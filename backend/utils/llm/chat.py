@@ -27,6 +27,7 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.temporal import MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS, date_in_tz, normalize_extracted_dates
 
 from .clients import get_llm
+from utils.llm.prompt_cache import with_cache_write_opt_out
 import logging
 
 logger = logging.getLogger(__name__)
@@ -241,7 +242,6 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     '''.replace('    ', '').strip()
 
     # print(prompt)
-    # print(get_llm('chat_extraction').invoke(prompt).content)
     with_parser = get_llm('chat_extraction').with_structured_output(DatesContext)
     response = cast(DatesContext, with_parser.invoke(prompt))
     return response.dates_range
@@ -1249,10 +1249,8 @@ def retrieve_metadata_fields_from_transcript(
     '''.replace('    ', '')
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result = cast(
-                ExtractedInformation,
-                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
-            )
+            structured = get_llm('chat_extraction').with_structured_output(ExtractedInformation)
+            result = cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
     except Exception as e:
         logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
@@ -1367,10 +1365,8 @@ def _process_extracted_metadata(uid: str, prompt: str, reference_date: str) -> d
     """Process the extracted metadata from any source"""
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result = cast(
-                ExtractedInformation,
-                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
-            )
+            structured = get_llm('chat_extraction').with_structured_output(ExtractedInformation)
+            result = cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}

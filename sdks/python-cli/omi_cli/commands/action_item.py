@@ -59,7 +59,7 @@ def list_action_items(
     for it in items or []:
         rows.append(
             {
-                "id": shorten(it.get("id"), 14),
+                "id": it.get("id"),
                 "completed": it.get("completed"),
                 "description": shorten(it.get("description"), 60),
                 "due_at": it.get("due_at"),
@@ -77,18 +77,23 @@ def get_action_item(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         # Like memories, the dev API has no single-resource GET for action items.
-        # Page through up to 5 pages of 200 to find it; beyond that the user
-        # probably wants `omi action-item list` directly.
-        for offset in range(0, 1000, 200):
-            page = client.get("/v1/dev/user/action-items", params={"limit": 200, "offset": offset})
+        # Search until the item is found or the API exhausts the result set.
+        # A fixed page cap would report existing older items as not found.
+        page_size = 200
+        offset = 0
+        # The API filters locked records after pagination, so a short page
+        # does not mean the result set is exhausted. Continue until empty
+        # or the documented 10k scan cap (checked before the next request).
+        max_offset = 10_000
+        while offset <= max_offset:
+            page = client.get("/v1/dev/user/action-items", params={"limit": page_size, "offset": offset})
             if not page:
                 break
             for item in page:
                 if item.get("id") == action_item_id:
                     ctx.renderer.emit(item, title="action item")
                     return
-            if len(page) < 200:
-                break
+            offset += page_size
     # Exit code 5 (NotFoundError) — same contract as a server-side 404,
     # whether or not the dev API exposed a direct GET for this noun.
     raise NotFoundError(message=f"Action item not found: {action_item_id}")

@@ -12,6 +12,7 @@ import typer
 
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
+from omi_cli.json_input import load_json_input
 from omi_cli.models import ConversationTextSource
 from omi_cli.output import shorten
 
@@ -67,7 +68,7 @@ def list_conversations(
         structured = c.get("structured") or {}
         rows.append(
             {
-                "id": shorten(c.get("id"), 14),
+                "id": c.get("id"),
                 "title": shorten(structured.get("title"), 50),
                 "category": structured.get("category"),
                 "started_at": c.get("started_at"),
@@ -151,8 +152,8 @@ def from_segments(
     if not segments_file.exists():
         raise UsageError(message=f"File not found: {segments_file}")
     try:
-        payload = json.loads(segments_file.read_bytes())
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        payload = load_json_input(segments_file.read_bytes())
+    except (ValueError, UnicodeDecodeError) as exc:
         raise UsageError(message=f"Invalid JSON in {segments_file}", detail=str(exc))
 
     segments = payload.get("transcript_segments") if isinstance(payload, dict) else payload

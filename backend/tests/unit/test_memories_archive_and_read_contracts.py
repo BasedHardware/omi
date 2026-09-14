@@ -378,9 +378,12 @@ def test_memory_item_to_memorydb_preserves_canonical_alias_for_portability():
 
 
 def test_memory_item_to_memorydb_attaches_belief_view_only_when_flag_on(monkeypatch):
-    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
-    item = _item("mem-state", tier=MemoryLayer.short_term, content="in a meeting", updated_at=now).model_copy(
-        update={"half_life_days": 30, "captured_at": now - timedelta(days=30)}
+    # Anchor to the wall clock: exactly one half-life old keeps currency at 0.5
+    # (the fading band floor) regardless of when CI runs. A fixed calendar date
+    # rots into the history band once 60 days elapse.
+    captured_at = datetime.now(timezone.utc) - timedelta(days=30)
+    item = _item("mem-state", tier=MemoryLayer.short_term, content="in a meeting", updated_at=captured_at).model_copy(
+        update={"half_life_days": 30, "captured_at": captured_at}
     )
     monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
     off = memory_item_to_memorydb(item)

@@ -63,7 +63,7 @@ class _ProviderFailureLlm(_ScriptedLlm):
 def _response(memories=(), transcript_requests=(), folder_assignments=()):
     return json.dumps(
         {
-            "memories": list(memories),
+            "memories": [{"about": "user", "basis": "decided", **memory} for memory in memories],
             "transcript_requests": list(transcript_requests),
             "folder_assignments": list(folder_assignments),
         }
@@ -480,6 +480,18 @@ def test_phase_prompts_share_a_cacheable_prefix():
     # summaries — the bulk of the tokens.
     assert common["summaries_block"] in shared
     assert len(shared) >= phase_a.find(common["summaries_block"]) + len(common["summaries_block"])
+    # Attribution rules live in the shared prefix, not a phase tail, so the
+    # second pass reuses the cached tokens and cannot forget WHO/BYSTANDER.
+    for pin in (
+        "WHO IS WHO: the owner is only the speaker clusters the transcript marks as the owner",
+        "BYSTANDER: if Dave said little or nothing in a conversation",
+        "PARTICIPATING IS NOT A FACT",
+        'NAME WHOSE FACT: every memory names its subject in about ("user"',
+        "BASIS: decided only for a commitment or decision on tape by the owner",
+    ):
+        assert pin in shared
+    assert "header says owner identity is untrusted" in phase_b
+    assert "header is authoritative" in phase_b
 
 
 def test_untrusted_text_cannot_close_prompt_fences_and_phase_b_inputs_are_clamped():
@@ -525,3 +537,80 @@ def test_phase_b_overhead_constant_covers_the_clamped_blocks():
     overhead = daily_sweep_phase_b_overhead_characters(4)
     assert overhead >= DAILY_SWEEP_DRAFT_ROW_LIMIT * DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS
     assert daily_sweep_phase_b_overhead_characters(0) < overhead
+
+
+def test_daily_sweep_memory_omitted_about_defaults_empty_and_sanitizer_preserves_subject():
+    from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
+
+    omitted = DailySweepAgentMemory(content='A fact', conversation_ids=['conversation-1'], basis='observed')
+    assert omitted.about == ''
+    output = DailySweepAgentPassOutput(
+        memories=[
+            DailySweepAgentMemory(
+                content='Sarah lives in Boston',
+                about='Sarah',
+                conversation_ids=['conversation-1'],
+                basis='observed',
+                duplicate_of='mem-existing',
+            )
+        ]
+    )
+    sanitized = _sanitized_daily_sweep_output(output, {'conversation-1'}, 8, lookup_ids={'mem-existing'})
+    assert sanitized.memories[0].about == 'Sarah'
+    assert sanitized.memories[0].duplicate_of == 'mem-existing'
+
+
+def test_invalid_duplicate_of_is_cleared_so_the_candidate_stays_new():
+    from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
+
+    output = DailySweepAgentPassOutput(
+        memories=[
+            DailySweepAgentMemory(
+                content='Dave lifts on Fridays',
+                about='user',
+                conversation_ids=['conversation-1'],
+                basis='observed',
+                duplicate_of='hallucinated-id',
+            )
+        ]
+    )
+    sanitized = _sanitized_daily_sweep_output(output, {'conversation-1'}, 8, lookup_ids={'mem-gym'})
+    assert sanitized.memories[0].duplicate_of == ''
+    assert sanitized.memories[0].content == 'Dave lifts on Fridays'
+
+
+def test_lookup_hit_duplicate_of_is_kept_and_invalid_markers_do_not_skip_new_facts():
+    queries = []
+
+    def searcher(query):
+        queries.append(query)
+        return ('[mem-gym] Dave lifts on Tuesdays [slot: gym_schedule]',)
+
+    llm = _ScriptedLlm(
+        [
+            _response(
+                memories=[{"content": "Dave lifts on Tuesdays", "conversation_ids": ["conversation-2"]}],
+            ).replace(
+                '"folder_assignments": []', '"folder_assignments": [], "memory_lookups": [{"query": "gym schedule"}]'
+            ),
+            _response(
+                memories=[
+                    {
+                        "content": "Dave lifts on Tuesdays",
+                        "conversation_ids": ["conversation-2"],
+                        "duplicate_of": "mem-gym",
+                    },
+                    {
+                        "content": "Dave now lifts on Fridays too",
+                        "conversation_ids": ["conversation-2"],
+                        "duplicate_of": "not-a-lookup",
+                    },
+                ]
+            ),
+        ]
+    )
+    output = run_daily_sweep_summary_agent("uid-1", _ROWS, dict(_TRANSCRIPTS), memory_searcher=searcher, llm=llm)
+    assert queries == ["gym schedule"]
+    by_content = {memory.content: memory.duplicate_of for memory in output.memories}
+    assert by_content["Dave lifts on Tuesdays"] == "mem-gym"
+    assert by_content["Dave now lifts on Fridays too"] == ""

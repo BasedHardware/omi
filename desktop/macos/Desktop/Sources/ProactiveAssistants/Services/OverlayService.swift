@@ -134,7 +134,8 @@ class OverlayService {
     let focusResult = AXUIElementCopyAttributeValue(
       appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
-    guard focusResult == .success, let windowElement = focusedWindow else {
+    guard focusResult == .success, let windowElement = AXAttributeCasting.element(focusedWindow)
+    else {
       if focusResult == .apiDisabled || focusResult == .cannotComplete {
         log(
           "ACCESSIBILITY_AX: getWindowFrameViaAccessibility failed with \(focusResult.rawValue) — permission may be stuck"
@@ -146,28 +147,28 @@ class OverlayService {
     // Get window position
     var positionValue: CFTypeRef?
     let posResult = AXUIElementCopyAttributeValue(
-      windowElement as! AXUIElement, kAXPositionAttribute as CFString, &positionValue)
+      windowElement, kAXPositionAttribute as CFString, &positionValue)
 
-    guard posResult == .success, let posRef = positionValue else {
+    guard posResult == .success, let posRef = AXAttributeCasting.value(positionValue) else {
       return nil
     }
 
     var position = CGPoint.zero
-    if !AXValueGetValue(posRef as! AXValue, .cgPoint, &position) {
+    if !AXValueGetValue(posRef, .cgPoint, &position) {
       return nil
     }
 
     // Get window size
     var sizeValue: CFTypeRef?
     let sizeResult = AXUIElementCopyAttributeValue(
-      windowElement as! AXUIElement, kAXSizeAttribute as CFString, &sizeValue)
+      windowElement, kAXSizeAttribute as CFString, &sizeValue)
 
-    guard sizeResult == .success, let sizeRef = sizeValue else {
+    guard sizeResult == .success, let sizeRef = AXAttributeCasting.value(sizeValue) else {
       return nil
     }
 
     var size = CGSize.zero
-    if !AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) {
+    if !AXValueGetValue(sizeRef, .cgSize, &size) {
       return nil
     }
 

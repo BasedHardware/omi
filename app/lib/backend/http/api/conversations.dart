@@ -12,6 +12,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/wal_sync_upload.dart';
 
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
@@ -631,6 +632,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   bool claimLiveCapture = false,
   Geolocation? geolocation,
 }) async {
+  assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
   String? captureManifest;
   if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);

@@ -373,6 +373,10 @@ extension RealtimeHubController {
             // Cancel any streaming projection that may have started before the
             // spawn receipt arrived; the spawn owns the canonical exchange now.
             self.cancelStreamingJournalWrites(forContinuityKey: receipt.continuityKey)
+            self.bindNativeTurnEvidenceToProducingRow(
+              turnID: turnID,
+              journalUserTurnID: KernelTurnProjection.stableTurnID(
+                continuityKey: receipt.continuityKey, role: "user"))
             self.lastTurnDiagnostics = [
               "provider": self.providerTag,
               "provider_transcript": self.turnTranscript,

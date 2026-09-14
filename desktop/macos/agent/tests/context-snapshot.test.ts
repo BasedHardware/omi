@@ -127,6 +127,57 @@ describe("kernel ContextSnapshot", () => {
     store.close();
   });
 
+  it("separates a delivery-cut completed answer from a mid-stream fragment on failed voice turns", () => {
+    // 2026-09-09 incident: a PTT barge-in after the provider finished journaled
+    // the reply `.failed` exactly like a mid-stream fragment, and the one-size
+    // cut-off guidance told the model to re-answer the old thread on a generic
+    // follow-up. The flag must surface per turn and the guidance must split.
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-cut",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "cut" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: "owner-cut", conversationId: surface.conversationId, turnId: "cut-user",
+      role: "user", surfaceKind: "main_chat", origin: "realtime_voice", status: "completed",
+      content: "how many obsidian do I need?", contentBlocks: [], createdAtMs: 1,
+      metadataJson: JSON.stringify({ continuityKey: "voice:1" }),
+    });
+    recordJournalTurn(store, {
+      ownerId: "owner-cut", conversationId: surface.conversationId, turnId: "cut-assistant-complete",
+      role: "assistant", surfaceKind: "main_chat", origin: "realtime_voice", status: "failed",
+      content: "You need four obsidian in total.", contentBlocks: [], createdAtMs: 2,
+      metadataJson: JSON.stringify({
+        terminalReason: "interrupted_by_barge_in",
+        answerTextCompleted: true,
+      }),
+    });
+    recordJournalTurn(store, {
+      ownerId: "owner-cut", conversationId: surface.conversationId, turnId: "cut-assistant-fragment",
+      role: "assistant", surfaceKind: "main_chat", origin: "realtime_voice", status: "failed",
+      content: "You need fo", contentBlocks: [], createdAtMs: 3,
+      metadataJson: JSON.stringify({
+        terminalReason: "provider_failed",
+        answerTextCompleted: false,
+      }),
+    });
+    const snapshot = buildContextSnapshot(store, surface.agentSessionId, "owner-cut", 3);
+    const completed = snapshot.recentTurns.find((turn) => turn.turnId === "cut-assistant-complete");
+    const fragment = snapshot.recentTurns.find((turn) => turn.turnId === "cut-assistant-fragment");
+    expect(completed?.status).toBe("failed");
+    expect(completed?.answerTextCompleted).toBe(true);
+    expect(fragment?.answerTextCompleted).toBeUndefined();
+    const rendered = renderContextSnapshot(snapshot, "realtime_voice", "coordinator");
+    expect(rendered).toContain("answerTextCompleted");
+    // The guidance keeps the strict rule for fragments and adds the
+    // do-not-re-answer rule for delivery-cut completed answers.
+    const guidance = kernelSystemPolicy("realtime_voice", "coordinator");
+    expect(guidance).toContain("if the user follows up on it, answer the request fully");
+    expect(guidance).toContain("Do not re-deliver or re-answer that thread from scratch");
+    store.close();
+  });
+
   it("delivers full history once per binding, then only new or changed canonical turns", () => {
     const { store } = fixture();
     const surface = resolveSurfaceSession(store, {

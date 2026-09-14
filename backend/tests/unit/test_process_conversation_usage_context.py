@@ -736,8 +736,8 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
         'conversation_transcripts_for_llm',
         lambda *_args, **_kwargs: (
             "Test User: Hey Omi, don't forget to send the budget.",
-            '[segment:wake-segment 0.000-5.000] '
-            "<omi-wake-word-invocation/> Test User: Hey Omi, don't forget to send the budget.",
+            "[wake-segment 0] <omi-wake-word-invocation/> Hey Omi, don't forget to send the budget.",
+            {0: 'Test User'},
         ),
     )
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', fake_discard)
@@ -777,7 +777,8 @@ def test_primary_user_name_reaches_action_item_extraction(monkeypatch):
         'conversation_transcripts_for_llm',
         lambda *_args, **_kwargs: (
             'David: Send the budget.',
-            '[segment:user-request 0.000-5.000] David: Send the budget.',
+            '[user-request 0] Send the budget.',
+            {0: 'David'},
         ),
     )
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', lambda *_args, **_kwargs: False)

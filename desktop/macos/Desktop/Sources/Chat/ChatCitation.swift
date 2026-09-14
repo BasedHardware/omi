@@ -209,10 +209,27 @@ enum ChatCitationMarkup {
   static let kindOnlyMarkerPattern =
     #"\[(memory|task|goal|conversation|screenshot|web|source|capture|rewind)\](?![\s:]*\d)"#
 
+  /// Compiled once per pattern. Every marker scan used to compile its
+  /// expression on the call, and the citation-inheritance pass runs one scan
+  /// per text of every settled assistant row on every journal projection —
+  /// hundreds of compiles per streaming write on a long transcript, all on
+  /// the main thread. `NSRegularExpression` is immutable and thread-safe.
+  private static let expressionLock = NSLock()
+  private nonisolated(unsafe) static var expressions: [String: NSRegularExpression] = [:]
+
+  static func expression(_ pattern: String, options: NSRegularExpression.Options = []) -> NSRegularExpression? {
+    let key = "\(options.rawValue):\(pattern)"
+    expressionLock.lock()
+    defer { expressionLock.unlock() }
+    if let cached = expressions[key] { return cached }
+    guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
+    expressions[key] = compiled
+    return compiled
+  }
+
   static func explicitlyRequestsSources(_ text: String) -> Bool {
     guard
-      let expression = try? NSRegularExpression(
-        pattern: #"\b(?:citations?|cite|sources)\b"#, options: [.caseInsensitive])
+      let expression = expression(#"\b(?:citations?|cite|sources)\b"#, options: [.caseInsensitive])
     else { return false }
     return expression.firstMatch(
       in: text,
@@ -222,18 +239,38 @@ enum ChatCitationMarkup {
   /// Numeric citations outside inline-code spans, in reading order. Incomplete streaming markers
   /// and bracketed prose are left alone. Kind-prefixed copies such as `[memory 5023]` still count.
   static func ordinals(in text: String) -> [Int] {
-    markerMatches(in: text, pattern: numericMarkerPattern).map(\.ordinal)
+    ordinalsLock.lock()
+    if let cached = ordinalsByText[text] {
+      ordinalsLock.unlock()
+      return cached
+    }
+    ordinalsLock.unlock()
+    let ordinals = markerMatches(in: text, pattern: numericMarkerPattern).map(\.ordinal)
+    ordinalsLock.lock()
+    // Bounded, not LRU: settled answers repeat verbatim on every projection
+    // and a streaming row's changing text is never asked here, so the set
+    // that matters is the transcript's settled rows, which fit many times over.
+    if ordinalsByText.count >= 4_096 { ordinalsByText.removeAll(keepingCapacity: true) }
+    ordinalsByText[text] = ordinals
+    ordinalsLock.unlock()
+    return ordinals
   }
+
+  /// `ordinals(in:)` memoized by text. The citation-inheritance pass asks it
+  /// for every text of every settled assistant row on every journal
+  /// projection — one per coalesced streaming write — and a regex scan per
+  /// row made that pass cost the transcript's length in milliseconds.
+  private static let ordinalsLock = NSLock()
+  private nonisolated(unsafe) static var ordinalsByText: [String: [Int]] = [:]
 
   static func markerMatches(
     in text: String,
     pattern: String
   ) -> [(range: Range<String.Index>, ordinal: Int)] {
+    // Every marker opens with a bracket; a text without one has nothing to scan.
+    guard text.utf8.contains(UInt8(ascii: "[")) else { return [] }
     let codeRanges = OmiMarkdownInlineCode.codeSpanRanges(in: text)
-    guard
-      let expression = try? NSRegularExpression(
-        pattern: pattern, options: [.caseInsensitive])
-    else { return [] }
+    guard let expression = expression(pattern, options: [.caseInsensitive]) else { return [] }
     let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
     return expression.matches(in: text, range: nsRange).compactMap { match in
       guard let full = Range(match.range(at: 0), in: text),
@@ -265,7 +302,7 @@ enum ChatCitationMarkup {
   static func inheritedReferences(
     citedIn message: ChatMessage,
     resolved: [ChatCitationReference],
-    earlierTurns: [ChatMessage],
+    earlierTurns: some BidirectionalCollection<ChatMessage>,
     lookback: Int = 8
   ) -> [ChatCitationReference] {
     var unresolved = message.citedCitationOrdinals.subtracting(resolved.map(\.ordinal))
@@ -330,11 +367,9 @@ enum ChatCitationMarkup {
   private static func kindOnlyMatches(
     in text: String
   ) -> [(range: Range<String.Index>, label: String)] {
+    guard text.utf8.contains(UInt8(ascii: "[")) else { return [] }
     let codeRanges = OmiMarkdownInlineCode.codeSpanRanges(in: text)
-    guard
-      let expression = try? NSRegularExpression(
-        pattern: kindOnlyMarkerPattern, options: [.caseInsensitive])
-    else { return [] }
+    guard let expression = expression(kindOnlyMarkerPattern, options: [.caseInsensitive]) else { return [] }
     let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
     return expression.matches(in: text, range: nsRange).compactMap { match in
       guard let full = Range(match.range(at: 0), in: text),
@@ -426,7 +461,7 @@ enum ChatCitationMarkup {
   }
 
   private static func firstBoldPhrase(in claim: String) -> String? {
-    guard let expression = try? NSRegularExpression(pattern: #"\*\*(.+?)\*\*"#),
+    guard let expression = expression(#"\*\*(.+?)\*\*"#),
       let match = expression.firstMatch(
         in: claim, range: NSRange(claim.startIndex..<claim.endIndex, in: claim)),
       let range = Range(match.range(at: 1), in: claim)
@@ -523,9 +558,8 @@ enum ChatCitationMarkup {
   }
 
   private static func webReferences(in text: String) -> [ChatCitationReference] {
-    guard
-      let expression = try? NSRegularExpression(
-        pattern: #"\[(\d{1,4})\]\((https?://[^\s)]+)\)"#)
+    guard text.utf8.contains(UInt8(ascii: "[")),
+      let expression = expression(#"\[(\d{1,4})\]\((https?://[^\s)]+)\)"#)
     else { return [] }
     let codeRanges = OmiMarkdownInlineCode.codeSpanRanges(in: text)
     var seen = Set<Int>()

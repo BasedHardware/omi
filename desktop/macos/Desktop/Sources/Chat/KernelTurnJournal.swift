@@ -198,13 +198,20 @@ struct KernelJournalTurnUpdate: Sendable {
   /// Downgrades an optimistically sealed `.completed` row to `.failed` with
   /// its truncation cause, carrying no payload: content, content blocks,
   /// resources, and existing metadata (model attribution, continuity) stay
-  /// untouched while `terminalReason` merges into the row's metadata.
+  /// untouched while `terminalReason` (and, when the answer text completed
+  /// before delivery was cut, `answerTextCompleted`) merges into the row's
+  /// metadata.
   static func sealedTerminalRevision(
     turnId: String,
-    terminalReason: String
+    terminalReason: String,
+    answerTextCompleted: Bool = false
   ) -> KernelJournalTurnUpdate {
+    var revisionMetadata: [String: Any] = ["terminalReason": terminalReason]
+    if answerTextCompleted {
+      revisionMetadata["answerTextCompleted"] = true
+    }
     let encodedReason: String
-    if let data = try? JSONSerialization.data(withJSONObject: ["terminalReason": terminalReason]),
+    if let data = try? JSONSerialization.data(withJSONObject: revisionMetadata),
       let encoded = String(data: data, encoding: .utf8)
     {
       encodedReason = encoded
@@ -373,11 +380,16 @@ extension KernelJournalTurn {
     // Persisted served-model attribution: lets a journaled voice turn (or a
     // restored one) show the Response Context Model row that in-memory
     // metadata would otherwise lose.
-    if message.sender == .ai, let models = metadata["modelsUsed"] as? [String], !models.isEmpty {
-      message.metadata = MessageMetadata(
-        adapterId: origin == "realtime_voice" ? "realtime" : "",
-        modelsUsed: models
-      )
+    if message.sender == .ai {
+      let models = metadata["modelsUsed"] as? [String] ?? []
+      let providers = metadata["providerTargets"] as? [String] ?? []
+      if !models.isEmpty || !providers.isEmpty {
+        message.metadata = MessageMetadata(
+          adapterId: origin == "realtime_voice" ? "realtime" : "",
+          modelsUsed: models,
+          providerTargets: providers
+        )
+      }
     }
     return message
   }
@@ -399,11 +411,15 @@ extension ChatMessage {
     appId: String? = nil,
     sessionId: String? = nil,
     messageSource: String? = nil,
-    terminalReason: String? = nil
+    terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil
   ) -> KernelJournalTurnWrite {
     var metadata: [String: Any] = [:]
     if let continuityKey, !continuityKey.isEmpty { metadata["continuityKey"] = continuityKey }
     if let models = self.metadata?.modelsUsed, !models.isEmpty { metadata["modelsUsed"] = models }
+    if let providers = self.metadata?.providerTargets, !providers.isEmpty {
+      metadata["providerTargets"] = providers
+    }
     if let notificationContext { metadata["notificationContext"] = notificationContext }
     if let screenContext = self.metadata?.screenContext, !screenContext.isEmpty {
       metadata["screen_context"] = String(screenContext.prefix(1_200))
@@ -420,6 +436,7 @@ extension ChatMessage {
     if let sessionId { metadata["sessionId"] = sessionId }
     if let messageSource { metadata["messageSource"] = messageSource }
     if let terminalReason { metadata["terminalReason"] = terminalReason }
+    if answerTextCompleted == true { metadata["answerTextCompleted"] = true }
     let metadataJSON: String
     let encodedMetadata: String
     if let data = try? JSONSerialization.data(withJSONObject: metadata),
@@ -449,11 +466,15 @@ extension ChatMessage {
 
   func journalUpdate(
     status: KernelJournalTurnStatus? = nil,
-    terminalReason: String? = nil
+    terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil
   ) -> KernelJournalTurnUpdate {
+    var updateMetadata: [String: Any] = [:]
+    if let terminalReason { updateMetadata["terminalReason"] = terminalReason }
+    if answerTextCompleted == true { updateMetadata["answerTextCompleted"] = true }
     var metadataJSON: String?
-    if let terminalReason,
-      let data = try? JSONSerialization.data(withJSONObject: ["terminalReason": terminalReason]),
+    if !updateMetadata.isEmpty,
+      let data = try? JSONSerialization.data(withJSONObject: updateMetadata),
       let encoded = String(data: data, encoding: .utf8)
     {
       metadataJSON = encoded

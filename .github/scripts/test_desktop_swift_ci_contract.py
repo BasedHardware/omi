@@ -7,11 +7,16 @@ identity. It also preserves the runner-saving test selector and the serial CI
 execution required by SwiftPM's shared build-directory lock. This is the Rung-0
 guard from #9843: every downstream strictness claim depends on knowing which
 compiler the flags run against.
+
+The pinned Xcode version/build/app path are read from desktop/macos/ci/xcode-pin.json
+(the single source of truth); this test fails if the workflow, the canonical
+runner script, or the two Codemagic desktop Swift workflows drift from that file.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import sys
 import unittest
@@ -22,6 +27,8 @@ WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
 RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/run-swift-ci.sh"
 SUITE_RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh"
 PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
+PIN_PATH = REPO_ROOT / "desktop/macos/ci/xcode-pin.json"
+CODEMAGIC_PATH = REPO_ROOT / "codemagic.yaml"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from pre_push_ci_prediction import DESKTOP_RELEASE_PATHSPECS, resolve_impact  # noqa: E402
@@ -34,15 +41,33 @@ assert _PLANNER_SPEC and _PLANNER_SPEC.loader
 planner = importlib.util.module_from_spec(_PLANNER_SPEC)
 _PLANNER_SPEC.loader.exec_module(planner)
 
-EXPECTED_XCODE_VERSION = "16.4"
-EXPECTED_XCODE_BUILD = "16F6"
-EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
+# Single source of truth: desktop/macos/ci/xcode-pin.json. Every consumer
+# (run-swift-ci.sh, desktop-swift-ci.yml, codemagic.yaml desktop workflows)
+# is asserted against these values; none of them may carry their own literal.
+PIN = json.loads(PIN_PATH.read_text(encoding="utf-8"))
+EXPECTED_XCODE_VERSION = PIN["version"]
+EXPECTED_XCODE_BUILD = PIN["build"]
+EXPECTED_XCODE_APP = PIN["app_path"]
+EXPECTED_XCODE_CACHE_TOKEN = "xcode" + EXPECTED_XCODE_VERSION.replace(".", "")
+CODEMAGIC_DESKTOP_WORKFLOWS = ["omi-desktop-swift-release", "omi-desktop-swift-preview"]
 JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
 # cold-runner ceiling than the narrower release-compile job.
 MACOS_JOB_TIMEOUT_MINUTES = {
+    # A wedge-guard, not a lane budget: it must admit one legitimate
+    # cold-tools run (~15 min from-source bootstrap) ahead of the full lane,
+    # which still executes every suite on runner-changing diffs. Two #13219
+    # runs were cancelled by tighter ceilings before completing. The first
+    # pinned-Xcode 26.6 full lane on macos-26 was cancelled by the old
+    # 60-minute ceiling mid serial cluster with every completed suite green
+    # (run 34687313733), so the ceiling is 90.
     "desktop-swift-verify": 90,
+    # A notification-boundary change compiles release mode AND builds the
+    # release test target for the regression (~50 min observed on
+    # run 34239723019). Combined app/test build avoids the duplicate
+    # compilation in #13481; keep the existing release-compile ceiling until
+    # hosted timing proves otherwise.
     "desktop-swift-release-compile": 60,
 }
 
@@ -93,6 +118,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertIn("run-swift-ci.sh --test", verify_job)
         self.assertIn("run-swift-ci.sh --release-compile", release_job)
+        self.assertIn("run-swift-ci.sh --release-test-compile", release_job)
         # The release-mode regression runs next to the release build it
         # consumes; a second release build on the verify runner cost ~31 min
         # of scarce hosted-macOS time per notification-boundary change.
@@ -108,6 +134,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("should_run_static", changes)
         self.assertIn("should_run_tests", changes)
         self.assertIn("should_release_compile", changes)
+        self.assertIn("desktop_swift_changed_files", changes)
         self.assertIn("diff_base", changes)
 
         for job_id, output in (("desktop-swift-release-compile", "should_release_compile"),):
@@ -147,6 +174,57 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             with self.subTest(job=job_id, timeout_minutes=timeout_minutes):
                 self.assertIn(f"timeout-minutes: {timeout_minutes}", self.jobs[job_id])
 
+    def test_ci_batch_ceiling_leaves_fallback_headroom(self):
+        """The batch watchdog budget must not crowd out the bisect fallback.
+
+        The scaled batch budget grows linearly with the batch size (per-suite
+        budget + per-extra-suite allowance). At CI's batch size the uncapped
+        budget approaches the job's 60-minute ceiling, so a wedged batch
+        would be killed by the job timeout before its isolation fallback
+        could run. CI must set an independent aggregate ceiling that keeps
+        the worst single-batch watchdog cost well under the job budget.
+        """
+        job = self.jobs["desktop-swift-verify"]
+        self.assertIn('OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"', job)
+        match = re.search(
+            r'OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "(\d+)"', job
+        )
+        if match is None:
+            self.fail(
+                "desktop-swift-verify must set OMI_SWIFT_TEST_BATCH_CEILING_SECONDS "
+                "alongside its batch size"
+            )
+        ceiling = int(match.group(1))
+        timeout_minutes = MACOS_JOB_TIMEOUT_MINUTES["desktop-swift-verify"]
+        timeout_seconds = timeout_minutes * 60
+        # 300s per-suite budget + 30s per additional suite at batch 100.
+        scaled_budget = 300 + 99 * 30
+        self.assertGreater(
+            scaled_budget,
+            timeout_seconds // 2,
+            "this guard lost its premise: the scaled batch budget no longer "
+            "threatens the job ceiling at this batch size",
+        )
+        self.assertGreater(
+            ceiling,
+            0,
+            "a zero ceiling disables the cap and restores the uncapped "
+            "scaled budget as the worst case",
+        )
+        self.assertLess(
+            ceiling,
+            scaled_budget,
+            f"ceiling {ceiling}s never bites: the scaled budget is already "
+            f"{scaled_budget}s",
+        )
+        self.assertLessEqual(
+            ceiling,
+            timeout_seconds // 2,
+            f"ceiling {ceiling}s exceeds half the {timeout_seconds}s job "
+            f"budget; a wedged batch must die with at least half the job "
+            f"left for its bisect fallback",
+        )
+
     def test_no_closed_pull_request_runs_exist(self):
         """No closure run can publish a skipped check onto the merge SHA."""
         workflow = _workflow_text()
@@ -167,6 +245,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 self.assertTrue(plan.includes("desktop-ci-only"))
                 self.assertTrue(plan.includes("desktop-swift-tests"))
                 self.assertTrue(plan.includes("desktop-swift-release-compile"))
+                self.assertTrue(plan.includes("desktop-swift-release-test-compile"))
 
     def test_required_release_check_names_are_literals(self):
         """GitHub does not evaluate `name:` for a skipped job.
@@ -201,10 +280,22 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertTrue(resolve_impact([path]).includes("desktop-swift-notification-release-regression"))
-        self.assertIn("runs-on: macos-15", job)
+        self.assertIn("runs-on: macos-26", job)
         self.assertIn("--release-notification-regression", job)
         self.assertIn("should_notification_release_regression", job)
         self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
+
+    def test_release_test_phase_is_forwarded_and_gates_the_existing_job(self):
+        """Static workflow contract; executable runner/selector tests own behavior."""
+        self.assertIn(
+            "should_release_test_compile: ${{ steps.changed.outputs.should_release_test_compile }}",
+            self.jobs["changes"],
+        )
+        for job_id in ("desktop-swift", "desktop-swift-release-compile"):
+            self.assertIn("needs.changes.outputs.should_release_test_compile == 'true'", self.jobs[job_id])
+        release = self.jobs["desktop-swift-release-compile"]
+        self.assertIn('if [ "$BUILD_RELEASE_TESTS" = true ]; then', release)
+        self.assertRegex(release, r"--release-test-compile\s+else\s+./scripts/run-swift-ci.sh --release-compile")
 
     def test_stable_release_gate_requires_the_selected_macos_job(self):
         """The required check name must fail closed on its selected lanes."""
@@ -305,7 +396,12 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_canonical_runner_fails_closed_on_the_pinned_toolchain(self):
         runner = _runner_text()
 
-        self.assertIn(EXPECTED_XCODE_APP, runner)
+        # The runner reads the pin file rather than carrying version literals;
+        # a missing pin file must fail closed before any toolchain use.
+        self.assertIn("ci/xcode-pin.json", runner)
+        self.assertIn('EXPECTED_XCODE_VERSION="$(read_pin version)"', runner)
+        self.assertIn('EXPECTED_XCODE_BUILD="$(read_pin build)"', runner)
+        self.assertIn('XCODE_APP="${OMI_SWIFT_CI_XCODE_APP:-$(read_pin app_path)}"', runner)
         self.assertIn("DEVELOPER_DIR", runner)
         self.assertIn("exit 1", runner)
         self.assertRegex(runner, r"if\s*\[\s*!\s*-d\s+\"\$XCODE_APP")
@@ -313,6 +409,46 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("xcrun swift --version", runner)
         self.assertIn(f'"Xcode $EXPECTED_XCODE_VERSION"', runner)
         self.assertIn(f'"$EXPECTED_XCODE_BUILD"', runner)
+
+    def test_pin_file_is_the_only_toolchain_literal(self):
+        """One source of truth: the pin file, its derived consumers, and nothing else."""
+        self.assertEqual(EXPECTED_XCODE_APP, f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app")
+        self.assertRegex(EXPECTED_XCODE_BUILD, r"^[0-9A-F]+$")
+        workflow = _workflow_text()
+        self.assertNotIn("xcode164", workflow)
+        self.assertIn(EXPECTED_XCODE_CACHE_TOKEN, workflow)
+        runner = _runner_text()
+        self.assertNotIn("16.4", runner)
+        self.assertNotIn("16F6", runner)
+        for step_name in (
+            f"Select and assert pinned Xcode {EXPECTED_XCODE_VERSION}",
+        ):
+            for job_id in MACOS_JOBS:
+                self.assertIn(step_name, self.jobs[job_id])
+
+    def test_macos_jobs_run_on_the_pinned_runner_image(self):
+        """#12867 class: the ship toolchain must be the one CI actually compiles with."""
+        for job_id in MACOS_JOBS:
+            with self.subTest(job=job_id):
+                self.assertIn("runs-on: macos-26", self.jobs[job_id])
+        self.assertNotIn("runs-on: macos-15", _workflow_text())
+
+    def test_codemagic_desktop_workflows_match_the_pin(self):
+        """Codemagic desktop Swift release/preview must build with the pinned Xcode."""
+        text = CODEMAGIC_PATH.read_text(encoding="utf-8")
+        for workflow_id in CODEMAGIC_DESKTOP_WORKFLOWS:
+            with self.subTest(workflow=workflow_id):
+                body = _job_text(text, workflow_id)
+                self.assertIn("instance_type: mac_mini_m4", body)
+                match = re.search(r"^\s+xcode:\s*(\S+)\s*$", body, re.MULTILINE)
+                self.assertIsNotNone(match, f"{workflow_id} must declare an xcode: version")
+                self.assertEqual(
+                    match.group(1),
+                    EXPECTED_XCODE_VERSION,
+                    f"{workflow_id} xcode must equal the pin (string compare)",
+                )
+                self.assertNotIn("xcode: latest", body)
+                self.assertNotIn("xcode: edge", body)
 
     def test_canonical_runner_exports_the_selected_toolchain_for_ci_steps(self):
         runner = _runner_text()
@@ -328,6 +464,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("push-time budget bloat", pre_push)
         self.assertNotIn("desktop/macos/scripts/run-swift-ci.sh --test", pre_push)
         self.assertNotIn("desktop/macos/scripts/run-swift-ci.sh --release-compile", pre_push)
+        self.assertNotIn("--release-test-compile", pre_push)
 
     # --- cache-key assertions ----------------------------------------------
 
@@ -342,9 +479,9 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # Toolchain identity in the key prefix prevents a tool change from
         # silently reusing a stale cache built with a different compiler.
         self.assertIn(
-            f"xcode{EXPECTED_XCODE_VERSION.replace('.', '')}",
+            EXPECTED_XCODE_CACHE_TOKEN,
             key,
-            "cache key must embed toolchain identity (xcode164)",
+            f"cache key must embed toolchain identity ({EXPECTED_XCODE_CACHE_TOKEN})",
         )
         # Package.swift hash
         self.assertIn(
@@ -374,6 +511,154 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("steps.swiftpm-cache.outputs.cache-hit != 'true'", job)
         self.assertIn("~/Library/Caches/org.swift.swiftpm", job)
         self.assertNotIn("desktop/macos/Desktop/.build", job)
+
+    def test_release_job_does_not_archive_build_products(self):
+        """The 5.3 GB release .build archive is gone from both directions.
+
+        Measurement on every recent run showed the release compile step at
+        23-25 min whether the archive hit exactly, partially, or not at all,
+        while each main-push save evicted the small swift-format/swiftlint
+        tool caches from the repository's ~10 GB cache budget — and a tools
+        cache miss made the verify job's launcher tests rebuild swift-format
+        from source for ~15 min. Neither job may restore or save it again.
+        """
+        release_job = self.jobs["desktop-swift-release-compile"]
+        self.assertNotIn("desktop/macos/Desktop/.build", release_job)
+        self.assertNotIn(f"desktop-swift-release-{EXPECTED_XCODE_CACHE_TOKEN}", release_job)
+        self.assertIn("Restore SwiftPM dependency cache", release_job)
+
+    def test_tools_cache_covers_the_launcher_test_lane(self):
+        """The launcher tests exercise the pinned swift-format binary.
+
+        The tools restore used to be gated on the static lane alone, so a
+        tests-only diff (static selection empty) rebuilt swift-format from
+        source for ~15 min inside the launcher tests, every run: the cache was
+        never restored, and the save ran before the step that built the tools,
+        caching nothing. Worse, an exact-key hit on an entry the old workflow
+        saved empty suppressed every later save (run 34295159347). The restore
+        must cover the tests lane, an explicit warm-up step builds whatever the
+        restore missed BEFORE any consumer runs, and the save immediately
+        follows the warm-up under a fresh -v3 key carrying only the built
+        binaries (the v2 full-tree archives lost eviction races against the
+        lingering 5.3 GB release .build entries and kept re-paying the
+        from-source rebuild).
+        """
+        job = self.jobs["desktop-swift-verify"]
+        self.assertIn(
+            "(needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true')",
+            job,
+        )
+        self.assertIn("desktop-swift-tools-v3-", job)
+        restore_index = job.index("Restore Swift formatter and linter tools")
+        warm_index = job.index("Warm pinned formatter and linter tools")
+        save_index = job.index("Save Swift formatter and linter tools after warm-up")
+        launcher_index = job.index("Desktop launcher script tests")
+        self.assertLess(restore_index, warm_index)
+        self.assertLess(warm_index, save_index)
+        self.assertLess(save_index, launcher_index)
+
+    def test_pr_test_lane_defers_slow_suites_with_changed_file_wake(self):
+        """The PR lane defers ratcheted slow suites; their own diffs wake them.
+
+        Deferral is the runner's decision from swift-test-slow-suites.json; the
+        workflow only selects the lane and forwards the deferral-relevant diff
+        so a PR that edits a deferred suite's own test file still executes it.
+        """
+        verify_job = self.jobs["desktop-swift-verify"]
+        # The lane comes from the changes job's effective-lane output so the
+        # runner and the step budget share one re-baseline decision.
+        self.assertIn("OMI_SWIFT_TEST_LANE: ${{ needs.changes.outputs.swift_test_effective_lane }}", verify_job)
+        self.assertIn("swift_test_effective_lane", self.jobs["changes"])
+        self.assertIn("OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}", verify_job)
+        # The serial/solo clusters cost one ~30s invocation per member for
+        # sub-second tests, sequentially (24 invocations / 12.9 min measured
+        # on run 34306382692); the PR lane defers them behind the same
+        # declaring-file and ratcheted-watch wake rules.
+        self.assertIn('OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL: "1"', verify_job)
+        # The slow list and its validator are full-suite inputs: editing them
+        # must wake the debug test lane.
+        self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-slow-suites.json"]).includes("desktop-swift-tests"))
+        self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-skip-ratchet.py"]).includes("desktop-swift-tests"))
+
+    def test_duration_regression_guards_are_enforced(self):
+        """Desktop Swift CI once drifted silently to 27-42 min suite steps.
+
+        Duration must fail the run, not just appear in logs: the suite and
+        launcher steps carry wall-clock budgets that hard-fail when exceeded,
+        and the PR lane ratchets slow suites so the fast lane cannot silently
+        grow a slow tail. Budgets are generous against every measured
+        legitimate shape (fast lane 15m42s at batch 50, full lane 17m46s at
+        batch 100, serial-woken auth PRs ~24m) and sit far below the
+        regression; they move only through this file's review.
+        """
+        verify_job = self.jobs["desktop-swift-verify"]
+        # Lane-aware through the same effective-lane output: the PR fast
+        # lane carries the tight budget; the full lane legitimately spans
+        # ~28-40m warm (measured 37m07s on run 34363659680) but the first
+        # pinned-Xcode 26.6 cold lane on macos-26 ran past 55m of suite
+        # time before its 60-minute job ceiling cancelled it (run
+        # 34687313733), so the full-lane budget is 4200s against the 70m+
+        # drift class. Keying the budget on the event type alone made
+        # a re-baselined PR run the full suite against the PR number and
+        # false-red at 2013s vs 1800s (run 34369508858). After Xcode 26.6,
+        # PR #13699 measured 2324s (run 34754454417), so the PR lane is 2700s.
+        self.assertIn(
+            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '2700' || '4200' }}",
+            verify_job,
+        )
+        self.assertIn('OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"', verify_job)
+        self.assertIn('OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS: "360"', verify_job)
+        self.assertIn("swift suite step wall: ${elapsed}s", verify_job)
+        self.assertIn("launcher step wall: ${elapsed}s", verify_job)
+        self.assertIn("over its ${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}s regression budget", verify_job)
+        self.assertIn("over its ${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}s regression budget", verify_job)
+        suite_runner = _suite_runner_text()
+        self.assertIn("FAILED slow-suite ratchet", suite_runner)
+        self.assertIn("SLOW_RATCHET_SECONDS", suite_runner)
+
+    def test_changed_file_forwarding_covers_the_deferral_infrastructure(self):
+        """The runner can only wake/re-baseline on files CI actually forwards.
+
+        The ratchet script decides deferral (--slow-list); a change to it must
+        reach the runner's CHANGED_FILES, and the runner's own re-baseline
+        pattern must include it — otherwise the PR lane would judge a modified
+        selection algorithm against the stale slow list it replaces.
+        """
+        changes_job = self.jobs["changes"]
+        self.assertIn("swift-test-skip-ratchet\\.py", changes_job)
+        self.assertIn("swift-test-skip-ratchet\\.py", _suite_runner_text())
+
+    def test_pr_lane_deferral_matcher_handles_multi_entry_slow_lists(self):
+        """--slow-list is newline-delimited; the matcher must see every entry.
+
+        A space-delimited case glob over raw newline output matches nothing
+        for the real multi-suite slow list, silently disabling the whole
+        80/20 deferral. The runner must normalize before matching.
+        """
+        suite_runner = _suite_runner_text()
+        # The watch-aware lookup splits the tab field first, then normalizes:
+        # names feed the matcher space-delimited either way.
+        self.assertIn("cut -f1 | tr '\\n' ' '", suite_runner)
+
+    def test_release_compile_is_reserved_off_ordinary_prs(self):
+        """One hosted Mac per ordinary PR; pushes and package edits compile release.
+
+        The predictor owns this asymmetry; pin it here because the required
+        aggregate check and the release planner both consume the job's verdict.
+        """
+        source_probe = ["desktop/macos/Desktop/Sources/OmiApp.swift"]
+        self.assertFalse(resolve_impact(source_probe, event="pull_request").includes("desktop-swift-release-compile"))
+        self.assertTrue(resolve_impact(source_probe, event="push").includes("desktop-swift-release-compile"))
+        self.assertTrue(
+            resolve_impact(["desktop/macos/Desktop/Package.swift"], event="pull_request").includes(
+                "desktop-swift-release-compile"
+            )
+        )
+        for event in ("schedule", "workflow_dispatch"):
+            with self.subTest(event=event):
+                self.assertTrue(
+                    resolve_impact(["backend/database/users.py"], event=event).includes("desktop-swift-release-compile")
+                )
 
     # --- changed-file gate assertions --------------------------------------
 
@@ -439,8 +724,8 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """A cache key without Package.resolved or toolchain identity is caught."""
         wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
         tampered = wf_text.replace(
-            "desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}",
-            "desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}",
+            f"desktop-swift-build-{EXPECTED_XCODE_CACHE_TOKEN}-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}",
+            f"desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}",
         )
         job = _job_text(tampered, "desktop-swift-verify")
         key = re.search(r"key:\s*([^\n]+)", job).group(1)

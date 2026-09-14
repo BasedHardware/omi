@@ -11,6 +11,19 @@ and background processing.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
   named executor lanes.
+- `owner_attribution.py` owns typed source-cluster evidence for memory writes.
+  A passive memory may be attributed to the account owner only when the
+  transcript identifies exactly one owner speaker cluster, keyed by
+  `(speaker_id_scope, speaker_id)` so merged conversations cannot collapse
+  distinct sources. Segment `is_user` labels and model-authored `about=user`
+  cannot override that evidence, including for quote promotion. Legacy
+  transcripts without cluster IDs fail closed: a `TranscriptSegment` that
+  only materialized `speaker_id` from the SPEAKER_00 default is not
+  cluster evidence.
+  `transcript_for_llm.memory_transcript_from_segments` is the memory-only
+  renderer: when owner evidence is untrusted it suppresses owner names and
+  prefixes an explicit UNTRUSTED header. Summary and action-item rendering keep
+  their existing presentation.
 - `wake_word.py` owns the pure, end-of-conversation matcher and trusted inline
   prompt marker. It has no realtime state, I/O, or speaker-identity gate. The
   independent invocation classifier lives in `utils/llm/`; task-intelligence
@@ -19,6 +32,11 @@ and background processing.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
   bulkhead, and runs external integrations.
+- `duplicate_capture.py` is the pure cross-device duplicate policy (#3244): at
+  finalization, a conversation whose wall window and word bigrams are already
+  carried by another capture client's conversation takes the discard exit and
+  records its primary in `external_data.duplicate_capture_of`. Callers load the
+  candidate rows and persist the verdict; the module holds no I/O.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.

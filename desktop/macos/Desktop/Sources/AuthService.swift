@@ -90,9 +90,9 @@ class AuthService {
   // Keys are defined once in `DefaultsKey` and read/written through the typed
   // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
   //
-  // Keychain service is team+bundle scoped so local Dev / named-bundle builds
-  // cannot poison each other or notarized Beta/Prod (login-keychain password
-  // dialog). See DesktopKeychainStore.scopedService.
+  // Secret-store service is team+bundle scoped so local Dev / named-bundle builds
+  // cannot poison each other or notarized Beta/Prod (keychain on shipped bundles,
+  // file store on developer bundles). See DesktopKeychainStore.scopedService.
   private let authTokenKeychainAccount = "firebase-rest-tokens"
   private var authTokenKeychainService: String {
     DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)
@@ -121,11 +121,11 @@ class AuthService {
     var deleteKeychainString: (_ service: String, _ account: String) -> Void
     var recordsFallbackTelemetry: Bool
 
-    // Security invariant: new auth tokens live in the Keychain on EVERY build,
-    // including Sparkle beta. Plaintext UserDefaults fallback is disabled for new
-    // sign-ins. The read path remains only for transactional migration of older
-    // installs: keep that already-existing copy until Keychain read-back plus a
-    // forced refresh commit the new store.
+    // Security invariant: new auth tokens live in DesktopKeychainStore on every
+    // build (login keychain on shipped bundles, file store otherwise). Plaintext
+    // UserDefaults fallback is disabled for new sign-ins. The read path remains
+    // only for transactional migration of older installs: keep that existing
+    // copy until secret-store read-back plus a forced refresh commit the new store.
     nonisolated(unsafe) static let live = TokenStorageHooks(
       usesKeychainTokenStorage: { true },
       allowsUserDefaultsFallback: { false },
@@ -1919,11 +1919,11 @@ class AuthService {
   /// the app really uses — so a harness can then relaunch and prove the app refreshes an
   /// expired idToken *without signing the user out*.
   ///
-  /// Why this exists: the tokens moved to the Keychain, so the old harness trick of
+  /// Why this exists: the tokens moved to the secret store, so the old harness trick of
   /// `defaults write <bundle> auth_tokenExpiry -float 1000` now tampers a key the app
   /// no longer reads — the probe silently measured nothing and reported a false
   /// regression. Going through `saveTokens` keeps the seam correct for BOTH backends
-  /// (keychain and the UserDefaults fallback) and is inert if the storage changes again.
+  /// (secret store and the UserDefaults fallback) and is inert if the storage changes again.
   ///
   /// `expiresIn: 0` lands at `now - 300` (saveTokens subtracts the 5-min buffer), i.e.
   /// already expired. Token material never leaves the process — only a redacted status.

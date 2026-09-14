@@ -253,7 +253,7 @@ async def create_task_internal(
                 body['due_string'] = due_date.strftime('%Y-%m-%d')
 
             response = await client.post(
-                'https://api.todoist.com/rest/v2/tasks',
+                'https://api.todoist.com/api/v1/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
                 json=body,
             )

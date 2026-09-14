@@ -10004,4 +10004,7 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.';
+
+  @override
+  String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
 }

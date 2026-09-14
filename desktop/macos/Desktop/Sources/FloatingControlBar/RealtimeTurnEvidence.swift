@@ -43,6 +43,14 @@ final class RealtimeTurnEvidenceLedger {
 
   var count: Int { entries.count }
 
+  #if DEBUG
+    /// Hermetic observation seam for native-evidence attach tests. Production
+    /// attaches through `FloatingControlBarManager`; tests inject this to count
+    /// and order writes without a live kernel journal.
+    var testingAttachRealtimeUserEvidence:
+      (@MainActor (AgentSurfaceReference, String, String, ConversationEvidence) async -> Bool)?
+  #endif
+
   func begin(
     ownerID: String,
     turnID: VoiceTurnID,

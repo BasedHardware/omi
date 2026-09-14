@@ -10016,4 +10016,7 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Пераўтварэнне маўлення ў тэкст зараз недаступнае. Праверце падключэнне да інтэрнэту і налады распазнавання маўлення на прыладзе, затым паспрабуйце яшчэ раз.';
+
+  @override
+  String get processingTakingLonger => 'Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.';
 }

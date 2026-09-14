@@ -24,11 +24,18 @@ ROLLOUT_FLAGS = (
     'CONVERSATION_OCR_CONTEXT_ENABLED',
 )
 
-# backend-listen finalizes a live conversation; gke/pusher hosts the same
+# backend-listen finalizes a live GKE conversation; gke/pusher hosts the same
 # process_conversation path after 2026-08-30; cloud_run/backend runs it inline
-# for POST /v1/conversations/{id}/reprocess. All three must agree or a captured
-# conversation and a regenerate/pusher finalization produce different pipelines.
-SUMMARY_PIPELINE_SCOPES = ('gke/backend-listen', 'gke/pusher', 'cloud_run/backend')
+# for POST /v1/conversations/{id}/reprocess; cloud_run/backend-sync is the
+# Cloud Tasks conversation-finalization writer for pendant/phone. All four
+# must agree or a captured conversation and a regenerate/sync finalization
+# produce different pipelines.
+SUMMARY_PIPELINE_SCOPES = (
+    'gke/backend-listen',
+    'gke/pusher',
+    'cloud_run/backend',
+    'cloud_run/backend-sync',
+)
 
 
 @functools.cache
@@ -41,6 +48,7 @@ def _env_maps(environment: dict) -> dict[str, dict]:
         'gke/backend-listen': environment['gke']['backend-listen']['env'],
         'gke/pusher': environment['gke']['pusher']['env'],
         'cloud_run/backend': environment['cloud_run']['services']['backend']['env'],
+        'cloud_run/backend-sync': environment['cloud_run']['services']['backend-sync']['env'],
     }
 
 
@@ -84,6 +92,8 @@ def test_reprocess_cannot_disagree_with_live_finalization():
             assert len(set(values.values())) == 1, f'{flag}: {values}'
             assert values['gke/backend-listen'] != '', flag
             assert values['gke/pusher'] != '', flag
+            assert values['cloud_run/backend'] != '', flag
+            assert values['cloud_run/backend-sync'] != '', flag
 
 
 def test_the_deployed_chart_values_match_the_composed_manifest():

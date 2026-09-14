@@ -66,6 +66,19 @@ def test_excluding_the_dead_provider_selects_the_next_one():
         assert second == STTService.soniox
 
 
+def test_excluding_the_dead_provider_skips_soniox_without_a_key():
+    """An empty key must not consume a failover hop."""
+    with patch.dict(
+        'os.environ',
+        {'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet', 'SONIOX_API_KEY': ''},
+        clear=False,
+    ), patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'soniox', 'dg-nova-3']), patch(
+        'utils.stt.streaming._deepgram_is_available', return_value=True
+    ):
+        second, _, _ = get_stt_service_for_language('en', exclude=frozenset({MODULATE_PROVIDER}))
+        assert second == STTService.deepgram
+
+
 def test_excluding_every_provider_selects_nothing():
     """Exhausting the chain must report no provider, not loop back to the first."""
     with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'soniox']), patch.dict(

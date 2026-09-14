@@ -900,6 +900,7 @@ final class DesktopDiagnosticsManager {
     "attempt_id", "capture_start_outcome", "capture_start_status_class",
     "ms_to_first_audio_bucket", "ms_to_first_usable_frame_bucket",
     "first_chunks_energy_bucket", "turn_disposition",
+    "turn_kind",
     "input_route_class", "input_route_source", "route_changed_during_attempt",
     "recovery_triggered", "recovery_attempt_id", "recovery_outcome_of_next_turn",
     "judgeable", "telemetry_schema_version",

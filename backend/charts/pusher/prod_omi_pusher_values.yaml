@@ -123,6 +123,15 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
+  # Read by utils/llm/managed_spend_ledger.py for direct-provider surfaces
+  # (desktop_proxy, omni_relay). Neither is mounted on the pusher today, so
+  # this is pre-positioning, not a fix for lost rows: pusher-hosted
+  # process_conversation spends through the LLM gateway, which ledgers under
+  # its own identity. Declared here so a co-host env diff cannot leave one
+  # process_conversation host silently unable to ledger if a direct surface
+  # is ever mounted (verify_pusher_cohost_env_diff.py REQUIRED_IDENTICAL_LITERALS).
+  - name: LLM_GATEWAY_ACCOUNTING_ENABLED
+    value: "true"
   - name: OMI_LLM_GATEWAY_URL
     value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
@@ -294,7 +303,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
+    value: "modulate-velma-2,dg-nova-3,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -307,12 +316,6 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
-  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "300"
-  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-    value: "0"
-  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-    value: "0"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
     value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID

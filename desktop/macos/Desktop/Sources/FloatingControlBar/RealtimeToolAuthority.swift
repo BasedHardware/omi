@@ -151,6 +151,21 @@ enum VoiceJournalSealedRowRevisionPolicy {
   struct Revision: Equatable {
     let status: KernelJournalTurnStatus
     let terminalReason: String
+    /// The revised row was sealed at provider-response-finish, so its answer
+    /// text completed even though delivery did not. Surfaced in the row's
+    /// metadata so later turns treat the reply as given rather than
+    /// re-answering the thread out of context.
+    let answerTextCompleted: Bool
+
+    init(
+      status: KernelJournalTurnStatus,
+      terminalReason: String,
+      answerTextCompleted: Bool = false
+    ) {
+      self.status = status
+      self.terminalReason = terminalReason
+      self.answerTextCompleted = answerTextCompleted
+    }
   }
 
   static func revision(
@@ -166,7 +181,11 @@ enum VoiceJournalSealedRowRevisionPolicy {
     // The reducer terminal said `.success` while the answer never drained;
     // "success" would be a false truncation cause on a failed row.
     let terminalReason = reason == .success ? "answer_not_delivered" : reason.rawValue
-    return Revision(status: .failed, terminalReason: terminalReason)
+    // A sealed completed row exists only when the funnel journaled at
+    // provider-response-finish: the answer text finished, only its delivery
+    // was cut. The row must keep saying so.
+    return Revision(
+      status: .failed, terminalReason: terminalReason, answerTextCompleted: true)
   }
 
   private static let revisableReasons: Set<VoiceTurnTerminalReason> = [

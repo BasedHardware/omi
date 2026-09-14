@@ -69,8 +69,19 @@ def _build_android_config(tag: str, priority: str = 'normal', is_data_only: bool
     return messaging.AndroidConfig(**config_kwargs)
 
 
-def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSConfig:
-    """Build APNs configuration with deduplication."""
+def _build_apns_config(
+    tag: str,
+    is_background: bool = False,
+    *,
+    alert_title: Optional[str] = None,
+    alert_body: Optional[str] = None,
+) -> messaging.APNSConfig:
+    """Build APNs configuration with deduplication.
+
+    When ``alert_title`` / ``alert_body`` are set (client-displayed chat answers),
+    emit an explicit APNS alert because the FCM top-level ``notification`` is
+    omitted so Android can render BigText locally (#4375).
+    """
     headers = {'apns-collapse-id': tag}
 
     if is_background:
@@ -84,6 +95,24 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
         return messaging.APNSConfig(
             headers=headers,
             payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+        )
+
+    if alert_title is not None or alert_body is not None:
+        headers.update(
+            {
+                'apns-push-type': 'alert',
+                'apns-priority': '10',
+                'apns-topic': IOS_BUNDLE_ID,
+            }
+        )
+        return messaging.APNSConfig(
+            headers=headers,
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(
+                    alert=messaging.ApsAlert(title=alert_title or '', body=alert_body or ''),
+                    sound='default',
+                ),
+            ),
         )
 
     return messaging.APNSConfig(headers=headers)
@@ -120,6 +149,13 @@ def _build_webpush_config(
     return messaging.WebpushConfig(**config_kwargs)
 
 
+def _stringify_fcm_data(data: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """FCM data payloads require string values."""
+    if not data:
+        return {}
+    return {str(k): '' if v is None else str(v) for k, v in data.items()}
+
+
 def _build_message(
     token: str,
     tag: str,
@@ -127,13 +163,35 @@ def _build_message(
     data: Optional[Dict[str, Any]] = None,
     is_background: bool = False,
     priority: str = 'normal',
+    *,
+    client_displayed: bool = False,
+    display_title: Optional[str] = None,
+    display_body: Optional[str] = None,
 ) -> messaging.Message:
-    """Build a complete FCM message with proper platform configs."""
-    # Extract title/body for webpush config (browsers need explicit values)
-    title: Optional[str] = cast(Any, notification).title if notification else None
-    body: Optional[str] = cast(Any, notification).body if notification else None
+    """Build a complete FCM message with proper platform configs.
+
+    ``client_displayed`` omits the top-level FCM notification so Android can
+    render a local BigText shade entry, while APNS still carries an alert for
+    iOS system trays (#4375).
+    """
     # Extract navigate_to for webpush click-through link
     link: Optional[str] = data.get('navigate_to') if data else None
+
+    if client_displayed:
+        title = display_title
+        body = display_body
+        return messaging.Message(
+            token=token,
+            notification=None,
+            data=data,
+            android=_build_android_config(tag, priority, is_data_only=True),
+            apns=_build_apns_config(tag, alert_title=title, alert_body=body),
+            webpush=_build_webpush_config(tag, title, body, link),
+        )
+
+    # Extract title/body for webpush config (browsers need explicit values)
+    title = cast(Any, notification).title if notification else None
+    body = cast(Any, notification).body if notification else None
 
     return messaging.Message(
         token=token,
@@ -177,6 +235,10 @@ def _send_to_user(
     is_background: bool = False,
     priority: str = 'normal',
     tokens: Optional[List[str]] = None,
+    *,
+    client_displayed: bool = False,
+    display_title: Optional[str] = None,
+    display_body: Optional[str] = None,
 ) -> int:
     """Send a message to all user's devices using batch send. Returns count of successful sends."""
     if tokens is None:
@@ -186,7 +248,20 @@ def _send_to_user(
         return 0
 
     # Build messages for all tokens
-    messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
+    messages = [
+        _build_message(
+            token,
+            tag,
+            notification,
+            data,
+            is_background,
+            priority,
+            client_displayed=client_displayed,
+            display_title=display_title,
+            display_body=display_body,
+        )
+        for token in tokens
+    ]
 
     try:
         response = _send_messages(messages)
@@ -212,6 +287,10 @@ async def _send_to_user_async(
     is_background: bool = False,
     priority: str = 'normal',
     tokens: Optional[List[str]] = None,
+    *,
+    client_displayed: bool = False,
+    display_title: Optional[str] = None,
+    display_body: Optional[str] = None,
 ) -> int:
     """Async boundary for the synchronous token store and Firebase Admin SDK."""
     if tokens is None:
@@ -220,7 +299,20 @@ async def _send_to_user_async(
         logger.info(f"No tokens found for user {user_id}")
         return 0
 
-    messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
+    messages = [
+        _build_message(
+            token,
+            tag,
+            notification,
+            data,
+            is_background,
+            priority,
+            client_displayed=client_displayed,
+            display_title=display_title,
+            display_body=display_body,
+        )
+        for token in tokens
+    ]
 
     try:
         response = await run_blocking(postprocess_executor, _send_messages, messages)
@@ -256,6 +348,74 @@ async def send_notification_async(
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     await _send_to_user_async(user_id, tag, notification=notification, data=data, tokens=tokens)
+
+
+def send_client_displayed_notification(
+    user_id: str,
+    title: str,
+    body: str,
+    data: Optional[Dict[str, Any]] = None,
+    tokens: Optional[List[str]] = None,
+) -> None:
+    """Send a chat/plugin answer push that Flutter renders with BigText on Android (#4375).
+
+    Android: data-only (no system tray fallback) so the client can show BigText.
+    iOS: APNS alert with title/body. Both carry ``push_type=chat_answer`` and
+    ``navigate_to`` in the data map for deep-linking.
+    """
+    logger.info(f'send_client_displayed_notification to user {user_id}')
+    body = to_plain_text(body)
+    payload = _stringify_fcm_data(data)
+    payload['push_type'] = 'chat_answer'
+    payload['title'] = title
+    # Do not set payload['body']: NotificationMessage already carries ``text``,
+    # and duplicating the full answer exceeds FCM's 4KB data limit on long
+    # replies. Clients resolve the shade body from ``text`` (#4375).
+    # APNS/webpush still receive display_body below for system-tray alerts.
+    if not payload.get('text'):
+        payload['text'] = body
+    tag = _generate_tag(f"{user_id}:{title}:{body}:{payload.get('id', '')}")
+    _send_to_user(
+        user_id,
+        tag,
+        notification=None,
+        data=payload,
+        priority='high',
+        tokens=tokens,
+        client_displayed=True,
+        display_title=title,
+        display_body=body,
+    )
+
+
+async def send_client_displayed_notification_async(
+    user_id: str,
+    title: str,
+    body: str,
+    data: Optional[Dict[str, Any]] = None,
+    tokens: Optional[List[str]] = None,
+) -> None:
+    """Async client-displayed boundary for streaming chat so FCM does not block SSE (#4375)."""
+    logger.info(f'send_client_displayed_notification to user {user_id}')
+    body = to_plain_text(body)
+    payload = _stringify_fcm_data(data)
+    payload['push_type'] = 'chat_answer'
+    payload['title'] = title
+    # Single copy of the answer in data (``text`` only) — see sync twin above.
+    if not payload.get('text'):
+        payload['text'] = body
+    tag = _generate_tag(f"{user_id}:{title}:{body}:{payload.get('id', '')}")
+    await _send_to_user_async(
+        user_id,
+        tag,
+        notification=None,
+        data=payload,
+        priority='high',
+        tokens=tokens,
+        client_displayed=True,
+        display_title=title,
+        display_body=body,
+    )
 
 
 async def send_subscription_paid_personalized_notification(user_id: str, data: Optional[Dict[str, Any]] = None) -> None:

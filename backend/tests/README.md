@@ -89,6 +89,20 @@ an exact-set pin — add its file to `tests/slow_guardrail_manifest.txt` so
 whose job is to notice a change nobody anticipated cannot be gated on the change set that triggered the run.
 Stress and network tests still belong in `slow` with no manifest entry.
 
+## Asana project chooser regression
+
+From the repository root, with the locked backend environment installed:
+
+```bash
+backend/.venv/bin/python -m pytest backend/tests/unit/test_asana_project_pagination.py backend/tests/unit/test_asana_project_pagination_http.py -q
+```
+
+These hermetic unit tests cover project continuation offsets, preserved query
+filters, OAuth retry across pages, and propagation of later-page errors. The HTTP
+cases mount the production router with fake provider/database boundaries and
+check response serialization; they do not contact Asana or exercise live OAuth.
+Both files are discovered by the existing backend unit runner.
+
 ## Integration Tests
 
 Integration tests live under `tests/integration/` and are not run by `bash test.sh`. They may require Redis,

@@ -28,6 +28,7 @@ from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -910,26 +911,55 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
         return 0
 
 
+# Embedding input for action-item similarity is scraped/untrusted text. The
+# embeddings gateway rejects empty or oversized input with a 400, so validate
+# and clip before spending the call; callers degrade to "no candidates".
+_ACTION_ITEM_QUERY_MAX_CHARS = 8000
+
+
+def _prepare_action_item_query(query: str) -> Optional[str]:
+    """Strip, reject empty, and clip untrusted action-item query text."""
+    prepared = (query or "").strip()
+    if not prepared:
+        return None
+    return prepared[:_ACTION_ITEM_QUERY_MAX_CHARS]
+
+
 def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_score: float = 0.3) -> List[str]:
-    if index is None:
-        logger.warning('Pinecone index not initialized, skipping action item search')
+    prepared_query = _prepare_action_item_query(query)
+    if index is None or prepared_query is None:
+        logger.warning('Pinecone index not initialized or empty query, skipping action item search')
         return []
 
-    vector = embeddings.embed_query(query)
-    filter_data: Dict[str, Any] = {'uid': uid}
+    try:
+        vector = embeddings.embed_query(prepared_query)
+        filter_data: Dict[str, Any] = {'uid': uid}
 
-    xc = index.query(
-        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
-    )
+        xc = index.query(
+            vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
+        )
 
-    matches: List[Any] = xc.get('matches', [])
-    top_score = matches[0]['score'] if matches else None
-    kept = [m for m in matches if m.get('score', 0.0) >= min_score]
-    logger.info(
-        f'search_action_items_by_vector uid={uid} matches={len(matches)} kept={len(kept)} '
-        f'top_score={top_score} min_score={min_score}'
-    )
-    return [m['metadata'].get('action_item_id') for m in kept]
+        matches: List[Any] = xc.get('matches', [])
+        top_score = matches[0]['score'] if matches else None
+        kept = [m for m in matches if m.get('score', 0.0) >= min_score]
+        logger.info(
+            f'search_action_items_by_vector uid={uid} matches={len(matches)} kept={len(kept)} '
+            f'top_score={top_score} min_score={min_score}'
+        )
+        return [m['metadata'].get('action_item_id') for m in kept]
+    except Exception as e:
+        logger.exception(f'search_action_items_by_vector failed uid={uid}: {e}')
+        # Degrade telemetry: without this, a provider outage is indistinguishable
+        # from a genuine no-match search in the empty-list result.
+        record_fallback(
+            component='other',
+            from_mode='action_item_vector_search',
+            to_mode='no_candidates',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return []
 
 
 def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limit: int = 10) -> List[Dict[str, Any]]:
@@ -944,11 +974,12 @@ def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limi
     caller treats "no candidates" as "user has nothing relevant," which is
     the same behavior as a brand-new user.
     """
-    if index is None:
+    prepared_query = _prepare_action_item_query(query)
+    if index is None or prepared_query is None:
         return []
 
     try:
-        vector = embeddings.embed_query(query)
+        vector = embeddings.embed_query(prepared_query)
         xc = index.query(
             vector=vector,
             top_k=limit,

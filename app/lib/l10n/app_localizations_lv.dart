@@ -10008,4 +10008,7 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
+
+  @override
+  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
 }

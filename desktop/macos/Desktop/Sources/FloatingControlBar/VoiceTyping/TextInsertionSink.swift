@@ -50,8 +50,10 @@ enum DictationTextReplacementResult: Equatable {
 
 enum TextInsertionResult: Equatable {
   case inserted
-  /// Legacy paste dispatch is accepted, but its asynchronous result cannot
-  /// support a verified insertion receipt.
+  /// A paste was dispatched and the editor never showed it landing, so it
+  /// carries no insertion receipt. A paste that *is* read back reports
+  /// `inserted` like any other verified insertion — only its Undo is missing,
+  /// because Cmd-V supplies no inserted range to take back.
   case pastePosted
   case notInserted
   /// Text may already be partly or fully present. Do not copy for a retry.
@@ -69,7 +71,11 @@ protocol DictationTextAccess: AnyObject {
 
 @MainActor
 protocol TextInsertionSink: AnyObject {
-  func paste(_ text: String, into target: TextInsertionTarget) -> TextInsertionResult
+  /// Asynchronous because an editor applies an addressed write or a posted
+  /// paste on its own run loop: the insertion is read back once the editor
+  /// has had a bounded moment to apply it, never on the same turn it was
+  /// dispatched.
+  func paste(_ text: String, into target: TextInsertionTarget) async -> TextInsertionResult
   func copy(_ text: String)
   func focusTarget() -> TextInsertionTarget?
   /// Receipt availability only. The action must separately validate the editor.
@@ -95,6 +101,7 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
   private let clipboardPaste: ((String, TextInsertionTarget) -> Bool)?
   private let clipboardCopy: ((String) -> Void)?
   private let sleepForReceiptExpiry: @MainActor (TimeInterval) async throws -> Void
+  private let sleepForVerification: @MainActor (TimeInterval) async throws -> Void
   private var receiptExpiryTask: Task<Void, Never>?
   var insertionReceiptDidChange: (() -> Void)?
   private struct InsertionReceipt {
@@ -112,6 +119,9 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
     clipboardCopy: ((String) -> Void)? = nil,
     sleepForReceiptExpiry: @escaping @MainActor (TimeInterval) async throws -> Void = { remaining in
       try await Task.sleep(for: .seconds(remaining))
+    },
+    sleepForVerification: @escaping @MainActor (TimeInterval) async throws -> Void = { interval in
+      try await Task.sleep(for: .seconds(interval))
     }
   ) {
     self.access = access
@@ -119,42 +129,104 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
     self.clipboardPaste = clipboardPaste
     self.clipboardCopy = clipboardCopy
     self.sleepForReceiptExpiry = sleepForReceiptExpiry
+    self.sleepForVerification = sleepForVerification
   }
 
   deinit { receiptExpiryTask?.cancel() }
 
   func focusTarget() -> TextInsertionTarget? { access.readFocusedText()?.target }
 
-  func paste(_ text: String, into target: TextInsertionTarget) -> TextInsertionResult {
+  func paste(_ text: String, into target: TextInsertionTarget) async -> TextInsertionResult {
     discardInsertionReceipt()
     guard !text.isEmpty, let before = access.readFocusedText(), before.target == target else { return .notInserted }
+    let expected = (before.value as NSString).replacingCharacters(in: before.selection, with: text)
+    let caretAfterInsertion = NSRange(
+      location: before.selection.location + (text as NSString).length, length: 0)
+    var addressedWriteWasDropped = false
     if before.canReplaceSelection {
       // A reported write failure may be partial. Never retry with Cmd-V or
       // restore the whole document after attempting an addressed mutation.
       let replacement = access.replaceSelection(text, in: target)
       guard replacement != .notAttempted else { return .notInserted }
-      let expected = (before.value as NSString).replacingCharacters(in: before.selection, with: text)
-      guard let after = access.readFocusedText(), after.target.isSameField(as: target),
-        after.value == expected,
-        after.selection == NSRange(location: before.selection.location + (text as NSString).length, length: 0)
-      else { return .uncertain }
-      if before.selection.length == 0 {
+      if let after = await settledField(target, showing: expected) {
+        // The exact expected value in the captured field is the insertion.
+        // Where the editor then left the caret is a separate question, and
+        // only the Undo receipt's: an editor that leaves what it inserted
+        // selected, or that parks the caret at the end of the line, has still
+        // inserted it.
+        guard before.selection.length == 0, after.selection == caretAfterInsertion else { return .inserted }
         installInsertionReceipt(
           InsertionReceipt(
             target: after.target,
             insertedRange: NSRange(location: before.selection.location, length: (text as NSString).length),
             originalDigest: target.valueDigest, expiresAt: now() + 30))
+        return .inserted
       }
-      return .inserted
+      // Chromium answers this write with success and silently drops it.
+      // Measured live against a Chrome textarea: `AXSelectedText` reports as
+      // settable, the write returns `kAXErrorSuccess`, and the value never
+      // changes — while setting the selected *range* on that same element
+      // does take effect, so the element is reachable and the value is not
+      // merely stale. Every browser and Electron editor is on that path, and
+      // the turn ended as an unverified insertion with the dictation lost.
+      //
+      // A field that still holds exactly its captured text, caret and
+      // revision after an *acknowledged* write is proof that no part of it
+      // landed — the one case where falling through to Cmd-V cannot
+      // double-insert. An errored or timed-out reply proves nothing (the
+      // editor may still be processing it) and is never retried.
+      guard replacement == .applied, access.readFocusedText()?.target == target else { return .uncertain }
+      addressedWriteWasDropped = true
+    } else {
+      guard access.readFocusedText()?.target == target else { return .notInserted }
     }
-    guard access.readFocusedText()?.target == target else { return .notInserted }
     let pasted = clipboardPaste?(text, target) ?? pasteViaClipboard(text, into: target)
-    if pasted {
-      DesktopDiagnosticsManager.shared.recordFallback(
-        area: "voice_typing", from: "ax_selected_text", to: "clipboard_paste",
-        reason: "policy", outcome: .degraded)
+    guard pasted else { return .notInserted }
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "voice_typing", from: "ax_selected_text", to: "clipboard_paste",
+      reason: addressedWriteWasDropped ? "capability_mismatch" : "policy", outcome: .degraded)
+    // Readable and writable are separate grants: an editor that refuses an
+    // addressed write still reports its value, so the same read-back that
+    // verifies a write verifies the Cmd-V. Only a paste that is never seen to
+    // land stays merely dispatched. Undo is still not offered — Cmd-V hands
+    // back no inserted range to take away.
+    return await settledField(target, showing: expected) == nil ? .pastePosted : .inserted
+  }
+
+  /// How long an editor gets to show an insertion before it is doubted, and
+  /// how the wait is spent: ten reads 30ms apart, under a hard elapsed cap.
+  /// Both bounds matter — every read is a synchronous Accessibility round
+  /// trip, so an app whose AX server is slow or wedged spends far more than
+  /// the interval per read, and the count alone would not bound the turn. The
+  /// whole window stays inside the pasteboard restore delay.
+  private static let verificationReads = 10
+  private static let verificationInterval: TimeInterval = 0.03
+  private static let verificationWindow: TimeInterval = 0.4
+
+  /// The captured field once it shows `expected`, or nil if it never does.
+  ///
+  /// Both an addressed AX write and a posted Cmd-V reach the editor
+  /// asynchronously. AppKit fields apply them before the next read, but
+  /// web-backed and Electron editors apply them a run-loop turn or two later,
+  /// and a single immediate read reported those correct insertions as
+  /// unverified — the dictation was in the field while the bar said
+  /// "Insertion unconfirmed". The read is repeated, briefly, before the
+  /// insertion is doubted.
+  private func settledField(
+    _ target: TextInsertionTarget, showing expected: String
+  ) async -> FocusedDictationText? {
+    let deadline = now() + Self.verificationWindow
+    for read in 0..<Self.verificationReads {
+      if read > 0 {
+        guard now() < deadline else { break }
+        try? await sleepForVerification(Self.verificationInterval)
+      }
+      guard let field = access.readFocusedText(), field.target.isSameField(as: target),
+        field.value == expected
+      else { continue }
+      return field
     }
-    return pasted ? .pastePosted : .notInserted
+    return nil
   }
 
   /// Opening an Omi menu can temporarily hide the focused text element. A

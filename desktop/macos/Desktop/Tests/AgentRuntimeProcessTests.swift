@@ -955,6 +955,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(message?.requestKey)
   }
 
+  func testQueryResultPreservesResponseObservedProviderTargets() async throws {
+    let message = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"result","protocolVersion":2,"requestId":"req-provider","clientId":"main-chat","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done","modelsUsed":["gpt-5.6-luna"],"providerTargets":["openai-codex"]}"#
+      )
+    )
+
+    let bridgeResult = await AgentRuntimeProcess.shared.queryResult(from: message)
+    let clientResult = AgentClient.QueryResult(bridgeResult)
+
+    XCTAssertEqual(bridgeResult.modelsUsed, ["gpt-5.6-luna"])
+    XCTAssertEqual(bridgeResult.providerTargets, ["openai-codex"])
+    XCTAssertEqual(clientResult.providerTargets, ["openai-codex"])
+  }
+
   func testHarnessModeMapsNamedAdapters() {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "piMono"), "pi-mono")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "pi-mono"), "pi-mono")

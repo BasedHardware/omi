@@ -116,6 +116,8 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
             try_acquire_daily_summary_lock=lambda *_args: True,
             # Declines before the LLM call hand the day back instead of sitting on the 2h key.
             release_daily_summary_lock=lambda *_args: None,
+            try_acquire_notifications_job_run_lock=lambda *_args, **_kwargs: True,
+            release_notifications_job_run_lock=lambda *_args, **_kwargs: None,
             r=fake_redis,
         ),
         'models.notification_message': _module(
@@ -522,6 +524,8 @@ def _loaded_send_path(
             try_acquire_daily_summary_lock=lambda *_args: True,
             # Declines before the LLM call hand the day back instead of sitting on the 2h key.
             release_daily_summary_lock=lambda *_args: None,
+            try_acquire_notifications_job_run_lock=lambda *_args, **_kwargs: True,
+            release_notifications_job_run_lock=lambda *_args, **_kwargs: None,
             r=FakeRedis(),
         ),
         'utils.conversations.factory': _module(

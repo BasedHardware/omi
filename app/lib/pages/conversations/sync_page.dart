@@ -16,6 +16,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/sync/sync_card_progress_line.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'widgets/sync_error_card.dart';
 import 'local_storage_page.dart';
@@ -546,8 +547,13 @@ class _SyncPageState extends State<SyncPage> {
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
-      // Uploaded WAL counts are queue state, not server segment progress.
-      subtitle = l.syncProcessingBackgroundHint;
+      final counts = syncProvider.offlineServerProcessingCounts;
+      subtitle = SyncCardProgressLine.serverProcessingSubtitle(
+            processed: counts.processed,
+            total: counts.total,
+            counterLabel: (p, t) => l.processingProgress(p, t),
+          ) ??
+          l.syncProcessingBackgroundHint;
     } else if (readyToSync > 0) {
       title = l.syncCardReadyCount(readyToSync);
       action = statusActionPill(l.sync, Colors.deepPurpleAccent, () {
@@ -610,12 +616,13 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   String? _progressLine(SyncState s, String? speedStr) {
-    final cur = s.currentFile ?? 0;
-    final tot = s.totalFiles ?? 0;
-    final parts = <String>[];
-    if (tot > 0) parts.add(context.l10n.syncCardProgressOf(cur, tot));
-    if (speedStr != null) parts.add(speedStr);
-    return parts.isEmpty ? null : parts.join(' · ');
+    return SyncCardProgressLine.subtitle(
+      phase: s.phase,
+      currentFile: s.currentFile,
+      totalFiles: s.totalFiles,
+      counterLabel: (processed, total) => context.l10n.syncCardProgressOf(processed, total),
+      speedSuffix: speedStr,
+    );
   }
 
   Widget _buildSyncErrorCard(SyncProvider syncProvider) {

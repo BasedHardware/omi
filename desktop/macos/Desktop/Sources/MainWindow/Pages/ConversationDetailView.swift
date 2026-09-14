@@ -17,42 +17,6 @@ enum ConversationDetailRequestGate {
   }
 }
 
-/// A parent can replace a conversation row without changing its identity
-/// (rename, folder move, processing completion). Keying detail work only by ID
-/// leaves the open panel pinned to the old value, so these visible revisions
-/// participate in the request identity as well.
-struct ConversationDetailRequestToken: Hashable {
-  let conversationID: String
-  let updatedAt: Date?
-  let title: String
-  let folderID: String?
-  let status: String
-
-  init(conversation: ServerConversation) {
-    self.init(
-      conversationID: conversation.id,
-      updatedAt: conversation.updatedAt,
-      title: conversation.title,
-      folderID: conversation.folderId,
-      status: String(describing: conversation.status)
-    )
-  }
-
-  init(
-    conversationID: String,
-    updatedAt: Date?,
-    title: String,
-    folderID: String?,
-    status: String
-  ) {
-    self.conversationID = conversationID
-    self.updatedAt = updatedAt
-    self.title = title
-    self.folderID = folderID
-    self.status = status
-  }
-}
-
 struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
   let isProcessing: Bool
   let banner: Banner
@@ -109,6 +73,16 @@ struct ConversationDetailView: View {
   /// This keeps the signed URL and AVPlayer lifecycle scoped to whichever
   /// conversation detail is currently visible.
   @StateObject private var capturePlayback = CapturePlaybackController()
+  /// On-device transcript-to-audio alignment behind the transcript refresh
+  /// button. Its result replaces `loadedConversation` for this selection only.
+  @StateObject private var transcriptResync = CaptureTranscriptResyncer()
+  /// True once the displayed transcript's times are seconds into the media
+  /// (a stored or fresh sync), so playback must not apply server spans again.
+  @State private var transcriptOnMediaClock = false
+  /// The transcript as the server sent it, kept while a sync is on screen so
+  /// the page can fall back to the server's clock when the audio that sync was
+  /// made against is no longer what plays.
+  @State private var serverClockConversation: ServerConversation?
   /// This note's screenshots, owned here rather than inside the summary because both halves of the
   /// note read them: the strip is in the summary, and the banner is the *header's* background.
   /// Constructing it is free — the initialiser only captures closures — and it starts no work
@@ -151,6 +125,7 @@ struct ConversationDetailView: View {
   @State private var didResolveInitialCaptureFocus = false
   @State private var detailLoadGeneration = 0
   @State private var detailReadyConversationID: String?
+  @State private var isRefreshingTranscript = false
   @State private var captureFocusGeneration = 0
 
   // Speaker naming state
@@ -314,6 +289,9 @@ struct ConversationDetailView: View {
         )
         didResolveInitialCaptureFocus = false
         capturePlayback.clear()
+        transcriptResync.reset()
+        transcriptOnMediaClock = false
+        serverClockConversation = nil
       }
     }
     .onDisappear {
@@ -322,6 +300,9 @@ struct ConversationDetailView: View {
       detailReadyConversationID = nil
       ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)
       capturePlayback.clear()
+      transcriptResync.reset()
+      transcriptOnMediaClock = false
+      serverClockConversation = nil
     }
     .onChange(of: showTranscriptDrawer) { _, newValue in
       ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
@@ -357,10 +338,10 @@ struct ConversationDetailView: View {
           guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { break }
           let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
             guard isCurrentDetailRequest(requestGeneration) else { return }
-            loadedConversation = cached
+            applyLoadedConversation(cached)
           }
           guard isCurrentDetailRequest(requestGeneration) else { return }
-          loadedConversation = fetched
+          applyLoadedConversation(fetched)
           if fetched.status != .processing { break }
           let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
           attempts += 1
@@ -373,10 +354,10 @@ struct ConversationDetailView: View {
         if let appState = AppState.current {
           let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
             guard isCurrentDetailRequest(requestGeneration) else { return }
-            loadedConversation = cached
+            applyLoadedConversation(cached)
           }
           guard isCurrentDetailRequest(requestGeneration) else { return }
-          loadedConversation = fetched
+          applyLoadedConversation(fetched)
         }
         guard isCurrentDetailRequest(requestGeneration) else { return }
         isLoadingConversation = false
@@ -725,6 +706,70 @@ struct ConversationDetailView: View {
 
   // MARK: - Actions
 
+  /// Re-reads the detail through the repository and re-resolves capture
+  /// playback. Selection identity is unchanged, so the same generation guards
+  /// that protect the initial load also discard a refresh that outlives it.
+  /// A freshly loaded detail, with any sync this machine already made for
+  /// this audio part applied on top so reopening never regresses the timing.
+  private func applyLoadedConversation(_ fetched: ServerConversation) {
+    serverClockConversation = fetched
+    if let synced = CaptureTranscriptSyncStore().applied(to: fetched) {
+      loadedConversation = synced
+      transcriptOnMediaClock = true
+    } else {
+      loadedConversation = fetched
+      transcriptOnMediaClock = false
+    }
+  }
+
+  /// A sync is made against the aggregate; while the transport is playing one
+  /// part instead, the aggregate's clock is the wrong one for a multi-part
+  /// transcript, so the page shows the server's timing until an exact
+  /// aggregate is back.
+  private func showServerClockTranscriptIfPlaybackIsAFallback(_ resolution: CapturePlaybackResolution) {
+    guard transcriptOnMediaClock, case .fileFallback = resolution, let serverClockConversation else { return }
+    loadedConversation = serverClockConversation
+    transcriptOnMediaClock = false
+  }
+
+  /// Refresh = re-fetch the transcript, then, for a capture with audio, listen
+  /// to that audio on-device and move every timestamp onto the audio's clock.
+  /// The raw transcript is always what gets aligned, never an already-synced
+  /// one, so repeated presses converge instead of compounding. Whatever timing
+  /// is on screen stays there until the new sync succeeds: a refresh that
+  /// cannot download, hear, or match the audio must not throw away a sync
+  /// that already lined the bubbles up.
+  private func refreshTranscript() {
+    guard !isRefreshingTranscript, !transcriptResync.phase.isBusy else { return }
+    isRefreshingTranscript = true
+    let requestGeneration = detailLoadGeneration
+    Task {
+      defer { isRefreshingTranscript = false }
+      var raw = displayConversation
+      if let appState = AppState.current {
+        raw = await appState.loadConversationDetail(raw) { _ in }
+        guard isCurrentDetailRequest(requestGeneration) else { return }
+      }
+      applyLoadedConversation(raw)
+      guard Self.showsCapturePlayback(for: raw.source, in: .transcript) else { return }
+      transcriptResync.reset()
+      let resolution = await capturePlayback.prepare(
+        for: raw, forceRefresh: true, transcriptOnMediaClock: transcriptOnMediaClock)
+      guard isCurrentDetailRequest(requestGeneration) else { return }
+      guard case .readyAggregate = resolution, let artifact = capturePlayback.serverClockArtifact else {
+        // Nothing exact to align against yet; the transport says why.
+        showServerClockTranscriptIfPlaybackIsAFallback(resolution ?? .unavailable)
+        return
+      }
+      guard let synced = await transcriptResync.resync(conversation: raw, artifact: artifact),
+        isCurrentDetailRequest(requestGeneration)
+      else { return }
+      loadedConversation = synced
+      transcriptOnMediaClock = true
+      capturePlayback.setTranscriptOnMediaClock(true)
+    }
+  }
+
   private func copyTranscript() {
     guard canCopyTranscript else { return }
 
@@ -851,6 +896,7 @@ struct ConversationDetailView: View {
     ConversationCapturePlaybackSection(
       capture: displayConversation,
       playback: capturePlayback,
+      resync: transcriptResync,
       onPrepare: { startCapturePlaybackPreparation() },
       onRefresh: { startCapturePlaybackPreparation(forceRefresh: true) }
     )
@@ -877,10 +923,12 @@ struct ConversationDetailView: View {
     guard
       let resolution = await capturePlayback.prepare(
         for: displayConversation,
-        forceRefresh: forceRefresh
+        forceRefresh: forceRefresh,
+        transcriptOnMediaClock: transcriptOnMediaClock
       )
     else { return }
     guard isCurrentCaptureFocusRequest(requestGeneration) else { return }
+    showServerClockTranscriptIfPlaybackIsAFallback(resolution)
 
     guard let requestedMoment = initialCaptureMomentTimestamp else {
       reportInitialCaptureFocus(resolved: true)
@@ -963,6 +1011,31 @@ struct ConversationDetailView: View {
           )
 
         Spacer()
+
+        // Refresh: re-fetch the transcript and rebuild the audio player from
+        // fresh signed URLs, so a stale detail or an expired link recovers
+        // without leaving and reopening the conversation.
+        Button(action: refreshTranscript) {
+          Image(systemName: "arrow.clockwise")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+            .rotationEffect(.degrees(isRefreshingTranscript || transcriptResync.phase.isBusy ? 360 : 0))
+            .animation(
+              isRefreshingTranscript || transcriptResync.phase.isBusy
+                ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
+              value: isRefreshingTranscript || transcriptResync.phase.isBusy
+            )
+            .frame(width: 28, height: 28)
+            .background(
+              Circle()
+                .fill(Ink.rowFillHover)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshingTranscript || transcriptResync.phase.isBusy)
+        .help("Refresh transcript and re-sync it to the audio")
+        .accessibilityLabel("Refresh transcript and re-sync it to the audio")
+        .accessibilityIdentifier("conversation-detail-transcript-refresh")
 
         // Copy button
         Button(action: copyTranscript) {
@@ -1086,12 +1159,12 @@ struct ConversationDetailView: View {
           : {
             selectedSegmentForNaming = segment
           },
-        onTimestampTapped: Self.showsCapturePlayback(for: displayConversation.source, in: .transcript)
+        onMomentTapped: Self.showsCapturePlayback(for: displayConversation.source, in: .transcript)
           ? {
-            Task { _ = await capturePlayback.seekToMoment(wallOffset: segment.start) }
+            Task { await capturePlayback.playFromMoment(wallOffset: segment.start) }
           }
           : nil,
-        isTimestampPlayable: canSeekCaptureMoment(segment)
+        isMomentPlayable: canSeekCaptureMoment(segment)
       )
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.xs)
@@ -1114,13 +1187,17 @@ struct ConversationDetailView: View {
 
   private func canSeekCaptureMoment(_ segment: TranscriptSegment) -> Bool {
     guard Self.showsCapturePlayback(for: displayConversation.source, in: .transcript),
-      case .readyAggregate(let artifact) = capturePlayback.resolution
+      let resolution = capturePlayback.resolution
     else { return false }
-    return artifact.artifactOffset(forWallOffset: segment.start) != nil
+    return resolution.playbackOffset(forWallOffset: segment.start) != nil
   }
 
+  /// The highlighted bubble is the transport's current position, so it also
+  /// marks where a paused or scrubbed player will resume, not only live playback.
   private var activeCaptureTranscriptSegmentID: String? {
-    guard capturePlayback.isPlaybackRequested, let resolution = capturePlayback.resolution else { return nil }
+    guard capturePlayback.isPlaybackRequested || capturePlayback.currentTime > 0,
+      let resolution = capturePlayback.resolution
+    else { return nil }
     return CaptureTranscriptFollowPolicy.activeSegmentID(
       atPlaybackOffset: capturePlayback.currentTime,
       resolution: resolution,
@@ -1228,8 +1305,11 @@ struct ConversationDetailView: View {
       // whole summary — the longest prose in the app — in near-white on a near-white ground. The
       // page is `glassContent()`, which already pins the panel's light appearance, and the markdown
       // inherits it.
-      OmiMarkdown(text: selection.content, sender: .ai)
-        .textSelection(.enabled)
+      //
+      // Selection is AppKit prose, not a SwiftUI native-selection modifier on an ancestor:
+      // that wraps this tall block in SelectionOverlay and re-lays-out the visible portion
+      // while the reader scrolls (FC-selection-overlay-layout-loop; same contract as chat).
+      OmiMarkdown(text: selection.content, sender: .ai, appKitProseSelection: true)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
@@ -1479,7 +1559,6 @@ struct ConversationDetailView: View {
             Text(item.description)
               .scaledFont(size: OmiType.body)
               .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
-              .textSelection(.enabled)
               .strikethrough(item.completed, color: Ink.secondary)
 
             Spacer(minLength: OmiSpacing.sm)
@@ -1586,122 +1665,6 @@ struct ConversationDetailView: View {
   }
 #endif
 
-/// Source-specific transport embedded in the canonical transcript. Transcript
-/// bubbles own precise moment seeking, so playback no longer creates a second
-/// transcript-like list ahead of the conversation summary.
-private struct ConversationCapturePlaybackSection: View {
-  let capture: ServerConversation
-  @ObservedObject var playback: CapturePlaybackController
-  let onPrepare: () -> Void
-  let onRefresh: () -> Void
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "waveform")
-          .scaledFont(size: OmiType.body)
-          .foregroundStyle(Ink.secondary)
-        Text("Audio")
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundStyle(Ink.secondary)
-        Spacer()
-      }
-
-      playbackControls
-    }
-    .padding(OmiSpacing.lg)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-        .fill(Ink.rowFillHover.opacity(0.45))
-    )
-    .accessibilityIdentifier("conversation-detail-capture-playback")
-  }
-
-  @ViewBuilder
-  private var playbackControls: some View {
-    if playback.isResolving {
-      HStack(spacing: OmiSpacing.sm) {
-        ProgressView()
-        Text("Preparing audio")
-          .scaledFont(size: OmiType.body)
-          .foregroundStyle(Ink.secondary)
-      }
-      .accessibilityLabel("Preparing capture audio")
-    } else if let resolution = playback.resolution {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        HStack(spacing: OmiSpacing.md) {
-          switch resolution {
-          case .readyAggregate, .fileFallback:
-            Button {
-              playback.playOrPause()
-            } label: {
-              Label(
-                playback.isPlaybackRequested ? "Pause" : "Play audio",
-                systemImage: playback.isPlaybackRequested ? "pause.fill" : "play.fill"
-              )
-            }
-            .buttonStyle(.bordered)
-            .accessibilityLabel(playback.isPlaybackRequested ? "Pause capture audio" : "Play capture audio")
-            .accessibilityIdentifier("chat-first-capture-play")
-          case .pending, .locked, .unavailable, .noAudio:
-            Button("Check audio", action: onRefresh)
-              .buttonStyle(.bordered)
-              .disabled(capture.isLocked)
-              .accessibilityLabel("Check capture audio")
-              .accessibilityIdentifier("chat-first-capture-check-audio-\(capture.id)")
-          }
-
-          Text(resolution.userFacingMessage)
-            .scaledFont(size: OmiType.caption)
-            .foregroundStyle(Ink.secondary)
-        }
-
-        if playback.duration > 0 {
-          HStack(spacing: OmiSpacing.sm) {
-            ProgressView(value: min(playback.currentTime, playback.duration), total: playback.duration)
-              .accessibilityLabel("Capture playback progress")
-            Text("\(Self.playbackTimestamp(playback.currentTime)) / \(Self.playbackTimestamp(playback.duration))")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundStyle(Ink.secondary)
-              .monospacedDigit()
-          }
-        }
-
-        if playback.isBuffering {
-          Label("Buffering audio…", systemImage: "circle.dotted")
-            .scaledFont(size: OmiType.caption)
-            .foregroundStyle(Ink.secondary)
-        } else if playback.isPlaying {
-          Label("Playing", systemImage: "speaker.wave.2.fill")
-            .scaledFont(size: OmiType.caption)
-            .foregroundStyle(Ink.secondary)
-        }
-
-        if let playbackError = playback.playbackError {
-          HStack(spacing: OmiSpacing.sm) {
-            Label(playbackError, systemImage: "exclamationmark.triangle")
-              .scaledFont(size: OmiType.caption)
-              .foregroundStyle(Ink.errorRed)
-            Button("Refresh", action: onRefresh)
-              .buttonStyle(.link)
-          }
-        }
-      }
-    } else {
-      Button("Prepare audio", action: onPrepare)
-        .buttonStyle(.bordered)
-        .accessibilityLabel("Prepare capture audio")
-        .accessibilityIdentifier("chat-first-capture-prepare-audio")
-    }
-  }
-
-  private static func playbackTimestamp(_ offset: TimeInterval) -> String {
-    let totalSeconds = max(0, Int(offset))
-    return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
-  }
-}
-
 // Preview helper
 extension ServerConversation {
   static var preview: ServerConversation {
@@ -1772,12 +1735,10 @@ struct AppResultCard: View {
 
       // Content
       if isExpanded || result.content.count < 200 {
-        OmiMarkdown(text: result.content, sender: .ai)
-          .textSelection(.enabled)
+        OmiMarkdown(text: result.content, sender: .ai, appKitProseSelection: true)
           .frame(maxWidth: .infinity, alignment: .leading)
       } else {
-        OmiMarkdown(text: String(result.content.prefix(200)) + "\u{2026}", sender: .ai)
-          .textSelection(.enabled)
+        OmiMarkdown(text: String(result.content.prefix(200)) + "\u{2026}", sender: .ai, appKitProseSelection: true)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
 

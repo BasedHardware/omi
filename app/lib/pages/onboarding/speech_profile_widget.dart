@@ -79,12 +79,62 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // Check if user has set primary language
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
       }
+      if (!mounted) return;
+      // Don't wait for Get Started — that extra tap is where Android users
+      // drop between permissions and any speech-profile skip/complete event.
+      await _startOnboardingRecording();
     });
-    // Onboarding completion is now handled by the completion screen
+  }
+
+  Future<void> _startOnboardingRecording() async {
+    if (!mounted) return;
+    final provider = context.read<SpeechProfileProvider>();
+    if (provider.startedRecording || provider.isInitialising || _isCheckingAvailability) return;
+
+    setState(() => _isCheckingAvailability = true);
+    final available = await isSttAvailable();
+    final useLocalStt = !available && await provider.enableLocalStt();
+    if (mounted) setState(() => _isCheckingAvailability = false);
+    if (!available && !useLocalStt) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () {
+            Navigator.pop(context);
+            widget.onSkip();
+          },
+          () => Navigator.pop(context),
+          context.l10n.connectionError,
+          context.l10n.speechToTextUnavailableDesc,
+          okButtonText: context.l10n.ok,
+          cancelButtonText: context.l10n.skipForNow,
+        ),
+        barrierDismissible: false,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
+    final success = await provider.initialise(
+      usePhoneMic: true,
+      isOnboardingFlow: true,
+      processConversationCallback: () {
+        Provider.of<CaptureProvider>(context, listen: false).forceProcessingCurrentConversation();
+      },
+    );
+    if (!success) return;
+    provider.forceCompletionTimer = Timer(
+      Duration(seconds: provider.maxDuration),
+      () async {
+        provider.finalize();
+      },
+    );
   }
 
   @override
@@ -156,15 +206,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
       }
     }
 
-    Future stopAllRecording() async {
-      Logger.debug("stopAllRecording $mounted");
-      if (mounted) {
-        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-        // Stop any active device recording
-        await captureProvider.stopStreamDeviceRecording();
-      }
-    }
-
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) async {
@@ -190,12 +231,15 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                   context: context,
                   builder: (c) => getDialog(
                     context,
+                    () {
+                      Navigator.pop(context);
+                      widget.onSkip();
+                    },
                     () => Navigator.pop(context),
-                    () {},
                     context.l10n.connectionError,
                     context.l10n.connectionErrorDesc,
                     okButtonText: context.l10n.ok,
-                    singleButton: true,
+                    cancelButtonText: context.l10n.skipForNow,
                   ),
                   barrierDismissible: false,
                 );
@@ -223,13 +267,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                     context,
                     () {
                       Navigator.pop(context);
-                      //  Navigator.pop(context);
+                      widget.onSkip();
                     },
-                    () {},
-                    context.l10n.invalidRecordingMultipleSpeakers,
+                    () => Navigator.pop(context),
+                    context.l10n.areYouThere,
                     context.l10n.tooShortDesc,
                     okButtonText: context.l10n.ok,
-                    singleButton: true,
+                    cancelButtonText: context.l10n.skipForNow,
                   ),
                   barrierDismissible: false,
                 );
@@ -240,12 +284,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                     context,
                     () {
                       Navigator.pop(context);
+                      widget.onSkip();
                     },
-                    () {},
+                    () => Navigator.pop(context),
                     context.l10n.connectionError,
                     context.l10n.connectionErrorDesc,
                     okButtonText: context.l10n.ok,
-                    singleButton: true,
+                    cancelButtonText: context.l10n.skipForNow,
                   ),
                   barrierDismissible: false,
                 );
@@ -419,69 +464,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                                   width: double.infinity,
                                   height: 56,
                                   child: ElevatedButton(
-                                    onPressed: () async {
-                                      if (_isCheckingAvailability) return;
-                                      setState(() => _isCheckingAvailability = true);
-
-                                      // Pre-flight: don't enter the recording UI at all if
-                                      // the streaming primary is known down — otherwise the
-                                      // socket connects and audio uploads, but no
-                                      // question/progress ever arrives.
-                                      final available = await isSttAvailable();
-                                      // Backend STT down: transcribe on-device instead when this
-                                      // platform can, rather than dead-ending in a dialog. The
-                                      // voice print comes from the uploaded audio either way.
-                                      final useLocalStt = !available && await provider.enableLocalStt();
-                                      if (mounted) setState(() => _isCheckingAvailability = false);
-                                      if (!available && !useLocalStt) {
-                                        if (!context.mounted) return;
-                                        await showDialog(
-                                          context: context,
-                                          builder: (c) => getDialog(
-                                            context,
-                                            () => Navigator.pop(context),
-                                            () {},
-                                            context.l10n.connectionError,
-                                            context.l10n.speechToTextUnavailableDesc,
-                                            okButtonText: context.l10n.ok,
-                                            singleButton: true,
-                                          ),
-                                          barrierDismissible: false,
-                                        );
-                                        return;
-                                      }
-
-                                      if (!context.mounted) return;
-                                      // Check if user has set primary language, if not, show dialog
-                                      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-                                        await LanguageSelectionDialog.show(context);
-                                      }
-
-                                      await stopAllRecording();
-
-                                      // Initialize speech profile with phone mic as input source
-                                      bool success = await provider.initialise(
-                                        usePhoneMic: true,
-                                        isOnboardingFlow: true,
-                                        processConversationCallback: () {
-                                          Provider.of<CaptureProvider>(
-                                            context,
-                                            listen: false,
-                                          ).forceProcessingCurrentConversation();
-                                        },
-                                      );
-
-                                      if (!success) {
-                                        return;
-                                      }
-
-                                      provider.forceCompletionTimer = Timer(
-                                        Duration(seconds: provider.maxDuration),
-                                        () async {
-                                          provider.finalize();
-                                        },
-                                      );
-                                    },
+                                    onPressed: () => _startOnboardingRecording(),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.white,
                                       foregroundColor: Colors.black,
@@ -509,6 +492,19 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
                                 textAlign: TextAlign.center,
                               ),
                             ),
+                          const SizedBox(height: 16),
+                          OutlinedButton(
+                            onPressed: widget.onSkip,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                            ),
+                            child: Text(
+                              context.l10n.skipForNow,
+                              style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Manrope'),
+                            ),
+                          ),
                         ] else ...[
                           // The finished recording holds still (see _frozenText) and then
                           // fades out as one block while All done fades in.

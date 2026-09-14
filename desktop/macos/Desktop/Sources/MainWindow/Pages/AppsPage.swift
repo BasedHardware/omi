@@ -181,6 +181,7 @@ enum AppsAllSearchPresentation: Equatable {
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
+  var onOpenChatApp: ((OmiApp, OmiAppDetails?) async -> Void)? = nil
   @ObservedObject var connectorStatusStore: ImportConnectorStatusStore = ImportConnectorStatusStore()
   @ObservedObject private var automationPresentationCoordinator =
     DesktopAutomationPresentationCoordinator.shared
@@ -285,11 +286,21 @@ struct AppsPage: View {
         .frame(width: 520, height: 460)
     }
     .dismissableSheet(item: $selectedApp) { app in
-      AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedApp = nil })
-        .frame(width: 480, height: 560)
-        .onAppear {
-          AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
-        }
+      AppDetailSheet(
+        app: app,
+        appProvider: appProvider,
+        onOpenChat: onOpenChatApp == nil
+          ? nil
+          : { details in
+            guard let onOpenChatApp else { return }
+            await onOpenChatApp(app, details)
+          },
+        onDismiss: { selectedApp = nil }
+      )
+      .frame(width: 480, height: 560)
+      .onAppear {
+        AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+      }
     }
     .dismissableSheet(item: $selectedConnector) { connector in
       ImportConnectorSheet(
@@ -2893,6 +2904,7 @@ struct CategoryAppsSheet: View {
 struct AppDetailSheet: View {
   let app: OmiApp
   @ObservedObject var appProvider: AppProvider
+  var onOpenChat: ((OmiAppDetails?) async -> Void)? = nil
   var onDismiss: (() -> Void)? = nil
 
   @Environment(\.dismiss) private var environmentDismiss
@@ -2918,12 +2930,19 @@ struct AppDetailSheet: View {
   enum PrimaryAppAction: Equatable {
     case install  // not enabled → install / enable
     case open  // enabled external integration → open in browser
+    case chat  // enabled chat-capable app → open its app-scoped conversation
     case hidden  // enabled non-external → no primary action (disable is the trash button)
   }
 
-  nonisolated static func primaryAppAction(isEnabled: Bool, worksExternally: Bool) -> PrimaryAppAction {
+  nonisolated static func primaryAppAction(
+    isEnabled: Bool,
+    worksExternally: Bool,
+    worksWithChat: Bool = false,
+    hasChatAction: Bool = false
+  ) -> PrimaryAppAction {
     if !isEnabled { return .install }
-    return worksExternally ? .open : .hidden
+    if worksExternally { return .open }
+    return worksWithChat && hasChatAction ? .chat : .hidden
   }
 
   private func dismissSheet() {
@@ -2996,7 +3015,12 @@ struct AppDetailSheet: View {
             Spacer()
 
             // Action button
-            let primaryAction = Self.primaryAppAction(isEnabled: isEnabled, worksExternally: app.worksExternally)
+            let primaryAction = Self.primaryAppAction(
+              isEnabled: isEnabled,
+              worksExternally: app.worksExternally,
+              worksWithChat: app.worksWithChat,
+              hasChatAction: onOpenChat != nil
+            )
             HStack(spacing: OmiSpacing.sm) {
               // Only render a primary button when there is a real action:
               // install/enable, or open an external integration. An enabled
@@ -3016,6 +3040,12 @@ struct AppDetailSheet: View {
                       } else {
                         await appProvider.toggleApp(app)
                       }
+                    case .chat:
+                      if appDetails == nil {
+                        await loadAppDetails()
+                      }
+                      await onOpenChat?(appDetails)
+                      dismissSheet()
                     case .hidden:
                       break
                     }
@@ -3034,16 +3064,20 @@ struct AppDetailSheet: View {
                     .foregroundColor(Ink.secondary)
                     .frame(width: 120, height: 36)
                   } else {
-                    Text(primaryAction == .open ? "Open" : "Install")
-                      .scaledFont(size: OmiType.body, weight: .semibold)
-                      .foregroundColor(Ink.surface)
-                      .frame(width: 100, height: 36)
-                      .background(Ink.primary)
-                      .cornerRadius(OmiChrome.controlRadius)
-                      .overlay(
-                        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                          .stroke(Ink.separator, lineWidth: 1)
-                      )
+                    Text(
+                      primaryAction == .open
+                        ? "Open"
+                        : primaryAction == .chat ? "Chat" : "Install"
+                    )
+                    .scaledFont(size: OmiType.body, weight: .semibold)
+                    .foregroundColor(Ink.surface)
+                    .frame(width: 100, height: 36)
+                    .background(Ink.primary)
+                    .cornerRadius(OmiChrome.controlRadius)
+                    .overlay(
+                      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+                        .stroke(Ink.separator, lineWidth: 1)
+                    )
                   }
                 }
                 .buttonStyle(.plain)
@@ -3087,7 +3121,7 @@ struct AppDetailSheet: View {
               ForEach(Array(integration.authSteps.enumerated()), id: \.offset) { index, step in
                 Button(action: {
                   if let uid = AuthState.shared.userId,
-                    let url = URL(string: "\(step.url)?uid=\(uid)")
+                    let url = AppSetupURL.withUID(step.url, uid: uid)
                   {
                     NSWorkspace.shared.open(url)
                   }
@@ -3312,7 +3346,7 @@ struct AppDetailSheet: View {
     if let homeUrl = integration?.appHomeUrl, !homeUrl.isEmpty, let url = URL(string: homeUrl) {
       NSWorkspace.shared.open(url)
     } else if let authSteps = integration?.authSteps, !authSteps.isEmpty,
-      let url = URL(string: "\(authSteps[0].url)?uid=\(uid)")
+      let url = AppSetupURL.withUID(authSteps[0].url, uid: uid)
     {
       NSWorkspace.shared.open(url)
     }
@@ -3337,8 +3371,7 @@ struct AppDetailSheet: View {
 
     // Open auth step or setup instructions URL in browser
     if let authSteps = integration?.authSteps, !authSteps.isEmpty {
-      let rawUrl = "\(authSteps[0].url)?uid=\(uid)"
-      if let url = URL(string: rawUrl) {
+      if let url = AppSetupURL.withUID(authSteps[0].url, uid: uid) {
         NSWorkspace.shared.open(url)
       }
     } else if let instructionsPath = integration?.setupInstructionsFilePath, !instructionsPath.isEmpty {

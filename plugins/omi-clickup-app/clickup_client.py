@@ -171,8 +171,58 @@ class ClickUpClient:
             print(f"❌ Error getting lists: {e}", flush=True)
             return []
     
+    def get_folders(self, access_token: str, space_id: str) -> List[Dict]:
+        """
+        Get all folders in a space. ClickUp embeds each folder's lists in this
+        response, so it is one call per space rather than one per folder.
+
+        Unlike the sibling getters this raises on failure: get_all_lists has to
+        tell "no folders" from "the folder request failed", or a transient error
+        would silently drop every folder list from the picker.
+        """
+        headers = {"Authorization": access_token}
+        response = requests.get(
+            f"{self.base_url}/space/{space_id}/folder",
+            headers=headers,
+            params={"archived": "false"}
+        )
+
+        if response.status_code != 200:
+            raise Exception(f"Error getting folders: {response.status_code} - {response.text}")
+
+        return response.json().get("folders", [])
+
+    def get_folder_lists(self, access_token: str, folder_id: str) -> List[Dict]:
+        """
+        Get the lists inside one folder. Only needed when a folder from
+        get_folders arrived without its embedded lists. Raises on failure,
+        for the same reason as get_folders.
+        """
+        headers = {"Authorization": access_token}
+        response = requests.get(
+            f"{self.base_url}/folder/{folder_id}/list",
+            headers=headers,
+            params={"archived": "false"}
+        )
+
+        if response.status_code != 200:
+            raise Exception(f"Error getting folder lists: {response.status_code} - {response.text}")
+
+        return response.json().get("lists", [])
+
     def get_all_lists(self, access_token: str, team_id: str) -> List[Dict]:
-        """Get all lists across all spaces in a workspace."""
+        """
+        Get every list across all spaces in a workspace.
+
+        GET /space/{id}/list returns only folderless lists — ClickUp v2 keeps
+        lists that live inside a folder behind GET /space/{id}/folder — so each
+        space's folders are walked as well. Folder lists carry `folder_name` so
+        a picker can show "Folder / List"; `name` stays the bare list name
+        because task_detector matches spoken list names against it.
+
+        Returns [] if any folder request fails: a picker silently missing whole
+        folders misleads more than an empty one.
+        """
         all_lists = []
         
         # Get all spaces
@@ -180,10 +230,30 @@ class ClickUpClient:
         
         # Get lists for each space
         for space in spaces:
+            # Folderless lists
             lists = self.get_lists(access_token, space["id"])
             for lst in lists:
                 lst["space_name"] = space["name"]
                 all_lists.append(lst)
+
+            # Lists inside folders
+            try:
+                for folder in self.get_folders(access_token, space["id"]):
+                    folder_lists = folder.get("lists")
+                    if folder_lists is None:
+                        folder_lists = self.get_folder_lists(access_token, folder["id"])
+                    for lst in folder_lists:
+                        all_lists.append({
+                            "id": lst.get("id"),
+                            "name": lst.get("name"),
+                            "space_id": space["id"],
+                            "space_name": space["name"],
+                            "folder_id": folder.get("id"),
+                            "folder_name": folder.get("name")
+                        })
+            except Exception as e:
+                print(f"❌ Error getting folder lists for space {space['id']}: {e}", flush=True)
+                return []
         
         return all_lists
     

@@ -154,3 +154,17 @@ def test_transport_failure_during_login_leaves_saved_config_unchanged(
     assert result.exit_code != 0
     assert route.call_count == 1
     assert config_path.read_bytes() == before
+
+
+def test_transport_timeout_during_login_leaves_saved_config_unchanged(
+    config_path, authed_profile, respx_mock, cli_runner, monkeypatch
+) -> None:
+    import httpx
+
+    monkeypatch.setattr("omi_cli.client.MAX_RETRY_ATTEMPTS", 1)
+    before = config_path.read_bytes()
+    route = respx_mock.get("/v1/dev/user/memories").mock(side_effect=httpx.ConnectTimeout("Connection timed out"))
+    result = cli_runner.invoke(app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32])
+    assert result.exit_code == 3
+    assert route.call_count == 1
+    assert config_path.read_bytes() == before

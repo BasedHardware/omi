@@ -259,6 +259,11 @@ AREA_TESTS = (
         ('tests/unit/test_apps_*.py', 'tests/unit/test_app_*.py', 'tests/unit/test_create_persona_user_none.py'),
     ),
     (
+        ('backend/utils/social.py',),
+        (),
+        ('tests/unit/test_social_*.py',),
+    ),
+    (
         ('backend/routers/folders', 'backend/services/folders/', 'backend/utils/folders'),
         (),
         ('tests/unit/test_folder_*.py',),

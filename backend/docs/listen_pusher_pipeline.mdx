@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-30 (provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts)
+> Last updated: 2026-09-13 (cross-device duplicate capture folded at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -175,6 +175,39 @@ custom upgrade headers, so `/v4/web/listen` carries the hash in its required
 first auth message; the backend fixes its platform to `web` before creating
 the conversation. Missing provenance remains unknown rather than being
 assigned to a different device.
+
+## Duplicate captures across devices
+
+An Omi device paired to the phone app and the macOS app in the same room open
+two independent `/v4/listen` streams, and each stream owns its own
+conversation — cross-source sockets never share one, because the two captures
+can legitimately hold different audio (a pendant in the room plus a headphone
+meeting on the laptop, #5388). Multi-device recording therefore stays fully
+enabled on every client; nothing is toggled off.
+
+The duplicate is resolved at finalization instead (#3244). Before the LLM
+discard gate, `process_conversation` asks `utils.conversations.duplicate_capture`
+whether another capture client's conversation already carries this one:
+`completed` or `processing` conversations of the same user whose activity
+clock runs past this recording's `started_at` (`get_conversations_finished_after`,
+served by the existing `(status, finished_at)` composite), from a different
+`client_device_id` (or platform/source pair on legacy rows), covering at least
+80% of this recording's wall window for at least 30 seconds, and holding at
+least 50% of its word bigrams. Containment is measured against *this*
+conversation's words, so a capture with speech the other one lacks keeps a low
+score and survives. When it matches, the conversation takes the same discard
+exit as a scrap — transcript and audio stay on the row, no summary, memories,
+or integrations are produced — and `external_data.duplicate_capture_of` names
+the primary.
+
+Exactly one side yields: a `completed` counterpart is always primary, and a
+`processing` counterpart is primary only when it was created earlier, so two
+sessions timing out on the same silence and finalizing concurrently cannot both
+discard themselves or both survive. Reprocessing (`force_process`) never
+consults the check — the existing "reprocess never discards" contract holds —
+and a failed candidate read fails open to the ordinary gate through
+`record_fallback(component='conversation_finalization')`, which is the pre-fix
+outcome of two visible conversations rather than a lost one.
 
 ## Conversation start location
 

@@ -38,6 +38,10 @@ REQUIRED_IDENTICAL_LITERALS = (
     "CONVERSATION_NOTES_V2_ENABLED",
     "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED",
     "CONVERSATION_OCR_CONTEXT_ENABLED",
+    # Both process_conversation hosts must read the same managed-spend ledger
+    # switch; a listen-only value would leave pusher-hosted direct-provider
+    # spend invisible to llm_gateway_attempts (free-tier program, Move 1).
+    "LLM_GATEWAY_ACCOUNTING_ENABLED",
 )
 
 # Explained listen-only residuals. New listen-only keys fail until added here
@@ -75,7 +79,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
-            "LLM_GATEWAY_ACCOUNTING_ENABLED",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MEETING_RECEIPT_RECONCILER_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
@@ -138,7 +141,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
-            "LLM_GATEWAY_ACCOUNTING_ENABLED",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
             "MEETING_RECEIPT_RECONCILER_ENABLED",

@@ -120,11 +120,7 @@ struct ExportsSection: View {
           .foregroundStyle(Ink.secondary)
           .padding(.vertical, OmiSpacing.md)
       } else {
-        LazyVGrid(
-          columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
-          alignment: .leading,
-          spacing: OmiSpacing.md
-        ) {
+        VStack(spacing: 0) {
           ForEach(entries) { entry in
             MemoryExportRow(
               destination: entry.destination,
@@ -142,7 +138,7 @@ struct ExportsSection: View {
   }
 }
 
-private struct MemoryExportRow: View {
+struct MemoryExportRow: View {
   let destination: MemoryExportDestination
   var titleOverride: String? = nil
   var subtitleOverride: String? = nil
@@ -179,73 +175,56 @@ private struct MemoryExportRow: View {
     return status.hasConnection ? "Connected" : "Not connected"
   }
 
-  private var statusSecondaryText: String? {
-    if let lastExportedAt = status.lastExportedAt {
-      let relative = RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date())
-      return "Exported \(relative)"
+  private var rowSecondaryText: String {
+    if status.exportedCount > 0 || status.hasConnection {
+      if let lastExportedAt = status.lastExportedAt {
+        let relative = RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date())
+        return "Exported \(relative)"
+      }
+      if let detailText = status.detailText, !detailText.isEmpty {
+        return detailText
+      }
+      return statusPrimaryText
     }
-    return status.detailText
+    if let descriptionOverride {
+      return descriptionOverride
+    }
+    if let subtitleOverride {
+      return subtitleOverride
+    }
+    let subtitle = destination.subtitle
+    return subtitle.isEmpty ? destination.description : subtitle
   }
 
-  // Mirrors ImportConnectorCard so the Imports and Exports grids read as one
-  // system: identical icon block, description slot, and status/action footer.
+  // Mirrors ImportConnectorRow: one horizontal row with the integration name,
+  // a single status line, and the action pill — no stacked description block that
+  // wraps "Claude / Claude Code" away from its Connect control.
   var body: some View {
     Button(action: action) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        HStack(spacing: OmiSpacing.md) {
-          ConnectorBrandIcon(
-            brand: destination.brand, size: 50, cornerRadius: OmiChrome.smallControlRadius)
+      HStack(spacing: OmiSpacing.md) {
+        ConnectorBrandIcon(brand: destination.brand, size: 34, cornerRadius: 9)
 
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text(titleOverride ?? destination.title)
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(Ink.primary)
-              .lineLimit(1)
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+          Text(titleOverride ?? destination.title)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
+            .lineLimit(1)
+            .truncationMode(.tail)
 
-            Text(subtitleOverride ?? destination.subtitle)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .lineLimit(1)
-          }
-
-          Spacer()
+          Text(rowSecondaryText)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
 
-        Text(descriptionOverride ?? destination.description)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .lineLimit(2)
-          .multilineTextAlignment(.leading)
+        Spacer(minLength: 12)
 
-        HStack {
-          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-            Text(statusPrimaryText)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(
-                status.hasConnection || status.exportedCount > 0
-                  ? Ink.primary : Ink.secondary)
-
-            if let statusSecondaryText {
-              Text(statusSecondaryText)
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-                .lineLimit(1)
-            }
-          }
-
-          Spacer()
-
-          ImportConnectorActionButton(
-            title: actionTitle, isConnected: showsConnectedState)
-        }
+        ImportConnectorActionButton(title: actionTitle, isConnected: showsConnectedState)
       }
-      .padding(OmiSpacing.md)
-      .background(isHovering ? Ink.rowFillHover : Ink.rowFill)
-      .cornerRadius(OmiChrome.smallControlRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(Ink.rowFillHover, lineWidth: 1)
-      )
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
+      .background(isHovering ? Ink.wash : Color.clear)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)

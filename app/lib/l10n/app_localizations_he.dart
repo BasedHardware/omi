@@ -9905,4 +9905,7 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.';
+
+  @override
+  String get processingTakingLonger => 'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
 }
