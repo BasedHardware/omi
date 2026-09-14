@@ -21,7 +21,6 @@ jest.mock('../desktopReadClient', () => {
 jest.mock('../omiNative', () => ({omiBackend: {}}));
 import {MemoriesPage} from './Memories';
 import {
-  clockLabel,
   desktopBackendUnavailableCopy,
   memoriesEmptyCopy,
   memoriesSearchEmptyCopy,
@@ -558,7 +557,7 @@ test('omitted memory lineage does not claim Synthesized memory', () => {
   });
   try {
     const copy = textOf(view);
-    expect(copy).toContain('0 citations');
+    expect(copy).not.toContain('0 citations');
     expect(copy).toContain('Synthesized memory');
     expect(
       view.root.findAll(
@@ -617,33 +616,8 @@ test('empty memory bodies stay visible instead of a blank card', async () => {
   }
 });
 
-test('a zero memory timestamp says Date unavailable instead of 1970', () => {
-  let view!: Renderer.ReactTestRenderer;
-  act(() => {
-    view = Renderer.create(
-      <MemoriesPage
-        outcome={{
-          status: 'success',
-          value: {
-            items: [{...memory('zero-date'), timestamp: 0}],
-            page: page(null),
-          },
-        }}
-        loading={false}
-      />,
-    );
-  });
-  try {
-    expect(textOf(view)).toContain('Date unavailable');
-    expect(textOf(view)).not.toContain('1970');
-  } finally {
-    act(() => view.unmount());
-  }
-});
-
-test('Memories rows keep GET timestamps with the same clock as Home', () => {
+test('Memories rows omit Flutter MemoryItem unused timestamp and citation count', () => {
   const timestamp = Date.parse('2026-09-07T12:00:00.000Z') / 1000;
-  const expected = clockLabel(timestamp * 1000, Date.now());
   let view!: Renderer.ReactTestRenderer;
   act(() => {
     view = Renderer.create(
@@ -658,7 +632,9 @@ test('Memories rows keep GET timestamps with the same clock as Home', () => {
                 summary: 'Visible memory',
                 searchableText: 'Visible memory',
                 timestamp,
+                citations: ['citation-v1:launch'],
               },
+              {...memory('zero-date'), timestamp: 0},
             ],
             page: page(null),
           },
@@ -668,9 +644,14 @@ test('Memories rows keep GET timestamps with the same clock as Home', () => {
     );
   });
   try {
-    expect(expected).not.toBe('');
-    expect(textOf(view)).toContain(expected);
-    expect(textOf(view)).not.toContain('Date unavailable');
+    const copy = textOf(view);
+    expect(copy).toContain('Visible memory');
+    expect(copy).not.toContain('Date unavailable');
+    expect(copy).not.toContain('Time unavailable');
+    expect(copy).not.toContain('1970');
+    expect(copy).not.toContain('1 citation');
+    expect(copy).not.toContain('0 citations');
+    expect(copy).not.toContain('citation-v1:launch');
   } finally {
     act(() => view.unmount());
   }

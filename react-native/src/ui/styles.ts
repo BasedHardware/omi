@@ -649,18 +649,10 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 13,
   },
-  memoryMetaRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  memoryTimestamp: {color: '#898989', fontSize: 11, fontWeight: '600'},
-  memoryCitationCount: {color: '#707070', fontSize: 11},
   memoryBody: {
     color: '#eeeeee',
     fontSize: 14,
     lineHeight: 20,
-    marginTop: 8,
   },
   memoryProvenance: {color: '#888888', fontSize: 11, marginTop: 9},
   memoryFooter: {gap: 10, paddingVertical: 8},

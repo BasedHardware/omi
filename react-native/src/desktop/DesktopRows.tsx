@@ -15,7 +15,6 @@ import {
   conversationListTimeCopy,
   conversationListUsesListenOverview,
   conversationRecapTitle,
-  memoryCitationCopy,
   memoryDisplayBody,
   memoryDisplayTitle,
   memoryLockedCopy,
@@ -137,10 +136,7 @@ export const ReadRow = memo(function ReadRow({
     item.kind === 'memory'
       ? visibleDisplayText(item.captureDeviceLabel ?? '')
       : '';
-  const meta =
-    item.kind === 'memory'
-      ? [timeLabel(item), memoryCitationCopy(item.citations)]
-      : [timeLabel(item)];
+  const meta = item.kind === 'memory' ? [] : [timeLabel(item)];
   return (
     <View style={styles.row}>
       <RowGlyph kind={item.kind} />
@@ -150,9 +146,11 @@ export const ReadRow = memo(function ReadRow({
             ? memoryDisplayTitle(item)
             : taskDisplayTitle(item)}
         </Text>
-        <Text numberOfLines={1} style={styles.rowMeta}>
-          {meta.filter(part => part !== '').join(' · ')}
-        </Text>
+        {meta.length > 0 ? (
+          <Text numberOfLines={1} style={styles.rowMeta}>
+            {meta.filter(part => part !== '').join(' · ')}
+          </Text>
+        ) : null}
         {locked !== null ? <Text style={styles.rowMeta}>{locked}</Text> : null}
         {history !== null ? (
           <Text style={styles.rowMeta}>{history}</Text>

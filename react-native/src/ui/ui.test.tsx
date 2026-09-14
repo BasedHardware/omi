@@ -2877,7 +2877,7 @@ test('wide Home search rows name Flutter ConversationListItem h:mm a', () => {
   expect(tree).not.toContain('Time unavailable');
 });
 
-test('wide Home search memory rows keep GET timestamps instead of citation-only', () => {
+test('wide Home search memory rows omit Flutter MemoryItem unused timestamp and citation count', () => {
   const item = {
     kind: 'memory' as const,
     id: 'memory-dated-home-search',
@@ -2897,9 +2897,11 @@ test('wide Home search memory rows keep GET timestamps instead of citation-only'
   const expected = projectionClockLabel(item, Date.now());
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('A walk.');
-  expect(tree).toContain('1 citation');
-  expect(tree).toContain(expected);
+  expect(tree).not.toContain('1 citation');
+  expect(tree).not.toContain('0 citations');
+  expect(tree).not.toContain(expected);
   expect(tree).not.toContain('Time unavailable');
+  expect(tree).not.toContain('citation-v1:launch');
 });
 
 test('wide Home search memory rows keep GET synthesized-memory chrome instead of citation-only', () => {
@@ -2924,7 +2926,7 @@ test('wide Home search memory rows keep GET synthesized-memory chrome instead of
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('A walk.');
-  expect(tree).toContain('1 citation');
+  expect(tree).not.toContain('1 citation');
   expect(tree).toContain('Synthesized memory');
 });
 
@@ -3020,7 +3022,7 @@ test('compact Home current memory rows keep GET synthesized-memory chrome', () =
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('A walk.');
-  expect(tree).toContain('1 citation');
+  expect(tree).not.toContain('1 citation');
   expect(tree).toContain('Synthesized memory');
 });
 
@@ -3156,7 +3158,7 @@ test('wide Home search rows keep empty memory text visible', () => {
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Memory text unavailable');
-  expect(tree).toContain('0 citations');
+  expect(tree).not.toContain('0 citations');
   expect(tree).not.toContain('Synthesized memory with source citations');
 });
 
@@ -3185,7 +3187,7 @@ test('wide Home search rows strip namespaced memory prefixes', () => {
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('qa_memory (observed 2026-07-30T12:00:00.000Z).');
   expect(tree).not.toContain('entity:qa:000008');
-  expect(tree).toContain('0 citations');
+  expect(tree).not.toContain('0 citations');
   expect(tree).not.toContain('Synthesized memory with source citations');
 });
 
@@ -3217,7 +3219,7 @@ test('wide Home search rows strip namespaced memory prefixes separated by NEXT L
   expect(tree).not.toContain('\u0085');
 });
 
-test('wide Home search rows report a single memory citation', () => {
+test('wide Home search rows omit Flutter MemoryItem unused citation count', () => {
   const renderer = render(
     <ProjectionRow
       item={{
@@ -3240,7 +3242,9 @@ test('wide Home search rows report a single memory citation', () => {
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Prefers concise release notes');
-  expect(tree).toContain('1 citation');
+  expect(tree).not.toContain('1 citation');
+  expect(tree).not.toContain('0 citations');
+  expect(tree).not.toContain('citation-v1:launch');
   expect(tree).not.toContain('Synthesized memory with source citations');
 });
 
@@ -3266,7 +3270,8 @@ test('wide Home search rows omit whitespace-only memory citations from the count
     />,
   );
   const tree = JSON.stringify(renderer.toJSON());
-  expect(tree).toContain('0 citations');
+  expect(tree).toContain('Prefers concise release notes');
+  expect(tree).not.toContain('0 citations');
   expect(tree).not.toContain('2 citations');
   expect(tree).not.toContain('"1 citation"');
 });

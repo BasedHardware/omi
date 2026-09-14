@@ -26,7 +26,7 @@ function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
     .join(' ');
 }
 
-test('a zero Home current timestamp says Time unavailable instead of omitting the clock', () => {
+test('Home currents omit Flutter MemoryItem unused timestamp and citation count', () => {
   const item: MemoryProjection = {
     kind: 'memory',
     id: 'memory-epoch',
@@ -42,21 +42,7 @@ test('a zero Home current timestamp says Time unavailable instead of omitting th
       outputDigest: null,
     },
   };
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(<ReadRow item={item} />);
-  });
-  const copy = textOf(renderer);
-  expect(copy).toContain('Time unavailable');
-  expect(copy).toContain('Undated memory');
-  expect(copy).toContain('0 citations');
-  expect(copy).not.toContain('Synthesized memory');
-  expect(copy).not.toContain('1970');
-  expect(copy).not.toMatch(/(^| )Memory( |$)/);
-});
-
-test('Home currents keep memory citation counts instead of a Memory kind label', () => {
-  const item: MemoryProjection = {
+  const cited: MemoryProjection = {
     kind: 'memory',
     id: 'memory-cited',
     title: 'A walk.',
@@ -71,18 +57,30 @@ test('Home currents keep memory citation counts instead of a Memory kind label',
       outputDigest: 'output',
     },
   };
+  let undated!: ReactTestRenderer.ReactTestRenderer;
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
-    renderer = ReactTestRenderer.create(<ReadRow item={item} />);
+    undated = ReactTestRenderer.create(<ReadRow item={item} />);
+    renderer = ReactTestRenderer.create(<ReadRow item={cited} />);
   });
-  const copy = textOf(renderer);
-  expect(copy).toContain('A walk.');
-  expect(copy).toContain('2 citations');
-  expect(copy).toContain('Synthesized memory');
-  expect(copy).not.toContain('citation-v1:launch');
-  expect(copy).not.toContain('input');
-  expect(copy).not.toContain('output');
+  const copy = textOf(undated);
+  expect(copy).toContain('Undated memory');
+  expect(copy).not.toContain('Time unavailable');
+  expect(copy).not.toContain('Date unavailable');
+  expect(copy).not.toContain('0 citations');
+  expect(copy).not.toContain('Synthesized memory');
+  expect(copy).not.toContain('1970');
   expect(copy).not.toMatch(/(^| )Memory( |$)/);
+  const citedCopy = textOf(renderer);
+  expect(citedCopy).toContain('A walk.');
+  expect(citedCopy).toContain('Synthesized memory');
+  expect(citedCopy).not.toContain('2 citations');
+  expect(citedCopy).not.toContain('1 citation');
+  expect(citedCopy).not.toContain('0 citations');
+  expect(citedCopy).not.toContain('citation-v1:launch');
+  expect(citedCopy).not.toContain('input');
+  expect(citedCopy).not.toContain('output');
+  expect(citedCopy).not.toMatch(/(^| )Memory( |$)/);
 });
 
 test('Home currents name GET locked memories and omit unlocked rows', () => {
@@ -137,7 +135,7 @@ test('Home currents omit synthesized-memory chrome when GET synthesisVersion is 
   });
   const copy = textOf(renderer);
   expect(copy).toContain('A walk.');
-  expect(copy).toContain('1 citation');
+  expect(copy).not.toContain('1 citation');
   expect(copy).not.toContain('Synthesized memory');
 });
 
@@ -241,7 +239,8 @@ test('Home currents omit whitespace-only memory citations from the count', () =>
     renderer = ReactTestRenderer.create(<ReadRow item={item} />);
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('0 citations');
+  expect(copy).toContain('A walk.');
+  expect(copy).not.toContain('0 citations');
   expect(copy).not.toContain('2 citations');
 });
 

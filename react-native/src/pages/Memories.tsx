@@ -9,13 +9,11 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
-  clockLabel,
   desktopBackendUnavailableCopy,
   loadMemories,
   MemoryCursorExpiredError,
   memoryDisplayBody,
   memoryDisplayTitle,
-  memoryCitationCopy,
   memorySynthesisCopy,
   memoryLedgerSlotCopy,
   memoryLedgerPlaybookCopy,
@@ -36,14 +34,6 @@ import {omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
-
-function formatMemoryDate(timestamp: number | null): string {
-  if (timestamp === null || !Number.isFinite(timestamp) || timestamp <= 0) {
-    return 'Date unavailable';
-  }
-  const label = clockLabel(timestamp * 1000, Date.now());
-  return label === '' ? 'Date unavailable' : label;
-}
 
 export function MemoriesPage({
   outcome,
@@ -174,14 +164,6 @@ export function MemoriesPage({
       <View
         accessibilityLabel={`Memory: ${memoryDisplayBody(item)}`}
         style={styles.memoryCard}>
-        <View style={styles.memoryMetaRow}>
-          <Text style={styles.memoryTimestamp}>
-            {formatMemoryDate(item.timestamp)}
-          </Text>
-          <Text style={styles.memoryCitationCount}>
-            {memoryCitationCopy(item.citations)}
-          </Text>
-        </View>
         <Text style={styles.memoryBody}>{memoryDisplayBody(item)}</Text>
         {history !== null ? (
           <Text style={styles.memoryProvenance}>{history}</Text>

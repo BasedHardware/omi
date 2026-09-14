@@ -18,7 +18,6 @@ import {
   conversationRecapTitle,
   conversationHasFinishClock,
   conversationListDurationCopy,
-  memoryCitationCopy,
   memoryDisplayTitle,
   memorySynthesisCopy,
   memoryLockedCopy,
@@ -30,7 +29,6 @@ import {
   taskDisplaySummary,
   taskDisplayTitle,
   taskIndentPadding,
-  projectionClockLabel,
   type DesktopReadProjection,
 } from '../desktopReadClient';
 import {styles} from './styles';
@@ -48,10 +46,7 @@ function displayTitle(item: DesktopReadProjection): string {
 }
 
 function displaySummary(item: DesktopReadProjection): string | null {
-  if (item.kind === 'memory') {
-    return memoryCitationCopy(item.citations);
-  }
-  if (item.kind === 'conversation') {
+  if (item.kind === 'memory' || item.kind === 'conversation') {
     return null;
   }
   return taskDisplaySummary(item);
@@ -206,14 +201,12 @@ export const ProjectionRow = memo(function ProjectionRow({
           {summary}
         </Text>
       )}
-      {item.kind !== 'task' ? (
+      {conversation !== null ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {newCopy ??
-            (conversation !== null
-              ? conversationListTimeCopy(
-                  conversation.startedAt ?? conversation.createdAt,
-                )
-              : projectionClockLabel(item, Date.now()))}
+            conversationListTimeCopy(
+              conversation.startedAt ?? conversation.createdAt,
+            )}
         </Text>
       ) : null}
       {history !== null ? (
