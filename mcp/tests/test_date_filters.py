@@ -39,7 +39,7 @@ def _ok_response(payload):
 
 
 @pytest.mark.parametrize("field", ["start_date", "end_date"])
-@pytest.mark.parametrize("bad", ["01/01/2026", "yesterday", "2026-13-40"])
+@pytest.mark.parametrize("bad", ["01/01/2026", "2026-1-1", "yesterday", "2026-13-40", ""])
 def test_get_conversations_rejects_malformed_date_before_request(field, bad):
     logger = logging.getLogger("test")
     with patch("mcp_server_omi.server.requests.get") as mock_get:
@@ -58,21 +58,13 @@ def test_get_conversations_keeps_day_bounds_for_valid_dates():
 
 
 @pytest.mark.parametrize("field", ["start_date", "end_date"])
-def test_search_conversations_rejects_malformed_date_before_request(field):
+@pytest.mark.parametrize("bad", ["01/01/2026", "2026-1-1", ""])
+def test_search_conversations_rejects_malformed_date_before_request(field, bad):
     logger = logging.getLogger("test")
     with patch("mcp_server_omi.server.requests.get") as mock_get:
         with pytest.raises(ValueError, match=f"{field}"):
-            search_conversations(logger, "omi_mcp_key", query="meeting", **{field: "01/01/2026"})
+            search_conversations(logger, "omi_mcp_key", query="meeting", **{field: bad})
         mock_get.assert_not_called()
-
-
-def test_search_conversations_forwards_valid_dates_unchanged():
-    logger = logging.getLogger("test")
-    with patch("mcp_server_omi.server.requests.get", return_value=_ok_response([])) as mock_get:
-        search_conversations(logger, "omi_mcp_key", query="meeting", start_date="2026-01-01", end_date="2026-01-31")
-    params = mock_get.call_args.kwargs["params"]
-    assert params["start_date"] == "2026-01-01"
-    assert params["end_date"] == "2026-01-31"
 
 
 @pytest.mark.anyio

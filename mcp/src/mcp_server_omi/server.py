@@ -1,4 +1,5 @@
 import os
+import re
 from enum import Enum
 import json
 from typing import List, Optional
@@ -146,6 +147,8 @@ def _response_json(response: requests.Response):
 
 
 DATE_ONLY_FORMAT = "%Y-%m-%d"
+# strptime alone accepts "2026-1-1"; the tools document the zero-padded ten-character form.
+_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _parse_date_only(value: str, field: str) -> datetime:
@@ -155,9 +158,11 @@ def _parse_date_only(value: str, field: str) -> datetime:
     API with no date bound and the model received the unfiltered list. Raising here
     surfaces the mistake as a tool error the model can correct.
     """
+    if not isinstance(value, str) or not _DATE_ONLY_RE.match(value):
+        raise ValueError(f"Invalid {field} '{value}'. Expected YYYY-MM-DD.")
     try:
         return datetime.strptime(value, DATE_ONLY_FORMAT)
-    except (TypeError, ValueError):
+    except ValueError:
         raise ValueError(f"Invalid {field} '{value}'. Expected YYYY-MM-DD.") from None
 
 
@@ -248,9 +253,9 @@ def get_conversations(
     offset: int = 0,
 ) -> List:
     params = {"limit": limit, "offset": offset}
-    if start_date:
+    if start_date is not None:
         params["start_date"] = _parse_date_only(start_date, "start_date").isoformat()
-    if end_date:
+    if end_date is not None:
         # Set to end of day (23:59:59) so the entire day is included
         end_of_day = _parse_date_only(end_date, "end_date") + timedelta(days=1) - timedelta(seconds=1)
         params["end_date"] = end_of_day.isoformat()
@@ -285,10 +290,10 @@ def search_conversations(
     params = {"query": query, "limit": limit}
     # The API's search endpoint takes date-only strings; validate them here so a
     # malformed value fails with a clear message instead of an opaque HTTP 400.
-    if start_date:
+    if start_date is not None:
         _parse_date_only(start_date, "start_date")
         params["start_date"] = start_date
-    if end_date:
+    if end_date is not None:
         _parse_date_only(end_date, "end_date")
         params["end_date"] = end_date
 
