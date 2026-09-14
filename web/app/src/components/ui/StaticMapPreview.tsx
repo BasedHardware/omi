@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   fetchStaticMap,
+  normalizeStaticMapPins,
   staticMapAxisPx,
   staticMapPath,
   staticMapPinsParam,
@@ -22,6 +23,7 @@ interface Size {
 
 interface StaticMapPreviewProps {
   pins: readonly MapPin[];
+  /** Accessible description; pass an empty string when a wrapping control already names the map. */
   alt: string;
   className?: string;
 }
@@ -37,7 +39,8 @@ export function StaticMapPreview({ pins, alt, className }: StaticMapPreviewProps
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size | null>(null);
   const [image, setImage] = useState<{ url: string; pinsParam: string } | null>(null);
-  const pinsParam = staticMapPinsParam(pins);
+  const renderedPins = normalizeStaticMapPins(pins);
+  const pinsParam = staticMapPinsParam(renderedPins);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -100,14 +103,17 @@ export function StaticMapPreview({ pins, alt, className }: StaticMapPreviewProps
   return (
     <div
       ref={containerRef}
+      role={alt ? 'img' : undefined}
+      aria-label={alt || undefined}
       className={cn('relative h-full w-full overflow-hidden', className)}
       style={{ backgroundColor: CANVAS_COLOR }}
     >
-      {size && <PinDots pins={pins} width={size.width} height={size.height} />}
+      {size && <PinDots pins={renderedPins} width={size.width} height={size.height} />}
       {image && image.pinsParam === pinsParam && (
         <img
+          data-testid="static-map-image"
           src={image.url}
-          alt={alt}
+          alt=""
           draggable={false}
           className="absolute inset-0 h-full w-full object-cover"
         />
