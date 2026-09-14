@@ -1297,6 +1297,8 @@ test('Settings names GET subscription period quotas without Upgrade', async () =
   expect(tree).toContain('Insights this month');
   expect(tree).toContain('3 of 500 insights gained this month');
   expect(tree).toContain('Chat this month');
+  expect(tree).toContain('5 Chat');
+  expect(tree).toContain('AI chat messages used with Omi this month.');
   expect(tree).toContain('5 of 100 messages used this month');
   expect(tree).not.toContain('Upgrade');
 });

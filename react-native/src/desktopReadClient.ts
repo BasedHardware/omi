@@ -1063,6 +1063,14 @@ export function usagePeriodStatsCopy(
   }));
 }
 
+export function chatQuotaSubtitleCopy(): string {
+  return 'AI chat messages used with Omi this month.';
+}
+
+function chatQuotaCardCopy(value: string, usageText: string): string {
+  return `${value}\n${chatQuotaSubtitleCopy()}\n${usageText}`;
+}
+
 export function subscriptionPeriodCopy(
   subscription:
     | {
@@ -1107,22 +1115,24 @@ export function subscriptionPeriodCopy(
     if (unit === 'cost_usd') {
       const used = `$${subscription.chatQuotaUsed.toFixed(2)}`;
       const limit = subscription.chatCostUsdPerMonth;
+      const usageText =
+        limit !== null && limit > 0
+          ? `${used} of $${limit.toFixed(0)} used this month`
+          : `${used} used this month`;
       rows.push({
         title: 'Chat this month',
-        copy:
-          limit !== null && limit > 0
-            ? `${used} of $${limit.toFixed(0)} used this month`
-            : `${used} used this month`,
+        copy: chatQuotaCardCopy(used, usageText),
       });
     } else {
       const used = Math.round(subscription.chatQuotaUsed);
       const limit = subscription.chatQuestionsPerMonth;
+      const usageText =
+        limit !== null && limit > 0
+          ? `${usageCountCopy(used)} of ${limit} messages used this month`
+          : `${usageCountCopy(used)} messages used this month`;
       rows.push({
         title: 'Chat this month',
-        copy:
-          limit !== null && limit > 0
-            ? `${used} of ${limit} messages used this month`
-            : `${used} messages used this month`,
+        copy: chatQuotaCardCopy(`${usageCountCopy(used)} Chat`, usageText),
       });
     }
   }

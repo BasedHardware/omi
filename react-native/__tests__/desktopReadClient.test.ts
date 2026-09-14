@@ -141,6 +141,7 @@ import {
   automaticTranslationCopy,
   customVocabularyCopy,
   subscriptionPeriodCopy,
+  chatQuotaSubtitleCopy,
   taskDisplaySummary,
   taskDisplayTitle,
   taskGroup,
@@ -4212,7 +4213,7 @@ test('names omitted GET subscription chat_quota_used as zero instead of hiding C
   ).toEqual([
     {
       title: 'Chat this month',
-      copy: '0 of 100 messages used this month',
+      copy: `0 Chat\n${chatQuotaSubtitleCopy()}\n0 of 100 messages used this month`,
     },
   ]);
   expect(
@@ -4227,7 +4228,10 @@ test('names omitted GET subscription chat_quota_used as zero instead of hiding C
       ),
     ),
   ).toEqual([
-    {title: 'Chat this month', copy: '$0.00 used this month'},
+    {
+      title: 'Chat this month',
+      copy: `$0.00\n${chatQuotaSubtitleCopy()}\n$0.00 used this month`,
+    },
   ]);
   expect(
     subscriptionPeriodCopy(
@@ -4252,6 +4256,9 @@ test('names omitted GET subscription chat_quota_used as zero instead of hiding C
 });
 
 test('subscription period copy names GET words insights and chat quotas without Upgrade', () => {
+  expect(chatQuotaSubtitleCopy()).toBe(
+    'AI chat messages used with Omi this month.',
+  );
   expect(
     subscriptionPeriodCopy({
       wordsTranscribedUsed: 12,
@@ -4274,7 +4281,7 @@ test('subscription period copy names GET words insights and chat quotas without 
     },
     {
       title: 'Chat this month',
-      copy: '5 of 100 messages used this month',
+      copy: `5 Chat\n${chatQuotaSubtitleCopy()}\n5 of 100 messages used this month`,
     },
   ]);
   expect(
@@ -4289,7 +4296,10 @@ test('subscription period copy names GET words insights and chat quotas without 
       chatCostUsdPerMonth: 20,
     }),
   ).toEqual([
-    {title: 'Chat this month', copy: '$1.20 of $20 used this month'},
+    {
+      title: 'Chat this month',
+      copy: `$1.20\n${chatQuotaSubtitleCopy()}\n$1.20 of $20 used this month`,
+    },
   ]);
   expect(
     parseCloudSubscription(
