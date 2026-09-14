@@ -163,6 +163,9 @@ import {
   primaryLanguageCopy,
   primaryLanguageNotSetCopy,
   peopleNameRows,
+  peopleTitleCopy,
+  peopleEmptyCopy,
+  peopleSettingsCopy,
   firmwareUpdateCopy,
   firmwareDeviceUpToDateCopy,
   firmwareLatestVersionCopy,
@@ -1439,6 +1442,28 @@ test('people name rows keep GET names without empty entries', () => {
     {id: 'person-sam', name: 'Sam'},
   ]);
   expect(peopleNameRows(new Map())).toEqual([]);
+});
+
+test('people settings copy names Flutter createPersonHint for empty GET people', () => {
+  expect(peopleTitleCopy()).toBe('People');
+  expect(peopleEmptyCopy()).toBe(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
+  expect(peopleSettingsCopy(null)).toEqual([]);
+  expect(peopleSettingsCopy(new Map())).toEqual([
+    {key: 'empty', title: peopleTitleCopy(), copy: peopleEmptyCopy()},
+  ]);
+  expect(
+    peopleSettingsCopy(
+      new Map([
+        ['person-alex', 'Alex Chen'],
+        ['person-sam', 'Sam'],
+      ]),
+    ),
+  ).toEqual([
+    {key: 'person-alex', title: peopleTitleCopy(), copy: 'Alex Chen'},
+    {key: 'person-sam', title: peopleTitleCopy(), copy: 'Sam'},
+  ]);
 });
 
 test('fair use copy names GET stage hours and restrict budget without Upgrade', () => {

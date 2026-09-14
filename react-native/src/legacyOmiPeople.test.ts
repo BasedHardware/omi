@@ -94,9 +94,8 @@ test('loadOmiPeopleNames names resolved GET people and omits failures', async ()
     body: JSON.stringify([{id: 'person-alex', name: 'Alex Chen'}]),
   }));
   const backend = {request} as unknown as OmiBackend;
-  expect((await loadOmiPeopleNames(backend)).get('person-alex')).toBe(
-    'Alex Chen',
-  );
+  const names = await loadOmiPeopleNames(backend);
+  expect(names?.get('person-alex')).toBe('Alex Chen');
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),
     method: 'GET',
@@ -104,7 +103,27 @@ test('loadOmiPeopleNames names resolved GET people and omits failures', async ()
     path: '/v1/users/people?include_speech_samples=false',
   });
   request.mockResolvedValueOnce({id: 'people', status: 500, body: '[]'});
-  expect((await loadOmiPeopleNames(backend)).size).toBe(0);
+  expect(await loadOmiPeopleNames(backend)).toBeNull();
   request.mockResolvedValueOnce({id: 'people', status: 200, body: '{'});
-  expect((await loadOmiPeopleNames(backend)).size).toBe(0);
+  expect(await loadOmiPeopleNames(backend)).toBeNull();
+});
+
+test('loadOmiPeopleNames keeps honest GET empty people', async () => {
+  const request = jest.fn(async () => ({
+    id: 'people',
+    status: 200,
+    body: JSON.stringify([]),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  expect(await loadOmiPeopleNames(backend)).toEqual(new Map());
+});
+
+test('loadOmiPeopleNames omits HTTP 404 people instead of empty success', async () => {
+  const request = jest.fn(async () => ({
+    id: 'people',
+    status: 404,
+    body: null,
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  expect(await loadOmiPeopleNames(backend)).toBeNull();
 });

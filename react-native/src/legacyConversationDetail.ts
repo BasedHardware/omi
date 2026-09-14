@@ -531,7 +531,7 @@ export async function loadLegacyConversationDetail(
             );
             const names = needsPeople
               ? await loadOmiPeopleNames(backend, signal).then(
-                  value => value,
+                  value => value ?? new Map<string, string>(),
                   reason => {
                     peopleError = desktopReadErrorCopy(reason);
                     return new Map<string, string>();

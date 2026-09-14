@@ -3654,6 +3654,9 @@ test('Settings names GET people without a write sheet', async () => {
   expect(tree).toContain('People');
   expect(tree).toContain('Alex Chen');
   expect(tree).not.toContain('person-alex');
+  expect(tree).not.toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
 });
 
 test('Settings names a failed people GET instead of empty success', async () => {
@@ -3720,6 +3723,141 @@ test('Settings names a failed people GET instead of empty success', async () => 
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Alex Chen');
   expect(tree).not.toContain('person-alex');
+  expect(tree).not.toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
+});
+
+test('Settings names Flutter createPersonHint for empty GET people', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {id: 'people', status: 200, body: JSON.stringify([])};
+    }
+    return {id: request.id ?? 'other', status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('People');
+  expect(tree).toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
+  expect(tree).not.toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Add New Person');
+  expect(tree).not.toContain('Speech Profile');
+  expect(tree).not.toContain('How it works?');
+});
+
+test('Settings omits Worker 404 people instead of createPersonHint', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async (request: {path?: string}) => ({
+    id: request.id ?? 'other',
+    status: 404,
+    body: null,
+  }));
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).not.toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
 });
 
 test('Settings names GET task integrations without Connect or a write sheet', async () => {

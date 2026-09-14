@@ -1315,10 +1315,34 @@ export function primaryLanguageCopy(
   return language;
 }
 
+export function peopleTitleCopy(): string {
+  return 'People';
+}
+
+export function peopleEmptyCopy(): string {
+  return 'Create a new person and train Omi to recognize their speech too!';
+}
+
 export function peopleNameRows(
   names: Map<string, string>,
 ): {id: string; name: string}[] {
   return Array.from(names, ([id, name]) => ({id, name}));
+}
+
+export function peopleSettingsCopy(
+  names: Map<string, string> | null,
+): {key: string; title: string; copy: string}[] {
+  if (names === null) {
+    return [];
+  }
+  if (names.size === 0) {
+    return [{key: 'empty', title: peopleTitleCopy(), copy: peopleEmptyCopy()}];
+  }
+  return peopleNameRows(names).map(person => ({
+    key: person.id,
+    title: peopleTitleCopy(),
+    copy: person.name,
+  }));
 }
 
 const dailySummaryWeekdays = [
@@ -3385,7 +3409,7 @@ export async function loadConversations(
     return loadOmiConversations(
       path => read(backend, 'desktop-omi-read', path, 'omi'),
       cursor,
-      () => loadOmiPeopleNames(backend),
+      () => loadOmiPeopleNames(backend).then(names => names ?? new Map()),
     );
   }
   if (cursor !== null && (cursor.length === 0 || cursor.length > 16384)) {

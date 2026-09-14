@@ -35,7 +35,8 @@ import {
   primaryLanguageCopy,
   primaryLanguageNotSetCopy,
   primaryLanguageTitleCopy,
-  peopleNameRows,
+  peopleSettingsCopy,
+  peopleTitleCopy,
   fairUseCopy,
   fairUseLoadErrorCopy,
   dailySummaryCopy,
@@ -302,9 +303,9 @@ export function DesktopSettings({
     Record<PermissionKind, PermissionState>
   >({microphone: 'unknown', notifications: 'unknown', screen: 'unknown'});
   const [account, setAccount] = useState<AccountSettingsSnapshot | null>(null);
-  const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
-    [],
-  );
+  const [peopleNames, setPeopleNames] = useState<
+    ReturnType<typeof peopleSettingsCopy>
+  >([]);
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [taskIntegrations, setTaskIntegrations] = useState<
     OmiTaskIntegration[]
@@ -397,7 +398,7 @@ export function DesktopSettings({
       setPermissions(nextPermissions);
     } catch {}
     let nextAccount: AccountSettingsSnapshot | null = null;
-    let nextPeople: {id: string; name: string}[] = [];
+    let nextPeople: ReturnType<typeof peopleSettingsCopy> = [];
     let nextPeopleError: string | null = null;
     let nextTaskIntegrations: OmiTaskIntegration[] = [];
     let nextIntegrations: OmiIntegration[] = [];
@@ -562,7 +563,7 @@ export function DesktopSettings({
         nextAccount = failedAccountSettings(desktopReadErrorCopy(reason));
       }
       const peopleResult = await peopleTask;
-      nextPeople = peopleNameRows(peopleResult.names);
+      nextPeople = peopleSettingsCopy(peopleResult.names);
       nextPeopleError = peopleResult.error;
       const taskIntegrationsResult = await taskIntegrationsTask;
       nextTaskIntegrations = taskIntegrationsResult.rows;
@@ -1017,10 +1018,10 @@ export function DesktopSettings({
         </>
       )}
       {peopleError !== null ? (
-        <Row copy={peopleError} title="People" />
+        <Row copy={peopleError} title={peopleTitleCopy()} />
       ) : (
-        peopleNames.map(person => (
-          <Row copy={person.name} key={person.id} title="People" />
+        peopleNames.map(row => (
+          <Row copy={row.copy} key={row.key} title={row.title} />
         ))
       )}
       {taskIntegrationsError !== null ? (

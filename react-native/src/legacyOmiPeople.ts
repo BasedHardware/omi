@@ -48,9 +48,9 @@ export function parseOmiPeopleNames(body: string): Map<string, string> {
 export async function loadOmiPeopleNames(
   backend: OmiBackend,
   signal?: AbortSignal,
-): Promise<Map<string, string>> {
+): Promise<Map<string, string> | null> {
   if (signal?.aborted) {
-    return new Map();
+    return null;
   }
   const response = await backend.request({
     id: 'omi-people',
@@ -59,18 +59,18 @@ export async function loadOmiPeopleNames(
     path: '/v1/users/people?include_speech_samples=false',
   });
   if (signal?.aborted) {
-    return new Map();
+    return null;
   }
   if (
     response.status !== 200 ||
     response.body === null ||
     response.body.length > 1024 * 1024
   ) {
-    return new Map();
+    return null;
   }
   try {
     return parseOmiPeopleNames(response.body);
   } catch {
-    return new Map();
+    return null;
   }
 }

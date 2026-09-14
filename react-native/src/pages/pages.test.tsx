@@ -1590,6 +1590,9 @@ test('Settings names GET people without a write sheet', async () => {
   expect(tree).toContain('Alex Chen');
   expect(tree).not.toContain('person-alex');
   expect(tree).not.toContain('person-empty');
+  expect(tree).not.toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
 });
 
 test('Settings names a failed people GET instead of empty success', async () => {
@@ -1606,6 +1609,43 @@ test('Settings names a failed people GET instead of empty success', async () => 
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Alex Chen');
   expect(tree).not.toContain('person-alex');
+  expect(tree).not.toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
+});
+
+test('Settings names Flutter createPersonHint for empty GET people', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('People');
+  expect(tree).toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
+  expect(tree).not.toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Add New Person');
+  expect(tree).not.toContain('Speech Profile');
+  expect(tree).not.toContain('How it works?');
+});
+
+test('Settings omits Worker 404 people instead of createPersonHint', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => ({
+    id: request.id,
+    status: 404,
+    body: null,
+  }));
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).not.toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
 });
 
 test('Settings names GET fair use without Upgrade or a write sheet', async () => {

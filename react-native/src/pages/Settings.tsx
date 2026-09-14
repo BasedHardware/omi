@@ -51,7 +51,8 @@ import {
   primaryLanguageCopy,
   primaryLanguageNotSetCopy,
   primaryLanguageTitleCopy,
-  peopleNameRows,
+  peopleSettingsCopy,
+  peopleTitleCopy,
   fairUseCopy,
   fairUseLoadErrorCopy,
   dailySummaryCopy,
@@ -230,9 +231,9 @@ export function SettingsPage({
   const [snapshot, setSnapshot] = useState<AccountSettingsSnapshot | null>(
     null,
   );
-  const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
-    [],
-  );
+  const [peopleNames, setPeopleNames] = useState<
+    ReturnType<typeof peopleSettingsCopy>
+  >([]);
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [taskIntegrations, setTaskIntegrations] = useState<
     OmiTaskIntegration[]
@@ -653,7 +654,7 @@ export function SettingsPage({
     if (!current()) {
       return;
     }
-    setPeopleNames(peopleNameRows(peopleResult.names));
+    setPeopleNames(peopleSettingsCopy(peopleResult.names));
     setPeopleError(peopleResult.error);
     setTaskIntegrations(taskIntegrationsResult.rows);
     setTaskIntegrationsError(taskIntegrationsResult.error);
@@ -933,10 +934,10 @@ export function SettingsPage({
           </>
         )}
         {peopleError !== null ? (
-          <SettingRow copy={peopleError} title="People" />
+          <SettingRow copy={peopleError} title={peopleTitleCopy()} />
         ) : (
-          peopleNames.map(person => (
-            <SettingRow copy={person.name} key={person.id} title="People" />
+          peopleNames.map(row => (
+            <SettingRow copy={row.copy} key={row.key} title={row.title} />
           ))
         )}
         {taskIntegrationsError !== null ? (
