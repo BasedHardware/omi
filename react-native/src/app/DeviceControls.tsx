@@ -184,9 +184,7 @@ export function DeviceControls({
           style={styles.scanButton}>
           <Text style={styles.scanButtonText}>Read storage status</Text>
         </FocusPressable>
-      ) : (
-        <Text style={styles.deviceMeta}>Storage status unavailable</Text>
-      )}
+      ) : null}
       {storage !== null && device.connected && (
         <View accessibilityLabel="Last reported storage status">
           <Text style={styles.deviceMeta}>Last reported storage</Text>

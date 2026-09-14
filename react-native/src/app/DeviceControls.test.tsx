@@ -413,6 +413,42 @@ test('connected device omits Flutter DeviceSettings unused Find-unavailable copy
   expect(button(findDeviceCopy())).toBeUndefined();
 });
 
+test('connected device omits Flutter DeviceSettings unused storage-unavailable copy', async () => {
+  await render(device);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Storage status unavailable',
+  );
+  expect(button('Read storage status')).toBeUndefined();
+  await act(async () =>
+    renderer.update(
+      <DeviceControls
+        device={{...device, storageStatusSupported: true}}
+        busy={false}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain('Read storage status');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Storage status unavailable',
+  );
+  await act(async () =>
+    renderer.update(
+      <DeviceControls
+        device={{
+          ...device,
+          connected: false,
+          storageStatusSupported: true,
+        }}
+        busy={false}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Storage status unavailable',
+  );
+  expect(button('Read storage status')).toBeUndefined();
+});
+
 test('connected device omits Flutter DeviceSettings unused Double-press copy', async () => {
   await render({...device, buttonSupported: true});
   expect(JSON.stringify(renderer.toJSON())).not.toContain(
