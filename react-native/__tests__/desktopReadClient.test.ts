@@ -116,6 +116,8 @@ import {
   conversationListTag,
   conversationVisibilityCopy,
   conversationUnknownAppCopy,
+  conversationUnknownLocationCopy,
+  conversationLocationAddressCopy,
   conversationNoFolderCopy,
   transcriptSttProviderCopy,
   transcriptSttUnknownCopy,
@@ -3240,6 +3242,36 @@ test('conversation visibility copy names GET private, shared, and public as Flut
 
 test('conversation unknown-app copy names Flutter catalog-miss attribution', () => {
   expect(conversationUnknownAppCopy()).toBe('Unknown App');
+});
+
+test('conversation location address copy names Flutter GetGeolocationWidgets short address', () => {
+  expect(conversationUnknownLocationCopy()).toBe('Unknown location');
+  expect(
+    conversationLocationAddressCopy(
+      '123 Market St, Mission District, San Francisco, CA 94103',
+    ),
+  ).toBe('Mission District, San Francisco');
+  expect(
+    conversationLocationAddressCopy('123 Market St, San Francisco, CA'),
+  ).toBe('123 Market St, San Francisco');
+  expect(
+    conversationLocationAddressCopy('123 Market St, San Francisco'),
+  ).toBe('123 Market St, San Francisco');
+  expect(conversationLocationAddressCopy('San Francisco')).toBe(
+    'San Francisco',
+  );
+  expect(conversationLocationAddressCopy('')).toBe(
+    conversationUnknownLocationCopy(),
+  );
+  expect(conversationLocationAddressCopy(' \t\u0085 ')).toBe(
+    conversationUnknownLocationCopy(),
+  );
+  expect(conversationLocationAddressCopy(undefined)).toBe(
+    conversationUnknownLocationCopy(),
+  );
+  expect(conversationLocationAddressCopy(null)).toBe(
+    conversationUnknownLocationCopy(),
+  );
 });
 
 test('conversation No Folder copy names Flutter l10n.noFolder', () => {

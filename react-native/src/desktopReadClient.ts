@@ -485,6 +485,27 @@ export function conversationUnknownAppCopy(): string {
   return 'Unknown App';
 }
 
+export function conversationUnknownLocationCopy(): string {
+  return 'Unknown location';
+}
+
+export function conversationLocationAddressCopy(
+  address: string | null | undefined,
+): string {
+  const fullAddress = visibleDisplayText(address ?? '');
+  if (fullAddress === '') {
+    return conversationUnknownLocationCopy();
+  }
+  const parts = fullAddress.split(',').map(part => part.trim());
+  if (parts.length >= 3) {
+    return `${parts[parts.length - 3]}, ${parts[parts.length - 2]}`;
+  }
+  if (parts.length === 2) {
+    return `${parts[0]}, ${parts[1]}`;
+  }
+  return fullAddress;
+}
+
 export function conversationNoFolderCopy(): string {
   return 'No Folder';
 }

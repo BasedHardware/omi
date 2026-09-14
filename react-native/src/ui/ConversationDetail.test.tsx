@@ -1521,6 +1521,37 @@ test('legacy conversation details name GET geolocation address', () => {
   expect(discarded).not.toContain('123 Market St, San Francisco');
 });
 
+test('legacy conversation details name Flutter GetGeolocationWidgets short address', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        locationAddress: 'Mission District, San Francisco',
+        locationMapsUrl:
+          'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Mission District, San Francisco');
+  expect(copy).not.toContain('123 Market St');
+  expect(copy).not.toContain('CA 94103');
+});
+
 test('legacy conversation details name GET geolocation maps open', () => {
   mockLegacy.mockReturnValue({
     result: {

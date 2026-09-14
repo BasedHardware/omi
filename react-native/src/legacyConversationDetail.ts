@@ -6,6 +6,7 @@ import {
   conversationFirstPartySummaryCopy,
   conversationNoFolderCopy,
   conversationUnknownAppCopy,
+  conversationLocationAddressCopy,
   desktopReadErrorCopy,
   transcriptSttProviderCopy,
   visibleDisplayText,
@@ -215,9 +216,9 @@ function locationChrome(value: unknown): {
   const address =
     geo.address === undefined || geo.address === null
       ? ''
-      : visibleDisplayText(text(geo.address));
+      : text(geo.address);
   return {
-    locationAddress: address === '' ? 'Unknown location' : address,
+    locationAddress: conversationLocationAddressCopy(address),
     locationMapsUrl: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
   };
 }

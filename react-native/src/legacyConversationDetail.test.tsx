@@ -1812,6 +1812,35 @@ test('keeps GET geolocation address and omits empty or missing locations', async
   ).toBeUndefined();
 });
 
+test('old conversation details name Flutter GetGeolocationWidgets short address', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: '123 Market St, Mission District, San Francisco, CA 94103',
+        latitude: 37.7749,
+        longitude: -122.4194,
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).locationAddress,
+  ).toBe('Mission District, San Francisco');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: '123 Market St, San Francisco, CA',
+        latitude: 37.7749,
+        longitude: -122.4194,
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).locationAddress,
+  ).toBe('123 Market St, San Francisco');
+});
+
 test('keeps GET geolocation maps open Flutter paints from required coordinates', async () => {
   mockRequest.mockResolvedValue(
     response({
