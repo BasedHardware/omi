@@ -5,7 +5,6 @@ import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import {
   conversationDiscardedPhotoCopy,
-  conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationListDurationCopy,
@@ -88,11 +87,6 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
           ? conversationRecapTitle(item)
           : conversationDisplayTitle(item)}
       </Text>
-      {listenOverview ? null : (
-        <Text numberOfLines={2} style={styles.rowSummary}>
-          {conversationDisplaySummary(item)}
-        </Text>
-      )}
       <Text numberOfLines={1} style={styles.rowMeta}>
         {[
           newCopy ??
@@ -268,12 +262,6 @@ const styles = StyleSheet.create({
     fontFamily: token.font,
     fontSize: token.type.title,
     fontWeight: '500',
-  },
-  rowSummary: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    marginTop: 2,
   },
   rowMeta: {
     color: token.color.inkMuted,

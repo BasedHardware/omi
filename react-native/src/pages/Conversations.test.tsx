@@ -315,7 +315,9 @@ test('untitled processing conversations stay visible instead of a blank row', ()
     );
   });
   expect(textOf(renderer)).toContain('Processing conversation…');
-  expect(textOf(renderer)).toContain('Conversation summary is not ready yet.');
+  expect(textOf(renderer)).not.toContain(
+    'Conversation summary is not ready yet.',
+  );
   expect(textOf(renderer)).not.toContain(conversationsEmptyCopy());
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });
@@ -361,7 +363,7 @@ test('untitled conversations keep overview speech on the open control', () => {
     );
   });
   expect(textOf(renderer)).toContain('Conversation title unavailable');
-  expect(textOf(renderer)).toContain('Assistant words');
+  expect(textOf(renderer)).not.toContain('Assistant words');
   expect(
     renderer.root.findAll(
       node =>
@@ -1656,6 +1658,53 @@ test('conversation list omits Flutter ConversationListItem Processing chips', ()
   ).toBeGreaterThan(0);
   expect(copy).toContain('Merging...');
   expect(copy).not.toContain(conversationStatusCopy('in_progress'));
+});
+
+test('conversation list omits Flutter ConversationListItem unused overview', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'omi-overview-one',
+    title: 'Morning standup',
+    summary: 'Notes from the standup',
+    searchableText: 'Morning standup\nNotes from the standup',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Morning standup');
+  expect(copy).not.toContain('Notes from the standup');
+  expect(copy).not.toContain('Conversation summary is not ready yet.');
+  expect(copy).not.toContain('Conversation summary unavailable');
 });
 
 test('conversation list names GET emoji and omits it when discarded or empty', () => {

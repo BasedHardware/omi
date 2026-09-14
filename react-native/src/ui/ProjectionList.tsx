@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import {
   conversationDiscardedPhotoCopy,
-  conversationDisplaySummary,
   conversationDisplayTitle,
   conversationListEmoji,
   conversationListNewCopy,
@@ -53,7 +52,7 @@ function displaySummary(item: DesktopReadProjection): string | null {
     return memoryCitationCopy(item.citations);
   }
   if (item.kind === 'conversation') {
-    return conversationDisplaySummary(item);
+    return null;
   }
   return taskDisplaySummary(item);
 }

@@ -155,11 +155,6 @@ const ConversationRow = memo(function ConversationRow({
           ? conversationRecapTitle(item)
           : conversationDisplayTitle(item)}
       </Text>
-      {listenOverview ? null : (
-        <Text numberOfLines={2} style={styles.resultSummary}>
-          {conversationDisplaySummary(item)}
-        </Text>
-      )}
       {durationCopy !== '' ? (
         <Text style={styles.conversationRowDuration}>{durationCopy}</Text>
       ) : null}

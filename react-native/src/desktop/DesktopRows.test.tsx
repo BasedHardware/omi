@@ -304,13 +304,13 @@ test('Home currents keep chat last-turn overview off the timestamp meta', () => 
     renderer = ReactTestRenderer.create(<ReadRow item={item} />);
   });
   expect(textOf(renderer)).toContain('Hi');
-  expect(textOf(renderer)).toContain(item.summary);
+  expect(textOf(renderer)).not.toContain(item.summary);
   expect(
     renderer.root.findAll(
       node =>
         node.props.numberOfLines === 2 && node.props.children === item.summary,
     ).length,
-  ).toBeGreaterThan(0);
+  ).toBe(0);
   expect(
     renderer.root.findAll(
       node =>
@@ -352,7 +352,7 @@ test('Library rows keep chat last-turn overview off the timestamp meta', () => {
       node =>
         node.props.numberOfLines === 2 && node.props.children === item.summary,
     ).length,
-  ).toBeGreaterThan(0);
+  ).toBe(0);
   expect(
     renderer.root.findAll(
       node =>
@@ -911,6 +911,37 @@ test('Home and Library rows omit Flutter ConversationListItem Processing chips',
   expect(textOf(chat)).toContain('Hello');
   expect(textOf(chat)).not.toContain('Processing');
   expect(textOf(chat)).not.toContain('In progress');
+});
+
+test('Home and Library rows omit Flutter ConversationListItem unused overview', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'omi-overview-row',
+    title: 'Morning standup',
+    summary: 'Notes from the standup',
+    searchableText: 'Morning standup\nNotes from the standup',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  expect(textOf(home)).toContain('Morning standup');
+  expect(textOf(home)).not.toContain('Notes from the standup');
+  expect(textOf(library)).toContain('Morning standup');
+  expect(textOf(library)).not.toContain('Notes from the standup');
 });
 
 test('library conversation rows name GET emoji and omit discarded or empty values', () => {

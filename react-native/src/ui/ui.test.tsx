@@ -2626,7 +2626,7 @@ test('wide Home search rows keep untitled processing conversations visible', () 
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Processing conversation…');
-  expect(tree).toContain('Conversation summary is not ready yet.');
+  expect(tree).not.toContain('Conversation summary is not ready yet.');
 });
 
 test('wide Home search rows keep empty completed conversation copy visible', () => {
@@ -2655,7 +2655,7 @@ test('wide Home search rows keep empty completed conversation copy visible', () 
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Conversation title unavailable');
-  expect(tree).toContain('Conversation summary unavailable');
+  expect(tree).not.toContain('Conversation summary unavailable');
 });
 
 test('wide Home search rows keep supplied conversation title and summary', () => {
@@ -2683,7 +2683,7 @@ test('wide Home search rows keep supplied conversation title and summary', () =>
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Morning walk');
-  expect(tree).toContain('Discussed the launch.');
+  expect(tree).not.toContain('Discussed the launch.');
   expect(tree).not.toContain('Processing conversation…');
   expect(tree).not.toContain('Conversation title unavailable');
 });
@@ -2785,7 +2785,7 @@ test('wide Home search in-progress chats omit Duration unavailable', () => {
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Hi');
-  expect(tree).toContain('Later independent turn');
+  expect(tree).not.toContain('Later independent turn');
   expect(tree).not.toContain('Duration unavailable');
 });
 
@@ -3667,6 +3667,36 @@ test('wide Home search rows omit Flutter ConversationListItem Processing chips',
   expect(mergingTree).toContain('Standup recap');
   expect(mergingTree).toContain('Merging...');
   expect(mergingTree).not.toContain('Processing');
+});
+
+test('wide Home search rows omit Flutter ConversationListItem unused overview', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'omi-overview-home-search',
+        title: 'Morning standup',
+        summary: 'Notes from the standup',
+        searchableText: 'Morning standup\nNotes from the standup',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'omi',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Morning standup');
+  expect(tree).not.toContain('Notes from the standup');
+  expect(tree).not.toContain('Conversation summary is not ready yet.');
+  expect(tree).not.toContain('Conversation summary unavailable');
 });
 
 test('wide Home search completed tasks omit invented Completed due chrome', () => {
