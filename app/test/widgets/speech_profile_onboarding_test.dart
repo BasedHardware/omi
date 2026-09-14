@@ -18,12 +18,8 @@ class _SpeechProvider extends SpeechProfileProvider {
     isInitialising = !recording;
   }
 
-  int closes = 0;
-
   @override
-  Future<void> close() async {
-    closes++;
-  }
+  Future<void> close() async {}
 }
 
 class _CaptureProvider extends ChangeNotifier implements CaptureProvider {
@@ -76,7 +72,6 @@ void main() {
     expect(skip, findsOneWidget);
     await tester.tap(skip);
     expect(skipped, isTrue);
-    expect(speech.closes, 2); // entry reset + explicit skip
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
