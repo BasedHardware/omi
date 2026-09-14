@@ -2134,6 +2134,29 @@ export function deviceDisplayName(name: string): string {
   return accountFieldCopy(name, 'Device name unavailable');
 }
 
+export function deviceFoundShortIdCopy(id: string): string {
+  if (id === 'apple-watch') {
+    return 'watchOS';
+  }
+  const last = id.replaceAll(':', '').split('-').pop() ?? '';
+  if (last.length >= 6) {
+    return last.slice(0, 6);
+  }
+  return id.length > 6 ? id.slice(0, 6) : id;
+}
+
+export function deviceFoundNameCopy(
+  name: string,
+  id: string,
+  devices: readonly {name: string}[],
+): string {
+  const display = deviceDisplayName(name);
+  const sameNameCount = devices.filter(device => device.name === name).length;
+  return sameNameCount > 1
+    ? `${display} (${deviceFoundShortIdCopy(id)})`
+    : display;
+}
+
 export function appDisplaySource(app: {
   author: string;
   category: string;

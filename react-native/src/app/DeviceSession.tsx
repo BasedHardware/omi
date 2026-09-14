@@ -13,6 +13,7 @@ import {DeviceControls} from './DeviceControls';
 import {
   accountFieldCopy,
   deviceDisplayName,
+  deviceFoundNameCopy,
   deviceModelNumberCopy,
   deviceProductNameCopy,
   deviceSerialNumberCopy,
@@ -355,6 +356,7 @@ export function DeviceSession({
   );
 
   const rows = devices.map(device => {
+    const foundName = deviceFoundNameCopy(device.name, device.id, devices);
     const rowStatus = device.connecting
       ? 'Connecting…'
       : device.connected
@@ -368,7 +370,7 @@ export function DeviceSession({
           : device.connected
           ? 'Disconnect'
           : 'Connect'
-      } ${deviceDisplayName(device.name)}`}
+      } ${foundName}`}
       accessibilityRole="button"
       disabled={deviceBusy || connectUnavailable(device)}
       key={device.id}
@@ -393,7 +395,7 @@ export function DeviceSession({
           />
           <View>
             <Text style={styles.deviceName}>
-              {deviceDisplayName(device.name)}
+              {foundName}
             </Text>
             {rowStatus !== null ? (
               <Text style={styles.deviceMeta}>{rowStatus}</Text>
@@ -403,7 +405,7 @@ export function DeviceSession({
       ) : (
         <View>
           <Text style={styles.deviceName}>
-            {deviceDisplayName(device.name)}
+            {foundName}
           </Text>
           {rowStatus !== null ? (
             <Text style={styles.deviceMeta}>{rowStatus}</Text>

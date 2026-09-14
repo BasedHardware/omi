@@ -180,6 +180,8 @@ import {
   deviceSerialNumberCopy,
   deviceUnknownCopy,
   deviceIdentityChipCopy,
+  deviceFoundShortIdCopy,
+  deviceFoundNameCopy,
   ledBrightnessCopy,
   micGainCopy,
   micGainLevelCopy,
@@ -1788,6 +1790,27 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(deviceIdentityChipCopy('AA:BB:CC:DD:EE:FF')).toBe('AA:BB•••E:FF');
   expect(deviceIdentityChipCopy('SERIALNUMBER9911')).toBe('SERIA•••9911');
   expect(deviceIdentityChipCopy('Unknown')).toBe('Unknown');
+  expect(deviceFoundShortIdCopy('AA:BB:CC:DD:EE:FF')).toBe('AABBCC');
+  expect(deviceFoundShortIdCopy('11:22:33:44:55:66')).toBe('112233');
+  expect(deviceFoundShortIdCopy('omi-test')).toBe('omi-te');
+  expect(deviceFoundShortIdCopy('abc')).toBe('abc');
+  expect(deviceFoundShortIdCopy('123456789012')).toBe('123456');
+  expect(deviceFoundShortIdCopy('apple-watch')).toBe('watchOS');
+  expect(
+    deviceFoundNameCopy('Omi', 'AA:BB:CC:DD:EE:FF', [
+      {name: 'Omi'},
+      {name: 'Omi'},
+    ]),
+  ).toBe('Omi (AABBCC)');
+  expect(
+    deviceFoundNameCopy('Omi', 'AA:BB:CC:DD:EE:FF', [{name: 'Omi'}]),
+  ).toBe('Omi');
+  expect(
+    deviceFoundNameCopy('Pendant', 'omi-unique', [
+      {name: 'Omi'},
+      {name: 'Pendant'},
+    ]),
+  ).toBe('Pendant');
   expect(ledBrightnessCopy()).toBe('LED Brightness');
   expect(micGainCopy()).toBe('Mic Gain');
   expect(micGainLevelCopy(0)).toBe('Mute');

@@ -139,6 +139,86 @@ test('connected device names Flutter home_device truncated Device ID and Serial 
   await act(async () => renderer.unmount());
 });
 
+test.each(['compact', 'overview'] as const)(
+  '%s names Flutter FoundDevices same-name getShortId on scan rows',
+  async variant => {
+    const snapshot = {
+      bluetooth: 'poweredOn',
+      devices: [
+        {
+          id: 'AA:BB:CC:DD:EE:FF',
+          name: 'Omi',
+          connected: false,
+          rssi: -40,
+        },
+        {
+          id: '11:22:33:44:55:66',
+          name: 'Omi',
+          connected: false,
+          rssi: -42,
+        },
+        {
+          id: 'omi-unique',
+          name: 'Pendant',
+          connected: false,
+          rssi: -50,
+        },
+      ],
+      connectedDeviceId: null,
+      capture: 'idle',
+    } as PlatformNativeSnapshot;
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          nativeSnapshot={snapshot}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          variant={variant}
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    const output = JSON.stringify(renderer.toJSON());
+    expect(output).toContain('Omi (AABBCC)');
+    expect(output).toContain('Omi (112233)');
+    expect(output).toContain('Pendant');
+    expect(output).not.toContain('Pendant (');
+    await act(async () => renderer.unmount());
+  },
+);
+
+test('affordance scan chips omit Flutter FoundDevices same-name getShortId', async () => {
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {id: 'AA:BB:CC:DD:EE:FF', name: 'Omi', connected: false, rssi: -40},
+      {id: '11:22:33:44:55:66', name: 'Omi', connected: false, rssi: -42},
+    ],
+    connectedDeviceId: null,
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="affordance"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Omi');
+  expect(output).not.toContain('Omi (AABBCC)');
+  expect(output).not.toContain('Omi (112233)');
+  await act(async () => renderer.unmount());
+});
+
 test('connected device details show reported values and truthful unavailable fields', async () => {
   const snapshot = {
     bluetooth: 'poweredOn',
