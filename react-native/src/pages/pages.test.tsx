@@ -29,9 +29,34 @@ const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
 const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy, subscriptionLoadErrorCopy, primaryLanguageNotSetCopy} = require('../desktopReadClient');
 const {appChangelogsLoadErrorCopy} = require('../legacyOmiAppChangelogs');
+const {styles} = require('../ui/styles');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter(
+      (value): value is string | number =>
+        typeof value === 'string' || typeof value === 'number',
+    )
+    .join(' ');
+}
+
+function sectionText(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  title: string,
+): string {
+  const heading = renderer.root.find(
+    node =>
+      node.type === Text &&
+      node.props.children === title &&
+      node.props.style === styles.destinationSectionTitle,
+  );
+  return heading.parent
     .findAllByType(Text)
     .flatMap(node =>
       Array.isArray(node.props.children)
@@ -2554,6 +2579,56 @@ test('Connectors rows keep GET private instead of a public-looking catalogue', a
   expect(tree).toContain('Owned app');
   expect(tree).toContain('Private · Not installed');
   expect(tree).toContain('Catalog fixture app');
+  expect(tree).not.toContain('Official');
+});
+
+test('Connectors Explore names Flutter CategorySection GET category and Installed omits it', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-explore',
+            name: 'Explore fixture app',
+            category: 'productivity-and-organization',
+          },
+          {
+            id: 'catalog-app-installed',
+            name: 'Owned app',
+            category: 'health-and-wellness',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(['catalog-app-installed']),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Explore fixture app');
+  expect(tree).toContain('Productivity');
+  expect(tree).toContain('Owned app');
+  expect(sectionText(renderer, 'Explore')).toContain('Health');
+  expect(sectionText(renderer, 'Installed')).toContain('Owned app');
+  expect(sectionText(renderer, 'Installed')).not.toContain('Health');
+  expect(tree).not.toContain('productivity-and-organization');
+  expect(tree).not.toContain('health-and-wellness');
   expect(tree).not.toContain('Official');
 });
 

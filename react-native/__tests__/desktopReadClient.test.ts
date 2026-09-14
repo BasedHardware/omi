@@ -53,6 +53,7 @@ import {
   termsOfServiceTitleCopy,
   permissionsTitleCopy,
   appCategoryCopy,
+  appSectionCategoryCopy,
   appDisplaySource,
   appDisplayAttribution,
   appDisplayName,
@@ -2124,6 +2125,19 @@ test('app category copy is not a raw wire token', () => {
   expect(appCategoryCopy('health-fitness')).toBe('Health Fitness');
   expect(appCategoryCopy('')).toBe('');
   expect(appCategoryCopy(' \t')).toBe('');
+});
+
+test('app section category copy names Flutter CategorySection GET category and omits AppListItem', () => {
+  expect(appSectionCategoryCopy('health-and-wellness', true)).toBe('Health');
+  expect(
+    appSectionCategoryCopy('productivity-and-organization', true),
+  ).toBe('Productivity');
+  expect(appSectionCategoryCopy('health-and-wellness', false)).toBeNull();
+  expect(
+    appSectionCategoryCopy('productivity-and-organization', false),
+  ).toBeNull();
+  expect(appSectionCategoryCopy('', true)).toBeNull();
+  expect(appSectionCategoryCopy(' \t', true)).toBeNull();
 });
 
 test('empty app source stays visible instead of a blank meta line', () => {

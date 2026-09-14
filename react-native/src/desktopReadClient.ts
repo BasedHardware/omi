@@ -2020,6 +2020,17 @@ export function appCategoryCopy(category: string): string {
     .join(' ');
 }
 
+export function appSectionCategoryCopy(
+  category: string,
+  explore: boolean,
+): string | null {
+  if (!explore) {
+    return null;
+  }
+  const copy = appCategoryCopy(category);
+  return copy === '' ? null : copy;
+}
+
 export function appDisplayName(name: string): string {
   return accountFieldCopy(name, 'App name unavailable');
 }

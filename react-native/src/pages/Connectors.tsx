@@ -25,7 +25,7 @@ import {
   desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
-  appCategoryCopy,
+  appSectionCategoryCopy,
   appDisplayName,
   appExploreRatingCopy,
   appImageUrl,
@@ -58,10 +58,10 @@ function appRowMeta(
   installKnown: boolean,
   explore = false,
 ): string {
-  const category = appCategoryCopy(app.category);
+  const category = appSectionCategoryCopy(app.category, explore);
   const author = visibleDisplayText(app.author);
   return [
-    category !== '' ? category : null,
+    category,
     author !== '' ? author : null,
     app.private ? 'Private' : null,
     explore
