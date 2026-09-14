@@ -1,5 +1,6 @@
 #include "lib/core/settings.h"
 
+#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
@@ -15,6 +16,8 @@ static uint8_t dim_light_ratio = DEFAULT_DIM_LIGHT_RATIO;
 static uint8_t mic_gain = DEFAULT_MIC_GAIN;
 static struct rtc_time rtc_timestamp = {0};
 static uint64_t rtc_epoch = 0;
+static uint8_t device_name[APP_SETTINGS_DEVICE_NAME_MAX_LEN];
+static uint16_t device_name_len = 0;
 
 struct lsm6dsl_time_base {
     uint64_t epoch_s;
@@ -28,6 +31,19 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
 {
     const char *next;
     int rc;
+
+    if (settings_name_steq(name, "device_name", &next) && !next) {
+        if (len > sizeof(device_name)) {
+            return -EINVAL;
+        }
+        rc = read_cb(cb_arg, device_name, len);
+        if (rc >= 0) {
+            device_name_len = (uint16_t) rc;
+            LOG_INF("Loaded device_name (%u bytes)", device_name_len);
+            return 0;
+        }
+        return rc;
+    }
 
     if (settings_name_steq(name, "dim_ratio", &next) && !next) {
         if (len != sizeof(dim_light_ratio)) {
@@ -254,4 +270,29 @@ int app_settings_save_mic_gain(uint8_t new_gain)
 uint8_t app_settings_get_mic_gain(void)
 {
     return mic_gain;
+}
+
+int app_settings_save_device_name(const uint8_t *name, uint16_t len)
+{
+    if (len > sizeof(device_name)) {
+        return -EINVAL;
+    }
+    int err = len == 0 ? settings_delete("omi/device_name") : settings_save_one("omi/device_name", name, len);
+    if (err) {
+        LOG_ERR("Failed to save device_name (err %d)", err);
+        return err;
+    }
+    if (len > 0) {
+        memcpy(device_name, name, len);
+    }
+    device_name_len = len;
+    LOG_INF("Saved device_name (%u bytes)", device_name_len);
+    return 0;
+}
+
+uint16_t app_settings_get_device_name(uint8_t *buf, uint16_t buf_len)
+{
+    uint16_t len = MIN(device_name_len, buf_len);
+    memcpy(buf, device_name, len);
+    return len;
 }
