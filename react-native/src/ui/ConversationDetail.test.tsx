@@ -1857,6 +1857,41 @@ test('legacy conversation details name GET invalid inline photo File unavailable
   ).toBeGreaterThan(0);
 });
 
+test('legacy conversation details name GET empty inline photo File unavailable', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        photoCount: 2,
+        photoCaptions: ['No bytes', 'Stored empty'],
+        photoRows: [
+          {caption: 'No bytes', unavailableCopy: conversationPhotoUnavailableCopy()},
+          {caption: 'Stored empty'},
+        ],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('2 photos');
+  expect(copy).toContain('No bytes');
+  expect(copy).toContain(conversationPhotoUnavailableCopy());
+  expect(copy).toContain('Stored empty');
+});
+
 test('legacy conversation details name GET folder name and omit unresolved folders', () => {
   mockLegacy.mockReturnValue({
     result: {

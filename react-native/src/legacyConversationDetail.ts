@@ -362,11 +362,15 @@ function conversationPhotos(value: unknown):
               ? undefined
               : text(photo.content_type),
           );
+    const storageId =
+      photo.storage_id === undefined || photo.storage_id === null
+        ? ''
+        : visibleDisplayText(text(photo.storage_id));
     const unavailableCopy =
+      imageUri !== undefined ||
       photo.base64 === undefined ||
       photo.base64 === null ||
-      photo.base64 === '' ||
-      imageUri !== undefined
+      (photo.base64 === '' && storageId !== '')
         ? undefined
         : conversationPhotoUnavailableCopy();
     return {

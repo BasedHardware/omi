@@ -1292,7 +1292,7 @@ test('names GET discarded photos and photos still analyzing', async () => {
   );
 });
 
-test('names GET invalid inline photo File unavailable and omits empty or storage-only photos', async () => {
+test('names GET invalid inline photo File unavailable and omits storage-only photos', async () => {
   const png =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   mockRequest.mockResolvedValue(
@@ -1312,28 +1312,35 @@ test('names GET invalid inline photo File unavailable and omits empty or storage
           storage_id: 'storage-1',
           description: 'Stored elsewhere',
         },
+        {
+          description: 'Stored empty',
+          base64: '',
+          storage_id: 'storage-1',
+        },
       ],
     }),
   );
   const value = await loadLegacyConversationDetail(backend, fixture.id);
   expect(value).toMatchObject({
-    photoCount: 5,
+    photoCount: 6,
     photoCaptions: [
       'Whiteboard notes',
       'No bytes',
       'Whitespace',
       'Corrupt',
       'Stored elsewhere',
+      'Stored empty',
     ],
     photoRows: [
       {
         caption: 'Whiteboard notes',
         imageUri: `data:image/png;base64,${png}`,
       },
-      {caption: 'No bytes'},
+      {caption: 'No bytes', unavailableCopy: conversationPhotoUnavailableCopy()},
       {caption: 'Whitespace', unavailableCopy: conversationPhotoUnavailableCopy()},
       {caption: 'Corrupt', unavailableCopy: conversationPhotoUnavailableCopy()},
       {caption: 'Stored elsewhere'},
+      {caption: 'Stored empty'},
     ],
   });
   expect(
