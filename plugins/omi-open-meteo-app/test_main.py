@@ -1,10 +1,95 @@
 from pathlib import Path
 import sys
+import types
 import unittest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
+
+# Provide lightweight stubs for third-party runtime dependencies so test_main.py
+# runs hermetically on any clean standard library Python environment without
+# requiring FastAPI, httpx, or Pydantic to be installed.
+if "httpx" not in sys.modules:
+    try:
+        import httpx  # type: ignore
+    except ImportError:
+        httpx = types.ModuleType("httpx")
+
+        class HTTPError(Exception):
+            pass
+
+        class HTTPStatusError(HTTPError):
+            pass
+
+        class AsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def get(self, *args, **kwargs):
+                pass
+
+        httpx.HTTPError = HTTPError
+        httpx.HTTPStatusError = HTTPStatusError
+        httpx.AsyncClient = AsyncClient
+        sys.modules["httpx"] = httpx
+
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi  # type: ignore
+        import fastapi.responses  # type: ignore
+    except ImportError:
+        fastapi = types.ModuleType("fastapi")
+
+        class FastAPI:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def get(self, *args, **kwargs):
+                return lambda f: f
+
+            def post(self, *args, **kwargs):
+                return lambda f: f
+
+        fastapi.FastAPI = FastAPI
+        sys.modules["fastapi"] = fastapi
+
+        responses = types.ModuleType("fastapi.responses")
+
+        class HTMLResponse:
+            pass
+
+        responses.HTMLResponse = HTMLResponse
+        sys.modules["fastapi.responses"] = responses
+        fastapi.responses = responses
+
+if "pydantic" not in sys.modules:
+    try:
+        import pydantic  # type: ignore
+    except ImportError:
+        pydantic = types.ModuleType("pydantic")
+
+        def Field(default=None, **kwargs):
+            return default
+
+        class BaseModel:
+            def __init__(self, **kwargs):
+                for cls in reversed(self.__class__.__mro__):
+                    for k, v in getattr(cls, "__dict__", {}).items():
+                        if not k.startswith("_") and not callable(v):
+                            setattr(self, k, None if v is ... else v)
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+
+        pydantic.BaseModel = BaseModel
+        pydantic.Field = Field
+        sys.modules["pydantic"] = pydantic
 
 # Add plugin directory to path so main can be loaded hermetically
-PLUGIN_DIR = Path(__file__).resolve().parents[4] / "omi" / "plugins" / "omi-open-meteo-app"
+PLUGIN_DIR = Path(__file__).resolve().parent
 if str(PLUGIN_DIR) not in sys.path:
     sys.path.insert(0, str(PLUGIN_DIR))
 
