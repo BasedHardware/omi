@@ -155,7 +155,13 @@ import type {
 } from "./kernel-types.js";
 import { ExternalSurfaceAuthorityError, StaleAdapterBindingError } from "./kernel-types.js";
 import { AdapterWorkerRecycledError } from "./worker-pool.js";
-import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
+import {
+  adapterUsesCloudModelQoSHint,
+  providerBoundaryForAdapter,
+  resolveAdapterWithinBoundary,
+  runRequestedModelIdForSession,
+  shouldRecordServedModelAsRunRequestedId,
+} from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
 
 function runtimeAdapterMetadata(input: ExecuteAgentRunInput, session: AgentSession): Record<string, unknown> {
@@ -1101,7 +1107,7 @@ export class KernelCore {
             : {}),
         }),
         modelProfile: session.modelProfile,
-        requestedModelId: session.modelProfile,
+        requestedModelId: runRequestedModelIdForSession(session),
         cwd: session.defaultCwd,
       });
       this.appendEvent({
@@ -1136,7 +1142,9 @@ export class KernelCore {
       ...input,
       defaultAdapterId: adapterId,
       adapterId,
-      model: accepted.session.modelProfile ?? undefined,
+      model: adapterUsesCloudModelQoSHint(accepted.session)
+        ? (accepted.session.modelProfile ?? undefined)
+        : undefined,
       cwd: accepted.session.defaultCwd ?? undefined,
       systemPrompt: kernelSystemPolicy(
         accepted.session.surfaceKind,
@@ -1345,6 +1353,7 @@ export class KernelCore {
           : undefined;
       }
 
+      const servedModelIds = new Set<string>();
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
           assertExecutionAuthority();
@@ -1387,7 +1396,15 @@ export class KernelCore {
               tools: input.tools ?? [],
               metadata: input.metadata,
             },
-            (event) => this.persistAdapterEvent(accepted.session.sessionId, accepted.run.runId, attempt.attemptId, event),
+            (event) => {
+              if (event.type === "model_used") {
+                const served = (event as { model?: unknown }).model;
+                if (typeof served === "string" && served.length > 0) {
+                  servedModelIds.add(served);
+                }
+              }
+              this.persistAdapterEvent(accepted.session.sessionId, accepted.run.runId, attempt.attemptId, event);
+            },
             abortController.signal,
           );
         }, adapterId === "pi-mono" ? {
@@ -1450,6 +1467,7 @@ export class KernelCore {
             conversationId,
             surfaceKind: surfaceRef?.surfaceKind ?? accepted.session.surfaceKind,
           },
+          [...servedModelIds],
         );
         return { ...completed, completionDeltaArtifacts };
       } catch (error) {
@@ -2229,14 +2247,23 @@ export class KernelCore {
     binding: AdapterBinding,
     result: AdapterAttemptResult,
     turnRecord?: { conversationId: string | null; surfaceKind: string },
+    servedModelIds: string[] = [],
   ): KernelRunResult {
     const status = result.terminalStatus;
     this.withTransaction(() => {
-      this.updateBinding(binding.bindingId, {
+      const bindingPatch: Partial<AdapterBinding> = {
         adapterNativeSessionId: result.adapterSessionId,
         lastUsedAtMs: Date.now(),
         updatedAtMs: Date.now(),
-      });
+      };
+      if (
+        status === "succeeded"
+        && servedModelIds.length > 0
+        && shouldRecordServedModelAsRunRequestedId(session)
+      ) {
+        bindingPatch.modelId = servedModelIds[0] ?? null;
+      }
+      this.updateBinding(binding.bindingId, bindingPatch);
       const emittedArtifacts = result.artifacts ?? [];
       const existingArtifacts = this.readArtifacts({ sessionId: session.sessionId, limit: 500 });
       const runScope = {
@@ -2283,6 +2310,8 @@ export class KernelCore {
         errorCode: status === "failed" ? result.failure?.code ?? "adapter_execution_failed" : null,
         errorMessage: status === "failed" ? result.failure?.userMessage ?? null : null,
         failure: result.failure,
+        session,
+        servedModelIds: status === "succeeded" ? servedModelIds : undefined,
       });
     });
     return {
@@ -2331,6 +2360,8 @@ export class KernelCore {
     errorCode?: string | null;
     errorMessage?: string | null;
     failure?: RuntimeFailure | null;
+    session?: AgentSession;
+    servedModelIds?: string[];
   }): void {
     const now = Date.now();
     const completedStatus = input.status;
@@ -2341,7 +2372,7 @@ export class KernelCore {
       errorMessage: input.errorMessage ?? null,
       updatedAtMs: now,
     });
-    this.updateRun(input.runId, {
+    const runPatch: Partial<AgentRun> = {
       status: completedStatus,
       finalText: input.finalText,
       resultJson: input.result ? JSON.stringify(input.result) : input.failure ? JSON.stringify({ failure: input.failure }) : null,
@@ -2354,7 +2385,16 @@ export class KernelCore {
       costUsd: input.result?.costUsd ?? null,
       completedAtMs: now,
       updatedAtMs: now,
-    });
+    };
+    if (
+      input.session
+      && input.servedModelIds
+      && input.servedModelIds.length > 0
+      && shouldRecordServedModelAsRunRequestedId(input.session)
+    ) {
+      runPatch.requestedModelId = input.servedModelIds[0] ?? null;
+    }
+    this.updateRun(input.runId, runPatch);
     if (completedStatus === "failed" || completedStatus === "cancelled") {
       this.appendEvent({
         sessionId: input.sessionId,

@@ -174,13 +174,19 @@ final class MessageMetadataModelAttributionTests: XCTestCase {
       MessageMetadata(modelsUsed: ["gpt-5.6-luna", "claude-sonnet-4-6"]).modelsSummary,
       "gpt-5.6-luna, claude-sonnet-4-6")
     XCTAssertEqual(MessageMetadata().modelsSummary, "")
+    XCTAssertEqual(
+      MessageMetadata(providerTargets: ["openai-codex"]).providersSummary,
+      "openai-codex"
+    )
   }
 
   func testJournalWritePersistsModelsAndChatMessageRestoresThem() throws {
     var message = ChatMessage(
       id: "turn-a", clientTurnId: "ck-1", text: "answer", sender: .ai)
     message.metadata = MessageMetadata(
-      adapterId: "realtime", modelsUsed: ["gemini-3.1-flash-live-preview"])
+      adapterId: "realtime",
+      modelsUsed: ["gemini-3.1-flash-live-preview"],
+      providerTargets: ["google"])
     let write = message.journalWrite(
       origin: "realtime_voice", status: .completed,
       continuityKey: "ck-1", messageSource: "realtime_voice")
@@ -188,6 +194,7 @@ final class MessageMetadataModelAttributionTests: XCTestCase {
     let object =
       try JSONSerialization.jsonObject(with: Data(write.metadataJSON.utf8)) as? [String: Any]
     XCTAssertEqual(object?["modelsUsed"] as? [String], ["gemini-3.1-flash-live-preview"])
+    XCTAssertEqual(object?["providerTargets"] as? [String], ["google"])
 
     let turn = try XCTUnwrap(
       KernelJournalTurn(
@@ -207,6 +214,7 @@ final class MessageMetadataModelAttributionTests: XCTestCase {
       ))
     let restored = turn.chatMessage()
     XCTAssertEqual(restored.metadata?.modelsUsed, ["gemini-3.1-flash-live-preview"])
+    XCTAssertEqual(restored.metadata?.providerTargets, ["google"])
     XCTAssertEqual(restored.metadata?.adapterId, "realtime")
   }
 

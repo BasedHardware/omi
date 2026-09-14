@@ -59,7 +59,7 @@ def list_action_items(
     for it in items or []:
         rows.append(
             {
-                "id": shorten(it.get("id"), 14),
+                "id": it.get("id"),
                 "completed": it.get("completed"),
                 "description": shorten(it.get("description"), 60),
                 "due_at": it.get("due_at"),
