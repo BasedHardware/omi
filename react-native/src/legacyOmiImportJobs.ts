@@ -252,7 +252,9 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
     const processedFiles = optionalCount(row.processed_files);
     const totalFiles = optionalCount(row.total_files);
     const error =
-      row.error === undefined || row.error === null
+      row.error === undefined ||
+      row.error === null ||
+      typeof row.error !== 'string'
         ? ''
         : visibleDisplayText(text(row.error, 1_000_000));
     items.push({

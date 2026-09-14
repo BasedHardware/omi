@@ -398,6 +398,20 @@ test('keeps GET import jobs when created_at is a non-string', () => {
   ]);
 });
 
+test('keeps GET import jobs when error is a non-string', () => {
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-numeric-error', status: 'failed', error: 1},
+        {job_id: 'job-neighbor', status: 'completed'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-numeric-error', status: 'failed'},
+    {id: 'job-neighbor', status: 'completed'},
+  ]);
+});
+
 test('fails closed for malformed GET import jobs', () => {
   expect(() => parseOmiImportJobs(JSON.stringify({}))).toThrow();
   expect(() =>
