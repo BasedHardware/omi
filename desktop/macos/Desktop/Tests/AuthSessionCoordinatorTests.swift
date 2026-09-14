@@ -102,17 +102,17 @@ final class AuthSessionCoordinatorTests: XCTestCase {
   func testChatProviderStopsBridgeOnSessionInvalidateWithoutFullReset() throws {
     let provider = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(provider.contains("makeAuthSessionNotificationObserver"))
-    let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
-    XCTAssertTrue(authExtension.contains("stopAgentBridgeAfterSessionInvalidation"))
-    let invalidateBlock = authExtension.range(of: "sessionDidInvalidate — stopping agent bridge")
+    XCTAssertTrue(provider.contains("stopAgentBridgeAfterSessionInvalidation"))
+    let invalidateBlock = provider.range(of: "sessionDidInvalidate — stopping agent bridge")
     XCTAssertNotNil(invalidateBlock)
-    let snippet = String(authExtension[invalidateBlock!.lowerBound...]).prefix(400)
+    let snippet = String(provider[invalidateBlock!.lowerBound...]).prefix(400)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
 
   func testChatProviderReloadsSessionsAfterAuthentication() throws {
     let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
     XCTAssertTrue(authExtension.contains("reloadChatSessionsAfterAuthentication"))
+    XCTAssertTrue(authExtension.contains("sessionDidAuthenticate"))
     let authBlock = authExtension.range(of: "sessionDidAuthenticate — reloading chat sessions")
     XCTAssertNotNil(authBlock)
     let snippet = String(authExtension[authBlock!.lowerBound...]).prefix(350)
