@@ -12,7 +12,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, lstatSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -48,10 +48,21 @@ export function findPackagedExecutable(unpackedDir) {
   return executablePath
 }
 
+export function assertPathInsidePackagedRoot(packagedAppRoot, candidatePath, label) {
+  const root = resolve(packagedAppRoot)
+  const candidate = resolve(candidatePath)
+  const rel = relative(root, candidate)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error(
+      `${label} resolved outside packaged app root (${root}): ${candidatePath}`
+    )
+  }
+}
+
 export function packagedRuntimeDriver() {
   return [
     'const { createRequire } = require("node:module");',
-    'const { join, resolve } = require("node:path");',
+    'const { join, resolve, relative, isAbsolute } = require("node:path");',
     'const appRoot = process.env.OMI_PACKAGED_APP_ROOT;',
     'const manifestPath = join(appRoot, "package.json");',
     'const manifestRequire = createRequire(manifestPath);',
@@ -65,9 +76,17 @@ export function packagedRuntimeDriver() {
     // debug loads `ms` from src/common.js. Resolving from Sentry's packaged entry
     // exercises the exact dependency boundary that failed in #10738 / #10849 without
     // initializing Electron or sending telemetry from the release runner.
-    'const debug = sentryRequire("debug");',
+    'const debugPath = sentryRequire.resolve("debug");',
+    'const debugRequire = createRequire(debugPath);',
+    'const debug = debugRequire("debug");',
     'if (typeof debug !== "function") throw new Error("debug did not export a function");',
-    'const msPath = sentryRequire.resolve("ms");',
+    'const msPath = debugRequire.resolve("ms");',
+    'const normalizedAppRoot = resolve(appRoot);',
+    'const normalizedMsPath = resolve(msPath);',
+    'const msRelative = relative(normalizedAppRoot, normalizedMsPath);',
+    'if (msRelative.startsWith("..") || isAbsolute(msRelative)) {',
+    '  throw new Error("ms resolved outside packaged app root: " + msPath);',
+    '}',
     `console.log("${SUCCESS_MARKER} " + JSON.stringify({ mainEntry, sentryMainPath, msPath }));`
   ].join('\n')
 }
@@ -132,6 +151,10 @@ export function verifyPackagedMainRuntime({
   ) {
     throw new Error(`packaged main dependency probe reported incomplete details:\n${output}`)
   }
+
+  assertPathInsidePackagedRoot(appAsarPath, details.mainEntry, 'main entry')
+  assertPathInsidePackagedRoot(appAsarPath, details.sentryMainPath, 'Sentry main')
+  assertPathInsidePackagedRoot(appAsarPath, details.msPath, 'ms')
 
   return { executablePath, ...details, output }
 }

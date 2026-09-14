@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  assertPathInsidePackagedRoot,
   packagedRuntimeDriver,
   verifyPackagedMainRuntime
 } from './verify-packaged-main-runtime.mjs'
@@ -72,6 +73,41 @@ describe('packaged main runtime guard', () => {
     expect(options.env.OMI_PACKAGED_APP_ROOT).toBe(join(unpackedDir, 'resources', 'app.asar'))
     expect(packagedRuntimeDriver()).toContain('manifest.main')
     expect(packagedRuntimeDriver()).toContain('@sentry/electron/main')
+    expect(packagedRuntimeDriver()).toContain('debugRequire.resolve("ms")')
+    expect(packagedRuntimeDriver()).toContain('ms resolved outside packaged app root')
+  })
+
+  it('rejects ms resolved from host node_modules outside app.asar', () => {
+    const unpackedDir = makePackagedFixture()
+    const appAsar = join(unpackedDir, 'resources', 'app.asar')
+    const mainEntry = join(appAsar, 'out', 'main', 'index.js')
+    const sentryMainPath = join(appAsar, 'node_modules', '@sentry', 'electron', 'main', 'index.js')
+    const hostMsPath = join(unpackedDir, '..', 'node_modules', 'ms', 'index.js')
+    const spawn = vi.fn(() => ({
+      status: 0,
+      stdout: `PACKAGED_MAIN_RUNTIME_OK ${JSON.stringify({
+        mainEntry,
+        sentryMainPath,
+        msPath: hostMsPath
+      })}\n`,
+      stderr: ''
+    }))
+
+    expect(() => verifyPackagedMainRuntime({ unpackedDir, spawn })).toThrow(/ms resolved outside packaged app root/)
+  })
+
+  it('assertPathInsidePackagedRoot accepts paths under app.asar', () => {
+    const appAsar = join(tmpdir(), 'win-unpacked', 'resources', 'app.asar')
+    const msPath = join(appAsar, 'node_modules', 'ms', 'index.js')
+    expect(() => assertPathInsidePackagedRoot(appAsar, msPath, 'ms')).not.toThrow()
+  })
+
+  it('assertPathInsidePackagedRoot rejects paths outside app.asar', () => {
+    const appAsar = join(tmpdir(), 'win-unpacked', 'resources', 'app.asar')
+    const hostMsPath = join(tmpdir(), 'node_modules', 'ms', 'index.js')
+    expect(() => assertPathInsidePackagedRoot(appAsar, hostMsPath, 'ms')).toThrow(
+      /ms resolved outside packaged app root/
+    )
   })
 
   it('rejects a different executable instead of running an arbitrary build artifact', () => {
