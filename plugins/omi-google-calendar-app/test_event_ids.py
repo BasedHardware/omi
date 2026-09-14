@@ -5,7 +5,7 @@
 ids are 26 base32hex characters and recurring-instance ids append
 `_YYYYMMDDTHHMMSSZ`, so every id the tool handed back was truncated and the
 follow-up tools (which send the id verbatim to the Calendar API) could not
-find the event.
+find the event. `create_event` printed no id at all.
 
 Import the production module with framework-only stubs, then exercise the
 real handlers. No network, credentials, or third-party packages required.
@@ -201,6 +201,32 @@ class ListedEventIdsAreUsable(unittest.TestCase):
         truncated = SINGLE_EVENT_ID[:20]
         response = _run(app.tool_get_event(_request({"uid": "u1", "event_id": truncated})))
         self.assertIsNotNone(response.error)
+
+
+class CreatedEventIdIsReported(unittest.TestCase):
+    def test_create_event_prints_id_that_get_event_accepts(self):
+        api = _FakeCalendarApi({})
+        with patch.object(app, "calendar_api_request", api), patch.object(
+            app, "get_valid_access_token", lambda uid: "token"
+        ), patch.object(app, "get_default_calendar", lambda uid: "primary"):
+            created = _run(
+                app.tool_create_event(
+                    _request(
+                        {
+                            "uid": "u1",
+                            "title": "Dentist",
+                            "start": "2026-09-15T09:00:00Z",
+                            "end": "2026-09-15T09:30:00Z",
+                        }
+                    )
+                )
+            )
+            self.assertIsNone(created.error, created.error)
+            ids = _ids_in(created.result)
+            self.assertEqual(ids, [SINGLE_EVENT_ID], created.result)
+
+            fetched = _run(app.tool_get_event(_request({"uid": "u1", "event_id": ids[0]})))
+            self.assertIsNone(fetched.error, fetched.error)
 
 
 if __name__ == "__main__":
