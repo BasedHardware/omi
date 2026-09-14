@@ -179,6 +179,7 @@ import {
   deviceProductNameCopy,
   deviceSerialNumberCopy,
   deviceUnknownCopy,
+  deviceIdentityChipCopy,
   ledBrightnessCopy,
   micGainCopy,
   micGainLevelCopy,
@@ -1781,6 +1782,12 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(deviceModelNumberCopy()).toBe('Model Number');
   expect(deviceSerialNumberCopy()).toBe('Serial Number');
   expect(deviceUnknownCopy()).toBe('Unknown');
+  expect(deviceIdentityChipCopy('omi-test')).toBe('omi-test');
+  expect(deviceIdentityChipCopy('123456789012')).toBe('123456789012');
+  expect(deviceIdentityChipCopy('1234567890123')).toBe('12345•••0123');
+  expect(deviceIdentityChipCopy('AA:BB:CC:DD:EE:FF')).toBe('AA:BB•••E:FF');
+  expect(deviceIdentityChipCopy('SERIALNUMBER9911')).toBe('SERIA•••9911');
+  expect(deviceIdentityChipCopy('Unknown')).toBe('Unknown');
   expect(ledBrightnessCopy()).toBe('LED Brightness');
   expect(micGainCopy()).toBe('Mic Gain');
   expect(micGainLevelCopy(0)).toBe('Mute');

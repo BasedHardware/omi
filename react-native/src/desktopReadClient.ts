@@ -1018,6 +1018,12 @@ export function deviceSerialMatchesId(
   return normalize(copy) === normalize(id);
 }
 
+export function deviceIdentityChipCopy(value: string): string {
+  return value.length > 12
+    ? `${value.slice(0, 5)}•••${value.slice(-4)}`
+    : value;
+}
+
 export function connectionIdentityCopy(
   identity: {displayName: string; email: string} | null,
 ): string {

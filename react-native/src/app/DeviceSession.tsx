@@ -17,6 +17,7 @@ import {
   deviceProductNameCopy,
   deviceSerialNumberCopy,
   deviceSerialMatchesId,
+  deviceIdentityChipCopy,
   deviceUnknownCopy,
   firmwareUpdateCopy,
   firmwareDeviceUpToDateCopy,
@@ -430,7 +431,9 @@ export function DeviceSession({
       <Text selectable style={styles.deviceMeta}>
         Device ID
         {': '}
-        {accountFieldCopy(connected.id, deviceUnknownCopy())}
+        {deviceIdentityChipCopy(
+          accountFieldCopy(connected.id, deviceUnknownCopy()),
+        )}
       </Text>
       {(
         [
@@ -452,7 +455,17 @@ export function DeviceSession({
           <Text key={field} selectable style={styles.deviceMeta}>
             {label}
             {': '}
-            {accountFieldCopy(connected.information?.[field], deviceUnknownCopy())}
+            {field === 'serial'
+              ? deviceIdentityChipCopy(
+                  accountFieldCopy(
+                    connected.information?.[field],
+                    deviceUnknownCopy(),
+                  ),
+                )
+              : accountFieldCopy(
+                  connected.information?.[field],
+                  deviceUnknownCopy(),
+                )}
           </Text>,
         ];
       })}

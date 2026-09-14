@@ -63,7 +63,8 @@ test('connected device omits serial when it duplicates Device ID', async () => {
     );
   });
   const duplicate = JSON.stringify(renderer.toJSON());
-  expect(duplicate).toContain('"Device ID",": ","AA:BB:CC:DD:EE:FF"');
+  expect(duplicate).toContain('"Device ID",": ","AA:BB•••E:FF"');
+  expect(duplicate).not.toContain('AA:BB:CC:DD:EE:FF');
   expect(duplicate).not.toContain(`"${deviceSerialNumberCopy()}"`);
   await act(async () => {
     renderer.update(
@@ -91,6 +92,50 @@ test('connected device omits serial when it duplicates Device ID', async () => {
   });
   const distinct = JSON.stringify(renderer.toJSON());
   expect(distinct).toContain(`"${deviceSerialNumberCopy()}",": ","SN-9911"`);
+  await act(async () => renderer.unmount());
+});
+
+test('connected device names Flutter home_device truncated Device ID and Serial Number', async () => {
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'AA:BB:CC:DD:EE:FF',
+        name: 'Omi',
+        connected: true,
+        rssi: -40,
+        information: {
+          model: 'Omi Dev Kit',
+          firmware: '1.2.3',
+          serial: 'SERIALNUMBER9911',
+        },
+      },
+    ],
+    connectedDeviceId: 'AA:BB:CC:DD:EE:FF',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('"Device ID",": ","AA:BB•••E:FF"');
+  expect(output).toContain(
+    `"${deviceSerialNumberCopy()}",": ","SERIA•••9911"`,
+  );
+  expect(output).not.toContain('AA:BB:CC:DD:EE:FF');
+  expect(output).not.toContain('SERIALNUMBER9911');
+  expect(output).toContain(`"${deviceProductNameCopy()}",": ","Omi"`);
+  expect(output).toContain(`"${deviceModelNumberCopy()}",": ","Omi Dev Kit"`);
   await act(async () => renderer.unmount());
 });
 
