@@ -32,13 +32,16 @@ import { MoveToFolderMenu } from '../components/conversations/MoveToFolderMenu'
 import { NameSpeakerModal } from '../components/conversations/NameSpeakerModal'
 import { TranscriptDrawer } from '../components/conversations/TranscriptDrawer'
 import { fetchPeople } from '../lib/conversations/people'
+import { personNameFor, speakerIdOf, speakerLabel } from '../lib/conversations/speakers'
 import { fetchFolders } from '../lib/conversations/folders'
 import { friendlyConversationError } from '../lib/conversations/detailErrors'
 import { buildTranscriptText } from '../lib/conversations/transcript'
 import {
+  SEGMENT_TEXT_MAX_CHARS,
   getConversationShareLink,
   moveConversationToFolder,
   reprocessConversation,
+  setConversationSegmentText,
   setConversationTitle
 } from '../lib/conversations/mutations'
 import {
@@ -194,6 +197,73 @@ function RenameModal({
   )
 }
 
+/** Edit-segment dialog — mobile's edit_segment_sheet as a centered modal: the
+ *  speaker label for context, a textarea seeded with the current text, Save
+ *  disabled while the text is empty or unchanged (mobile: `newText.isNotEmpty &&
+ *  newText != segment.text`). Cmd/Ctrl+Enter saves. */
+function EditSegmentModal({
+  speaker,
+  initial,
+  onClose,
+  onSave
+}: {
+  speaker: string
+  initial: string
+  onClose: () => void
+  onSave: (text: string) => void
+}): React.JSX.Element {
+  const [value, setValue] = useState(initial)
+  const next = value.trim()
+  const canSave =
+    next.length > 0 && next !== initial.trim() && next.length <= SEGMENT_TEXT_MAX_CHARS
+  const submit = (): void => {
+    if (canSave) onSave(next)
+  }
+  return (
+    <ModalShell onClose={onClose} labelledBy="edit-segment-title">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          submit()
+        }}
+      >
+        <h2 id="edit-segment-title" className="font-display text-lg font-semibold text-white">
+          Edit transcript
+        </h2>
+        <p className="mt-1 text-xs text-text-tertiary">{speaker}</p>
+        {/* autoFocus is intentional: the modal only opens on an explicit user action */}
+        <textarea
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              submit()
+            }
+          }}
+          rows={4}
+          maxLength={SEGMENT_TEXT_MAX_CHARS}
+          aria-label="Segment text"
+          className="mt-4 w-full resize-y rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2 text-sm leading-relaxed text-white focus:border-white/40 focus:outline-none"
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn-ghost px-3 py-1.5 text-sm">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!canSave}
+            className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-bg-primary disabled:opacity-40"
+          >
+            Save
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  )
+}
+
 /**
  * Remounts the view whenever the conversation changes, so opening a different
  * conversation starts from clean state. Without the key we would have to reset
@@ -226,6 +296,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
   const [drawerOpen, setDrawerOpen] = useState(false) // Mac: closed by default
   const [renaming, setRenaming] = useState(false)
   const [naming, setNaming] = useState<TranscriptSegment | null>(null)
+  const [editingSegment, setEditingSegment] = useState<TranscriptSegment | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [copied, setCopied] = useState<'link' | 'transcript' | null>(null)
   const [reprocessing, setReprocessing] = useState(false)
@@ -433,6 +504,48 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
       /* keep what we have */
     }
   }, [fetchConversation])
+
+  // Optimistic like mobile's saveEditingSegmentText: swap the text in place, PATCH
+  // by segment id, put the old text back if the backend rejects it. The segment is
+  // addressed by id (never by index) so a concurrent reprocess that reorders the
+  // transcript can't land the edit on the wrong line.
+  const onSaveSegmentText = async (segment: TranscriptSegment, text: string): Promise<void> => {
+    setEditingSegment(null)
+    const segmentId = segment.id
+    if (!conv || !segmentId) return
+    const prev = segment.text
+    const apply = (value: string): void =>
+      setConv((c) =>
+        c?.transcript_segments
+          ? {
+              ...c,
+              transcript_segments: c.transcript_segments.map((s) =>
+                s.id === segmentId ? { ...s, text: value } : s
+              )
+            }
+          : c
+      )
+    apply(text)
+    try {
+      await setConversationSegmentText(id, segmentId, text)
+      invalidateConversationsCache()
+      // Spoken-word search uses backend transcript-chunk vectors (Typesense + Pinecone).
+      // PATCH …/segments/text updates Firestore only today — same as mobile — so search
+      // can lag until the backend reindexes chunks on segment edit.
+    } catch (e) {
+      setConv((c) =>
+        c?.transcript_segments
+          ? {
+              ...c,
+              transcript_segments: c.transcript_segments.map((s) =>
+                s.id === segmentId && s.text === text ? { ...s, text: prev } : s
+              )
+            }
+          : c
+      )
+      toast('Could not update transcript', { tone: 'error', body: (e as Error).message })
+    }
+  }
 
   const onToggleActionItem = async (idx: number): Promise<void> => {
     const items = conv?.structured?.action_items
@@ -796,10 +909,24 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
         people={people}
         onClose={() => setDrawerOpen(false)}
         onNameSpeaker={setNaming}
+        onEditText={setEditingSegment}
       />
 
       {renaming && (
         <RenameModal initial={title} onClose={() => setRenaming(false)} onSave={onRename} />
+      )}
+
+      {editingSegment && (
+        <EditSegmentModal
+          speaker={speakerLabel(
+            speakerIdOf(editingSegment),
+            editingSegment.is_user,
+            personNameFor(editingSegment, people)
+          )}
+          initial={editingSegment.text}
+          onClose={() => setEditingSegment(null)}
+          onSave={(text) => void onSaveSegmentText(editingSegment, text)}
+        />
       )}
 
       {naming && (
