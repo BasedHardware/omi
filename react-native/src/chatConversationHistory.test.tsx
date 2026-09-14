@@ -909,7 +909,8 @@ test('conversation-detail history keeps attachment names on empty message text',
       )[0]!
       .props.onPress(),
   );
-  expect(textOf(renderer)).toContain('You · notes.txt · Text · 12 B');
+  expect(textOf(renderer)).toContain('You · notes.txt');
+  expect(textOf(renderer)).not.toContain('You · notes.txt · Text · 12 B');
   expect(textOf(renderer)).not.toContain('You · Message text unavailable');
 });
 

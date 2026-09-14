@@ -1239,7 +1239,8 @@ test('an empty chat bubble keeps history attachment names instead of Message tex
       }
       return [];
     });
-  expect(copies).toContain('notes.txt · Text · 12 B');
+  expect(copies).toContain('notes.txt');
+  expect(copies).not.toContain('notes.txt · Text · 12 B');
   expect(copies).not.toContain('Message text unavailable');
   expect(copies).not.toContain(' \t\n');
   act(() => {

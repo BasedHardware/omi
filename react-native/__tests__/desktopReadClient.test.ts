@@ -70,6 +70,7 @@ import {
   chatDiscoveryShowMoreCopy,
   chatDiscoveryShowLessCopy,
   taskCardDescription,
+  chatAttachmentCopy,
   chatAttachmentThumbnailUrl,
   chatSenderCopy,
   chatDaySummaryCopy,
@@ -2659,6 +2660,34 @@ test('empty chat bodies still show attachment names from history', () => {
     }),
   ).toBe('Response stopped');
   expect(
+    chatAttachmentCopy({
+      displayName: 'meeting-notes.pdf',
+      mediaType: 'application/pdf',
+      sizeBytes: 2048,
+    }),
+  ).toBe('meeting-notes.pdf');
+  expect(
+    chatAttachmentCopy({
+      displayName: 'notes.txt',
+      mediaType: 'text/plain',
+      sizeBytes: 12,
+    }),
+  ).toBe('notes.txt');
+  expect(
+    chatAttachmentCopy({
+      displayName: 'notes.txt',
+      mediaType: 'text/plain',
+      sizeBytes: 12,
+    }),
+  ).not.toContain('Text');
+  expect(
+    chatAttachmentCopy({
+      displayName: 'meeting-notes.pdf',
+      mediaType: 'application/pdf',
+      sizeBytes: 2048,
+    }),
+  ).not.toContain('PDF');
+  expect(
     chatMessageDisplayText({
       text: '',
       generationOutcome: null,
@@ -2670,7 +2699,7 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('notes.txt · Text · 12 B');
+  ).toBe('notes.txt');
   expect(
     chatMessageDisplayText({
       text: 'Here is the note.',
@@ -2682,7 +2711,7 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('Here is the note.\nnotes.txt · Text');
+  ).toBe('Here is the note.\nnotes.txt');
   expect(
     chatMessageDisplayText({
       text: '  Hello  ',
@@ -2695,7 +2724,7 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('Hello\nmeeting-notes.pdf · PDF · 2 KB');
+  ).toBe('Hello\nmeeting-notes.pdf');
   expect(
     chatMessageDisplayText({
       text: '',
@@ -2708,7 +2737,20 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('Attachment name unavailable · Size unavailable');
+  ).toBe('Attachment name unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'completed',
+      attachments: [
+        {
+          displayName: ' \t\n',
+          mediaType: 'application/octet-stream',
+          sizeBytes: 0,
+        },
+      ],
+    }),
+  ).not.toContain('Size unavailable');
 });
 
 test('unknown chat senders stay visible instead of failing the history page', () => {
