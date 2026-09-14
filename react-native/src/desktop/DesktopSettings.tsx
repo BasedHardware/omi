@@ -48,6 +48,8 @@ import {
   customVocabularyCopy,
   customVocabularyTitleCopy,
   taskIntegrationsTitleCopy,
+  integrationsTitleCopy,
+  integrationsFooterCopy,
 } from '../desktopReadClient';
 import {
   audioRecordingModeCopy,
@@ -1035,11 +1037,21 @@ export function DesktopSettings({
         ))
       )}
       {integrationsError !== null ? (
-        <Row copy={integrationsError} title="Integrations" />
+        <Row copy={integrationsError} title={integrationsTitleCopy()} />
       ) : (
-        integrations.map(row => (
-          <Row copy={row.name} key={row.key} title="Integrations" />
-        ))
+        <>
+          {integrations.map(row => (
+            <Row
+              copy={row.name}
+              key={row.key}
+              title={integrationsTitleCopy()}
+            />
+          ))}
+          <Row
+            copy={integrationsFooterCopy()}
+            title={integrationsTitleCopy()}
+          />
+        </>
       )}
       {fairUseError !== null ? (
         <Row copy={fairUseError} title="Fair Use" />

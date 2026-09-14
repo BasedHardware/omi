@@ -26,6 +26,7 @@ import {
   usageLoadErrorCopy,
   subscriptionLoadErrorCopy,
   primaryLanguageNotSetCopy,
+  integrationsFooterCopy,
 } from '../desktopReadClient';
 import {appChangelogsLoadErrorCopy} from '../legacyOmiAppChangelogs';
 
@@ -3920,6 +3921,7 @@ test('Settings names GET integrations without Connect or a write sheet', async (
   expect(tree).toContain('Integrations');
   expect(tree).toContain('Gmail');
   expect(tree).toContain('Apple Health');
+  expect(tree).toContain(integrationsFooterCopy());
   expect(tree).not.toContain('Google Calendar');
   expect(tree).not.toContain('Coming Soon');
   expect(tree).not.toContain('Disconnect');
@@ -4014,6 +4016,7 @@ test('Settings names a failed integrations GET instead of empty success', async 
   expect(tree).toContain('Integrations');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Gmail');
+  expect(tree).not.toContain(integrationsFooterCopy());
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Connect',

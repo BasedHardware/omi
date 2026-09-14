@@ -1142,6 +1142,14 @@ export function taskIntegrationsTitleCopy(): string {
   return 'Task Integrations';
 }
 
+export function integrationsTitleCopy(): string {
+  return 'Integrations';
+}
+
+export function integrationsFooterCopy(): string {
+  return 'Connect your apps to view data and metrics in chat.';
+}
+
 export function usagePeriodStatsCopy(
   periodTitle: string,
   stats:

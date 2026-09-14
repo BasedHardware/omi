@@ -64,6 +64,8 @@ import {
   customVocabularyCopy,
   customVocabularyTitleCopy,
   taskIntegrationsTitleCopy,
+  integrationsTitleCopy,
+  integrationsFooterCopy,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
@@ -951,11 +953,24 @@ export function SettingsPage({
           ))
         )}
         {integrationsError !== null ? (
-          <SettingRow copy={integrationsError} title="Integrations" />
+          <SettingRow
+            copy={integrationsError}
+            title={integrationsTitleCopy()}
+          />
         ) : (
-          integrations.map(row => (
-            <SettingRow copy={row.name} key={row.key} title="Integrations" />
-          ))
+          <>
+            {integrations.map(row => (
+              <SettingRow
+                copy={row.name}
+                key={row.key}
+                title={integrationsTitleCopy()}
+              />
+            ))}
+            <SettingRow
+              copy={integrationsFooterCopy()}
+              title={integrationsTitleCopy()}
+            />
+          </>
         )}
         {fairUseError !== null ? (
           <SettingRow copy={fairUseError} title="Fair Use" />

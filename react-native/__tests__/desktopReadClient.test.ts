@@ -145,6 +145,8 @@ import {
   usageLoadErrorCopy,
   subscriptionLoadErrorCopy,
   taskIntegrationsTitleCopy,
+  integrationsTitleCopy,
+  integrationsFooterCopy,
   usageActivityEmptyCopy,
   usageListeningSubtitleCopy,
   usageUnderstandingSubtitleCopy,
@@ -1331,6 +1333,10 @@ test('usage stats copy names GET today counts without Upgrade', () => {
     'Failed to load subscription data. Please try again later.',
   );
   expect(taskIntegrationsTitleCopy()).toBe('Task Integrations');
+  expect(integrationsTitleCopy()).toBe('Integrations');
+  expect(integrationsFooterCopy()).toBe(
+    'Connect your apps to view data and metrics in chat.',
+  );
   expect(
     usagePeriodStatsCopy(usageThisYearTitleCopy(), {
       transcriptionSeconds: 0,
