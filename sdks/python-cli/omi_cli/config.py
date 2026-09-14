@@ -167,6 +167,31 @@ class Config:
         return sorted(self.profiles.keys())
 
 
+# Profile fields that must be strings when present. ``id_token_expires_at`` is
+# numeric (epoch seconds) and validated separately. Anything else lands in
+# ``Profile.extra`` untouched so forward-compatible keys keep working.
+_STRING_PROFILE_FIELDS = frozenset(
+    {"name", "auth_method", "api_key", "id_token", "refresh_token", "api_base", "local_api_url", "local_token"}
+)
+
+
+def _validate_profile_field_types(name: str, raw: dict[str, Any]) -> Optional[str]:
+    """Check known profile field types, returning a load_error message or None.
+
+    A mistyped field (e.g. ``local_token = 12345``) must be reported as a
+    load error — like the other malformed-config cases in :func:`load` —
+    instead of crashing a reader such as ``omi config show`` later on.
+    """
+    for field in sorted(_STRING_PROFILE_FIELDS):
+        value = raw.get(field)
+        if value is not None and not isinstance(value, str):
+            return f"profile '{name}' field '{field}' must be a string, got {type(value).__name__}"
+    expires_at = raw.get("id_token_expires_at")
+    if expires_at is not None and (isinstance(expires_at, bool) or not isinstance(expires_at, (int, float))):
+        return f"profile '{name}' field 'id_token_expires_at' must be a number, " f"got {type(expires_at).__name__}"
+    return None
+
+
 def load(path: Optional[Path] = None) -> Config:
     """Load the config from disk, returning an empty Config if the file is missing.
 
@@ -228,6 +253,14 @@ def load(path: Optional[Path] = None) -> Config:
                 active_profile=DEFAULT_PROFILE_NAME,
                 profiles={},
                 load_error=f"profile '{name}' must be a table, got {type(raw).__name__}",
+            )
+        field_error = _validate_profile_field_types(name, raw)
+        if field_error is not None:
+            return Config(
+                path=p,
+                active_profile=DEFAULT_PROFILE_NAME,
+                profiles={},
+                load_error=field_error,
             )
         profiles[name] = Profile.from_toml_dict(name, raw)
 

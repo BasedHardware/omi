@@ -527,3 +527,22 @@ def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_ru
 
     result_path = cli_runner.invoke(app, ["config", "path"])
     assert result_path.exit_code == 0, result_path.output
+
+
+@pytest.mark.parametrize("field,value", [("local_token", "12345"), ("api_key", "[\"x\"]")])
+def test_malformed_profile_field_types_are_load_errors(config_path: Path, cli_runner, field: str, value: str) -> None:
+    """Non-string known profile fields are load errors, not crashes (#13775)."""
+    config_path.write_text(f'[profiles.default]\n{field} = {value}\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert field in (config.load_error or "")
+    result = cli_runner.invoke(app, ["config", "show"])
+    assert result.exit_code == 0, result.output
+
+
+def test_malformed_id_token_expires_at_is_load_error(config_path: Path) -> None:
+    """Non-numeric ``id_token_expires_at`` is a load error, not a crash (#13775)."""
+    config_path.write_text('[profiles.default]\nid_token_expires_at = "tomorrow"\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert "id_token_expires_at" in (config.load_error or "")
