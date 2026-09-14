@@ -143,6 +143,52 @@ class TestClickUpClient(unittest.TestCase):
         self.assertEqual(self.client.get_folders(self.token, self.space_id), [])
         self.assertEqual(self.client.get_folder_lists(self.token, "folder-1"), [])
 
+    @patch.object(ClickUpClient, "get_spaces")
+    @patch.object(ClickUpClient, "get_lists")
+    @patch.object(ClickUpClient, "get_folders")
+    @patch.object(ClickUpClient, "get_folder_lists")
+    def test_get_all_lists_fetches_folder_lists_fallback_when_not_embedded(
+        self, mock_get_folder_lists, mock_get_folders, mock_get_lists, mock_get_spaces
+    ):
+        """When folder does not embed 'lists', get_all_lists falls back to get_folder_lists."""
+        mock_get_spaces.return_value = [{"id": "space-1", "name": "Engineering"}]
+        mock_get_lists.return_value = []
+        mock_get_folders.return_value = [
+            {"id": "folder-1", "name": "Milestone 1"}
+        ]
+        mock_get_folder_lists.return_value = [
+            {"id": "list-fallback-1", "name": "Tasks", "folder_id": "folder-1"}
+        ]
+
+        all_lists = self.client.get_all_lists(self.token, self.team_id)
+
+        mock_get_folder_lists.assert_called_once_with(self.token, "folder-1")
+        self.assertEqual(len(all_lists), 1)
+        self.assertEqual(all_lists[0]["id"], "list-fallback-1")
+        self.assertEqual(all_lists[0]["name"], "Milestone 1 / Tasks")
+        self.assertEqual(all_lists[0]["space_name"], "Engineering")
+        self.assertEqual(all_lists[0]["folder_name"], "Milestone 1")
+
+    @patch.object(ClickUpClient, "get_spaces")
+    @patch.object(ClickUpClient, "get_lists")
+    @patch.object(ClickUpClient, "get_folders")
+    def test_get_all_lists_degrades_gracefully_on_folder_fetch_failure(
+        self, mock_get_folders, mock_get_lists, mock_get_spaces
+    ):
+        """When folder fetching fails/returns empty, get_all_lists still returns folderless lists."""
+        mock_get_spaces.return_value = [{"id": "space-1", "name": "Engineering"}]
+        mock_get_lists.return_value = [
+            {"id": "list-1", "name": "Backlog", "space_id": "space-1", "folder_id": None}
+        ]
+        mock_get_folders.return_value = []
+
+        all_lists = self.client.get_all_lists(self.token, self.team_id)
+
+        self.assertEqual(len(all_lists), 1)
+        self.assertEqual(all_lists[0]["id"], "list-1")
+        self.assertEqual(all_lists[0]["name"], "Backlog")
+        self.assertEqual(all_lists[0]["space_name"], "Engineering")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+import html
 import os
 import sys
 from dotenv import load_dotenv
@@ -250,7 +251,9 @@ async def root(uid: str = Query(None)):
         selected_attr = 'selected' if lst['id'] == selected_list else ''
         space_name = lst.get('space_name', '')
         display_name = f"{lst['name']}" + (f" ({space_name})" if space_name else "")
-        list_options += f'<option value="{lst["id"]}" {selected_attr}>{display_name}</option>'
+        escaped_id = html.escape(str(lst['id']), quote=True)
+        escaped_display = html.escape(display_name)
+        list_options += f'<option value="{escaped_id}" {selected_attr}>{escaped_display}</option>'
     
     return HTMLResponse(content=f"""
     <html>
@@ -266,7 +269,7 @@ async def root(uid: str = Query(None)):
                 <div class="card" style="margin-top: 20px;">
                     <h2>✅ ClickUp Settings</h2>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
-                        Connected to <span class="username">{team_name}</span>
+                        Connected to <span class="username">{html.escape(team_name)}</span>
                     </p>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 16px;">
                         Default list (optional - you can specify list in voice command):
