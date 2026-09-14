@@ -517,8 +517,7 @@ extension MemoryRecord {
       inputDeviceName: inputDeviceName,
       windowTitle: windowTitle,
       headline: headline,
-      ledgerMetadata: Dictionary(
-        uniqueKeysWithValues: ledgerMetadata.filter { !Self.memoryAssessmentKeys.contains($0.key) }),
+      ledgerMetadata: ledgerMetadata.filter { !Self.memoryAssessmentKeys.contains($0.key) },
       evidence: MemoryLedgerEvidence.decode(ledgerEvidenceJson),
       evidenceIsExplicit: ledgerEvidenceJson != nil,
       asOf: assessment.0,
