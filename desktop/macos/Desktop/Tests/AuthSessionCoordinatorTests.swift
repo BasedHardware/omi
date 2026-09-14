@@ -100,9 +100,10 @@ final class AuthSessionCoordinatorTests: XCTestCase {
 
   func testChatProviderStopsBridgeOnSessionInvalidateWithoutFullReset() throws {
     let provider = try sourceFile("Providers/ChatProvider.swift")
+    let authSession = try sourceFile("Providers/ChatProvider+AuthSession.swift")
     XCTAssertTrue(provider.contains("makeAuthSessionNotificationObserver"))
-    XCTAssertTrue(provider.contains("stopAgentBridgeAfterSessionInvalidation"))
-    let invalidateBlock = try XCTUnwrap(provider.range(of: "sessionDidInvalidate — stopping agent bridge"))
+    XCTAssertTrue(authSession.contains("stopAgentBridgeAfterSessionInvalidation"))
+    let invalidateBlock = try XCTUnwrap(authSession.range(of: "sessionDidInvalidate — stopping agent bridge"))
     let snippet = String(provider[invalidateBlock.lowerBound...]).prefix(400)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
@@ -124,8 +125,9 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(restoreSnippet.contains("transition(to: .needsReauth)"))
     let listenerRange = try XCTUnwrap(source.range(of: "private func setupAuthStateListener()"))
     let listenerSnippet = String(source[listenerRange.lowerBound...]).prefix(3200)
-    XCTAssertTrue(listenerSnippet.contains("preservedReauthOwnerId()"))
-    XCTAssertTrue(listenerSnippet.contains("preserving needsReauth"))
+    XCTAssertTrue(listenerSnippet.contains("handleFirebaseNilUserWithoutSavedSignedIn()"))
+    let ownerTransition = try sourceFile("Auth/AuthOwnerTransition.swift")
+    XCTAssertTrue(ownerTransition.contains("preserving needsReauth"))
   }
 
   func testRefreshIdTokenUsesClassifierNotBlanket400() throws {

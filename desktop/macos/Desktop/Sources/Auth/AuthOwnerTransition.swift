@@ -19,6 +19,34 @@ func performAuthOwnerTransition<T: Sendable>(
 }
 
 extension AuthService {
+  /// Owner uid preserved after light invalidation: signed-out boolean cleared but
+  /// `auth_userId` remains until the user completes re-authentication.
+  func preservedReauthOwnerId(from defaults: UserDefaults = .standard) -> String? {
+    guard !defaults.bool(forKey: .authIsSignedIn) else { return nil }
+    let trimmed =
+      defaults.string(forKey: .authUserId)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  func restorePreservedReauthOwner(email: String?) {
+    NSLog("OMI AUTH: Restoring preserved re-auth owner")
+    AuthState.shared.userEmail = email
+    AuthState.shared.transition(to: .needsReauth)
+  }
+
+  @MainActor
+  func handleFirebaseNilUserWithoutSavedSignedIn() {
+    if preservedReauthOwnerId() != nil {
+      log("AUTH_LISTENER: Firebase user nil — preserving needsReauth")
+      if sessionCoordinator.phase != .needsReauth { AuthState.shared.transition(to: .needsReauth) }
+      return
+    }
+    log("AUTH_LISTENER: No saved session - setting isSignedIn=false")
+    AuthState.shared.transition(to: .signedOut)
+    AuthState.shared.userEmail = nil
+  }
+
   // MARK: - Auth Persistence (UserDefaults for dev builds)
 
   /// Revoke the remote session and publish the signed-out credential generation
