@@ -2027,6 +2027,125 @@ test('a chat message names loaded GET task_card description without leaking ids'
   });
 });
 
+test('a chat message names loaded GET goal_link miss No longer available without leaking ids', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-goal',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'goal-join'},
+        ],
+      }}
+      reduceMotion
+      goals={[{id: 'goal-join'}]}
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Goal');
+  expect(copies).toContain('Ship the recap');
+  expect(copies).not.toContain('goal-join');
+  expect(copies).not.toContain('Loading');
+  expect(copies).not.toContain('No longer available');
+  expect(copies).not.toContain('Open in Goals');
+  const unmatched = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-goal-miss',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'goal-join'},
+        ],
+      }}
+      reduceMotion
+      goals={[{id: 'other'}]}
+    />,
+  );
+  const unmatchedCopies = unmatched.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(unmatchedCopies).toContain('Goal');
+  expect(unmatchedCopies).toContain(chatBlockUnavailableCopy());
+  expect(unmatchedCopies).not.toContain('Ship the recap');
+  expect(unmatchedCopies).not.toContain('goal-join');
+  expect(unmatchedCopies).not.toContain('Loading');
+  expect(unmatchedCopies).not.toContain('Open in Goals');
+  const unloaded = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-goal-unloaded',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'goal-join'},
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const unloadedCopies = unloaded.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(unloadedCopies).toContain('Goal');
+  expect(unloadedCopies).toContain('Ship the recap');
+  expect(unloadedCopies).not.toContain(chatBlockUnavailableCopy());
+  expect(unloadedCopies).not.toContain('Loading');
+  act(() => {
+    renderer.unmount();
+    unmatched.unmount();
+    unloaded.unmount();
+  });
+});
+
 test('a chat message names unanswered GET questionCard option labels without send chips', () => {
   const renderer = render(
     <ChatMessageRow

@@ -15,6 +15,7 @@ import {
   chatSenderCopy,
   visibleDisplayText,
   type TaskCardLookup,
+  type GoalLinkLookup,
 } from '../desktopReadClient';
 import {desktopTokens} from '../desktop/tokens';
 import {ChatAppAttribution, ChatContentBlockList} from './ChatTranscript';
@@ -25,10 +26,12 @@ export function ChatConversationHistory({
   conversationId,
   desktop = false,
   tasks,
+  goals,
 }: {
   conversationId: string;
   desktop?: boolean;
   tasks?: readonly TaskCardLookup[];
+  goals?: readonly GoalLinkLookup[];
 }) {
   const {result, reload, loadingOlder, loadOlder, olderNotice, olderRetryable} =
     useChatConversationHistory(true, conversationId);
@@ -213,6 +216,7 @@ export function ChatConversationHistory({
                     <ChatContentBlockList
                       blocks={message.contentBlocks ?? []}
                       tasks={tasks}
+                      goals={goals}
                       textStyle={[styles.conversationDetailField, ink]}
                     />
                   ) : null}

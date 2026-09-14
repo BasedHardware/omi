@@ -21,6 +21,7 @@ import {
   conversationRecapTitle,
   visibleDisplayText,
   type DesktopReadOutcomes,
+  type GoalLinkLookup,
 } from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
 import {ConversationDetail} from '../ui/ConversationDetail';
@@ -43,6 +44,7 @@ export function LibraryPage({
   onRequestedConversationConsumed,
   outcomes,
   requestedConversationId = null,
+  goals,
 }: {
   conversationNotice?: string | null;
   conversationsLoadingMore?: boolean;
@@ -50,6 +52,7 @@ export function LibraryPage({
   onRequestedConversationConsumed?: () => void;
   outcomes: DesktopReadOutcomes | null;
   requestedConversationId?: string | null;
+  goals?: readonly GoalLinkLookup[];
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const outcome = outcomes?.conversations ?? null;
@@ -109,6 +112,7 @@ export function LibraryPage({
                 ? outcomes.tasks.value.items
                 : undefined
             }
+            goals={goals}
           />
         </ScrollView>
       ) : (

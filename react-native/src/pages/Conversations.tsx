@@ -248,6 +248,7 @@ export function ConversationsPage({
   const filtering = searching || starredOnly || selectedFolderId !== null;
   const [goals, setGoals] = useState<OmiGoal[]>([]);
   const [goalsError, setGoalsError] = useState<string | null>(null);
+  const [goalsReady, setGoalsReady] = useState(false);
   const [folders, setFolders] = useState<OmiFolder[]>([]);
   const [foldersError, setFoldersError] = useState<string | null>(null);
   const [captureGaps, setCaptureGaps] = useState<OmiCalendarCaptureGap[]>([]);
@@ -317,20 +318,24 @@ export function ConversationsPage({
     if (backend === undefined || backend === null) {
       setGoals([]);
       setGoalsError(null);
+      setGoalsReady(false);
       return;
     }
     let cancelled = false;
+    setGoalsReady(false);
     loadOmiGoals(backend).then(
       rows => {
         if (!cancelled) {
           setGoals(rows);
           setGoalsError(null);
+          setGoalsReady(true);
         }
       },
       reason => {
         if (!cancelled) {
           setGoals([]);
           setGoalsError(desktopReadErrorCopy(reason));
+          setGoalsReady(false);
         }
       },
     );
@@ -696,6 +701,7 @@ export function ConversationsPage({
                   }
                   conversation={selected}
                   tasks={tasks}
+                  goals={goalsReady ? goals : undefined}
                 />
               </>
             )}

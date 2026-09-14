@@ -27,6 +27,7 @@ import {
   chatDiscoveryShowLessCopy,
   visibleDisplayText,
   type TaskCardLookup,
+  type GoalLinkLookup,
 } from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {FocusPressable} from './Pressable';
@@ -35,14 +36,16 @@ import {styles} from './styles';
 function ChatContentBlockRow({
   block,
   tasks,
+  goals,
   textStyle,
 }: {
   block: NonNullable<ChatMessage['contentBlocks']>[number];
   tasks?: readonly TaskCardLookup[];
+  goals?: readonly GoalLinkLookup[];
   textStyle: StyleProp<TextStyle>;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const painted = paintedChatContentBlock(block, tasks, expanded);
+  const painted = paintedChatContentBlock(block, tasks, expanded, goals);
   const more = block.more === undefined ? '' : visibleDisplayText(block.more);
   const detail =
     block.detail === undefined ? '' : visibleDisplayText(block.detail);
@@ -86,10 +89,12 @@ function ChatContentBlockRow({
 export function ChatContentBlockList({
   blocks,
   tasks,
+  goals,
   textStyle,
 }: {
   blocks: NonNullable<ChatMessage['contentBlocks']>;
   tasks?: readonly TaskCardLookup[];
+  goals?: readonly GoalLinkLookup[];
   textStyle: StyleProp<TextStyle>;
 }) {
   return (
@@ -99,6 +104,7 @@ export function ChatContentBlockList({
           key={index}
           block={block}
           tasks={tasks}
+          goals={goals}
           textStyle={textStyle}
         />
       ))}
@@ -171,12 +177,14 @@ const ChatMessageRow = memo(function ChatMessageRow({
   message,
   reduceMotion,
   tasks,
+  goals,
 }: {
   animate: boolean;
   compact: boolean;
   message: ChatMessage;
   reduceMotion: boolean;
   tasks?: readonly TaskCardLookup[];
+  goals?: readonly GoalLinkLookup[];
 }) {
   const opacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
   const translateY = useRef(
@@ -318,6 +326,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
           <ChatContentBlockList
             blocks={message.contentBlocks ?? []}
             tasks={tasks}
+            goals={goals}
             textStyle={styles.cancelledLabel}
           />
         ) : null}

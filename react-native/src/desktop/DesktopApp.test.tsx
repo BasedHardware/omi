@@ -774,6 +774,52 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
   ).toHaveLength(0);
 });
 
+test('desktop chat names GET goal_link loaded-list miss No longer available', () => {
+  const renderer = renderDesktop({
+    goals: [{id: 'other'}],
+    messages: [
+      {
+        id: 'goal-miss',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'goal-join'},
+        ],
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Goal');
+  expect(copy).toContain(chatBlockUnavailableCopy());
+  expect(copy).not.toContain('Ship the recap');
+  expect(copy).not.toContain('goal-join');
+  expect(copy).not.toContain('Loading');
+  expect(copy).not.toContain('Open in Goals');
+  const hit = renderDesktop({
+    goals: [{id: 'goal-join'}],
+    messages: [
+      {
+        id: 'goal-hit',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'goal-join'},
+        ],
+      },
+    ],
+  });
+  const hitCopy = renderedText(hit);
+  expect(hitCopy).toContain('Goal');
+  expect(hitCopy).toContain('Ship the recap');
+  expect(hitCopy).not.toContain(chatBlockUnavailableCopy());
+  expect(hitCopy).not.toContain('goal-join');
+  expect(hitCopy).not.toContain('Open in Goals');
+});
+
 test('desktop chat names GET discovery fullText Show more without a write', () => {
   const renderer = renderDesktop({
     messages: [

@@ -446,6 +446,78 @@ test('conversation-detail history names loaded GET task_card description without
   expect(unloadedTree).not.toContain('Loading');
 });
 
+test('conversation-detail history names loaded GET goal_link miss No longer available without leaking ids', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-1',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          contentBlocks: [
+            {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'goal-join'},
+          ],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+    goals: [{id: 'goal-join'}],
+  });
+  const tree = text(view);
+  expect(tree).toContain('Goal');
+  expect(tree).toContain('Ship the recap');
+  expect(tree).not.toContain('goal-join');
+  expect(tree).not.toContain('Loading');
+  expect(tree).not.toContain(chatBlockUnavailableCopy());
+  expect(tree).not.toContain('Open in Goals');
+  const unmatched = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+    goals: [{id: 'other'}],
+  });
+  const unmatchedTree = text(unmatched);
+  expect(unmatchedTree).toContain('Goal');
+  expect(unmatchedTree).toContain(chatBlockUnavailableCopy());
+  expect(unmatchedTree).not.toContain('Ship the recap');
+  expect(unmatchedTree).not.toContain('goal-join');
+  expect(unmatchedTree).not.toContain('Loading');
+  expect(unmatchedTree).not.toContain('Open in Goals');
+  const unloaded = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const unloadedTree = text(unloaded);
+  expect(unloadedTree).toContain('Goal');
+  expect(unloadedTree).toContain('Ship the recap');
+  expect(unloadedTree).not.toContain(chatBlockUnavailableCopy());
+  expect(unloadedTree).not.toContain('Loading');
+});
+
 test('canonical listen rows do not invent a transcript producer', () => {
   const view = render({
     conversation: {...conversation, id: 'listen:one', source: 'listen'},

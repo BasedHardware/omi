@@ -6,6 +6,7 @@ import {
   desktopReadsCanRetry,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
+  type GoalLinkLookup,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {Onboarding} from '../ui/Onboarding';
@@ -72,6 +73,7 @@ type Props = TaskMutationProps & {
   onSend: () => void;
   onStop: () => void;
   onWorkspaceReload?: () => void;
+  goals?: readonly GoalLinkLookup[];
 };
 
 export function DesktopApp({
@@ -107,6 +109,7 @@ export function DesktopApp({
   readsPhase,
   session,
   signingIn,
+  goals,
   ...taskMutations
 }: Props) {
   const [captureRevision, setCaptureRevision] = useState(0);
@@ -205,6 +208,7 @@ export function DesktopApp({
             outcomes={outcomes}
             reads={reads}
             readsPhase={readsPhase}
+            goals={goals}
             {...taskMutations}
           />
         ) : route === 'Conversations' ? (
@@ -217,6 +221,7 @@ export function DesktopApp({
             }
             outcomes={outcomes}
             requestedConversationId={requestedConversationId}
+            goals={goals}
           />
         ) : route === 'Rewind' ? (
           <DesktopRewind capture={capture} captureRevision={captureRevision} />

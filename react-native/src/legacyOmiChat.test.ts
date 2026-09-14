@@ -921,7 +921,7 @@ test('old chat history names GET content_blocks without inventing writes', () =>
       more: 'Longer body stays collapsed.',
     },
     {eyebrow: 'Memory', title: 'Prefers concise notes'},
-    {eyebrow: 'Goal', title: 'Ship the release notes'},
+    {eyebrow: 'Goal', title: 'Ship the release notes', goalId: 'goal-1'},
     {eyebrow: 'Conversation', title: 'Standup recap'},
     {eyebrow: 'Recommended next steps', title: 'Send the agenda'},
     {

@@ -1946,6 +1946,67 @@ test('task card chrome names loaded GET task description and omits ids', () => {
   ).toEqual({eyebrow: 'Memory', title: 'Prefers concise notes'});
 });
 
+test('goal link chrome names loaded GET miss No longer available without leaking ids', () => {
+  const goals = [{id: 'goal-join'}];
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'goal-join'},
+      undefined,
+      false,
+      goals,
+    ),
+  ).toEqual({eyebrow: 'Goal', title: 'Ship the recap'});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'missing'},
+      undefined,
+      false,
+      goals,
+    ),
+  ).toEqual({eyebrow: 'Goal', title: chatBlockUnavailableCopy()});
+  expect(
+    paintedChatContentBlock({
+      eyebrow: 'Goal',
+      title: 'Ship the recap',
+      goalId: 'missing',
+    }),
+  ).toEqual({eyebrow: 'Goal', title: 'Ship the recap'});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'missing'},
+      undefined,
+      false,
+      [],
+    ),
+  ).toEqual({eyebrow: 'Goal', title: chatBlockUnavailableCopy()});
+  expect(
+    JSON.stringify(
+      paintedChatContentBlock(
+        {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'missing'},
+        undefined,
+        false,
+        goals,
+      ),
+    ),
+  ).not.toContain('missing');
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Goal', title: 'Ship the recap', goalId: 'goal-join'},
+      undefined,
+      false,
+      goals,
+    ),
+  ).not.toHaveProperty('goalId');
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Memory', title: 'Prefers concise notes', goalId: 'missing'},
+      undefined,
+      false,
+      goals,
+    ),
+  ).toEqual({eyebrow: 'Memory', title: 'Prefers concise notes'});
+});
+
 test('discovery chrome names GET fullText Show more without leaking the wire key', () => {
   const block = {
     eyebrow: 'Discovery',

@@ -29,6 +29,7 @@ import {
   type DesktopReadOutcomes,
   type DesktopReadProjection,
   type TaskCardLookup,
+  type GoalLinkLookup,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
@@ -62,6 +63,7 @@ type Props = TaskMutationProps & {
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
   taskNotice?: string | null;
+  goals?: readonly GoalLinkLookup[];
 };
 
 export function DesktopReadBanner({
@@ -115,6 +117,7 @@ function AskExchange({
   messages,
   onLoadOlderChat,
   tasks,
+  goals,
 }: {
   chatBusy: boolean;
   olderChatAvailable: boolean;
@@ -122,6 +125,7 @@ function AskExchange({
   messages: ChatMessage[];
   onLoadOlderChat: () => void;
   tasks?: readonly TaskCardLookup[];
+  goals?: readonly GoalLinkLookup[];
 }) {
   return (
     <View accessibilityLabel="Ask exchange" style={styles.exchange}>
@@ -233,6 +237,7 @@ function AskExchange({
               <ChatContentBlockList
                 blocks={item.contentBlocks ?? []}
                 tasks={tasks}
+                goals={goals}
                 textStyle={styles.rowMeta}
               />
             ) : null}
@@ -268,6 +273,7 @@ export function DesktopHome({
   reads,
   readsPhase,
   taskNotice = null,
+  goals,
   onTaskToggle,
   busyTaskId = null,
   writesAvailable,
@@ -382,6 +388,7 @@ export function DesktopHome({
                 ? tasksOutcome.value.items
                 : undefined
             }
+            goals={goals}
             onLoadOlderChat={() => {
               shouldFollowChat.current = false;
               onLoadOlderChat();

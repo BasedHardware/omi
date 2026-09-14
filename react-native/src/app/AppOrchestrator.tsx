@@ -35,6 +35,7 @@ import {
   type ChatMessage,
 } from '../chatClient';
 import {omiBackend} from '../omiNative';
+import {loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
 import {
   conversationHasFinishClock,
   conversationListDurationCopy,
@@ -140,6 +141,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatWriteDoorClosed, setChatWriteDoorClosed] = useState(false);
   const [chatEpoch, setChatEpoch] = useState(0);
+  const [chatGoals, setChatGoals] = useState<OmiGoal[] | undefined>(undefined);
   const chatMutationSeqRef = useRef(0);
   const sendInFlightRef = useRef<object | null>(null);
   // Monotonic chat session epoch. Each run of the chat-history effect (a gate
@@ -244,6 +246,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     setLoadingOlderChat(false);
     setChatHistorySettled(false);
     setActiveGenerationId(null);
+    setChatGoals(undefined);
     sendInFlightRef.current = null;
     stableChatMessageIds.clear();
     animatedChatMessageIds.clear();
@@ -270,6 +273,34 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   });
   const searchRef = useRef<TextInput>(null);
   useEffect(() => {
+    if (onboardingRequired !== false) {
+      setChatGoals(undefined);
+      return;
+    }
+    const backend = omiBackend;
+    if (backend === undefined || backend === null) {
+      setChatGoals(undefined);
+      return;
+    }
+    let cancelled = false;
+    setChatGoals(undefined);
+    loadOmiGoals(backend).then(
+      rows => {
+        if (!cancelled) {
+          setChatGoals(rows);
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setChatGoals(undefined);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [chatEpoch, onboardingRequired]);
+  useEffect(() => {
     let active = true;
     chatSessionEpochRef.current += 1;
     const retiredRequest = omiRequestRef.current;
@@ -293,6 +324,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setLoadingOlderChat(false);
       setChatHistorySettled(false);
       setActiveGenerationId(null);
+      setChatGoals(undefined);
       sendInFlightRef.current = null;
       stableChatMessageIds.clear();
       animatedChatMessageIds.clear();
@@ -1068,6 +1100,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           outcomes={readOutcomes}
           reads={reads}
           readsPhase={readsPhase}
+          goals={chatGoals}
           session={
             onboardingRequired === null
               ? 'probing'
@@ -1718,6 +1751,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                     ? readOutcomes.tasks.value.items
                                     : undefined
                                 }
+                                goals={chatGoals}
                               />
                             ))}
                             {chatBusy && (

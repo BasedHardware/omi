@@ -20,6 +20,7 @@ import {
   visibleDisplayText,
   type ConversationProjection,
   type TaskCardLookup,
+  type GoalLinkLookup,
 } from '../desktopReadClient';
 import {RecordingTranscriptView} from './RecordingTranscript';
 import {ChatConversationHistory} from './ChatConversationHistory';
@@ -176,11 +177,13 @@ export function ConversationDetail({
   desktop = false,
   apiContract,
   tasks,
+  goals,
 }: {
   conversation: ConversationProjection;
   desktop?: boolean;
   apiContract?: 'omi';
   tasks?: readonly TaskCardLookup[];
+  goals?: readonly GoalLinkLookup[];
 }) {
   if (apiContract === 'omi') {
     return (
@@ -223,6 +226,7 @@ export function ConversationDetail({
             key={conversation.id}
             conversationId={conversation.id}
             tasks={tasks}
+            goals={goals}
           />
         )}
       {conversation.source === 'chat' &&
