@@ -672,6 +672,7 @@ async def tool_create_event(request: Request):
             result_parts.append(f"Attendees: {', '.join(attendees)}")
         if html_link:
             result_parts.append(f"Link: {html_link}")
+        result_parts.append(f"ID: `{event_id}`")
 
         return ChatToolResponse(result="\n".join(result_parts))
 
