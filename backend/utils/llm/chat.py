@@ -498,25 +498,6 @@ def get_user_timezone(uid: str) -> str:
         return "UTC"
 
 
-def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
-    """Apply a client-reported IANA timezone for this chat turn and return the resolved zone.
-
-    When the client omits ``request_tz``, falls back to the stored profile (then UTC).
-    Invalid client values are ignored so a bad payload cannot poison the profile.
-    """
-    if not request_tz:
-        return get_user_timezone(uid)
-    try:
-        ZoneInfo(request_tz)
-    except Exception:
-        logger.warning("sync_user_time_zone_from_client - invalid request_tz, ignoring")
-        return get_user_timezone(uid)
-    stored = notification_db.get_user_time_zone(uid)
-    if stored != request_tz:
-        notification_db.set_user_time_zone(uid, request_tz)
-    return request_tz
-
-
 def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Optional[str] = None) -> str:
     """Build the current-datetime block injected into the user turn.
 

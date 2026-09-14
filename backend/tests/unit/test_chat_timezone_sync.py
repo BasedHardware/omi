@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models.chat import SendMessageRequest
-from utils.llm import chat as chat_mod
+from utils import chat_time_zone as chat_mod
 
 
 def test_send_message_request_accepts_valid_iana_timezone():
@@ -43,6 +43,8 @@ def test_sync_user_time_zone_from_client_ignores_invalid_request(get_tz, set_tz)
 
 
 def test_current_datetime_block_mentions_relative_time_words():
-    block = chat_mod.get_current_datetime_block("uid1", tz="America/Los_Angeles")
+    from utils.llm import chat as llm_chat
+
+    block = llm_chat.get_current_datetime_block("uid1", tz="America/Los_Angeles")
     assert "tonight" in block
     assert "America/Los_Angeles" in block
