@@ -121,11 +121,12 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     let restoreRange = try XCTUnwrap(source.range(of: "private func restoreAuthState(attempt:"))
     let restoreSnippet = String(source[restoreRange.lowerBound...]).prefix(2200)
     XCTAssertTrue(restoreSnippet.contains("preservedReauthOwnerId()"))
-    XCTAssertTrue(restoreSnippet.contains("transition(to: .needsReauth)"))
+    XCTAssertTrue(restoreSnippet.contains("restorePreservedReauthOwner"))
+    let ownerTransition = try sourceFile("Auth/AuthOwnerTransition.swift")
+    XCTAssertTrue(ownerTransition.contains("transition(to: .needsReauth)"))
     let listenerRange = try XCTUnwrap(source.range(of: "private func setupAuthStateListener()"))
     let listenerSnippet = String(source[listenerRange.lowerBound...]).prefix(3200)
     XCTAssertTrue(listenerSnippet.contains("handleFirebaseNilUserWithoutSavedSignedIn()"))
-    let ownerTransition = try sourceFile("Auth/AuthOwnerTransition.swift")
     XCTAssertTrue(ownerTransition.contains("preserving needsReauth"))
   }
 
