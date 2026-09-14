@@ -58,7 +58,7 @@ import type {
   StructuredActionItem,
 } from '@/types/conversation';
 
-// Dynamic import for Leaflet map (SSR not supported)
+// Code-split the location preview out of the conversation panel bundle
 const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
   ssr: false,
   loading: () => (
