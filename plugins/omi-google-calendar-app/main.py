@@ -266,6 +266,22 @@ def get_default_calendar(uid: str) -> str:
     return saved_cal if saved_cal else "primary"
 
 
+def _coerce_int(value, default: int, minimum: int, maximum: int) -> int:
+    """Turn an optional tool argument into an int inside [minimum, maximum].
+
+    The Omi backend models optional parameters as Optional[int] with a None
+    default and forwards them verbatim, so None (and the occasional numeric
+    string) must fall back to the default rather than crash on comparison.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(number, maximum))
+
+
 def format_event_time(event: dict) -> str:
     """Format event start/end time for display."""
     start = event.get("start", {})
@@ -486,8 +502,8 @@ async def tool_list_events(request: Request):
         log(f"=== LIST_EVENTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        days = _coerce_int(body.get("days"), default=7, minimum=1, maximum=30)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
