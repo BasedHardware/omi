@@ -3943,13 +3943,20 @@ test('conversation location address copy names Flutter GetGeolocationWidgets sho
   expect(conversationLocationAddressCopy('')).toBe(
     conversationUnknownLocationCopy(),
   );
-  expect(conversationLocationAddressCopy(' \t\u0085 ')).toBe(
-    conversationUnknownLocationCopy(),
-  );
+  expect(conversationLocationAddressCopy(' \t\u0085 ')).toBe('');
+  expect(conversationLocationAddressCopy('\u0085')).toBe('');
   expect(conversationLocationAddressCopy(undefined)).toBe(
     conversationUnknownLocationCopy(),
   );
   expect(conversationLocationAddressCopy(null)).toBe(
+    conversationUnknownLocationCopy(),
+  );
+});
+
+test('names Flutter GetGeolocationWidgets whitespace GET address instead of Unknown location', () => {
+  expect(conversationLocationAddressCopy(' \t')).toBe('');
+  expect(conversationLocationAddressCopy('\n')).toBe('');
+  expect(conversationLocationAddressCopy('')).toBe(
     conversationUnknownLocationCopy(),
   );
 });

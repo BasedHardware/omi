@@ -7,6 +7,7 @@ import {
   conversationPhotoUnavailableCopy,
   conversationNoFolderCopy,
   conversationUnknownAppCopy,
+  conversationUnknownLocationCopy,
   desktopBackendServiceCopy,
   transcriptSttUnknownCopy,
   transcriptSttOmiFallbackCopy,
@@ -2072,7 +2073,22 @@ test('keeps GET geolocation maps open Flutter paints from required coordinates',
     }),
   );
   expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
-    locationAddress: 'Unknown location',
+    locationAddress: '',
+    locationMapsUrl:
+      'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: '',
+        latitude: 37.7749,
+        longitude: -122.4194,
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    locationAddress: conversationUnknownLocationCopy(),
     locationMapsUrl:
       'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
   });

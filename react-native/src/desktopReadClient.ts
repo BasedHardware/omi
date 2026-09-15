@@ -489,9 +489,12 @@ export function conversationUnknownLocationCopy(): string {
 export function conversationLocationAddressCopy(
   address: string | null | undefined,
 ): string {
-  const fullAddress = visibleDisplayText(address ?? '');
-  if (fullAddress === '') {
+  if (address === undefined || address === null || address === '') {
     return conversationUnknownLocationCopy();
+  }
+  const fullAddress = visibleDisplayText(address);
+  if (fullAddress === '') {
+    return '';
   }
   const parts = fullAddress.split(',').map(part => part.trim());
   if (parts.length >= 3) {

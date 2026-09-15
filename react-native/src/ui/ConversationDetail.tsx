@@ -310,6 +310,8 @@ function LegacyConversationBody({
           return {...segment, text, speaker: speaker === '' ? null : speaker};
         })
       : [];
+  const hasLocation =
+    !conversation.discarded && detail.locationAddress !== undefined;
   const address = conversation.discarded
     ? ''
     : visibleDisplayText(detail.locationAddress ?? '');
@@ -450,7 +452,8 @@ function LegacyConversationBody({
         folderColor={folderColor === '' ? undefined : folderColor}
         folderIcon={folderIcon === '' ? undefined : folderIcon}
       />
-      {address === '' ? null : /^https?:\/\//i.test(locationMapsUrl) ? (
+      {hasLocation ? (
+        /^https?:\/\//i.test(locationMapsUrl) ? (
         <FocusPressable
           accessibilityRole="link"
           accessibilityLabel="Open in Maps"
@@ -459,9 +462,10 @@ function LegacyConversationBody({
           }}>
           <Text style={[styles.conversationDetailField, ink]}>{address}</Text>
         </FocusPressable>
-      ) : (
+        ) : (
         <Text style={[styles.conversationDetailField, ink]}>{address}</Text>
-      )}
+        )
+      ) : null}
       {detail.calendarEvent === undefined ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {calendarTitle}

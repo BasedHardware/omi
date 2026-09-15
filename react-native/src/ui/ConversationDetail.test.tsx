@@ -25,6 +25,7 @@ import {
   conversationActionItemsEmptyDescriptionCopy,
   conversationNoFolderCopy,
   conversationUnknownAppCopy,
+  conversationUnknownLocationCopy,
   conversationPhotoUnavailableCopy,
   transcriptSttUnknownCopy,
   transcriptSttOmiFallbackCopy,
@@ -2015,6 +2016,52 @@ test('legacy conversation details name GET geolocation maps open', () => {
     'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
   );
   openURL.mockRestore();
+});
+
+test('legacy conversation details name Flutter GetGeolocationWidgets whitespace GET address without Unknown location', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        locationAddress: '',
+        locationMapsUrl:
+          'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  expect(copy).not.toContain(conversationUnknownLocationCopy());
+  const links = view.root.findAll(
+    node =>
+      node.props.accessibilityRole === 'link' &&
+      node.props.accessibilityLabel === 'Open in Maps' &&
+      typeof node.props.onPress === 'function',
+  );
+  expect(links.length).toBeGreaterThan(0);
+  const emptyAddresses = view.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyAddresses.length).toBeGreaterThan(0);
 });
 
 test('legacy conversation details name Flutter AppResultDetailWidget empty GET names without Unknown App', () => {
