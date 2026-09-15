@@ -173,7 +173,7 @@ def _format_question(item: dict[str, Any], index: int, site: str) -> str:
     # Stack Exchange distinguishes "has any answer" (is_answered) from
     # "has an accepted answer" (accepted_answer_id). Label only the latter.
     accepted = "accepted" if item.get("accepted_answer_id") else "not accepted"
-    tags = ", ".join(item.get("tags", [])) or "no tags"
+    tags = ", ".join(str(tag) for tag in item.get("tags") or []) or "no tags"
     link = item.get("link") or _question_url(site, question_id)
 
     return (
@@ -185,7 +185,7 @@ def _format_question(item: dict[str, Any], index: int, site: str) -> str:
 
 
 def _format_answer(item: dict[str, Any], index: int) -> str:
-    owner = item.get("owner", {}).get("display_name") or "unknown"
+    owner = (item.get("owner") or {}).get("display_name") or "unknown"
     score = item.get("score", 0)
     accepted = " | accepted" if item.get("is_accepted") else ""
     body = _clean_text(item.get("body"))
@@ -371,7 +371,7 @@ async def get_question(payload: dict[str, Any]):
         body = _clean_text(item.get("body"))
         if len(body) > 1800:
             body = body[:1800].rstrip() + "..."
-        tags = ", ".join(item.get("tags", [])) or "no tags"
+        tags = ", ".join(str(tag) for tag in item.get("tags") or []) or "no tags"
         link = item.get("link") or _question_url(site, question_id)
 
         lines = [
