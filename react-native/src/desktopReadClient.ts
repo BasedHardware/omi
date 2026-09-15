@@ -2396,16 +2396,15 @@ export function chatChartCopy(chart: {
 }): string | null {
   const title = visibleDisplayText(chart.title);
   const lines = chart.points.flatMap(point => {
-    const label = visibleDisplayText(point.label);
-    if (label === '' || !Number.isFinite(point.value)) {
+    if (!Number.isFinite(point.value)) {
       return [];
     }
-    return [`${label} · ${point.value}`];
+    return [`${visibleDisplayText(point.label)} · ${point.value}`];
   });
   if (lines.length === 0) {
     return null;
   }
-  return title === '' ? lines.join('\n') : `${title}\n${lines.join('\n')}`;
+  return `${title}\n${lines.join('\n')}`;
 }
 
 export type TaskCardLookup = {

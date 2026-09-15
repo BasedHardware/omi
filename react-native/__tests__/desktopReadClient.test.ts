@@ -2737,7 +2737,6 @@ test('chat message copy names GET chart points and omits empty charts', () => {
       title: 'Talk time',
       points: [
         {label: 'Mon', value: 12},
-        {label: ' \t', value: 1},
         {label: 'Tue', value: 15},
       ],
     }),
@@ -2758,9 +2757,62 @@ test('chat message copy names GET chart points and omits empty charts', () => {
   expect(
     chatChartCopy({
       title: 'Talk time',
-      points: [{label: ' \t', value: 12}],
+      points: [],
     }),
   ).toBeNull();
+});
+
+test('names Flutter ChartMessageWidget empty GET title instead of omitting the heading', () => {
+  expect(
+    chatChartCopy({
+      title: '',
+      points: [
+        {label: 'Mon', value: 12},
+        {label: 'Tue', value: 15},
+      ],
+    }),
+  ).toBe('\nMon · 12\nTue · 15');
+  expect(
+    chatChartCopy({
+      title: ' \t',
+      points: [{label: 'Mon', value: 12}],
+    }),
+  ).toBe('\nMon · 12');
+  expect(
+    chatMessageDisplayText({
+      text: 'Here is the trend.',
+      generationOutcome: null,
+      chart: {
+        title: '',
+        points: [{label: 'Mon', value: 12}],
+      },
+    }),
+  ).toBe('Here is the trend.\n\nMon · 12');
+});
+
+test('names Flutter ChartMessageWidget empty GET point labels instead of omitting the chart', () => {
+  expect(
+    chatChartCopy({
+      title: 'Talk time',
+      points: [
+        {label: 'Mon', value: 12},
+        {label: ' \t', value: 1},
+        {label: 'Tue', value: 15},
+      ],
+    }),
+  ).toBe('Talk time\nMon · 12\n · 1\nTue · 15');
+  expect(
+    chatChartCopy({
+      title: 'Talk time',
+      points: [{label: '', value: 12}],
+    }),
+  ).toBe('Talk time\n · 12');
+  expect(
+    chatChartCopy({
+      title: '',
+      points: [{label: ' \t', value: 12}],
+    }),
+  ).toBe('\n · 12');
 });
 
 test('task card chrome names loaded GET task description and omits ids', () => {

@@ -754,6 +754,31 @@ test('desktop chat names GET day_summary instead of a normal Omi turn', () => {
   expect(copy).not.toContain('day_summary');
 });
 
+test('desktop chat names Flutter ChartMessageWidget empty GET title without omitting the chart', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'empty-chart-title',
+        text: 'Here is the trend.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        chart: {
+          title: '',
+          points: [
+            {label: 'Mon', value: 12},
+            {label: ' \t', value: 1},
+          ],
+        },
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Here is the trend.');
+  expect(copy).toContain('\nMon · 12\n · 1');
+  expect(copy).not.toContain('Here is the trend.\nMon · 12');
+});
+
 test('desktop chat names GET memory citations with empty titles', () => {
   const renderer = renderDesktop({
     messages: [

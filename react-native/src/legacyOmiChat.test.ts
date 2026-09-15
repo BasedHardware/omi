@@ -533,6 +533,44 @@ test('old chat history keeps GET chart_data points and omits empty charts', () =
   ).toBeUndefined();
 });
 
+test('old chat history keeps Flutter ChartMessageWidget empty GET title and point labels', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'chart-empty-title',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T01:02:03Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: '',
+          datasets: [
+            {
+              label: 'Minutes',
+              data_points: [
+                {label: 'Mon', value: 12},
+                {label: '', value: 1},
+                {label: ' \t', value: 15},
+              ],
+            },
+          ],
+        },
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'chart-empty-title')?.chart,
+  ).toEqual({
+    title: '',
+    points: [
+      {label: 'Mon', value: 12},
+      {label: '', value: 1},
+      {label: ' \t', value: 15},
+    ],
+  });
+});
+
 test('old chat history names GET chart_data numeric-string values', () => {
   const page = parseOmiHistory(
     JSON.stringify([

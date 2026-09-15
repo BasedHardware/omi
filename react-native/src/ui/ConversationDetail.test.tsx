@@ -257,6 +257,50 @@ test('conversation-detail history names GET memory citations with empty titles',
   expect(tree).not.toContain('\u0085');
 });
 
+test('conversation-detail history names Flutter ChartMessageWidget empty GET title without omitting the chart', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-empty-chart-title',
+          sender: 'ai',
+          text: 'Here is the trend.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          chart: {
+            title: '',
+            points: [
+              {label: 'Mon', value: 12},
+              {label: ' \t', value: 1},
+            ],
+          },
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loading: false,
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const tree = text(view);
+  expect(tree).toContain('Here is the trend.');
+  expect(tree).toContain('\nMon · 12\n · 1');
+  expect(tree).not.toContain('Here is the trend.\nMon · 12');
+});
+
 test('conversation-detail history names GET content_blocks without inventing write actions', () => {
   mockChat.mockReturnValue({
     result: {

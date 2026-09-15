@@ -1563,6 +1563,49 @@ test('a day_summary chat message names GET text as Flutter numbered rows', () =>
   });
 });
 
+test('a chat message names Flutter ChartMessageWidget empty GET title without omitting the chart', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-empty-chart-title',
+        text: 'Here is the trend.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        chart: {
+          title: '',
+          points: [
+            {label: 'Mon', value: 12},
+            {label: ' \t', value: 1},
+          ],
+        },
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Here is the trend.\n\nMon · 12\n · 1');
+  expect(copies).not.toContain('Here is the trend.\nMon · 12');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('a chat message names GET memory citations with empty titles', () => {
   const renderer = render(
     <ChatMessageRow
