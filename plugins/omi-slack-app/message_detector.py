@@ -1,5 +1,6 @@
+from difflib import SequenceMatcher
 import re
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
@@ -21,6 +22,41 @@ class MessageDetector:
     def normalize_text(text: str) -> str:
         """Normalize text for comparison."""
         return text.lower().strip()
+
+    @staticmethod
+    def resolve_channel(spoken_name: str, channel_map: Dict[str, str]) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Resolve a spoken channel name to (channel_id, channel_name).
+
+        Exact (case-insensitive) match wins outright. Otherwise the candidate
+        whose name is the closest substring match wins -- but only if it is
+        the single closest one. Two channels equally close (e.g. "dev-ops"
+        and "dev-secrets" for a spoken "dev") are left unresolved rather than
+        picking whichever channel the Slack API happened to list first: a
+        wrong guess here silently sends the message to someone else's
+        channel instead of failing safely with "channel not found".
+        """
+        for name, channel_id in channel_map.items():
+            if name.lower() == spoken_name.lower():
+                return channel_id, name
+
+        spoken_lower = spoken_name.lower()
+        candidates = [
+            (name, channel_id) for name, channel_id in channel_map.items()
+            if spoken_lower in name.lower() or name.lower() in spoken_lower
+        ]
+        if not candidates:
+            return None, None
+
+        scored = [
+            (SequenceMatcher(None, spoken_lower, name.lower()).ratio(), name, channel_id)
+            for name, channel_id in candidates
+        ]
+        best_score = max(score for score, _, _ in scored)
+        best = [(name, channel_id) for score, name, channel_id in scored if score == best_score]
+        if len(best) != 1:
+            return None, None
+        return best[0][1], best[0][0]
     
     @classmethod
     def detect_trigger(cls, text: str) -> bool:
@@ -142,23 +178,15 @@ MESSAGE: Hello everyone, this is a test message"""
             # Remove # if present
             channel_name = channel_name.lstrip('#')
             
-            # Get channel ID from map (case insensitive)
-            channel_id = None
-            for name, id in channel_map.items():
-                if name.lower() == channel_name.lower():
-                    channel_id = id
-                    channel_name = name  # Use exact name from map
-                    break
-            
-            if not channel_id:
-                # Try fuzzy match
-                for name, id in channel_map.items():
-                    if channel_name.lower() in name.lower() or name.lower() in channel_name.lower():
-                        channel_id = id
-                        channel_name = name
-                        print(f"🔍 Fuzzy matched '{channel_name}' to '{name}'", flush=True)
-                        break
-            
+            # Resolve against known channels: exact match, else the single
+            # closest fuzzy match. Ties resolve to "not found" rather than
+            # an arbitrary guess -- see resolve_channel.
+            channel_id, resolved_name = cls.resolve_channel(channel_name, channel_map)
+            if channel_id:
+                if resolved_name != channel_name:
+                    print(f"🔍 Fuzzy matched '{channel_name}' to '{resolved_name}'", flush=True)
+                channel_name = resolved_name
+
             if not channel_id:
                 print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
                 return None, channel_name, message
