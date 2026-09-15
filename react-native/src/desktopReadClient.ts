@@ -2429,8 +2429,7 @@ export function taskCardDescription(
     if (task.id !== taskId && task.taskId !== taskId) {
       continue;
     }
-    const title = visibleDisplayText(task.title);
-    return title === '' ? undefined : title;
+    return visibleDisplayText(task.title);
   }
   return undefined;
 }
@@ -2473,11 +2472,7 @@ export function paintedChatContentBlock(
       ? tasks === undefined
         ? chatBlockLoadingCopy()
         : taskCardDescription(block.taskId, tasks) ??
-          (tasks.some(
-            task => task.id === block.taskId || task.taskId === block.taskId,
-          )
-            ? undefined
-            : chatBlockUnavailableCopy())
+          chatBlockUnavailableCopy()
       : undefined;
   const title = block.title ?? joined;
   const visibleTitle = title === undefined ? '' : visibleDisplayText(title);
@@ -2489,7 +2484,9 @@ export function paintedChatContentBlock(
         : visibleDisplayText(block.detail);
   return {
     eyebrow: block.eyebrow,
-    ...(visibleTitle === '' ? {} : {title: visibleTitle}),
+    ...(joined !== undefined || visibleTitle !== ''
+      ? {title: visibleTitle}
+      : {}),
     ...(visibleDetail === '' ? {} : {detail: visibleDetail}),
   };
 }

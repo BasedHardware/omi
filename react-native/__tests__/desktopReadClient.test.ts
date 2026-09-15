@@ -2843,7 +2843,7 @@ test('task card chrome names loaded GET task description and omits ids', () => {
       {eyebrow: 'Task', taskId: 'task-join'},
       [{id: 'task-join', title: ' \t'}],
     ),
-  ).toEqual({eyebrow: 'Task'});
+  ).toEqual({eyebrow: 'Task', title: ''});
   expect(
     JSON.stringify(
       paintedChatContentBlock({eyebrow: 'Task', taskId: 'task-join'}, tasks),
@@ -2863,6 +2863,43 @@ test('task card chrome names loaded GET task description and omits ids', () => {
       tasks,
     ),
   ).toEqual({eyebrow: 'Memory', title: 'Prefers concise notes'});
+});
+
+test('names Flutter TaskCardBlock empty GET descriptions instead of omitting the title', () => {
+  expect(
+    taskCardDescription('task-join', [{id: 'task-join', title: ''}]),
+  ).toBe('');
+  expect(
+    taskCardDescription('task-join', [{id: 'task-join', title: ' \t'}]),
+  ).toBe('');
+  expect(
+    taskCardDescription('task-alias', [
+      {id: 'other', taskId: 'task-alias', title: ''},
+    ]),
+  ).toBe('');
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Task', taskId: 'task-join'},
+      [{id: 'task-join', title: ''}],
+    ),
+  ).toEqual({eyebrow: 'Task', title: ''});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Task', taskId: 'task-join'},
+      [{id: 'task-join', title: ' \t'}],
+    ),
+  ).toEqual({eyebrow: 'Task', title: ''});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Task', taskId: 'task-alias'},
+      [{id: 'other', taskId: 'task-alias', title: ''}],
+    ),
+  ).toEqual({eyebrow: 'Task', title: ''});
+  expect(
+    paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}, [
+      {id: 'task-join', title: ''},
+    ]),
+  ).toEqual({eyebrow: 'Task', title: chatBlockUnavailableCopy()});
 });
 
 test('goal link chrome names loaded GET miss No longer available without leaking ids', () => {

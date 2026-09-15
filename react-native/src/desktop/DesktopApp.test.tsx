@@ -803,6 +803,57 @@ test('desktop chat names GET memory citations with empty titles', () => {
   expect(copy).not.toContain('\u0085');
 });
 
+test('desktop chat names Flutter TaskCardBlock empty GET descriptions', () => {
+  const emptyTask = {
+    ...outcomes.tasks.value.items[0],
+    id: 'task-join',
+    title: '',
+    searchableText: '',
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        ...outcomes.tasks,
+        value: {
+          ...outcomes.tasks.value,
+          items: [emptyTask],
+        },
+      },
+    },
+    reads: [...outcomes.conversations.value.items, emptyTask],
+    messages: [
+      {
+        id: 'empty-task-desc',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+      },
+    ],
+  });
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Task: ' &&
+        node.findAll(
+          child =>
+            String(child.type) === 'Text' && child.props.children === 'Task',
+        ).length > 0 &&
+        node.findAll(
+          child =>
+            String(child.type) === 'Text' && child.props.children === '',
+        ).length > 0,
+    ).length,
+  ).toBeGreaterThan(0);
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Task');
+  expect(copy).not.toContain(chatBlockUnavailableCopy());
+  expect(copy).not.toContain('Loading');
+  expect(copy).not.toContain('task-join');
+});
+
 test('desktop chat names GET content_blocks without inventing write actions', () => {
   const renderer = renderDesktop({
     messages: [

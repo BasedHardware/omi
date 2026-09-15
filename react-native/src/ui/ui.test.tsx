@@ -2210,6 +2210,74 @@ test('a chat message names loaded GET task_card description without leaking ids'
   });
 });
 
+test('a chat message names Flutter TaskCardBlock empty GET descriptions', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-empty-task',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+      }}
+      reduceMotion
+      tasks={[{id: 'task-join', title: ''}]}
+    />,
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Task: ',
+    ).length,
+  ).toBeGreaterThan(0);
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Task');
+  expect(copies).toContain('');
+  expect(copies).not.toContain(chatBlockUnavailableCopy());
+  expect(copies).not.toContain(chatBlockLoadingCopy());
+  expect(copies).not.toContain('task-join');
+  const whitespace = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-whitespace-task',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+      }}
+      reduceMotion
+      tasks={[{id: 'task-join', title: ' \t'}]}
+    />,
+  );
+  expect(
+    whitespace.root.findAll(
+      node => node.props.accessibilityLabel === 'Task: ',
+    ).length,
+  ).toBeGreaterThan(0);
+  act(() => {
+    renderer.unmount();
+    whitespace.unmount();
+  });
+});
+
 test('a chat message names loaded GET goal_link miss No longer available without leaking ids', () => {
   const renderer = render(
     <ChatMessageRow

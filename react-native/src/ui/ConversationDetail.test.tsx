@@ -545,6 +545,64 @@ test('conversation-detail history names loaded GET task_card description without
   expect(unloadedTree).not.toContain(chatBlockUnavailableCopy());
 });
 
+test('conversation-detail history names Flutter TaskCardBlock empty GET descriptions', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-empty-task',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loading: false,
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+    tasks: [{id: 'task-join', title: ''}],
+  });
+  expect(
+    view.root.findAll(node => node.props.accessibilityLabel === 'Task: ')
+      .length,
+  ).toBeGreaterThan(0);
+  const tree = text(view);
+  expect(tree).toContain('Task');
+  expect(tree).not.toContain(chatBlockUnavailableCopy());
+  expect(tree).not.toContain(chatBlockLoadingCopy());
+  expect(tree).not.toContain('task-join');
+  const whitespace = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+    tasks: [{id: 'task-join', title: ' \t'}],
+  });
+  expect(
+    whitespace.root.findAll(
+      node => node.props.accessibilityLabel === 'Task: ',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
 test('conversation-detail history names loaded GET goal_link miss No longer available without leaking ids', () => {
   mockChat.mockReturnValue({
     result: {
