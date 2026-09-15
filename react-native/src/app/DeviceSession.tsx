@@ -11,7 +11,6 @@ import {styles} from '../ui/styles';
 import {bluetoothSessionLabel, emptyDeviceListHint} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
 import {
-  accountFieldCopy,
   deviceDisplayName,
   deviceFoundNameCopy,
   deviceFoundSavedChipCopy,
@@ -21,7 +20,7 @@ import {
   deviceSerialNumberCopy,
   deviceSerialMatchesId,
   deviceIdentityChipCopy,
-  deviceUnknownCopy,
+  deviceInformationCopy,
   firmwareUpdateCopy,
   firmwareDeviceUpToDateCopy,
   firmwareLatestVersionCopy,
@@ -449,9 +448,7 @@ export function DeviceSession({
       <Text selectable style={styles.deviceMeta}>
         Device ID
         {': '}
-        {deviceIdentityChipCopy(
-          accountFieldCopy(connected.id, deviceUnknownCopy()),
-        )}
+        {deviceIdentityChipCopy(deviceInformationCopy(connected.id))}
       </Text>
       {(
         [
@@ -475,15 +472,9 @@ export function DeviceSession({
             {': '}
             {field === 'serial'
               ? deviceIdentityChipCopy(
-                  accountFieldCopy(
-                    connected.information?.[field],
-                    deviceUnknownCopy(),
-                  ),
+                  deviceInformationCopy(connected.information?.[field]),
                 )
-              : accountFieldCopy(
-                  connected.information?.[field],
-                  deviceUnknownCopy(),
-                )}
+              : deviceInformationCopy(connected.information?.[field])}
           </Text>,
         ];
       })}

@@ -1826,6 +1826,15 @@ export function deviceUnknownCopy(): string {
   return 'Unknown';
 }
 
+export function deviceInformationCopy(
+  value: string | null | undefined,
+): string {
+  if (value === undefined || value === null) {
+    return deviceUnknownCopy();
+  }
+  return visibleDisplayText(value);
+}
+
 export function ledBrightnessCopy(): string {
   return 'LED Brightness';
 }

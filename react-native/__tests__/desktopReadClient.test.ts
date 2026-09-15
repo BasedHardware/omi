@@ -186,6 +186,7 @@ import {
   deviceProductNameCopy,
   deviceSerialNumberCopy,
   deviceUnknownCopy,
+  deviceInformationCopy,
   deviceIdentityChipCopy,
   deviceFoundShortIdCopy,
   deviceFoundNameCopy,
@@ -2495,6 +2496,16 @@ test('device display name names Flutter empty GET names', () => {
   expect(deviceDisplayName(' \t\n')).toBe('');
   expect(deviceDisplayName('\u00A0')).toBe('');
   expect(deviceDisplayName('  Omi  ')).toBe('Omi');
+});
+
+test('device information copy names Flutter empty GET chips', () => {
+  expect(deviceInformationCopy('')).toBe('');
+  expect(deviceInformationCopy(' \t\n')).toBe('');
+  expect(deviceInformationCopy('\u00A0')).toBe('');
+  expect(deviceInformationCopy('\u0085')).toBe('');
+  expect(deviceInformationCopy('  Omi Dev Kit  ')).toBe('Omi Dev Kit');
+  expect(deviceInformationCopy(null)).toBe(deviceUnknownCopy());
+  expect(deviceInformationCopy(undefined)).toBe(deviceUnknownCopy());
 });
 
 test('chat message display text names Flutter empty GET text', () => {

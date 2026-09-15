@@ -507,7 +507,7 @@ test('disconnected device rows omit Flutter FoundDevices unused scan battery', a
   await act(async () => renderer.unmount());
 });
 
-test('connected device details treat empty information fields as Flutter Unknown', async () => {
+test('connected device details name Flutter home_device empty GET information', async () => {
   const snapshot = {
     bluetooth: 'poweredOn',
     devices: [
@@ -521,6 +521,7 @@ test('connected device details treat empty information fields as Flutter Unknown
           firmware: ' \t\n',
           hardware: '\u00A0',
           manufacturer: '  Based  ',
+          serial: '\u00A0',
         },
       },
     ],
@@ -542,13 +543,16 @@ test('connected device details treat empty information fields as Flutter Unknown
   });
   const output = JSON.stringify(renderer.toJSON());
   expect(output).toContain(`"${deviceProductNameCopy()}",": ","Omi"`);
-  expect(output).toContain(
+  expect(output).toContain(`"${deviceModelNumberCopy()}",": "`);
+  expect(output).not.toContain(
     `"${deviceModelNumberCopy()}",": ","${deviceUnknownCopy()}"`,
   );
-  expect(output).toContain(`"Firmware",": ","${deviceUnknownCopy()}"`);
+  expect(output).toContain('"Firmware",": "');
+  expect(output).not.toContain(`"Firmware",": ","${deviceUnknownCopy()}"`);
   expect(output).not.toContain('"Hardware",": "');
   expect(output).toContain('"Manufacturer",": ","Based"');
-  expect(output).toContain(
+  expect(output).toContain(`"${deviceSerialNumberCopy()}",": "`);
+  expect(output).not.toContain(
     `"${deviceSerialNumberCopy()}",": ","${deviceUnknownCopy()}"`,
   );
   expect(output).toContain('"Device ID",": ","omi-test"');
