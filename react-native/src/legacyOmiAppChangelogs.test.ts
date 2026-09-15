@@ -113,7 +113,7 @@ test('names Flutter ChangelogSheet empty GET icons instead of omitting the prefi
 
 test('names Flutter ChangelogSheet empty GET app_version as What\'s New in ', () => {
   expect(appChangelogLoadedHeading('')).toBe("What's New in ");
-  expect(appChangelogLoadedHeading('  ')).toBe("What's New in ");
+  expect(appChangelogLoadedHeading('  ')).toBe("What's New in   ");
   expect(
     parseOmiAppChangelogs(
       JSON.stringify([
@@ -135,13 +135,79 @@ test('names Flutter ChangelogSheet empty GET app_version as What\'s New in ', ()
   ).toEqual([
     {
       key: 'ann-empty-version:0',
-      title: "What's New in ",
+      title: "What's New in  \t",
       copy: '✨ · Offline replay · ',
     },
     {
       key: 'ann-omitted-version:0',
       title: "What's New in ",
       copy: '✨ · Faster sync · ',
+    },
+  ]);
+});
+
+test('names Flutter ChangelogSheet padded GET app_version instead of remapping to a version chip', () => {
+  expect(appChangelogLoadedHeading('1.2.0')).toBe("What's New in 1.2.0");
+  expect(appChangelogLoadedHeading('1.2.0 ')).toBe("What's New in 1.2.0 ");
+  expect(appChangelogLoadedHeading('  1.2.0  ')).toBe(
+    "What's New in   1.2.0  ",
+  );
+  expect(appChangelogLoadedHeading('\u00851.2.0')).toBe(
+    "What's New in \u00851.2.0",
+  );
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-exact',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Exact version', description: ''}]},
+        },
+        {
+          id: 'ann-padded',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '  1.2.0  ',
+          content: {changes: [{title: 'Padded version', description: ''}]},
+        },
+        {
+          id: 'ann-trail',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.2.0 ',
+          content: {changes: [{title: 'Trailing version', description: ''}]},
+        },
+        {
+          id: 'ann-next',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '\u00851.2.0',
+          content: {changes: [{title: 'Next-line version', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-exact:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Exact version · ',
+    },
+    {
+      key: 'ann-padded:0',
+      title: "What's New in   1.2.0  ",
+      copy: '✨ · Padded version · ',
+    },
+    {
+      key: 'ann-trail:0',
+      title: "What's New in 1.2.0 ",
+      copy: '✨ · Trailing version · ',
+    },
+    {
+      key: 'ann-next:0',
+      title: "What's New in \u00851.2.0",
+      copy: '✨ · Next-line version · ',
     },
   ]);
 });

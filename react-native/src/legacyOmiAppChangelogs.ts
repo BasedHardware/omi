@@ -138,7 +138,7 @@ export function appChangelogHeading(version: string): string {
 }
 
 export function appChangelogLoadedHeading(version: string): string {
-  return `What's New in ${visibleDisplayText(version)}`;
+  return `What's New in ${version}`;
 }
 
 export function appChangelogsLoadErrorCopy(): string {
@@ -190,7 +190,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
     const version =
       row.app_version === undefined || row.app_version === null
         ? ''
-        : visibleDisplayText(text(row.app_version, 1_000_000));
+        : text(row.app_version, 1_000_000);
     const content = object(row.content);
     if (
       content.changes !== undefined &&

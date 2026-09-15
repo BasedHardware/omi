@@ -4417,6 +4417,51 @@ test('Settings names Flutter ChangelogSheet empty GET app_version as What\'s New
   expect(tree).not.toContain('Dismiss');
 });
 
+test('Settings names Flutter ChangelogSheet padded GET app_version instead of remapping to a version chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'ann-exact',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.2.0',
+            content: {changes: [{title: 'Exact version', description: ''}]},
+          },
+          {
+            id: 'ann-padded',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '  1.2.0  ',
+            content: {changes: [{title: 'Padded version', description: ''}]},
+          },
+          {
+            id: 'ann-trail',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.2.0 ',
+            content: {changes: [{title: 'Trailing version', description: ''}]},
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New in 1.2.0");
+  expect(tree).toContain("What's New in   1.2.0  ");
+  expect(tree).toContain("What's New in 1.2.0 ");
+  expect(tree).toContain('✨ · Exact version · ');
+  expect(tree).toContain('✨ · Padded version · ');
+  expect(tree).toContain('✨ · Trailing version · ');
+  expect(tree).not.toContain('Dismiss');
+});
+
 test('Settings names Flutter ChangelogSheet empty GET ids without omitting What\'s New', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -5195,6 +5195,100 @@ test('Settings names Flutter ChangelogSheet empty GET change titles without omit
   expect(tree).not.toContain('Dismiss');
 });
 
+test('Settings names Flutter ChangelogSheet padded GET app_version instead of remapping to a version chip', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'ann-exact',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.2.0',
+            content: {changes: [{title: 'Exact version', description: ''}]},
+          },
+          {
+            id: 'ann-padded',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '  1.2.0  ',
+            content: {changes: [{title: 'Padded version', description: ''}]},
+          },
+          {
+            id: 'ann-trail',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.2.0 ',
+            content: {changes: [{title: 'Trailing version', description: ''}]},
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain("What's New in 1.2.0");
+  expect(tree).toContain("What's New in   1.2.0  ");
+  expect(tree).toContain("What's New in 1.2.0 ");
+  expect(tree).toContain('✨ · Exact version · ');
+  expect(tree).toContain('✨ · Padded version · ');
+  expect(tree).toContain('✨ · Trailing version · ');
+  expect(tree).not.toContain('Dismiss');
+});
+
 test('Settings names Flutter ChangelogSheet empty GET icons without omitting What\'s New', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
