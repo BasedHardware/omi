@@ -1514,6 +1514,73 @@ test('an honest empty human chat message names Flutter HumanMessage empty GET te
   });
 });
 
+test('a chat message names Flutter HumanMessage padded GET text without colliding with trim', () => {
+  const human = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-padded',
+        text: '  Hello  ',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+      }}
+      reduceMotion
+    />,
+  );
+  const humanCopies = human.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(humanCopies).toContain('  Hello');
+  expect(humanCopies).not.toContain('Hello');
+  const ai = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-ai-padded',
+        text: '  Hello  ',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const aiCopies = ai.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(aiCopies).toContain('  Hello');
+  expect(aiCopies).not.toContain('Hello');
+  act(() => {
+    human.unmount();
+    ai.unmount();
+  });
+});
+
 test('an honest empty AI chat message still omits Flutter NormalMessageWidget empty GET text', () => {
   const renderer = render(
     <ChatMessageRow

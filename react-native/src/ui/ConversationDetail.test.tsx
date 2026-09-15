@@ -654,6 +654,74 @@ test('conversation-detail history names Flutter ChatBlockLinkCard padded GET sum
   expect(tree).not.toContain('Open in Goals');
 });
 
+test('conversation-detail history names Flutter HumanMessage padded GET text without colliding with trim', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'human-padded',
+          sender: 'human',
+          text: '  Hello  ',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: null,
+        },
+        {
+          id: 'ai-padded',
+          sender: 'ai',
+          text: '  Hello  ',
+          createdAt: Date.parse('2026-09-07T12:01:00.000Z'),
+          generationOutcome: 'completed',
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loading: false,
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  expect(
+    view.root.findAll(
+      node =>
+        String(node.type) === 'Text' &&
+        node.props.children === 'You ·   Hello',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    view.root.findAll(
+      node =>
+        String(node.type) === 'Text' &&
+        node.props.children === 'Omi ·   Hello',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    view.root.findAll(
+      node =>
+        String(node.type) === 'Text' &&
+        node.props.children === 'You · Hello',
+    ),
+  ).toHaveLength(0);
+  expect(
+    view.root.findAll(
+      node =>
+        String(node.type) === 'Text' &&
+        node.props.children === 'Omi · Hello',
+    ),
+  ).toHaveLength(0);
+});
+
 test('conversation-detail history names loaded GET goal_link miss No longer available without leaking ids', () => {
   mockChat.mockReturnValue({
     result: {

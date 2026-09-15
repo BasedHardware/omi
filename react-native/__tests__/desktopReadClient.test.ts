@@ -2859,7 +2859,7 @@ test('chat message display text names Flutter empty GET text', () => {
       text: '  Hello  ',
       generationOutcome: null,
     }),
-  ).toBe('Hello');
+  ).toBe('  Hello');
   expect(
     chatMessageDisplayText({
       text: '',
@@ -2867,6 +2867,39 @@ test('chat message display text names Flutter empty GET text', () => {
       generationRetryable: true,
     }),
   ).toBe('Response failed. Try again.');
+});
+
+test('names Flutter HumanMessage empty GET text trimRight instead of colliding with trim', () => {
+  expect(
+    chatMessageDisplayText({
+      text: '  Hello  ',
+      generationOutcome: null,
+    }),
+  ).toBe('  Hello');
+  expect(
+    chatMessageDisplayText({
+      text: '  padded',
+      generationOutcome: 'completed',
+    }),
+  ).toBe('  padded');
+  expect(
+    chatMessageDisplayText({
+      text: 'Hello  ',
+      generationOutcome: null,
+    }),
+  ).toBe('Hello');
+  expect(
+    chatMessageDisplayText({
+      text: ' \t',
+      generationOutcome: 'completed',
+    }),
+  ).toBe('');
+  expect(
+    chatMessageDisplayText({
+      text: '\u0085',
+      generationOutcome: 'completed',
+    }),
+  ).toBe('');
 });
 
 test('chat message body slot names Flutter HumanMessage empty GET text and AI whitespace', () => {
@@ -3480,7 +3513,7 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('Hello\nnotes.txt');
+  ).toBe('  Hello\nnotes.txt');
   expect(
     chatMessageDisplayText({
       text: '',
@@ -3557,7 +3590,7 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('Hello\nmeeting-notes.pdf');
+  ).toBe('  Hello\nmeeting-notes.pdf');
   expect(
     chatMessageDisplayText({
       text: '',

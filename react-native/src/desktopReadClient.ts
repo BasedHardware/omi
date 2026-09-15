@@ -36,6 +36,10 @@ export function visibleDisplayText(value: string): string {
   return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, '');
 }
 
+function chatMessageBodyText(value: string): string {
+  return value.replace(/[\s\u0085]+$/gu, '');
+}
+
 export function conversationDisplayTitle(item: {
   title: string;
   status: string;
@@ -2588,7 +2592,7 @@ export function chatMessageDisplayText(
       ? 'Response failed. Try again.'
       : 'Response failed.';
   }
-  const text = visibleDisplayText(message.text);
+  const text = chatMessageBodyText(message.text);
   const chartCopy =
     message.chart === undefined ? null : chatChartCopy(message.chart);
   const extraLines = [

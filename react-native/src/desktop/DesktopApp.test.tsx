@@ -922,6 +922,38 @@ test('desktop chat names Flutter ChatBlockLinkCard padded GET summaries', () => 
   expect(copy).not.toContain('Open in Goals');
 });
 
+test('desktop chat names Flutter HumanMessage padded GET text without colliding with trim', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'human-padded',
+        text: '  Hello  ',
+        sender: 'human',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: null,
+      },
+      {
+        id: 'ai-padded',
+        text: '  Hello  ',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:01:00.000Z'),
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'Text' && node.props.children === '  Hello',
+    ).length,
+  ).toBeGreaterThan(1);
+  expect(
+    renderer.root.findAll(
+      node => String(node.type) === 'Text' && node.props.children === 'Hello',
+    ),
+  ).toHaveLength(0);
+});
+
 test('desktop chat names GET content_blocks without inventing write actions', () => {
   const renderer = renderDesktop({
     messages: [
