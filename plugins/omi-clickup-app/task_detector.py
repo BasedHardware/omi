@@ -327,10 +327,15 @@ CRITICAL RULES:
 
                             if username and email and (name_lower in username or username in name_lower or
                                 name_lower in email or email.startswith(name_lower)):
-                                assignee_ids.append(str(member.get("id")))
-                                print(f"👤 Fuzzy matched assignee: {name} → {member.get('username')}", flush=True)
-                                break
-
+                                member_id = member.get("id")
+                                # A member without an id must not leak the
+                                # "None" sentinel string into assignee_ids —
+                                # int("None") downstream is a crash token.
+                                if member_id is not None:
+                                    assignee_ids.append(str(member_id))
+                                    print(f"👤 Fuzzy matched assignee: {name} → {member.get('username')}", flush=True)
+                                    break
+            
             # Handle unknown list
             if not list_name or list_name.upper() == "UNKNOWN":
                 print(f"⚠️  No list identified in command", flush=True)

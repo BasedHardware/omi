@@ -1434,6 +1434,12 @@ checks:
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open Food Facts app must guard _safe_int, sanitize barcodes (4-18 digits, URL extraction), handle 404s gracefully, and test hermetically"
+  - id: clickup-coerce-tests
+    command: ["python3", "plugins/omi-clickup-app/test_main.py"]
+    triggers: ["plugins/omi-clickup-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13922: create_task aborted task creation on non-numeric assignee tokens, dropped millisecond due-date timestamps, and forwarded unvalidated priority; the suite drives the production handler and client to assert coercion, 1-4 bounds, and graceful continuation"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
