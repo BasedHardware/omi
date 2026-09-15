@@ -4698,7 +4698,7 @@ test('Settings names Flutter TaskIntegrationsPage padded GET integration keys', 
   });
   act(() => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
       .props.onPress();
   });
   const tree = renderedText(renderer);
