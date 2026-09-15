@@ -2364,11 +2364,12 @@ export function appExploreRatingCopy(
 export function appListDescriptionCopy(
   description: string | null | undefined,
 ): string | null {
-  const visible = visibleDisplayText(description ?? '');
-  if (visible === '') {
+  if (description === undefined || description === null) {
     return null;
   }
-  return visible.length > 50 ? `${visible.slice(0, 50)}...` : visible;
+  return description.length > 50
+    ? `${description.slice(0, 50)}...`
+    : description;
 }
 
 export function appListPrivateNameCopy(

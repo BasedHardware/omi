@@ -3532,7 +3532,7 @@ test('Connectors Installed names Flutter AppListItem empty GET descriptions and 
   );
   expect(installedDescriptions.map(node => node.props.children)).toEqual([
     '',
-    '',
+    ' \t',
   ]);
   const exploreHeading = renderer.root.find(
     node =>

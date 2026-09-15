@@ -2174,7 +2174,7 @@ test('Apps gallery names Flutter AppListItem empty GET descriptions', async () =
     node =>
       String(node.type) === 'Text' && node.props.numberOfLines === 2,
   );
-  expect(descriptions.map(node => node.props.children)).toEqual(['', '']);
+  expect(descriptions.map(node => node.props.children)).toEqual(['', ' \t']);
 });
 
 test('successful empty Apps enabled reads still report catalogue tiles as not connected', async () => {

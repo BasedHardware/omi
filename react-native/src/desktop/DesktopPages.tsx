@@ -14,6 +14,7 @@ import {
   appDisplayAttribution,
   appExploreRatingCopy,
   appImageUrl,
+  appListDescriptionCopy,
   appsEmptyCopy,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
@@ -21,7 +22,6 @@ import {
   taskDisplayTitle,
   tasksEmptyCopy,
   conversationRecapTitle,
-  visibleDisplayText,
   type DesktopReadOutcomes,
   type GoalLinkLookup,
 } from '../desktopReadClient';
@@ -341,7 +341,7 @@ function tilesFromCatalog(
   installKnown: boolean,
 ): AppTileModel[] {
   return apps.map(app => {
-    const description = visibleDisplayText(app.description);
+    const description = appListDescriptionCopy(app.description) ?? '';
     const attribution = appDisplayAttribution(app);
     return {
       Icon: Puzzle,

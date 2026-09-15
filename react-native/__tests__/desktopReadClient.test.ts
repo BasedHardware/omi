@@ -2733,10 +2733,13 @@ test('app list description copy names Flutter AppListItem truncated GET descript
   expect(appListDescriptionCopy('Calendar sync')).toBe('Calendar sync');
   expect(appListDescriptionCopy('A'.repeat(50))).toBe('A'.repeat(50));
   expect(appListDescriptionCopy('A'.repeat(51))).toBe(`${'A'.repeat(50)}...`);
-  expect(appListDescriptionCopy('  Calendar sync  ')).toBe('Calendar sync');
-  expect(appListDescriptionCopy(' \t')).toBeNull();
-  expect(appListDescriptionCopy('')).toBeNull();
-  expect(appListDescriptionCopy('\u0085')).toBeNull();
+  expect(appListDescriptionCopy('  Calendar sync  ')).toBe('  Calendar sync  ');
+  expect(appListDescriptionCopy(` ${'A'.repeat(50)}`)).toBe(
+    ` ${'A'.repeat(49)}...`,
+  );
+  expect(appListDescriptionCopy(' \t')).toBe(' \t');
+  expect(appListDescriptionCopy('')).toBe('');
+  expect(appListDescriptionCopy('\u0085')).toBe('\u0085');
   expect(appListDescriptionCopy(undefined)).toBeNull();
   expect(appListDescriptionCopy(null)).toBeNull();
 });
