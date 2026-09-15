@@ -95,7 +95,7 @@ omi auth status    # kiểm tra cục bộ, offline
 omi auth whoami    # kiểm tra trên server
 ```
 
-Làm mới token sắp hết hạn mà không cần đăng nhập lại:
+Làm mới phiên OAuth sắp hết hạn mà không cần đăng nhập lại — chỉ áp dụng cho đăng nhập qua trình duyệt (OAuth). Với khóa `omi_dev_*` lệnh này không làm mới được; hãy xoay khóa trong ứng dụng web tại `Developer → API Keys`:
 
 ```bash
 omi auth refresh
@@ -209,8 +209,8 @@ Các mã này ổn định, nên có thể dùng để rẽ nhánh logic trong s
 | Mã | Ý nghĩa | Khi nào xảy ra |
 | :---: | :--- | :--- |
 | `0` | Thành công | Lệnh chạy xong |
-| `1` | Lỗi gọi lệnh | Flag sai, thiếu tham số |
-| `2` | Lỗi truy cập | Chưa đăng nhập, key sai hoặc hết hạn |
+| `1` | Lỗi gọi lệnh | Kiểm tra của chính omi-cli (ví dụ dùng đồng thời `--browser` và `--api-key`, lựa chọn không hợp lệ, đầu vào rỗng) |
+| `2` | Lỗi truy cập hoặc tham số | Chưa đăng nhập, key sai hoặc hết hạn — cũng gồm lỗi phân tích cú pháp (flag không rõ, thiếu tham số) |
 | `3` | Lỗi server | Phản hồi 5xx, timeout, mất kết nối |
 | `4` | Quá nhiều request | 429 Too Many Requests |
 | `5` | Không tìm thấy | 404, id được chỉ định không tồn tại |
@@ -300,6 +300,8 @@ omi --profile work auth login
 # chạy lệnh trong một profile cụ thể
 omi --profile work memory list
 ```
+
+Nếu không chỉ định, CLI dùng profile từ biến môi trường `OMI_PROFILE` trước, rồi đến profile đang hoạt động trong tệp cấu hình, rồi `default`. Thứ tự ưu tiên: `--profile` → `OMI_PROFILE` → profile hoạt động trong `~/.omi/config.toml` → `default`.
 
 Xem và sửa chính cấu hình:
 
