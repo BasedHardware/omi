@@ -2219,7 +2219,7 @@ test('names Flutter AppResultDetailWidget empty GET descriptions', async () => {
     expect.objectContaining({
       appSummary: 'App wrote this recap',
       appSummaryName: 'Notes',
-      appSummaryDescription: '',
+      appSummaryDescription: ' \t',
     }),
   );
 });

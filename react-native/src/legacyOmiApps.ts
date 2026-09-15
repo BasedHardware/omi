@@ -41,7 +41,7 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   if (typeof row.description !== 'string') {
     throw new AppError();
   }
-  const description = visibleDisplayText(row.description);
+  const description = row.description;
   return {
     name,
     description,

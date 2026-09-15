@@ -2118,17 +2118,7 @@ test('legacy conversation details name Flutter AppResultDetailWidget empty GET d
     apiContract: 'omi',
     conversation: {...conversation, id: 'old-1'},
   });
-  const emptyDescriptions = view.root.findAll(node => {
-    if (node.type !== Text) {
-      return false;
-    }
-    const children = node.props.children;
-    return (
-      children === '' ||
-      (Array.isArray(children) && children.some(child => child === ''))
-    );
-  });
-  expect(emptyDescriptions.length).toBeGreaterThan(0);
+  expect(text(view)).toContain(' \t\n');
   expect(text(view)).toContain('Notes');
   expect(text(view)).toContain('App wrote this recap');
   expect(text(view)).not.toContain('App details unavailable');
