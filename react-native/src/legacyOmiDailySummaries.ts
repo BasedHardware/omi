@@ -70,6 +70,16 @@ function optionalWireString(value: unknown, limit: number): string {
   return visibleDisplayText(text(value, limit));
 }
 
+function summaryId(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  return visibleDisplayText(text(value, 1_000_000));
+}
+
 function headlineCopy(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return dailySummaryDefaultHeadlineCopy();
@@ -121,18 +131,20 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
       break;
     }
     const summary = object(raw);
-    const id = optionalWireString(summary.id, 1_000_000);
-    if (id === '') {
+    const id = summaryId(summary.id);
+    if (id === null) {
       continue;
-    }
-    if (seen.has(id)) {
-      throw new DailySummaryError();
     }
     const headline = headlineCopy(summary.headline);
     if (headline === undefined) {
       continue;
     }
-    seen.add(id);
+    if (id !== '') {
+      if (seen.has(id)) {
+        throw new DailySummaryError();
+      }
+      seen.add(id);
+    }
     const date = optionalWireString(summary.date, 1_000_000);
     const dayEmoji = optionalWireString(summary.day_emoji, 1_000_000);
     const overview = optionalWireString(summary.overview, 1_000_000);

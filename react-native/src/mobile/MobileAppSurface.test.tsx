@@ -1824,6 +1824,41 @@ test('compact Home names Flutter DailySummaryCard omitted GET headlines as Your 
   act(() => renderer.unmount());
 });
 
+test('compact Home names Flutter DailySummaryCard empty GET ids without hiding Daily Recaps', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [{id: '', date: '2020-01-14', headline: 'Empty id'}],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          backend: {request} as never,
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Daily Recaps');
+  expect(tree).toContain('Empty id');
+  expect(tree).toContain('Tue, Jan 14');
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('No daily recaps yet');
+  expect(tree).not.toContain('View All Daily Recaps');
+  act(() => renderer.unmount());
+});
+
 test('compact Home names Flutter DailySummaryCard empty GET headlines without hiding Daily Recaps', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {

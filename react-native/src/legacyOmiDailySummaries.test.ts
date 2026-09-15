@@ -38,6 +38,23 @@ test('names Flutter DailySummaryCard empty GET headlines instead of omitting the
   ]);
 });
 
+test('names Flutter DailySummary.fromGenerated empty GET ids instead of omitting the summary', () => {
+  const rows = parseOmiDailySummaries(
+    JSON.stringify({
+      summaries: [
+        {id: '', date: '2026-09-09', headline: 'Empty id'},
+        {id: ' \t', date: '2026-09-08', headline: 'Whitespace id'},
+        {headline: 'Omitted id', date: '2026-09-07'},
+      ],
+    }),
+  );
+  expect(rows).toEqual([
+    {id: '', date: '2026-09-09', headline: 'Empty id'},
+    {id: '', date: '2026-09-08', headline: 'Whitespace id'},
+    {id: '', date: '2026-09-07', headline: 'Omitted id'},
+  ]);
+});
+
 test('parses GET daily summary headlines and omits unused stats', () => {
   const rows = parseOmiDailySummaries(
     JSON.stringify({
@@ -129,7 +146,6 @@ test('does not omit a neighboring daily summary when stored headline or stats ca
         summaries: [
           {id: 'sum-kept', headline: 'Met with the team'},
           {id: 'sum-headline-number', headline: 1},
-          {id: '', headline: 'Empty id'},
           {id: 7, headline: 'Numeric id'},
           {
             id: 'sum-optional',

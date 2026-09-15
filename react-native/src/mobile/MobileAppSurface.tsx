@@ -636,7 +636,9 @@ export function MobileAppSurface({
               <FlatList
                 data={dailySummaryCards}
                 horizontal
-                keyExtractor={summary => summary.id}
+                keyExtractor={(summary, index) =>
+                  summary.id === '' ? `summary-${index}` : summary.id
+                }
                 renderItem={({item: summary}) => (
                   <View style={styles.recapCard}>
                     <Text numberOfLines={5} style={styles.recapTitle}>
