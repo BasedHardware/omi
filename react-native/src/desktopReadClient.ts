@@ -73,6 +73,7 @@ export function conversationRecapTitle(item: {
   title: string;
   summary: string;
   status: string;
+  discarded?: boolean;
 }): string {
   const title = visibleDisplayText(item.title);
   const summary = visibleDisplayText(item.summary);
@@ -81,6 +82,9 @@ export function conversationRecapTitle(item: {
   }
   if (title !== '') {
     return title;
+  }
+  if (item.discarded === true) {
+    return conversationDisplayTitle(item);
   }
   if (summary !== '') {
     return summary;
@@ -111,9 +115,9 @@ export function conversationDiscardedTranscriptCopy(
     personId?: string;
   }[],
   peopleNames: ReadonlyMap<string, string> = new Map(),
-): string | null {
+): string {
   if (segments.length === 0) {
-    return null;
+    return '';
   }
   const clocks: {start: number; end: number}[] = [];
   for (const segment of segments) {
@@ -163,7 +167,7 @@ export function conversationDiscardedTranscriptCopy(
   }
   transcript = transcript.trim();
   if (transcript === '') {
-    return null;
+    return '';
   }
   return transcript.length <= 100
     ? transcript

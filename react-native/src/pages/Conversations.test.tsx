@@ -2498,6 +2498,70 @@ test('conversation list names discarded GET transcript excerpt as the title', ()
   ).toHaveLength(0);
 });
 
+test('conversation list names discarded empty GET transcript instead of structured title', () => {
+  const base = {
+    kind: 'conversation' as const,
+    searchableText: '\nActual overview',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'omi-discarded-empty',
+                title: '',
+                summary: 'Actual overview',
+                discarded: true,
+              },
+              {
+                ...base,
+                id: 'omi-kept-titled',
+                title: 'Kept title',
+                summary: 'Actual overview',
+                discarded: false,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Kept title');
+  expect(copy).not.toContain('Actual overview');
+  expect(copy).not.toContain('Discarded');
+  expect(
+    renderer.root.findAll(
+      node =>
+        typeof node.props.accessibilityLabel === 'string' &&
+        node.props.accessibilityLabel === 'Open conversation ',
+    ),
+  ).toHaveLength(1);
+});
+
 test('conversation list names GET goals without add or a write sheet', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/goals/all') {

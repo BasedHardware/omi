@@ -259,13 +259,11 @@ export async function loadOmiConversations(
       emoji,
       category,
     }) => {
-      const discardedExcerpt = discarded
-        ? conversationDiscardedTranscriptCopy(discardedSegments, peopleNames)
-        : null;
       const transcriptEndSeconds =
         conversationTranscriptEndSeconds(listSegments);
-      const title =
-        discardedExcerpt !== null ? discardedExcerpt : structuredTitle;
+      const title = discarded
+        ? conversationDiscardedTranscriptCopy(discardedSegments, peopleNames)
+        : structuredTitle;
       return {
         kind: 'conversation' as const,
         id: id(row.id),

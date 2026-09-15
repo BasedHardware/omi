@@ -111,7 +111,7 @@ test('old discarded conversations name GET transcript_segments as the list title
     '[00:00:00 - 00:00:02] Speaker 1: Hello from the recording',
   );
   expect(result.items[1].title).toBe('[00:00:00 - 00:00:01] User: Live speech');
-  expect(result.items[2].title).toBe('Kept title');
+  expect(result.items[2].title).toBe('');
   expect(result.items[3].title).toBe('Real title');
 });
 

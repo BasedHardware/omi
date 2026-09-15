@@ -903,6 +903,14 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
   expect(
     conversationRecapTitle({
       title: '',
+      summary: 'Actual overview',
+      status: 'completed',
+      discarded: true,
+    }),
+  ).toBe('');
+  expect(
+    conversationRecapTitle({
+      title: '',
       summary: '\u0085',
       status: 'completed',
     }),
@@ -1296,7 +1304,7 @@ test('discarded conversation titles use Flutter transcript excerpt and people na
       {text: 'a'.repeat(90), isUser: true, start: 0, end: 2},
     ]),
   ).toBe(`[00:00:00 - 00:00:02] User: ${'a'.repeat(90)}`.slice(-100));
-  expect(conversationDiscardedTranscriptCopy([])).toBeNull();
+  expect(conversationDiscardedTranscriptCopy([])).toBe('');
   expect(
     conversationDiscardedTranscriptCopy([{text: ' \t\n', isUser: false}]),
   ).toBe('Speaker 1:');

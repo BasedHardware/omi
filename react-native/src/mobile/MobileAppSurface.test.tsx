@@ -983,6 +983,23 @@ test('Daily Recaps name discarded GET transcript excerpt as the title', () => {
   expect(renderedText(flagged)).not.toContain('Duration');
 });
 
+test('Daily Recaps name discarded empty GET transcript instead of structured title', () => {
+  const empty = render({
+    recaps: [
+      {
+        id: 'recap-discarded-empty-transcript',
+        title: '',
+        dateLabel: 'Yesterday',
+        discarded: true,
+      },
+    ],
+  });
+  expect(renderedText(empty)).toContain('Yesterday');
+  expect(renderedText(empty)).not.toContain('Kept title');
+  expect(renderedText(empty)).not.toContain('Actual overview');
+  expect(renderedText(empty)).not.toContain('Discarded');
+});
+
 test('compact Home conversations omit Flutter ConversationListItem mobile Discarded chip', () => {
   const flagged = render({
     recaps: [

@@ -864,6 +864,39 @@ test('Home and Library rows keep GET locked flags and omit Flutter ConversationL
   expect(textOf(plain)).not.toContain('Discarded');
 });
 
+test('Home and Library rows name discarded empty GET transcript instead of structured title', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'omi-discarded-empty',
+    title: '',
+    summary: 'Actual overview',
+    searchableText: '\nActual overview',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: true,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const copy of [textOf(home), textOf(library)]) {
+    expect(copy).not.toContain('Actual overview');
+    expect(copy).not.toContain('Kept title');
+    expect(copy).not.toContain('Discarded');
+    expect(copy).toContain('12:00 PM');
+  }
+});
+
 test('Home and Library rows omit Flutter ConversationListItem Failed chips', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
