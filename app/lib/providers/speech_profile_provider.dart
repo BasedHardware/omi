@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
@@ -54,13 +55,12 @@ class SpeechProfileProvider extends ChangeNotifier
 
   bool startedRecording = false;
 
-  /// Sentences the user must speak before the profile is finalized. The UI
-  /// shows a bar filling toward it; reaching it is what completes the
-  /// recording. A sentence ends at ., ! or ? followed by a space or the end
-  /// of the text (so "3.5" is not a boundary); both server STT and the
+  /// Sentence target for Settings redo; first-run onboarding uses
+  /// transcribed speech duration via [recordingProgress]. A sentence ends at
+  /// ., ! or ? followed by a space or the end of the text (so "3.5" is not a boundary); both server STT and the
   /// on-device recognizers punctuate their output.
   static const int targetSentenceCount = 3;
-  bool _sentenceTargetReached = false;
+  bool _recordingTargetReached = false;
 
   /// Once the target is reached the recording is not cut off mid-sentence:
   /// it finalizes after [completionGrace] without new speech (each new
@@ -68,9 +68,16 @@ class SpeechProfileProvider extends ChangeNotifier
   /// the latest.
   static const Duration completionGrace = Duration(seconds: 2);
   static const Duration completionCap = Duration(seconds: 8);
+
+  /// Backend `/v3/upload-audio` rejects WAVs shorter than 5s. Three short
+  /// punctuated sentences can otherwise finalize in ~2s and 400 as TOO_SHORT.
+  static const Duration minUploadDuration = Duration(seconds: 5);
+  static const int uploadMaxAttempts = 3;
+  static const Duration uploadAttemptTimeout = Duration(seconds: 30);
   Timer? _completionGraceTimer;
   Timer? _completionCapTimer;
   bool _completionFired = false;
+  DateTime? _recordingStartedAt;
   static final RegExp _sentenceEnd = RegExp(r'[.!?]+(?=\s|$)');
 
   int get spokenSentenceCount => _sentenceEnd.allMatches(text).length;
@@ -113,6 +120,32 @@ class SpeechProfileProvider extends ChangeNotifier
   // onboarded account still gets the question flow — see
   // routers/listen/runtime.py's _bootstrap for why that distinction exists.
   bool _isOnboardingFlow = false;
+  bool get isOnboardingFlow => _isOnboardingFlow;
+
+  /// First-run enrollment needs a short voice sample, not three answers.
+  /// Use the union of non-empty user transcript spans: gaps, overlapping
+  /// updates and Omi's prompts must not fill the bar. STT timestamps are an
+  /// estimate; the backend still validates the actual uploaded audio.
+  double get recordingProgress {
+    if (!isOnboardingFlow) return sentenceProgress;
+    final speech = segments
+        .where((s) =>
+            s.speakerId != omiSpeakerId &&
+            s.text.trim().isNotEmpty &&
+            s.start.isFinite &&
+            s.end.isFinite &&
+            s.start >= 0 &&
+            s.end > s.start)
+        .toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+    double seconds = 0;
+    double end = 0;
+    for (final segment in speech) {
+      seconds += max(0, segment.end - max(end, segment.start));
+      end = max(end, segment.end);
+    }
+    return (seconds / minUploadDuration.inSeconds).clamp(0.0, 1.0);
+  }
 
   /// True while the question flow is transcribed on-device instead of by the
   /// backend's streaming STT — entered up front when the pre-flight
@@ -292,6 +325,11 @@ class SpeechProfileProvider extends ChangeNotifier
 
   void updateStartedRecording(bool value) {
     startedRecording = value;
+    if (value) {
+      _recordingStartedAt ??= clock.now();
+    } else {
+      _recordingStartedAt = null;
+    }
     notifyListeners();
   }
 
@@ -424,6 +462,35 @@ class SpeechProfileProvider extends ChangeNotifier
   @visibleForTesting
   Future<bool> uploadSpeechProfile(File file) => uploadProfile(file);
 
+  bool _isTooShortUploadError(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('audio duration is invalid') || text.contains('audio is empty');
+  }
+
+  /// Retries transient upload failures. Duration-too-short / empty-audio 400s
+  /// are not retried — more talking is required, not another POST.
+  @visibleForTesting
+  Future<({bool success, bool tooShort})> uploadProfileWithRetry(File file) async {
+    var tooShort = false;
+    for (var attempt = 1; attempt <= uploadMaxAttempts; attempt++) {
+      try {
+        final ok = await uploadSpeechProfile(file).timeout(
+          uploadAttemptTimeout,
+          onTimeout: () {
+            Logger.debug('Profile upload timed out after ${uploadAttemptTimeout.inSeconds}s (attempt $attempt)');
+            return false;
+          },
+        );
+        if (ok) return (success: true, tooShort: false);
+      } catch (e) {
+        Logger.debug('Error uploading profile (attempt $attempt): $e');
+        tooShort = _isTooShortUploadError(e);
+        if (tooShort) return (success: false, tooShort: true);
+      }
+    }
+    return (success: false, tooShort: false);
+  }
+
   /// Start phone microphone streaming (alternative to BLE device streaming).
   /// Returns false when the mic could not be acquired — contention with a live
   /// conversation throws a [StateError] — so [initialise] fails visibly instead
@@ -488,29 +555,21 @@ class SpeechProfileProvider extends ChangeNotifier
 
       updateLoadingState(SpeechProfileLoadingState.memorizing);
       Logger.debug('Creating WAV file...');
-      var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+      File file;
+      try {
+        file = (await audioStorage.createWavFile(filename: 'speaker_profile.wav')).item1;
+      } catch (_) {
+        Logger.debug('Speech profile WAV creation failed');
+        completeAfterUploadFailure(tooShort: false);
+        return;
+      }
       Logger.debug('WAV file created, uploading profile...');
 
-      bool uploadSuccess = false;
-      bool uploadFailedDueToShortAudio = false;
-      try {
-        uploadSuccess = await uploadSpeechProfile(data.item1).timeout(
-          const Duration(seconds: 30),
-          onTimeout: () {
-            Logger.debug('Profile upload timed out after 30 seconds');
-            return false;
-          },
-        );
-        Logger.debug('Profile upload completed: $uploadSuccess');
-      } catch (e) {
-        Logger.debug('Error uploading profile: $e');
-        final error = e.toString().toLowerCase();
-        uploadFailedDueToShortAudio = error.contains('audio duration is invalid') || error.contains('audio is empty');
-        uploadSuccess = false;
-      }
+      final upload = await uploadProfileWithRetry(file);
+      Logger.debug('Profile upload completed: success=${upload.success} tooShort=${upload.tooShort}');
 
-      if (!uploadSuccess) {
-        completeAfterUploadFailure(tooShort: uploadFailedDueToShortAudio);
+      if (!upload.success) {
+        completeAfterUploadFailure(tooShort: upload.tooShort);
         return;
       }
 
@@ -541,22 +600,22 @@ class SpeechProfileProvider extends ChangeNotifier
     }
   }
 
-  /// Upload failed - notify user but still complete onboarding. A failed
-  /// voice-print upload (e.g. no speech-profiles bucket configured, as in the
-  /// local dev harness) is a degraded feature, not a reason to trap the user
-  /// on the last onboarding question forever: the "All Done" continue button
-  /// in speech_profile_widget.dart is gated on profileCompleted, which this
-  /// branch previously never set. Separated from finalize() so it's directly
+  /// Upload failed. Do not mark the profile completed — All Done means a
+  /// voiceprint landed. Skip for now on the recording UI is the way out so
+  /// onboarding is never trapped. Separated from finalize() so it's directly
   /// testable without a real (opus-decoder-backed) WavBytesUtil.
   @visibleForTesting
   void completeAfterUploadFailure({required bool tooShort}) {
     uploadingProfile = false;
+    profileCompleted = false;
+    _completionFired = false;
+    _recordingTargetReached = false;
+    _cancelCompletionTimers();
     notifyError(tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED');
     PlatformManager.instance.analytics.speechProfileUploadFailed(
       reason: tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED',
     );
 
-    // Still trigger conversation processing
     if (_processConversationCallback != null) {
       Logger.debug('Triggering conversation processing despite upload failure...');
       _processConversationCallback!();
@@ -564,9 +623,6 @@ class SpeechProfileProvider extends ChangeNotifier
 
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    profileCompleted = true;
-    text = '';
-    updateLoadingState(SpeechProfileLoadingState.allSet);
     notifyListeners();
   }
 
@@ -652,7 +708,8 @@ class SpeechProfileProvider extends ChangeNotifier
     segments.clear();
     streamStartedAtSecond = null;
     text = '';
-    _sentenceTargetReached = false;
+    _recordingTargetReached = false;
+    _recordingStartedAt = startedRecording ? clock.now() : null;
     profileCompleted = false;
     uploadingProfile = false;
     notifyListeners();
@@ -684,7 +741,7 @@ class SpeechProfileProvider extends ChangeNotifier
     currentQuestionIndex = 0;
     totalQuestions = 0;
     startedRecording = false;
-    _sentenceTargetReached = false;
+    _recordingTargetReached = false;
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
@@ -839,7 +896,7 @@ class SpeechProfileProvider extends ChangeNotifier
       Logger.debug('Question ${event.questionIndex} answered');
       notifyInfo('NEXT_QUESTION');
     } else if (event is OnboardingCompleteEvent) {
-      // Completion is driven by the spoken word target (onSegmentReceived);
+      // Completion is driven by the recording target (onSegmentReceived);
       // the backend finishing its topic checks only means it stops asking.
       Logger.debug('Onboarding topics complete from backend: conversationId=${event.conversationId}');
     }
@@ -872,18 +929,17 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   /// Recomputes what the user has said (Omi's own question segments are
-  /// excluded), the sentence-target progress, and finalizes the recording
+  /// excluded), the recording progress, and finalizes the recording
   /// once the target is reached. Split from onSegmentReceived so it can be
   /// exercised without the audio storage that method also touches.
   @visibleForTesting
   void updateSpokenText() {
     text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    if (_completionFired || spokenSentenceCount < targetSentenceCount) return;
+    if (_completionFired || recordingProgress < 1) return;
 
-    if (!_sentenceTargetReached) {
-      _sentenceTargetReached = true;
-      Logger.debug(
-          'Spoken sentence target reached ($spokenSentenceCount/$targetSentenceCount); finalizing after a pause');
+    if (!_recordingTargetReached) {
+      _recordingTargetReached = true;
+      Logger.debug('Speech profile recording target reached; finalizing after a pause');
       _completionCapTimer = Timer(completionCap, _completeOnTarget);
     }
     // Still talking: wait for a pause so the last sentence is not cut off.
@@ -892,6 +948,18 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   void _completeOnTarget() {
+    final started = _recordingStartedAt;
+    if (started != null) {
+      final elapsed = clock.now().difference(started);
+      if (elapsed < minUploadDuration) {
+        final wait = minUploadDuration - elapsed;
+        Logger.debug(
+            'Recording target reached after ${elapsed.inMilliseconds}ms; waiting ${wait.inMilliseconds}ms to meet upload floor');
+        _completionGraceTimer?.cancel();
+        _completionGraceTimer = Timer(wait, _completeOnTarget);
+        return;
+      }
+    }
     _cancelCompletionTimers();
     _completionFired = true;
     finalize();

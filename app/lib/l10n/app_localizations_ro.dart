@@ -10029,4 +10029,8 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.';
 }

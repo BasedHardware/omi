@@ -18,6 +18,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/constants.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 
 /// Minimal EnvFields stub so Env-backed code paths don't hit a
 /// LateInitializationError (mirrors capture_provider_test.dart's fixture).
@@ -123,6 +124,39 @@ class _FinalizeCountingProvider extends SpeechProfileProvider {
   @override
   Future finalize() async {
     finalizeCalls++;
+  }
+}
+
+class _OnboardingFinalizeProvider extends _FinalizeCountingProvider {
+  @override
+  bool get isOnboardingFlow => true;
+}
+
+class _BrokenWavStorage extends Fake implements WavBytesUtil {
+  @override
+  Future<Never> createWavFile({String? filename, int removeLastNSeconds = 0}) async =>
+      throw const FileSystemException('disk full');
+}
+
+/// Fails [failTimes] upload attempts, then succeeds. [tooShort] throws the
+/// backend duration-cap error so retry logic can refuse to retry it.
+class _FlakyUploadProvider extends SpeechProfileProvider {
+  _FlakyUploadProvider({required this.failTimes, this.tooShort = false});
+
+  final int failTimes;
+  final bool tooShort;
+  int uploadAttempts = 0;
+
+  @override
+  Future<bool> uploadSpeechProfile(File file) async {
+    uploadAttempts++;
+    if (tooShort) {
+      throw Exception('Failed to upload sample (400): Audio duration is invalid (must be 5-180 seconds)');
+    }
+    if (uploadAttempts <= failTimes) {
+      throw Exception('Failed to upload sample (500): boom');
+    }
+    return true;
   }
 }
 
@@ -505,32 +539,116 @@ void main() {
     });
   });
 
-  // Regression coverage: finalize()'s upload-failure branch commented "still
-  // process conversation" but never set profileCompleted, so the "All Done"
-  // continue button (gated on provider.profileCompleted in
-  // speech_profile_widget.dart) never appeared — trapping the user on the
-  // last onboarding question forever whenever the speech-profile upload
-  // fails (e.g. BUCKET_SPEECH_PROFILES unconfigured locally).
-  group('onboarding completes even when the speech-profile upload fails', () {
-    test('marks the profile completed after an upload failure', () {
+  // Upload failure used to set profileCompleted so All Done appeared, which
+  // let people leave onboarding with no voiceprint and made "Completed"
+  // telemetry lie. Failure must keep Skip available and must not look like
+  // enroll success. Skip (not All Done) is the escape hatch.
+  group('upload failure does not pretend the voiceprint landed', () {
+    test('does not mark the profile completed after an upload failure', () {
       final provider = SpeechProfileProvider();
+      provider.updateStartedRecording(true);
 
       provider.completeAfterUploadFailure(tooShort: false);
 
-      expect(provider.profileCompleted, isTrue, reason: 'the user must be able to leave onboarding');
+      expect(provider.profileCompleted, isFalse, reason: 'All Done is enroll success, not a failed upload');
       expect(provider.uploadingProfile, isFalse);
+      expect(provider.startedRecording, isTrue, reason: 'Skip for now stays on the recording UI');
       expect(provider.error, 'UPLOAD_FAILED');
 
       provider.dispose();
     });
 
-    test('marks the profile completed after a too-short-audio failure', () {
+    test('does not mark the profile completed after a too-short-audio failure', () {
       final provider = SpeechProfileProvider();
+      provider.updateStartedRecording(true);
 
       provider.completeAfterUploadFailure(tooShort: true);
 
-      expect(provider.profileCompleted, isTrue, reason: 'the user must be able to leave onboarding');
+      expect(provider.profileCompleted, isFalse);
+      expect(provider.startedRecording, isTrue);
       expect(provider.error, 'TOO_SHORT');
+
+      provider.dispose();
+    });
+  });
+
+  test('WAV creation failure restores the escape path instead of leaving uploading stuck', () async {
+    final provider = SpeechProfileProvider()..audioStorage = _BrokenWavStorage();
+    provider.updateStartedRecording(true);
+    await provider.finalize();
+    expect(provider.uploadingProfile, isFalse);
+    expect(provider.profileCompleted, isFalse);
+    expect(provider.error, 'UPLOAD_FAILED');
+    provider.dispose();
+  });
+
+  group('first-run enrollment accepts any topic without punctuation', () {
+    test('five seconds of transcribed speech completes after a pause', () {
+      fakeAsync((async) {
+        final provider = _OnboardingFinalizeProvider();
+        provider.updateStartedRecording(true);
+        provider.segments.add(_userSegment('1', 'today I walked my dog and enjoyed the sunshine')..end = 5);
+        provider.updateSpokenText();
+        expect(provider.recordingProgress, 1);
+        expect(provider.spokenSentenceCount, 0);
+        async.elapse(SpeechProfileProvider.minUploadDuration);
+        expect(provider.finalizeCalls, 1);
+        async.elapse(SpeechProfileProvider.completionCap);
+        expect(provider.finalizeCalls, 1);
+        provider.dispose();
+      });
+    });
+
+    test('silence, Omi prompts, and overlapping spans do not inflate progress', () {
+      fakeAsync((async) {
+        final provider = _OnboardingFinalizeProvider();
+        provider.updateStartedRecording(true);
+        provider.segments.addAll([
+          _userSegment('q', 'Where do you live?', speakerId: omiSpeakerId)..end = 20,
+          _userSegment('1', 'one two')
+            ..start = 20
+            ..end = 22,
+          _userSegment('2', 'three four')
+            ..start = 21
+            ..end = 23,
+          _userSegment('empty', ' ')
+            ..start = 23
+            ..end = 40,
+        ]);
+        provider.updateSpokenText();
+        expect(provider.recordingProgress, closeTo(0.6, 0.001));
+        async.elapse(const Duration(seconds: 30));
+        expect(provider.finalizeCalls, 0);
+        provider.segments.add(_userSegment('3', 'a little more')
+          ..start = 40
+          ..end = 42);
+        provider.updateSpokenText();
+        async.elapse(SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 1);
+        provider.dispose();
+      });
+    });
+  });
+
+  group('speech-profile upload retries transient failures', () {
+    test('succeeds on a later attempt without completing on the first failure', () async {
+      final provider = _FlakyUploadProvider(failTimes: 2);
+      final result = await provider.uploadProfileWithRetry(File('speaker_profile.wav'));
+
+      expect(result.success, isTrue);
+      expect(result.tooShort, isFalse);
+      expect(provider.uploadAttempts, 3);
+
+      provider.dispose();
+    });
+
+    test('does not retry a too-short recording', () async {
+      final provider = _FlakyUploadProvider(failTimes: 5, tooShort: true);
+      final result = await provider.uploadProfileWithRetry(File('speaker_profile.wav'));
+
+      expect(result.success, isFalse);
+      expect(result.tooShort, isTrue);
+      expect(provider.uploadAttempts, 1);
 
       provider.dispose();
     });
@@ -558,7 +676,9 @@ void main() {
         expect(provider.finalizeCalls, 0, reason: 'the target does not cut the user off mid-sentence');
 
         async.elapse(SpeechProfileProvider.completionGrace);
-        expect(provider.finalizeCalls, 1, reason: 'finalizes once the user pauses');
+        expect(provider.finalizeCalls, 0, reason: 'three short sentences are still below the 5s upload floor');
+        async.elapse(SpeechProfileProvider.minUploadDuration - SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 1, reason: 'finalizes once the user pauses and the upload floor is met');
 
         provider.segments.add(_userSegment('3', 'And more.'));
         provider.updateSpokenText();
@@ -618,7 +738,7 @@ void main() {
       fakeAsync((async) {
         provider.segments.add(_userSegment('1', 'I live in Austin. I build hardware. I want to ship!'));
         provider.updateSpokenText();
-        async.elapse(SpeechProfileProvider.completionGrace);
+        async.elapse(SpeechProfileProvider.minUploadDuration);
         expect(provider.finalizeCalls, 1);
         provider.profileCompleted = true;
 
@@ -632,7 +752,7 @@ void main() {
         // The fresh session counts from zero and can finalize again.
         provider.segments.add(_userSegment('2', 'One. Two. Three.'));
         provider.updateSpokenText();
-        async.elapse(SpeechProfileProvider.completionGrace);
+        async.elapse(SpeechProfileProvider.minUploadDuration);
         expect(provider.finalizeCalls, 2);
 
         provider.dispose();

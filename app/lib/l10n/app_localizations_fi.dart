@@ -9983,4 +9983,8 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.';
 }

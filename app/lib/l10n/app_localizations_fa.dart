@@ -9982,4 +9982,8 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.';
 }

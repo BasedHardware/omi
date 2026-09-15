@@ -2,6 +2,49 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.350",
+      "date": "2026-09-14",
+      "changes": [
+        "Always-on listening no longer switches itself off when your microphone is briefly taken by another audio app — Omi now keeps trying to reconnect for several minutes instead of giving up after six seconds",
+        "Fixed chat-only apps not opening their own conversation and improved delegated agent provider and file-path reliability"
+      ]
+    },
+    {
+      "version": "0.12.349",
+      "date": "2026-09-14",
+      "changes": [
+        "Dropping several files onto the chat composer at once now stages all of them up to the attachment limit, and composers without attachment support now decline file drags instead of pasting the dropped file's path into the message"
+      ]
+    },
+    {
+      "version": "0.12.348",
+      "date": "2026-09-14",
+      "changes": [
+        "Fixed dragging a file onto the chat composer only working over its border, not the input area itself"
+      ]
+    },
+    {
+      "version": "0.12.347",
+      "date": "2026-09-13",
+      "changes": [
+        "Fixed conversation summaries flashing while scrolling on desktop"
+      ]
+    },
+    {
+      "version": "0.12.346",
+      "date": "2026-09-13",
+      "changes": [
+        "Dictations into Wispr Flow, superwhisper, or macOS Dictation no longer become conversations: while a dictation app is using the microphone (and no call is), Omi mutes its own listening for exactly that window. Calls are never muted. Toggle under Transcription → Ignore Dictation Apps"
+      ]
+    },
+    {
+      "version": "0.12.345",
+      "date": "2026-09-13",
+      "changes": [
+        "Fixed external app setup so sign-in links and completion checks keep working when the provider's URL already carries its own query parameters"
+      ]
+    },
+    {
       "version": "0.12.344",
       "date": "2026-09-13",
       "changes": [

@@ -16,6 +16,7 @@ import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
+import 'package:omi/utils/sync/offline_processing_display.dart';
 import 'package:omi/utils/waveform_utils.dart';
 
 enum WalStatusFilter { pending, synced, corrupted }
@@ -290,6 +291,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // Track WAL processing progress
   int _totalWalsToProcess = 0;
   int _walsProcessedCount = 0;
+  Set<String> _uploadedWalIdsAtSyncStart = const {};
+  final Set<String> _trackedServerJobWalIds = {};
   bool _isDisposed = false;
   late bool _rateLimitWasActive;
 
@@ -559,6 +562,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _uploadGate.prepareToUpload();
     if (_isDisposed) return;
     _updateSyncState(_syncState.toIdle());
+    _totalWalsToProcess = 1;
+    _walsProcessedCount = 0;
     final result = await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
       context: 'sync WAL ${wal.id}',
@@ -589,6 +594,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     bool rethrowOnError = false,
     bool checkFlashStall = false,
   }) async {
+    _uploadedWalIdsAtSyncStart = uploadedWals.map((w) => w.id).toSet();
     try {
       _updateSyncState(_syncState.toSyncing());
 
@@ -689,7 +695,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       _updateSyncState(_syncState.toError(message: errorMessage, failedWal: failedWal));
       if (rethrowOnError) rethrow;
       return null;
+    } finally {
+      if (!_isDisposed) {
+        await refreshWals();
+        _recordNewlyAcceptedUploads();
+      }
     }
+  }
+
+  void _recordNewlyAcceptedUploads() {
+    final after = uploadedWals.map((w) => w.id).toSet();
+    _trackedServerJobWalIds.addAll(after.difference(_uploadedWalIdsAtSyncStart));
   }
 
   bool _hasConversationResults(SyncLocalFilesResponse result) {
@@ -856,8 +872,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   void onWalSynced(Wal wal, {ServerConversation? conversation}) async {
     await refreshWals();
 
+    if (wal.status == WalStatus.synced) {
+      _trackedServerJobWalIds.remove(wal.id);
+    }
+
     // Update progress based on WALs synced if we're currently syncing
-    if (_syncState.isSyncing) {
+    if (_totalWalsToProcess > 0) {
       _walsProcessedCount++;
       // If device download created new WALs, total grows dynamically
       final currentMissing = _allWals.where((w) => w.status == WalStatus.miss).length;
@@ -865,8 +885,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (newTotal > _totalWalsToProcess) {
         _totalWalsToProcess = newTotal;
       }
+    }
+
+    if (_syncState.isSyncing) {
       final walProgress = walBasedProgress;
       _updateSyncState(_syncState.toSyncing(progress: walProgress));
+    } else if (_totalWalsToProcess > 0 && uploadedWals.isNotEmpty) {
+      notifyListeners();
     }
   }
 
@@ -885,19 +910,32 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     int? uploadedBytes,
     int? totalBytesToUpload,
   }) {
-    if (_syncState.isSyncing) {
-      _updateSyncState(
-        _syncState.toSyncing(
-          progress: percentage,
-          speedKBps: speedKBps,
-          phase: phase,
-          currentFile: currentFile,
-          totalFiles: totalFiles,
-          uploadedBytes: uploadedBytes,
-          totalBytesToUpload: totalBytesToUpload,
-        ),
-      );
+    if (!_syncState.isSyncing) {
+      return;
     }
+
+    final incomingPhase = phase ?? _syncState.phase;
+    var nextCurrent = currentFile ?? _syncState.currentFile;
+    var nextTotal = totalFiles ?? _syncState.totalFiles;
+
+    // Per-chunk device downloads report 1/1; do not clobber multi-recording upload counts.
+    if (incomingPhase == SyncPhase.downloadingFromDevice && totalFiles == 1 && (_syncState.totalFiles ?? 0) > 1) {
+      nextCurrent = _syncState.currentFile;
+      nextTotal = _syncState.totalFiles;
+    }
+
+    final progress = percentage.clamp(0.0, 1.0);
+    _updateSyncState(
+      _syncState.toSyncing(
+        progress: progress,
+        speedKBps: speedKBps,
+        phase: incomingPhase,
+        currentFile: nextCurrent,
+        totalFiles: nextTotal,
+        uploadedBytes: uploadedBytes,
+        totalBytesToUpload: totalBytesToUpload,
+      ),
+    );
   }
 
   /// Cancel ongoing sync operation.
@@ -957,6 +995,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   // Get the total WALs to process
   int get initialMissingWalsCount => _totalWalsToProcess;
+
+  /// Server-side processing progress after uploads returned 202 (uploaded WALs
+  /// still reconciling). Completed = recordings no longer waiting on a job.
+  ({int processed, int total}) get offlineServerProcessingCounts {
+    return OfflineProcessingDisplay.serverJobCounts(trackedUploadedWalIds: _trackedServerJobWalIds, wals: _allWals);
+  }
 
   @override
   void dispose() {

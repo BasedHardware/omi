@@ -3257,5 +3257,6 @@
     "speechToTextUnavailableDesc": "Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.",
     "memoryHistoryPartial": "Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.",
     "tapPlusToStartRecording": "Norėdami pradėti įrašymą, palieskite +",
-    "processingTakingLonger": "Vis dar vyksta — tai užtrunka ilgiau nei įprasta."
+    "processingTakingLonger": "Vis dar vyksta — tai užtrunka ilgiau nei įprasta.",
+    "speechProfileEnrollmentPrompt": "Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes."
 }
