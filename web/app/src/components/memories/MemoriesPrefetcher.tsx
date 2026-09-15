@@ -25,6 +25,10 @@ export function MemoriesPrefetcher() {
   const backendScope = getMemoryBackendScope();
   const scope = !loading && user ? { ownerId: user.uid, backendScope } : null;
   const scopeKey = scope ? memoryCacheScopeKey(scope) : null;
+  // Latest owner/backend session, read after each await so a mid-flight owner
+  // change cannot cache one owner's response under the other's scope.
+  const scopeKeyRef = useRef<string | null>(scopeKey);
+  scopeKeyRef.current = scopeKey;
 
   useEffect(() => {
     // Only run once per authenticated owner/backend session.
@@ -36,6 +40,7 @@ export function MemoriesPrefetcher() {
       try {
         // Check if we already have fresh cache
         const cacheFresh = await isCacheFresh(scope);
+        if (scopeKeyRef.current !== scopeKey) return;
         if (cacheFresh) {
           console.log('[MemoriesPrefetcher] Cache is fresh, skipping prefetch');
           return;
@@ -45,6 +50,7 @@ export function MemoriesPrefetcher() {
 
         // Fetch memories in the background (backend returns up to 5000 when offset=0)
         const memories = await getMemories({ limit: 25, offset: 0 });
+        if (scopeKeyRef.current !== scopeKey) return;
 
         // Cache them in IndexedDB
         await cacheMemories(memories, 'useful_now', scope);
@@ -61,7 +67,10 @@ export function MemoriesPrefetcher() {
     const timeout = setTimeout(prefetchMemories, 2000);
 
     return () => clearTimeout(timeout);
-  }, [loading, scope, scopeKey]);
+    // `scope` is a pure function of the stable `scopeKey` inputs (owner uid +
+    // backend scope); depending on the primitives keeps the delay timer alive
+    // across rerenders that recreate the scope object.
+  }, [loading, scopeKey]);
 
   // This component doesn't render anything
   return null;

@@ -173,6 +173,9 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   const [beliefEnabled, setBeliefEnabled] = useState<boolean | null>(
     cachedEntry?.beliefEnabled ?? null,
   );
+  // Bumped whenever a network fetch releases the fetching lock, so a
+  // view/category change that arrived mid-fetch re-runs once idle.
+  const [fetchIdleTick, setFetchIdleTick] = useState(0);
 
   // Use ref for offset to avoid dependency issues
   const offsetRef = useRef(cachedEntry?.offset || 0);
@@ -180,6 +183,8 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   const feedbackIdsRef = useRef(new Map<string, string>());
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
+  // In-flight canonical refresh, shared with concurrent callers (see refresh).
+  const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
   // Track if initial fetch is done
   const initializedRef = useRef(false);
   const capabilityRef = useRef<boolean | null>(cachedEntry?.beliefEnabled ?? null);
@@ -191,6 +196,10 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   const previousScopeRef = useRef<MemoryCacheScope | null>(null);
   const currentScopeRef = useRef<MemoryCacheScope | null>(null);
   currentScopeRef.current = memoryCacheScope;
+  // Latest categories+view query, assigned every render so an in-flight
+  // request can detect the visible query moved on before its response lands.
+  const latestQueryRef = useRef('');
+  latestQueryRef.current = `${JSON.stringify(activeCategories)}:${memoryView}`;
   const captureScopeGeneration = () => {
     const requestScopeKey = scopeKeyRef.current;
     const requestGeneration = scopeGenerationRef.current;
@@ -211,7 +220,9 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     previousScopeRef.current = memoryCacheScope;
     scopeGenerationRef.current += 1;
     activeStateScopeRef.current = scopeKey;
+    // A new session abandons any in-flight canonical refresh from the old one.
     fetchingRef.current = false;
+    refreshInFlightRef.current = null;
     initializedRef.current = false;
     const scopedCache = cacheKey ? getFromCache(cacheKey) : null;
     capabilityRef.current = scopedCache?.beliefEnabled ?? null;
@@ -287,9 +298,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
     const requestScopeKey = scopeKey;
     const requestGeneration = scopeGenerationRef.current;
+    const requestQuery = `${JSON.stringify(activeCategories)}:${memoryView}`;
     const isCurrentRequest = () =>
       scopeKeyRef.current === requestScopeKey &&
       scopeGenerationRef.current === requestGeneration;
+    // Fence by query as well as scope: a view/category change mid-request
+    // must not apply the old query's page to the newly selected one.
+    const isQueryCurrent = () => latestQueryRef.current === requestQuery;
 
     const key = cacheKey;
     const cached = getFromCache(key);
@@ -328,7 +343,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           memoryView === 'useful_now'
             ? await getCachedMemories(memoryView, memoryCacheScope)
             : null;
-        if (!isCurrentRequest()) return;
+        if (!isCurrentRequest() || !isQueryCurrent()) return;
         if (indexedDBMemories && indexedDBMemories.length > 0) {
           console.log('[useMemories] Loaded from IndexedDB');
           setMemories(indexedDBMemories);
@@ -359,7 +374,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
       try {
         const page = await doFetch(activeCategories, 0);
-        if (!isCurrentRequest()) return;
+        if (!isCurrentRequest() || !isQueryCurrent()) return;
         const pageHasMore =
           Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
         setMemories(page.memories);
@@ -380,10 +395,10 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         );
         if (memoryView === 'useful_now') {
           await cacheMemories(page.memories, memoryView, memoryCacheScope);
-          if (!isCurrentRequest()) return;
+          if (!isCurrentRequest() || !isQueryCurrent()) return;
         }
       } catch (err) {
-        if (!isCurrentRequest()) return;
+        if (!isCurrentRequest() || !isQueryCurrent()) return;
         // Check if we have any cached data to show
         let hasAnyCachedData = !!cached;
         if (!hasAnyCachedData) {
@@ -392,7 +407,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
               memoryView === 'useful_now'
                 ? await getCachedMemories(memoryView, memoryCacheScope)
                 : null;
-            if (!isCurrentRequest()) return;
+            if (!isCurrentRequest() || !isQueryCurrent()) return;
             hasAnyCachedData = !!indexedDbMemories;
           } catch {
             // If reading from IndexedDB fails, don't mask the original error
@@ -411,6 +426,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         if (isCurrentRequest()) {
           setLoading(false);
           fetchingRef.current = false;
+          setFetchIdleTick((tick) => tick + 1);
         }
       }
     };
@@ -436,7 +452,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     if (!scopeKey || authLoading || !memoryCacheScope) return;
     const currentQuery = `${JSON.stringify(activeCategories)}:${memoryView}`;
     if (prevQueryRef.current === currentQuery) return;
-    prevQueryRef.current = currentQuery;
 
     // Only refetch if already initialized
     if (!initializedRef.current) return;
@@ -456,19 +471,27 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
       // If not stale, we're done
       if (!isCacheStale(key)) {
+        prevQueryRef.current = currentQuery;
         return;
       }
       // If stale, continue to background refresh
     }
 
+    // Another query's fetch can still hold the lock. Leave the query
+    // unconsumed; the fetchIdleTick bump when that fetch goes idle re-runs
+    // this effect and fetches the latest view then.
+    if (fetchingRef.current) return;
+    prevQueryRef.current = currentQuery;
+
     const loadForCategories = async () => {
-      if (fetchingRef.current) return;
       fetchingRef.current = true;
       const requestScopeKey = scopeKey;
       const requestGeneration = scopeGenerationRef.current;
+      const requestQuery = currentQuery;
       const isCurrentRequest = () =>
         scopeKeyRef.current === requestScopeKey &&
         scopeGenerationRef.current === requestGeneration;
+      const isQueryCurrent = () => latestQueryRef.current === requestQuery;
 
       // Only show loading if no cache
       if (!cached) {
@@ -478,7 +501,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
       try {
         const page = await doFetch(activeCategories, 0);
-        if (!isCurrentRequest()) return;
+        if (!isCurrentRequest() || !isQueryCurrent()) return;
         const pageHasMore =
           Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
         setMemories(page.memories);
@@ -498,13 +521,14 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           page.beliefEnabled,
         );
       } catch (err) {
-        if (isCurrentRequest() && !cached) {
+        if (isCurrentRequest() && isQueryCurrent() && !cached) {
           setError(err instanceof Error ? err.message : 'Failed to load memories');
         }
       } finally {
         if (isCurrentRequest()) {
           setLoading(false);
           fetchingRef.current = false;
+          setFetchIdleTick((tick) => tick + 1);
         }
       }
     };
@@ -515,68 +539,9 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     applyCapability,
     authLoading,
     doFetch,
+    fetchIdleTick,
     limit,
     memoryCacheScope,
-    memoryView,
-    scopeKey,
-  ]);
-
-  // Subscribe to cache invalidation - refetch when memories are modified elsewhere
-  useEffect(() => {
-    if (!scopeKey || authLoading || !memoryCacheScope) return;
-    const unsubscribe = onCacheInvalidation((pattern) => {
-      if (pattern === invalidationPatterns.memories) {
-        // Clear local state and refetch
-        const key = getCacheKey(activeCategories, memoryView, memoryCacheScope);
-        if (!key) return;
-        const loadFresh = async () => {
-          if (fetchingRef.current) return;
-          fetchingRef.current = true;
-          const requestScopeKey = scopeKey;
-          const requestGeneration = scopeGenerationRef.current;
-          const isCurrentRequest = () =>
-            scopeKeyRef.current === requestScopeKey &&
-            scopeGenerationRef.current === requestGeneration;
-          try {
-            const page = await doFetch(activeCategories, 0);
-            if (!isCurrentRequest()) return;
-            const pageHasMore =
-              Boolean(page.nextCursor) ||
-              (!page.truncated && page.memories.length >= limit);
-            setMemories(page.memories);
-            offsetRef.current = page.memories.length;
-            cursorRef.current = page.nextCursor;
-            setHasMore(pageHasMore);
-            setTruncated(page.truncated);
-            applyCapability(page.beliefEnabled);
-            setToCache(
-              key,
-              page.memories,
-              page.memories.length,
-              page.nextCursor,
-              pageHasMore,
-              page.truncated,
-              page.beliefEnabled,
-            );
-          } catch (err) {
-            if (!isCurrentRequest()) return;
-            // Silent fail on background refresh
-            console.error('Failed to refresh memories after invalidation:', err);
-          } finally {
-            if (isCurrentRequest()) fetchingRef.current = false;
-          }
-        };
-        loadFresh();
-      }
-    });
-    return unsubscribe;
-  }, [
-    activeCategories,
-    applyCapability,
-    authLoading,
-    doFetch,
-    memoryCacheScope,
-    limit,
     memoryView,
     scopeKey,
   ]);
@@ -592,17 +557,20 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     const key = getCacheKey(activeCategories, memoryView, scope);
     if (!key) {
       fetchingRef.current = false;
+      setFetchIdleTick((tick) => tick + 1);
       setLoading(false);
       return;
     }
     const requestGeneration = scopeGenerationRef.current;
+    const requestQuery = latestQueryRef.current;
     const isCurrentRequest = () =>
       scopeKeyRef.current === requestedScopeKey &&
       scopeGenerationRef.current === requestGeneration;
+    const isQueryCurrent = () => latestQueryRef.current === requestQuery;
 
     try {
       const page = await doFetch(activeCategories, offsetRef.current, cursorRef.current);
-      if (!isCurrentRequest()) return;
+      if (!isCurrentRequest() || !isQueryCurrent()) return;
       const pageHasMore =
         Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
 
@@ -631,13 +599,14 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       setTruncated(page.truncated);
       applyCapability(page.beliefEnabled);
     } catch (err) {
-      if (isCurrentRequest()) {
+      if (isCurrentRequest() && isQueryCurrent()) {
         setError(err instanceof Error ? err.message : 'Failed to load more memories');
       }
     } finally {
       if (isCurrentRequest()) {
         setLoading(false);
         fetchingRef.current = false;
+        setFetchIdleTick((tick) => tick + 1);
       }
     }
   }, [activeCategories, applyCapability, doFetch, hasMore, limit, memoryView]);
@@ -645,6 +614,11 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   // Refresh
   const refresh = useCallback(
     async (throwOnError = false) => {
+      // Single-flight canonical refresh: a mutation's synchronous cache
+      // invalidation starts this fetch before the mutation's own canonical
+      // re-read runs, so concurrent callers join the in-flight request
+      // instead of being told the refresh failed.
+      if (refreshInFlightRef.current) return refreshInFlightRef.current;
       const scope = currentScopeRef.current;
       const requestedScopeKey = scopeKeyRef.current;
       if (!scope || !requestedScopeKey || fetchingRef.current) return false;
@@ -655,51 +629,77 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       const key = getCacheKey(activeCategories, memoryView, scope);
       if (!key) {
         fetchingRef.current = false;
+        setFetchIdleTick((tick) => tick + 1);
         setLoading(false);
         return false;
       }
       const requestGeneration = scopeGenerationRef.current;
+      const requestQuery = latestQueryRef.current;
       const isCurrentRequest = () =>
         scopeKeyRef.current === requestedScopeKey &&
         scopeGenerationRef.current === requestGeneration;
+      const isQueryCurrent = () => latestQueryRef.current === requestQuery;
 
-      try {
-        const page = await doFetch(activeCategories, 0);
-        if (!isCurrentRequest()) return false;
-        const pageHasMore =
-          Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
-        setMemories(page.memories);
-        offsetRef.current = page.memories.length;
-        cursorRef.current = page.nextCursor;
-        setHasMore(pageHasMore);
-        setTruncated(page.truncated);
-        applyCapability(page.beliefEnabled);
-        // Update cache
-        setToCache(
-          key,
-          page.memories,
-          page.memories.length,
-          page.nextCursor,
-          pageHasMore,
-          page.truncated,
-          page.beliefEnabled,
-        );
-        return true;
-      } catch (err) {
-        if (isCurrentRequest()) {
-          setError(err instanceof Error ? err.message : 'Failed to refresh memories');
-          if (throwOnError) throw err;
+      let inFlight: Promise<boolean>;
+      inFlight = (async () => {
+        try {
+          const page = await doFetch(activeCategories, 0);
+          if (!isCurrentRequest() || !isQueryCurrent()) return false;
+          const pageHasMore =
+            Boolean(page.nextCursor) ||
+            (!page.truncated && page.memories.length >= limit);
+          setMemories(page.memories);
+          offsetRef.current = page.memories.length;
+          cursorRef.current = page.nextCursor;
+          setHasMore(pageHasMore);
+          setTruncated(page.truncated);
+          applyCapability(page.beliefEnabled);
+          // Update cache
+          setToCache(
+            key,
+            page.memories,
+            page.memories.length,
+            page.nextCursor,
+            pageHasMore,
+            page.truncated,
+            page.beliefEnabled,
+          );
+          return true;
+        } catch (err) {
+          if (isCurrentRequest() && isQueryCurrent()) {
+            setError(err instanceof Error ? err.message : 'Failed to refresh memories');
+            if (throwOnError) throw err;
+          }
+          return false;
+        } finally {
+          if (isCurrentRequest()) {
+            setLoading(false);
+            fetchingRef.current = false;
+            setFetchIdleTick((tick) => tick + 1);
+          }
+          if (refreshInFlightRef.current === inFlight) refreshInFlightRef.current = null;
         }
-        return false;
-      } finally {
-        if (isCurrentRequest()) {
-          setLoading(false);
-          fetchingRef.current = false;
-        }
-      }
+      })();
+      refreshInFlightRef.current = inFlight;
+      return inFlight;
     },
     [activeCategories, applyCapability, doFetch, limit, memoryView],
   );
+
+  // Subscribe to cache invalidation - refetch when memories are modified elsewhere
+  useEffect(() => {
+    if (!scopeKey || authLoading || !memoryCacheScope) return;
+    const unsubscribe = onCacheInvalidation((pattern) => {
+      if (pattern === invalidationPatterns.memories) {
+        // Mutations invalidate synchronously — api.ts fires these listeners
+        // before its awaiting caller resumes — so a committed use-feedback
+        // POST starts this canonical refresh and then joins it through
+        // refresh's single flight instead of racing it.
+        void refresh();
+      }
+    });
+    return unsubscribe;
+  }, [authLoading, memoryCacheScope, refresh, scopeKey]);
 
   // The discovery request intentionally omits the beta-only view query. Once
   // the server advertises the capability, re-read the default Useful now

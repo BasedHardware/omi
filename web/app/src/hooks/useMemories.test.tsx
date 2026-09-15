@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   deleteCachePattern: vi.fn(),
   invalidateMemoryCache: vi.fn(),
   cacheEntries: new Map<string, { data: unknown; isStale: boolean }>(),
+  invalidationListeners: new Set<(pattern: string) => void>(),
   authUser: { uid: 'owner-a' } as { uid: string } | null,
   authLoading: false,
   backendScope: 'https://backend-a',
@@ -38,7 +39,12 @@ vi.mock('@/lib/cache', () => ({
   setCache: mocks.setCache,
   updateCache: mocks.updateCache,
   deleteCachePattern: mocks.deleteCachePattern,
-  onCacheInvalidation: vi.fn(() => () => {}),
+  onCacheInvalidation: (listener: (pattern: string) => void) => {
+    // Mirror cache.ts: registered listeners fire synchronously from
+    // invalidateCache, before its caller resumes.
+    mocks.invalidationListeners.add(listener);
+    return () => mocks.invalidationListeners.delete(listener);
+  },
   invalidationPatterns: { memories: 'memories' },
   CACHE_TTL: { MEDIUM: 300000 },
   getMemoryBackendScope: () => mocks.backendScope,
@@ -60,7 +66,21 @@ vi.mock('@/lib/indexeddb', () => ({
   invalidateCache: mocks.invalidateMemoryCache,
 }));
 
-function page(beliefEnabled: boolean | null, content = 'A useful memory') {
+/** Page shape returned by the mocked getMemoriesPage. */
+interface MemoryPage {
+  memories: Array<{
+    id: string;
+    uid: string;
+    content: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+  nextCursor: string | null;
+  truncated: boolean;
+  beliefEnabled: boolean | null;
+}
+
+function page(beliefEnabled: boolean | null, content = 'A useful memory'): MemoryPage {
   return {
     memories: [
       {
@@ -83,6 +103,7 @@ describe('useMemories beta capability negotiation and cache scope', () => {
     mocks.authLoading = false;
     mocks.backendScope = 'https://backend-a';
     mocks.cacheEntries.clear();
+    mocks.invalidationListeners.clear();
     mocks.getCache.mockImplementation(
       (key: string) => mocks.cacheEntries.get(key) ?? null,
     );
@@ -220,9 +241,9 @@ describe('useMemories beta capability negotiation and cache scope', () => {
   });
 
   it('reuses feedback id when canonical refresh is still in flight', async () => {
-    let resolveRefresh: (value: ReturnType<typeof page>) => void = () => {};
-    const pendingRefresh = new Promise<ReturnType<typeof page>>((resolve) => {
-      resolveRefresh = resolve;
+    let rejectRefresh: (reason?: unknown) => void = () => {};
+    const pendingRefresh = new Promise<MemoryPage>((_resolve, reject) => {
+      rejectRefresh = reject;
     });
     mocks.getMemoriesPage
       .mockResolvedValueOnce(page(true))
@@ -236,23 +257,133 @@ describe('useMemories beta capability negotiation and cache scope', () => {
     const refreshPromise = result.current.refresh();
     await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(3));
 
-    let firstResult = true;
+    // The use-feedback request joins the in-flight canonical refresh instead
+    // of reporting failure, then fails with it when the canonical read errors.
+    let setMemoryUsePromise: Promise<boolean> | undefined;
     await act(async () => {
-      firstResult = await result.current.setMemoryUse('memory-owner-a', 'useful');
+      setMemoryUsePromise = result.current.setMemoryUse('memory-owner-a', 'useful');
     });
-    expect(firstResult).toBe(false);
+    expect(mocks.setMemoryUseRequest).toHaveBeenCalledTimes(1);
     const firstFeedbackId = mocks.setMemoryUseRequest.mock.calls[0][2];
+
+    let outcome = true;
+    await act(async () => {
+      rejectRefresh(new Error('canonical read failed'));
+      outcome = await setMemoryUsePromise!;
+      await refreshPromise;
+    });
+    expect(outcome).toBe(false);
+
+    // The failed canonical read keeps the feedback id so the retry reuses it.
+    let retryOutcome = false;
+    await act(async () => {
+      retryOutcome = await result.current.setMemoryUse('memory-owner-a', 'useful');
+    });
+    expect(retryOutcome).toBe(true);
+    expect(mocks.setMemoryUseRequest.mock.calls[1][2]).toBe(firstFeedbackId);
+  });
+
+  it('awaits the invalidation-triggered refresh and reports success after commit', async () => {
+    mocks.getMemoriesPage
+      .mockResolvedValueOnce(page(true))
+      .mockResolvedValueOnce(page(true))
+      .mockResolvedValueOnce(page(true, 'Useful after feedback'));
+    // api.ts fires invalidation listeners synchronously once the POST
+    // commits, before the awaiting use-feedback caller resumes.
+    mocks.setMemoryUseRequest.mockImplementation(async () => {
+      mocks.invalidationListeners.forEach((listener) => listener('memories'));
+    });
+
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2));
+
+    let outcome = false;
+    await act(async () => {
+      outcome = await result.current.setMemoryUse('memory-owner-a', 'useful');
+    });
+    expect(outcome).toBe(true);
+    // The invalidation-triggered refresh is the canonical read: exactly one
+    // post-commit fetch, joined by the use-feedback re-read.
+    expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(3);
+    const firstFeedbackId = mocks.setMemoryUseRequest.mock.calls[0][2];
+
+    // Success releases the feedback id: a repeat action gets a fresh one.
+    mocks.setMemoryUseRequest.mockReset();
+    mocks.setMemoryUseRequest.mockResolvedValue(undefined);
+    mocks.getMemoriesPage.mockResolvedValueOnce(page(true));
+    let repeatOutcome = false;
+    await act(async () => {
+      repeatOutcome = await result.current.setMemoryUse('memory-owner-a', 'useful');
+    });
+    expect(repeatOutcome).toBe(true);
+    expect(mocks.setMemoryUseRequest.mock.calls[0][2]).not.toBe(firstFeedbackId);
+  });
+
+  it('fetches the newly selected view after a refresh that was in flight when the view changed', async () => {
+    let resolveRefresh: (value: MemoryPage) => void = () => {};
+    const pendingRefresh = new Promise<MemoryPage>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    mocks.getMemoriesPage
+      .mockResolvedValueOnce(page(true))
+      .mockResolvedValueOnce(page(true))
+      .mockReturnValueOnce(pendingRefresh)
+      .mockResolvedValueOnce(page(true, 'History memory'));
+
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2));
+
+    const refreshPromise = result.current.refresh();
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(3));
+
+    act(() => {
+      result.current.setMemoryView('history');
+    });
 
     resolveRefresh(page(true));
     await act(async () => {
       await refreshPromise;
     });
 
-    let secondResult = false;
-    await act(async () => {
-      secondResult = await result.current.setMemoryUse('memory-owner-a', 'useful');
+    await waitFor(() =>
+      expect(result.current.memories[0]?.content).toBe('History memory'),
+    );
+    expect(mocks.getMemoriesPage.mock.calls[3][0]).toMatchObject({ view: 'history' });
+  });
+
+  it('does not apply the previous view page after the view changes', async () => {
+    let resolveHistory: (value: MemoryPage) => void = () => {};
+    const pendingHistory = new Promise<MemoryPage>((resolve) => {
+      resolveHistory = resolve;
     });
-    expect(secondResult).toBe(true);
-    expect(mocks.setMemoryUseRequest.mock.calls[1][2]).toBe(firstFeedbackId);
+    mocks.getMemoriesPage
+      .mockResolvedValueOnce(page(true))
+      .mockResolvedValueOnce(page(true))
+      .mockReturnValueOnce(pendingHistory)
+      .mockResolvedValueOnce(page(true, 'All memory'));
+
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2));
+
+    act(() => {
+      result.current.setMemoryView('history');
+    });
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(3));
+
+    act(() => {
+      result.current.setMemoryView('all');
+    });
+
+    resolveHistory(page(true, 'History memory'));
+    await act(async () => {
+      await pendingHistory;
+    });
+
+    // The stale history page never lands; the 'all' fetch replaces the list.
+    await waitFor(() => expect(result.current.memories[0]?.content).toBe('All memory'));
+    expect(
+      result.current.memories.some((memory) => memory.content === 'History memory'),
+    ).toBe(false);
+    expect(mocks.getMemoriesPage.mock.calls[3][0]).toMatchObject({ view: 'all' });
   });
 });
