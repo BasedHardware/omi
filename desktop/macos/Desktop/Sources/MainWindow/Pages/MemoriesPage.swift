@@ -2048,6 +2048,7 @@ class MemoriesViewModel: ObservableObject {
     // production. This presents the real sheet with the real draft text.
     registry.register(
       name: "memories_open_add_sheet",
+      effects: [.localState],
       summary: "Present the Add Memory sheet, optionally pre-filled with draft text",
       params: ["text"]
     ) { [weak self] params in
@@ -2061,6 +2062,7 @@ class MemoriesViewModel: ObservableObject {
     }
     registry.register(
       name: "memories_search",
+      effects: [.localState, .networkOrModel],
       summary: "Set memories search query and return filtered result count",
       params: ["query"]
     ) { [weak self] params in
@@ -2089,6 +2091,7 @@ class MemoriesViewModel: ObservableObject {
 
     registry.register(
       name: "memories_set_tag_filter",
+      effects: [.localState],
       summary: "Set memory tag/category filters and return filtered count",
       params: ["tags"]
     ) { [weak self] params in
@@ -2124,6 +2127,7 @@ class MemoriesViewModel: ObservableObject {
 
     registry.register(
       name: "toggle_memory_visibility",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Toggle a memory's public/private visibility via the real API path",
       params: ["id", "marker"]
     ) { [weak self] params in
