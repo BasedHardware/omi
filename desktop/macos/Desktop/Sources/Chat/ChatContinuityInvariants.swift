@@ -99,6 +99,34 @@ enum ChatContinuityInvariants {
     return "\(proactiveNotificationContinuityKeyPrefix)\(kind.rawValue):\(id.uuidString)"
   }
 
+  /// **A redone answer says which answer it replaces, in its continuity key.**
+  /// The journal is append-only by design — a delivered answer is a fact, and
+  /// the kernel refuses to rewrite a completed run-linked turn — so Redo writes
+  /// an ordinary new turn and the transcript renders it *in place of* the answer
+  /// it supersedes. That relationship has to survive a reload, and the
+  /// continuity key is the one piece of structured identity that does (it is
+  /// journaled and read back as `ChatMessage.clientTurnId`), which is why it is
+  /// carried here rather than in a table the next launch would not have.
+  ///
+  /// Shape: `redo:<nonce>:<superseded message id>`. The nonce is a UUID (never
+  /// a colon), so the first separator after the prefix ends it and everything
+  /// after is the id — which may itself contain colons, because the answer being
+  /// replaced can be a proactive notification or another redo.
+  static let redoContinuityKeyPrefix = "redo:"
+
+  static func redoContinuityKey(supersedingMessageID: String) -> String {
+    "\(redoContinuityKeyPrefix)\(UUID().uuidString.lowercased()):\(supersedingMessageID)"
+  }
+
+  /// The message a redo turn replaces, or nil for any other turn.
+  static func supersededMessageID(fromContinuityKey key: String?) -> String? {
+    guard let key, key.hasPrefix(redoContinuityKeyPrefix) else { return nil }
+    let suffix = key.dropFirst(redoContinuityKeyPrefix.count)
+    guard let separator = suffix.firstIndex(of: ":") else { return nil }
+    let superseded = String(suffix[suffix.index(after: separator)...])
+    return superseded.isEmpty ? nil : superseded
+  }
+
   static func isProactiveNotification(_ message: ChatMessage) -> Bool {
     guard message.sender != .user, let key = message.clientTurnId else { return false }
     return key.hasPrefix(proactiveNotificationContinuityKeyPrefix)

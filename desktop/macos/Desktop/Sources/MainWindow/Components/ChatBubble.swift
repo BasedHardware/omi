@@ -84,6 +84,10 @@ struct ChatBubble: View {
   var onCancelTurn: (() -> Void)? = nil
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Asks this answer's question again. Nil on a row there is nothing to re-ask
+  /// — a user turn, or a surface with no send of its own — and the Redo control
+  /// is then absent rather than inert.
+  var onRedo: (() -> Void)? = nil
   /// The owners a content block needs to become an interactable control. Every
   /// Chat surface has one — a rendered card is transcript data either way, and a
   /// card the reader cannot act on is worse than no card at all.
@@ -92,6 +96,9 @@ struct ChatBubble: View {
   @State private var metadataHoverState = ChatBubbleMetadataHoverState()
   @State private var isExpanded = false
   @State private var showCopied = false
+  /// Keeps the strip up for a moment after Redo, so the press has a visible
+  /// acknowledgement of its own before the new turn starts streaming below.
+  @State private var showRedone = false
   @State private var showRatingFeedback = false
   /// Shown after a thumbs-down so the user can say *why* in one click.
   @State private var showReasonPicker = false
@@ -115,6 +122,7 @@ struct ChatBubble: View {
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil,
+    onRedo: (() -> Void)? = nil,
     chatFirstRichBlockContext: ChatFirstRichBlockContext
   ) {
     self.message = message
@@ -127,6 +135,7 @@ struct ChatBubble: View {
     self.onCancelTurn = onCancelTurn
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
+    self.onRedo = onRedo
     self.chatFirstRichBlockContext = chatFirstRichBlockContext
     _lastSubmittedRating = State(initialValue: message.rating)
   }
@@ -661,12 +670,15 @@ struct ChatBubble: View {
       metadataRevealOverrideForTesting
       ?? (metadataHoverState.keepsMetadataVisible || isMetadataControlFocused || showRatingFeedback
         || showReasonPicker
-        || showCopied || showInfoPopover)
+        || showCopied || showRedone || showInfoPopover)
     // **One cluster under the message.** Controls far left and timestamp far right
     // of one line is how two halves of a row end up reading as page furniture.
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
       if includeRatingButtons {
         ratingButtons
+      }
+      if includeCopyButton, let onRedo {
+        redoButton(onRedo)
       }
       if includeCopyButton {
         copyButton
@@ -795,6 +807,34 @@ struct ChatBubble: View {
     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
       showRatingFeedback = false
     }
+  }
+
+  /// **Ask this question again.** It sits between the thumbs and Copy because
+  /// that is the order the reader decides in: the answer was wrong, and the next
+  /// move is another attempt at the same question rather than keeping this one.
+  /// The re-ask goes through the host's one send (INV-6) — this control owns no
+  /// send path and rewrites no history, so the new answer lands as the next turn
+  /// and the one being redone stays where it is.
+  @ViewBuilder
+  private func redoButton(_ redo: @escaping () -> Void) -> some View {
+    Button(action: {
+      showRedone = true
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showRedone = false }
+      redo()
+    }) {
+      Image(systemName: "arrow.clockwise")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(showRedone ? Ink.primary : Ink.secondary)
+        .frame(
+          width: ChatBubbleMetadataControlMetrics.targetSize,
+          height: ChatBubbleMetadataControlMetrics.targetSize
+        )
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .focused($isMetadataControlFocused)
+    .help("Ask again")
+    .accessibilityLabel("Ask again")
   }
 
   @ViewBuilder
