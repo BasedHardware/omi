@@ -148,7 +148,11 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
             return response.json()
         else:
             log(f"Whoop API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            # WHOOP answers some failures (e.g. 404 for an unknown path) with an
+            # empty body; always carry the status so the user sees a real reason.
+            detail = (response.text or "").strip()
+            error = f"HTTP {response.status_code}: {detail}" if detail else f"HTTP {response.status_code}"
+            return {"error": error, "status_code": response.status_code}
 
     except Exception as e:
         log(f"Whoop API request error: {e}")
@@ -818,7 +822,9 @@ async def tool_get_body_measurements(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
-        result = whoop_api_request(uid, "GET", "/body_measurement")
+        # WHOOP serves body measurements at /user/measurement/body;
+        # /body_measurement has never existed (404 before auth).
+        result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")

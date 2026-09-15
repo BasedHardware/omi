@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: whoop-app-body-measurement-tests
+    command: ["python3", "plugins/omi-whoop-app/test_body_measurements.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "get_body_measurements requested /developer/v1/body_measurement, a path WHOOP has never served (404 before auth), so the tool could never return data and the empty 404 body surfaced as a blank error; the suite executes the handler through the requests seam and asserts the documented /user/measurement/body path and a status-bearing error"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
