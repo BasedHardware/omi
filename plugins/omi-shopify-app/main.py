@@ -925,6 +925,41 @@ async def tool_get_order_details(request: Request):
         return ChatToolResponse(error=f"Failed to get order details: {str(e)}")
 
 
+def match_products_by_title(products: List[Dict], title: str):
+    """Products that resolve a requested title, and the tier that produced
+    them: "exact", "contains", "contained" or "word". The first tier with any
+    hit wins; more than one hit at that tier is ambiguous."""
+    wanted = (title or "").lower().strip()
+    if not wanted:
+        return [], None
+    titles = [(p, (p.get("title") or "").lower().strip()) for p in products if p.get("variants")]
+    exact = [p for p, t in titles if t == wanted]
+    if exact:
+        return exact, "exact"
+    contains = [p for p, t in titles if wanted in t]
+    if contains:
+        return contains, "contains"
+    contained = [p for p, t in titles if t and t in wanted]
+    if contained:
+        return contained, "contained"
+    words = [w for w in wanted.split() if len(w) >= 2]
+    word = [p for p, t in titles if any(w in t for w in words)]
+    return word, "word"
+
+
+def pick_variant(variants: List[Dict], sku: Optional[str]) -> Optional[Dict]:
+    """The one variant to order: the SKU match if a SKU was given, the only
+    variant if there is one, otherwise None (the caller asks)."""
+    if sku:
+        for v in variants:
+            if str(v.get("sku") or "").lower() == str(sku).lower():
+                return v
+        return None
+    if len(variants) == 1:
+        return variants[0]
+    return None
+
+
 @app.post("/tools/create_order", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_create_order(request: Request):
     """
@@ -1173,59 +1208,37 @@ async def tool_create_order(request: Request):
                 if provided_price:
                     order_item["price"] = str(provided_price)
             else:
-                # Fuzzy search for the product by title
+                # Resolve the title to exactly one product. An order is a real
+                # sale (and a receipt to the customer), so the title has to be
+                # unambiguous at the first tier that matches: exact, then the
+                # request inside a product title, then a product title inside
+                # the request, then a shared word. Several hits at a tier mean
+                # we ask, never guess.
                 print(f"🔍 Searching for product: '{title}'")
-                search_title = title.lower().strip()
+                candidates, tier = match_products_by_title(all_products, title)
                 found_variant = None
-                
-                # Try exact match first (case-insensitive)
-                for product in all_products:
-                    product_title = product.get("title", "").lower().strip()
-                    if product_title == search_title:
-                        if product.get("variants"):
-                            found_variant = product["variants"][0]
-                            matched_product = product["title"]
-                            print(f"✅ Exact match: '{title}' → {product['title']}")
-                            break
-                
-                # Try "contains" match - search term in product title
-                if not found_variant:
-                    for product in all_products:
-                        product_title = product.get("title", "").lower()
-                        if search_title in product_title:
-                            if product.get("variants"):
-                                found_variant = product["variants"][0]
-                                matched_product = product["title"]
-                                print(f"✅ Contains match: '{title}' found in '{product['title']}'")
-                                break
-                
-                # Try reverse "contains" - product title in search term
-                if not found_variant:
-                    for product in all_products:
-                        product_title = product.get("title", "").lower().strip()
-                        if product_title in search_title:
-                            if product.get("variants"):
-                                found_variant = product["variants"][0]
-                                matched_product = product["title"]
-                                print(f"✅ Reverse match: product '{product['title']}' in search '{title}'")
-                                break
-                
-                # Try word-by-word fuzzy match
-                if not found_variant:
-                    search_words = search_title.split()
-                    for product in all_products:
-                        product_title = product.get("title", "").lower()
-                        # Check if any search word matches any word in product title
-                        for word in search_words:
-                            if len(word) >= 2 and word in product_title:
-                                if product.get("variants"):
-                                    found_variant = product["variants"][0]
-                                    matched_product = product["title"]
-                                    print(f"✅ Word match: '{word}' found in '{product['title']}'")
-                                    break
-                        if found_variant:
-                            break
-                
+                if len(candidates) > 1:
+                    lines = [f"❓ **Which product did you mean by '{title}'?** {len(candidates)} match:\n"]
+                    for p in candidates[:10]:
+                        price = p.get("variants", [{}])[0].get("price", "0") if p.get("variants") else "0"
+                        lines.append(f"   • {p['title']} - ${price}")
+                    lines.append("\n💡 Say the full product name and I will create the order.")
+                    return ChatToolResponse(result="\n".join(lines))
+                if candidates:
+                    product = candidates[0]
+                    variants = product.get("variants") or []
+                    chosen = pick_variant(variants, sku)
+                    if chosen is None and len(variants) > 1:
+                        lines = [f"❓ **{product['title']} comes in {len(variants)} variants. Which one?**\n"]
+                        for v in variants[:10]:
+                            lines.append(f"   • {v.get('title') or v.get('sku') or v.get('id')} - ${v.get('price', '0')} (SKU {v.get('sku') or 'n/a'})")
+                        lines.append("\n💡 Give the variant name or SKU and I will create the order.")
+                        return ChatToolResponse(result="\n".join(lines))
+                    if chosen is not None:
+                        found_variant = chosen
+                        matched_product = product["title"]
+                        print(f"✅ {tier} match: '{title}' → {product['title']}")
+
                 if found_variant:
                     # Get product price from variant
                     product_price = found_variant.get("price", "0")
