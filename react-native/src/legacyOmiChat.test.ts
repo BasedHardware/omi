@@ -785,6 +785,120 @@ test('old chat history rejects malformed GET files', () => {
   ).toThrow('Omi chat files are malformed');
 });
 
+test('names Flutter ServerMessage empty GET ids instead of omitting neighboring messages', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'kept',
+        sender: 'human',
+        text: 'Hello',
+        created_at: '2026-09-07T01:02:03Z',
+      },
+      {
+        id: '',
+        sender: 'ai',
+        text: 'Empty id stays.',
+        created_at: '2026-09-07T01:02:04Z',
+      },
+      {
+        id: ' \t',
+        sender: 'ai',
+        text: 'Whitespace id stays.',
+        created_at: '2026-09-07T01:02:05Z',
+      },
+      {
+        id: '\u0085',
+        sender: 'ai',
+        text: 'Next line id stays.',
+        created_at: '2026-09-07T01:02:06Z',
+      },
+      {
+        id: '  padded  ',
+        sender: 'ai',
+        text: 'Padded id stays.',
+        created_at: '2026-09-07T01:02:07Z',
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.map(row => row.id)).toEqual([
+    '  padded  ',
+    '\u0085',
+    ' \t',
+    '',
+    'kept',
+  ]);
+  expect(page.messages.find(row => row.id === '')?.text).toBe(
+    'Empty id stays.',
+  );
+  expect(page.messages.find(row => row.id === ' \t')?.text).toBe(
+    'Whitespace id stays.',
+  );
+  expect(page.messages.find(row => row.id === '\u0085')?.text).toBe(
+    'Next line id stays.',
+  );
+  expect(page.messages.find(row => row.id === '  padded  ')?.text).toBe(
+    'Padded id stays.',
+  );
+  expect(page.messages.find(row => row.id === 'kept')?.text).toBe('Hello');
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'kept',
+          sender: 'human',
+          text: 'Hello',
+          created_at: '2026-09-07T01:02:03Z',
+        },
+        {
+          sender: 'ai',
+          text: 'Omitted id hides neighbors.',
+          created_at: '2026-09-07T01:02:04Z',
+        },
+      ]),
+      0,
+    ),
+  ).toThrow('Omi chat message is malformed');
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'kept',
+          sender: 'human',
+          text: 'Hello',
+          created_at: '2026-09-07T01:02:03Z',
+        },
+        {
+          id: null,
+          sender: 'ai',
+          text: 'Null id hides neighbors.',
+          created_at: '2026-09-07T01:02:04Z',
+        },
+      ]),
+      0,
+    ),
+  ).toThrow('Omi chat message is malformed');
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'kept',
+          sender: 'human',
+          text: 'Hello',
+          created_at: '2026-09-07T01:02:03Z',
+        },
+        {
+          id: 1,
+          sender: 'ai',
+          text: 'Numeric id hides neighbors.',
+          created_at: '2026-09-07T01:02:04Z',
+        },
+      ]),
+      0,
+    ),
+  ).toThrow('Omi chat message is malformed');
+});
+
 test('does not omit neighboring GET messages when a file id is empty', () => {
   const page = parseOmiHistory(
     JSON.stringify([

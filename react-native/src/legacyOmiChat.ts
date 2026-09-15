@@ -803,7 +803,6 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   const createdAt = timestampMs(row.created_at);
   if (
     typeof row.id !== 'string' ||
-    row.id.length === 0 ||
     typeof row.text !== 'string' ||
     (row.sender !== 'human' && row.sender !== 'ai') ||
     !Number.isFinite(createdAt)
