@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 import {
   beliefCapabilityFromResponse,
@@ -137,11 +137,12 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
   // hydrateFromDisk (in the render above) clears the module cache when the
   // requested view changes, but this component's snapshot still holds the
   // previous view's rows — and with cache.list null no publish is coming to
-  // replace them. Align local state during render on view change so the old
-  // rows drop immediately without a synchronous setState-in-effect.
-  const viewSyncRef = useRef(effectiveRequestedView)
-  if (viewSyncRef.current !== effectiveRequestedView) {
-    viewSyncRef.current = effectiveRequestedView
+  // replace them. Align local state during render on view change (React's
+  // "adjust state when a prop changes" pattern) so old rows drop without
+  // a setState-in-effect or a render-time ref read.
+  const [syncedView, setSyncedView] = useState(effectiveRequestedView)
+  if (syncedView !== effectiveRequestedView) {
+    setSyncedView(effectiveRequestedView)
     setMemories(cache.list ?? [])
     setLoading(!cache.loaded && (cache.list?.length ?? 0) === 0)
   }
