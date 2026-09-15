@@ -121,6 +121,37 @@ test('names Flutter Goal.fromJson defaulted GET metrics instead of omitting the 
   ]);
 });
 
+test('names Flutter Goal.fromJson empty GET ids instead of omitting the row', () => {
+  const rows = parseOmiGoals(
+    JSON.stringify([
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+      {id: '', title: 'Empty id', current_value: 1, target_value: 1},
+      {id: ' \t', title: 'Whitespace id', current_value: 2, target_value: 2},
+      {id: null, title: 'Null id', current_value: 3, target_value: 3},
+      {title: 'Omitted id', current_value: 4, target_value: 4},
+      {
+        id: 'goal-run',
+        title: 'Run weekly',
+        current_value: 1.5,
+        target_value: 4,
+      },
+    ]),
+  );
+  expect(rows).toEqual([
+    {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
+    {id: '', title: 'Empty id', current: 1, target: 1},
+    {id: '', title: 'Whitespace id', current: 2, target: 2},
+    {id: '', title: 'Null id', current: 3, target: 3},
+    {id: '', title: 'Omitted id', current: 4, target: 4},
+    {id: 'goal-run', title: 'Run weekly', current: 1.5, target: 4},
+  ]);
+});
+
 test('does not omit a neighboring titled goal when stored identity cannot project', () => {
   const rows = parseOmiGoals(
     JSON.stringify([
@@ -154,6 +185,7 @@ test('does not omit a neighboring titled goal when stored identity cannot projec
   expect(rows).toEqual([
     {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
     {id: '7', title: 'Walk daily', current: 1.5, target: 4},
+    {id: '', title: 'Empty id', current: 1, target: 1},
   ]);
 });
 

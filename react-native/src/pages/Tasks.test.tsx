@@ -864,6 +864,7 @@ test('tasks page names GET goals without add or a write sheet', async () => {
           },
           {id: 'goal-missing', title: 'Missing metrics', target_value: 10},
           {id: 'goal-empty', title: ' \t', current_value: 1, target_value: 2},
+          {id: '', title: 'Empty id', current_value: 5, target_value: 8},
         ]),
       };
     }
@@ -886,6 +887,7 @@ test('tasks page names GET goals without add or a write sheet', async () => {
   expect(tree).toContain('Read 20 books (3/10)');
   expect(tree).toContain('Missing metrics (0/10)');
   expect(tree).toContain(' (1/2)');
+  expect(tree).toContain('Empty id (5/8)');
   expect(tree).toContain('Prepare demo');
   expect(tree).not.toContain('goal-read');
   expect(tree).not.toContain('No goals');

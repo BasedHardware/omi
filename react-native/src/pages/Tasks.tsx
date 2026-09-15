@@ -160,8 +160,8 @@ export function TasksPage({
       ) : goals.length > 0 ? (
         <View>
           <Text style={styles.projectionEmptyTitle}>Goals</Text>
-          {goals.map(goal => (
-            <View key={goal.id}>
+          {goals.map((goal, index) => (
+            <View key={goal.id === '' ? `goal-${index}` : goal.id}>
               <Text numberOfLines={2} style={styles.resultTitle}>
                 {goalTasksTitleCopy(goal.title, goal.current, goal.target)}
               </Text>

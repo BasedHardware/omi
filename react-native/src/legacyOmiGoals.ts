@@ -29,13 +29,14 @@ function goalMetric(value: unknown): number | null {
 }
 
 function goalId(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return '';
+  }
   if (typeof value === 'string') {
-    const id = visibleDisplayText(text(value, 1_000_000));
-    return id === '' ? null : id;
+    return visibleDisplayText(text(value, 1_000_000));
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
-    const id = visibleDisplayText(String(value));
-    return id === '' ? null : id;
+    return visibleDisplayText(String(value));
   }
   return null;
 }
@@ -99,10 +100,12 @@ export function parseOmiGoals(body: string): OmiGoal[] {
     if (current === null || target === null) {
       continue;
     }
-    if (seen.has(id)) {
-      throw new GoalError();
+    if (id !== '') {
+      if (seen.has(id)) {
+        throw new GoalError();
+      }
+      seen.add(id);
     }
-    seen.add(id);
     items.push({
       id,
       title,

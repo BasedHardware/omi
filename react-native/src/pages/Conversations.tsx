@@ -533,8 +533,8 @@ export function ConversationsPage({
             ) : goals.length > 0 && !searching && !starredOnly ? (
               <View>
                 <Text style={styles.projectionEmptyTitle}>Goals</Text>
-                {goals.map(goal => (
-                  <View key={goal.id}>
+                {goals.map((goal, index) => (
+                  <View key={goal.id === '' ? `goal-${index}` : goal.id}>
                     <Text numberOfLines={1} style={styles.resultTitle}>
                       {goal.title}
                     </Text>

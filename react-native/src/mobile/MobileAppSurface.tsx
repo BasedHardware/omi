@@ -846,8 +846,8 @@ export function MobileAppSurface({
                     ) : goals.length > 0 ? (
                       <View>
                         <Text style={styles.sectionTitle}>Goals</Text>
-                        {goals.map(goal => (
-                          <View key={goal.id}>
+                        {goals.map((goal, index) => (
+                          <View key={goal.id === '' ? `goal-${index}` : goal.id}>
                             <Text numberOfLines={2} style={styles.taskText}>
                               {goalTasksTitleCopy(
                                 goal.title,
