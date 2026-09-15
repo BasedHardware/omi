@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: whoop-measurements-tests
+    command: ["python3", "plugins/omi-whoop-app/test_main.py"]
+    triggers: ["plugins/omi-whoop-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13927: get_body_measurements requested the nonexistent /body_measurement route so every call failed with a blank error; the documented path is /user/measurement/body and an empty upstream error body must still surface the HTTP status"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

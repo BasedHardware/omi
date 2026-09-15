@@ -148,7 +148,10 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
             return response.json()
         else:
             log(f"Whoop API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            # An empty upstream body must still surface a diagnosable reason
+            # (e.g. "HTTP 404"), never a blank error string.
+            error = response.text or f"HTTP {response.status_code}"
+            return {"error": error, "status_code": response.status_code}
 
     except Exception as e:
         log(f"Whoop API request error: {e}")
@@ -657,8 +660,9 @@ async def tool_get_workouts(request: Request):
         log(f"=== GET_WORKOUTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        # Optional params may arrive as explicit JSON null; fall back to defaults.
+        days = min(body.get("days") or 7, 30)
+        max_results = min(body.get("max_results") or 10, 50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -818,7 +822,7 @@ async def tool_get_body_measurements(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
-        result = whoop_api_request(uid, "GET", "/body_measurement")
+        result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
