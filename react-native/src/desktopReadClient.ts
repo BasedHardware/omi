@@ -2339,7 +2339,7 @@ export function appListPrivateNameCopy(
 }
 
 export function chatAttachmentDisplayName(name: string): string {
-  return accountFieldCopy(name, 'Attachment name unavailable');
+  return visibleDisplayText(name);
 }
 
 export function chatAttachmentThumbnailUrl(attachment: {

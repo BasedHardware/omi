@@ -917,6 +917,41 @@ test('conversation-detail history keeps attachment names on empty message text',
   expect(textOf(renderer)).not.toContain('You · Message text unavailable');
 });
 
+test('conversation-detail history names Flutter FilesHandlerWidget empty GET names', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'human-empty-attachment',
+        text: '',
+        sender: 'human',
+        generationOutcome: null,
+        attachments: [
+          {
+            id: 'att-empty',
+            displayName: ' \t\n',
+            mediaType: 'text/plain',
+            sizeBytes: 0,
+            contentReference: null,
+          },
+        ],
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You');
+  expect(textOf(renderer)).not.toContain('Attachment name unavailable');
+  expect(textOf(renderer)).not.toContain('You ·');
+  expect(textOf(renderer)).not.toContain('Size unavailable');
+});
+
 test('conversation-detail history names GET day_summary instead of a normal Omi turn', async () => {
   mockRequest.mockResolvedValue(
     historyResponse([

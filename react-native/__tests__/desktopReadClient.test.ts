@@ -87,6 +87,7 @@ import {
   chatDiscoveryShowLessCopy,
   taskCardDescription,
   chatAttachmentCopy,
+  chatAttachmentDisplayName,
   chatAttachmentThumbnailUrl,
   chatSenderCopy,
   chatDaySummaryCopy,
@@ -2859,6 +2860,14 @@ test('chat attachment thumbnails keep http image GET urls and omit local or non-
   ).toBeNull();
 });
 
+test('chat attachment display name names Flutter empty GET names', () => {
+  expect(chatAttachmentDisplayName('')).toBe('');
+  expect(chatAttachmentDisplayName(' \t\n')).toBe('');
+  expect(chatAttachmentDisplayName('\u00A0')).toBe('');
+  expect(chatAttachmentDisplayName('\u0085')).toBe('');
+  expect(chatAttachmentDisplayName('  notes.txt  ')).toBe('notes.txt');
+});
+
 test('empty chat bodies still show attachment names from history', () => {
   expect(
     chatMessageDisplayText({
@@ -2881,7 +2890,7 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('Attachment name unavailable');
+  ).toBe('');
   expect(
     chatMessageDisplayText({
       text: '  Hello  ',
@@ -2982,7 +2991,7 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('Attachment name unavailable');
+  ).toBe('');
   expect(
     chatMessageDisplayText({
       text: '',
@@ -2996,6 +3005,17 @@ test('empty chat bodies still show attachment names from history', () => {
       ],
     }),
   ).not.toContain('Size unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'completed',
+      attachments: [
+        {
+          displayName: ' \t\n',
+        },
+      ],
+    }),
+  ).not.toContain('Attachment name unavailable');
 });
 
 test('unknown chat senders stay visible instead of failing the history page', () => {

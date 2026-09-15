@@ -1044,6 +1044,33 @@ test('desktop chat names Flutter empty GET chat text', () => {
   expect(copy).not.toContain(' \t\n');
 });
 
+test('desktop chat names Flutter FilesHandlerWidget empty GET names', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'human-empty-attachment',
+        text: '',
+        sender: 'human',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        attachments: [
+          {
+            id: 'att-empty',
+            displayName: ' \t\n',
+            mediaType: 'text/plain',
+            sizeBytes: 0,
+          },
+        ],
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('You');
+  expect(copy).not.toContain('Attachment name unavailable');
+  expect(copy).not.toContain('Size unavailable');
+  expect(copy).not.toContain('Message text unavailable');
+});
+
 test('a zero macOS Home chat timestamp says Time unavailable instead of omitting the clock', () => {
   const renderer = renderDesktop({
     messages: [

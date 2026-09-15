@@ -1323,6 +1323,52 @@ test('chat history names GET image file thumbnails', () => {
   });
 });
 
+test('an empty-named chat attachment names Flutter FilesHandlerWidget empty GET names', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-empty-attachment',
+        text: '',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        attachments: [
+          {
+            id: 'att-empty',
+            displayName: ' \t\n',
+            mediaType: 'text/plain',
+            sizeBytes: 0,
+          },
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).not.toContain('Attachment name unavailable');
+  expect(copies).not.toContain('Size unavailable');
+  expect(copies).not.toContain('Message text unavailable');
+  expect(renderer.toJSON()).not.toBeNull();
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('a whitespace-only human chat message names Flutter empty GET text', () => {
   const renderer = render(
     <ChatMessageRow
