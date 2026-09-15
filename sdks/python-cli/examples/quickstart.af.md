@@ -27,13 +27,13 @@ As die terminaal nie `omi` vind nie, maak seker dat die virtuele omgewing aktief
 Om met jou e-posadres en wagwoord aan te meld:
 
 ```sh
-omi auth login --email jouepos@voorbeeld.com
+omi auth login --api-key <jou-sleutel>
 ```
 
-Jy kan ook die omgewingsveranderlike `OMI_ACCESS_TOKEN` direk stel:
+Jy kan ook die omgewingsveranderlike `OMI_API_KEY` direk stel:
 
 ```sh
-export OMI_ACCESS_TOKEN="jou-toegangskode"
+export OMI_API_KEY="jou-toegangskode"
 omi auth status
 ```
 
@@ -62,7 +62,7 @@ omi action-item list
 `omi-cli` ondersteun JSON-uitvoer vir outomatiese verwerking:
 
 ```sh
-omi memory list --json
+omi --json memory list
 omi memory list --limit 10 --offset 0
 ```
 
