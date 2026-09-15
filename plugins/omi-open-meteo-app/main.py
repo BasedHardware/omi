@@ -64,6 +64,31 @@ def _format_number(value: Any, suffix: str = "") -> str:
     return f"{value}{suffix}"
 
 
+def _safe_item(items: Any, index: int, default: Any = None) -> Any:
+    """Return ``items[index]`` without raising ``IndexError`` or ``TypeError``.
+
+    Open-Meteo may return daily metric arrays that are missing, ``null``, or
+    shorter than ``daily["time"]``; fall back to ``default`` in those cases.
+    """
+    if not isinstance(items, (list, tuple)):
+        return default
+    if 0 <= index < len(items):
+        return items[index]
+    return default
+
+
+def _format_unit_suffix(unit_val: Any, prefix: str = " ") -> str:
+    """Format a unit value as a display suffix.
+
+    Returns an empty string for ``null``, non-string, or empty units so callers
+    never raise ``TypeError`` or render ``"None"`` when the API omits a unit
+    field in JSON.
+    """
+    if not isinstance(unit_val, str) or not unit_val:
+        return ""
+    return f"{prefix}{unit_val}"
+
+
 def _format_weather_code(code: Optional[int]) -> str:
     if code is None:
         return "unknown"
@@ -286,11 +311,11 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
             f"Current weather for {place_name}",
             f"Observed: {observed_at}",
             f"Condition: {condition}",
-            f"Temperature: {_format_number(current.get('temperature_2m'), units.get('temperature_2m', ''))}",
-            f"Feels like: {_format_number(current.get('apparent_temperature'), units.get('apparent_temperature', ''))}",
-            f"Humidity: {_format_number(current.get('relative_humidity_2m'), units.get('relative_humidity_2m', ''))}",
-            f"Precipitation: {_format_number(current.get('precipitation'), units.get('precipitation', ''))}",
-            f"Wind: {_format_number(current.get('wind_speed_10m'), ' ' + units.get('wind_speed_10m', ''))}",
+            f"Temperature: {_format_number(current.get('temperature_2m'), _format_unit_suffix(units.get('temperature_2m'), ''))}",
+            f"Feels like: {_format_number(current.get('apparent_temperature'), _format_unit_suffix(units.get('apparent_temperature'), ''))}",
+            f"Humidity: {_format_number(current.get('relative_humidity_2m'), _format_unit_suffix(units.get('relative_humidity_2m'), ''))}",
+            f"Precipitation: {_format_number(current.get('precipitation'), _format_unit_suffix(units.get('precipitation'), ''))}",
+            f"Wind: {_format_number(current.get('wind_speed_10m'), _format_unit_suffix(units.get('wind_speed_10m')))}",
         ]
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
@@ -331,14 +356,19 @@ async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
         daily = payload.get("daily") or {}
         units = payload.get("daily_units") or {}
         place_name = _format_place(place)
+
+        times = daily.get("time")
+        if not isinstance(times, list) or not times:
+            return ChatToolResponse(result=f"No forecast data available for {place_name}.")
+
         lines = [f"{days}-day forecast for {place_name}"]
 
-        for index, day in enumerate(daily.get("time", [])[:days]):
-            condition = _format_weather_code((daily.get("weather_code") or [None])[index])
-            high = _format_number((daily.get("temperature_2m_max") or [None])[index], units.get("temperature_2m_max", ""))
-            low = _format_number((daily.get("temperature_2m_min") or [None])[index], units.get("temperature_2m_min", ""))
-            rain = _format_number((daily.get("precipitation_probability_max") or [None])[index], units.get("precipitation_probability_max", "%"))
-            wind = _format_number((daily.get("wind_speed_10m_max") or [None])[index], " " + units.get("wind_speed_10m_max", ""))
+        for index, day in enumerate(times[:days]):
+            condition = _format_weather_code(_safe_item(daily.get("weather_code"), index))
+            high = _format_number(_safe_item(daily.get("temperature_2m_max"), index), _format_unit_suffix(units.get("temperature_2m_max"), ""))
+            low = _format_number(_safe_item(daily.get("temperature_2m_min"), index), _format_unit_suffix(units.get("temperature_2m_min"), ""))
+            rain = _format_number(_safe_item(daily.get("precipitation_probability_max"), index), _format_unit_suffix(units.get("precipitation_probability_max") or "%", ""))
+            wind = _format_number(_safe_item(daily.get("wind_speed_10m_max"), index), _format_unit_suffix(units.get("wind_speed_10m_max")))
             lines.append(f"- {day}: {condition}; high {high}, low {low}; rain {rain}; wind up to {wind}")
 
         return ChatToolResponse(result="\n".join(lines))
@@ -374,10 +404,10 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
             f"Air quality for {place_name}",
             f"Observed: {observed_at}",
             f"US AQI: {_format_number(current.get('us_aqi'))}",
-            f"PM2.5: {_format_number(current.get('pm2_5'), ' ' + units.get('pm2_5', ''))}",
-            f"PM10: {_format_number(current.get('pm10'), ' ' + units.get('pm10', ''))}",
-            f"Ozone: {_format_number(current.get('ozone'), ' ' + units.get('ozone', ''))}",
-            f"Nitrogen dioxide: {_format_number(current.get('nitrogen_dioxide'), ' ' + units.get('nitrogen_dioxide', ''))}",
+            f"PM2.5: {_format_number(current.get('pm2_5'), _format_unit_suffix(units.get('pm2_5')))}",
+            f"PM10: {_format_number(current.get('pm10'), _format_unit_suffix(units.get('pm10')))}",
+            f"Ozone: {_format_number(current.get('ozone'), _format_unit_suffix(units.get('ozone')))}",
+            f"Nitrogen dioxide: {_format_number(current.get('nitrogen_dioxide'), _format_unit_suffix(units.get('nitrogen_dioxide')))}",
         ]
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:

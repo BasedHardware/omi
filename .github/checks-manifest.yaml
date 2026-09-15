@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: open-meteo-bounds-tests
+    command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
+    triggers: ["plugins/omi-open-meteo-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13924: daily metric arrays shorter than daily.time IndexError'd the whole forecast, null unit fields TypeError'd on ' ' + units.get(...) in all three handlers, and empty daily.time returned a bare header with no explanation"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
