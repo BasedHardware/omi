@@ -32,21 +32,15 @@ export type OmiDeveloperKey = {
   id: string;
   name: string;
   keyPrefix: string;
-  createdAtMs?: number;
+  createdAtMs: number;
   scopes?: string[];
 };
 
-function createdAtMs(value: unknown): number | undefined {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-  const raw = visibleDisplayText(text(value, 1_000_000));
-  if (raw === '') {
-    return undefined;
-  }
+function createdAtMs(value: unknown): number {
+  const raw = text(value, 1_000_000);
   const parsed = Date.parse(raw.replace(/([+-]\d{2})$/, '$1:00'));
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return undefined;
+  if (!Number.isFinite(parsed)) {
+    throw new DeveloperKeyError();
   }
   return parsed;
 }
@@ -88,7 +82,7 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
       id,
       name,
       keyPrefix,
-      ...(created === undefined ? {} : {createdAtMs: created}),
+      createdAtMs: created,
       ...(scopes === undefined ? {} : {scopes}),
     });
   }
