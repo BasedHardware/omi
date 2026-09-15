@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: mcp-date-filter-tests
+    command: ["python3", "mcp/tests/test_date_filters.py"]
+    triggers: ["mcp/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13941: get_conversations silently dropped an unparseable start_date/end_date and returned the unfiltered list while search_conversations surfaced the backend 400 opaquely; malformed dates must raise a field-naming ValueError before any request"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
