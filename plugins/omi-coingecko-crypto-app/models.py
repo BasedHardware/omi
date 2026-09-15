@@ -24,28 +24,31 @@ class GetCryptoPriceRequest(BaseModel):
         ...,
         description="One or more CoinGecko coin IDs or comma-separated string, e.g. ['bitcoin', 'ethereum'] or 'solana'.",
     )
-    vs_currency: str = Field(
+    vs_currency: Optional[str] = Field(
         default="usd",
-        min_length=2,
         max_length=10,
         description="Target currency code (e.g., 'usd', 'eur', 'gbp', 'jpy').",
     )
 
-    @field_validator("vs_currency")
+    @field_validator("vs_currency", mode="before")
     @classmethod
-    def normalize_vs_currency(cls, v: str) -> str:
-        cleaned = v.strip().lower()
+    def coerce_vs_currency(cls, v: Optional[str]) -> str:
+        if v is None:
+            return "usd"
+        cleaned = str(v).strip().lower()
         if len(cleaned) < 2:
             raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")
         return cleaned
 
-    @field_validator("coin_ids")
+    @field_validator("coin_ids", mode="before")
     @classmethod
     def normalize_coin_ids(cls, v: Union[List[str], str]) -> List[str]:
         if isinstance(v, str):
             ids = [i.strip().lower() for i in v.split(",") if i.strip()]
-        else:
+        elif isinstance(v, (list, tuple)):
             ids = [i.strip().lower() for i in v if isinstance(i, str) and i.strip()]
+        else:
+            ids = []
         if not ids:
             raise ValueError("At least one valid coin ID must be provided.")
         # Deduplicate while preserving order, max 10
@@ -62,7 +65,14 @@ class SearchCryptoCoinsRequest(BaseModel):
     """Request model for searching cryptocurrency coins."""
 
     query: str = Field(..., min_length=1, max_length=100, description="Coin name, ticker symbol, or keyword.")
-    max_results: int = Field(default=5, ge=1, le=15, description="Maximum number of search results to return.")
+    max_results: Optional[int] = Field(default=5, ge=1, le=15, description="Maximum number of search results to return.")
+
+    @field_validator("max_results", mode="before")
+    @classmethod
+    def coerce_max_results(cls, v: Optional[int]) -> int:
+        if v is None:
+            return 5
+        return int(v)
 
     @field_validator("query")
     @classmethod
@@ -76,24 +86,39 @@ class SearchCryptoCoinsRequest(BaseModel):
 class GetTrendingCryptoRequest(BaseModel):
     """Request model for fetching top trending cryptocurrencies."""
 
-    limit: int = Field(default=5, ge=1, le=15, description="Number of trending coins to return (1-15).")
+    limit: Optional[int] = Field(default=5, ge=1, le=15, description="Number of trending coins to return (1-15).")
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def coerce_limit(cls, v: Optional[int]) -> int:
+        if v is None:
+            return 5
+        return int(v)
 
 
 class GetCryptoMarketOverviewRequest(BaseModel):
     """Request model for getting global crypto market overview."""
 
-    limit: int = Field(default=10, ge=1, le=20, description="Number of top market cap coins to return.")
-    vs_currency: str = Field(
+    limit: Optional[int] = Field(default=10, ge=1, le=20, description="Number of top market cap coins to return.")
+    vs_currency: Optional[str] = Field(
         default="usd",
-        min_length=2,
         max_length=10,
         description="Target currency code, e.g. 'usd'.",
     )
 
-    @field_validator("vs_currency")
+    @field_validator("limit", mode="before")
     @classmethod
-    def normalize_vs_currency(cls, v: str) -> str:
-        cleaned = v.strip().lower()
+    def coerce_limit(cls, v: Optional[int]) -> int:
+        if v is None:
+            return 10
+        return int(v)
+
+    @field_validator("vs_currency", mode="before")
+    @classmethod
+    def coerce_vs_currency(cls, v: Optional[str]) -> str:
+        if v is None:
+            return "usd"
+        cleaned = str(v).strip().lower()
         if len(cleaned) < 2:
             raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")
         return cleaned
