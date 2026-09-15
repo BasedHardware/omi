@@ -2044,6 +2044,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistoryPartial => 'Část historie vzpomínek není dostupná. Zobrazuje se dosud přijatá historie.';
 
   @override
+  String get memoryHistory => 'Historie';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Vrátit zpět';
 
   @override

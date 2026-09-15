@@ -40,7 +40,7 @@ from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
-from models.memories import MemoryDB, Memory, MemoryCategory, SubjectAttribution
+from models.memories import MemoryCaptureContext, MemoryDB, Memory, MemoryCategory, SubjectAttribution
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.memory_contracts import L1MemoryArchiveClass, deterministic_contract_id
 from models.workstream_association import AssociationEvidence
@@ -1334,6 +1334,32 @@ def _grounded_l1_evidence_quotes(evidence_quotes: List[str], segments: List[Any]
     return grounded
 
 
+def _l1_owner_spoken_for_grounded_quotes(evidence_quotes: List[str], segments: List[Any]) -> bool:
+    """Return true only when every grounded quote is spoken by the owner.
+
+    Subject resolution may conservatively fall back to ``about=user`` when a
+    transcript has a uniquely identified owner but no quote-bound speaker. That
+    is enough to scope a claim, but it is not evidence that the owner uttered
+    the source text. Source attribution therefore requires quote-level binding
+    to the owner's cluster.
+    """
+
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
+    if not evidence_quotes or not may_attribute_to_owner(owner_evidence):
+        return False
+    for raw_quote in evidence_quotes:
+        normalized_quote = _normalized_l1_evidence_quote(raw_quote)
+        matched_segments = [
+            segment
+            for segment in segments
+            if normalized_quote
+            and f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
+        ]
+        if len(matched_segments) != 1 or not may_attribute_to_owner(owner_evidence, segment=matched_segments[0]):
+            return False
+    return True
+
+
 def _canonical_quote_ref(
     *,
     quote: str,
@@ -1448,6 +1474,7 @@ def _extract_memories_canonical(
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
+    source_captured_at = getattr(conversation, "started_at", None) or getattr(conversation, "created_at", None)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
     capture_decisions_by_memory_object: Dict[int, Tuple[str, bool]] = {}
 
@@ -1551,6 +1578,32 @@ def _extract_memories_canonical(
                 visibility="private",
                 subject_entity_id=subject_entity_id,
                 subject_attribution=subject_attribution,
+            )
+            # Carry the candidate's proposition shape onto the persisted
+            # memory: object qualifiers and decision states must not be
+            # silently dropped by canonical conversation capture. Arguments
+            # are already scoped/bounded by the extractor.
+            memory.predicate = getattr(candidate, "predicate", None)
+            memory.arguments = dict(getattr(candidate, "arguments", None) or {})
+            # The transcript is the original evidence family for this
+            # candidate. Build capture context from the server-owned
+            # conversation and the resolved speaker attribution; never trust
+            # source identifiers emitted by the model. The canonical adapter
+            # preserves this context on MemoryEvidence.
+            source_attribution = (
+                "user_spoken"
+                if _l1_owner_spoken_for_grounded_quotes(evidence_quotes, conversation.transcript_segments)
+                else "third_party" if subject_attribution == SubjectAttribution.third_party else "unknown"
+            )
+            memory.capture_context = MemoryCaptureContext(
+                source_type="conversation",
+                captured_at=source_captured_at,
+                source_id=conversation.id,
+                source_version="v1",
+                source_signal="transcription",
+                independence_group=conversation.id,
+                lineage_id=conversation.id,
+                attribution=source_attribution,
             )
             if belief_model_enabled():
                 resolved_scope = subject_scope_from_extraction(
@@ -1662,6 +1715,7 @@ def _extract_memories_canonical(
             artifact_ref=_transcript_artifact_ref(conversation),
             extractor_id="canonical_l1_memory_extractor" if has_candidate_subject else "new_memories_extractor",
             extractor_version="v1",
+            source_captured_at=source_captured_at,
             subject_entity_id=candidate_subject_entity_id,
             subject_attribution=memory.subject_attribution if has_candidate_subject else subject_attribution,
             client_device_id=getattr(conversation, "client_device_id", None),

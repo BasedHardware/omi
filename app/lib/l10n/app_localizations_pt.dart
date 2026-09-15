@@ -2019,6 +2019,15 @@ class AppLocalizationsPt extends AppLocalizations {
       'Parte do histórico de memórias não está disponível. Exibindo o histórico recebido até agora.';
 
   @override
+  String get memoryHistory => 'Histórico';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Desfazer';
 
   @override

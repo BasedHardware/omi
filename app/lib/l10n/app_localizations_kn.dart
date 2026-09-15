@@ -2048,6 +2048,15 @@ class AppLocalizationsKn extends AppLocalizations {
       'ನೆನಪುಗಳ ಇತಿಹಾಸದ ಕೆಲವು ಭಾಗಗಳು ಲಭ್ಯವಿಲ್ಲ. ಇದುವರೆಗೆ ಸ್ವೀಕರಿಸಿದ ಇತಿಹಾಸವನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.';
 
   @override
+  String get memoryHistory => 'ಇತಿಹಾಸ';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'ರದ್ದುಗೊಳಿಸಿ';
 
   @override

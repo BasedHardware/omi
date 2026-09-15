@@ -2045,6 +2045,15 @@ class AppLocalizationsSv extends AppLocalizations {
       'En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.';
 
   @override
+  String get memoryHistory => 'Historik';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Ångra';
 
   @override

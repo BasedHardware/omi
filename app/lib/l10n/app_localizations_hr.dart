@@ -2043,6 +2043,15 @@ class AppLocalizationsHr extends AppLocalizations {
   String get memoryHistoryPartial => 'Dio povijesti sjećanja nije dostupan. Prikazuje se dosad primljena povijest.';
 
   @override
+  String get memoryHistory => 'Povijest';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Vrati Unazad';
 
   @override
