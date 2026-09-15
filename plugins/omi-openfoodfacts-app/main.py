@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -56,6 +58,23 @@ app = FastAPI(
     description="Food, nutrition, Nutri-Score, allergen, and barcode lookup tools for Omi.",
     version="1.0.0",
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return HTTP 200 with a structured ChatToolResponse error envelope for validation errors."""
+    details = "; ".join(
+        f"{'.'.join(str(x) for x in err.get('loc', []))}: {err.get('msg', '')}"
+        for err in exc.errors()
+    )
+    return JSONResponse(
+        status_code=200,
+        content=ChatToolResponse(
+            success=False,
+            message=f"Invalid request: {details}",
+            data={"error": details},
+        ).model_dump(),
+    )
 
 
 def _headers() -> Dict[str, str]:
@@ -105,12 +124,28 @@ def _invalid_body_response(message: str) -> ChatToolResponse:
     )
 
 
+def _safe_str(value: Any) -> str:
+    """Coerce a value to string safely; returns empty string for None/non-str."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
 def _nutrient(product: Dict[str, Any], key: str) -> Optional[Any]:
-    nutriments = product.get("nutriments") or {}
+    """Return the per-100g nutrient only.
+
+    Unsuffixed nutriment keys depend on nutrition_data_per (often serving).
+    Falling back to them and labeling the result per_100g is wrong.
+    """
+    nutriments = product.get("nutriments")
+    if not isinstance(nutriments, dict):
+        return None
     per_100g_key = f"{key}_100g"
     if per_100g_key in nutriments:
         return nutriments[per_100g_key]
-    return nutriments.get(key)
+    return None
 
 
 def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
@@ -119,9 +154,9 @@ def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
         "name": product.get("product_name") or product.get("generic_name") or "Unknown product",
         "brands": product.get("brands") or "",
         "quantity": product.get("quantity") or "",
-        "nutri_score": (product.get("nutriscore_grade") or "").upper() or None,
+        "nutri_score": _safe_str(product.get("nutriscore_grade")).upper() or None,
         "nova_group": product.get("nova_group"),
-        "eco_score": (product.get("ecoscore_grade") or "").upper() or None,
+        "eco_score": _safe_str(product.get("ecoscore_grade")).upper() or None,
         "allergens": _normalize_tags(product.get("allergens_tags")),
         "traces": _normalize_tags(product.get("traces_tags")),
         "labels": _normalize_tags(product.get("labels_tags"))[:12],
@@ -185,10 +220,14 @@ async def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
     if not query:
         return {"error": "query is required"}
 
+    # CGI search is the full-text product search; /api/v2/search is not.
     payload = await _openfoodfacts_get_async(
-        "/api/v2/search",
+        "/cgi/search.pl",
         {
+            "action": "process",
             "search_terms": query,
+            "search_simple": 1,
+            "json": 1,
             "page_size": page_size,
             "fields": PRODUCT_FIELDS,
         },
@@ -196,7 +235,7 @@ async def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
     if "error" in payload:
         return payload
 
-    products = [_summarize_product(item) for item in payload.get("products", [])]
+    products = [_summarize_product(item) for item in payload.get("products", []) if isinstance(item, dict)]
     return {
         "query": query,
         "count": payload.get("count", 0),
