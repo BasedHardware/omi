@@ -362,3 +362,5 @@ bash release.sh --build-only
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
+
+- [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
