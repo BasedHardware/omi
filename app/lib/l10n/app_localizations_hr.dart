@@ -10020,4 +10020,34 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Kako bi Omi znao koji je vaš glas — govorite oko 5 sekundi o bilo čemu.';
+
+  @override
+  String get renameDevice => 'Preimenuj uređaj';
+
+  @override
+  String get renameDeviceDescription =>
+      'Ime se sprema na samom Omi uređaju, pa se prikazuje na svakom telefonu s kojim ga uparite.';
+
+  @override
+  String get tapToRename => 'Dodirnite za preimenovanje';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Ime uređaja ne može biti prazno';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Ime je predugačko (do $maxBytes znakova; emojiji i dijakritički znakovi broje se više)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Ime sadrži nepodržane znakove';
+
+  @override
+  String get deviceRenameFailed =>
+      'Ime nije bilo moguće spremiti na Omi. Provjerite je li povezan i pokušajte ponovno.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Uređaj je preimenovan u $name';
+  }
 }

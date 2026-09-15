@@ -9976,4 +9976,32 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'So Omi knows which voice is yours — talk for about 5 seconds about anything.';
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get renameDeviceDescription => 'The name is saved on your Omi, so it shows up on any phone you pair with.';
+
+  @override
+  String get tapToRename => 'Tap to rename';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Name is too long (up to $maxBytes characters; emoji and accents count extra)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Name contains unsupported characters';
+
+  @override
+  String get deviceRenameFailed => 'Could not save the name to your Omi. Check that it is connected and try again.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Device renamed to $name';
+  }
 }

@@ -3258,5 +3258,13 @@
     "memoryHistoryPartial": "Osa mälestuste ajaloost pole saadaval. Kuvatakse seni saadud ajalugu.",
     "tapPlusToStartRecording": "Salvestamise alustamiseks puuduta +",
     "processingTakingLonger": "Ikka käimas — see võtab kauem aega kui tavaliselt.",
-    "speechProfileEnrollmentPrompt": "Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit."
+    "speechProfileEnrollmentPrompt": "Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.",
+    "renameDevice": "Nimeta seade ümber",
+    "renameDeviceDescription": "Nimi salvestatakse Omi seadmesse, seega kuvatakse seda igas telefonis, millega selle seod.",
+    "tapToRename": "Puuduta ümbernimetamiseks",
+    "deviceNameCannotBeEmpty": "Seadme nimi ei saa olla tühi",
+    "deviceNameTooLong": "Nimi on liiga pikk (kuni {maxBytes} märki; emojid ja täpitähed loevad rohkem)",
+    "deviceNameInvalidCharacters": "Nimi sisaldab toetamata märke",
+    "deviceRenameFailed": "Nime ei õnnestunud Omi seadmesse salvestada. Kontrolli, et see on ühendatud, ja proovi uuesti.",
+    "deviceRenamed": "Seade nimetati ümber: {name}"
 }

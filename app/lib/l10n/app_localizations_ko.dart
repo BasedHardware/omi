@@ -9817,4 +9817,32 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
+
+  @override
+  String get renameDevice => '기기 이름 변경';
+
+  @override
+  String get renameDeviceDescription => '이름은 Omi 기기 자체에 저장되므로 페어링하는 모든 휴대폰에 표시됩니다.';
+
+  @override
+  String get tapToRename => '탭하여 이름 변경';
+
+  @override
+  String get deviceNameCannotBeEmpty => '기기 이름은 비워둘 수 없습니다';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return '이름이 너무 깁니다 (최대 $maxBytes자, 이모지와 한글 등은 여러 자로 계산됩니다)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => '이름에 지원되지 않는 문자가 포함되어 있습니다';
+
+  @override
+  String get deviceRenameFailed => 'Omi에 이름을 저장할 수 없습니다. 연결 상태를 확인한 후 다시 시도하세요.';
+
+  @override
+  String deviceRenamed(String name) {
+    return '기기 이름 변경: $name';
+  }
 }

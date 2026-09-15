@@ -9970,4 +9970,33 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.';
+
+  @override
+  String get renameDevice => 'Omdøb enhed';
+
+  @override
+  String get renameDeviceDescription =>
+      'Navnet gemmes på selve din Omi, så det vises på enhver telefon, du parrer den med.';
+
+  @override
+  String get tapToRename => 'Tryk for at omdøbe';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Enhedsnavnet må ikke være tomt';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Navnet er for langt (op til $maxBytes tegn; emoji og accenter tæller ekstra)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Navnet indeholder tegn, der ikke understøttes';
+
+  @override
+  String get deviceRenameFailed => 'Navnet kunne ikke gemmes på din Omi. Tjek, at den er forbundet, og prøv igen.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Enheden er omdøbt til $name';
+  }
 }

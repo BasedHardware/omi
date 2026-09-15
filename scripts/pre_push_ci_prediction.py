@@ -108,6 +108,12 @@ ROUTING_INPUTS = {
     ".github/scripts/test_pre_push_ci_prediction.py",
 }
 
+# Manifest-only routing edits register checks that run on Repo Checks / Linux CI.
+# They must not claim a macOS runner for the full Swift suite when the diff does
+# not touch desktop sources (#13704: firmware rename + manifest entry measured
+# 3608s on the PR lane with a SwiftPM cache miss against a 2700s budget).
+MANIFEST_ONLY_ROUTING_INPUTS = frozenset({".github/checks-manifest.yaml"})
+
 FLUTTER_GENERATION_DEFINITION_INPUTS = {
     ".github/workflows/mobile-app-checks.yml",
 }
@@ -316,6 +322,14 @@ def _is_desktop_agent_runtime_input(path: str) -> bool:
     )
 
 
+def _routing_paths(normalized_paths: list[str]) -> list[str]:
+    return [
+        path
+        for path in normalized_paths
+        if path in ROUTING_INPUTS or path.startswith(".github/actions/detect-changes/")
+    ]
+
+
 @dataclass(frozen=True)
 class ImpactPlan:
     """Selected phase IDs in stable display order."""
@@ -343,9 +357,9 @@ def resolve_impact(
     read_base_text = read_base_text or read_text
     selected: set[str] = set()
     normalized_paths = [raw_path.strip() for raw_path in paths if raw_path.strip()]
-    selector_changed = any(
-        path in ROUTING_INPUTS or path.startswith(".github/actions/detect-changes/") for path in normalized_paths
-    )
+    routing_paths = _routing_paths(normalized_paths)
+    selector_changed = bool(routing_paths)
+    manifest_only_selector = selector_changed and set(routing_paths) <= MANIFEST_ONLY_ROUTING_INPUTS
 
     for path in normalized_paths:
         if path.startswith("app/"):
@@ -390,17 +404,21 @@ def resolve_impact(
         # editing routing metadata cannot make a committed generated file stale,
         # and waking build_runner from a manifest-only diff costs ~17 minutes at
         # push time. Those lanes stay owned by their real generator inputs.
-        selected.update(
-            {
-                "app-ci-only",
-                "app-analysis-tests",
-                "app-compile-smoke",
-                "desktop-ci-only",
-                "desktop-flow-lint",
-                "desktop-swift-tests",
-                "desktop-swift-release-test-compile",
-            }
-        )
+        selector_phases = {
+            "app-ci-only",
+            "app-analysis-tests",
+            "app-compile-smoke",
+            "desktop-ci-only",
+            "desktop-flow-lint",
+        }
+        if not manifest_only_selector:
+            selector_phases.update(
+                {
+                    "desktop-swift-tests",
+                    "desktop-swift-release-test-compile",
+                }
+            )
+        selected.update(selector_phases)
 
     if event in FULL_DESKTOP_HEALTH_EVENTS:
         # Manual dispatch is the exact-SHA recovery hatch and the scheduled run
@@ -415,7 +433,9 @@ def resolve_impact(
             }
         )
 
-    releasable_desktop = any(_is_releasable_desktop_path(path) for path in normalized_paths) or selector_changed
+    releasable_desktop = any(_is_releasable_desktop_path(path) for path in normalized_paths) or (
+        selector_changed and not manifest_only_selector
+    )
     package_changed = any(
         path in {"desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Package.resolved"}
         for path in normalized_paths

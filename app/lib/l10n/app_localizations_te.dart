@@ -10035,4 +10035,34 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.';
+
+  @override
+  String get renameDevice => 'పరికరం పేరు మార్చండి';
+
+  @override
+  String get renameDeviceDescription =>
+      'పేరు మీ Omi లోనే సేవ్ అవుతుంది, అందువల్ల మీరు జోడించే ఏ ఫోన్‌లోనైనా అది కనిపిస్తుంది.';
+
+  @override
+  String get tapToRename => 'పేరు మార్చడానికి నొక్కండి';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'పరికరం పేరు ఖాళీగా ఉండకూడదు';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా $maxBytes అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'పేరులో మద్దతు లేని అక్షరాలు ఉన్నాయి';
+
+  @override
+  String get deviceRenameFailed =>
+      'మీ Omi లో పేరును సేవ్ చేయలేకపోయాము. అది కనెక్ట్ అయి ఉందో లేదో తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'పరికరం పేరు $name గా మార్చబడింది';
+  }
 }

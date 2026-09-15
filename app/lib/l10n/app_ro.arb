@@ -3258,5 +3258,13 @@
     "memoryHistoryPartial": "O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.",
     "tapPlusToStartRecording": "Atinge + pentru a începe înregistrarea",
     "processingTakingLonger": "Încă se procesează — durează mai mult decât de obicei.",
-    "speechProfileEnrollmentPrompt": "Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde."
+    "speechProfileEnrollmentPrompt": "Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.",
+    "renameDevice": "Redenumește dispozitivul",
+    "renameDeviceDescription": "Numele este salvat pe Omi, așa că apare pe orice telefon cu care îl asociezi.",
+    "tapToRename": "Atinge pentru a redenumi",
+    "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol",
+    "deviceNameTooLong": "Numele este prea lung (până la {maxBytes} caractere; emoji-urile și diacriticele contează mai mult)",
+    "deviceNameInvalidCharacters": "Numele conține caractere neacceptate",
+    "deviceRenameFailed": "Numele nu a putut fi salvat pe Omi. Verifică dacă este conectat și încearcă din nou.",
+    "deviceRenamed": "Dispozitivul a fost redenumit în {name}"
 }

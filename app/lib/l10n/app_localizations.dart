@@ -18590,6 +18590,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
   String get speechProfileEnrollmentPrompt;
+
+  /// Title of the dialog that renames the connected Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Rename Device'**
+  String get renameDevice;
+
+  /// Explains that the device name is stored on the device itself
+  ///
+  /// In en, this message translates to:
+  /// **'The name is saved on your Omi, so it shows up on any phone you pair with.'**
+  String get renameDeviceDescription;
+
+  /// Subtitle of the device name row when renaming is supported
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to rename'**
+  String get tapToRename;
+
+  /// Validation error when the device name is blank
+  ///
+  /// In en, this message translates to:
+  /// **'Device name cannot be empty'**
+  String get deviceNameCannotBeEmpty;
+
+  /// Validation error when the device name exceeds the byte limit
+  ///
+  /// In en, this message translates to:
+  /// **'Name is too long (up to {maxBytes} characters; emoji and accents count extra)'**
+  String deviceNameTooLong(int maxBytes);
+
+  /// Validation error when the device name has control characters
+  ///
+  /// In en, this message translates to:
+  /// **'Name contains unsupported characters'**
+  String get deviceNameInvalidCharacters;
+
+  /// Error shown when the device rejected or did not confirm the new name
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the name to your Omi. Check that it is connected and try again.'**
+  String get deviceRenameFailed;
+
+  /// Confirmation after the device accepted the new name
+  ///
+  /// In en, this message translates to:
+  /// **'Device renamed to {name}'**
+  String deviceRenamed(String name);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

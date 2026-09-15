@@ -10824,5 +10824,13 @@
     "memoryHistoryPartial": "חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.",
     "tapPlusToStartRecording": "הקישו על + כדי להתחיל להקליט",
     "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל.",
-    "speechProfileEnrollmentPrompt": "כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות."
+    "speechProfileEnrollmentPrompt": "כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.",
+    "renameDevice": "שינוי שם המכשיר",
+    "renameDeviceDescription": "השם נשמר על ה-Omi עצמו, ולכן יופיע בכל טלפון שתצמידו אליו.",
+    "tapToRename": "הקישו לשינוי השם",
+    "deviceNameCannotBeEmpty": "שם המכשיר לא יכול להיות ריק",
+    "deviceNameTooLong": "השם ארוך מדי (עד {maxBytes} תווים; אמוג'י וניקוד נספרים יותר)",
+    "deviceNameInvalidCharacters": "השם מכיל תווים שאינם נתמכים",
+    "deviceRenameFailed": "לא ניתן היה לשמור את השם על ה-Omi. ודאו שהוא מחובר ונסו שוב.",
+    "deviceRenamed": "שם המכשיר שונה ל-{name}"
 }

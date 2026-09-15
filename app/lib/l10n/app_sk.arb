@@ -3263,5 +3263,13 @@
     "memoryHistoryPartial": "Časť histórie spomienok nie je dostupná. Zobrazuje sa doteraz prijatá história.",
     "tapPlusToStartRecording": "Ťuknutím na + spustíte nahrávanie",
     "processingTakingLonger": "Stále prebieha — trvá to dlhšie ako zvyčajne.",
-    "speechProfileEnrollmentPrompt": "Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek."
+    "speechProfileEnrollmentPrompt": "Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek.",
+    "renameDevice": "Premenovať zariadenie",
+    "renameDeviceDescription": "Názov sa ukladá priamo do Omi, takže sa zobrazí na každom telefóne, s ktorým ho spárujete.",
+    "tapToRename": "Ťuknutím premenujete",
+    "deviceNameCannotBeEmpty": "Názov zariadenia nemôže byť prázdny",
+    "deviceNameTooLong": "Názov je príliš dlhý (max. {maxBytes} znakov; emoji a diakritika sa počítajú viac)",
+    "deviceNameInvalidCharacters": "Názov obsahuje nepodporované znaky",
+    "deviceRenameFailed": "Názov sa nepodarilo uložiť do Omi. Skontrolujte, či je pripojené, a skúste to znova.",
+    "deviceRenamed": "Zariadenie premenované na {name}"
 }

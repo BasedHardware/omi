@@ -3258,5 +3258,13 @@
     "memoryHistoryPartial": "Parte della cronologia dei ricordi non è disponibile. Viene mostrata la cronologia ricevuta finora.",
     "tapPlusToStartRecording": "Tocca + per iniziare a registrare",
     "processingTakingLonger": "Ancora in corso: ci sta mettendo più del solito.",
-    "speechProfileEnrollmentPrompt": "Perché Omi sappia qual è la tua voce — parla di qualsiasi cosa per circa 5 secondi."
+    "speechProfileEnrollmentPrompt": "Perché Omi sappia qual è la tua voce — parla di qualsiasi cosa per circa 5 secondi.",
+    "renameDevice": "Rinomina dispositivo",
+    "renameDeviceDescription": "Il nome viene salvato sul tuo Omi, quindi compare su qualsiasi telefono a cui lo associ.",
+    "tapToRename": "Tocca per rinominare",
+    "deviceNameCannotBeEmpty": "Il nome del dispositivo non può essere vuoto",
+    "deviceNameTooLong": "Il nome è troppo lungo (fino a {maxBytes} caratteri; emoji e accenti contano di più)",
+    "deviceNameInvalidCharacters": "Il nome contiene caratteri non supportati",
+    "deviceRenameFailed": "Impossibile salvare il nome sul tuo Omi. Verifica che sia connesso e riprova.",
+    "deviceRenamed": "Dispositivo rinominato in {name}"
 }

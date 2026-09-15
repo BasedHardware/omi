@@ -10824,5 +10824,13 @@
     "memoryHistoryPartial": "یادوں کی تاریخ کا کچھ حصہ دستیاب نہیں ہے۔ اب تک موصول ہونے والی تاریخ دکھائی جا رہی ہے۔",
     "tapPlusToStartRecording": "ریکارڈنگ شروع کرنے کے لیے + پر ٹیپ کریں",
     "processingTakingLonger": "ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔",
-    "speechProfileEnrollmentPrompt": "تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔"
+    "speechProfileEnrollmentPrompt": "تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔",
+    "renameDevice": "ڈیوائس کا نام بدلیں",
+    "renameDeviceDescription": "نام آپ کے Omi پر ہی محفوظ ہوتا ہے، اس لیے یہ ہر اس فون پر نظر آتا ہے جس کے ساتھ آپ اسے جوڑتے ہیں۔",
+    "tapToRename": "نام بدلنے کے لیے ٹیپ کریں",
+    "deviceNameCannotBeEmpty": "ڈیوائس کا نام خالی نہیں ہو سکتا",
+    "deviceNameTooLong": "نام بہت لمبا ہے (زیادہ سے زیادہ {maxBytes} حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)",
+    "deviceNameInvalidCharacters": "نام میں غیر معاون حروف شامل ہیں",
+    "deviceRenameFailed": "آپ کے Omi پر نام محفوظ نہیں ہو سکا۔ یقینی بنائیں کہ یہ منسلک ہے اور دوبارہ کوشش کریں۔",
+    "deviceRenamed": "ڈیوائس کا نام بدل کر {name} کر دیا گیا"
 }

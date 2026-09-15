@@ -1,6 +1,7 @@
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <zephyr/drivers/rtc.h>
 
@@ -91,5 +92,33 @@ int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp
  * @param imu_timestamp Output IMU timestamp counter.
  */
 int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp);
+
+/**
+ * @brief Persist a user-chosen device name in NVS.
+ *
+ * The name must already satisfy omi_device_name_is_valid(); it is stored as
+ * raw UTF-8 bytes without a terminator.
+ *
+ * @param name UTF-8 bytes (not NUL-terminated).
+ * @param len Length in bytes, 1..OMI_DEVICE_NAME_MAX_LEN.
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_save_device_name(const char *name, size_t len);
+
+/**
+ * @brief Remove the persisted device name so the device falls back to
+ * CONFIG_BT_DEVICE_NAME on the next boot.
+ *
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_clear_device_name(void);
+
+/**
+ * @brief Get the device name to advertise.
+ *
+ * @return NUL-terminated persisted name, or CONFIG_BT_DEVICE_NAME when none
+ *         has been stored.
+ */
+const char *app_settings_get_device_name(void);
 
 #endif // SETTINGS_H

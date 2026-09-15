@@ -10824,5 +10824,13 @@
     "memoryHistoryPartial": "Del zgodovine spominov ni na voljo. Prikazana je doslej prejeta zgodovina.",
     "tapPlusToStartRecording": "Tapnite + za začetek snemanja",
     "processingTakingLonger": "Še poteka — traja dlje kot običajno.",
-    "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund."
+    "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.",
+    "renameDevice": "Preimenuj napravo",
+    "renameDeviceDescription": "Ime se shrani v sam Omi, zato se prikaže na vsakem telefonu, s katerim ga povežete.",
+    "tapToRename": "Tapnite za preimenovanje",
+    "deviceNameCannotBeEmpty": "Ime naprave ne sme biti prazno",
+    "deviceNameTooLong": "Ime je predolgo (do {maxBytes} znakov; emojiji in šumniki štejejo več)",
+    "deviceNameInvalidCharacters": "Ime vsebuje nepodprte znake",
+    "deviceRenameFailed": "Imena ni bilo mogoče shraniti v Omi. Preverite, ali je povezan, in poskusite znova.",
+    "deviceRenamed": "Naprava je preimenovana v {name}"
 }

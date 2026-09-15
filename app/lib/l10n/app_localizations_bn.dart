@@ -9991,4 +9991,33 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi যেন আপনার কণ্ঠ চিনতে পারে — যেকোনো বিষয়ে প্রায় ৫ সেকেন্ড কথা বলুন।';
+
+  @override
+  String get renameDevice => 'ডিভাইসের নাম পরিবর্তন';
+
+  @override
+  String get renameDeviceDescription =>
+      'নামটি আপনার Omi-তেই সংরক্ষিত থাকে, তাই আপনি যে ফোনের সাথেই যুক্ত করুন, সেখানে এটি দেখা যাবে।';
+
+  @override
+  String get tapToRename => 'নাম পরিবর্তন করতে ট্যাপ করুন';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'ডিভাইসের নাম খালি রাখা যাবে না';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'নামটি খুব দীর্ঘ (সর্বোচ্চ $maxBytes অক্ষর; ইমোজি ও স্বরচিহ্ন অতিরিক্ত গণনা হয়)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'নামে অসমর্থিত অক্ষর রয়েছে';
+
+  @override
+  String get deviceRenameFailed => 'আপনার Omi-তে নাম সংরক্ষণ করা যায়নি। এটি সংযুক্ত আছে কি না দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'ডিভাইসের নাম পরিবর্তন করে $name রাখা হয়েছে';
+  }
 }
