@@ -61,9 +61,6 @@ export function goalTasksTitleCopy(
   target: number,
 ): string {
   const name = visibleDisplayText(title);
-  if (name === '') {
-    return '';
-  }
   return `${name} ${goalTasksProgressCopy(current, target)}`;
 }
 
@@ -87,13 +84,16 @@ export function parseOmiGoals(body: string): OmiGoal[] {
     if (id === null) {
       continue;
     }
-    if (typeof row.title !== 'string') {
+    if (
+      row.title !== undefined &&
+      row.title !== null &&
+      typeof row.title !== 'string'
+    ) {
       continue;
     }
-    const title = visibleDisplayText(text(row.title, 1_000_000));
-    if (title === '') {
-      continue;
-    }
+    const title = visibleDisplayText(
+      text(typeof row.title === 'string' ? row.title : '', 1_000_000),
+    );
     const current = goalMetric(row.current_value);
     const target = goalMetric(row.target_value);
     if (current === null || target === null) {

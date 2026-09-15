@@ -2460,6 +2460,7 @@ test('conversation list names GET goals without add or a write sheet', async () 
   expect(tree).toContain('3/10');
   expect(tree).toContain('Missing metrics');
   expect(tree).toContain('0/10');
+  expect(tree).toContain('1/2');
   expect(tree).toContain(conversationsEmptyCopy());
   expect(tree).not.toContain('No conversations yet.');
   expect(tree).not.toContain('goal-read');

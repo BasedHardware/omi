@@ -23,9 +23,11 @@ test('formats Tasks GET goal progress like Flutter _buildGoalItem toInt', () => 
   expect(goalTasksTitleCopy('Missing metrics', 0, 10)).toBe(
     'Missing metrics (0/10)',
   );
+  expect(goalTasksTitleCopy(' \t', 1, 2)).toBe(' (1/2)');
+  expect(goalTasksTitleCopy('', 3, 10)).toBe(' (3/10)');
 });
 
-test('parses GET goals titles and omits empty titles', () => {
+test('names Flutter Goal.fromJson empty GET titles as progress instead of omitting the row', () => {
   const rows = parseOmiGoals(
     JSON.stringify([
       {
@@ -35,6 +37,8 @@ test('parses GET goals titles and omits empty titles', () => {
         target_value: 10,
       },
       {id: 'goal-empty', title: ' \t', current_value: 1, target_value: 2},
+      {id: 'goal-null', title: null, current_value: 3, target_value: 10},
+      {id: 'goal-omitted', current_value: 0, target_value: 1},
       {
         id: 'goal-run',
         title: 'Run weekly',
@@ -45,6 +49,9 @@ test('parses GET goals titles and omits empty titles', () => {
   );
   expect(rows).toEqual([
     {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
+    {id: 'goal-empty', title: '', current: 1, target: 2},
+    {id: 'goal-null', title: '', current: 3, target: 10},
+    {id: 'goal-omitted', title: '', current: 0, target: 1},
     {id: 'goal-run', title: 'Run weekly', current: 1.5, target: 4},
   ]);
 });
@@ -60,7 +67,14 @@ test('does not omit a neighboring titled goal when GET lists more than four', ()
       {id: 'g5', title: 'Five', current_value: 5, target_value: 5},
     ]),
   );
-  expect(rows.map(row => row.id)).toEqual(['g1', 'g2', 'g3', 'g4', 'g5']);
+  expect(rows.map(row => row.id)).toEqual([
+    'g1',
+    'g-empty',
+    'g2',
+    'g3',
+    'g4',
+    'g5',
+  ]);
 });
 
 test('names Flutter Goal.fromJson defaulted GET metrics instead of omitting the titled row', () => {
