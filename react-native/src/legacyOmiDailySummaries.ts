@@ -77,8 +77,7 @@ function headlineCopy(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  const headline = visibleDisplayText(text(value, 1_000_000));
-  return headline === '' ? undefined : headline;
+  return visibleDisplayText(text(value, 1_000_000));
 }
 
 function summaryStats(value: unknown): {

@@ -467,19 +467,11 @@ export function MobileAppSurface({
   }, [backend]);
   const dailySummaryCards = useMemo(() => {
     const now = new Date();
-    return dailySummaries.flatMap(row => {
-      const headline = visibleDisplayText(row.headline);
-      if (headline === '') {
-        return [];
-      }
-      return [
-        {
-          dateLabel: dailySummaryDateCopy(row.date, now),
-          headline,
-          id: row.id,
-        },
-      ];
-    });
+    return dailySummaries.map(row => ({
+      dateLabel: dailySummaryDateCopy(row.date, now),
+      headline: visibleDisplayText(row.headline),
+      id: row.id,
+    }));
   }, [dailySummaries]);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(

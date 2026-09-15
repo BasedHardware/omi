@@ -5,7 +5,40 @@ import {
 } from './legacyOmiDailySummaries';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('parses GET daily summary headlines and omits empty headlines', () => {
+test('names Flutter DailySummaryCard empty GET headlines instead of omitting the summary', () => {
+  const rows = parseOmiDailySummaries(
+    JSON.stringify({
+      summaries: [
+        {
+          id: 'sum-1',
+          date: '2026-09-09',
+          headline: 'Met with the team',
+        },
+        {
+          id: 'sum-empty',
+          date: '2026-09-08',
+          headline: ' \t',
+        },
+        {
+          id: 'sum-blank',
+          date: '2026-09-07',
+          headline: '',
+        },
+      ],
+    }),
+  );
+  expect(rows).toEqual([
+    {
+      id: 'sum-1',
+      date: '2026-09-09',
+      headline: 'Met with the team',
+    },
+    {id: 'sum-empty', date: '2026-09-08', headline: ''},
+    {id: 'sum-blank', date: '2026-09-07', headline: ''},
+  ]);
+});
+
+test('parses GET daily summary headlines and omits unused stats', () => {
   const rows = parseOmiDailySummaries(
     JSON.stringify({
       summaries: [
@@ -57,6 +90,7 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
       watchingMinutes: 10,
       proactiveMoments: 1,
     },
+    {id: 'sum-empty', date: '2026-09-08', headline: ''},
     {id: 'sum-2', date: '', headline: 'Shipped the recap'},
   ]);
 });
@@ -70,7 +104,6 @@ test('names Flutter DailySummaryCard omitted or JSON-null GET headlines as Your 
           {id: 'sum-null', date: '2026-09-09', headline: null},
           {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
           {id: 'sum-number', date: '2026-09-07', headline: 1},
-          {id: 'sum-kept', headline: 'Met with the team'},
         ],
       }),
     ),
@@ -85,7 +118,7 @@ test('names Flutter DailySummaryCard omitted or JSON-null GET headlines as Your 
       date: '2026-09-09',
       headline: dailySummaryDefaultHeadlineCopy(),
     },
-    {id: 'sum-kept', date: '', headline: 'Met with the team'},
+    {id: 'sum-empty', date: '2026-09-08', headline: ''},
   ]);
 });
 

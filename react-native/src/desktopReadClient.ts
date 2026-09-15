@@ -1529,19 +1529,13 @@ export function dailySummaryCopy(
   }[],
   now: Date = new Date(),
 ): {title: string; copy: string}[] {
-  return rows.flatMap(row => {
+  return rows.map(row => {
     const headline = visibleDisplayText(row.headline);
-    if (headline === '') {
-      return [];
-    }
     const date = dailySummaryDateCopy(row.date, now);
-    const dated = date === '' ? headline : `${date} · ${headline}`;
-    return [
-      {
-        title: 'Daily summary',
-        copy: dated,
-      },
-    ];
+    return {
+      title: 'Daily summary',
+      copy: [date, headline].filter(copy => copy !== '').join(' · '),
+    };
   });
 }
 

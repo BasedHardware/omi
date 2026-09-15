@@ -1880,6 +1880,28 @@ test('Settings names Flutter DailySummaryCard omitted GET headlines as Your Day 
   expect(tree).not.toContain('Regenerate');
 });
 
+test('Settings names Flutter DailySummaryCard empty GET headlines without omitting Daily summary', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [{id: 'sum-empty', headline: ' \t'}],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Daily summary');
+  expect(tree).not.toContain('sum-empty');
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('Regenerate');
+});
+
 test('Settings names a failed daily summaries GET instead of empty success', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
