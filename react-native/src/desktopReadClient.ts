@@ -239,9 +239,6 @@ export function transcriptSttProviderCopy(
     return transcriptSttUnknownCopy();
   }
   const token = visibleDisplayText(value);
-  if (token === '') {
-    return undefined;
-  }
   return TRANSCRIPT_STT_PROVIDER_COPY[token] ?? transcriptSttOmiFallbackCopy();
 }
 

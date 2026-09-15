@@ -806,6 +806,7 @@ test('names GET transcript stt_provider unknown as Flutter Omi', async () => {
         isUser: true,
         start: 0.25,
         end: 4.5,
+        sttProvider: transcriptSttOmiFallbackCopy(),
       },
     ],
   });

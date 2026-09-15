@@ -3703,7 +3703,9 @@ test('transcript STT copy names Flutter getDisplayName empty as Unknown', () => 
   expect(transcriptSttProviderCopy('Deepgram')).toBe(
     transcriptSttOmiFallbackCopy(),
   );
-  expect(transcriptSttProviderCopy(' \t\u0085 ')).toBeUndefined();
+  expect(transcriptSttProviderCopy(' \t\u0085 ')).toBe(
+    transcriptSttOmiFallbackCopy(),
+  );
   expect(transcriptSttProviderCopy(undefined)).toBeUndefined();
   expect(transcriptSttProviderCopy(null)).toBeUndefined();
 });
