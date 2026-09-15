@@ -490,6 +490,17 @@ class TranscriptSocketServiceFactory {
   static IPureSocket _createStreamingSocket(int sampleRate, BleAudioCodec codec, CustomSttConfig config) {
     final transcoder = AudioTranscoderFactory.createToRawPcm(sourceCodec: codec, sampleRate: sampleRate);
 
+    // Special case: OpenAI GPT-Live has a unique protocol (session.start handshake, base64 audio)
+    if (config.provider == SttProvider.gptLive) {
+      return GptLiveStreamingSttSocket(
+        apiKey: config.apiKey ?? '',
+        model: config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gpt-live-1',
+        language: config.effectiveLanguage,
+        sampleRate: sampleRate,
+        transcoder: transcoder,
+      );
+    }
+
     // Special case: Gemini Live has unique protocol (setup message, base64 audio)
     if (config.provider == SttProvider.geminiLive) {
       return GeminiStreamingSttSocket(

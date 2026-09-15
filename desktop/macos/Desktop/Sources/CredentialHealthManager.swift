@@ -207,6 +207,7 @@ final class CredentialHealthManager: ObservableObject {
     switch raw.lowercased() {
     case "openai": return .openai
     case "gemini": return .gemini
+    case "gpt_live": return .gptLive
     default: return nil
     }
   }

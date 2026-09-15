@@ -48,14 +48,14 @@ interface GeminiMessage {
   serverContent?: GeminiServerContent;
 }
 
-function appendChunk(current: string, chunk: string): string {
+export function appendChunk(current: string, chunk: string): string {
   if (!chunk) return current;
   if (!current) return chunk;
   if (/\s$/.test(current) || /^\s/.test(chunk)) return current + chunk;
   return `${current} ${chunk}`;
 }
 
-function pcmToBase64(pcm: Int16Array): string {
+export function pcmToBase64(pcm: Int16Array): string {
   const bytes = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -93,7 +93,7 @@ export function geminiUsageReport(metadata: GeminiUsageMetadata): RealtimeUsageR
   };
 }
 
-class PcmPlayer {
+export class PcmPlayer {
   private context: AudioContext | null = null;
   private nextStart = 0;
   private sources = new Set<AudioBufferSourceNode>();

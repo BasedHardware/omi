@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
@@ -369,26 +370,29 @@ class GeminiStreamingSttSocket implements IPureSocket {
   @override
   Future disconnect() async {
     if (_bufferedBytes > 0 && _status == PureSocketStatus.connected) {
-      final combined = Uint8List(_bufferedBytes);
-      int offset = 0;
-      for (final frame in _frameBuffer) {
-        combined.setRange(offset, offset + frame.length, frame);
-        offset += frame.length;
-      }
-      _frameBuffer.clear();
-      _bufferedBytes = 0;
-
-      Uint8List? pcmData = combined;
+      Uint8List? pcmData;
       if (transcoder != null) {
         try {
-          pcmData = transcoder!.transcodeFrames([combined]);
+          // Keep the original frame list: Opus decodes per packet, so
+          // concatenating frames into one buffer would corrupt the tail.
+          pcmData = transcoder!.transcodeFrames(_frameBuffer);
         } catch (e) {
           // Don't ship un-transcoded bytes tagged as PCM — that produces a corrupted stream.
           // Skip only the tail send; teardown below must still run.
           CustomSttLogService.instance.error('GeminiStreaming', 'Transcode error (flush): $e');
           pcmData = null;
         }
+      } else {
+        final combined = Uint8List(_bufferedBytes);
+        int offset = 0;
+        for (final frame in _frameBuffer) {
+          combined.setRange(offset, offset + frame.length, frame);
+          offset += frame.length;
+        }
+        pcmData = combined;
       }
+      _frameBuffer.clear();
+      _bufferedBytes = 0;
 
       if (pcmData != null) {
         final realtimeInput = {
@@ -447,6 +451,408 @@ class GeminiStreamingSttSocket implements IPureSocket {
   void onError(Object err, StackTrace trace) {
     CustomSttLogService.instance.error('GeminiStreaming', 'Error: $err');
     DebugLogManager.logError(err, trace, 'gemini_streaming_error');
+    _listener?.onError(err, trace);
+  }
+}
+
+/// The one-time GPT-Live `session.start` frame for the STT-only socket.
+///
+/// Unlike the conversational GPT-Live clients, this lane only consumes
+/// `session.input_transcript.delta`, so it names the spoken language in the
+/// instructions and omits `audio.output.voice` (no reply is synthesized).
+Map<String, dynamic> gptLiveSessionStartMessage({
+  required String model,
+  required String language,
+  required int sampleRate,
+  required String eventId,
+}) {
+  final languageName = SttLanguages.common[language] ?? language;
+  return {
+    'type': 'session.start',
+    'event_id': eventId,
+    'session': {
+      'model': model,
+      'instructions': "Transcribe the user's speech in $languageName.",
+      'audio': {
+        'format': {'type': 'audio/pcm', 'rate': sampleRate},
+      },
+    },
+  };
+}
+
+/// OpenAI GPT-Live streaming socket with session.start handshake and base64 audio encoding
+class GptLiveStreamingSttSocket implements IPureSocket {
+  WebSocketChannel? _channel;
+
+  final String apiKey;
+  final String model;
+  final String language;
+  final int sampleRate;
+  final IAudioTranscoder? transcoder;
+
+  PureSocketStatus _status = PureSocketStatus.notConnected;
+  @override
+  PureSocketStatus get status => _status;
+
+  IPureSocketListener? _listener;
+
+  late final SttAudioTimeline _timeline = SttAudioTimeline(sampleRate: sampleRate);
+  /// True once the server confirms `session.started`; audio is buffered, never
+  /// dropped, until then.
+  bool _sessionStarted = false;
+  /// True once the `session.start` frame has been written (guards re-send).
+  bool _sessionStartSent = false;
+
+  final List<Uint8List> _frameBuffer = [];
+  int _bufferedBytes = 0;
+  static const int _minBytesBeforeSend = 16000;
+  /// Bound on pre-ack buffering so a provider that never sends `session.started`
+  /// can't grow memory without limit; oldest frames are dropped first.
+  static const int _maxBufferedBytes = 1_920_000;
+
+  GptLiveStreamingSttSocket({
+    required this.apiKey,
+    this.model = 'gpt-live-1',
+    this.language = 'en',
+    this.sampleRate = 16000,
+    this.transcoder,
+  });
+
+  @override
+  void setListener(IPureSocketListener listener) {
+    _listener = listener;
+  }
+
+  String get _wsUrl => 'wss://api.openai.com/v1/live/sessions';
+
+  @override
+  Future<bool> connect() async {
+    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
+      return false;
+    }
+
+    CustomSttLogService.instance.info('GptLive', 'Connecting...');
+    _status = PureSocketStatus.connecting;
+
+    try {
+      _channel = IOWebSocketChannel.connect(
+        _wsUrl,
+        headers: {'Authorization': 'Bearer $apiKey'},
+        pingInterval: const Duration(seconds: 20),
+        connectTimeout: const Duration(seconds: 15),
+      );
+
+      await _channel!.ready;
+
+      _status = PureSocketStatus.connected;
+      _sessionStarted = false;
+      _sessionStartSent = false;
+      DebugLogManager.logEvent('gpt_live_streaming_connected', {
+        'model': model,
+        'language': language,
+        'sample_rate': sampleRate,
+      });
+
+      _channel!.stream.listen(
+        _handleMessage,
+        onError: (err, trace) => onError(err, trace),
+        onDone: () => onClosed(_channel?.closeCode),
+        cancelOnError: true,
+      );
+
+      if (!await _sendSessionStart()) {
+        // The handshake never reached the wire — reporting connected would let the
+        // composite service treat a dead session as live and never recover.
+        CustomSttLogService.instance.error('GptLive', 'Session start failed; not reporting connected');
+        DebugLogManager.logWarning('gpt_live_streaming_session_start_failed', {});
+        _status = PureSocketStatus.notConnected;
+        return false;
+      }
+
+      onConnected();
+      return true;
+    } on TimeoutException catch (e) {
+      CustomSttLogService.instance.error('GptLive', 'Connection timeout: $e');
+      DebugLogManager.logWarning('gpt_live_streaming_connect_timeout', {'error': e.toString()});
+      _status = PureSocketStatus.notConnected;
+      return false;
+    } on SocketException catch (e) {
+      CustomSttLogService.instance.error('GptLive', 'Socket error: $e');
+      DebugLogManager.logWarning('gpt_live_streaming_socket_error', {'error': e.toString()});
+      _status = PureSocketStatus.notConnected;
+      return false;
+    } on WebSocketChannelException catch (e) {
+      CustomSttLogService.instance.error('GptLive', 'WebSocket error: $e');
+      DebugLogManager.logWarning('gpt_live_streaming_websocket_error', {'error': e.toString()});
+      _status = PureSocketStatus.notConnected;
+      return false;
+    } catch (e) {
+      CustomSttLogService.instance.error('GptLive', 'Connection error: $e');
+      DebugLogManager.logWarning('gpt_live_streaming_connect_error', {'error': e.toString()});
+      _status = PureSocketStatus.notConnected;
+      return false;
+    }
+  }
+
+  /// Send the one-time `session.start` frame. Returns false if the write failed,
+  /// so [connect] can refuse to report a connection that never started.
+  Future<bool> _sendSessionStart() async {
+    if (_sessionStartSent) return true;
+
+    final startMessage = gptLiveSessionStartMessage(
+      model: model,
+      language: language,
+      sampleRate: sampleRate,
+      eventId: DateTime.now().microsecondsSinceEpoch.toString(),
+    );
+
+    try {
+      _channel!.sink.add(jsonEncode(startMessage));
+      _sessionStartSent = true;
+      CustomSttLogService.instance.info('GptLive', 'Session start sent');
+      return true;
+    } catch (e) {
+      CustomSttLogService.instance.error('GptLive', 'Failed to send session.start: $e');
+      return false;
+    }
+  }
+
+  void _handleMessage(dynamic message) {
+    String messageStr;
+    if (message is String) {
+      messageStr = message;
+    } else if (message is List<int>) {
+      // Binary WebSocket frame - decode as UTF-8
+      try {
+        messageStr = utf8.decode(message);
+      } catch (e) {
+        Logger.debug("[GptLive] Failed to decode binary message: $e");
+        return;
+      }
+    } else {
+      Logger.debug("[GptLive] Unsupported message type: ${message.runtimeType}");
+      return;
+    }
+
+    try {
+      final json = jsonDecode(messageStr);
+      if (json is! Map) return;
+
+      final type = json['type'] as String?;
+      if (type == null) return;
+
+      if (type == 'session.started') {
+        CustomSttLogService.instance.info('GptLive', 'Session started');
+        _sessionStarted = true;
+        // Audio captured during the handshake was buffered, not dropped — send it
+        // now that the provider accepts input.
+        _flushBufferedAudio();
+        return;
+      }
+
+      if (type == 'error') {
+        final raw = json['error'] ?? json['message'];
+        final errorMessage = raw is Map
+            ? (raw['message'] ?? raw.toString())
+            : (raw?.toString() ?? 'GPT-Live server error');
+        CustomSttLogService.instance.error('GptLive', 'Server error: $errorMessage');
+        // The socket may stay open after an error frame; surface it so the
+        // composite transcription service can tear down and recover instead of
+        // hanging until the idle timeout.
+        onError(StateError('GPT-Live server error: $errorMessage'), StackTrace.current);
+        return;
+      }
+
+      // Only the user's input transcript is STT output; ignore output_transcript.delta,
+      // output_audio.delta, and every other server event.
+      if (type != 'session.input_transcript.delta') return;
+
+      final delta = json['delta'] as String?;
+      final text = delta?.trim();
+      if (text == null || text.isEmpty) return;
+
+      final bounds = _timeline.nextSegment();
+      final segment = {
+        'text': text,
+        'speaker': 'SPEAKER_0',
+        'speaker_id': 0,
+        'is_user': false,
+        'start': bounds.start,
+        'end': bounds.end,
+        'person_id': null,
+      };
+
+      onMessage(jsonEncode([segment]));
+    } catch (e, trace) {
+      CustomSttLogService.instance.error('GptLive', 'Parse error: $e');
+      Logger.handle(e, trace, message: 'GptLive parse error');
+    }
+  }
+
+  @override
+  void send(dynamic message) {
+    if (_status != PureSocketStatus.connected || _channel == null) {
+      return;
+    }
+
+    Uint8List audioData;
+    if (message is Uint8List) {
+      audioData = message;
+    } else if (message is List<int>) {
+      audioData = Uint8List.fromList(message);
+    } else {
+      CustomSttLogService.instance.warning('GptLive', 'Unsupported message type: ${message.runtimeType}');
+      return;
+    }
+
+    _frameBuffer.add(audioData);
+    _bufferedBytes += audioData.length;
+    // Bound pre-ack buffering; drop oldest frames first.
+    while (_bufferedBytes > _maxBufferedBytes && _frameBuffer.length > 1) {
+      _bufferedBytes -= _frameBuffer.removeAt(0).length;
+    }
+
+    // Wait for `session.started`: the provider rejects audio sent before its
+    // ack, so hold the frames (don't drop) and flush them from _handleMessage.
+    if (!_sessionStarted || _bufferedBytes < _minBytesBeforeSend) {
+      return;
+    }
+
+    _flushBufferedAudio();
+  }
+
+  /// Transcode + send everything buffered. Precondition: `_sessionStarted`.
+  void _flushBufferedAudio() {
+    if (_bufferedBytes == 0 || _channel == null || _status != PureSocketStatus.connected) {
+      return;
+    }
+
+    Uint8List pcmData;
+    if (transcoder != null) {
+      // Transcode individual frames (important for Opus which needs frame boundaries)
+      try {
+        pcmData = transcoder!.transcodeFrames(_frameBuffer);
+      } catch (e) {
+        CustomSttLogService.instance.error('GptLive', 'Transcode error: $e');
+        _frameBuffer.clear();
+        _bufferedBytes = 0;
+        return;
+      }
+    } else {
+      // Only combine if no transcoding needed (raw PCM)
+      pcmData = Uint8List(_bufferedBytes);
+      int offset = 0;
+      for (final frame in _frameBuffer) {
+        pcmData.setRange(offset, offset + frame.length, frame);
+        offset += frame.length;
+      }
+    }
+    _frameBuffer.clear();
+    _bufferedBytes = 0;
+
+    final audioMessage = {
+      'type': 'session.input_audio.append',
+      'audio': base64Encode(pcmData),
+    };
+
+    try {
+      _channel!.sink.add(jsonEncode(audioMessage));
+      _timeline.addPcm(pcmData.length);
+    } catch (e) {
+      CustomSttLogService.instance.error('GptLive', 'Send error: $e');
+    }
+  }
+
+  @override
+  Future disconnect() async {
+    if (_bufferedBytes > 0 && _status == PureSocketStatus.connected && _sessionStarted) {
+      Uint8List? pcmData;
+      if (transcoder != null) {
+        try {
+          // Keep the original frame list: Opus decodes per packet, so
+          // concatenating frames into one buffer would corrupt the tail.
+          pcmData = transcoder!.transcodeFrames(_frameBuffer);
+        } catch (e) {
+          // Don't ship un-transcoded bytes tagged as PCM — that produces a corrupted stream.
+          // Skip only the tail send; teardown below must still run.
+          CustomSttLogService.instance.error('GptLive', 'Transcode error (flush): $e');
+          pcmData = null;
+        }
+      } else {
+        final combined = Uint8List(_bufferedBytes);
+        int offset = 0;
+        for (final frame in _frameBuffer) {
+          combined.setRange(offset, offset + frame.length, frame);
+          offset += frame.length;
+        }
+        pcmData = combined;
+      }
+      _frameBuffer.clear();
+      _bufferedBytes = 0;
+
+      if (pcmData != null) {
+        final audioMessage = {
+          'type': 'session.input_audio.append',
+          'audio': base64Encode(pcmData),
+        };
+
+        try {
+          _channel!.sink.add(jsonEncode(audioMessage));
+          _timeline.addPcm(pcmData.length);
+        } catch (_) {}
+      }
+    }
+    // Drop any buffered audio even when the session never started, so a
+    // pre-ack disconnect can't leak frames into the next session.
+    _frameBuffer.clear();
+    _bufferedBytes = 0;
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    try {
+      _channel?.sink.add(jsonEncode({'type': 'session.close'}));
+    } catch (_) {}
+
+    _channel?.sink.close();
+    _status = PureSocketStatus.disconnected;
+    CustomSttLogService.instance.info('GptLive', 'Disconnected');
+    onClosed();
+  }
+
+  @override
+  Future stop() async {
+    DebugLogManager.logEvent('gpt_live_streaming_stopping', {});
+    await disconnect();
+    _frameBuffer.clear();
+    _bufferedBytes = 0;
+    _timeline.reset();
+    _sessionStarted = false;
+    _sessionStartSent = false;
+  }
+
+  @override
+  void onConnected() {
+    CustomSttLogService.instance.info('GptLive', 'Connected');
+    _listener?.onConnected();
+  }
+
+  @override
+  void onMessage(dynamic message) {
+    _listener?.onMessage(message);
+  }
+
+  @override
+  void onClosed([int? closeCode]) {
+    _status = PureSocketStatus.disconnected;
+    CustomSttLogService.instance.warning('GptLive', 'Closed with code: $closeCode');
+    DebugLogManager.logEvent('gpt_live_streaming_closed', {'close_code': closeCode ?? -1});
+    _listener?.onClosed(closeCode);
+  }
+
+  @override
+  void onError(Object err, StackTrace trace) {
+    CustomSttLogService.instance.error('GptLive', 'Error: $err');
+    DebugLogManager.logError(err, trace, 'gpt_live_streaming_error');
     _listener?.onError(err, trace);
   }
 }

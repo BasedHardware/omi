@@ -3,13 +3,17 @@
 // and building it must never block session start on a network fetch.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { get, startOpenAiSession, startGeminiSession, mintRealtimeToken } = vi.hoisted(() => ({
-  get: vi.fn(),
-  startOpenAiSession: vi.fn(),
-  startGeminiSession: vi.fn(),
-  mintRealtimeToken: vi.fn()
-}))
+const { get, startOpenAiSession, startGeminiSession, startGptLiveSession, mintRealtimeToken, openAiByokKeyCached } =
+  vi.hoisted(() => ({
+    get: vi.fn(),
+    startOpenAiSession: vi.fn(),
+    startGeminiSession: vi.fn(),
+    startGptLiveSession: vi.fn(),
+    mintRealtimeToken: vi.fn(),
+    openAiByokKeyCached: vi.fn()
+  }))
 
+vi.mock('../byokKeys', () => ({ openAiByokKeyCached }))
 vi.mock('../analytics', () => ({ trackEvent: vi.fn() }))
 vi.mock('../firebase', () => ({ auth: { currentUser: { uid: 'u1', displayName: 'Ada' } } }))
 vi.mock('../apiClient', () => ({ omiApi: { get } }))
@@ -17,14 +21,21 @@ vi.mock('./tokenMint', () => ({
   mintRealtimeToken,
   MintError: class MintError extends Error {},
   OPENAI_REALTIME_MODEL: 'test-openai',
-  GEMINI_LIVE_MODEL: 'test-gemini'
+  GEMINI_LIVE_MODEL: 'test-gemini',
+  GPT_LIVE_MODEL: 'test-gpt-live'
 }))
 vi.mock('./usageReport', () => ({ reportRealtimeUsage: vi.fn() }))
 vi.mock('./openaiSession', () => ({ startOpenAiSession }))
 vi.mock('./geminiSession', () => ({ startGeminiSession }))
+vi.mock('./gptLiveSession', () => ({ startGptLiveSession }))
 vi.mock('./tts', () => ({ synthesizeTts: vi.fn(), DEFAULT_TTS_VOICE: 'test-voice' }))
 
-import { startVoiceSession, stopVoiceSession } from './voiceController'
+import {
+  startVoiceSession,
+  stopVoiceSession,
+  sendVoiceText,
+  getVoiceEvents
+} from './voiceController'
 import { refreshAboutUserCard, resetAboutUserCard, whenAboutUserCardSettled } from './aboutUser'
 import { setPreferences } from './../preferences'
 
@@ -34,7 +45,9 @@ beforeEach(() => {
   get.mockReset()
   startOpenAiSession.mockReset().mockResolvedValue(handle)
   startGeminiSession.mockReset().mockResolvedValue(handle)
+  startGptLiveSession.mockReset().mockResolvedValue(handle)
   mintRealtimeToken.mockReset().mockResolvedValue({ token: 't' })
+  openAiByokKeyCached.mockReset().mockReturnValue(undefined)
   resetAboutUserCard()
   localStorage.clear()
   setPreferences({ voiceLanguages: undefined })
@@ -58,7 +71,7 @@ describe('startVoiceSession — system instruction', () => {
     expect(instructions).not.toContain('What Omi knows about them:')
   })
 
-  it('feeds the cached card and the voice-language preference to BOTH lanes', async () => {
+  it('feeds the cached card and the voice-language preference to EVERY lane', async () => {
     get.mockResolvedValue({
       data: [{ content: 'Ships fast.', created_at: '2026-07-01T00:00:00Z' }]
     })
@@ -69,17 +82,58 @@ describe('startVoiceSession — system instruction', () => {
     await startVoiceSession('openai')
     stopVoiceSession()
     await startVoiceSession('gemini')
+    stopVoiceSession()
+    await startVoiceSession('gpt_live')
 
     const openai = startOpenAiSession.mock.calls[0][0].instructions
     const gemini = startGeminiSession.mock.calls[0][0].instructions
+    const gptLive = startGptLiveSession.mock.calls[0][0].instructions
     // Identical apart from the wall-clock line each session stamps at start.
     const withoutClock = (s: string): string => s.replace(/Current local datetime:.*\n/, '')
     expect(withoutClock(openai)).toBe(withoutClock(gemini))
-    for (const text of [openai, gemini]) {
+    expect(withoutClock(openai)).toBe(withoutClock(gptLive))
+    for (const text of [openai, gemini, gptLive]) {
       expect(text).toContain('<about_user>')
       expect(text).toContain('Name: Ada')
       expect(text).toContain('- Ships fast.')
       expect(text).toContain('The user speaks ONLY these languages: Russian, English')
     }
+  })
+
+  it('routes GPT-Live direct to OpenAI with the cached BYOK key', async () => {
+    openAiByokKeyCached.mockReturnValue('sk-user-openai')
+    await startVoiceSession('gpt_live')
+    expect(startGptLiveSession).toHaveBeenCalledTimes(1)
+    const args = startGptLiveSession.mock.calls[0][0]
+    expect(args.byok).toBe(true)
+    expect(args.token).toBe('sk-user-openai')
+  })
+
+  it('keeps GPT-Live on the managed relay when no OpenAI key is configured', async () => {
+    await startVoiceSession('gpt_live')
+    const args = startGptLiveSession.mock.calls[0][0]
+    expect(args.byok).toBe(false)
+    expect(args.token).toBe('t')
+  })
+})
+
+describe('sendVoiceText — GPT-Live has no text-input frame', () => {
+  it('surfaces the drop instead of recording a sent turn', async () => {
+    await startVoiceSession('gpt_live')
+    handle.sendUserText.mockClear()
+
+    sendVoiceText('typed hello')
+
+    expect(handle.sendUserText).not.toHaveBeenCalled()
+    expect(getVoiceEvents().map((e) => e.type)).toContain('user-text-unsupported')
+  })
+
+  it('forwards typed text on a lane that supports it', async () => {
+    await startVoiceSession('openai')
+    handle.sendUserText.mockClear()
+
+    sendVoiceText('typed hello')
+
+    expect(handle.sendUserText).toHaveBeenCalledWith('typed hello')
   })
 })

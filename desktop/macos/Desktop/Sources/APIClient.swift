@@ -259,7 +259,7 @@ actor APIClient {
   }
 
   /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
-  /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall.
+  /// for `provider` ("openai"|"gemini"|"gpt_live"). The backend gates on auth + paywall.
   /// Credential failures are typed so the hub can recover deterministically instead
   /// of treating every failure as a silent fallback.
   func mintRealtimeToken(

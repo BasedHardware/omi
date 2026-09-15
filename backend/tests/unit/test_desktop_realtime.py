@@ -196,3 +196,70 @@ async def test_usage_blocks_quota_before_recording(monkeypatch):
         )
 
     assert error.value.status_code == 402
+
+
+@pytest.mark.asyncio
+async def test_gpt_live_mint_echoes_omi_auth_token_when_openai_configured(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "platform-key")
+    persisted = {}
+
+    async def persist(*args):
+        persisted["args"] = args
+
+    monkeypatch.setattr(desktop_realtime, "_persist_session", persist)
+
+    async def run(_executor, function, *_args, **_kwargs):
+        assert function is desktop_realtime.enforce_desktop_chat_quota
+        return False
+
+    monkeypatch.setattr(desktop_realtime, "run_blocking", run)
+
+    response = await desktop_realtime.mint_session(
+        desktop_realtime.MintRequest(provider="gpt_live"),
+        "user-1",
+        authorization="Bearer firebase-id-token",
+    )
+
+    assert response.status_code == 200
+    body = json.loads(response.body)
+    assert body["provider"] == "gpt_live"
+    assert body["token"] == "firebase-id-token"
+    assert "expires_at" in body
+    assert persisted["args"][0] == "user-1"
+    assert persisted["args"][1] == "firebase-id-token"
+    assert persisted["args"][2] == "gpt_live"
+    assert persisted["args"][3] == "gpt-live-1"
+
+
+@pytest.mark.asyncio
+async def test_gpt_live_mint_requires_openai_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    async def run(_executor, function, *_args, **_kwargs):
+        assert function is desktop_realtime.enforce_desktop_chat_quota
+        return False
+
+    monkeypatch.setattr(desktop_realtime, "run_blocking", run)
+
+    response = await desktop_realtime.mint_session(
+        desktop_realtime.MintRequest(provider="gpt_live"),
+        "user-1",
+        authorization="Bearer firebase-id-token",
+    )
+
+    assert response.status_code == 503
+    assert json.loads(response.body)["reason"] == "provider_not_configured"
+
+
+def test_usage_cost_uses_the_server_issued_gpt_live_model(monkeypatch):
+    models = []
+
+    def cost(provider, model, turn):
+        models.append((provider, model))
+        return 0.05
+
+    monkeypatch.setattr(desktop_realtime, 'client_reported_cost_usd', cost)
+    report = desktop_realtime.UsageReport(provider='gpt_live', model='ignored-client-model')
+
+    assert desktop_realtime._usage_cost(report) == 0.05
+    assert models == [('gpt_live', 'gpt-live-1')]

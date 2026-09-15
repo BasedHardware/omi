@@ -667,7 +667,7 @@ export async function deleteChatSession(id: string): Promise<void> {
 }
 
 export interface RealtimeSessionToken {
-  provider: 'gemini';
+  provider: 'gemini' | 'gpt_live';
   token: string;
   expires_at?: string;
 }
@@ -686,10 +686,10 @@ interface SavedRealtimeMessage {
   session_id?: string | null;
 }
 
-export async function createGeminiLiveSession(): Promise<RealtimeSessionToken> {
+export async function createGptLiveSession(): Promise<RealtimeSessionToken> {
   return fetchWithAuth<RealtimeSessionToken>('/v2/realtime/session', {
     method: 'POST',
-    body: JSON.stringify({ provider: 'gemini' }),
+    body: JSON.stringify({ provider: 'gpt_live' }),
   });
 }
 
@@ -713,12 +713,12 @@ export async function saveRealtimeMessage(params: {
   });
 }
 
-export async function reportGeminiLiveUsage(usage: RealtimeUsageReport): Promise<void> {
+export async function reportGptLiveUsage(usage: RealtimeUsageReport): Promise<void> {
   await fetchWithAuth('/v2/realtime/usage', {
     method: 'POST',
     body: JSON.stringify({
-      provider: 'gemini',
-      model: 'gemini-3.1-flash-live-preview',
+      provider: 'gpt_live',
+      model: 'gpt-live-1',
       ...usage,
     }),
   });

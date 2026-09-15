@@ -24,9 +24,11 @@ import { refreshIfStale, resolveEffectiveVoiceProvider } from './autoModelSelect
 import { getAboutUserCard, refreshAboutUserCard } from './aboutUser'
 import { buildVoiceSystemInstruction } from './systemInstruction'
 import { getPreferences } from '../preferences'
+import { openAiByokKeyCached } from '../byokKeys'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
 import { startGeminiSession } from './geminiSession'
+import { startGptLiveSession } from './gptLiveSession'
 import { synthesizeTts, DEFAULT_TTS_VOICE } from './tts'
 import { chunkTts } from './ttsChunker'
 import type { ProviderSessionCallbacks, ProviderSessionHandle } from './providerSession'
@@ -297,7 +299,10 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
     } catch (e) {
       const failure = e instanceof MintError ? e.failure : null
       if (!failure?.tryOtherProvider) throw e
-      const other: VoiceProvider = provider === 'openai' ? 'gemini' : 'openai'
+      // GPT-Live is the default lane and always falls over to Gemini (the available
+      // alternate); Gemini falls to GPT-Live; the legacy OpenAI lane keeps Gemini.
+      const other: VoiceProvider =
+        provider === 'openai' ? 'gemini' : provider === 'gemini' ? 'gpt_live' : 'gemini'
       trackEvent('fallback_triggered', {
         component: 'realtime_mint',
         from: provider,
@@ -335,21 +340,34 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   // newer session's handle, orphaning its live mic/socket.
   let session: ProviderSessionHandle
   try {
-    session =
-      provider === 'openai'
-        ? await startOpenAiSession({
-            clientSecret: token,
-            instructions,
-            onSpeakers: !headset,
-            sinkId: sinkId || undefined,
-            cb
-          })
-        : await startGeminiSession({
-            authToken: token,
-            instructions,
-            sinkId: sinkId || undefined,
-            cb
-          })
+    if (provider === 'gpt_live') {
+      // BYOK: a cached OpenAI key routes GPT-Live direct to OpenAI (the REST
+      // mint's request-local key can't reach the WebSocket). Otherwise the Omi
+      // relay injects the platform key server-side.
+      const byokKey = openAiByokKeyCached()
+      session = await startGptLiveSession({
+        token: byokKey ?? token,
+        byok: byokKey !== undefined,
+        instructions,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    } else if (provider === 'openai') {
+      session = await startOpenAiSession({
+        clientSecret: token,
+        instructions,
+        onSpeakers: !headset,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    } else {
+      session = await startGeminiSession({
+        authToken: token,
+        instructions,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    }
   } catch (e) {
     if (mySeq !== startSeq) return
     dispatch({ type: 'fail', message: (e as Error)?.message ?? String(e), retryable: true })
@@ -379,6 +397,13 @@ export function setVoiceMuted(muted: boolean): void {
 
 /** Typed user turn into the live voice conversation (model replies with voice). */
 export function sendVoiceText(text: string): void {
+  // GPT-Live is full-duplex with no text-input frame (see
+  // gptLiveSession.sendUserText), so a typed turn would be silently dropped.
+  // Surface the drop on the event trail instead of recording a false send.
+  if ((state.status === 'connecting' || state.status === 'live') && state.provider === 'gpt_live') {
+    record('user-text-unsupported', text.slice(0, 80))
+    return
+  }
   handle?.sendUserText(text)
   record('user-text', text.slice(0, 80))
 }

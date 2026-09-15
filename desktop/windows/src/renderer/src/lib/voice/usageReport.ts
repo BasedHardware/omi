@@ -85,6 +85,43 @@ export function mapGeminiUsage(
   }
 }
 
+/** GPT-Live `session.closed.usage` → report body. The relay speaks OpenAI-style
+ *  counts with the modality split under `input_token_details` /
+ *  `output_token_details`; an aggregate-only block falls back to the totals
+ *  without inventing an audio split (web `gptLiveUsageReport` parity). */
+export function mapGptLiveUsage(
+  usage: {
+    input_tokens?: number
+    output_tokens?: number
+    input_token_details?: {
+      text_tokens?: number
+      audio_tokens?: number
+      cached_tokens?: number
+    }
+    output_token_details?: {
+      text_tokens?: number
+      audio_tokens?: number
+    }
+  },
+  model: string
+): RealtimeUsageBody {
+  const input = usage.input_token_details ?? {}
+  const output = usage.output_token_details ?? {}
+  const inputText = num(input.text_tokens)
+  const inputAudio = num(input.audio_tokens)
+  const outputText = num(output.text_tokens)
+  const outputAudio = num(output.audio_tokens)
+  return {
+    provider: 'gpt_live',
+    model,
+    input_text_tokens: inputText + inputAudio > 0 ? inputText : num(usage.input_tokens),
+    input_audio_tokens: inputAudio,
+    input_cached_tokens: num(input.cached_tokens),
+    output_text_tokens: outputText + outputAudio > 0 ? outputText : num(usage.output_tokens),
+    output_audio_tokens: outputAudio
+  }
+}
+
 /** Difference of two cumulative reports (a − b, floored at 0 per field) — used
  *  to turn OpenAI's cumulative session usage into per-report deltas. */
 export function usageDelta(a: RealtimeUsageBody, b: RealtimeUsageBody | null): RealtimeUsageBody {

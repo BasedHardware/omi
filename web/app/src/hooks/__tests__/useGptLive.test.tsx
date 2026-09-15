@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const doubles = vi.hoisted(() => ({
   clients: [] as Array<{
-    callbacks: {
+    options: {
       onReady: () => void;
       onClose: () => void;
     };
@@ -15,39 +15,36 @@ const doubles = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  createGeminiLiveSession: vi.fn(async () => ({ token: 'session-token' })),
-  reportGeminiLiveUsage: vi.fn(async () => undefined),
+  createGptLiveSession: vi.fn(async () => ({ token: 'session-token' })),
+  reportGptLiveUsage: vi.fn(async () => undefined),
 }));
 
-vi.mock('@/lib/geminiLive', () => ({
-  GeminiLiveClient: class {
-    connect = vi.fn();
-    stop = vi.fn();
-    pause = vi.fn();
-    resume = vi.fn();
-
-    constructor(
-      readonly callbacks: {
-        onReady: () => void;
-        onClose: () => void;
-      },
-    ) {
-      doubles.clients.push(this);
-    }
+vi.mock('@/lib/gptLive', () => ({
+  DEFAULT_GPT_LIVE_INSTRUCTIONS: 'You are Omi.',
+  createGptLiveClient: (options: (typeof doubles.clients)[number]['options']) => {
+    const client = {
+      options,
+      connect: vi.fn(),
+      stop: vi.fn(),
+      pause: vi.fn(),
+      resume: vi.fn(),
+    };
+    doubles.clients.push(client);
+    return client;
   },
 }));
 
-const { useGeminiLive } = await import('@/hooks/useGeminiLive');
+const { useGptLive } = await import('@/hooks/useGptLive');
 
 beforeEach(() => {
   vi.clearAllMocks();
   doubles.clients = [];
 });
 
-describe('useGeminiLive session ownership', () => {
+describe('useGptLive session ownership', () => {
   it('ignores a retired client closing after its replacement becomes live', async () => {
     const { result } = renderHook(() =>
-      useGeminiLive({ messages: [], onExchange: vi.fn(async () => undefined) }),
+      useGptLive({ messages: [], onExchange: vi.fn(async () => undefined) }),
     );
 
     await act(async () => {
@@ -60,10 +57,10 @@ describe('useGeminiLive session ownership', () => {
       await result.current.start();
     });
     const replacement = doubles.clients[1]!;
-    act(() => replacement.callbacks.onReady());
+    act(() => replacement.options.onReady());
     await waitFor(() => expect(result.current.state).toBe('listening'));
 
-    act(() => retired.callbacks.onClose());
+    act(() => retired.options.onClose());
 
     expect(result.current.state).toBe('listening');
     expect(replacement.connect).toHaveBeenCalledWith('session-token');

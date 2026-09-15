@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # (the realtime audio variants aren't in AA's LLM index, so we use the closest
 # representative model).
 PROXY = {
+    "gptLive1": "gpt-5",
     "geminiFlashLive": "gemini-3-5-flash",
     "gptRealtime2": "gpt-5",
 }
@@ -46,7 +47,7 @@ def _score(quality, speed):
 async def _fetch_and_score():
     key = os.getenv("ARTIFICIALANALYSIS_API_KEY")
     if not key:
-        return "geminiFlashLive", {"reason": "no ARTIFICIALANALYSIS_API_KEY; default to Gemini"}
+        return "gptLive1", {"reason": "no ARTIFICIALANALYSIS_API_KEY; default to GPT-Live"}
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         resp = await client.get(AA_URL, headers={"x-api-key": key})
@@ -72,7 +73,7 @@ async def _fetch_and_score():
     scores = {p: best_score(sub) for p, sub in PROXY.items()}
     scores = {p: round(s, 4) for p, s in scores.items() if s is not None}
     if not scores:
-        return "geminiFlashLive", {"reason": "no matching AA models", "scores": {}}
+        return "gptLive1", {"reason": "no matching AA models", "scores": {}}
     pick = max(scores, key=scores.get)
     return pick, {"scores": scores}
 
@@ -92,7 +93,7 @@ async def auto_model_pick(uid: str = Depends(get_current_user_uid)):
                 except Exception as e:
                     logger.error(f"auto model-pick fetch failed: {e}")
                     if _cache["provider"] is None:
-                        _cache.update(provider="geminiFlashLive", ts=now, detail={"reason": f"error: {e}"})
+                        _cache.update(provider="gptLive1", ts=now, detail={"reason": f"error: {e}"})
     return {
         "provider": _cache["provider"],
         "updated_at": _cache["ts"],
