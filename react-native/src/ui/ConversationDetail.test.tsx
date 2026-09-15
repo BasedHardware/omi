@@ -4619,6 +4619,116 @@ test('legacy conversation details name GET omi speaker 99 without Speaker N', ()
   expect(copy).not.toContain('Alex Chen  ·  Omi said this');
 });
 
+test('legacy conversation details name Flutter TranscriptWidget padded GET SPEAKER_99', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Omi said this',
+              speaker: 'SPEAKER_99 ',
+              isUser: false,
+              start: 0,
+              end: 1,
+              personName: 'Alex Chen',
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const trailing = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(trailing).toContain('Alex Chen  ·  Omi said this');
+  expect(trailing).not.toContain('omi  ·  Omi said this');
+  expect(trailing).not.toContain('Speaker 1  ·  Omi said this');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Omi said this',
+              speaker: '  SPEAKER_99  ',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const padded = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(padded).toContain('Speaker 1  ·  Omi said this');
+  expect(padded).not.toContain('omi  ·  Omi said this');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Omi said this',
+              speaker: '\u0085SPEAKER_99',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const nextLine = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(nextLine).toContain('omi  ·  Omi said this');
+  expect(nextLine).not.toContain('Speaker 1  ·  Omi said this');
+});
+
 test('legacy conversation details name a failed GET people instead of empty success', () => {
   mockLegacy.mockReturnValue({
     result: {

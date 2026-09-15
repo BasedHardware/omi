@@ -298,15 +298,7 @@ function LegacyConversationBody({
     detail.transcript.status === 'loaded' &&
     legacyTranscriptCanDisplaySeconds(detail.transcript.segments);
   const transcriptSegments =
-    detail.transcript.status === 'loaded'
-      ? detail.transcript.segments.map(segment => {
-          const speaker =
-            segment.speaker === null
-              ? null
-              : visibleDisplayText(segment.speaker);
-          return {...segment, speaker: speaker === '' ? null : speaker};
-        })
-      : [];
+    detail.transcript.status === 'loaded' ? detail.transcript.segments : [];
   const hasLocation =
     !conversation.discarded && detail.locationAddress !== undefined;
   const address = conversation.discarded

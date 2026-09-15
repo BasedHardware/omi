@@ -1243,6 +1243,44 @@ test('discarded conversation titles use Flutter transcript excerpt and people na
     ),
   ).toBe('Speaker 1');
   expect(
+    conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_99 ', isUser: false},
+      [{speaker: 'SPEAKER_99 ', isUser: false}],
+    ),
+  ).toBe('Speaker 1');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_99 ', isUser: false, personName: 'Alex Chen'},
+      [{speaker: 'SPEAKER_99 ', isUser: false}],
+    ),
+  ).toBe('Alex Chen');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: '  SPEAKER_99  ', isUser: false},
+      [{speaker: '  SPEAKER_99  ', isUser: false}],
+    ),
+  ).toBe('Speaker 1');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: '  SPEAKER_99', isUser: false},
+      [{speaker: '  SPEAKER_99', isUser: false}],
+    ),
+  ).toBe('omi');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: '\u0085SPEAKER_99', isUser: false},
+      [{speaker: '\u0085SPEAKER_99', isUser: false}],
+    ),
+  ).toBe('omi');
+  expect(
+    conversationDiscardedTranscriptCopy([
+      {text: 'A', speaker: 'SPEAKER_99 ', isUser: false, start: 0, end: 1},
+      {text: 'B', speaker: 'SPEAKER_100', isUser: false, start: 2, end: 3},
+    ]),
+  ).toBe(
+    '[00:00:00 - 00:00:01] Speaker 1: A \n\n[00:00:02 - 00:00:03] Speaker 101: B',
+  );
+  expect(
     conversationDiscardedTranscriptCopy([
       {text: 'Hi', speaker: 'SPEAKER_99', isUser: false},
     ]),

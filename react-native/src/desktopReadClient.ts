@@ -105,8 +105,15 @@ function discardedTranscriptSpeakerId(
   if (typeof speaker !== 'string') {
     return 0;
   }
-  const labeled = /^SPEAKER_(\d+)$/.exec(visibleDisplayText(speaker));
-  return labeled !== null ? Number(labeled[1]) : 0;
+  const parts = speaker.split('_');
+  if (parts.length <= 1) {
+    return 0;
+  }
+  if (!/^-?\d+$/.test(parts[1])) {
+    return 0;
+  }
+  const parsed = Number(parts[1]);
+  return Number.isSafeInteger(parsed) ? parsed : 0;
 }
 
 export function conversationDiscardedTranscriptCopy(
@@ -289,31 +296,23 @@ export function conversationDetailSpeakerCopy(
   if (segment.isUser === true) {
     return 'You';
   }
-  const trimmed =
-    typeof segment.speaker === 'string'
-      ? visibleDisplayText(segment.speaker)
-      : '';
-  const labeled = /^SPEAKER_(\d+)$/.exec(trimmed);
-  if (labeled !== null && Number(labeled[1]) === OMI_SPEAKER_ID) {
+  const speakerId = discardedTranscriptSpeakerId(segment.speaker);
+  if (speakerId === OMI_SPEAKER_ID) {
     return 'omi';
   }
   if (segment.personName !== undefined) {
     return segment.personName;
-  }
-  if (labeled === null && trimmed !== '') {
-    return trimmed;
   }
   let minSpeakerId: number | null = null;
   for (const row of segments) {
     if (row.isUser === true) {
       continue;
     }
-    const speakerId = discardedTranscriptSpeakerId(row.speaker);
-    if (minSpeakerId === null || speakerId < minSpeakerId) {
-      minSpeakerId = speakerId;
+    const rowSpeakerId = discardedTranscriptSpeakerId(row.speaker);
+    if (minSpeakerId === null || rowSpeakerId < minSpeakerId) {
+      minSpeakerId = rowSpeakerId;
     }
   }
-  const speakerId = labeled === null ? 0 : Number(labeled[1]);
   return `Speaker ${speakerId - (minSpeakerId ?? 0) + 1}`;
 }
 
