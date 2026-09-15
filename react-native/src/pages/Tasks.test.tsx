@@ -327,7 +327,7 @@ test('task rows keep GET indent instead of a flat list', () => {
   act(() => renderer.unmount());
 });
 
-test('task rows name GET exported platforms and omit missing exports', () => {
+test('task rows name Flutter ActionItemsPage empty GET export_platform', () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     renderer = ReactTestRenderer.create(
@@ -344,6 +344,12 @@ test('task rows name GET exported platforms and omit missing exports', () => {
                 title: 'Call Sam',
                 exportCopy: 'Exported to Todoist',
               },
+              {
+                ...task,
+                id: 'task-empty-export',
+                title: 'Ship notes',
+                exportCopy: 'Exported to ',
+              },
               {...task, id: 'task-plain', title: 'Write recap'},
             ],
           },
@@ -351,13 +357,14 @@ test('task rows name GET exported platforms and omit missing exports', () => {
       />,
     );
   });
-  const copy = renderer.root
+  const labels = renderer.root
     .findAllByType(Text)
-    .flatMap(node => node.props.children)
-    .join(' ');
-  expect(copy).toContain('Exported to Todoist');
-  expect(copy).toContain('Call Sam');
-  expect(copy).toContain('Write recap');
+    .flatMap(node => node.props.children);
+  expect(labels).toContain('Exported to Todoist');
+  expect(labels).toContain('Exported to ');
+  expect(labels).toContain('Ship notes');
+  expect(labels).toContain('Call Sam');
+  expect(labels).toContain('Write recap');
   act(() => renderer.unmount());
 });
 

@@ -1041,7 +1041,7 @@ test('old tasks keep GET taskId for chat task_card joins', async () => {
   expect(result.items[3]).not.toHaveProperty('taskId');
 });
 
-test('old tasks name GET exported platforms and omit missing exports', async () => {
+test('old tasks name Flutter ActionItemsPage empty GET export_platform', async () => {
   const {api} = backend({
     action_items: [
       {
@@ -1065,6 +1065,19 @@ test('old tasks name GET exported platforms and omit missing exports', async () 
         exported: true,
         export_platform: ' \u0085 ',
       },
+      {
+        id: 'empty-platform',
+        description: 'Empty platform',
+        completed: false,
+        exported: true,
+        export_platform: '',
+      },
+      {
+        id: 'omitted-platform',
+        description: 'Omitted platform',
+        completed: false,
+        exported: true,
+      },
     ],
     has_more: false,
   });
@@ -1073,7 +1086,13 @@ test('old tasks name GET exported platforms and omit missing exports', async () 
     exportCopy: 'Exported to Todoist',
   });
   expect(result.items[1]).not.toHaveProperty('exportCopy');
-  expect(result.items[2]).not.toHaveProperty('exportCopy');
+  expect(result.items[2]).toMatchObject({
+    exportCopy: 'Exported to ',
+  });
+  expect(result.items[3]).toMatchObject({
+    exportCopy: 'Exported to ',
+  });
+  expect(result.items[4]).not.toHaveProperty('exportCopy');
 });
 
 test('fails closed for malformed GET task export fields', async () => {

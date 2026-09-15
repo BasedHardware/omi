@@ -2818,10 +2818,10 @@ export function taskExportCopy(
   if (exported !== true) {
     return null;
   }
-  const platform = visibleDisplayText(exportPlatform ?? '');
-  if (platform === '') {
+  if (exportPlatform === undefined || exportPlatform === null) {
     return null;
   }
+  const platform = visibleDisplayText(exportPlatform);
   return `Exported to ${TASK_EXPORT_PLATFORM_COPY[platform] ?? platform}`;
 }
 
