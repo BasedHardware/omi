@@ -119,6 +119,11 @@ checks:
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13928: holiday API error payloads, whitespace country codes, missing lifespan clients, and malformed holiday fields must return clean chat-tool responses without uncaught exceptions"
+  - id: omi-crossref-tests
+    command: ["python3", "plugins/omi-crossref-app/test_main.py"]
+    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Crossref responses with null or non-dict payloads must not raise AttributeError or IndexError during formatting"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]
