@@ -63,8 +63,8 @@ def _coerce_int(value: Any, default: int, minimum: int, maximum: int) -> int:
         try:
             coerced = int(value.strip())
         except (TypeError, ValueError, OverflowError):
-            # OverflowError covers a stringified JSON number such as "1e309",
-            # which is longer than any int and must fall back, not 500.
+            # int() rejects non-integer strings such as "1e309" with ValueError;
+            # these inputs must fall back to the documented default.
             return default
     else:
         return default

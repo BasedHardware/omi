@@ -102,6 +102,22 @@ When creating/updating the Omi app, use these URLs:
 4. Install dependencies: `pip install -r requirements.txt`
 5. Run: `python main.py`
 
+## Regression Tests
+
+Run the manifest-registered suites from the repository root:
+
+```bash
+python3 -S plugins/omi-whoop-app/test_workouts_input_coercion.py
+python3 -S plugins/omi-whoop-app/test_body_measurements.py
+```
+
+Both suites use only the Python standard library, including when FastAPI/httpx,
+Pydantic, requests, python-dotenv, and Redis are not installed. They call the
+production async handlers with dependency doubles and patch the `requests.get`
+boundary; they do not require credentials, storage, or network access. The `-S`
+flag disables site-packages to verify the CI dependency contract without skips.
+These tests cover handler behavior, not FastAPI routing or HTTP serialization.
+
 ## Environment Variables
 
 | Variable | Description | Required |
