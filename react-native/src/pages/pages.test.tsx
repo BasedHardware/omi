@@ -1571,6 +1571,41 @@ test('Settings names Flutter UsagePage padded GET chatQuotaUnit as messages', as
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter UsagePage padded GET chat_quota_used instead of remapping to a Chat this month chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 0,
+          transcription_seconds_used: 0,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          chat_quota_used: '  5.5  ',
+          chat_quota_unit: 'messages',
+          subscription: {
+            plan: 'basic',
+            status: 'active',
+            limits: {chat_questions_per_month: 100},
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain(subscriptionLoadErrorCopy());
+  expect(tree).not.toContain('5 Chat');
+  expect(tree).not.toContain('5.5');
+  expect(tree).not.toContain('Chat this month');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET subscription transcription quota as minutes this month', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
@@ -4294,6 +4329,62 @@ test('Connectors Explore names Flutter CategorySection ratings and Installed kee
   expect(tree).toContain('4.5 (12)');
   expect(tree).toContain('Catalog fixture app');
   expect(tree).not.toContain('0.0');
+  expect(tree).not.toContain('Official');
+});
+
+test('Connectors Explore names Flutter AppListItem padded GET rating_avg instead of remapping to a rating chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-padded',
+            name: 'Padded rating app',
+            rating_avg: '  4.5  ',
+            rating_count: 12,
+          },
+          {
+            id: 'catalog-app-rated',
+            name: 'Owned app',
+            rating_avg: '4.5',
+            rating_count: 12,
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(['catalog-app-rated']),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  const explore = sectionText(renderer, 'Explore');
+  const installed = sectionText(renderer, 'Installed');
+  expect(explore).toContain('Padded rating app');
+  expect(explore).toContain('Owned app');
+  expect(installed).toContain('Owned app');
+  expect(installed).not.toContain('Padded rating app');
+  expect(explore).toContain('4.5 · 12 ratings');
+  expect(installed).toContain('4.5 (12)');
+  expect(
+    renderer.root.findAll(node => node.props.children === '4.5 · 12 ratings')
+      .length,
+  ).toBe(2);
   expect(tree).not.toContain('Official');
 });
 

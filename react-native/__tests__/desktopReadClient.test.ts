@@ -6180,6 +6180,74 @@ test('names Flutter AppListItem empty GET ids instead of failing the Apps page',
   );
 });
 
+test('names Flutter AppListItem padded GET rating_avg instead of remapping to a rating chip', () => {
+  expect(
+    parseCloudApp(
+      {
+        id: 'catalog-app-exact-string',
+        name: 'Exact string rating',
+        rating_avg: '4.5',
+        rating_count: 12,
+      },
+      'App exact string',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      ratingAvg: 4.5,
+      ratingCount: 12,
+    }),
+  );
+  expect(
+    parseCloudApp(
+      {
+        id: 'catalog-app-number',
+        name: 'Number rating',
+        rating_avg: 4.5,
+        rating_count: 12,
+      },
+      'App number',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      ratingAvg: 4.5,
+      ratingCount: 12,
+    }),
+  );
+  for (const rating of ['  4.5  ', '4.5 ', '  4.5', '4.5\n', '\u00854.5', ' \t']) {
+    expect(
+      parseCloudApps(
+        [
+          {
+            id: 'catalog-app-padded',
+            name: 'Padded rating app',
+            rating_avg: rating,
+            rating_count: 12,
+          },
+          {
+            id: 'catalog-app-rated',
+            name: 'Owned app',
+            rating_avg: 4.5,
+            rating_count: 12,
+          },
+        ],
+        'Apps response',
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        id: 'catalog-app-padded',
+        name: 'Padded rating app',
+        ratingAvg: null,
+      }),
+      expect.objectContaining({
+        id: 'catalog-app-rated',
+        name: 'Owned app',
+        ratingAvg: 4.5,
+        ratingCount: 12,
+      }),
+    ]);
+  }
+});
+
 test('keeps empty catalogue names instead of failing the Apps page', () => {
   expect(
     parseCloudApps(
@@ -6441,6 +6509,41 @@ test('names GET subscription quota integer strings instead of omitting Plan usag
       chatCostUsdPerMonth: 20.5,
     }),
   );
+});
+
+test('names Flutter UsagePage padded GET chat_quota_used instead of remapping to a Chat this month chip', () => {
+  const quota = {
+    insights_gained_limit: 0,
+    insights_gained_used: 0,
+    transcription_seconds_limit: 0,
+    transcription_seconds_used: 0,
+    words_transcribed_limit: 0,
+    words_transcribed_used: 0,
+  };
+  expect(
+    parseCloudSubscription(
+      {
+        ...quota,
+        chat_quota_used: '5.5',
+        chat_quota_unit: 'messages',
+        subscription: {plan: 'plus', status: 'active'},
+      },
+      'Subscription response',
+    ).chatQuotaUsed,
+  ).toBe(5.5);
+  for (const used of ['  5.5  ', '5.5 ', '  5.5', '5.5\n', '\u00855.5', ' \t']) {
+    expect(() =>
+      parseCloudSubscription(
+        {
+          ...quota,
+          chat_quota_used: used,
+          chat_quota_unit: 'messages',
+          subscription: {plan: 'plus', status: 'active'},
+        },
+        'Subscription response',
+      ),
+    ).toThrow('Subscription response chat_quota_used is malformed');
+  }
 });
 
 test('keeps empty subscription plan tokens instead of failing Settings Plan', () => {

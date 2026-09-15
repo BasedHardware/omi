@@ -9,6 +9,7 @@ import {
   desktopReadErrorCopy,
   usageLoadErrorCopy,
   subscriptionLoadErrorCopy,
+  visibleDisplayText,
 } from './desktopReadClient';
 
 export type CloudApp = {
@@ -129,8 +130,11 @@ function optionalInteger(value: unknown): number | null {
 
 function optionalFiniteNumber(value: unknown): number | null {
   if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      return null;
+    }
     const parsed = Number(value);
-    if (value.trim() === '' || !Number.isFinite(parsed)) {
+    if (value === '' || !Number.isFinite(parsed)) {
       return null;
     }
     return parsed;
