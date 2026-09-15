@@ -12,9 +12,16 @@ import re
 from typing import Any, Optional
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from models import (
+    ChatToolResponse,
+    GetQuestionRequest,
+    GetTopAnswersRequest,
+    SearchQuestionsRequest,
+)
 
 
 STACK_API_BASE_URL = "https://api.stackexchange.com/2.3"
@@ -66,11 +73,16 @@ app = FastAPI(
 )
 
 
-class ChatToolResponse(BaseModel):
-    """Response model for Omi chat tool endpoints."""
-
-    result: Optional[str] = None
-    error: Optional[str] = None
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    # A raw 422 crashes the Omi chat agent — tool responses must always be
+    # HTTP 200 with the error in the ChatToolResponse envelope.
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
 
 
 def _safe_limit(limit: Any, default: int = 5) -> int:
@@ -145,11 +157,27 @@ async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> d
     response = await client.get(f"{STACK_API_BASE_URL}{path}", params=params)
     response.raise_for_status()
     data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("Stack Exchange returned a malformed payload")
     if data.get("error_id"):
         raise ValueError(data.get("error_message") or "Stack Exchange API returned an error")
     if data.get("backoff"):
         raise ValueError(f"Stack Exchange requested a {data['backoff']} second backoff. Retry shortly.")
     return data
+
+
+def _safe_tags_list(tags: Any) -> str:
+    """Tags arrive as a list of strings — a null or non-list value, or a
+    non-string member, must not crash join()."""
+    if not isinstance(tags, list):
+        return "no tags"
+    cleaned = [str(tag).strip() for tag in tags if isinstance(tag, str) and tag.strip()]
+    return ", ".join(cleaned) if cleaned else "no tags"
+
+
+def _safe_count(value: Any) -> Any:
+    """score/answer_count/view_count render in f-strings; null renders 'None'."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def _question_url(site: str, question_id: Any) -> str:
@@ -165,15 +193,17 @@ def _question_url(site: str, question_id: Any) -> str:
 
 
 def _format_question(item: dict[str, Any], index: int, site: str) -> str:
+    if not isinstance(item, dict):
+        item = {}
     title = _clean_text(item.get("title")) or "Untitled question"
     question_id = item.get("question_id")
-    score = item.get("score", 0)
-    answers = item.get("answer_count", 0)
-    views = item.get("view_count", 0)
+    score = _safe_count(item.get("score"))
+    answers = _safe_count(item.get("answer_count"))
+    views = _safe_count(item.get("view_count"))
     # Stack Exchange distinguishes "has any answer" (is_answered) from
     # "has an accepted answer" (accepted_answer_id). Label only the latter.
     accepted = "accepted" if item.get("accepted_answer_id") else "not accepted"
-    tags = ", ".join(item.get("tags", [])) or "no tags"
+    tags = _safe_tags_list(item.get("tags"))
     link = item.get("link") or _question_url(site, question_id)
 
     return (
@@ -185,8 +215,12 @@ def _format_question(item: dict[str, Any], index: int, site: str) -> str:
 
 
 def _format_answer(item: dict[str, Any], index: int) -> str:
-    owner = item.get("owner", {}).get("display_name") or "unknown"
-    score = item.get("score", 0)
+    if not isinstance(item, dict):
+        item = {}
+    # Stack Exchange returns "owner": null for deleted/anonymized users —
+    # dict.get("owner", {}) returns the stored None, not the default.
+    owner = (item.get("owner") or {}).get("display_name") or "unknown"
+    score = _safe_count(item.get("score"))
     accepted = " | accepted" if item.get("is_accepted") else ""
     body = _clean_text(item.get("body"))
     if len(body) > 1600:
@@ -307,13 +341,10 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/search_questions", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_questions(payload: dict[str, Any]):
-    query = (payload.get("query") or "").strip()
-    if not query:
-        return ChatToolResponse(error="Missing required field: query")
-
-    site = _safe_site(payload.get("site"))
-    limit = _safe_limit(payload.get("limit"))
+async def search_questions(req: SearchQuestionsRequest):
+    query = req.query
+    site = _safe_site(req.site)
+    limit = req.limit
     params: dict[str, Any] = {
         "site": site,
         "q": query,
@@ -321,16 +352,15 @@ async def search_questions(payload: dict[str, Any]):
         "order": "desc",
         "sort": "relevance",
     }
-    tags = _safe_tags(payload.get("tags"))
+    tags = _safe_tags(req.tags)
     if tags:
         params["tagged"] = tags
-    accepted = _coerce_bool(payload.get("accepted"))
-    if accepted is not None:
-        params["accepted"] = "true" if accepted else "false"
+    if req.accepted is not None:
+        params["accepted"] = "true" if req.accepted else "false"
 
     try:
         data = await _request_json("/search/advanced", params)
-        items = data.get("items", [])[:limit]
+        items = [i for i in (data.get("items") or []) if isinstance(i, dict)][:limit]
         if not items:
             return ChatToolResponse(result=f"No Stack Exchange questions found for '{query}'.")
 
@@ -346,23 +376,15 @@ async def search_questions(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_question", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_question(payload: dict[str, Any]):
-    question_id = payload.get("question_id")
-    if question_id is None:
-        return ChatToolResponse(error="Missing required field: question_id")
-
-    try:
-        question_id = int(question_id)
-    except (TypeError, ValueError):
-        return ChatToolResponse(error="question_id must be an integer")
-
-    site = _safe_site(payload.get("site"))
+async def get_question(req: GetQuestionRequest):
+    question_id = req.question_id
+    site = _safe_site(req.site)
     try:
         data = await _request_json(
             f"/questions/{question_id}",
             {"site": site, "filter": "withbody", "pagesize": 1},
         )
-        items = data.get("items", [])
+        items = [i for i in (data.get("items") or []) if isinstance(i, dict)]
         if not items:
             return ChatToolResponse(error=f"No question found for ID {question_id} on {site}.")
 
@@ -371,14 +393,14 @@ async def get_question(payload: dict[str, Any]):
         body = _clean_text(item.get("body"))
         if len(body) > 1800:
             body = body[:1800].rstrip() + "..."
-        tags = ", ".join(item.get("tags", [])) or "no tags"
+        tags = _safe_tags_list(item.get("tags"))
         link = item.get("link") or _question_url(site, question_id)
 
         lines = [
             title,
             f"Question ID: {question_id}",
             f"Created: {_format_date(item.get('creation_date'))}",
-            f"Score: {item.get('score', 0)} | Answers: {item.get('answer_count', 0)} | Views: {item.get('view_count', 0)}",
+            f"Score: {_safe_count(item.get('score'))} | Answers: {_safe_count(item.get('answer_count'))} | Views: {_safe_count(item.get('view_count'))}",
             f"Tags: {tags}",
             link,
         ]
@@ -394,18 +416,10 @@ async def get_question(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_top_answers", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_top_answers(payload: dict[str, Any]):
-    question_id = payload.get("question_id")
-    if question_id is None:
-        return ChatToolResponse(error="Missing required field: question_id")
-
-    try:
-        question_id = int(question_id)
-    except (TypeError, ValueError):
-        return ChatToolResponse(error="question_id must be an integer")
-
-    site = _safe_site(payload.get("site"))
-    limit = _safe_limit(payload.get("limit"), default=3)
+async def get_top_answers(req: GetTopAnswersRequest):
+    question_id = req.question_id
+    site = _safe_site(req.site)
+    limit = req.limit
     try:
         data = await _request_json(
             f"/questions/{question_id}/answers",
@@ -417,7 +431,7 @@ async def get_top_answers(payload: dict[str, Any]):
                 "sort": "votes",
             },
         )
-        items = data.get("items", [])[:limit]
+        items = [i for i in (data.get("items") or []) if isinstance(i, dict)][:limit]
         if not items:
             return ChatToolResponse(result=f"No answers found for question ID {question_id} on {site}.")
 
