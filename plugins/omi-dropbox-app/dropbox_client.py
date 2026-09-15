@@ -265,52 +265,13 @@ class DropboxClient:
                     json={"cursor": cursor},
                 )
                 if continue_response.status_code != 200:
-                    break
+                    return None, f"List failed during pagination: {continue_response.text}"
                 continue_data = continue_response.json()
                 results.extend(self._parse_folder_entries(continue_data.get("entries", [])))
                 cursor = continue_data.get("cursor")
                 has_more = continue_data.get("has_more", False)
 
             return results[:limit], None
-        except Exception as e:
-            return None, f"Error listing: {str(e)}"
-
-    def _old_list_folder(
-        self,
-        path: str = "",
-        limit: int = 20,
-    ) -> Tuple[Optional[list], Optional[str]]:
-        """
-        List files in a folder.
-        Returns (files_list, error_message).
-        """
-        try:
-            response = requests.post(
-                f"{self.API_BASE}/files/list_folder",
-                headers=self._headers(),
-                json={
-                    "path": path if path else "",
-                    "limit": limit,
-                    "recursive": False,
-                },
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                entries = data.get("entries", [])
-                results = []
-                for entry in entries:
-                    results.append({
-                        "name": entry.get("name", "Unknown"),
-                        "path": entry.get("path_display", ""),
-                        "type": entry.get(".tag", "file"),
-                        "size": entry.get("size", 0),
-                        "modified": entry.get("server_modified", ""),
-                    })
-                return results, None
-            else:
-                return None, f"List failed: {response.text}"
-
         except Exception as e:
             return None, f"Error listing: {str(e)}"
 
