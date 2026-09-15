@@ -845,6 +845,158 @@ test('names Flutter ChangelogSheet fromGenerated unknown GET trigger instead of 
   ).toThrow('Omi app changelogs are malformed');
 });
 
+test('names Flutter ChangelogSheet fromJson invalid GET active instead of keeping neighbors', () => {
+  const createdAt = '2026-09-09T12:00:00.000Z';
+  const neighbor = {
+    id: 'ann-good',
+    type: 'changelog',
+    created_at: createdAt,
+    app_version: '1.2.0',
+    content: {changes: [{title: 'Offline replay', description: ''}]},
+  };
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-feature',
+          type: 'feature',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          active: 'yes',
+          content: {title: 'Feature'},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-null-active',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          active: null,
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-firmware',
+          type: 'feature',
+          created_at: createdAt,
+          firmware_version: 12,
+          content: {title: 'Feature'},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-models',
+          type: 'announcement',
+          created_at: createdAt,
+          device_models: 'omi',
+          content: {title: 'Note', body: 'Hi'},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-expires',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          expires_at: 'not-a-date',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-version',
+          type: 'feature',
+          created_at: createdAt,
+          app_version: 1,
+          content: {title: 'Feature'},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+});
+
+test('keeps GET app changelogs when fromJson optional announcement extras are omitted or valid', () => {
+  const createdAt = '2026-09-09T12:00:00.000Z';
+  const content = {changes: [{title: 'Faster sync', description: ''}]};
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-active',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          active: true,
+          firmware_version: '1.0.0',
+          device_models: ['omi'],
+          expires_at: createdAt,
+          content,
+        },
+        {
+          id: 'ann-null-extras',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: null,
+          firmware_version: null,
+          device_models: null,
+          expires_at: null,
+          content,
+        },
+        {
+          id: 'ann-feature',
+          type: 'feature',
+          created_at: createdAt,
+          active: false,
+          app_version: '',
+          firmware_version: ' \t',
+          device_models: [''],
+          expires_at: '2026-04-01T12:00:00+00',
+          content: {title: 'Feature'},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-active:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Faster sync · ',
+    },
+    {
+      key: 'ann-null-extras:0',
+      title: "What's New in ",
+      copy: '✨ · Faster sync · ',
+    },
+  ]);
+});
+
 test('keeps GET app changelogs when targeting trigger is omitted or a Flutter enum value', () => {
   const createdAt = '2026-09-09T12:00:00.000Z';
   const content = {changes: [{title: 'Faster sync', description: ''}]};

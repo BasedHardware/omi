@@ -171,6 +171,11 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
     object(row.content);
     optionalTargeting(row.targeting);
     optionalDisplay(row.display);
+    optionalBool(row.active);
+    optionalNullableString(row.app_version);
+    optionalNullableString(row.firmware_version);
+    optionalNullableStringList(row.device_models);
+    optionalDateTime(row.expires_at);
     if (type === 'feature' || type === 'announcement') {
       continue;
     }

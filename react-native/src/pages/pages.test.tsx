@@ -3926,6 +3926,44 @@ test('Settings names Flutter ChangelogSheet fromJson missing GET content instead
   expect(tree).not.toContain('✨');
 });
 
+test('Settings names Flutter ChangelogSheet fromJson invalid GET active instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'ann-feature',
+            type: 'feature',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.2.0',
+            active: 'yes',
+            content: {title: 'Feature'},
+          },
+          {
+            id: 'ann-good',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.2.0',
+            content: {changes: [{title: 'Offline replay', description: ''}]},
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New");
+  expect(tree).toContain(appChangelogsLoadErrorCopy());
+  expect(tree).not.toContain("What's New in 1.2.0");
+  expect(tree).not.toContain('Offline replay');
+  expect(tree).not.toContain('Dismiss');
+  expect(tree).not.toContain('✨');
+});
+
 test('Settings names Flutter ChangelogSheet fromGenerated unknown GET trigger instead of empty success', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
