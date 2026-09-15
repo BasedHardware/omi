@@ -5745,6 +5745,11 @@ test('Settings names Flutter FairUsePage whitespace GET message without omitting
       .findAllByType(Text)
       .some(node => node.props.children === 'Fair Use'),
   ).toBe(true);
+  expect(
+    renderer.root
+      .findAllByType(Text)
+      .some(node => node.props.children === ' \t'),
+  ).toBe(true);
   expect(tree).toContain('Speech Usage');
   expect(tree).toContain('About Fair Use');
   expect(tree).not.toContain('Restricted');
@@ -5834,6 +5839,11 @@ test('Settings names Flutter FairUsePage whitespace GET caseRef without omitting
       .props.onPress();
   });
   const tree = renderedText(renderer);
+  expect(
+    renderer.root
+      .findAllByType(Text)
+      .some(node => node.props.children === 'Restricted ·  \t'),
+  ).toBe(true);
   expect(tree).toContain('Restricted \u00b7 ');
   expect(tree).toContain('Speech Usage');
   expect(tree).toContain('About Fair Use');

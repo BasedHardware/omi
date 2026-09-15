@@ -1692,7 +1692,7 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     {title: 'Today', copy: '0.0h / 2h'},
     {title: '3-Day Rolling', copy: '0.0h / 8h'},
     {title: 'Weekly Rolling', copy: '0.0h / 10h'},
-    {title: 'Fair Use', copy: ''},
+    {title: 'Fair Use', copy: ' \t'},
     {
       title: fairUseAboutTitleCopy(),
       copy: fairUseAboutBodyCopy(),
@@ -1734,7 +1734,7 @@ test('names Flutter FairUsePage whitespace GET message instead of omitting the b
     {title: 'Today', copy: '0.0h / 2h'},
     {title: '3-Day Rolling', copy: '0.0h / 8h'},
     {title: 'Weekly Rolling', copy: '0.0h / 10h'},
-    {title: 'Fair Use', copy: ''},
+    {title: 'Fair Use', copy: ' \t'},
     {
       title: fairUseAboutTitleCopy(),
       copy: fairUseAboutBodyCopy(),
@@ -1745,7 +1745,18 @@ test('names Flutter FairUsePage whitespace GET message instead of omitting the b
     {title: 'Today', copy: '0.0h / 2h'},
     {title: '3-Day Rolling', copy: '0.0h / 8h'},
     {title: 'Weekly Rolling', copy: '0.0h / 10h'},
-    {title: 'Fair Use', copy: ''},
+    {title: 'Fair Use', copy: '\u0085'},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
+  ]);
+  expect(fairUseCopy({...idle, message: '  padded  '})).toEqual([
+    {title: 'Speech Usage', copy: ''},
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {title: 'Fair Use', copy: '  padded  '},
     {
       title: fairUseAboutTitleCopy(),
       copy: fairUseAboutBodyCopy(),
@@ -1778,7 +1789,7 @@ test('names Flutter FairUsePage whitespace GET caseRef instead of omitting the s
     exhausted: false,
   };
   expect(fairUseCopy({...restrict, caseRef: ' \t'})).toEqual([
-    {title: 'Fair Use', copy: 'Restricted · '},
+    {title: 'Fair Use', copy: 'Restricted ·  \t'},
     {title: 'Speech Usage', copy: ''},
     {title: 'Today', copy: '0.0h / 2h'},
     {title: '3-Day Rolling', copy: '0.0h / 8h'},
@@ -1790,7 +1801,19 @@ test('names Flutter FairUsePage whitespace GET caseRef instead of omitting the s
     },
   ]);
   expect(fairUseCopy({...restrict, caseRef: '\u0085'})).toEqual([
-    {title: 'Fair Use', copy: 'Restricted · '},
+    {title: 'Fair Use', copy: 'Restricted · \u0085'},
+    {title: 'Speech Usage', copy: ''},
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {title: fairUseDailyTranscriptionCopy(), copy: '0m / 30m'},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
+  ]);
+  expect(fairUseCopy({...restrict, caseRef: '  padded  '})).toEqual([
+    {title: 'Fair Use', copy: 'Restricted ·   padded  '},
     {title: 'Speech Usage', copy: ''},
     {title: 'Today', copy: '0.0h / 2h'},
     {title: '3-Day Rolling', copy: '0.0h / 8h'},

@@ -1754,10 +1754,9 @@ export function fairUseCopy(
   const rows: {title: string; copy: string}[] = [];
   const stage = fairUseStageCopy(status.stage);
   if (stage !== null) {
-    const caseRef = visibleDisplayText(status.caseRef);
     rows.push({
       title: 'Fair Use',
-      copy: status.caseRef === '' ? stage : `${stage} · ${caseRef}`,
+      copy: status.caseRef === '' ? stage : `${stage} · ${status.caseRef}`,
     });
   }
   rows.push(
@@ -1778,9 +1777,8 @@ export function fairUseCopy(
       copy: fairUseHoursCopy(status.speechHoursWeekly, status.weeklyHours),
     },
   );
-  const message = visibleDisplayText(status.message);
   if (status.message !== '') {
-    rows.push({title: 'Fair Use', copy: message});
+    rows.push({title: 'Fair Use', copy: status.message});
   }
   if (status.stage === 'restrict' && status.dailyLimitMs > 0) {
     rows.push({
