@@ -1148,6 +1148,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
+  - id: whoop-workouts-tests
+    command: ["python3", "plugins/omi-whoop-app/test_workouts_input_coercion.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13931: the backend forwards omitted optional manifest params as explicit JSON nulls, so min(None, 30) crashed get_workouts; the hermetic suite drives the production handler through requests.get to prove null/unparseable values hit defaults and non-positive values clamp to 1"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
