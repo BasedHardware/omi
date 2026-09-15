@@ -282,7 +282,7 @@ function calendarEvent(
   const htmlLink =
     event.html_link === undefined || event.html_link === null
       ? undefined
-      : visibleDisplayText(text(event.html_link));
+      : text(event.html_link);
   const shareMailto =
     attendeeEmails.length === 0
       ? ''

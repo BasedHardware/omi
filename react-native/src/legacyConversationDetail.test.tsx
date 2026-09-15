@@ -236,7 +236,7 @@ test('keeps GET calendar event title and attendees and omits missing events', as
   ).toBeUndefined();
 });
 
-test('keeps GET calendar event html_link and omits empty links', async () => {
+test('names Flutter CalendarEventDetailsSheet empty GET html_link whitespace', async () => {
   mockRequest.mockResolvedValue(
     response({
       ...fixture,
@@ -271,7 +271,23 @@ test('keeps GET calendar event html_link and omits empty links', async () => {
   );
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
-  ).toMatchObject({htmlLink: ''});
+  ).toMatchObject({htmlLink: ' \t'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-next-line-link',
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+        html_link: '\u0085',
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
+  ).toMatchObject({htmlLink: '\u0085'});
   mockRequest.mockResolvedValue(
     response({
       ...fixture,
