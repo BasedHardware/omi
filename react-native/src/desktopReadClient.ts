@@ -1633,13 +1633,10 @@ export function customVocabularyCopy(
   if (words === null || words === undefined) {
     return [];
   }
-  return words.flatMap(word => {
-    const visible = visibleDisplayText(word);
-    if (visible === '') {
-      return [];
-    }
-    return [{title: customVocabularyTitleCopy(), copy: visible}];
-  });
+  return words.map(word => ({
+    title: customVocabularyTitleCopy(),
+    copy: visibleDisplayText(word),
+  }));
 }
 
 function fairUseStageCopy(stage: string): string | null {

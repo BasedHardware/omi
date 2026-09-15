@@ -24,9 +24,7 @@ function vocabulary(value: unknown): string[] {
       throw new TranscriptionPreferencesError();
     }
     const word = visibleDisplayText(raw);
-    if (word !== '') {
-      words.push(word);
-    }
+    words.push(word);
   }
   return words;
 }

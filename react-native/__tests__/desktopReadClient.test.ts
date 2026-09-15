@@ -1847,7 +1847,11 @@ test('transcription preference copy names GET vocabulary without Flutter false d
   expect(automaticTranslationCopy(null)).toEqual([]);
   expect(customVocabularyCopy(['Omi', ' \t', 'Based Hardware'])).toEqual([
     {title: customVocabularyTitleCopy(), copy: 'Omi'},
+    {title: customVocabularyTitleCopy(), copy: ''},
     {title: customVocabularyTitleCopy(), copy: 'Based Hardware'},
+  ]);
+  expect(customVocabularyCopy([''])).toEqual([
+    {title: customVocabularyTitleCopy(), copy: ''},
   ]);
   expect(customVocabularyCopy([])).toEqual([]);
   expect(customVocabularyCopy(null)).toEqual([]);

@@ -14,7 +14,7 @@ test('parses GET transcription preferences with Flutter omitted single_language_
     ),
   ).toEqual({
     singleLanguageMode: true,
-    vocabulary: ['Omi', 'Based Hardware'],
+    vocabulary: ['Omi', '', 'Based Hardware'],
   });
   expect(parseOmiTranscriptionPreferences(JSON.stringify({}))).toEqual({
     singleLanguageMode: false,
