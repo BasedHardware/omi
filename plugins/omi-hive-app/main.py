@@ -84,7 +84,6 @@ def hive_graphql_request(
     
     print(f"🐝 Hive GraphQL Request:")
     print(f"   URL: {HIVE_GRAPHQL_URL}")
-    print(f"   API Key (first 8 chars): {api_key[:8]}...")
     print(f"   Query: {query[:100]}...")
     
     try:
@@ -96,10 +95,9 @@ def hive_graphql_request(
         )
         
         print(f"🐝 Hive Response: Status {response.status_code}")
-        print(f"   Body: {response.text[:500]}")
         
         if response.status_code != 200:
-            return {"errors": [{"message": f"HTTP {response.status_code}: {response.text}"}]}
+            return {"errors": [{"message": f"HTTP {response.status_code}"}]}
         
         result = response.json()
         return result
@@ -167,16 +165,16 @@ def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict]
         print(f"🐝 Hive REST Response: Status {response.status_code}")
         
         if response.status_code >= 400:
-            return {"errors": [{"message": f"HTTP {response.status_code}: {response.text}"}]}
+            return {"errors": [{"message": f"HTTP {response.status_code}"}]}
             
         try:
             return response.json()
         except Exception:
-            return {"data": response.text}
+            return {"errors": [{"message": f"HTTP {response.status_code}"}]}
             
     except Exception as e:
-        print(f"🐝 Hive REST Exception: {e}")
-        return {"errors": [{"message": str(e)}]}
+        print(f"🐝 Hive REST Exception: {type(e).__name__}")
+        return {"errors": [{"message": type(e).__name__}]}
 
 
 def hive_api_request(uid: str, query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
@@ -278,15 +276,12 @@ def verify_api_key(api_key: str) -> Optional[Dict[str, Any]]:
     print(f"🐝 Verifying API key...")
     result = hive_graphql_request(api_key, GET_USER_QUERY)
     
-    print(f"🐝 Verify result: {result}")
-    
     error = get_graphql_error(result)
     if error:
         print(f"🐝 GraphQL Error: {error}")
         return None
     
     data = result.get("data", {}).get("user")
-    print(f"🐝 User data: {data}")
     
     if not data:
         return None
@@ -304,14 +299,12 @@ def verify_api_key(api_key: str) -> Optional[Dict[str, Any]]:
             if user_id:
                 headers["user_id"] = user_id
                 
-            print(f"   REST Headers: {headers}")
             response = requests.get(
                 f"{HIVE_REST_API_BASE}/workspaces",
                 headers=headers,
                 timeout=10
             )
             print(f"   REST Response Status: {response.status_code}")
-            print(f"   REST Response Body: {response.text[:200]}")
             
             if response.status_code == 200:
                 workspaces = response.json()

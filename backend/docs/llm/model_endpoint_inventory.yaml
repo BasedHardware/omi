@@ -260,7 +260,9 @@ surfaces:
   migration_status: gateway_routed_desktop_vertex; the BFF keeps auth, trial paywall, S14 generate/stream
     plan gate (402 plan_gated via authorize_managed_compute on screen_frame_judge; embedContent ungated), redis metering, body limits, and model
     allowlist; PT pin/overflow/host policy moved into the gateway provider via vertex_pt_routing (no second policy); FEATURE_MODE=off
-    keeps the legacy direct Vertex path
+    keeps the legacy direct Vertex path; operator pins (OMI_VERTEX_PT_MODEL, OMI_GEMINI_OVERFLOW_MODEL) are
+    validated against vertex_pt_routing.COMPANY_PAID_VERTEX_TEXT_MODELS and Pro/image-output shapes fail closed
+    at both the BFF and the gateway provider (SCA-481)
   test_guardrail_coverage: backend/tests/unit/test_desktop_proxy.py and backend/tests/unit/test_vertex_pt_routing.py
 - surface: openai_embeddings
   code_path: backend/utils/llm/clients.py:_OpenAIEmbeddingsProxy

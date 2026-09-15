@@ -79,6 +79,30 @@ enum BYOKLLMProvider: String, CaseIterable, Identifiable {
     }
   }
 }
+
+enum BYOKOwnerResetReason: String, Codable {
+  case legacyUnownedKeys
+  case differentOwner
+}
+
+struct BYOKOwnerResetNotice: Codable, Equatable {
+  let ownerUid: String
+  let reason: BYOKOwnerResetReason
+
+  var title: String { "Re-add your custom API keys" }
+
+  var message: String {
+    switch reason {
+    case .legacyUnownedKeys:
+      return
+        "Omi cleared custom API keys saved before keys were linked to an account. This keeps them from being used by another account on this Mac. Add them again in Settings → Advanced → Developer Keys."
+    case .differentOwner:
+      return
+        "Omi cleared custom API keys saved by another account on this Mac. Add your keys in Settings → Advanced → Developer Keys."
+    }
+  }
+}
+
 @MainActor
 final class APIKeyService: ObservableObject {
   static let shared = APIKeyService()
@@ -246,8 +270,7 @@ final class APIKeyService: ObservableObject {
   }
 
   nonisolated static var hasTranscriptionBYOK: Bool {
-    guard selectedBYOKLLMProvider != nil, let key = byokKey(.deepgram) else { return false }
-    return enrolledFingerprints()["deepgram"] == byokFingerprint(key)
+    selectedBYOKLLMProvider != nil && activeBYOKSnapshot[.deepgram] != nil
   }
 
   /// Persist fingerprints that passed BYOKValidator and were sent to activateBYOK.
@@ -262,12 +285,54 @@ final class APIKeyService: ObservableObject {
 
   nonisolated static func bindBYOKOwner(_ uid: String?) {
     guard let uid, !uid.isEmpty else { return }
-    let last = UserDefaults.standard.string(forKey: DefaultsKey.byokOwnerUid.rawValue)
+    let defaults = UserDefaults.standard
+    let last = defaults.string(forKey: DefaultsKey.byokOwnerUid.rawValue)
     if last != uid {
       // Unowned pre-upgrade keys (last == nil) are unsafe to inherit: the next
       // signed-in account would otherwise enroll someone else's credentials.
+      let hadKeys = BYOKProvider.allCases.contains { byokKey($0) != nil }
       clearPersistedBYOKKeys()
-      UserDefaults.standard.set(uid, forKey: DefaultsKey.byokOwnerUid.rawValue)
+      defaults.set(uid, forKey: DefaultsKey.byokOwnerUid.rawValue)
+      defaults.removeObject(forKey: DefaultsKey.byokOwnerResetNotice.rawValue)
+
+      guard hadKeys else { return }
+      let reason: BYOKOwnerResetReason = last == nil ? .legacyUnownedKeys : .differentOwner
+      persistBYOKOwnerResetNotice(.init(ownerUid: uid, reason: reason))
+    }
+  }
+
+  nonisolated static func pendingBYOKOwnerResetNotice(for uid: String?) -> BYOKOwnerResetNotice? {
+    guard let uid, !uid.isEmpty,
+      let data = UserDefaults.standard.data(forKey: DefaultsKey.byokOwnerResetNotice.rawValue),
+      let notice = try? JSONDecoder().decode(BYOKOwnerResetNotice.self, from: data),
+      notice.ownerUid == uid
+    else {
+      return nil
+    }
+    return notice
+  }
+
+  private nonisolated static func persistBYOKOwnerResetNotice(_ notice: BYOKOwnerResetNotice) {
+    guard let data = try? JSONEncoder().encode(notice) else { return }
+    UserDefaults.standard.set(data, forKey: DefaultsKey.byokOwnerResetNotice.rawValue)
+  }
+
+  private nonisolated static func acknowledgeBYOKOwnerResetNotice(_ notice: BYOKOwnerResetNotice) {
+    guard pendingBYOKOwnerResetNotice(for: notice.ownerUid) == notice else { return }
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.byokOwnerResetNotice.rawValue)
+  }
+
+  func presentPendingBYOKOwnerResetNotice(
+    for uid: String?,
+    through presenter: (any DesktopAlertPresenting)? = nil
+  ) {
+    guard let notice = Self.pendingBYOKOwnerResetNotice(for: uid),
+      let presenter = presenter ?? AppState.current?.alertPresenter
+    else {
+      return
+    }
+    presenter.present(title: notice.title, message: notice.message) {
+      Self.acknowledgeBYOKOwnerResetNotice(notice)
     }
   }
 
@@ -341,7 +406,9 @@ final class APIKeyService: ObservableObject {
     return out
   }
 
-  nonisolated static var activeBYOKSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
+  /// The selected keys that need validation. Runtime request builders must use
+  /// `activeBYOKSnapshot` instead so a raw or rotated key is never attached before enrollment.
+  nonisolated static var byokActivationCandidateSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
     var snapshot: [BYOKProvider: (String, String)] = [:]
     if let provider = selectedBYOKLLMProvider, let key = byokKey(provider) {
       snapshot[provider] = (key, byokFingerprint(key))
@@ -350,6 +417,16 @@ final class APIKeyService: ObservableObject {
       snapshot[.deepgram] = (key, byokFingerprint(key))
     }
     return snapshot
+  }
+
+  /// Provider credentials whose current fingerprint was successfully enrolled.
+  /// Each capability is checked independently so an enrolled Deepgram key can
+  /// still transcribe while a rotated LLM key waits for revalidation, and vice versa.
+  nonisolated static var activeBYOKSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
+    let enrolled = enrolledFingerprints()
+    return byokActivationCandidateSnapshot.filter { provider, entry in
+      enrolled[provider.rawValue] == entry.fingerprint
+    }
   }
 
   private static let reconcileLock = NSLock()
@@ -369,11 +446,13 @@ final class APIKeyService: ObservableObject {
   }
 
   func reconcileBYOKActivation() async {
-    Self.bindBYOKOwner(UserDefaults.standard.string(forKey: .authUserId))
+    let ownerUid = UserDefaults.standard.string(forKey: .authUserId)
+    Self.bindBYOKOwner(ownerUid)
+    presentPendingBYOKOwnerResetNotice(for: ownerUid)
     guard let selectedProvider = Self.selectedBYOKLLMProvider, Self.byokKey(selectedProvider) != nil else { return }
     let generation = Self.nextReconciliationGeneration()
 
-    let snapshot = Self.activeBYOKSnapshot.reduce(into: [BYOKProvider: String]()) { result, entry in
+    let snapshot = Self.byokActivationCandidateSnapshot.reduce(into: [BYOKProvider: String]()) { result, entry in
       result[entry.key] = entry.value.key
     }
     let statuses = await BYOKValidator.validateAll(snapshot)

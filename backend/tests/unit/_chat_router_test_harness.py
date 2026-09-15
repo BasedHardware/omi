@@ -78,6 +78,13 @@ def wire_common_stubs(install) -> SimpleNamespace:
     """
     load_real_module('models.chat', BACKEND_DIR / 'models' / 'chat.py')
 
+    notification_db = install('database.notifications')
+    notification_db.get_user_time_zone = MagicMock(return_value=None)
+    notification_db.set_user_time_zone = MagicMock()
+    notification_db.sync_user_time_zone_from_client = MagicMock(
+        side_effect=lambda _uid, request_tz: request_tz or 'UTC'
+    )
+
     chat_db = install('database.chat')
     chat_db.get_chat_session = MagicMock(return_value=None)
     chat_db.get_messages = MagicMock(return_value=[])

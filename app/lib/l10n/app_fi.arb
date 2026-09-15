@@ -3256,6 +3256,11 @@
     "speechProfileTopicGoal": "Mikä on pitkän aikavälin tavoitteesi?",
     "speechToTextUnavailableDesc": "Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.",
     "memoryHistoryPartial": "Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.",
+    "memoryHistory": "Historia",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Aloita tallennus napauttamalla +",
-    "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin."
+    "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin.",
+    "speechProfileEnrollmentPrompt": "Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia."
 }

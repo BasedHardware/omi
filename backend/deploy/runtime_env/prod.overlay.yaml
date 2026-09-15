@@ -20,6 +20,8 @@ overlay:
           value: http://nllb.omi.me
         MEMORY_BELIEF_MODEL_ENABLED:
           value: 'false'
+        MEMORY_BELIEF_AUTOMATION_PAUSED:
+          value: 'false'
         REFERRAL_PUBLIC_BASE_URL:
           value: https://omi.me
         ACCOUNT_DELETION_DISPATCH_MODE:
@@ -118,7 +120,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -134,6 +136,10 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      MEMORY_BELIEF_MODEL_ENABLED:
+        value: 'false'
+      MEMORY_BELIEF_AUTOMATION_PAUSED:
+        value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
   cloud_run:
@@ -163,6 +169,8 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
@@ -236,6 +244,8 @@ overlay:
             value: http://parakeet.omi.me
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
@@ -295,6 +305,8 @@ overlay:
             value: http://parakeet.omi.me
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -350,6 +362,8 @@ overlay:
             value: http://parakeet.omi.me
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           ACCOUNT_DELETION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -387,6 +401,8 @@ overlay:
             value: memories-backend
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
@@ -399,6 +415,8 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             value: 'false'

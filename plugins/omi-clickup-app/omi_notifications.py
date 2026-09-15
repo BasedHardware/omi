@@ -90,7 +90,7 @@ async def send_omi_notification(uid: str, message: str) -> bool:
                 print(f"🔔 Notification sent to user {uid[:10]}...", flush=True)
                 return True
             else:
-                print(f"⚠️  Failed to send notification: {response.status_code} - {response.text}", flush=True)
+                print(f"⚠️  Failed to send notification: {response.status_code}", flush=True)
                 return False
                 
     except Exception as e:
