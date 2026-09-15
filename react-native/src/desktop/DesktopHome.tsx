@@ -20,6 +20,7 @@ import {
   chatMemoryCitationCopy,
   chatHumanQuotedContextCopy,
   chatMessageDisplayText,
+  chatMessageShowsBodySlot,
   chatSenderCopy,
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
@@ -183,7 +184,7 @@ function AskExchange({
                   {chatDaySummaryRowCopy(index, itemText)}
                 </Text>
               ))
-            ) : body === '' ? null : (
+            ) : chatMessageShowsBodySlot(item, body) ? (
               <Text
                 accessibilityLabel={
                   item.generationOutcome === 'failed'
@@ -193,7 +194,7 @@ function AskExchange({
                 style={styles.rowTitle}>
                 {body}
               </Text>
-            )}
+            ) : null}
             {(item.attachments ?? []).flatMap((attachment, index) => {
               const uri = chatAttachmentThumbnailUrl(attachment);
               if (uri === null) {

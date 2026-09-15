@@ -21,6 +21,7 @@ import {
   chatMemoryCitationCopy,
   chatHumanQuotedContextCopy,
   chatMessageDisplayText,
+  chatMessageShowsBodySlot,
   chatSenderCopy,
   paintedChatContentBlock,
   chatDiscoveryShowMoreCopy,
@@ -259,7 +260,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
           </Text>
         ) : null}
         {message.generationOutcome === 'failed' ||
-        (!showSummaryItems && body !== '') ? (
+        (!showSummaryItems && chatMessageShowsBodySlot(message, body)) ? (
           <View
             style={[
               styles.chatBubble,

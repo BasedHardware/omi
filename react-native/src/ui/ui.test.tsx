@@ -1401,6 +1401,17 @@ test('a whitespace-only human chat message names Flutter empty GET text', () => 
   expect(copies).not.toContain('Message text unavailable');
   expect(copies).not.toContain(' \t\n');
   expect(copies).not.toContain('Response stopped');
+  const emptyBodies = renderer.root.findAll(node => {
+    if (String(node.type) !== 'Text') {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyBodies.length).toBeGreaterThan(0);
   expect(renderer.toJSON()).not.toBeNull();
   act(() => {
     renderer.unmount();
@@ -1439,7 +1450,112 @@ test('a completed whitespace-only chat message names Flutter empty GET text', ()
   expect(copies).not.toContain('Message text unavailable');
   expect(copies).not.toContain(' \t\n');
   expect(copies).not.toContain('Response stopped');
+  const emptyBodies = renderer.root.findAll(node => {
+    if (String(node.type) !== 'Text') {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyBodies.length).toBeGreaterThan(0);
   expect(renderer.toJSON()).not.toBeNull();
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('an honest empty human chat message names Flutter HumanMessage empty GET text', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-empty',
+        text: '',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+      }}
+      reduceMotion
+    />,
+  );
+  const emptyBodies = renderer.root.findAll(node => {
+    if (String(node.type) !== 'Text') {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyBodies.length).toBeGreaterThan(0);
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).not.toContain('Message text unavailable');
+  expect(copies).not.toContain('Response stopped');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('an honest empty AI chat message still omits Flutter NormalMessageWidget empty GET text', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-ai-empty',
+        text: '',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const emptyBodies = renderer.root.findAll(node => {
+    if (String(node.type) !== 'Text') {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyBodies).toHaveLength(0);
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).not.toContain('Message text unavailable');
+  expect(copies).not.toContain('Response stopped');
   act(() => {
     renderer.unmount();
   });

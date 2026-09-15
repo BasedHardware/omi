@@ -2578,6 +2578,22 @@ export function chatMessageDisplayText(
   return '';
 }
 
+export function chatMessageShowsBodySlot(
+  message: {
+    text: string;
+    sender?: 'human' | 'ai' | 'unknown';
+  },
+  displayText: string,
+): boolean {
+  if (displayText !== '') {
+    return true;
+  }
+  if (message.sender === 'human') {
+    return true;
+  }
+  return message.text !== '';
+}
+
 export function chatSenderCopy(sender: 'human' | 'ai' | 'unknown'): string {
   if (sender === 'human') {
     return 'You';

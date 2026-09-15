@@ -83,6 +83,7 @@ import {
   connectionIdentityCopy,
   chatHumanQuotedContextCopy,
   chatMessageDisplayText,
+  chatMessageShowsBodySlot,
   chatChartCopy,
   paintedChatContentBlock,
   chatBlockUnavailableCopy,
@@ -2797,6 +2798,58 @@ test('chat message display text names Flutter empty GET text', () => {
       generationRetryable: true,
     }),
   ).toBe('Response failed. Try again.');
+});
+
+test('chat message body slot names Flutter HumanMessage empty GET text and AI whitespace', () => {
+  expect(
+    chatMessageShowsBodySlot(
+      {text: '', sender: 'human'},
+      chatMessageDisplayText({text: '', generationOutcome: null}),
+    ),
+  ).toBe(true);
+  expect(
+    chatMessageShowsBodySlot(
+      {text: ' \t\n', sender: 'human'},
+      chatMessageDisplayText({text: ' \t\n', generationOutcome: null}),
+    ),
+  ).toBe(true);
+  expect(
+    chatMessageShowsBodySlot(
+      {text: ' \t\n', sender: 'ai'},
+      chatMessageDisplayText({
+        text: ' \t\n',
+        generationOutcome: 'completed',
+      }),
+    ),
+  ).toBe(true);
+  expect(
+    chatMessageShowsBodySlot(
+      {text: '', sender: 'ai'},
+      chatMessageDisplayText({
+        text: '',
+        generationOutcome: 'completed',
+      }),
+    ),
+  ).toBe(false);
+  expect(
+    chatMessageShowsBodySlot(
+      {text: '', sender: 'ai'},
+      chatMessageDisplayText({
+        text: '',
+        generationOutcome: 'cancelled',
+      }),
+    ),
+  ).toBe(true);
+  expect(
+    chatMessageShowsBodySlot(
+      {text: '', sender: 'ai'},
+      chatMessageDisplayText({
+        text: '',
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
+      }),
+    ),
+  ).toBe(false);
 });
 
 test('chat human quoted context copy names Flutter HumanMessage Context chrome', () => {

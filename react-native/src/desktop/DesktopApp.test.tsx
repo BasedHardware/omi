@@ -1118,6 +1118,17 @@ test('desktop chat names Flutter empty GET chat text', () => {
   expect(copy).toContain('Omi');
   expect(copy).not.toContain('Response stopped.');
   expect(copy).not.toContain(' \t\n');
+  const emptyBodies = renderer.root.findAll(node => {
+    if (String(node.type) !== 'Text') {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyBodies.length).toBeGreaterThan(0);
 });
 
 test('desktop chat names Flutter FilesHandlerWidget empty GET names', () => {
