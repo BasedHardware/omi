@@ -1654,6 +1654,7 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     {title: 'Today', copy: '0.0h / 2h'},
     {title: '3-Day Rolling', copy: '0.0h / 8h'},
     {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {title: 'Fair Use', copy: ''},
     {
       title: fairUseAboutTitleCopy(),
       copy: fairUseAboutBodyCopy(),
@@ -1674,6 +1675,54 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     '',
   );
   expect(fairUseBudgetResetCopy(undefined, now)).toBe('');
+});
+
+test('names Flutter FairUsePage whitespace GET message instead of omitting the banner', () => {
+  const idle = {
+    stage: 'none',
+    caseRef: '',
+    speechHoursToday: 0,
+    speechHours3day: 0,
+    speechHoursWeekly: 0,
+    dailyHours: 2,
+    threeDayHours: 8,
+    weeklyHours: 10,
+    dailyLimitMs: 1_800_000,
+    usedMs: 0,
+    exhausted: false,
+  };
+  expect(fairUseCopy({...idle, message: ' \t'})).toEqual([
+    {title: 'Speech Usage', copy: ''},
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {title: 'Fair Use', copy: ''},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
+  ]);
+  expect(fairUseCopy({...idle, message: '\u0085'})).toEqual([
+    {title: 'Speech Usage', copy: ''},
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {title: 'Fair Use', copy: ''},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
+  ]);
+  expect(fairUseCopy({...idle, message: ''})).toEqual([
+    {title: 'Speech Usage', copy: ''},
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
+  ]);
 });
 
 test('daily summary copy names GET headlines and omits Flutter DailySummaryCard unused stats', () => {

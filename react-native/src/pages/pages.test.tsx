@@ -1748,6 +1748,51 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter FairUsePage whitespace GET message without omitting Fair Use', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/fair-use/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          stage: 'none',
+          case_ref: '',
+          message: ' \t',
+          speech_hours_today: 0,
+          speech_hours_3day: 0,
+          speech_hours_weekly: 0,
+          limits: {
+            daily_hours: 2,
+            three_day_hours: 8,
+            weekly_hours: 10,
+          },
+          usage_pct: {daily: 0, three_day: 0, weekly: 0},
+          dg_budget: {
+            daily_limit_ms: 1800000,
+            used_ms: 0,
+            remaining_ms: 1800000,
+            exhausted: false,
+            resets_at: '2099-01-01T00:00:00Z',
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(
+    renderer.root
+      .findAllByType(Text)
+      .some(node => node.props.children === 'Fair Use'),
+  ).toBe(true);
+  expect(tree).toContain('Speech Usage');
+  expect(tree).toContain('About Fair Use');
+  expect(tree).not.toContain('Restricted');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names a failed fair use GET instead of empty success', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

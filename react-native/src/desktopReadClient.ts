@@ -1762,7 +1762,7 @@ export function fairUseCopy(
     },
   );
   const message = visibleDisplayText(status.message);
-  if (message !== '') {
+  if (status.message !== '') {
     rows.push({title: 'Fair Use', copy: message});
   }
   if (status.stage === 'restrict' && status.dailyLimitMs > 0) {
