@@ -550,7 +550,7 @@ test('connected device details name Flutter home_device empty GET information', 
   expect(output).toContain('"Firmware",": "');
   expect(output).not.toContain(`"Firmware",": ","${deviceUnknownCopy()}"`);
   expect(output).not.toContain('"Hardware",": "');
-  expect(output).toContain('"Manufacturer",": ","Based"');
+  expect(output).toContain('"Manufacturer",": ","  Based  "');
   expect(output).toContain(`"${deviceSerialNumberCopy()}",": "`);
   expect(output).not.toContain(
     `"${deviceSerialNumberCopy()}",": ","${deviceUnknownCopy()}"`,
@@ -558,7 +558,7 @@ test('connected device details name Flutter home_device empty GET information', 
   expect(output).toContain('"Device ID",": ","omi-test"');
   expect(output).not.toContain('"Model"');
   expect(output).not.toContain('Serial number');
-  expect(output).not.toContain(' \t\n');
+  expect(output).toContain('"Firmware",": "," \\t\\n"');
   expect(output).not.toContain(`"${firmwareLatestVersionCopy()}"`);
   await act(async () => renderer.unmount());
 });

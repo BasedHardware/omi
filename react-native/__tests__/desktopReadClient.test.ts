@@ -2774,10 +2774,10 @@ test('device display name names Flutter empty GET names', () => {
 
 test('device information copy names Flutter empty GET chips', () => {
   expect(deviceInformationCopy('')).toBe('');
-  expect(deviceInformationCopy(' \t\n')).toBe('');
-  expect(deviceInformationCopy('\u00A0')).toBe('');
-  expect(deviceInformationCopy('\u0085')).toBe('');
-  expect(deviceInformationCopy('  Omi Dev Kit  ')).toBe('Omi Dev Kit');
+  expect(deviceInformationCopy(' \t\n')).toBe(' \t\n');
+  expect(deviceInformationCopy('\u00A0')).toBe('\u00A0');
+  expect(deviceInformationCopy('\u0085')).toBe('\u0085');
+  expect(deviceInformationCopy('  Omi Dev Kit  ')).toBe('  Omi Dev Kit  ');
   expect(deviceInformationCopy(null)).toBe(deviceUnknownCopy());
   expect(deviceInformationCopy(undefined)).toBe(deviceUnknownCopy());
 });

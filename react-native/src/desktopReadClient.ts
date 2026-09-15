@@ -1866,7 +1866,7 @@ export function deviceInformationCopy(
   if (value === undefined || value === null) {
     return deviceUnknownCopy();
   }
-  return visibleDisplayText(value);
+  return value;
 }
 
 export function ledBrightnessCopy(): string {
