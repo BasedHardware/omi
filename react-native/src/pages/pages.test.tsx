@@ -2899,6 +2899,81 @@ test('Connectors Explore names Flutter CategorySection GET category and Installe
   expect(tree).not.toContain('Official');
 });
 
+test('Connectors Explore names Flutter CategorySection empty GET category and Installed omits it', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-explore',
+            name: 'Explore fixture app',
+            category: '',
+          },
+          {
+            id: 'catalog-app-whitespace',
+            name: 'Whitespace category app',
+            category: ' \t',
+          },
+          {
+            id: 'catalog-app-installed',
+            name: 'Owned app',
+            category: 'health-and-wellness',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(['catalog-app-installed']),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(sectionText(renderer, 'Explore')).toContain('Explore fixture app');
+  expect(sectionText(renderer, 'Explore')).toContain('Whitespace category app');
+  expect(sectionText(renderer, 'Explore')).toContain('Health');
+  expect(sectionText(renderer, 'Installed')).toContain('Owned app');
+  expect(sectionText(renderer, 'Installed')).not.toContain('Health');
+  const exploreHeading = renderer.root.find(
+    node =>
+      node.type === Text &&
+      node.props.children === 'Explore' &&
+      node.props.style === styles.destinationSectionTitle,
+  );
+  expect(
+    exploreHeading.parent
+      .findAll(
+        node => node.type === Text && node.props.numberOfLines === 1,
+      )
+      .map(node => node.props.children),
+  ).toEqual(['', '', 'Health']);
+  const installedHeading = renderer.root.find(
+    node =>
+      node.type === Text &&
+      node.props.children === 'Installed' &&
+      node.props.style === styles.destinationSectionTitle,
+  );
+  expect(
+    installedHeading.parent.findAll(
+      node => node.type === Text && node.props.numberOfLines === 1,
+    ),
+  ).toHaveLength(0);
+  expect(textOf(renderer)).not.toContain('Not installed');
+});
+
 test('Connectors list cards omit GET author like Flutter CategorySection and AppListItem', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

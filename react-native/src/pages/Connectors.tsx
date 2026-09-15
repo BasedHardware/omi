@@ -54,16 +54,10 @@ function CatalogAppImage({uri}: {uri: string}) {
   );
 }
 
-function appRowMeta(app: CloudApp, explore = false): string {
-  const category = appSectionCategoryCopy(app.category, explore);
-  return [
-    category,
-    explore
-      ? appExploreRatingCopy(app.ratingAvg, app.ratingCount)
-      : appRatingCopy(app.ratingAvg, app.ratingCount),
-  ]
-    .filter(item => item !== null)
-    .join(' · ');
+function appRowRating(app: CloudApp, explore = false): string | null {
+  return explore
+    ? appExploreRatingCopy(app.ratingAvg, app.ratingCount)
+    : appRatingCopy(app.ratingAvg, app.ratingCount);
 }
 
 export function ConnectorsPage({
@@ -272,7 +266,8 @@ export function ConnectorsPage({
               ) : (
                 section.items.map(app => {
                   const explore = section.key === 'Explore';
-                  const meta = appRowMeta(app, explore);
+                  const category = appSectionCategoryCopy(app.category, explore);
+                  const rating = appRowRating(app, explore);
                   const name = appDisplayName(app.name);
                   const title = appListPrivateNameCopy(
                     app.name,
@@ -292,13 +287,17 @@ export function ConnectorsPage({
                       ) : null}
                       <View style={styles.cloudRowBody}>
                         <Text style={styles.cloudRowTitle}>{title}</Text>
-                        {explore ? null : (
+                        {explore ? (
+                          <Text numberOfLines={1} style={styles.cloudRowMeta}>
+                            {category ?? ''}
+                          </Text>
+                        ) : (
                           <Text numberOfLines={2} style={styles.cloudRowMeta}>
                             {description}
                           </Text>
                         )}
-                        {meta.length > 0 && (
-                          <Text style={styles.cloudRowMeta}>{meta}</Text>
+                        {rating !== null && (
+                          <Text style={styles.cloudRowMeta}>{rating}</Text>
                         )}
                       </View>
                       {writesAvailable && installKnown && (
