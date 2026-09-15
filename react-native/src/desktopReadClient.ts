@@ -62,13 +62,11 @@ export function conversationListUsesListenOverview(item: {
   title: string;
   summary: string;
 }): boolean {
-  const title = visibleDisplayText(item.title);
-  const summary = visibleDisplayText(item.summary);
   return (
     conversationListUsesListenExcerpt(item.id) &&
-    title !== '' &&
-    summary !== '' &&
-    summary.startsWith(title)
+    item.title !== '' &&
+    item.summary !== '' &&
+    item.summary.startsWith(item.title)
   );
 }
 

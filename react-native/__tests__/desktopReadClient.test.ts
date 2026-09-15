@@ -1043,6 +1043,51 @@ test('names Flutter ConversationListItem padded GET title instead of remapping t
       status: 'in_progress',
     }),
   ).toBe('Assistant words');
+  expect(
+    conversationListUsesListenOverview({
+      id: 'conversation-one',
+      title: `  ${'a'.repeat(80)}  `,
+      summary: `${'a'.repeat(80)} later speech`,
+    }),
+  ).toBe(false);
+  expect(
+    conversationRecapTitle({
+      id: 'conversation-one',
+      title: `  ${'a'.repeat(80)}  `,
+      summary: `${'a'.repeat(80)} later speech`,
+      status: 'completed',
+    }),
+  ).toBe(`  ${'a'.repeat(80)}  `);
+  expect(
+    conversationListUsesListenOverview({
+      id: 'recording:session-1',
+      title: '  Morning walk  ',
+      summary: 'Morning walk later speech',
+    }),
+  ).toBe(false);
+  expect(
+    conversationRecapTitle({
+      id: 'recording:session-1',
+      title: '  Morning walk  ',
+      summary: 'Morning walk later speech',
+      status: 'completed',
+    }),
+  ).toBe('  Morning walk  ');
+  expect(
+    conversationListUsesListenOverview({
+      id: 'conversation-one',
+      title: `${'a'.repeat(80)}`,
+      summary: `${'a'.repeat(80)} later speech`,
+    }),
+  ).toBe(true);
+  expect(
+    conversationRecapTitle({
+      id: 'conversation-one',
+      title: `${'a'.repeat(80)}`,
+      summary: `${'a'.repeat(80)} later speech`,
+      status: 'completed',
+    }),
+  ).toBe(`${'a'.repeat(80)} later speech`);
 });
 
 test('conversation list duration prefers GET transcript span over wall clocks', () => {
