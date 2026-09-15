@@ -1,0 +1,47 @@
+name: MCP Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mcp/**'
+      - '.github/workflows/mcp-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mcp/**'
+      - '.github/workflows/mcp-ci.yml'
+
+concurrency:
+  group: mcp-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: mcp
+
+jobs:
+  tests:
+    name: Linux / Python 3.12
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches backend-checks.yml.
+          version: "0.11.13"
+          enable-cache: true
+          cache-dependency-glob: mcp/uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --python 3.12
+
+      - name: Run tests
+        run: uv run --frozen python -m pytest -q

@@ -1,4 +1,5 @@
 import os
+import re
 from enum import Enum
 import json
 from typing import List, Optional
@@ -145,6 +146,26 @@ def _response_json(response: requests.Response):
     return response.json()
 
 
+DATE_ONLY_FORMAT = "%Y-%m-%d"
+# strptime alone accepts "2026-1-1"; the tools document the zero-padded ten-character form.
+_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _parse_date_only(value: str, field: str) -> datetime:
+    """Parse a ``YYYY-MM-DD`` tool argument, failing the call instead of dropping the filter.
+
+    A malformed date used to be logged and ignored, so the tool silently queried the
+    API with no date bound and the model received the unfiltered list. Raising here
+    surfaces the mistake as a tool error the model can correct.
+    """
+    if not isinstance(value, str) or not _DATE_ONLY_RE.match(value):
+        raise ValueError(f"Invalid {field} '{value}'. Expected YYYY-MM-DD.")
+    try:
+        return datetime.strptime(value, DATE_ONLY_FORMAT)
+    except ValueError:
+        raise ValueError(f"Invalid {field} '{value}'. Expected YYYY-MM-DD.") from None
+
+
 def _parse_categories(categories, category_cls: type, logger: logging.Logger) -> list:
     if not isinstance(categories, list):
         raise ValueError(f"categories must be a list, got {type(categories)}")
@@ -232,17 +253,12 @@ def get_conversations(
     offset: int = 0,
 ) -> List:
     params = {"limit": limit, "offset": offset}
-    if start_date:
-        try:
-            params["start_date"] = datetime.strptime(start_date, "%Y-%m-%d").isoformat()
-        except ValueError:
-            logger.warning(f"Could not parse start date: {start_date}")
-    if end_date:
-        try:
-            # Set to end of day (23:59:59) so the entire day is included
-            params["end_date"] = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)).isoformat()
-        except ValueError:
-            logger.warning(f"Could not parse end date: {end_date}")
+    if start_date is not None:
+        params["start_date"] = _parse_date_only(start_date, "start_date").isoformat()
+    if end_date is not None:
+        # Set to end of day (23:59:59) so the entire day is included
+        end_of_day = _parse_date_only(end_date, "end_date") + timedelta(days=1) - timedelta(seconds=1)
+        params["end_date"] = end_of_day.isoformat()
     if categories:
         params["categories"] = ",".join([c.value for c in categories])
 
@@ -272,9 +288,13 @@ def search_conversations(
     end_date: Optional[str] = None,
 ) -> List:
     params = {"query": query, "limit": limit}
-    if start_date:
+    # The API's search endpoint takes date-only strings; validate them here so a
+    # malformed value fails with a clear message instead of an opaque HTTP 400.
+    if start_date is not None:
+        _parse_date_only(start_date, "start_date")
         params["start_date"] = start_date
-    if end_date:
+    if end_date is not None:
+        _parse_date_only(end_date, "end_date")
         params["end_date"] = end_date
 
     logger.info(f"Searching conversations with limit={limit}")
