@@ -377,7 +377,7 @@ overlay:
             value: 'true'
             category: rollout
     jobs:
-      notifications-job:
+      x-connector-sync-job:
         env:
           PINECONE_INDEX_NAME:
             value: memories-backend
@@ -427,6 +427,7 @@ overlay:
     workflow_files:
     - .github/workflows/gcp_backend.yml
     - .github/workflows/gcp_notifications_job.yml
+    - .github/workflows/gcp_x_connector_sync_job.yml
     - .github/workflows/gcp_memory_maintenance_job.yml
     - .github/workflows/gcp_frame_request_retention_job.yml
     - .github/workflows/gcp_daily_memory_sweep_job.yml
