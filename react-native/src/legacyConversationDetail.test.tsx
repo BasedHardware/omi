@@ -1726,6 +1726,35 @@ test('names GET folder name when folders resolve and No Folder otherwise', async
       return {
         id: 'folders',
         status: 200,
+        body: JSON.stringify([
+          {id: ' \t', name: 'Whitespace id'},
+          {id: '', name: 'Blank id'},
+        ]),
+      };
+    }
+    return response({...fixture, folder_id: ' \t'});
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({folderName: 'Whitespace id'}),
+  );
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: 'folders',
+        status: 200,
+        body: JSON.stringify([{id: '', name: 'Blank id'}]),
+      };
+    }
+    return response({...fixture, folder_id: ''});
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({folderName: 'Blank id'}),
+  );
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: 'folders',
+        status: 200,
         body: JSON.stringify([{id: 'folder-other', name: 'Other'}]),
       };
     }

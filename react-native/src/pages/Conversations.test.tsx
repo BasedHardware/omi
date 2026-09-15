@@ -2881,6 +2881,8 @@ test('conversation list names GET folders without add or a write sheet', async (
         body: JSON.stringify([
           {id: 'folder-work', name: 'Work'},
           {id: 'folder-empty', name: ' \t'},
+          {id: ' \t', name: 'Whitespace id'},
+          {id: '', name: 'Blank id'},
         ]),
       };
     }
@@ -2944,6 +2946,8 @@ test('conversation list names GET folders without add or a write sheet', async (
   expect(tree).toContain('Work');
   expect(tree).toContain('Work standup');
   expect(tree).toContain('Inbox chat');
+  expect(tree).toContain('Whitespace id');
+  expect(tree).toContain('Blank id');
   expect(tree).not.toContain('folder-work');
   expect(tree).not.toContain('folder-empty');
   expect(

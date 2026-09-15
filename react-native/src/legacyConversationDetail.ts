@@ -588,9 +588,9 @@ export async function loadLegacyConversationDetail(
   const folderId =
     value.folder_id === undefined || value.folder_id === null
       ? undefined
-      : visibleDisplayText(text(value.folder_id, 1_000_000));
+      : text(value.folder_id, 1_000_000);
   const folder =
-    folderId === undefined || folderId === ''
+    folderId === undefined
       ? undefined
       : await loadOmiFolder(backend, folderId, signal).catch(() => undefined);
   return {

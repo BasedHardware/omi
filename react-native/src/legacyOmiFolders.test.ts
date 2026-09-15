@@ -7,6 +7,26 @@ import {
 } from './legacyOmiFolders';
 import type {OmiBackend} from './omiNativeTypes';
 
+test('names Flutter FolderTabs empty GET ids instead of omitting them', () => {
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work'},
+        {id: ' \t', name: 'Whitespace id'},
+        {id: '\u0085', name: 'Next line id'},
+        {id: '', name: 'Blank id'},
+        {id: '  padded  ', name: 'Padded id'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'folder-work', name: 'Work', color: '#6B7280'},
+    {id: ' \t', name: 'Whitespace id', color: '#6B7280'},
+    {id: '\u0085', name: 'Next line id', color: '#6B7280'},
+    {id: '', name: 'Blank id', color: '#6B7280'},
+    {id: '  padded  ', name: 'Padded id', color: '#6B7280'},
+  ]);
+});
+
 test('names Flutter FolderTabs empty GET names instead of omitting them', () => {
   const names = parseOmiFolderNames(
     JSON.stringify([
@@ -218,6 +238,8 @@ test('loadOmiFolder names a resolved GET folder color and omits misses', async (
     body: JSON.stringify([
       {id: 'folder-work', name: 'Work', color: '#3B82F6', icon: '💼'},
       {id: 'folder-empty', name: ' \t', color: '#EF4444'},
+      {id: ' \t', name: 'Whitespace id', color: '#10B981'},
+      {id: '', name: 'Blank id'},
     ]),
   }));
   const backend = {request} as unknown as OmiBackend;
@@ -231,6 +253,16 @@ test('loadOmiFolder names a resolved GET folder color and omits misses', async (
     id: 'folder-empty',
     name: ' \t',
     color: '#EF4444',
+  });
+  expect(await loadOmiFolder(backend, ' \t')).toEqual({
+    id: ' \t',
+    name: 'Whitespace id',
+    color: '#10B981',
+  });
+  expect(await loadOmiFolder(backend, '')).toEqual({
+    id: '',
+    name: 'Blank id',
+    color: '#6B7280',
   });
   expect(await loadOmiFolder(backend, 'folder-missing')).toBeUndefined();
   request.mockResolvedValueOnce({id: 'folders', status: 500, body: '[]'});
