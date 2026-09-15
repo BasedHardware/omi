@@ -974,6 +974,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "process_segments called seg.get(\"text\") on every transcript segment, so a non-dict segment crashed the realtime webhook with AttributeError; list_channels also re-requested forever when Slack returned a repeated next_cursor"
 
+  - id: slack-app-tests
+    command: ["python3", "plugins/omi-slack-app/test_channel_resolution.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14112: ai_extract_message_and_channel resolved a spoken channel name to the first bidirectional substring hit in Slack API order, so an ambiguous name like \"dev\" could send the voice-dictated message to a channel the user never named; resolve_channel now requires an exact match or a single closest SequenceMatcher candidate, and a genuine tie resolves to not-found so the caller falls back to the user's selected channel"
+
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
