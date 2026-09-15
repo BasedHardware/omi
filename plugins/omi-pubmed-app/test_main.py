@@ -145,15 +145,40 @@ def load_app_modules(force_stubs: bool = True):
                 return fn
             return decorator
 
+        def exception_handler(self, exc_cls):
+            def decorator(fn):
+                return fn
+            return decorator
+
     fastapi_mod.FastAPI = FastAPIStub
+    fastapi_mod.Request = MagicMock
+    fastapi_exceptions = types.ModuleType("fastapi.exceptions")
+
+    class RequestValidationErrorStub(Exception):
+        def __init__(self, errors=None):
+            self._errors = errors or []
+
+        def errors(self):
+            return self._errors
+
+    fastapi_exceptions.RequestValidationError = RequestValidationErrorStub
+    fastapi_mod.exceptions = fastapi_exceptions
+    stubs["fastapi"] = fastapi_mod
+    stubs["fastapi.exceptions"] = fastapi_exceptions
+
     fastapi_responses = types.ModuleType("fastapi.responses")
 
     class HTMLResponseStub:
         pass
 
+    class JSONResponseStub:
+        def __init__(self, content=None, status_code=200):
+            self.content = content
+            self.status_code = status_code
+
     fastapi_responses.HTMLResponse = HTMLResponseStub
+    fastapi_responses.JSONResponse = JSONResponseStub
     fastapi_mod.responses = fastapi_responses
-    stubs["fastapi"] = fastapi_mod
     stubs["fastapi.responses"] = fastapi_responses
 
     httpx_mod = types.ModuleType("httpx")
@@ -565,6 +590,14 @@ class TestPubmedApp(unittest.TestCase):
         req = real_models.SearchPubmedRequest(query="  neuroscience  ", max_results=5)
         self.assertEqual(req.query, "neuroscience")
         self.assertEqual(req.max_results, 5)
+
+
+    def test_validation_exception_handler(self):
+        """Verify validation_exception_handler formats 422 errors as 200 ChatToolResponse JSON."""
+        err = self.main.RequestValidationError([{"loc": ["body", "query"], "msg": "Field required"}])
+        resp = asyncio.run(self.main.validation_exception_handler(MagicMock(), err))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("query: Field required", resp.content["error"])
 
 
 if __name__ == "__main__":
