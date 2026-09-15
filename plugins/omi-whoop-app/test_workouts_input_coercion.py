@@ -8,6 +8,7 @@ transport, so they exercise the real endpoint code and never touch the network.
 import asyncio
 import json
 import unittest
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from whoop_test_support import DummyRequest, load_main
@@ -58,6 +59,7 @@ class WorkoutInputCoercionTests(unittest.TestCase):
             return response
 
         patcher = patch.object(main.requests, "get", side_effect=fake_get)
+        self.addCleanup(patcher.stop)
         patcher.start()
         return patcher
 
@@ -76,9 +78,10 @@ class WorkoutInputCoercionTests(unittest.TestCase):
         params = self.calls[0]["params"]
         self.assertEqual(params["limit"], 10)
         start, end = params["start"], params["end"]
-        # A 7-day window: the start date is exactly 7 days before the end date.
-        self.assertEqual(start[:10], "2026-09-08")
-        self.assertGreater(end[:10], start[:10])
+        # The requested start date is seven days before the end date.
+        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        self.assertEqual(end_dt.date() - start_dt.date(), timedelta(days=7))
 
     def test_missing_and_null_optionals_agree(self):
         self._patch_get(FakeResponse(200, _workout_payload()))
