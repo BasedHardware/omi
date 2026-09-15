@@ -900,6 +900,7 @@ test('legacy processing empty GET transcript text names Flutter TranscriptWidget
     }),
   );
   expect(copy).toContain('Speaker 1');
+  expect(copy).toContain(' \t\n');
   expect(copy).not.toContain(processingConversationNoContentCopy());
   expect(copy).not.toContain('The transcript is empty.');
   expect(copy).not.toContain('Transcript unavailable');
@@ -964,21 +965,21 @@ test('legacy conversation details name Flutter TranscriptWidget empty GET text',
     conversation: {...conversation, id: 'old-1'},
   });
   const copy = text(view);
-  const emptyText = view.root.findAll(node => {
+  const whitespaceText = view.root.findAll(node => {
     if (node.type !== Text) {
       return false;
     }
     const children = node.props.children;
     return (
-      children === '' ||
-      (Array.isArray(children) && children.some(child => child === ''))
+      children === '\u0085' ||
+      (Array.isArray(children) && children.some(child => child === '\u0085'))
     );
   });
-  expect(emptyText.length).toBeGreaterThan(0);
+  expect(whitespaceText.length).toBeGreaterThan(0);
   expect(copy).toContain('Speaker 1');
   expect(copy).not.toContain('The transcript is empty.');
   expect(copy).not.toContain(processingConversationNoContentCopy());
-  expect(copy).not.toContain('\u0085');
+  expect(copy).toContain('\u0085');
   expect(copy).not.toContain('Speaker ·');
 });
 
@@ -1053,9 +1054,9 @@ test('legacy NEXT LINE-prefixed segments keep later speech', () => {
       conversation: {...conversation, id: 'old-1'},
     }),
   );
-  expect(copy).toContain('Recorded words');
+  expect(copy).toContain('\u0085Recorded words');
   expect(copy).toContain('Speaker 1');
-  expect(copy).not.toContain('\u0085');
+  expect(copy).not.toContain('\u0085SPEAKER_00');
   expect(copy).not.toContain('The transcript is empty.');
 });
 

@@ -302,12 +302,11 @@ function LegacyConversationBody({
   const transcriptSegments =
     detail.transcript.status === 'loaded'
       ? detail.transcript.segments.map(segment => {
-          const text = visibleDisplayText(segment.text);
           const speaker =
             segment.speaker === null
               ? null
               : visibleDisplayText(segment.speaker);
-          return {...segment, text, speaker: speaker === '' ? null : speaker};
+          return {...segment, speaker: speaker === '' ? null : speaker};
         })
       : [];
   const hasLocation =
