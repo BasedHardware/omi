@@ -2729,6 +2729,11 @@ test('conversation list names GET folders without add or a write sheet', async (
   expect(tree).toContain('Inbox chat');
   expect(tree).not.toContain('folder-work');
   expect(tree).not.toContain('folder-empty');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Show  conversations',
+    ),
+  ).toBeDefined();
   expect(tree).not.toContain('Add');
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),

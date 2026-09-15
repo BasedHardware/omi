@@ -2756,6 +2756,38 @@ test('legacy conversation details name GET folder name and Flutter No Folder oth
   expect(omitted).not.toContain('folder-work');
 });
 
+test('legacy conversation details name Flutter GetSummaryWidgets empty GET folder name without No Folder', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        folderName: '',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        folderId: 'folder-empty',
+      },
+    }),
+  );
+  expect(copy).not.toContain(conversationNoFolderCopy());
+  expect(copy).not.toContain('folder-empty');
+});
+
 test('legacy conversation details name GET folder color without hex copy', () => {
   mockLegacy.mockReturnValue({
     result: {

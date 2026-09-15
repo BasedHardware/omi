@@ -359,9 +359,11 @@ function LegacyConversationBody({
   const calendarShareMailto = visibleDisplayText(
     detail.calendarEvent?.shareMailto ?? '',
   );
-  const folderName = visibleDisplayText(detail.folderName ?? '');
+  const folderName = detail.folderName;
   const folderLabel =
-    folderName === '' ? conversationNoFolderCopy() : folderName;
+    folderName === undefined || folderName === null
+      ? conversationNoFolderCopy()
+      : visibleDisplayText(folderName);
   const folderColor = visibleDisplayText(detail.folderColor ?? '');
   const folderIcon = visibleDisplayText(detail.folderIcon ?? '');
   const externalText = visibleDisplayText(detail.externalText ?? '');
