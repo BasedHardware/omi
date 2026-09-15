@@ -76,7 +76,7 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     if (typeof folder.name !== 'string') {
       continue;
     }
-    const name = visibleDisplayText(text(folder.name, 1_000_000));
+    const name = text(folder.name, 1_000_000);
     names.set(id, name);
     const color = omiFolderColorCopy(folder.color);
     const icon =

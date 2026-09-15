@@ -7,16 +7,18 @@ import {
 } from './legacyOmiFolders';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('names Flutter FolderTabs empty GET names instead of omitting the folder', () => {
+test('names Flutter FolderTabs empty GET names instead of omitting them', () => {
   const names = parseOmiFolderNames(
     JSON.stringify([
       {id: 'folder-work', name: 'Work'},
       {id: 'folder-empty', name: ' \t'},
+      {id: 'folder-next', name: '\u0085'},
       {id: 'folder-blank', name: ''},
     ]),
   );
   expect(names.get('folder-work')).toBe('Work');
-  expect(names.get('folder-empty')).toBe('');
+  expect(names.get('folder-empty')).toBe(' \t');
+  expect(names.get('folder-next')).toBe('\u0085');
   expect(names.get('folder-blank')).toBe('');
 });
 
@@ -183,7 +185,7 @@ test('loadOmiFolderNames names resolved GET folders and omits failures', async (
   const backend = {request} as unknown as OmiBackend;
   expect(await loadOmiFolderNames(backend)).toEqual([
     {id: 'folder-work', name: 'Work', color: '#6B7280'},
-    {id: 'folder-empty', name: '', color: '#6B7280'},
+    {id: 'folder-empty', name: ' \t', color: '#6B7280'},
   ]);
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),
@@ -227,7 +229,7 @@ test('loadOmiFolder names a resolved GET folder color and omits misses', async (
   });
   expect(await loadOmiFolder(backend, 'folder-empty')).toEqual({
     id: 'folder-empty',
-    name: '',
+    name: ' \t',
     color: '#EF4444',
   });
   expect(await loadOmiFolder(backend, 'folder-missing')).toBeUndefined();

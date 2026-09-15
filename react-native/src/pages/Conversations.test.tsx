@@ -2876,7 +2876,7 @@ test('conversation list names GET folders without add or a write sheet', async (
   expect(tree).not.toContain('folder-empty');
   expect(
     renderer.root.find(
-      node => node.props.accessibilityLabel === 'Show  conversations',
+      node => node.props.accessibilityLabel === 'Show  \t conversations',
     ),
   ).toBeDefined();
   expect(tree).not.toContain('Add');
