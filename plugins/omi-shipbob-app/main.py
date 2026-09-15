@@ -221,29 +221,38 @@ def get_products(uid: str, page: int = 1, limit: int = 50) -> List[Dict]:
 
 
 def search_product_by_name(uid: str, name: str) -> Optional[Dict]:
-    """Search for a product by name."""
-    # Try products endpoint first
+    """Search for a product by name. Returns exact match, single partial match, or raises on ambiguity."""
     products = get_products(uid, limit=100)
     name_lower = name.lower()
 
-    for product in products:
-        product_name = product.get("name", "").lower()
-        if name_lower in product_name or product_name in name_lower:
-            return product
+    exact = [p for p in products if p.get("name", "").lower() == name_lower]
+    if exact:
+        return exact[0]
 
+    partial = [p for p in products if name_lower in p.get("name", "").lower() or p.get("name", "").lower() in name_lower]
+    if len(partial) == 1:
+        return partial[0]
+    if len(partial) > 1:
+        candidates = "\n".join(f"  - id={p.get('id')} sku={p.get('sku', 'N/A')} name={p.get('name')}" for p in partial)
+        return {"_ambiguous": True, "_candidates": partial, "_message": f"Ambiguous product name '{name}'. Candidates:\n{candidates}"}
     return None
 
 
 def search_inventory_by_name(uid: str, name: str) -> Optional[Dict]:
-    """Search for an inventory item by name."""
+    """Search for an inventory item by name. Returns exact match, single partial match, or raises on ambiguity."""
     inventory = get_inventory(uid, limit=100)
     name_lower = name.lower()
 
-    for item in inventory:
-        item_name = item.get("name", "").lower()
-        if name_lower in item_name or item_name in name_lower:
-            return item
+    exact = [item for item in inventory if item.get("name", "").lower() == name_lower]
+    if exact:
+        return exact[0]
 
+    partial = [item for item in inventory if name_lower in item.get("name", "").lower() or item.get("name", "").lower() in name_lower]
+    if len(partial) == 1:
+        return partial[0]
+    if len(partial) > 1:
+        candidates = "\n".join(f"  - id={i.get('id')} sku={i.get('sku', 'N/A')} name={i.get('name')}" for i in partial)
+        return {"_ambiguous": True, "_candidates": partial, "_message": f"Ambiguous inventory name '{name}'. Candidates:\n{candidates}"}
     return None
 
 
@@ -621,6 +630,10 @@ async def tool_create_wro(request: Request):
         product = search_product_by_name(uid, product_name)
         if not product:
             return ChatToolResponse(error=f"Could not find product '{product_name}'. Please check the product name.")
+
+        # Handle ambiguous match
+        if isinstance(product, dict) and product.get("_ambiguous"):
+            return ChatToolResponse(result=f"Ambiguous product name '{product_name}'. Multiple candidates found:\n{product.get('_message', 'Please specify a more precise name or provide the product id.')}")
 
         # Get inventory_id from product
         inventory_id = None
