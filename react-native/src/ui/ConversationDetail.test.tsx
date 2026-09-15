@@ -255,8 +255,7 @@ test('conversation-detail history names GET memory citations with empty titles',
   const tree = text(view);
   expect(tree).toContain('I found that meeting.');
   expect(tree).toContain('🧠 ');
-  expect(tree).toContain('🚀 ');
-  expect(tree).not.toContain('\u0085');
+  expect(tree).toContain('🚀 \u0085');
 });
 
 test('conversation-detail history names Flutter ChartMessageWidget empty GET title without omitting the chart', () => {

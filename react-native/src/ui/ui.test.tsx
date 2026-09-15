@@ -1737,6 +1737,7 @@ test('a chat message names GET memory citations with empty titles', () => {
           {title: '', emoji: '🧠'},
           {title: '  '},
           {title: '\u0085', emoji: '🚀'},
+          {title: 'Notes', emoji: ' \t'},
         ],
       }}
       reduceMotion
@@ -1757,9 +1758,9 @@ test('a chat message names GET memory citations with empty titles', () => {
       return [];
     });
   expect(copies).toContain('🧠 ');
-  expect(copies).toContain('🚀 ');
-  expect(copies).toContain(' ');
-  expect(copies).not.toContain('\u0085');
+  expect(copies).toContain('   ');
+  expect(copies).toContain('🚀 \u0085');
+  expect(copies).toContain(' \t Notes');
   act(() => {
     renderer.unmount();
   });
@@ -1801,8 +1802,7 @@ test('a chat message names GET memory citations without inventing a conversation
     });
   expect(copies).toContain('🚀 Morning standup');
   expect(copies).toContain(' Notes');
-  expect(copies).toContain('🧠 ');
-  expect(copies).not.toContain('\u0085');
+  expect(copies).toContain('🧠 \u0085');
   act(() => {
     renderer.unmount();
   });

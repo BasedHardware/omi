@@ -2663,9 +2663,7 @@ export function chatMemoryCitationCopy(memory: {
   title: string;
   emoji?: string | null;
 }): string {
-  const title = visibleDisplayText(memory.title);
-  const emoji = visibleDisplayText(memory.emoji ?? '');
-  return `${emoji} ${title}`;
+  return `${memory.emoji ?? ''} ${memory.title}`;
 }
 
 export function chatEvidenceKindCopy(kind: string): string {
