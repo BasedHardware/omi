@@ -126,6 +126,69 @@ test('names Flutter Goal.fromJson defaulted GET metrics instead of omitting the 
   ]);
 });
 
+test('names Flutter Goal.fromJson padded GET current_value instead of remapping to a progress chip', () => {
+  expect(
+    parseOmiGoals(
+      JSON.stringify([
+        {
+          id: 'goal-exact-string',
+          title: 'Exact string metrics',
+          current_value: '3',
+          target_value: '10',
+        },
+        {
+          id: 'goal-number',
+          title: 'Number metrics',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'goal-exact-string',
+      title: 'Exact string metrics',
+      current: 3,
+      target: 10,
+    },
+    {id: 'goal-number', title: 'Number metrics', current: 3, target: 10},
+  ]);
+  for (const [id, current, target] of [
+    ['goal-padded', '  3  ', 10],
+    ['goal-trailing', '3 ', 10],
+    ['goal-leading', '  3', 10],
+    ['goal-newline', '3\n', 10],
+    ['goal-decimal', '  1.5  ', 10],
+    ['goal-next-line', '\u00853', 10],
+    ['goal-padded-target', 3, '  10  '],
+    ['goal-whitespace', ' \t', 10],
+  ] as const) {
+    const rows = parseOmiGoals(
+      JSON.stringify([
+        {
+          id,
+          title: 'Padded metrics',
+          current_value: current,
+          target_value: target,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    );
+    expect(rows.find(row => row.id === id)).toBeUndefined();
+    expect(rows.find(row => row.id === 'goal-read')).toEqual({
+      id: 'goal-read',
+      title: 'Read 20 books',
+      current: 3,
+      target: 10,
+    });
+  }
+});
+
 test('names Flutter Goal.fromJson empty GET ids instead of omitting the row', () => {
   const rows = parseOmiGoals(
     JSON.stringify([

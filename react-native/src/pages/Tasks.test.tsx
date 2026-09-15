@@ -970,6 +970,53 @@ test('tasks page names GET goals without add or a write sheet', async () => {
   act(() => renderer.unmount());
 });
 
+test('tasks page names Flutter Goal.fromJson padded GET current_value instead of remapping to a progress chip', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'goal-padded',
+            title: 'Padded metrics',
+            current_value: '  3  ',
+            target_value: 10,
+          },
+          {
+            id: 'goal-read',
+            title: 'Read 20 books',
+            current_value: '3',
+            target_value: '10',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        backend={{request} as never}
+        outcome={outcome}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = taskPageText(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain('Read 20 books (3/10)');
+  expect(tree).not.toContain('Padded metrics');
+  expect(tree).not.toContain('Padded metrics (3/10)');
+  expect(tree).not.toContain('goal-padded');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('Add');
+  act(() => renderer.unmount());
+});
+
 test('tasks page names a failed GET goals instead of empty success', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/goals/all') {

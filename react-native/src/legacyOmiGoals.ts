@@ -1,3 +1,4 @@
+import {visibleDisplayText} from './desktopReadClient';
 import type {OmiBackend} from './omiNativeTypes';
 
 class GoalError extends Error {
@@ -20,9 +21,15 @@ function goalMetric(value: unknown): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
   }
-  if (typeof value === 'string' && value.trim() !== '') {
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      return null;
+    }
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+    if (value === '' || !Number.isFinite(parsed)) {
+      return null;
+    }
+    return parsed;
   }
   return null;
 }
