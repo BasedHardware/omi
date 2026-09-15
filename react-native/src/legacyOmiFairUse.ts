@@ -1,3 +1,4 @@
+import {visibleDisplayText} from './desktopReadClient';
 import type {OmiBackend} from './omiNativeTypes';
 
 class FairUseError extends Error {
@@ -15,8 +16,11 @@ function object(value: unknown): Record<string, unknown> {
 
 function finiteNumber(value: unknown): number {
   if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new FairUseError();
+    }
     const parsed = Number(value);
-    if (value.trim() === '' || !Number.isFinite(parsed)) {
+    if (value === '' || !Number.isFinite(parsed)) {
       throw new FairUseError();
     }
     return parsed;

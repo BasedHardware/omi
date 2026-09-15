@@ -6236,6 +6236,97 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter FairUsePage padded GET speech_hours_today instead of remapping to a hours chip', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/fair-use/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          stage: 'restrict',
+          case_ref: 'FU-1',
+          message: 'Usage is restricted.',
+          speech_hours_today: '  2.4  ',
+          speech_hours_3day: 8.1,
+          speech_hours_weekly: 11,
+          limits: {
+            daily_hours: 2,
+            three_day_hours: 8,
+            weekly_hours: 10,
+          },
+          usage_pct: {daily: 120, three_day: 101, weekly: 110},
+          dg_budget: {
+            daily_limit_ms: 1800000,
+            used_ms: 1800000,
+            remaining_ms: 0,
+            exhausted: true,
+            resets_at: '2099-01-01T00:00:00Z',
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Fair Use');
+  expect(tree).toContain(fairUseLoadErrorCopy());
+  expect(tree).not.toContain('2.4h / 2h');
+  expect(tree).not.toContain('Restricted');
+  expect(tree).not.toContain('FU-1');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names Flutter FairUsePage whitespace GET message without omitting Fair Use', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

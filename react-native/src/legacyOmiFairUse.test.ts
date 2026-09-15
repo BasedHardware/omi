@@ -80,6 +80,40 @@ test('does not omit fair use status when stored counts are numeric strings', () 
   });
 });
 
+test('names Flutter FairUsePage padded GET speech_hours_today instead of remapping to a hours chip', () => {
+  expect(
+    parseOmiFairUseStatus(
+      JSON.stringify({
+        ...status,
+        speech_hours_today: '2.4',
+      }),
+    ).speechHoursToday,
+  ).toBe(2.4);
+  for (const hours of ['  2.4  ', '2.4 ', '  2.4', '2.4\n', '\u00852.4', ' \t']) {
+    expect(() =>
+      parseOmiFairUseStatus(
+        JSON.stringify({...status, speech_hours_today: hours}),
+      ),
+    ).toThrow();
+  }
+  expect(() =>
+    parseOmiFairUseStatus(
+      JSON.stringify({
+        ...status,
+        limits: {...status.limits, daily_hours: '  2  '},
+      }),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiFairUseStatus(
+      JSON.stringify({
+        ...status,
+        usage_pct: {...status.usage_pct, daily: '  120  '},
+      }),
+    ),
+  ).toThrow();
+});
+
 test('fails closed for malformed GET fair use status', () => {
   expect(() => parseOmiFairUseStatus(JSON.stringify([]))).toThrow();
   expect(() =>
