@@ -1057,6 +1057,17 @@ test('old memories keep GET ledger slot, playbook body, baseline, and known devi
         primary_capture_device: 'macos_ab12cd34',
       },
       {
+        id: 'padded-device',
+        content: 'Prefers padded devices.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        slot: 'identity.full_name',
+        kind: 'fact',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        is_baseline: false,
+        primary_capture_device: '  macos_ab12cd34',
+      },
+      {
         id: 'omitted',
         content: 'Likes walking.',
         created_at: '2026-09-07T00:00:00Z',
@@ -1081,10 +1092,14 @@ test('old memories keep GET ledger slot, playbook body, baseline, and known devi
     ledgerSlot: '  identity.full_name  ',
     captureDeviceLabel: 'Mac',
   });
-  expect(result.items[2]).not.toHaveProperty('ledgerSlot');
-  expect(result.items[2]).not.toHaveProperty('ledgerBody');
-  expect(result.items[2]).not.toHaveProperty('isBaseline');
+  expect(result.items[2]).toMatchObject({
+    ledgerSlot: 'identity.full_name',
+  });
   expect(result.items[2]).not.toHaveProperty('captureDeviceLabel');
+  expect(result.items[3]).not.toHaveProperty('ledgerSlot');
+  expect(result.items[3]).not.toHaveProperty('ledgerBody');
+  expect(result.items[3]).not.toHaveProperty('isBaseline');
+  expect(result.items[3]).not.toHaveProperty('captureDeviceLabel');
 });
 
 test('old memories name GET knowledge-ledger History chrome Flutter paints on non-current rows', async () => {

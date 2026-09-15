@@ -2815,11 +2815,10 @@ export function memoryLockedCopy(item: {locked?: boolean}): string | null {
 export function memoryCaptureDeviceCopy(
   device: string | null | undefined,
 ): string | null {
-  const raw = visibleDisplayText(device ?? '');
-  if (raw === '') {
+  if (device === undefined || device === null || device === '') {
     return null;
   }
-  switch (raw.split('_')[0]) {
+  switch (device.split('_')[0]) {
     case 'macos':
       return 'Mac';
     case 'ios':

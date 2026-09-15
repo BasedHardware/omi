@@ -3855,9 +3855,14 @@ test('Omi memory ledger chrome names GET slot, playbook body, baseline, and know
     'Some memory history is unavailable. Showing the history received so far.',
   );
   expect(memoryCaptureDeviceCopy(null)).toBeNull();
+  expect(memoryCaptureDeviceCopy('')).toBeNull();
   expect(memoryCaptureDeviceCopy(' \t')).toBeNull();
+  expect(memoryCaptureDeviceCopy('\u0085')).toBeNull();
   expect(memoryCaptureDeviceCopy('windows_ab12cd34')).toBeNull();
+  expect(memoryCaptureDeviceCopy('  macos_ab12cd34')).toBeNull();
+  expect(memoryCaptureDeviceCopy('macos ')).toBeNull();
   expect(memoryCaptureDeviceCopy('macos_ab12cd34')).toBe('Mac');
+  expect(memoryCaptureDeviceCopy('macos_ab12cd34 ')).toBe('Mac');
   expect(memoryCaptureDeviceCopy('ios_ab12cd34')).toBe('iPhone');
   expect(memoryCaptureDeviceCopy('android_ab12cd34')).toBe('Android');
 });
