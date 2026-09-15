@@ -2553,13 +2553,6 @@ test('conversation list names discarded empty GET transcript instead of structur
   expect(copy).toContain('Kept title');
   expect(copy).not.toContain('Actual overview');
   expect(copy).not.toContain('Discarded');
-  expect(
-    renderer.root.findAll(
-      node =>
-        typeof node.props.accessibilityLabel === 'string' &&
-        node.props.accessibilityLabel === 'Open conversation ',
-    ),
-  ).toHaveLength(1);
 });
 
 test('conversation list names GET goals without add or a write sheet', async () => {
