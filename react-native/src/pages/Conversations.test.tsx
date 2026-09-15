@@ -3472,6 +3472,107 @@ test('conversation list names Flutter FolderTabs padded GET color as gray on the
   expect(textOf(renderer)).not.toContain('#6B7280');
 });
 
+test('conversation list names Flutter FolderTabs padded GET icon as default folder', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'folder-exact',
+            name: 'Exact',
+            icon: '💼',
+          },
+          {
+            id: 'folder-padded',
+            name: 'Padded',
+            icon: '  💼  ',
+          },
+          {
+            id: 'folder-trailing',
+            name: 'Trailing',
+            icon: '💼 ',
+          },
+          {
+            id: 'folder-next-line',
+            name: 'Next line',
+            icon: '\u0085💼',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                kind: 'conversation',
+                id: 'chat:work',
+                title: 'Work standup',
+                summary: 'Notes',
+                searchableText: 'Work standup\nNotes',
+                createdAt: '2026-09-07T00:00:00.000Z',
+                updatedAt: '2026-09-07T00:01:00.000Z',
+                startedAt: '2026-09-07T00:00:00.000Z',
+                finishedAt: null,
+                starred: false,
+                status: 'in_progress',
+                source: 'chat',
+                visibility: 'private',
+                locked: false,
+                discarded: false,
+                folderId: 'folder-exact',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Exact');
+  expect(tree).toContain('Padded');
+  expect(tree).toContain('Trailing');
+  expect(tree).toContain('Next line');
+  expect(tree).toContain('💼');
+  const chipCopy = (label: string) =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === label)
+      .findAllByType(Text)
+      .flatMap(node =>
+        Array.isArray(node.props.children)
+          ? node.props.children
+          : [node.props.children],
+      )
+      .filter(
+        (value): value is string | number =>
+          typeof value === 'string' || typeof value === 'number',
+      )
+      .join(' ');
+  expect(chipCopy('Show Exact conversations')).toContain('💼');
+  expect(chipCopy('Show Padded conversations')).not.toContain('💼');
+  expect(chipCopy('Show Trailing conversations')).not.toContain('💼');
+  expect(chipCopy('Show Next line conversations')).not.toContain('💼');
+});
+
 test('conversation list names a failed GET folders instead of empty success', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/folders') {

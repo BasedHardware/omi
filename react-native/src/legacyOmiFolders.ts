@@ -1,5 +1,4 @@
 import type {OmiBackend} from './omiNativeTypes';
-import {visibleDisplayText} from './desktopReadClient';
 
 class FoldersError extends Error {
   constructor() {
@@ -27,6 +26,34 @@ function array(value: unknown): unknown[] {
 
 const FOLDER_HEX_COLOR = /^#?[0-9A-Fa-f]{6}$/;
 
+const FOLDER_CUSTOM_ICONS: ReadonlySet<string> = new Set([
+  '📁',
+  '💼',
+  '🏠',
+  '📚',
+  '👨‍👩‍👧‍👦',
+  '👤',
+  '👥',
+  '❤️',
+  '🎮',
+  '✈️',
+  '🏥',
+  '🛒',
+  '💰',
+  '🎵',
+  '🎨',
+  '📝',
+  '💬',
+  '🌎',
+  '🛠️',
+  '🍔',
+  '🏆',
+  '🔒',
+  '⭐',
+  '🕐',
+  '📊',
+]);
+
 export function folderDefaultColorCopy(): string {
   return '#6B7280';
 }
@@ -49,6 +76,14 @@ export function omiFolderColorCopy(value: unknown): string | undefined {
     return undefined;
   }
   return omiFolderHexColor(value) ?? folderDefaultColorCopy();
+}
+
+export function omiFolderIconCopy(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const icon = text(value, 1_000_000);
+  return FOLDER_CUSTOM_ICONS.has(icon) ? icon : undefined;
 }
 
 export function omiFolderFill(color: string, alpha: number): string {
@@ -75,17 +110,12 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     const name = text(folder.name, 1_000_000);
     names.set(id, name);
     const color = omiFolderColorCopy(folder.color);
-    const icon =
-      folder.icon === undefined
-        ? undefined
-        : visibleDisplayText(text(folder.icon, 1_000_000));
+    const icon = omiFolderIconCopy(folder.icon);
     folders.push({
       id,
       name,
       ...(color === undefined ? {} : {color}),
-      ...(icon === undefined || icon === '' || icon === 'folder'
-        ? {}
-        : {icon}),
+      ...(icon === undefined ? {} : {icon}),
     });
   }
   return folders;

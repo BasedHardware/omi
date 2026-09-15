@@ -3,6 +3,7 @@ import {
   loadOmiFolderName,
   loadOmiFolderNames,
   omiFolderHexColor,
+  omiFolderIconCopy,
   parseOmiFolderNames,
   parseOmiFolders,
 } from './legacyOmiFolders';
@@ -69,6 +70,39 @@ test('names Flutter FolderTabs padded GET color as gray', () => {
     {id: 'folder-next-line', name: 'Next line', color: '#6B7280'},
     {id: 'folder-hashless-padded', name: 'Hashless padded', color: '#6B7280'},
     {id: 'folder-hashless', name: 'Hashless', color: '#00AA11'},
+  ]);
+});
+
+test('names Flutter FolderTabs padded GET icon as default folder', () => {
+  expect(omiFolderIconCopy('💼')).toBe('💼');
+  expect(omiFolderIconCopy('🏠')).toBe('🏠');
+  expect(omiFolderIconCopy('folder')).toBeUndefined();
+  expect(omiFolderIconCopy('')).toBeUndefined();
+  expect(omiFolderIconCopy(' \t')).toBeUndefined();
+  expect(omiFolderIconCopy('  💼  ')).toBeUndefined();
+  expect(omiFolderIconCopy('💼 ')).toBeUndefined();
+  expect(omiFolderIconCopy('\u0085💼')).toBeUndefined();
+  expect(omiFolderIconCopy('  folder  ')).toBeUndefined();
+  expect(omiFolderIconCopy(undefined)).toBeUndefined();
+  expect(() => omiFolderIconCopy(1)).toThrow();
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-exact', name: 'Exact', icon: '💼'},
+        {id: 'folder-padded', name: 'Padded', icon: '  💼  '},
+        {id: 'folder-trailing', name: 'Trailing', icon: '💼 '},
+        {id: 'folder-next-line', name: 'Next line', icon: '\u0085💼'},
+        {id: 'folder-word', name: 'Word', icon: 'folder'},
+        {id: 'folder-house', name: 'House', icon: '🏠'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'folder-exact', name: 'Exact', color: '#6B7280', icon: '💼'},
+    {id: 'folder-padded', name: 'Padded', color: '#6B7280'},
+    {id: 'folder-trailing', name: 'Trailing', color: '#6B7280'},
+    {id: 'folder-next-line', name: 'Next line', color: '#6B7280'},
+    {id: 'folder-word', name: 'Word', color: '#6B7280'},
+    {id: 'folder-house', name: 'House', color: '#6B7280', icon: '🏠'},
   ]);
 });
 
