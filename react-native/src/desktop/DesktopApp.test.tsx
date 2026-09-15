@@ -1017,7 +1017,7 @@ test('desktop chat names GET discovery fullText Show more without a write', () =
   expect(expanded).not.toContain('You like a slow start.');
 });
 
-test('desktop chat treats a whitespace-only reply as Message text unavailable', () => {
+test('desktop chat names Flutter empty GET chat text', () => {
   const renderer = renderDesktop({
     messages: [
       {
@@ -1037,7 +1037,9 @@ test('desktop chat treats a whitespace-only reply as Message text unavailable', 
     ],
   });
   const copy = renderedText(renderer);
-  expect(copy).toContain('Message text unavailable');
+  expect(copy).not.toContain('Message text unavailable');
+  expect(copy).toContain('You');
+  expect(copy).toContain('Omi');
   expect(copy).not.toContain('Response stopped.');
   expect(copy).not.toContain(' \t\n');
 });

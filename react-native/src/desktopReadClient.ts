@@ -2535,10 +2535,7 @@ export function chatMessageDisplayText(
   if (extraLines.length > 0) {
     return extraLines.join('\n');
   }
-  if ((message.contentBlocks ?? []).length > 0) {
-    return '';
-  }
-  return 'Message text unavailable';
+  return '';
 }
 
 export function chatSenderCopy(sender: 'human' | 'ai' | 'unknown'): string {

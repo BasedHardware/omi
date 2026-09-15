@@ -2478,31 +2478,31 @@ test('device display name names Flutter empty GET names', () => {
   expect(deviceDisplayName('  Omi  ')).toBe('Omi');
 });
 
-test('empty chat bodies stay visible instead of a blank bubble', () => {
+test('chat message display text names Flutter empty GET text', () => {
   expect(
     chatMessageDisplayText({
       text: '',
       generationOutcome: null,
     }),
-  ).toBe('Message text unavailable');
+  ).toBe('');
   expect(
     chatMessageDisplayText({
       text: ' \t\n',
       generationOutcome: 'completed',
     }),
-  ).toBe('Message text unavailable');
+  ).toBe('');
   expect(
     chatMessageDisplayText({
       text: '\u00A0',
       generationOutcome: null,
     }),
-  ).toBe('Message text unavailable');
+  ).toBe('');
   expect(
     chatMessageDisplayText({
       text: '\u0085',
       generationOutcome: 'completed',
     }),
-  ).toBe('Message text unavailable');
+  ).toBe('');
   expect(
     chatMessageDisplayText({
       text: '',

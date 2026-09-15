@@ -849,7 +849,7 @@ test('a cancelled NEXT LINE-only conversation-detail chat message says Response 
   ).toHaveLength(0);
 });
 
-test('a whitespace-only conversation-detail chat message says Message text unavailable instead of a blank answer', async () => {
+test('conversation-detail history names Flutter empty GET chat text', async () => {
   mockRequest.mockResolvedValue(
     historyResponse([
       {
@@ -875,8 +875,11 @@ test('a whitespace-only conversation-detail chat message says Message text unava
       )[0]!
       .props.onPress(),
   );
-  expect(textOf(renderer)).toContain('You · Message text unavailable');
-  expect(textOf(renderer)).toContain('Omi · Message text unavailable');
+  expect(textOf(renderer)).toContain('You');
+  expect(textOf(renderer)).toContain('Omi');
+  expect(textOf(renderer)).not.toContain('Message text unavailable');
+  expect(textOf(renderer)).not.toContain('You ·');
+  expect(textOf(renderer)).not.toContain('Omi ·');
   expect(textOf(renderer)).not.toContain('Response stopped');
 });
 

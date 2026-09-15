@@ -1323,7 +1323,7 @@ test('chat history names GET image file thumbnails', () => {
   });
 });
 
-test('a whitespace-only human chat message says Message text unavailable instead of a blank bubble', () => {
+test('a whitespace-only human chat message names Flutter empty GET text', () => {
   const renderer = render(
     <ChatMessageRow
       animate={false}
@@ -1352,15 +1352,16 @@ test('a whitespace-only human chat message says Message text unavailable instead
       }
       return [];
     });
-  expect(copies).toContain('Message text unavailable');
+  expect(copies).not.toContain('Message text unavailable');
   expect(copies).not.toContain(' \t\n');
   expect(copies).not.toContain('Response stopped');
+  expect(renderer.toJSON()).not.toBeNull();
   act(() => {
     renderer.unmount();
   });
 });
 
-test('a completed whitespace-only chat message says Message text unavailable instead of a blank bubble', () => {
+test('a completed whitespace-only chat message names Flutter empty GET text', () => {
   const renderer = render(
     <ChatMessageRow
       animate={false}
@@ -1389,9 +1390,10 @@ test('a completed whitespace-only chat message says Message text unavailable ins
       }
       return [];
     });
-  expect(copies).toContain('Message text unavailable');
+  expect(copies).not.toContain('Message text unavailable');
   expect(copies).not.toContain(' \t\n');
   expect(copies).not.toContain('Response stopped');
+  expect(renderer.toJSON()).not.toBeNull();
   act(() => {
     renderer.unmount();
   });
