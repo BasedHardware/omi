@@ -1,39 +1,58 @@
-"""
-Wikipedia Integration App for Omi.
+"""Wikipedia Integration App for Omi.
 
 Provides chat tools for searching Wikipedia, reading concise article summaries,
 and finding a random article for exploration.
 """
 
+from contextlib import asynccontextmanager
 from html import unescape
 import re
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 
+from models import (
+    ChatToolResponse,
+    GetArticleSummaryRequest,
+    GetRandomArticleRequest,
+    SearchArticlesRequest,
+    normalize_language,
+)
 
-REQUEST_TIMEOUT_SECONDS = 10
+REQUEST_TIMEOUT_SECONDS = 10.0
 MAX_LIMIT = 10
 DEFAULT_LANGUAGE = "en"
 USER_AGENT = "omi-wikipedia-app/1.0 (https://omi.me)"
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
+        app_instance.state.http_client = client
+        yield
 
 
 app = FastAPI(
     title="Omi Wikipedia Integration",
     description="Search and read Wikipedia from Omi chat tools",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
-class ChatToolResponse(BaseModel):
-    """Response model for Omi chat tool endpoints."""
-
-    result: Optional[str] = None
-    error: Optional[str] = None
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
 
 
 def _safe_limit(limit: Any) -> int:
@@ -47,18 +66,27 @@ def _safe_limit(limit: Any) -> int:
 
 
 def _safe_language(language: Optional[str]) -> str:
-    lang = (language or DEFAULT_LANGUAGE).strip().lower()
-    if not lang.replace("-", "").isalpha() or len(lang) > 12:
-        return DEFAULT_LANGUAGE
-    return lang
+    return normalize_language(language)
 
 
-async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+async def _request_json(url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Execute asynchronous GET request with persistent client reuse and fallback."""
+    client = getattr(app.state, "http_client", None)
+
+    async def _do_get(cli: httpx.AsyncClient) -> Dict[str, Any]:
+        response = await cli.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError("Invalid response received from Wikipedia API.")
+        return data
+
+    if client is not None and getattr(client, "is_closed", False) is not True:
+        return await _do_get(client)
+
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
-        response = await client.get(url, params=params)
-    response.raise_for_status()
-    return response.json()
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as fallback_client:
+        return await _do_get(fallback_client)
 
 
 def _article_url(language: str, title: str) -> str:
@@ -75,11 +103,16 @@ def _clean_snippet(value: Optional[str]) -> str:
     return text.strip()
 
 
-def _format_summary(data: dict[str, Any], language: str) -> str:
+def _format_summary(data: Any, language: str) -> str:
+    if not isinstance(data, dict):
+        return "No summary was returned for this article."
     title = data.get("title") or "Untitled"
     extract = data.get("extract") or "No summary was returned for this article."
     description = data.get("description")
-    page_url = data.get("content_urls", {}).get("desktop", {}).get("page") or _article_url(language, title)
+
+    content_urls = data.get("content_urls")
+    desktop_urls = content_urls.get("desktop") if isinstance(content_urls, dict) else None
+    page_url = (desktop_urls.get("page") if isinstance(desktop_urls, dict) else None) or _article_url(language, title)
 
     lines = [title]
     if description:
@@ -184,13 +217,13 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/search_articles", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_articles(payload: dict[str, Any]):
-    query = (payload.get("query") or "").strip()
+async def search_articles(req: SearchArticlesRequest) -> ChatToolResponse:
+    query = req.query.strip()
     if not query:
         return ChatToolResponse(error="Missing required field: query")
 
-    language = _safe_language(payload.get("language"))
-    limit = _safe_limit(payload.get("limit"))
+    language = _safe_language(req.language)
+    limit = req.limit
     url = f"https://{language}.wikipedia.org/w/api.php"
 
     try:
@@ -205,12 +238,24 @@ async def search_articles(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        results = data.get("query", {}).get("search", [])[:limit]
-        if not results:
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Invalid response received from Wikipedia API.")
+
+        query_dict = data.get("query")
+        if not isinstance(query_dict, dict):
             return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
 
+        raw_results = query_dict.get("search", [])
+        if not isinstance(raw_results, list) or not raw_results:
+            return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
+
+        valid_results = [item for item in raw_results if isinstance(item, dict)]
+        if not valid_results:
+            return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
+
+        selected = valid_results[:limit]
         lines = [f"Wikipedia search results for '{query}':"]
-        for index, item in enumerate(results, start=1):
+        for index, item in enumerate(selected, start=1):
             title = item.get("title") or "Untitled"
             snippet = _clean_snippet(item.get("snippet"))
             lines.append(f"\n{index}. {title}")
@@ -219,40 +264,51 @@ async def search_articles(payload: dict[str, Any]):
             lines.append(f"   {_article_url(language, title)}")
 
         return ChatToolResponse(result="\n".join(lines))
+    except ValueError as exc:
+        return ChatToolResponse(error=str(exc))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia search failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"Wikipedia search failed: {exc}")
+    except Exception as exc:
+        return ChatToolResponse(error=f"Unexpected error searching Wikipedia: {exc}")
 
 
 @app.post("/tools/get_article_summary", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_article_summary(payload: dict[str, Any]):
-    title = (payload.get("title") or "").strip()
+async def get_article_summary(req: GetArticleSummaryRequest) -> ChatToolResponse:
+    title = req.title.strip()
     if not title:
         return ChatToolResponse(error="Missing required field: title")
 
-    language = _safe_language(payload.get("language"))
+    language = _safe_language(req.language)
     url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
 
     try:
         data = await _request_json(url)
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Invalid summary data received from Wikipedia API.")
+
         if data.get("type") == "disambiguation":
             return ChatToolResponse(
                 result=_format_summary(data, language)
                 + "\n\nThis is a disambiguation page. Use search_articles for more specific matches."
             )
         return ChatToolResponse(result=_format_summary(data, language))
+    except ValueError as exc:
+        return ChatToolResponse(error=str(exc))
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
             return ChatToolResponse(error=f"No Wikipedia article found for '{title}'. Try search_articles first.")
         return ChatToolResponse(error=f"Wikipedia article request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"Wikipedia article request failed: {exc}")
+    except Exception as exc:
+        return ChatToolResponse(error=f"Unexpected error fetching Wikipedia summary: {exc}")
 
 
 @app.post("/tools/get_random_article", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_random_article(payload: dict[str, Any]):
-    language = _safe_language(payload.get("language"))
+async def get_random_article(req: Optional[GetRandomArticleRequest] = None) -> ChatToolResponse:
+    language = _safe_language(req.language if req else None)
     url = f"https://{language}.wikipedia.org/w/api.php"
 
     try:
@@ -267,18 +323,32 @@ async def get_random_article(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        random_items = data.get("query", {}).get("random", [])
-        if not random_items:
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Invalid response received from Wikipedia API.")
+
+        query_dict = data.get("query")
+        if not isinstance(query_dict, dict):
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 
-        title = random_items[0].get("title")
-        if not title:
+        random_items = query_dict.get("random", [])
+        if not isinstance(random_items, list) or not random_items:
+            return ChatToolResponse(result="No random Wikipedia article was returned.")
+
+        first_item = random_items[0]
+        if not isinstance(first_item, dict) or not first_item.get("title"):
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 
+        title = first_item["title"]
         summary_url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
         summary = await _request_json(summary_url)
+        if not isinstance(summary, dict):
+            return ChatToolResponse(error="Invalid response received from Wikipedia API.")
         return ChatToolResponse(result="Random Wikipedia article:\n\n" + _format_summary(summary, language))
+    except ValueError as exc:
+        return ChatToolResponse(error=str(exc))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia random article request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"Wikipedia random article request failed: {exc}")
+    except Exception as exc:
+        return ChatToolResponse(error=f"Unexpected error fetching random Wikipedia article: {exc}")
