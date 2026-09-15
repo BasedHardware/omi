@@ -1115,16 +1115,15 @@ export function subscriptionPlanPlusCopy(): string {
 }
 
 export function subscriptionPlanCopy(plan: string): string {
-  const token = visibleDisplayText(plan).toLowerCase();
-  if (token === 'plus') {
+  if (plan === 'plus') {
     return subscriptionPlanPlusCopy();
   }
   if (
-    token === 'unlimited' ||
-    token === 'unlimited_v2' ||
-    token === 'architect' ||
-    token === 'operator' ||
-    token === 'pro'
+    plan === 'unlimited' ||
+    plan === 'unlimited_v2' ||
+    plan === 'architect' ||
+    plan === 'operator' ||
+    plan === 'pro'
   ) {
     return subscriptionPlanUnlimitedCopy();
   }

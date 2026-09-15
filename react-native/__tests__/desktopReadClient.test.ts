@@ -1402,6 +1402,12 @@ test('account subscription copy is not a raw wire token', () => {
   expect(subscriptionPlanCopy('')).toBe('Free Plan');
   expect(subscriptionStatusCopy('')).toBe('Plan unavailable');
   expect(subscriptionPlanCopy('\u0085')).toBe('Free Plan');
+  expect(subscriptionPlanCopy('  plus  ')).toBe('Free Plan');
+  expect(subscriptionPlanCopy('plus ')).toBe('Free Plan');
+  expect(subscriptionPlanCopy('PLUS')).toBe('Free Plan');
+  expect(subscriptionPlanCopy('\u0085plus')).toBe('Free Plan');
+  expect(subscriptionPlanCopy('  unlimited  ')).toBe('Free Plan');
+  expect(subscriptionPlanCopy('  pro  ')).toBe('Free Plan');
   expect(subscriptionTranscriptionQuotaCopy(90, 3600)).toBe(
     '2 of 60 min used this month',
   );
@@ -6033,6 +6039,12 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
       'Subscription response',
     ),
   ).toEqual(expect.objectContaining({plan: 'plus', status: 'active'}));
+  expect(
+    parseCloudSubscription(
+      {...quota, subscription: {plan: '  plus  ', status: 'active'}},
+      'Subscription response',
+    ),
+  ).toEqual(expect.objectContaining({plan: '  plus  ', status: 'active'}));
   expect(
     parseCloudSubscription(
       {...quota, subscription: {status: 'active'}},
