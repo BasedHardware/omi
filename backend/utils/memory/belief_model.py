@@ -280,8 +280,11 @@ def temporal_view_allows_record(
         return False
     assessment = belief_view_for_record(item, now=now)
     if normalized == "useful_now":
+        # Unclassified rows are inspectable on history/all, never the current
+        # working set — matching record_passes_proactive_bar and the overlay
+        # that refuses to mint a current band without a class.
         if not belief_classification_known(item):
-            return True
+            return False
         return assessment.band in {CurrencyBand.current, CurrencyBand.fading} or assessment.band is None
     if normalized == "history":
         # History is the explicit dated/retained view: current facts stay in

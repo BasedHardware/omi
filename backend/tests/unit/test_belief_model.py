@@ -581,3 +581,30 @@ def test_history_view_excludes_known_current_records(monkeypatch):
     )
     assert temporal_view_allows_record(record, view="history", now=NOW) is False
     assert temporal_view_allows_record(record, view="all", now=NOW) is True
+    assert temporal_view_allows_record(record, view="useful_now", now=NOW) is True
+
+
+def test_unclassified_records_are_history_only(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    record = SimpleNamespace(
+        captured_at=NOW,
+        created_at=NOW,
+        half_life_days=None,
+        last_corroborated_at=None,
+        valid_to=None,
+        invalid_at=None,
+        user_asserted=False,
+        manually_added=False,
+        belief_class=None,
+        kind="fact",
+        category=None,
+        tier="long_term",
+        status="active",
+        arguments={},
+    )
+    assert temporal_view_allows_record(record, view="useful_now", now=NOW) is False
+    assert temporal_view_allows_record(record, view="history", now=NOW) is True
+    assert temporal_view_allows_record(record, view="all", now=NOW) is True
+    assert temporal_view_allows_record(record, view="released", now=NOW) is True
