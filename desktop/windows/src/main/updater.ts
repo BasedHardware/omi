@@ -131,7 +131,12 @@ export async function checkForUpdatesNow(): Promise<UpdateCheckResult> {
 export function installUpdateNow(): boolean {
   if (!started || !pendingUpdate) return false
   markQuitting()
-  autoUpdater.quitAndInstall(true, true)
+  // Defer so Electron finishes the quit handshake before NSIS update.exe runs.
+  // Launching synchronously from IPC can leave the assisted installer stuck after
+  // uninstall (#10849 — app removed, update never applied).
+  setImmediate(() => {
+    autoUpdater.quitAndInstall(true, true)
+  })
   return true
 }
 
