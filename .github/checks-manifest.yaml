@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: notion-app-max-results-input-tests
+    command: ["python3", "plugins/omi-notion-app/test_max_results_inputs.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "search, list_pages, list_databases and query_database compared the raw optional max_results with min(), and the backend forwards omitted optionals as JSON null, so every ordinary Notion request crashed with TypeError; the suite executes all four handlers and asserts null, string, non-positive and oversized inputs become a page_size inside Notion's 1..100 range"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
