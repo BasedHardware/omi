@@ -3267,6 +3267,5 @@
     },
     "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm",
     "processingTakingLonger": "Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.",
-    "memoryDontUse": "Không sử dụng",
-    "memoryAllowUse": "Cho phép sử dụng"
+    "speechProfileEnrollmentPrompt": "Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây."
 }

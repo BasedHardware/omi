@@ -10828,6 +10828,5 @@
     },
     "tapPlusToStartRecording": "रेकॉर्डिंग सुरू करण्यासाठी + टॅप करा",
     "processingTakingLonger": "अजूनही काम सुरू आहे — याला नेहमीपेक्षा जास्त वेळ लागत आहे.",
-    "memoryDontUse": "वापरू नका",
-    "memoryAllowUse": "वापरण्यास अनुमती द्या"
+    "speechProfileEnrollmentPrompt": "Omi ला तुमचा आवाज ओळखता यावा म्हणून — कोणत्याही विषयावर सुमारे 5 सेकंद बोला."
 }

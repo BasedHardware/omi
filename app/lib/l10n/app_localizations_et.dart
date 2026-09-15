@@ -9980,8 +9980,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
 
   @override
-  String get memoryDontUse => 'Ära kasuta';
-
-  @override
-  String get memoryAllowUse => 'Luba kasutada';
+  String get speechProfileEnrollmentPrompt =>
+      'Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.';
 }

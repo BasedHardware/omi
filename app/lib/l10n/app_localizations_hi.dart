@@ -9966,8 +9966,5 @@ class AppLocalizationsHi extends AppLocalizations {
   String get processingTakingLonger => 'अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।';
 
   @override
-  String get memoryDontUse => 'उपयोग न करें';
-
-  @override
-  String get memoryAllowUse => 'उपयोग की अनुमति दें';
+  String get speechProfileEnrollmentPrompt => 'ताकि Omi आपकी आवाज़ पहचान सके — किसी भी विषय पर लगभग 5 सेकंड बोलें।';
 }

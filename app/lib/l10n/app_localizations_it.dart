@@ -10044,8 +10044,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get processingTakingLonger => 'Ancora in corso: ci sta mettendo più del solito.';
 
   @override
-  String get memoryDontUse => 'Non usare';
-
-  @override
-  String get memoryAllowUse => 'Consenti l’uso';
+  String get speechProfileEnrollmentPrompt =>
+      'Perché Omi sappia qual è la tua voce — parla di qualsiasi cosa per circa 5 secondi.';
 }

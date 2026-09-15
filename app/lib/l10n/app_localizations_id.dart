@@ -9997,8 +9997,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get processingTakingLonger => 'Masih diproses — ini memakan waktu lebih lama dari biasanya.';
 
   @override
-  String get memoryDontUse => 'Jangan gunakan';
-
-  @override
-  String get memoryAllowUse => 'Izinkan penggunaan';
+  String get speechProfileEnrollmentPrompt =>
+      'Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik.';
 }

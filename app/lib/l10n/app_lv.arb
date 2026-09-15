@@ -3262,6 +3262,5 @@
     },
     "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu",
     "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti.",
-    "memoryDontUse": "Neizmantot",
-    "memoryAllowUse": "Atļaut lietošanu"
+    "speechProfileEnrollmentPrompt": "Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes."
 }

@@ -3238,6 +3238,5 @@
     },
     "tapPlusToStartRecording": "اضغط على + لبدء التسجيل",
     "processingTakingLonger": "ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.",
-    "memoryDontUse": "لا تستخدم",
-    "memoryAllowUse": "السماح بالاستخدام"
+    "speechProfileEnrollmentPrompt": "لكي يعرف Omi أي صوت هو صوتك — تحدث عن أي شيء لمدة 5 ثوانٍ تقريبًا."
 }

@@ -9929,8 +9929,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get processingTakingLonger => 'ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ';
 
   @override
-  String get memoryDontUse => 'ไม่ใช้';
-
-  @override
-  String get memoryAllowUse => 'อนุญาตให้ใช้';
+  String get speechProfileEnrollmentPrompt =>
+      'เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที';
 }

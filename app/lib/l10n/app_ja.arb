@@ -3238,6 +3238,5 @@
     },
     "tapPlusToStartRecording": "＋をタップして録音を開始",
     "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。",
-    "memoryDontUse": "使用しない",
-    "memoryAllowUse": "使用を許可"
+    "speechProfileEnrollmentPrompt": "Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。"
 }

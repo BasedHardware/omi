@@ -3262,6 +3262,5 @@
     },
     "tapPlusToStartRecording": "Tik op + om de opname te starten",
     "processingTakingLonger": "Nog bezig — dit duurt langer dan normaal.",
-    "memoryDontUse": "Niet gebruiken",
-    "memoryAllowUse": "Gebruik toestaan"
+    "speechProfileEnrollmentPrompt": "Zodat Omi weet welke stem van jou is — praat ongeveer 5 seconden over wat je maar wilt."
 }

@@ -10828,6 +10828,5 @@
     },
     "tapPlusToStartRecording": "Додирните + да започнете снимање",
     "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
-    "memoryDontUse": "Не користи",
-    "memoryAllowUse": "Дозволи коришћење"
+    "speechProfileEnrollmentPrompt": "Да би Omi знао који је глас ваш — причајте о било чему око 5 секунди."
 }

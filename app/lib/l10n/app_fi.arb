@@ -3262,6 +3262,5 @@
     },
     "tapPlusToStartRecording": "Aloita tallennus napauttamalla +",
     "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin.",
-    "memoryDontUse": "Älä käytä",
-    "memoryAllowUse": "Salli käyttö"
+    "speechProfileEnrollmentPrompt": "Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia."
 }

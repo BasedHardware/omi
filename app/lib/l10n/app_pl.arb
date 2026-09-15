@@ -3297,6 +3297,5 @@
     },
     "tapPlusToStartRecording": "Dotknij +, aby rozpocząć nagrywanie",
     "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle.",
-    "memoryDontUse": "Nie używaj",
-    "memoryAllowUse": "Zezwól na użycie"
+    "speechProfileEnrollmentPrompt": "Aby Omi wiedziało, który głos jest Twój — mów o czymkolwiek przez około 5 sekund."
 }

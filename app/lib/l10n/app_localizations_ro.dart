@@ -10034,8 +10034,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
 
   @override
-  String get memoryDontUse => 'Nu utiliza';
-
-  @override
-  String get memoryAllowUse => 'Permite utilizarea';
+  String get speechProfileEnrollmentPrompt =>
+      'Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.';
 }

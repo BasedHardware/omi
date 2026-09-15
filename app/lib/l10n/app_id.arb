@@ -3304,6 +3304,5 @@
     },
     "tapPlusToStartRecording": "Ketuk + untuk mulai merekam",
     "processingTakingLonger": "Masih diproses — ini memakan waktu lebih lama dari biasanya.",
-    "memoryDontUse": "Jangan gunakan",
-    "memoryAllowUse": "Izinkan penggunaan"
+    "speechProfileEnrollmentPrompt": "Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik."
 }

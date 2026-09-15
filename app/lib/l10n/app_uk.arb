@@ -3262,6 +3262,5 @@
     },
     "tapPlusToStartRecording": "Натисніть +, щоб почати запис",
     "processingTakingLonger": "Ще обробляється — це триває довше, ніж зазвичай.",
-    "memoryDontUse": "Не використовувати",
-    "memoryAllowUse": "Дозволити використання"
+    "speechProfileEnrollmentPrompt": "Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд."
 }

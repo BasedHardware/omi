@@ -10040,8 +10040,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
 
   @override
-  String get memoryDontUse => 'Не користи';
-
-  @override
-  String get memoryAllowUse => 'Дозволи користење';
+  String get speechProfileEnrollmentPrompt =>
+      'За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.';
 }

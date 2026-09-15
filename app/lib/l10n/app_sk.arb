@@ -3267,6 +3267,5 @@
     },
     "tapPlusToStartRecording": "Ťuknutím na + spustíte nahrávanie",
     "processingTakingLonger": "Stále prebieha — trvá to dlhšie ako zvyčajne.",
-    "memoryDontUse": "Nepoužívať",
-    "memoryAllowUse": "Povoliť použitie"
+    "speechProfileEnrollmentPrompt": "Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek."
 }

@@ -10010,8 +10010,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
 
   @override
-  String get memoryDontUse => 'Neizmantot';
-
-  @override
-  String get memoryAllowUse => 'Atļaut lietošanu';
+  String get speechProfileEnrollmentPrompt =>
+      'Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.';
 }

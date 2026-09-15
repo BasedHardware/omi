@@ -10028,8 +10028,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
 
   @override
-  String get memoryDontUse => 'Ne használd';
-
-  @override
-  String get memoryAllowUse => 'Használat engedélyezése';
+  String get speechProfileEnrollmentPrompt =>
+      'Hogy az Omi tudja, melyik hang a tiéd — beszélj bármiről körülbelül 5 másodpercig.';
 }

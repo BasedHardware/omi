@@ -10828,6 +10828,5 @@
     },
     "tapPlusToStartRecording": "Tapnite + za začetek snemanja",
     "processingTakingLonger": "Še poteka — traja dlje kot običajno.",
-    "memoryDontUse": "Ne uporabljaj",
-    "memoryAllowUse": "Dovoli uporabo"
+    "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund."
 }

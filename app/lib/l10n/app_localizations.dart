@@ -18591,17 +18591,11 @@ abstract class AppLocalizations {
   /// **'Still working — this is taking longer than usual.'**
   String get processingTakingLonger;
 
-  /// Owner action to suppress one memory from agent use.
+  /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
   ///
   /// In en, this message translates to:
-  /// **'Don\'t use'**
-  String get memoryDontUse;
-
-  /// Owner action to restore one memory to agent use.
-  ///
-  /// In en, this message translates to:
-  /// **'Allow use'**
-  String get memoryAllowUse;
+  /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
+  String get speechProfileEnrollmentPrompt;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

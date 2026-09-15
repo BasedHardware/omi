@@ -9819,8 +9819,5 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
 
   @override
-  String get memoryDontUse => '사용하지 않기';
-
-  @override
-  String get memoryAllowUse => '사용 허용';
+  String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
 }

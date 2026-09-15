@@ -2065,10 +2065,6 @@
     "@memoryHistoryPartial": {
         "description": "Notice shown when the memory history response is truncated"
     },
-    "memoryHistory": "History",
-    "@memoryHistory": {
-        "description": "Filter option for retained memory history"
-    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
@@ -11834,12 +11830,8 @@
     "@processingTakingLonger": {
         "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
     },
-    "memoryDontUse": "Don't use",
-    "@memoryDontUse": {
-        "description": "Owner action to suppress one memory from agent use."
-    },
-    "memoryAllowUse": "Allow use",
-    "@memoryAllowUse": {
-        "description": "Owner action to restore one memory to agent use."
+    "speechProfileEnrollmentPrompt": "So Omi knows which voice is yours — talk for about 5 seconds about anything.",
+    "@speechProfileEnrollmentPrompt": {
+        "description": "First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration."
     }
 }

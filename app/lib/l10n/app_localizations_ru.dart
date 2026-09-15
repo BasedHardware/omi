@@ -10024,8 +10024,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get processingTakingLonger => 'Ещё обрабатывается — это занимает больше обычного.';
 
   @override
-  String get memoryDontUse => 'Не использовать';
-
-  @override
-  String get memoryAllowUse => 'Разрешить использование';
+  String get speechProfileEnrollmentPrompt =>
+      'Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд.';
 }

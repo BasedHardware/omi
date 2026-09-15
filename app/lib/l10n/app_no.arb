@@ -3262,6 +3262,5 @@
     },
     "tapPlusToStartRecording": "Trykk på + for å starte opptaket",
     "processingTakingLonger": "Jobber fortsatt — dette tar lengre tid enn vanlig.",
-    "memoryDontUse": "Ikke bruk",
-    "memoryAllowUse": "Tillat bruk"
+    "speechProfileEnrollmentPrompt": "Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder."
 }

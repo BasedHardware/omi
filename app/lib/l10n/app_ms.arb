@@ -3262,6 +3262,5 @@
     },
     "tapPlusToStartRecording": "Ketik + untuk mula merakam",
     "processingTakingLonger": "Masih diproses — ini mengambil masa lebih lama daripada biasa.",
-    "memoryDontUse": "Jangan gunakan",
-    "memoryAllowUse": "Benarkan penggunaan"
+    "speechProfileEnrollmentPrompt": "Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat."
 }

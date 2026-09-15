@@ -10002,8 +10002,5 @@ class AppLocalizationsSr extends AppLocalizations {
   String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
 
   @override
-  String get memoryDontUse => 'Не користи';
-
-  @override
-  String get memoryAllowUse => 'Дозволи коришћење';
+  String get speechProfileEnrollmentPrompt => 'Да би Omi знао који је глас ваш — причајте о било чему око 5 секунди.';
 }

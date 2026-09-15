@@ -9928,8 +9928,5 @@ class AppLocalizationsAr extends AppLocalizations {
   String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
 
   @override
-  String get memoryDontUse => 'لا تستخدم';
-
-  @override
-  String get memoryAllowUse => 'السماح بالاستخدام';
+  String get speechProfileEnrollmentPrompt => 'لكي يعرف Omi أي صوت هو صوتك — تحدث عن أي شيء لمدة 5 ثوانٍ تقريبًا.';
 }

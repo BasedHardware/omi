@@ -10024,8 +10024,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get processingTakingLonger => 'Все още работи — отнема повече време от обичайното.';
 
   @override
-  String get memoryDontUse => 'Не използвай';
-
-  @override
-  String get memoryAllowUse => 'Разреши използването';
+  String get speechProfileEnrollmentPrompt =>
+      'За да знае Omi кой глас е вашият — говорете за каквото искате около 5 секунди.';
 }

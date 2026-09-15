@@ -10006,8 +10006,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
 
   @override
-  String get memoryDontUse => 'Nenaudoti';
-
-  @override
-  String get memoryAllowUse => 'Leisti naudoti';
+  String get speechProfileEnrollmentPrompt =>
+      'Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes.';
 }

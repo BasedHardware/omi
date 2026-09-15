@@ -9816,8 +9816,5 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processingTakingLonger => 'まだ処理中です。通常より時間がかかっています。';
 
   @override
-  String get memoryDontUse => '使用しない';
-
-  @override
-  String get memoryAllowUse => '使用を許可';
+  String get speechProfileEnrollmentPrompt => 'Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。';
 }

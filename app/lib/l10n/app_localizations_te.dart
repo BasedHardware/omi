@@ -10036,8 +10036,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
 
   @override
-  String get memoryDontUse => 'ఉపయోగించవద్దు';
-
-  @override
-  String get memoryAllowUse => 'వినియోగాన్ని అనుమతించండి';
+  String get speechProfileEnrollmentPrompt =>
+      'Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.';
 }

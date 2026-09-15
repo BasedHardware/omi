@@ -9982,8 +9982,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
 
   @override
-  String get memoryDontUse => 'Không sử dụng';
-
-  @override
-  String get memoryAllowUse => 'Cho phép sử dụng';
+  String get speechProfileEnrollmentPrompt =>
+      'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
 }

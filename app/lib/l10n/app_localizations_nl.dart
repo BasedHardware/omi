@@ -10014,8 +10014,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
 
   @override
-  String get memoryDontUse => 'Niet gebruiken';
-
-  @override
-  String get memoryAllowUse => 'Gebruik toestaan';
+  String get speechProfileEnrollmentPrompt =>
+      'Zodat Omi weet welke stem van jou is — praat ongeveer 5 seconden over wat je maar wilt.';
 }

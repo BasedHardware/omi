@@ -10015,8 +10015,5 @@ class AppLocalizationsBs extends AppLocalizations {
   String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
 
   @override
-  String get memoryDontUse => 'Ne koristi';
-
-  @override
-  String get memoryAllowUse => 'Dozvoli korištenje';
+  String get speechProfileEnrollmentPrompt => 'Da Omi zna koji je glas vaš — pričajte o bilo čemu oko 5 sekundi.';
 }

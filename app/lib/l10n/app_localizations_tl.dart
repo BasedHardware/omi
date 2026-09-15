@@ -10078,8 +10078,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
 
   @override
-  String get memoryDontUse => 'Huwag gamitin';
-
-  @override
-  String get memoryAllowUse => 'Payagan ang paggamit';
+  String get speechProfileEnrollmentPrompt =>
+      'Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.';
 }

@@ -10019,8 +10019,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get processingTakingLonger => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.';
 
   @override
-  String get memoryDontUse => 'ಬಳಸಬೇಡಿ';
-
-  @override
-  String get memoryAllowUse => 'ಬಳಕೆಯನ್ನು ಅನುಮತಿಸಿ';
+  String get speechProfileEnrollmentPrompt =>
+      'Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ.';
 }

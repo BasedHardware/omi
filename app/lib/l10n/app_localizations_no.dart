@@ -9985,8 +9985,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get processingTakingLonger => 'Jobber fortsatt — dette tar lengre tid enn vanlig.';
 
   @override
-  String get memoryDontUse => 'Ikke bruk';
-
-  @override
-  String get memoryAllowUse => 'Tillat bruk';
+  String get speechProfileEnrollmentPrompt =>
+      'Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder.';
 }

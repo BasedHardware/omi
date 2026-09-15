@@ -9988,8 +9988,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
 
   @override
-  String get memoryDontUse => 'Älä käytä';
-
-  @override
-  String get memoryAllowUse => 'Salli käyttö';
+  String get speechProfileEnrollmentPrompt =>
+      'Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.';
 }

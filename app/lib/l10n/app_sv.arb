@@ -3262,6 +3262,5 @@
     },
     "tapPlusToStartRecording": "Tryck på + för att börja spela in",
     "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt.",
-    "memoryDontUse": "Använd inte",
-    "memoryAllowUse": "Tillåt användning"
+    "speechProfileEnrollmentPrompt": "Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder."
 }

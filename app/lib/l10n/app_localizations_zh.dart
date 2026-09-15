@@ -9797,8 +9797,5 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
 
   @override
-  String get memoryDontUse => '不使用';
-
-  @override
-  String get memoryAllowUse => '允许使用';
+  String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
 }

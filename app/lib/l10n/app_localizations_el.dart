@@ -10057,8 +10057,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get processingTakingLonger => 'Ακόμα σε εξέλιξη — χρειάζεται περισσότερο χρόνο από το συνηθισμένο.';
 
   @override
-  String get memoryDontUse => 'Να μην χρησιμοποιείται';
-
-  @override
-  String get memoryAllowUse => 'Να επιτρέπεται η χρήση';
+  String get speechProfileEnrollmentPrompt =>
+      'Για να ξέρει το Omi ποια φωνή είναι δική σας — μιλήστε για οτιδήποτε για περίπου 5 δευτερόλεπτα.';
 }

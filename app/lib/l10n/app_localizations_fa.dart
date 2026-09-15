@@ -9987,8 +9987,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
 
   @override
-  String get memoryDontUse => 'استفاده نکن';
-
-  @override
-  String get memoryAllowUse => 'اجازه استفاده';
+  String get speechProfileEnrollmentPrompt =>
+      'برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.';
 }

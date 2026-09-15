@@ -9979,8 +9979,5 @@ class AppLocalizationsSk extends AppLocalizations {
   String get processingTakingLonger => 'Stále prebieha — trvá to dlhšie ako zvyčajne.';
 
   @override
-  String get memoryDontUse => 'Nepoužívať';
-
-  @override
-  String get memoryAllowUse => 'Povoliť použitie';
+  String get speechProfileEnrollmentPrompt => 'Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek.';
 }

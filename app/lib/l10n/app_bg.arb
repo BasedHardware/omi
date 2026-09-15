@@ -3240,6 +3240,5 @@
     },
     "tapPlusToStartRecording": "Докоснете +, за да започнете запис",
     "processingTakingLonger": "Все още работи — отнема повече време от обичайното.",
-    "memoryDontUse": "Не използвай",
-    "memoryAllowUse": "Разреши използването"
+    "speechProfileEnrollmentPrompt": "За да знае Omi кой глас е вашият — говорете за каквото искате около 5 секунди."
 }
