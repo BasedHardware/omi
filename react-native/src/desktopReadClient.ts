@@ -2132,7 +2132,7 @@ export function developerKeyRowCopy(
     typeof key.createdAtMs === 'number'
       ? developerKeyCreatedCopy(key.createdAtMs)
       : '';
-  const labeled = name === '' ? prefix : `${name} · ${prefix}`;
+  const labeled = `${name} · ${prefix}`;
   const scope = developerKeyScopeCopy(
     key.scopes,
     options?.emptyScopesCopy === undefined

@@ -7315,6 +7315,74 @@ test('Settings names Flutter McpApiKeyListItem empty GET keyPrefix without omitt
   expect(tree).not.toContain('Create Key');
 });
 
+test('Settings names Flutter DevApiKeyListItem empty GET names without noApiKeys', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [],
+    webhooksError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'key-empty', name: ' \t', key_prefix: 'omi_sk_cd'},
+        ]),
+      };
+    }
+    if (request.path === '/v1/mcp/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'mcp-empty', name: '', key_prefix: 'omi_mcp_cd'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Developer API');
+  expect(tree).toContain(' \u00b7 omi_sk_cd***');
+  expect(tree).not.toContain('key-empty');
+  expect(tree).toContain('MCP');
+  expect(tree).toContain(' \u00b7 omi_mcp_cd');
+  expect(tree).not.toContain('omi_mcp_cd***');
+  expect(tree).not.toContain('mcp-empty');
+  expect(tree).not.toContain('No API keys yet');
+  expect(tree).not.toContain('Revoke');
+  expect(tree).not.toContain('Create Key');
+});
+
 test('Settings names GET developer-key empty scopes Read Only without inventing it on MCP keys', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

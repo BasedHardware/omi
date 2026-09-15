@@ -2229,7 +2229,7 @@ test('developer key copy names GET name and prefix without a full secret', () =>
     ),
   ).toEqual([
     {title: developerApiTitleCopy(), copy: `Local · omi_sk_ab · ${created}`},
-    {title: developerApiTitleCopy(), copy: `omi_sk_cd · ${created}`},
+    {title: developerApiTitleCopy(), copy: ` \u00b7 omi_sk_cd · ${created}`},
     {title: developerApiTitleCopy(), copy: 'Cursor \u00b7 '},
     {
       title: developerApiTitleCopy(),
@@ -2237,8 +2237,12 @@ test('developer key copy names GET name and prefix without a full secret', () =>
     },
   ]);
   expect(developerKeyRowCopy({name: '', keyPrefix: 'omi_sk_ab'})).toBe(
-    'omi_sk_ab',
+    ' \u00b7 omi_sk_ab',
   );
+  expect(developerKeyRowCopy({name: ' \t', keyPrefix: 'omi_sk_ab'})).toBe(
+    ' \u00b7 omi_sk_ab',
+  );
+  expect(developerKeyRowCopy({name: '', keyPrefix: ''})).toBe(' \u00b7 ');
   expect(developerKeyRowCopy({name: 'Cursor', keyPrefix: ''})).toBe(
     'Cursor \u00b7 ',
   );
@@ -2248,6 +2252,18 @@ test('developer key copy names GET name and prefix without a full secret', () =>
   expect(
     developerKeysCopy([{name: 'Cursor', keyPrefix: ''}], mcpTitleCopy()),
   ).toEqual([{title: mcpTitleCopy(), copy: 'Cursor \u00b7 '}]);
+  expect(
+    developerKeysCopy([{name: '', keyPrefix: 'omi_mcp_cd'}], mcpTitleCopy()),
+  ).toEqual([{title: mcpTitleCopy(), copy: ' \u00b7 omi_mcp_cd'}]);
+  expect(
+    developerKeysCopy([{name: '', keyPrefix: ''}], mcpTitleCopy()),
+  ).toEqual([{title: mcpTitleCopy(), copy: ' \u00b7 '}]);
+  expect(
+    developerKeyRowCopy(
+      {name: '', keyPrefix: 'omi_sk_cd'},
+      {emptyScopesCopy: 'Read Only', maskPrefix: true},
+    ),
+  ).toBe(' \u00b7 omi_sk_cd*** \u00b7 Read Only');
   expect(developerKeyCreatedCopy(0)).toBe('');
   expect(developerKeyScopeCopy(undefined)).toBe('');
   expect(developerKeyScopeCopy([])).toBe('');

@@ -2648,10 +2648,10 @@ test('Settings names Flutter DevApiKeyListItem empty GET names without noApiKeys
   });
   const tree = textOf(renderer);
   expect(tree).toContain('Developer API');
-  expect(tree).toContain('omi_sk_cd***');
+  expect(tree).toContain(' \u00b7 omi_sk_cd***');
   expect(tree).not.toContain('key-empty');
   expect(tree).toContain('MCP');
-  expect(tree).toContain('omi_mcp_cd');
+  expect(tree).toContain(' \u00b7 omi_mcp_cd');
   expect(tree).not.toContain('omi_mcp_cd***');
   expect(tree).not.toContain('mcp-empty');
   expect(tree).not.toContain('No API keys yet');
