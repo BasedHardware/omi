@@ -197,6 +197,84 @@ test('names Flutter ImportHistoryPage padded GET status', () => {
   ).toBe('Completed · Today at 14:30');
 });
 
+test('names Flutter ImportHistoryPage padded GET created_at', () => {
+  const now = new Date(2026, 8, 10, 20, 0);
+  const exact = '2026-09-10T14:30:00.000Z';
+  const createdAtMs = Date.parse(exact);
+  const stamp = importJobTimestampCopy(createdAtMs, now);
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {
+          job_id: 'job-padded',
+          status: 'completed',
+          created_at: '  2026-09-10T14:30:00.000Z  ',
+        },
+        {
+          job_id: 'job-trailing',
+          status: 'completed',
+          created_at: '2026-09-10T14:30:00.000Z ',
+        },
+        {
+          job_id: 'job-next-line',
+          status: 'completed',
+          created_at: '\u00852026-09-10T14:30:00.000Z',
+        },
+        {
+          job_id: 'job-padded-hour',
+          status: 'completed',
+          created_at: '  2026-09-10T14:30:00+00  ',
+        },
+        {job_id: 'job-exact', status: 'completed', created_at: exact},
+        {
+          job_id: 'job-hour',
+          status: 'completed',
+          created_at: '2026-09-10T14:30:00+00',
+        },
+        {job_id: 'job-empty', status: 'completed', created_at: ''},
+        {job_id: 'job-whitespace', status: 'completed', created_at: ' \t'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-padded', status: 'completed'},
+    {id: 'job-trailing', status: 'completed'},
+    {id: 'job-next-line', status: 'completed'},
+    {id: 'job-padded-hour', status: 'completed'},
+    {id: 'job-exact', status: 'completed', createdAtMs},
+    {id: 'job-hour', status: 'completed', createdAtMs},
+    {id: 'job-empty', status: 'completed'},
+    {id: 'job-whitespace', status: 'completed'},
+  ]);
+  expect(stamp).not.toBe('');
+  expect(
+    importJobRowCopy({id: 'job-padded', status: 'completed'}, now),
+  ).toBe('Completed');
+  expect(
+    importJobRowCopy({id: 'job-trailing', status: 'completed'}, now),
+  ).toBe('Completed');
+  expect(
+    importJobRowCopy({id: 'job-next-line', status: 'completed'}, now),
+  ).toBe('Completed');
+  expect(
+    importJobRowCopy({id: 'job-padded-hour', status: 'completed'}, now),
+  ).toBe('Completed');
+  expect(
+    importJobRowCopy(
+      {id: 'job-exact', status: 'completed', createdAtMs},
+      now,
+    ),
+  ).toBe(`Completed · ${stamp}`);
+  expect(
+    importJobRowCopy({id: 'job-hour', status: 'completed', createdAtMs}, now),
+  ).toBe(`Completed · ${stamp}`);
+  expect(
+    importJobRowCopy({id: 'job-empty', status: 'completed'}, now),
+  ).toBe('Completed');
+  expect(
+    importJobRowCopy({id: 'job-whitespace', status: 'completed'}, now),
+  ).toBe('Completed');
+});
+
 test('names Flutter import timestamps from local midnight', () => {
   const created = new Date(2026, 8, 10, 14, 30).getTime();
   expect(importJobTimestampCopy(created, new Date(2026, 8, 10, 20, 0))).toBe(

@@ -1,5 +1,4 @@
 import type {OmiBackend} from './omiNativeTypes';
-import {visibleDisplayText} from './desktopReadClient';
 
 const MAX_IMPORT_JOBS = 50;
 
@@ -50,7 +49,7 @@ function createdAtMs(value: unknown): number | undefined {
   if (value === undefined || value === null || typeof value !== 'string') {
     return undefined;
   }
-  const raw = visibleDisplayText(text(value, 1_000_000));
+  const raw = text(value, 1_000_000);
   if (raw === '') {
     return undefined;
   }
