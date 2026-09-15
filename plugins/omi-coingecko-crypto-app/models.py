@@ -55,7 +55,7 @@ class GetCryptoPriceRequest(_NullMeansDefault):
 
     @field_validator("coin_ids", mode="before")
     @classmethod
-    def normalize_coin_ids(cls, v: Union[str, List[str]]) -> List[str]:
+    def normalize_coin_ids(cls, v: Union[List[str], str]) -> List[str]:
         if isinstance(v, str):
             ids = [i.strip().lower() for i in v.split(",") if i.strip()]
         elif isinstance(v, (list, tuple)):
@@ -69,11 +69,9 @@ class GetCryptoPriceRequest(_NullMeansDefault):
         deduped = []
         for coin_id in ids:
             if coin_id not in seen:
-                seen.add(coin_id)
                 deduped.append(coin_id)
-            if len(deduped) >= 10:
-                break
-        return deduped
+                seen.add(coin_id)
+        return deduped[:10]
 
 
 class SearchCryptoCoinsRequest(_NullMeansDefault):
@@ -91,10 +89,10 @@ class SearchCryptoCoinsRequest(_NullMeansDefault):
 
     @field_validator("query")
     @classmethod
-    def clean_query(cls, v: str) -> str:
+    def normalize_query(cls, v: str) -> str:
         cleaned = v.strip()
         if not cleaned:
-            raise ValueError("query cannot be empty or whitespace only.")
+            raise ValueError("Query string cannot be empty.")
         return cleaned
 
 
@@ -118,13 +116,7 @@ class GetCryptoMarketOverviewRequest(_NullMeansDefault):
     vs_currency: Optional[str] = Field(
         default="usd",
         max_length=10,
-        description="Target currency for market cap and volume display (e.g. 'usd').",
-    )
-    limit: int = Field(
-        default=10,
-        ge=1,
-        le=50,
-        description="Number of top market-cap coins to include (default 10, max 50).",
+        description="Target currency code, e.g. 'usd'.",
     )
 
     @field_validator("limit", mode="before")
@@ -141,5 +133,5 @@ class GetCryptoMarketOverviewRequest(_NullMeansDefault):
             return "usd"
         cleaned = str(v).strip().lower()
         if len(cleaned) < 2:
-            raise ValueError("vs_currency must contain at least 2 non-whitespace characters.")
+            raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")
         return cleaned
