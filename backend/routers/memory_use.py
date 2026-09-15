@@ -8,7 +8,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-import database._client as db_client_module
+from database._client import get_data_plane_firestore_client
 from models.feedback import MemoryUseFeedback
 from models.product_memory import MemoryItem
 from utils.memory.belief_model import belief_model_enabled
@@ -93,7 +93,7 @@ def use_memory(
     if not memory_id.strip():
         raise HTTPException(status_code=404, detail="Memory not found")
 
-    db_client = getattr(db_client_module, "db", None)
+    db_client = get_data_plane_firestore_client()
     expected_revision = request.expected_item_revision
     feedback = MemoryUseFeedback(
         uid=uid,

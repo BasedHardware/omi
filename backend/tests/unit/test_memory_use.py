@@ -163,3 +163,33 @@ def test_memory_use_http_contract_runs_authenticated_suppress_allow_and_revision
             json={"action": "suppress", "feedback_id": " "},
         )
         assert invalid.status_code == 422
+
+
+def test_memory_use_route_uses_the_configured_customer_data_plane_client(monkeypatch):
+    """The route is registered on desktop-backend, so its Firestore reads and
+    writes must target the configured customer data plane — never the compute
+    project's default client (silent cross-plane corruption otherwise)."""
+    app = FastAPI()
+    app.include_router(memory_use_router.router)
+    monkeypatch.setattr(memory_use_router, "belief_model_enabled", lambda: True)
+
+    sentinel = object()
+    monkeypatch.setattr(memory_use_router, "get_data_plane_firestore_client", lambda: sentinel)
+    seen = {}
+
+    def fake_apply(uid, memory_id, **kwargs):
+        seen["db_client"] = kwargs.get("db_client")
+        item = _item()
+        return item, item
+
+    monkeypatch.setattr(memory_use_router, "_apply_canonical_user_mutation", fake_apply)
+    route = next(route for route in app.routes if route.path == "/v3/memories/{memory_id}/use")
+    app.dependency_overrides[route.dependant.dependencies[0].call] = lambda: "user_1"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v3/memories/mem_1/use",
+            json={"action": "suppress", "feedback_id": "http-data-plane"},
+        )
+    assert response.status_code == 200
+    assert seen["db_client"] is sentinel
