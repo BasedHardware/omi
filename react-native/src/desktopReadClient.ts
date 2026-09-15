@@ -496,18 +496,14 @@ export function conversationLocationAddressCopy(
   if (address === undefined || address === null || address === '') {
     return conversationUnknownLocationCopy();
   }
-  const fullAddress = visibleDisplayText(address);
-  if (fullAddress === '') {
-    return '';
-  }
-  const parts = fullAddress.split(',').map(part => part.trim());
+  const parts = address.split(',').map(part => part.trim());
   if (parts.length >= 3) {
     return `${parts[parts.length - 3]}, ${parts[parts.length - 2]}`;
   }
   if (parts.length === 2) {
     return `${parts[0]}, ${parts[1]}`;
   }
-  return fullAddress;
+  return address;
 }
 
 export function conversationNoFolderCopy(): string {

@@ -4084,11 +4084,14 @@ test('conversation location address copy names Flutter GetGeolocationWidgets sho
   expect(conversationLocationAddressCopy('San Francisco')).toBe(
     'San Francisco',
   );
+  expect(conversationLocationAddressCopy('  San Francisco  ')).toBe(
+    '  San Francisco  ',
+  );
   expect(conversationLocationAddressCopy('')).toBe(
     conversationUnknownLocationCopy(),
   );
-  expect(conversationLocationAddressCopy(' \t\u0085 ')).toBe('');
-  expect(conversationLocationAddressCopy('\u0085')).toBe('');
+  expect(conversationLocationAddressCopy(' \t\u0085 ')).toBe(' \t\u0085 ');
+  expect(conversationLocationAddressCopy('\u0085')).toBe('\u0085');
   expect(conversationLocationAddressCopy(undefined)).toBe(
     conversationUnknownLocationCopy(),
   );
@@ -4098,8 +4101,8 @@ test('conversation location address copy names Flutter GetGeolocationWidgets sho
 });
 
 test('names Flutter GetGeolocationWidgets whitespace GET address instead of Unknown location', () => {
-  expect(conversationLocationAddressCopy(' \t')).toBe('');
-  expect(conversationLocationAddressCopy('\n')).toBe('');
+  expect(conversationLocationAddressCopy(' \t')).toBe(' \t');
+  expect(conversationLocationAddressCopy('\n')).toBe('\n');
   expect(conversationLocationAddressCopy('')).toBe(
     conversationUnknownLocationCopy(),
   );

@@ -2098,7 +2098,7 @@ test('keeps GET geolocation maps open Flutter paints from required coordinates',
     }),
   );
   expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
-    locationAddress: '',
+    locationAddress: ' \t\n',
     locationMapsUrl:
       'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
   });

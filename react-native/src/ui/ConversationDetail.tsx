@@ -310,7 +310,7 @@ function LegacyConversationBody({
     !conversation.discarded && detail.locationAddress !== undefined;
   const address = conversation.discarded
     ? ''
-    : visibleDisplayText(detail.locationAddress ?? '');
+    : detail.locationAddress ?? '';
   const locationMapsUrl = conversation.discarded
     ? ''
     : visibleDisplayText(detail.locationMapsUrl ?? '');

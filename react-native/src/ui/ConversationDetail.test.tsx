@@ -2066,6 +2066,96 @@ test('legacy conversation details name Flutter GetGeolocationWidgets whitespace 
   expect(emptyAddresses.length).toBeGreaterThan(0);
 });
 
+test('legacy conversation details name Flutter GetGeolocationWidgets empty GET address whitespace', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        locationAddress: ' \t',
+        locationMapsUrl:
+          'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const whitespace = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    whitespace.root.findAll(
+      node => node.type === Text && node.props.children === ' \t',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(text(whitespace)).toContain(' \t');
+  expect(text(whitespace)).not.toContain(conversationUnknownLocationCopy());
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        locationAddress: '  Mission  ',
+        locationMapsUrl:
+          'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const padded = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    padded.root.findAll(
+      node => node.type === Text && node.props.children === '  Mission  ',
+    ).length,
+  ).toBeGreaterThan(0);
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        locationAddress: '\u0085',
+        locationMapsUrl:
+          'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const nextLine = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    nextLine.root.findAll(
+      node => node.type === Text && node.props.children === '\u0085',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(text(nextLine)).not.toContain(conversationUnknownLocationCopy());
+});
+
 test('legacy conversation details name Flutter AppResultDetailWidget empty GET names without Unknown App', () => {
   mockLegacy.mockReturnValue({
     result: {
