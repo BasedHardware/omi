@@ -1060,6 +1060,7 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
+      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       context: options?.context
         ? {
             type: options.context.type === 'general' ? 'recap' : options.context.type,
