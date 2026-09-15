@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Mapping, Sequence
 
 from models.memory_evidence import MemoryEvidence, RedactionStatus, SourceState
-from models.product_memory import MemoryItem, MemoryItemStatus, RESTRICTED_SENSITIVITY_LABELS
+from models.product_memory import MemoryItem, MemoryItemStatus, ProcessingState, RESTRICTED_SENSITIVITY_LABELS
 
 # Coarse, ratified source order. These are ordering values, not confidence scores.
 AUTHORITY = {
@@ -34,6 +34,7 @@ def eligible_record(item: MemoryItem) -> bool:
     use = item.arguments.get("memory_use")
     return (
         item.status == MemoryItemStatus.active
+        and item.processing_state == ProcessingState.processed
         and item.source_state == SourceState.active
         and not set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
         and not promotion.get("is_locked", False)

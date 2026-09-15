@@ -156,9 +156,12 @@ def _default_item_reader(
     errors = 0
     next_cursor: Optional[str] = None
     take = max(1, int(limit)) if limit is not None else None
-    query = db_client.collection(MemoryCollections(uid=uid).memory_items).order_by("__name__")
+    collection = db_client.collection(MemoryCollections(uid=uid).memory_items)
+    query = collection.order_by("__name__")
     if start_after:
-        query = query.start_after({"__name__": start_after})
+        # Firestore requires a DocumentReference in the __name__ cursor slot;
+        # a bare string id fails at query build on every resume.
+        query = query.start_after({"__name__": collection.document(start_after)})
     if take is not None:
         query = query.limit(take)
     for snapshot in query.stream():
@@ -326,6 +329,21 @@ def backfill_belief_classes(
     state.setdefault("completed", {})
     state.setdefault("errors", {})
     cursor = state.get("cursor") if start_after is None else start_after
+    if start_after is None:
+        pending_page_starts = [
+            entry["page_start"]
+            for mid, entry in state["results"].items()
+            if mid not in state["completed"] and isinstance(entry, dict) and "page_start" in entry
+        ]
+        if pending_page_starts:
+            # A dry-run preview caches classifications without applying them
+            # while still advancing the checkpoint cursor past the page (the
+            # physical cursor must advance past unreadable rows). Re-read the
+            # earliest cached-but-unapplied page so a later --apply run
+            # consumes the cache instead of stranding it behind the cursor.
+            # Entries without a recorded page start predate this rescue and
+            # keep their previous resume behavior.
+            cursor = None if None in pending_page_starts else min(pending_page_starts)
 
     def save_checkpoint() -> None:
         if checkpoint_writer is not None:
@@ -377,6 +395,16 @@ def backfill_belief_classes(
         memory_id = getattr(item, "memory_id", None)
         cached = cached_results.get(memory_id) if isinstance(memory_id, str) else None
         return isinstance(cached, dict) and cached.get("revision") == getattr(item, "item_revision", None)
+
+    # A completed outcome belongs to its source revision, exactly like a
+    # cached classification. If the owner edited the item after the checkpoint
+    # recorded the terminal result, the entry is stale: drop it so a rerun
+    # reclassifies the row instead of skipping it forever.
+    for item in page:
+        memory_id = getattr(item, "memory_id", None)
+        entry = completed.get(memory_id) if isinstance(memory_id, str) else None
+        if isinstance(entry, dict) and entry.get("revision") != getattr(item, "item_revision", None):
+            completed.pop(memory_id, None)
 
     # Only rows with no terminal checkpoint result need a paid classifier call.
     to_classify = [
@@ -435,6 +463,9 @@ def backfill_belief_classes(
                     # Diagnostic compatibility only; never copied into a memory.
                     "subject_scope": classification.subject_scope,
                     "revision": getattr(item, "item_revision", None),
+                    # Read cursor of the page that produced this cache entry, so
+                    # a later apply run can re-read stranded dry-run pages.
+                    "page_start": cursor,
                 }
             save_checkpoint()
 

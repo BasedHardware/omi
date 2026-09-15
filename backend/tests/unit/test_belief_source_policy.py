@@ -171,6 +171,14 @@ def test_tombstoned_source_is_not_eligible_for_corroboration():
     assert not eligible_record(item)
 
 
+def test_pending_and_blocked_records_are_not_eligible_for_corroboration():
+    """Rows that have not completed (or failed) provider processing must not
+    drive belief admission writes, mirroring the canonical read fence."""
+    assert not eligible_record(_item("pending", _evidence("ev-pending"), processing_state=ProcessingState.pending))
+    assert not eligible_record(_item("blocked", _evidence("ev-blocked"), processing_state=ProcessingState.blocked))
+    assert eligible_record(_item("processed", _evidence("ev-processed"), processing_state=ProcessingState.processed))
+
+
 def test_memory_capture_context_preserves_original_voice_provenance():
     memory = Memory(
         content="I prefer tea",

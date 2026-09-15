@@ -285,6 +285,155 @@ def test_bounded_checkpoint_reuses_cached_classification_after_apply_failure(mon
     assert apply_calls == ["mem-a", "mem-a"]
 
 
+def test_dry_run_checkpoint_then_apply_applies_the_cached_page(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    items = [_item(memory_id="mem-a", item_revision=1), _item(memory_id="mem-b", item_revision=1)]
+    checkpoint = {}
+    classify_calls = []
+    apply_calls = []
+    read_cursors = []
+
+    def reader(_uid, _db, *, start_after=None, limit=None):
+        read_cursors.append(start_after)
+        return [item for item in items if start_after is None or item.memory_id > start_after][:limit]
+
+    def classify(rows, _user_name=None):
+        classify_calls.append([row.memory_id for row in rows])
+        return [BeliefBackfillRow(memory_id=row.memory_id, belief_class="identity") for row in rows]
+
+    def apply(_uid, item, _classification, _db):
+        apply_calls.append(item.memory_id)
+
+    dry = backfill_belief_classes(
+        "uid-1",
+        db_client=SimpleNamespace(),
+        dry_run=True,
+        page_size=1,
+        item_reader=reader,
+        classifier=classify,
+        applier=apply,
+        checkpoint=checkpoint,
+    )
+    assert dry.classified == 1
+    assert apply_calls == []
+    # The dry-run preview advances the physical cursor (unreadable rows must
+    # not be re-paid), but its cached page stays pending for the apply run.
+    assert checkpoint["cursor"] == "mem-a"
+    assert checkpoint["results"]["mem-a"]["page_start"] is None
+
+    applied_report = backfill_belief_classes(
+        "uid-1",
+        db_client=SimpleNamespace(),
+        dry_run=False,
+        page_size=1,
+        item_reader=reader,
+        classifier=classify,
+        applier=apply,
+        checkpoint=checkpoint,
+    )
+    assert applied_report.written == 1
+    assert apply_calls == ["mem-a"]
+    # The apply run must re-read the stranded dry-run page from its recorded
+    # page start instead of resuming past it.
+    assert read_cursors == [None, None]
+    # The cached dry-run classification must be reused, not paid for twice.
+    assert classify_calls == [["mem-a"]]
+
+
+def test_checkpoint_completed_entry_is_invalidated_when_revision_changes(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    items = [_item(memory_id="mem-a", item_revision=1), _item(memory_id="mem-b", item_revision=1)]
+    checkpoint = {}
+    classify_calls = []
+    apply_calls = []
+    fail_b = {"value": True}
+
+    def reader(_uid, _db, *, start_after=None, limit=None):
+        return [item for item in items if start_after is None or item.memory_id > start_after][:limit]
+
+    def classify(rows, _user_name=None):
+        classify_calls.append([row.memory_id for row in rows])
+        return [BeliefBackfillRow(memory_id=row.memory_id, belief_class="identity") for row in rows]
+
+    def apply(_uid, item, _classification, _db):
+        apply_calls.append(item.memory_id)
+        if item.memory_id == "mem-b" and fail_b["value"]:
+            fail_b["value"] = False
+            raise RuntimeError("temporary apply failure")
+
+    first = backfill_belief_classes(
+        "uid-1",
+        db_client=SimpleNamespace(),
+        dry_run=False,
+        page_size=2,
+        item_reader=reader,
+        classifier=classify,
+        applier=apply,
+        checkpoint=checkpoint,
+    )
+    assert first.written == 1
+    assert checkpoint["completed"]["mem-a"] == {"status": "written", "revision": 1}
+    # The failed page keeps the cursor at the page start for the rerun.
+    assert checkpoint["cursor"] is None
+
+    # Owner edits mem-a after the checkpoint recorded its terminal outcome.
+    items[0] = _item(memory_id="mem-a", item_revision=2)
+
+    second = backfill_belief_classes(
+        "uid-1",
+        db_client=SimpleNamespace(),
+        dry_run=False,
+        page_size=2,
+        item_reader=reader,
+        classifier=classify,
+        applier=apply,
+        checkpoint=checkpoint,
+    )
+    # The stale completed entry must be invalidated and mem-a reclassified.
+    assert classify_calls[-1] == ["mem-a"]
+    assert second.written == 2
+    assert apply_calls == ["mem-a", "mem-b", "mem-a", "mem-b"]
+
+
+def test_default_item_reader_uses_document_reference_cursor():
+    captured = {}
+
+    class _Query:
+        def order_by(self, _field):
+            return self
+
+        def start_after(self, cursor):
+            captured["cursor"] = cursor
+            return self
+
+        def limit(self, _count):
+            return self
+
+        def stream(self):
+            return iter([])
+
+    class _Collection:
+        def document(self, doc_id):
+            captured.setdefault("documents", []).append(doc_id)
+            return SimpleNamespace(id=doc_id, path=f"users/uid-1/memory_items/{doc_id}")
+
+        def order_by(self, field):
+            return _Query().order_by(field)
+
+    class _Db:
+        def collection(self, _name):
+            return _Collection()
+
+    from utils.memory.belief_backfill import _default_item_reader
+
+    _default_item_reader("uid-1", _Db(), start_after="mem-b", limit=5)
+
+    name_cursor = captured["cursor"]["__name__"]
+    assert not isinstance(name_cursor, str)
+    assert name_cursor.id == "mem-b"
+    assert captured["documents"] == ["mem-b"]
+
+
 def test_unknown_is_counted_and_does_not_apply(monkeypatch):
     monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     applied = []
