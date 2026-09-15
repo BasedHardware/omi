@@ -1375,7 +1375,7 @@ export function subscriptionPeriodCopy(
       )} insights gained this month`,
     });
   }
-  const unit = visibleDisplayText(subscription.chatQuotaUnit ?? '');
+  const unit = subscription.chatQuotaUnit ?? '';
   if (
     subscription.chatQuotaUnit != null &&
     typeof subscription.chatQuotaUsed === 'number'

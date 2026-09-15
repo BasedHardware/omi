@@ -3371,6 +3371,71 @@ test('Settings names Flutter UsagePage empty GET chatQuotaUnit without omitting 
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter UsagePage padded GET chatQuotaUnit as messages', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'basic',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+      wordsTranscribedUsed: null,
+      wordsTranscribedLimit: null,
+      insightsGainedUsed: null,
+      insightsGainedLimit: null,
+      chatQuotaUsed: 5,
+      chatQuotaUnit: '  cost_usd  ',
+      chatQuestionsPerMonth: 100,
+      chatCostUsdPerMonth: 20,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Chat this month');
+  expect(tree).toContain('5 Chat');
+  expect(tree).toContain('5 of 100 messages used this month');
+  expect(tree).not.toContain('$5.00');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET usage today without Upgrade', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

@@ -6239,6 +6239,40 @@ test('subscription period copy names GET words insights and chat quotas without 
     },
   ]);
   expect(
+    subscriptionPeriodCopy({
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: null,
+      insightsGainedLimit: 500,
+      chatQuotaUsed: 1.2,
+      chatQuotaUnit: '  cost_usd  ',
+      chatQuestionsPerMonth: 100,
+      chatCostUsdPerMonth: 20,
+    }),
+  ).toEqual([
+    {
+      title: 'Chat this month',
+      copy: `1 Chat\n${chatQuotaSubtitleCopy()}\n1 of 100 messages used this month`,
+    },
+  ]);
+  expect(
+    subscriptionPeriodCopy({
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: null,
+      insightsGainedLimit: 500,
+      chatQuotaUsed: 1.2,
+      chatQuotaUnit: 'cost_usd ',
+      chatQuestionsPerMonth: 100,
+      chatCostUsdPerMonth: 20,
+    }),
+  ).toEqual([
+    {
+      title: 'Chat this month',
+      copy: `1 Chat\n${chatQuotaSubtitleCopy()}\n1 of 100 messages used this month`,
+    },
+  ]);
+  expect(
     parseCloudSubscription(
       {
         transcription_seconds_used: 0,

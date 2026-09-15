@@ -1510,6 +1510,41 @@ test('Settings names Flutter UsagePage empty GET chatQuotaUnit without omitting 
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter UsagePage padded GET chatQuotaUnit as messages', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 0,
+          transcription_seconds_used: 0,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          chat_quota_used: 5,
+          chat_quota_unit: '  cost_usd  ',
+          subscription: {
+            plan: 'basic',
+            status: 'active',
+            limits: {chat_questions_per_month: 100, chat_cost_usd_per_month: 20},
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Chat this month');
+  expect(tree).toContain('5 Chat');
+  expect(tree).toContain('5 of 100 messages used this month');
+  expect(tree).not.toContain('$5.00');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET subscription transcription quota as minutes this month', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
