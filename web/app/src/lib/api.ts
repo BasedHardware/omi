@@ -1060,6 +1060,7 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
+      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       context: options?.context
         ? {
             type: options.context.type === 'general' ? 'recap' : options.context.type,
@@ -2245,7 +2246,11 @@ export async function exportAllData(): Promise<Blob> {
   if (!response.ok) {
     throw new Error(`Export failed: ${response.status} ${response.statusText}`);
   }
-  return response.blob();
+  const blob = await response.blob();
+  if (blob.size === 0) {
+    throw new Error('Export failed: server returned an empty file');
+  }
+  return blob;
 }
 
 /**

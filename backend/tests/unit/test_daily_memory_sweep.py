@@ -57,6 +57,8 @@ from utils.memory.daily_memory_sweep import (
     MODEL_INVOCATION_FENCE_COLLECTION,
     MODEL_INVOCATION_SCHEMA_VERSION,
     _invoke_model_once,
+    MODEL_INVOCATION_REPAIR_PATH,
+    repair_daily_sweep_model_invocation,
     _apply_candidate,
     cleanup_expired_daily_memory_sweep_stages,
     read_daily_memory_sweep_cohort_assignment,
@@ -1396,7 +1398,228 @@ def test_returned_payload_expiry_keeps_content_free_tombstone_and_blocks_replay(
     assert paid_call_count == 1
 
 
+def test_repair_receipt_reopens_exactly_one_bounded_invocation_retry(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    invocation_id = "repair-window-a"
+    claim_at = datetime(2026, 9, 15, 5, 0, tzinfo=timezone.utc)
+    paid_calls = []
+
+    def dying_provider():
+        paid_calls.append("first")
+        raise RuntimeError("worker died after the provider call")
+
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            invocation_id,
+            candidate_builder=dying_provider,
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-a",
+            now=claim_at,
+        )
+        is None
+    )
+    fence_path = f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}"
+    assert db.store[fence_path]["state"] == "indeterminate"
+
+    # Before the lease expires an explicit repair must fail closed.
+    with pytest.raises(ValueError, match="expired invocation lease"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={
+                "jit_run_id": "qa-sweep-1",
+                "attempts": [{"request_id": "req-1", "outcome": "success", "total_tokens": 2730}],
+            },
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(minutes=2),
+        )
+
+    receipt = repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id=invocation_id,
+        provider_outcome_evidence={
+            "jit_run_id": "qa-sweep-1",
+            "attempts": [{"request_id": "req-1", "outcome": "success", "total_tokens": 2730}],
+        },
+        repair_authority="operator:qa-sweep-1",
+        now=claim_at + timedelta(minutes=16),
+    )
+    assert receipt["prior_state"] == "indeterminate"
+    assert receipt["provider_outcome_summary"] == "success_usage_recorded"
+    assert receipt["consumed"] is False
+    stored = db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}"]
+    assert stored["window_id"] == "window-a"
+
+    def repaired_provider():
+        paid_calls.append("second")
+        return ({"candidate_id": "repaired"},)
+
+    assert _invoke_model_once(
+        db,
+        "user-1",
+        invocation_id,
+        candidate_builder=repaired_provider,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=1,
+        window_id="window-a",
+        now=claim_at + timedelta(minutes=17),
+    ) == ({"candidate_id": "repaired"},)
+    assert db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}"]["consumed"] is True
+    assert db.store[fence_path]["repaired_from_state"] == "indeterminate"
+
+    # A tombstone that reforms after the repaired retry stays closed forever:
+    # exactly one repair receipt may ever exist per invocation.
+    db.store[fence_path]["state"] = "indeterminate"
+    with pytest.raises(ValueError, match="already has a repair receipt"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={"jit_run_id": "qa-sweep-2", "attempts": []},
+            repair_authority="operator:qa-sweep-2",
+            now=claim_at + timedelta(minutes=40),
+        )
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            invocation_id,
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("charged a third time")),
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-a",
+            now=claim_at + timedelta(minutes=41),
+        )
+        is None
+    )
+    assert paid_calls == ["first", "second"]
+
+
+def test_repair_receipt_requires_accounting_evidence_and_tombstoned_fence(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    invocation_id = "repair-returned"
+    claim_at = datetime(2026, 9, 15, 5, 0, tzinfo=timezone.utc)
+    assert _invoke_model_once(
+        db,
+        "user-1",
+        invocation_id,
+        candidate_builder=lambda: ({"candidate_id": "returned"},),
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=1,
+        window_id="window-a",
+        now=claim_at,
+    ) == ({"candidate_id": "returned"},)
+
+    # A returned invocation has a proven provider outcome; nothing to repair.
+    with pytest.raises(ValueError, match="not repairable"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={"jit_run_id": "qa-sweep-1", "attempts": []},
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(hours=2),
+        )
+    # Evidence without the owning run id is not a provider proof.
+    db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/repair-evidence").set(
+        {
+            "uid": "user-1",
+            "invocation_id": "repair-evidence",
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "sweep_generation": 1,
+            "window_id": "window-b",
+            "state": "payload_expired",
+            "claimed_at": claim_at,
+        }
+    )
+    with pytest.raises(ValueError, match="owning run id"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id="repair-evidence",
+            provider_outcome_evidence={"attempts": []},
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(hours=2),
+        )
+    receipt = repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id="repair-evidence",
+        provider_outcome_evidence={"jit_run_id": "qa-sweep-9", "attempts": []},
+        repair_authority="operator:qa-sweep-9",
+        now=claim_at + timedelta(hours=2),
+    )
+    assert receipt["provider_outcome_summary"] == "no_recorded_attempt"
+    # A consumed or identity-mismatched receipt never reopens a claim.
+    db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/repair-evidence"]["consumed"] = True
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            "repair-evidence",
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("stale receipt reopened")),
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-b",
+            now=claim_at + timedelta(hours=3),
+        )
+        is None
+    )
+
+
+def test_scheduler_names_incomplete_sources_without_raising(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence={"feature": "memories", "requests": [{"request_id": "req-1"}]},
+        ),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    assert summary.attempted_users == 1
+    assert summary.blocked_users == 1
+    assert summary.failed_uids == ("user-1",)
+    assert summary.errors == ("uid=user-1:source_incomplete:2026-08-23",)
+    assert summary.model_dispatch_evidence == ({"feature": "memories", "requests": [{"request_id": "req-1"}]},)
+
+
 def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
+
     monkeypatch.setattr(data_export, "get_user_profile", lambda _uid: {})
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversation_photos", lambda *_args, **_kwargs: ())

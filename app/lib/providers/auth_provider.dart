@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
+import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/app_globals.dart';
@@ -199,6 +201,12 @@ class AuthenticationProvider extends BaseProvider {
     try {
       final token = await AuthService.instance.getIdToken();
       NotificationService.instance.saveNotificationToken();
+      try {
+        final timeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
+        unawaited(syncUserTimeZoneServer(timeZone: timeZone));
+      } catch (e) {
+        Logger.debug('Failed to sync device timezone: $e');
+      }
 
       Logger.debug('Firebase token retrieved successfully');
       return token;

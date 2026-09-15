@@ -23210,6 +23210,17 @@
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "time_zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Zone"
           }
         },
         "required": [
@@ -25318,6 +25329,19 @@
           "detail"
         ],
         "title": "SyncRequestValidationErrorResponse",
+        "type": "object"
+      },
+      "SyncUserTimeZoneRequest": {
+        "properties": {
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time_zone"
+        ],
+        "title": "SyncUserTimeZoneRequest",
         "type": "object"
       },
       "SynthesizeAIUserProfileRequest": {
@@ -62734,6 +62758,91 @@
         "tags": [
           "v1"
         ]
+      }
+    },
+    "/v1/users/time-zone": {
+      "put": {
+        "description": "Persist the device's IANA timezone without requiring push notification registration.",
+        "operationId": "sync_user_time_zone_v1_users_time_zone_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncUserTimeZoneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FcmTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Sync User Time Zone"
       }
     },
     "/v1/users/training-data-opt-in": {
