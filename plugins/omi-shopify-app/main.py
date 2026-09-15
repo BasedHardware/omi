@@ -395,6 +395,23 @@ async def disconnect_shopify(uid: str):
 # Chat Tool Endpoints
 # ============================================
 
+def _coerce_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    """Turn an optional tool argument into an int inside [minimum, maximum].
+
+    The Omi backend models optional parameters as Optional[int] with a None
+    default and forwards them verbatim, so None (and the occasional numeric
+    string) must fall back to the default rather than crash on comparison.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: JSON numbers like 1e309 parse to float('inf').
+        return default
+    return max(minimum, min(number, maximum))
+
+
 def parse_date(date_str: str) -> Optional[datetime]:
     """Parse various date formats into datetime object."""
     if not date_str:
@@ -747,7 +764,7 @@ async def tool_get_orders(request: Request):
         uid = body.get("uid")
         status = body.get("status", "any")
         financial_status = body.get("financial_status")
-        limit = min(body.get("limit", 10), 50)
+        limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -1614,7 +1631,7 @@ async def tool_get_customers(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query = body.get("query", "")
-        limit = min(body.get("limit", 10), 50)
+        limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
