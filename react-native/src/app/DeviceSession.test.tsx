@@ -929,6 +929,63 @@ test('connected device names Flutter FirmwareUpdate padded GET version as up to 
   omiBackend.request.mockReset();
 });
 
+test('connected device names Flutter FirmwareUpdate min_version-blocked GET as up to date instead of Latest Version', async () => {
+  omiBackend.request.mockReset();
+  omiBackend.request.mockResolvedValue({
+    id: 'omi-firmware-latest',
+    status: 200,
+    body: JSON.stringify({
+      version: '1.3.0',
+      min_version: '1.0.0',
+      changelog: ['Fixed BLE reconnect'],
+    }),
+  });
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'omi-test',
+        name: 'Omi',
+        connected: true,
+        rssi: -40,
+        information: {
+          model: 'Omi Dev Kit',
+          firmware: '0.9.0',
+          hardware: '1',
+          manufacturer: 'Based Hardware',
+        },
+      },
+    ],
+    connectedDeviceId: 'omi-test',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain(`"${firmwareDeviceUpToDateCopy()}"`);
+  expect(output).not.toContain(`"${firmwareLatestVersionCopy()}"`);
+  expect(output).not.toContain('": ","1.3.0"');
+  expect(output).not.toContain('Firmware update available');
+  expect(output).toContain(`"${firmwareWhatsNewCopy()}"`);
+  expect(output).toContain('"Fixed BLE reconnect"');
+  expect(output).not.toContain('Install');
+  await act(async () => renderer.unmount());
+  omiBackend.request.mockReset();
+});
+
 test('connected device names Flutter FirmwareUpdate empty GET changelog lines without omitting What\'s New', async () => {
   omiBackend.request.mockReset();
   omiBackend.request.mockResolvedValue({

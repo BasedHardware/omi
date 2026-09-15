@@ -1984,17 +1984,13 @@ export function firmwareUpdateCopy(
     details.minVersion === null || details.minVersion === ''
       ? null
       : dottedVersionParts(details.minVersion);
-  const upToDate =
-    current !== null &&
-    (newest === null ||
-      minimum === null ||
-      compareDottedVersion(newest, current) === 0);
   const available =
     current !== null &&
     newest !== null &&
     minimum !== null &&
     compareDottedVersion(current, minimum) >= 0 &&
     compareDottedVersion(newest, current) > 0;
+  const upToDate = current !== null && !available;
   const changelog = [...(details.changelog ?? [])];
   return {
     latest,
