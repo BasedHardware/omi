@@ -95,7 +95,7 @@ omi auth status    # lokalno preverjanje, brez povezave
 omi auth whoami    # preverjanje na strežniku
 ```
 
-Obnovitev ključa s potečeno veljavnostjo brez ponovne prijave:
+Obnovitev OAuth seje, ki se ji izteka veljavnost, brez ponovne prijave — velja samo za prijavo v brskalniku (OAuth). Za ključe `omi_dev_*` ta ukaz ne osveži; ključ zamenjajte v spletni aplikaciji pod `Developer → API Keys`:
 
 ```bash
 omi auth refresh
@@ -209,8 +209,8 @@ Kode so stabilne, zato se po njih lahko veji logika v skriptah in CI.
 | Koda | Pomen | Kdaj nastane |
 | :---: | :--- | :--- |
 | `0` | Uspeh | Ukaz se je izvedel |
-| `1` | Napaka klica | Neveljavna zastavica, manjka argument |
-| `2` | Napaka dostopa | Niste prijavljeni, ključ je neveljaven ali potekel |
+| `1` | Napaka klica | Lastna preveritev omi-cli (npr. `--browser` in `--api-key` hkrati, neveljavna izbira, prazen vnos) |
+| `2` | Napaka dostopa ali argumentov | Niste prijavljeni, ključ je neveljaven ali potekel — tudi napake razčlenjevalnika (neznana zastavica, manjkajoč argument) |
 | `3` | Napaka strežnika | Odgovor 5xx, timeout, ni povezave |
 | `4` | Preveč zahtevkov | 429 Too Many Requests |
 | `5` | Ni najdeno | 404, navedeni identifikator ne obstaja |
@@ -300,6 +300,8 @@ omi --profile work auth login
 # izvesti ukaz v konkretnem profilu
 omi --profile work memory list
 ```
+
+Če profila ne navedete, CLI najprej uporabi profil iz okoljske spremenljivke `OMI_PROFILE`, nato aktivni profil iz konfiguracijske datoteke, nazadnje `default`. Vrstni red prednosti: `--profile` → `OMI_PROFILE` → aktivni profil v `~/.omi/config.toml` → `default`.
 
 Ogled in spreminjanje same konfiguracije:
 

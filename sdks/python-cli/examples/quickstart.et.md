@@ -95,7 +95,7 @@ omi auth status    # kohalik kontroll, võrguühenduseta
 omi auth whoami    # kontroll serveris
 ```
 
-Aegumiseni läheneva võtme uuendamine ilma uuesti sisselogimata:
+Aegumais oleva OAuth-seansi värskendamine ilma uuesti sisse logimata — kehtib ainult brauseri kaudu sisselogimisel (OAuth). `omi_dev_*` võtmete puhul see käsk ei värskenda; vahetage võti veebirakenduses `Developer → API Keys` all:
 
 ```bash
 omi auth refresh
@@ -209,8 +209,8 @@ Koodid on stabiilsed, seega saab nende järgi skriptides ja CI-s loogikat haruta
 | Kood | Tähendus | Millal tekib |
 | :---: | :--- | :--- |
 | `0` | Õnnestus | Käsk lõppes |
-| `1` | Väljakutse viga | Vale lipp, argument puudu |
-| `2` | Ligipääsu viga | Sisse pole logitud, võti on vale või aegunud |
+| `1` | Väljakutse viga | omi-cli enda kontroll (nt `--browser` ja `--api-key` korraga, kehtetu valik, tühi sisend) |
+| `2` | Ligipääsu- või argumentide viga | Sisse pole logitud, võti on vale või aegunud — samuti parseri vead (tundmatu lipp, puuduv argument) |
 | `3` | Serveri viga | Vastus 5xx, timeout, ühendust pole |
 | `4` | Liiga palju päringuid | 429 Too Many Requests |
 | `5` | Ei leitud | 404, määratud identifikaatorit pole olemas |
@@ -300,6 +300,8 @@ omi --profile work auth login
 # käsu käivitamine konkreetses profiilis
 omi --profile work memory list
 ```
+
+Kui profiili ei määrata, kasutab CLI esmalt keskkonnamuutuja `OMI_PROFILE` profiili, seejärel konfiguratsioonifaili aktiivset profiili, lõpuks `default`. Eelistusjärjekord: `--profile` → `OMI_PROFILE` → aktiivne profiil `~/.omi/config.toml`-is → `default`.
 
 Vaadata ja muuta ennast konfiguratsiooni:
 

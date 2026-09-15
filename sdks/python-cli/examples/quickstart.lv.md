@@ -95,7 +95,7 @@ omi auth status    # lokālā pārbaude, bezsaistē
 omi auth whoami    # pārbaude serverī
 ```
 
-Atjaunināt atslēgu, kurai tuvojas derīguma termiņš, bez atkārtotas pieslēgšanās:
+Atjaunināt OAuth sesiju, kurai tuvojas derīguma termiņš, bez atkārtotas pieslēgšanās — attiecas tikai uz pieslēgšanos pārlūkā (OAuth). `omi_dev_*` atslēgām šī komanda neko neatjaunina; nomainiet atslēgu tīmekļa lietotnē sadaļā `Developer → API Keys`:
 
 ```bash
 omi auth refresh
@@ -209,8 +209,8 @@ Kodi ir stabili, tāpēc pēc tiem var zarot loģiku skriptos un CI.
 | Kods | Nozīme | Kad rodas |
 | :---: | :--- | :--- |
 | `0` | Veiksme | Komanda pabeigta |
-| `1` | Izsaukšanas kļūda | Nederīgs karodziņš, trūkst argumenta |
-| `2` | Piekļuves kļūda | Nav pieslēgts, atslēga nederīga vai beigusies |
+| `1` | Izsaukšanas kļūda | Paša omi-cli pārbaude (piem., `--browser` un `--api-key` vienlaikus, nederīga izvēle, tukša ievade) |
+| `2` | Piekļuves vai argumentu kļūda | Nav pieslēgts, atslēga nederīga vai beigusies — arī parsera kļūdas (nezināms karodziņš, trūkstošs arguments) |
 | `3` | Servera kļūda | Atbilde 5xx, timeout, nav savienojuma |
 | `4` | Pārāk daudz pieprasījumu | 429 Too Many Requests |
 | `5` | Nav atrasts | 404, norādītais identifikators neeksistē |
@@ -300,6 +300,8 @@ omi --profile work auth login
 # izpildīt komandu konkrētā profilā
 omi --profile work memory list
 ```
+
+Ja profilu nenorādat, CLI vispirms izmanto profilu no vides mainīgā `OMI_PROFILE`, tad aktīvo profilu no konfigurācijas faila, visbeidzot `default`. Prioritāšu secība: `--profile` → `OMI_PROFILE` → aktīvais profils `~/.omi/config.toml` → `default`.
 
 Aplūkot un mainīt pašu konfigurāciju:
 
