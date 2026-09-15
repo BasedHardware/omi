@@ -3005,9 +3005,7 @@ test('app image URLs keep GET http(s) images instead of inventing a GitHub host'
   expect(appImageUrl('http://cdn.example.test/app.png')).toBe(
     'http://cdn.example.test/app.png',
   );
-  expect(appImageUrl('  HTTPS://cdn.example.test/app.png  ')).toBe(
-    'HTTPS://cdn.example.test/app.png',
-  );
+  expect(appImageUrl('  HTTPS://cdn.example.test/app.png  ')).toBe(null);
   expect(appImageUrl('/assets/apps/foo.png')).toBe(null);
   expect(appImageUrl('assets/foo.png')).toBe(null);
   expect(appImageUrl('javascript:https://evil.test')).toBe(null);
@@ -3017,6 +3015,28 @@ test('app image URLs keep GET http(s) images instead of inventing a GitHub host'
   expect(appImageUrl('\u0085')).toBe(null);
   expect(appImageUrl(null)).toBe(null);
   expect(appImageUrl(undefined)).toBe(null);
+});
+
+test('app image URLs name Flutter getImageUrl padded GET http instead of remapping to a CDN chip', () => {
+  expect(appImageUrl('https://cdn.example.test/app.png')).toBe(
+    'https://cdn.example.test/app.png',
+  );
+  expect(appImageUrl('http://cdn.example.test/app.png')).toBe(
+    'http://cdn.example.test/app.png',
+  );
+  expect(appImageUrl('https://cdn.example.test/app.png ')).toBe(
+    'https://cdn.example.test/app.png ',
+  );
+  expect(appImageUrl('  https://cdn.example.test/app.png  ')).toBe(null);
+  expect(appImageUrl('https://cdn.example.test/app.png  ')).toBe(
+    'https://cdn.example.test/app.png  ',
+  );
+  expect(appImageUrl('\u0085https://cdn.example.test/app.png')).toBe(null);
+  expect(appImageUrl('HTTPS://cdn.example.test/app.png')).toBe(null);
+  expect(appImageUrl('  HTTPS://cdn.example.test/app.png  ')).toBe(null);
+  expect(appImageUrl('HTTP://cdn.example.test/app.png')).toBe(null);
+  expect(appImageUrl('  HTTP://cdn.example.test/app.png  ')).toBe(null);
+  expect(appImageUrl('/assets/apps/foo.png')).toBe(null);
 });
 
 test('device display name names Flutter empty GET names', () => {

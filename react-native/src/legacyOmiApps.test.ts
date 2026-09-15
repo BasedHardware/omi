@@ -80,7 +80,29 @@ test('parseOmiApp keeps GET http(s) images and omits relative or unsafe URLs', (
   ).toEqual({
     name: 'Notes',
     description: 'Saves notes from calls',
-    image: 'HTTP://cdn.example.test/notes.png',
+  });
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        image: 'HTTPS://cdn.example.test/notes.png',
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        image: 'https://cdn.example.test/notes.png ',
+      }),
+      'notes',
+    ),
+  ).toEqual({
+    name: 'Notes',
+    image: 'https://cdn.example.test/notes.png ',
   });
   expect(
     parseOmiApp(
@@ -124,6 +146,39 @@ test('parseOmiApp keeps GET http(s) images and omits relative or unsafe URLs', (
       'notes',
     ),
   ).toEqual({name: 'Notes'});
+});
+
+test('parseOmiApp names Flutter getImageUrl padded GET http instead of remapping to a CDN chip', () => {
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        image: '  https://cdn.example.test/notes.png  ',
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        image: 'HTTP://cdn.example.test/notes.png',
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        image: 'https://cdn.example.test/notes.png',
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes', image: 'https://cdn.example.test/notes.png'});
 });
 
 test('does not omit a neighboring named chat app when GET lists more than twenty unique plugin ids', async () => {

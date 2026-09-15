@@ -2297,11 +2297,13 @@ export function appDisplayAttribution(app: {
 }
 
 export function appImageUrl(image: string | null | undefined): string | null {
-  const trimmed = visibleDisplayText(image ?? '');
-  if (!/^https?:\/\//i.test(trimmed)) {
+  if (image === undefined || image === null) {
     return null;
   }
-  return trimmed;
+  if (!/^https?:\/\//.test(image)) {
+    return null;
+  }
+  return image;
 }
 
 export function appRatingCopy(

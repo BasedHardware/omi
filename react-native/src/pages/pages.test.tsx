@@ -4162,6 +4162,69 @@ test('Connectors rows keep GET http images instead of a logo-less catalogue', as
   expect(tree).not.toContain('Official');
 });
 
+test('Connectors rows name Flutter AppListItem padded GET image instead of remapping to a CDN chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-padded',
+            name: 'Padded image app',
+            image: '  https://cdn.example.test/app.png  ',
+          },
+          {
+            id: 'catalog-app-https',
+            name: 'Uppercase image app',
+            image: 'HTTPS://cdn.example.test/app.png',
+          },
+          {
+            id: 'catalog-app-exact',
+            name: 'Exact image app',
+            image: 'https://cdn.example.test/app.png',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([]),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Padded image app');
+  expect(tree).toContain('Uppercase image app');
+  expect(tree).toContain('Exact image app');
+  const exactImages = renderer.root.findAll(
+    node =>
+      node.props.accessibilityLabel === 'App image' &&
+      node.props.source?.uri === 'https://cdn.example.test/app.png',
+  );
+  const cdnImages = renderer.root.findAll(
+    node =>
+      node.props.accessibilityLabel === 'App image' &&
+      typeof node.props.source?.uri === 'string' &&
+      node.props.source.uri.includes('cdn.example.test/app.png'),
+  );
+  expect(exactImages.length).toBeGreaterThan(0);
+  expect(cdnImages.length).toBe(exactImages.length);
+  expect(tree).not.toContain('Official');
+});
+
 test('Settings names GET task integrations without Connect or a write sheet', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
