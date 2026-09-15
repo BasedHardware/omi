@@ -24,13 +24,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 
-def slugify(text: str) -> str:
-    """Sanitize a string for safe filesystem paths."""
-    text = text.lower().strip()
-    text = re.sub(r"[^\w\s-]", "", text)
-    text = re.sub(r"[\s_-]+", "_", text)
-    return text.strip("_") or "action_items"
-
 
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
     """Safely parse an ISO-8601 datetime string and normalize to UTC."""
