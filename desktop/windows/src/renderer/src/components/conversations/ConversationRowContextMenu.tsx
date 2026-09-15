@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronRight, Copy, FolderInput, Link2, Pencil, Trash2 } from 'lucide-react'
+import { ChevronRight, Copy, FileText, FolderInput, Link2, Pencil, Trash2 } from 'lucide-react'
 import type { ConversationFolder } from '../../../../shared/types'
 import type { ConversationRow } from '../../lib/pageCache'
 import { isCloudBacked } from '../../lib/conversations/filtering'
 import { getConversationShareLink } from '../../lib/conversations/mutations'
 import { loadRowTranscript } from '../../lib/conversations/transcript'
+import { formatConversationSummaryMarkdown } from '../../lib/conversations/summaryMarkdown'
 import { toast } from '../../lib/toast'
 import { FolderPickerList } from './FolderPickerList'
 
@@ -23,7 +24,8 @@ const SUB_MAX_HEIGHT = 288 // px — must match the submenu's max-h-72 (vertical
 // at the cursor with viewport-edge clamping, closed by a full-screen backdrop,
 // Escape, or choosing an item. `surface-panel` is opaque so nothing shows through.
 //
-// Item order matches Mac (ConversationRowView.swift): Copy Transcript, Copy Link,
+// Alongside the Mac actions, cached cloud summaries can be copied as Markdown.
+// Item order: Copy Transcript, Copy as Markdown (when cached), Copy Link,
 // divider, Edit Title, Move to Folder ▸, divider, Delete. isCloudBacked(row) gates
 // the two backend-id actions (Copy Link, Move to Folder) exactly like the row's
 // hover buttons — a local-only row omits them rather than showing a broken action.
@@ -159,6 +161,22 @@ export function ConversationRowContextMenu({
           <Copy className="h-4 w-4 shrink-0 text-white/55" />
           Copy Transcript
         </button>
+
+        {row.markdownSummary && (
+          <button
+            role="menuitem"
+            onMouseEnter={closeSubmenu}
+            onClick={() =>
+              copyToClipboard('Summary', async () =>
+                formatConversationSummaryMarkdown({ ...row.markdownSummary, title: row.title })
+              )
+            }
+            className={itemClass()}
+          >
+            <FileText className="h-4 w-4 shrink-0 text-white/55" />
+            Copy as Markdown
+          </button>
+        )}
 
         {cloud && (
           <button
