@@ -812,14 +812,14 @@ test('keeps processing conversations whose title and overview are not ready yet'
           summary: '',
           status: 'processing',
           searchableText:
-            'Processing conversation…\nConversation summary is not ready yet.',
+            '\nConversation summary is not ready yet.',
         }),
       ],
     }),
   );
 });
 
-test('empty conversation titles stay visible instead of a blank row', () => {
+test('conversation display title names Flutter empty GET titles', () => {
   expect(processingConversationDetailTitleCopy()).toBe('In progress');
   expect(processingConversationDetailContentTabCopy('omi')).toBe('Content');
   expect(processingConversationDetailContentTabCopy('openglass')).toBe('Photos');
@@ -829,19 +829,17 @@ test('empty conversation titles stay visible instead of a blank row', () => {
   expect(processingConversationDetailContentTabCopy('')).toBe('Content');
   expect(processingConversationDetailContentTabCopy('  ')).toBe('Content');
   expect(conversationDisplayTitle({title: '', status: 'processing'})).toBe(
-    'Processing conversation…',
+    '',
   );
-  expect(conversationDisplayTitle({title: '', status: 'completed'})).toBe(
-    'Conversation title unavailable',
-  );
+  expect(conversationDisplayTitle({title: '', status: 'completed'})).toBe('');
   expect(conversationDisplayTitle({title: ' \t\n', status: 'processing'})).toBe(
-    'Processing conversation…',
+    '',
   );
   expect(conversationDisplayTitle({title: ' \t\n', status: 'completed'})).toBe(
-    'Conversation title unavailable',
+    '',
   );
   expect(conversationDisplayTitle({title: '\u0085', status: 'completed'})).toBe(
-    'Conversation title unavailable',
+    '',
   );
   expect(
     conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
@@ -886,21 +884,21 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
       summary: '',
       status: 'processing',
     }),
-  ).toBe('Processing conversation…');
+  ).toBe('');
   expect(
     conversationRecapTitle({
       title: '',
       summary: '',
       status: 'completed',
     }),
-  ).toBe('Conversation title unavailable');
+  ).toBe('');
   expect(
     conversationRecapTitle({
       title: '',
       summary: '\u0085',
       status: 'completed',
     }),
-  ).toBe('Conversation title unavailable');
+  ).toBe('');
   expect(
     conversationRecapTitle({
       id: 'recording:session-1',

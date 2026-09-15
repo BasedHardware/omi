@@ -314,10 +314,12 @@ test('untitled processing conversations stay visible instead of a blank row', ()
       />,
     );
   });
-  expect(textOf(renderer)).toContain('Processing conversation…');
+  expect(textOf(renderer)).not.toContain('Processing conversation…');
   expect(textOf(renderer)).not.toContain(
     'Conversation summary is not ready yet.',
   );
+  expect(textOf(renderer)).toContain('Sep 07');
+  expect(textOf(renderer)).toContain('1m');
   expect(textOf(renderer)).not.toContain(conversationsEmptyCopy());
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });
@@ -362,7 +364,7 @@ test('untitled conversations keep overview speech on the open control', () => {
       />,
     );
   });
-  expect(textOf(renderer)).toContain('Conversation title unavailable');
+  expect(textOf(renderer)).not.toContain('Conversation title unavailable');
   expect(textOf(renderer)).not.toContain('Assistant words');
   expect(
     renderer.root.findAll(
@@ -476,9 +478,11 @@ test('a NEXT LINE-only conversation search keeps rows instead of claiming a miss
       )
       .props.onChangeText('\u0085');
   });
-  expect(textOf(renderer)).toContain('Processing conversation…');
+  expect(textOf(renderer)).not.toContain('Processing conversation…');
   expect(textOf(renderer)).not.toContain('No loaded conversations match.');
   expect(textOf(renderer)).not.toContain('\u0085');
+  expect(textOf(renderer)).toContain('Sep 07');
+  expect(textOf(renderer)).toContain('1m');
 });
 
 test('listen conversations do not present a blank detail as a transcript', async () => {
@@ -1509,7 +1513,7 @@ test('processing list rows name GET transcript span without a finish clock', () 
   expect(copy).not.toContain('Duration unavailable');
 });
 
-test('conversation list omits Flutter ConversationListItem Failed chips', () => {
+test('conversation list names Flutter empty GET titles without Failed chips', () => {
   const base = {
     kind: 'conversation' as const,
     title: '',
@@ -1563,7 +1567,7 @@ test('conversation list omits Flutter ConversationListItem Failed chips', () => 
     );
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('Conversation title unavailable');
+  expect(copy).not.toContain('Conversation title unavailable');
   expect(copy).not.toContain('Failed');
   expect(copy).toContain('Hello');
   expect(

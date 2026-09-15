@@ -844,9 +844,11 @@ test('Home and Library rows omit Flutter ConversationListItem Failed chips', () 
     library = ReactTestRenderer.create(<ConversationRow item={item} />);
   });
   for (const copy of [textOf(home), textOf(library)]) {
-    expect(copy).toContain('Conversation title unavailable');
+    expect(copy).not.toContain('Conversation title unavailable');
     expect(copy).not.toContain('Failed');
     expect(copy).not.toContain('In progress');
+    expect(copy).toContain('12:00 PM');
+    expect(copy).toContain('20s');
   }
   let plain!: ReactTestRenderer.ReactTestRenderer;
   act(() => {

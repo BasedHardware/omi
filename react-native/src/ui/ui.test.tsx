@@ -2668,7 +2668,9 @@ test('wide Home search rows keep untitled processing conversations visible', () 
     />,
   );
   const tree = JSON.stringify(renderer.toJSON());
-  expect(tree).toContain('Processing conversation…');
+  expect(tree).not.toContain('Processing conversation…');
+  expect(tree).toContain('12:00 AM');
+  expect(tree).toContain('1m');
   expect(tree).not.toContain('Conversation summary is not ready yet.');
 });
 
@@ -2697,8 +2699,10 @@ test('wide Home search rows keep empty completed conversation copy visible', () 
     />,
   );
   const tree = JSON.stringify(renderer.toJSON());
-  expect(tree).toContain('Conversation title unavailable');
+  expect(tree).not.toContain('Conversation title unavailable');
   expect(tree).not.toContain('Conversation summary unavailable');
+  expect(tree).toContain('12:00 AM');
+  expect(tree).toContain('1m');
 });
 
 test('wide Home search rows keep supplied conversation title and summary', () => {
@@ -3642,7 +3646,7 @@ test('wide Home search rows omit Flutter ConversationListItem Failed chips', () 
     />,
   );
   const tree = JSON.stringify(renderer.toJSON());
-  expect(tree).toContain('Conversation title unavailable');
+  expect(tree).not.toContain('Conversation title unavailable');
   expect(tree).not.toContain('Failed');
   const plain = render(
     <ProjectionRow

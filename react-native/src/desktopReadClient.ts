@@ -40,13 +40,7 @@ export function conversationDisplayTitle(item: {
   title: string;
   status: string;
 }): string {
-  const title = visibleDisplayText(item.title);
-  if (title !== '') {
-    return title;
-  }
-  return item.status === 'processing'
-    ? 'Processing conversation…'
-    : 'Conversation title unavailable';
+  return visibleDisplayText(item.title);
 }
 
 function conversationListUsesListenExcerpt(id: string | undefined): boolean {

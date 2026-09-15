@@ -249,7 +249,7 @@ test.each(['completed', 'processing'])(
 );
 
 test.each(['completed', 'processing'])(
-  'untitled %s conversation without overview keeps the title fallback label',
+  'untitled %s conversation without overview names Flutter empty GET titles',
   status => {
     const {StyleSheet} = require('react-native');
     const value = libraryOutcome();
@@ -264,10 +264,7 @@ test.each(['completed', 'processing'])(
       view = ReactTestRenderer.create(<LibraryPage outcomes={value} />);
     });
     mounted.push(view);
-    const title =
-      status === 'processing'
-        ? 'Processing conversation…'
-        : 'Conversation title unavailable';
+    const title = '';
     act(() => label(view, `Open conversation ${title}`).props.onPress());
     expect(
       StyleSheet.flatten(label(view, 'Back to conversations').props.style)
