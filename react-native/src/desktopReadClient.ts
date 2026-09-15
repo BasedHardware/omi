@@ -1422,7 +1422,7 @@ export function primaryLanguageCopy(
     | null
     | undefined,
 ): string | null {
-  const language = visibleDisplayText(code ?? '');
+  const language = code ?? '';
   if (language === '') {
     return null;
   }

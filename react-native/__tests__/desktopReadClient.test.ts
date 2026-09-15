@@ -1575,7 +1575,22 @@ test('primary language copy names Flutter notSet for empty or catalog-miss GET l
   expect(primaryLanguageCopy('en', null)).toBe('en');
   expect(primaryLanguageCopy('', [{code: 'en', name: 'English'}])).toBeNull();
   expect(primaryLanguageCopy(null, [{code: 'en', name: 'English'}])).toBeNull();
-  expect(primaryLanguageCopy('\u0085', [{code: 'en', name: 'English'}])).toBeNull();
+  expect(
+    primaryLanguageCopy('\u0085', [{code: 'en', name: 'English'}]),
+  ).toBe(primaryLanguageNotSetCopy());
+  expect(
+    primaryLanguageCopy('  en  ', [{code: 'en', name: 'English'}]),
+  ).toBe(primaryLanguageNotSetCopy());
+  expect(
+    primaryLanguageCopy('en ', [{code: 'en', name: 'English'}]),
+  ).toBe(primaryLanguageNotSetCopy());
+  expect(
+    primaryLanguageCopy('\u0085en', [{code: 'en', name: 'English'}]),
+  ).toBe(primaryLanguageNotSetCopy());
+  expect(primaryLanguageCopy('  en  ', null)).toBe('  en  ');
+  expect(primaryLanguageCopy('en', [{code: 'en', name: 'English'}])).toBe(
+    'English',
+  );
   expect(
     primaryLanguageCopy('xx', [
       {code: 'en', name: 'English'},
@@ -7101,6 +7116,9 @@ test('loadAccountSettings names GET primary language without inventing Not set',
   ]);
   expect(parseCloudLanguage({language: null}, 'Language')).toBeNull();
   expect(parseCloudLanguage({language: ''}, 'Language')).toBeNull();
+  expect(parseCloudLanguage({language: ' \t'}, 'Language')).toBe(' \t');
+  expect(parseCloudLanguage({language: '  en  '}, 'Language')).toBe('  en  ');
+  expect(parseCloudLanguage({language: 'en'}, 'Language')).toBe('en');
   expect(parseCloudLanguageNames({languages: []}, 'Languages')).toBeNull();
   expect(() => parseCloudLanguage({language: 1}, 'Language')).toThrow(
     'Language language is malformed',

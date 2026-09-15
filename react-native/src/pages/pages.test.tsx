@@ -1714,6 +1714,15 @@ test('Settings names Flutter notSet for empty GET language', async () => {
         body: JSON.stringify({language: ' \t'}),
       };
     }
+    if (request.path === '/v1/users/available-languages') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          languages: [{code: 'en', name: 'English'}],
+        }),
+      };
+    }
     return {id: request.id, status: 404, body: null};
   });
   const renderer = await renderPage(SettingsPage);
@@ -1748,6 +1757,34 @@ test('Settings names Flutter notSet for catalog-miss GET language', async () => 
   expect(tree).toContain('Primary Language');
   expect(tree).toContain('Not set');
   expect(tree).not.toContain('xx');
+  expect(tree).not.toContain('English');
+});
+
+test('Settings names Flutter LanguageSettingsPage padded GET language as Not set', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/language') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({language: '  en  '}),
+      };
+    }
+    if (request.path === '/v1/users/available-languages') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          languages: [{code: 'en', name: 'English'}],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Primary Language');
+  expect(tree).toContain('Not set');
   expect(tree).not.toContain('English');
 });
 

@@ -9,7 +9,6 @@ import {
   desktopReadErrorCopy,
   usageLoadErrorCopy,
   subscriptionLoadErrorCopy,
-  visibleDisplayText,
 } from './desktopReadClient';
 
 export type CloudApp = {
@@ -326,8 +325,7 @@ export function parseCloudLanguage(
   if (typeof record.language !== 'string') {
     throw new Error(`${label} language is malformed`);
   }
-  const language = visibleDisplayText(record.language);
-  return language === '' ? null : language;
+  return record.language === '' ? null : record.language;
 }
 
 export function parseCloudLanguageNames(
