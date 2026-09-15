@@ -1,0 +1,3 @@
+{
+  "change": "Offline voice dictation no longer waits indefinitely when its on-device speech model cannot finish loading — the turn now stops after a bounded wait instead of leaving Omi stuck"
+}

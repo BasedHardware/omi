@@ -2048,6 +2048,15 @@ class AppLocalizationsNl extends AppLocalizations {
       'Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.';
 
   @override
+  String get memoryHistory => 'Geschiedenis';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Ongedaan maken';
 
   @override
@@ -10009,4 +10018,8 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Zodat Omi weet welke stem van jou is — praat ongeveer 5 seconden over wat je maar wilt.';
 }

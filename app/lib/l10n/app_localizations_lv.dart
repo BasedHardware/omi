@@ -2047,6 +2047,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryHistoryPartial => 'Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.';
 
   @override
+  String get memoryHistory => 'Vēsture';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Atsaukt';
 
   @override
@@ -10005,4 +10014,8 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.';
 }

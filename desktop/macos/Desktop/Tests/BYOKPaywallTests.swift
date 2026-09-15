@@ -2,9 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Verifies the BYOK-vs-paywall precedence fix: a user with a configured BYOK
-/// key locally is never paywalled, regardless of the persisted
-/// `desktop_isPaywalled` flag.
+/// Verifies BYOK enrollment, owner binding, and paywall precedence.
 @MainActor final class BYOKPaywallTests: XCTestCase {
   private let paywallKey = "desktop_isPaywalled"
 
@@ -31,7 +29,9 @@ import XCTest
       XCTFail("enroll(\(p)) called before \(p.storageKey) was set")
       return
     }
-    APIKeyService.persistEnrolledFingerprints([p.rawValue: APIKeyService.byokFingerprint(key)])
+    var fingerprints = APIKeyService.enrolledFingerprints()
+    fingerprints[p.rawValue] = APIKeyService.byokFingerprint(key)
+    APIKeyService.persistEnrolledFingerprints(fingerprints)
   }
 
   override func tearDown() async throws {
@@ -39,6 +39,8 @@ import XCTest
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
     UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+    UserDefaults.standard.removeObject(forKey: .byokOwnerUid)
+    UserDefaults.standard.removeObject(forKey: .byokOwnerResetNotice)
     APIKeyService.persistEnrolledFingerprints([:])
   }
 
@@ -110,6 +112,7 @@ import XCTest
     setAllBYOKKeys()
     UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     enroll(.openai)
+    enroll(.deepgram)
     let openAIKey = try XCTUnwrap(APIKeyService.byokKey(.openai))
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
@@ -191,6 +194,120 @@ import XCTest
     XCTAssertFalse(
       APIKeyService.hasTranscriptionBYOK,
       "rotated Deepgram key is not enrolled until validation succeeds")
+  }
+
+  func testActiveSnapshotIncludesOnlyEnrolledCurrentFingerprints() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("dg-original", forKey: BYOKProvider.deepgram.storageKey)
+    APIKeyService.persistEnrolledFingerprints([:])
+
+    XCTAssertTrue(APIKeyService.activeBYOKSnapshot.isEmpty)
+    XCTAssertEqual(
+      Set(APIKeyService.byokActivationCandidateSnapshot.keys),
+      Set([.openrouter, .deepgram]),
+      "configured keys remain validation candidates before enrollment")
+
+    let openRouterFingerprint = APIKeyService.byokFingerprint("sk-or")
+    APIKeyService.persistEnrolledFingerprints(["openrouter": openRouterFingerprint])
+    XCTAssertEqual(Set(APIKeyService.activeBYOKSnapshot.keys), Set([.openrouter]))
+
+    let deepgramFingerprint = APIKeyService.byokFingerprint("dg-original")
+    APIKeyService.persistEnrolledFingerprints([
+      "openrouter": openRouterFingerprint,
+      "deepgram": deepgramFingerprint,
+    ])
+    XCTAssertEqual(Set(APIKeyService.activeBYOKSnapshot.keys), Set([.openrouter, .deepgram]))
+
+    UserDefaults.standard.set("dg-rotated", forKey: BYOKProvider.deepgram.storageKey)
+    XCTAssertEqual(
+      Set(APIKeyService.activeBYOKSnapshot.keys),
+      Set([.openrouter]),
+      "a rotated Deepgram key stays out of runtime requests until validation enrolls it")
+
+    UserDefaults.standard.set("dg-original", forKey: BYOKProvider.deepgram.storageKey)
+    UserDefaults.standard.set("sk-or-rotated", forKey: BYOKProvider.openrouter.storageKey)
+    XCTAssertEqual(
+      Set(APIKeyService.activeBYOKSnapshot.keys),
+      Set([.deepgram]),
+      "each runtime capability independently requires its current enrolled fingerprint")
+  }
+
+  func testLegacyUnownedKeysAreClearedAndLeaveDurableReentryNotice() throws {
+    clearAllBYOKKeys()
+    UserDefaults.standard.removeObject(forKey: .byokOwnerUid)
+    UserDefaults.standard.removeObject(forKey: .byokOwnerResetNotice)
+    UserDefaults.standard.set("sk-legacy", forKey: BYOKProvider.openrouter.storageKey)
+
+    APIKeyService.bindBYOKOwner("owner-a")
+
+    XCTAssertNil(APIKeyService.byokKey(.openrouter))
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .byokOwnerUid), "owner-a")
+    let notice = try XCTUnwrap(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"))
+    XCTAssertEqual(notice.reason, .legacyUnownedKeys)
+    XCTAssertNil(
+      APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-b"),
+      "a credential-reset notice must never cross the owner boundary")
+  }
+
+  func testDifferentOwnerKeysAreClearedWithDifferentOwnerNotice() throws {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set("owner-a", forKey: .byokOwnerUid)
+    UserDefaults.standard.set("sk-owner-a", forKey: BYOKProvider.openrouter.storageKey)
+
+    APIKeyService.bindBYOKOwner("owner-b")
+
+    XCTAssertNil(APIKeyService.byokKey(.openrouter))
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .byokOwnerUid), "owner-b")
+    XCTAssertEqual(
+      try XCTUnwrap(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-b")).reason,
+      .differentOwner)
+  }
+
+  func testOwnerBindingWithoutKeysDoesNotInventAResetNotice() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.removeObject(forKey: .byokOwnerUid)
+    UserDefaults.standard.removeObject(forKey: .byokOwnerResetNotice)
+
+    APIKeyService.bindBYOKOwner("owner-a")
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .byokOwnerUid), "owner-a")
+    XCTAssertNil(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"))
+  }
+
+  func testSameOwnerBindingPreservesKeysAndEnrollment() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set("owner-a", forKey: .byokOwnerUid)
+    UserDefaults.standard.set("sk-owner-a", forKey: BYOKProvider.openrouter.storageKey)
+    enroll(.openrouter)
+
+    APIKeyService.bindBYOKOwner("owner-a")
+
+    XCTAssertEqual(APIKeyService.byokKey(.openrouter), "sk-owner-a")
+    XCTAssertEqual(
+      APIKeyService.enrolledFingerprints()[BYOKProvider.openrouter.rawValue],
+      APIKeyService.byokFingerprint("sk-owner-a"))
+    XCTAssertNil(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"))
+  }
+
+  func testResetNoticePersistsUntilTheUserAcknowledgesIt() throws {
+    clearAllBYOKKeys()
+    UserDefaults.standard.removeObject(forKey: .byokOwnerUid)
+    UserDefaults.standard.set("sk-legacy", forKey: BYOKProvider.openrouter.storageKey)
+    APIKeyService.bindBYOKOwner("owner-a")
+    let recorder = BYOKResetNoticeRecorder()
+
+    APIKeyService().presentPendingBYOKOwnerResetNotice(for: "owner-a", through: recorder)
+
+    XCTAssertEqual(recorder.title, "Re-add your custom API keys")
+    XCTAssertTrue(recorder.message?.contains("Settings → Advanced → Developer Keys") == true)
+    XCTAssertNotNil(
+      APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"),
+      "launching the sheet must not lose the recovery instruction before it is read")
+
+    try XCTUnwrap(recorder.completion)()
+    XCTAssertNil(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"))
   }
 
   func testSelectedRealtimeBYOKKeyIgnoresUnselectedLeftover() {
@@ -292,5 +409,18 @@ import XCTest
     XCTAssertFalse(
       RealtimeHubSettings.shared.isVoiceModelChoice(.openai),
       "choosing one provider does not unlock the other's key")
+  }
+}
+
+@MainActor
+private final class BYOKResetNoticeRecorder: DesktopAlertPresenting {
+  private(set) var title: String?
+  private(set) var message: String?
+  private(set) var completion: (@MainActor () -> Void)?
+
+  func present(title: String, message: String, completion: (@MainActor () -> Void)?) {
+    self.title = title
+    self.message = message
+    self.completion = completion
   }
 }

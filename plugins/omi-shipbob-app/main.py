@@ -133,7 +133,7 @@ def refresh_token_if_needed(uid: str) -> bool:
             log(f"Token refreshed for user {uid}")
             return True
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return False
     except Exception as e:
         log(f"Token refresh error: {e}")
@@ -171,7 +171,7 @@ def make_shipbob_request(
         if response.status_code in [200, 201]:
             return response.json()
         else:
-            log(f"ShipBob API error: {response.status_code} - {response.text[:200]}")
+            log(f"ShipBob API error: {response.status_code}")
             return {"error": response.text, "status_code": response.status_code}
     except Exception as e:
         log(f"ShipBob API exception: {e}")
@@ -220,30 +220,80 @@ def get_products(uid: str, page: int = 1, limit: int = 50) -> List[Dict]:
     return []
 
 
-def search_product_by_name(uid: str, name: str) -> Optional[Dict]:
-    """Search for a product by name."""
-    # Try products endpoint first
+def match_name_candidates(items, name, key="name"):
+    """Return (exact_hits, partial_hits) for a name query.
+
+    Exact hits compare case-insensitively on the full string. Partial
+    hits match either containment direction. Callers must only act on
+    a single total hit; several hits are ambiguous and nothing may be
+    posted for them.
+    """
+    wanted = (name or "").lower().strip()
+    if not wanted:
+        return [], []
+    exact = [
+        item for item in items
+        if (item.get(key, "") or "").lower().strip() == wanted
+    ]
+    if exact:
+        return exact, []
+    partial = [
+        item for item in items
+        if wanted in (item.get(key, "") or "").lower()
+        or (item.get(key, "") or "").lower().strip() in wanted
+    ]
+    return [], partial
+
+
+def format_name_candidates(candidates, what="product"):
+    """Render a disambiguation list with SKU and id."""
+    lines = [f"Multiple {what}s match. Please specify which one:\n"]
+    for item in candidates[:10]:
+        lines.append(
+            f"- **{item.get('name', 'Unknown')}**"
+            f" (SKU: {item.get('sku', 'N/A')}, id: {item.get('id', 'N/A')})"
+        )
+    lines.append("\nReply with the exact name.")
+    return "\n".join(lines)
+
+
+def find_product_candidates(uid: str, name: str):
+    """All product hits for a name: exact hits, else partial hits."""
     products = get_products(uid, limit=100)
-    name_lower = name.lower()
+    exact, partial = match_name_candidates(products, name)
+    return exact or partial
 
-    for product in products:
-        product_name = product.get("name", "").lower()
-        if name_lower in product_name or product_name in name_lower:
-            return product
 
+def find_inventory_candidates(uid: str, name: str):
+    """All inventory hits for a name: exact hits, else partial hits."""
+    inventory = get_inventory(uid, limit=100)
+    exact, partial = match_name_candidates(inventory, name)
+    return exact or partial
+
+
+def search_product_by_name(uid: str, name: str) -> Optional[Dict]:
+    """Search for a product by name.
+
+    Exact name first, else a single partial match. Returns None when
+    there is no hit or several hits (ambiguous); use
+    find_product_candidates to list the candidates.
+    """
+    candidates = find_product_candidates(uid, name)
+    if len(candidates) == 1:
+        return candidates[0]
     return None
 
 
 def search_inventory_by_name(uid: str, name: str) -> Optional[Dict]:
-    """Search for an inventory item by name."""
-    inventory = get_inventory(uid, limit=100)
-    name_lower = name.lower()
+    """Search for an inventory item by name.
 
-    for item in inventory:
-        item_name = item.get("name", "").lower()
-        if name_lower in item_name or item_name in name_lower:
-            return item
-
+    Exact name first, else a single partial match. Returns None when
+    there is no hit or several hits (ambiguous); use
+    find_inventory_candidates to list the candidates.
+    """
+    candidates = find_inventory_candidates(uid, name)
+    if len(candidates) == 1:
+        return candidates[0]
     return None
 
 
@@ -407,7 +457,7 @@ async def handle_shipbob_callback(
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.status_code} - {response.text}")
+            log(f"Token exchange failed: {response.status_code}")
             return templates.TemplateResponse("setup.html", {
                 "request": request,
                 "authenticated": False,
@@ -505,8 +555,13 @@ async def tool_get_inventory(request: Request):
             return ChatToolResponse(error="Please connect your ShipBob account first in the app settings.")
 
         if product_name:
-            # Search inventory directly by name
-            inv = search_inventory_by_name(uid, product_name)
+            # Search inventory directly by name; never report another
+            # item's counts when the name is ambiguous.
+            candidates = find_inventory_candidates(uid, product_name)
+            if len(candidates) > 1:
+                return ChatToolResponse(
+                    result=format_name_candidates(candidates, what="inventory item"))
+            inv = candidates[0] if candidates else None
             if not inv:
                 return ChatToolResponse(error=f"Could not find inventory item '{product_name}'")
 
@@ -617,8 +672,16 @@ async def tool_create_wro(request: Request):
         if not headers:
             return ChatToolResponse(error="Please connect your ShipBob account first in the app settings.")
 
-        # Find the product and get inventory_id
-        product = search_product_by_name(uid, product_name)
+        # Find the product and get inventory_id. Never open a WRO
+        # for a different SKU than the one named: an ambiguous name
+        # lists the candidates and posts nothing.
+        candidates = find_product_candidates(uid, product_name)
+        if len(candidates) > 1:
+            log(f"Ambiguous product '{product_name}': "
+                f"{len(candidates)} candidates, asking user")
+            return ChatToolResponse(
+                result=format_name_candidates(candidates))
+        product = candidates[0] if candidates else None
         if not product:
             return ChatToolResponse(error=f"Could not find product '{product_name}'. Please check the product name.")
 

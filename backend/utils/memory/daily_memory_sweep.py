@@ -80,6 +80,7 @@ from utils.free_tier_memory_policy import (
     free_tier_memory_suppression_enabled,
     memory_formation_verdict,
 )
+from utils.memory.belief_model import belief_automation_enabled, belief_model_enabled
 from utils.managed_compute import authorize_managed_compute
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 from utils.memory.daily_memory_sweep_queue import ProcessOutcome, drain_sweep_uids
@@ -141,6 +142,12 @@ MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
 # same logical invocation again.
 MODEL_INVOCATION_FENCE_COLLECTION = "daily_memory_sweep_model_invocation_fences"
 MODEL_INVOCATION_SCHEMA_VERSION = "daily_memory_sweep_model_invocation.v1"
+# An explicit operator repair for a tombstoned model invocation.  Pending,
+# indeterminate, and payload-expired fences are closed forever by design; this
+# user-scoped receipt is the one sanctioned way to reopen exactly one retry
+# after the operator proves what the provider accounting recorded.
+MODEL_INVOCATION_REPAIR_PATH = "daily_memory_sweep_model_invocation_repairs"
+MODEL_INVOCATION_REPAIR_SCHEMA_VERSION = "daily_memory_sweep_model_invocation_repair.v1"
 
 SCHEMA_VERSION = "daily_memory_sweep.v1"
 CURSOR_SCHEMA_VERSION = "daily_memory_sweep_cursor.v1"
@@ -595,6 +602,7 @@ class DailySweepCandidate(BaseModel):
     slot: Optional[str] = None
     subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user
     subject_entity_id: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
     trigger_condition: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("candidate_id", "target_memory_id", "subject_entity_id")
@@ -662,6 +670,19 @@ class DailySweepCandidate(BaseModel):
         if len(value) > MAX_TRIGGER_CONDITION_KEYS:
             raise ValueError("trigger condition exceeds the daily sweep budget")
         return value
+
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def validate_arguments(cls, value: Any, info) -> Dict[str, Any]:
+        # Keep the canonical argument vocabulary shared with conversation
+        # extraction without importing the LLM stack while this scheduler
+        # module is being initialized.
+        from utils.llm.working_observations import normalize_scoped_claim_arguments
+
+        basis = None
+        if info.data:
+            basis = info.data.get("basis")
+        return normalize_scoped_claim_arguments(value, basis=basis)
 
     @model_validator(mode="after")
     def validate_semantics(self) -> "DailySweepCandidate":
@@ -1206,6 +1227,12 @@ def _model_invocation_fence_ref(db_client: Any, invocation_id: str) -> Any:
     return db_client.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}")
 
 
+def _model_invocation_repair_ref(db_client: Any, uid: str, invocation_id: str) -> Any:
+    """Return the user-scoped explicit repair receipt for one invocation."""
+
+    return db_client.document(f"users/{uid}/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}")
+
+
 def cleanup_expired_daily_memory_sweep_stages(
     uid: str,
     *,
@@ -1558,6 +1585,7 @@ def _invoke_model_once(
     sweep_generation = int(cast(int, sweep_generation))
     claim_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     invocation_ref = _model_invocation_ref(db_client, uid, invocation_id)
+    repair_ref = _model_invocation_repair_ref(db_client, uid, invocation_id)
     fence_ref = _model_invocation_fence_ref(db_client, invocation_id)
     deletion_ref, control_ref = _live_fence_refs(db_client, uid)
     identity = {
@@ -1627,8 +1655,27 @@ def _invoke_model_once(
             if fence_payload.get("state") == "returned":
                 return "returned", _validated_output(user_payload)
             # Existing pending, indeterminate, and payload-expired fences are
-            # deliberately closed forever without an explicit repair receipt.
-            return "blocked", None
+            # deliberately closed forever unless an explicit, unconsumed
+            # operator repair receipt reopens exactly one further attempt.
+            repair_snapshot = _read(repair_ref, transaction)
+            repair_payload = repair_snapshot.to_dict() if getattr(repair_snapshot, "exists", False) else None
+            if not _valid_model_invocation_repair(repair_payload, identity):
+                return "blocked", None
+            transaction.set(repair_ref, {"consumed": True, "consumed_at": claim_now}, merge=True)
+            repaired_pending = {
+                **identity,
+                "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+                "state": "pending",
+                "at_most_once_tombstone": True,
+                "claimed_at": claim_now,
+                "repaired_from_state": fence_payload.get("state"),
+            }
+            transaction.set(fence_ref, repaired_pending)
+            transaction.set(
+                invocation_ref,
+                {**repaired_pending, "lease_expires_at": claim_now + MODEL_INVOCATION_LEASE},
+            )
+            return "claimed", None
         # A user payload without its top-level identity fence is an orphan,
         # usually the result of an interrupted account wipe. Never recreate it.
         if user_payload is not None:
@@ -1780,6 +1827,132 @@ def _invoke_model_once(
         except Exception:
             return None
         return built
+
+
+def _valid_model_invocation_repair(payload: Any, identity: Mapping[str, Any]) -> bool:
+    """Return True only for an unconsumed, identity-matching repair receipt."""
+
+    if not isinstance(payload, Mapping):
+        return False
+    if payload.get("schema_version") != MODEL_INVOCATION_REPAIR_SCHEMA_VERSION:
+        return False
+    if payload.get("consumed") is not False:
+        return False
+    return all(payload.get(key) == value for key, value in identity.items())
+
+
+def repair_daily_sweep_model_invocation(
+    db_client: Any,
+    *,
+    uid: str,
+    invocation_id: str,
+    provider_outcome_evidence: Mapping[str, Any],
+    repair_authority: str,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Write the one explicit repair receipt for a tombstoned invocation.
+
+    Pending, indeterminate, and payload-expired fences never reopen on their
+    own: their provider outcome cannot be proven, so an implicit retry could
+    charge the same logical invocation twice.  This function is the sanctioned
+    operator path.  It is fail-closed: the fence must exist in a tombstoned
+    state, its lease must have expired, the caller must supply content-free
+    provider accounting evidence, and at most one receipt may ever exist per
+    invocation.  The next claim consumes the receipt transactionally and
+    rewrites the fence as a fresh ``pending`` claim, so exactly one further
+    bounded attempt becomes possible — never an automatic second charge.
+    """
+
+    repaired_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    authority = str(repair_authority or "").strip()
+    if not authority or len(authority) > 128:
+        raise ValueError("daily sweep invocation repair requires a bounded repair authority")
+    normalized_invocation_id = str(invocation_id or "").strip()
+    if not normalized_invocation_id or len(normalized_invocation_id) > 128:
+        raise ValueError("daily sweep invocation repair requires a bounded invocation id")
+    evidence = dict(provider_outcome_evidence or {})
+    recorded_attempts = evidence.get("attempts")
+    if not isinstance(evidence.get("jit_run_id"), str) or not evidence["jit_run_id"].strip():
+        raise ValueError("daily sweep invocation repair requires the owning run id in its provider evidence")
+    if not isinstance(recorded_attempts, list) or len(recorded_attempts) > 4:
+        raise ValueError("daily sweep invocation repair requires a bounded provider attempt page")
+    for attempt in recorded_attempts:
+        if not isinstance(attempt, Mapping) or not isinstance(attempt.get("request_id"), str):
+            raise ValueError("daily sweep invocation repair evidence attempts must carry request ids")
+
+    fence_ref = _model_invocation_fence_ref(db_client, normalized_invocation_id)
+    repair_ref = _model_invocation_repair_ref(db_client, uid, normalized_invocation_id)
+    fence_snapshot = fence_ref.get()
+    fence_payload = fence_snapshot.to_dict() if getattr(fence_snapshot, "exists", False) else None
+    if not isinstance(fence_payload, dict):
+        raise ValueError("daily sweep invocation repair requires an existing invocation fence")
+    identity = {
+        "uid": uid,
+        "invocation_id": normalized_invocation_id,
+        "account_generation": fence_payload.get("account_generation"),
+        "source_generation": fence_payload.get("source_generation"),
+        "sweep_generation": fence_payload.get("sweep_generation"),
+        "window_id": fence_payload.get("window_id"),
+    }
+    if any(
+        value is None
+        for value in (
+            identity["account_generation"],
+            identity["source_generation"],
+            identity["sweep_generation"],
+            identity["window_id"],
+        )
+    ):
+        raise ValueError("daily sweep invocation repair requires a complete fence identity")
+    prior_state = fence_payload.get("state")
+    if prior_state not in {"pending", "indeterminate", "payload_expired"}:
+        raise ValueError(f"daily sweep invocation in state {prior_state!r} is not repairable")
+
+    user_snapshot = _model_invocation_ref(db_client, uid, normalized_invocation_id).get()
+    user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else None
+    lease_deadline: Optional[datetime] = None
+    for candidate_deadline in (
+        (user_payload or {}).get("lease_expires_at"),
+        fence_payload.get("lease_expires_at"),
+    ):
+        if isinstance(candidate_deadline, datetime):
+            lease_deadline = candidate_deadline if lease_deadline is None else min(lease_deadline, candidate_deadline)
+    if lease_deadline is None:
+        claimed_at = fence_payload.get("claimed_at")
+        lease_deadline = claimed_at + MODEL_INVOCATION_LEASE if isinstance(claimed_at, datetime) else None
+    if lease_deadline is None or lease_deadline.tzinfo is None or lease_deadline > repaired_now:
+        raise ValueError("daily sweep invocation repair requires an expired invocation lease")
+    existing_repair = repair_ref.get()
+    if getattr(existing_repair, "exists", False):
+        raise ValueError("daily sweep invocation already has a repair receipt")
+
+    outcome_summary = "no_recorded_attempt"
+    for attempt in recorded_attempts:
+        outcome = attempt.get("outcome")
+        if outcome == "success" and attempt.get("total_tokens") not in (None, 0):
+            outcome_summary = "success_usage_recorded"
+            break
+        if outcome in {"error", "timeout"}:
+            outcome_summary = "error_recorded"
+    receipt = {
+        "schema_version": MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
+        **identity,
+        "prior_state": prior_state,
+        "repaired_at": repaired_now,
+        "repair_authority": authority,
+        "provider_outcome_summary": outcome_summary,
+        "provider_outcome_evidence": evidence,
+        "consumed": False,
+    }
+    create = getattr(repair_ref, "create", None)
+    if callable(create):
+        try:
+            create(receipt)
+        except Exception as exc:
+            raise ValueError("daily sweep invocation already has a repair receipt") from exc
+    else:
+        repair_ref.set(receipt)
+    return {key: value for key, value in receipt.items() if key != "provider_outcome_evidence"}
 
 
 def _receipt_id(
@@ -2914,16 +3087,40 @@ def _apply_candidate(
     if effective_operation == "amend":
         assert target is not None
         try:
-            memory_id = amend_fact(
+            if not candidate.arguments:
+                memory_id = amend_fact(
+                    uid,
+                    target.memory_id,
+                    candidate.content,
+                    provenance=provenance,
+                    write_reason=reason,
+                    slot=candidate.slot,
+                    subject_scope=candidate.subject_scope,
+                    subject_entity_id=candidate.subject_entity_id,
+                    valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                    db_client=db_client,
+                    required_source_item=target,
+                )
+                return memory_id, None
+            # Use the same canonical append path as a new fact so scoped
+            # object/decision arguments survive an amendment.  ``supersedes``
+            # keeps replacement and validity semantics identical to
+            # ``amend_fact`` while avoiding a second task/action path.
+            memory_id = save_ledger_write(
                 uid,
-                target.memory_id,
-                candidate.content,
-                provenance=provenance,
-                write_reason=reason,
-                slot=candidate.slot,
-                subject_scope=candidate.subject_scope,
-                subject_entity_id=candidate.subject_entity_id,
-                valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                LedgerWrite(
+                    kind=MemoryKind.fact,
+                    content=candidate.content,
+                    provenance=provenance,
+                    write_reason=reason,
+                    slot=candidate.slot,
+                    subject_scope=candidate.subject_scope,
+                    subject_entity_id=candidate.subject_entity_id,
+                    arguments=dict(candidate.arguments or {}),
+                    valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                    user_asserted=candidate.authority == SweepAuthority.direct_user_statement,
+                    supersedes=[target.memory_id],
+                ),
                 db_client=db_client,
                 required_source_item=target,
             )
@@ -2943,6 +3140,7 @@ def _apply_candidate(
             subject_entity_id=candidate.subject_entity_id,
             slot=candidate.slot,
             trigger_condition=candidate.trigger_condition,
+            arguments=dict(candidate.arguments or {}),
             # A completed-day replay must derive identical mutation metadata.  The
             # ledger otherwise defaults ``valid_from`` to wall-clock ``now`` and a
             # crash after canonical apply would produce a different operation ID.
@@ -2996,6 +3194,12 @@ def run_daily_memory_sweep(
         qa_run_id = validate_qa_sweep_run_id(qa_run_id)
     if not authority.may_write:
         return _blocked_output(normalized_uid, "authority_closed", status="disabled")
+    # Belief automation is independently pausable once the Beta read/write
+    # contract is enabled. Keep the legacy sweep fully available while the
+    # belief model flag is off: this guard only pauses the new automated
+    # formation path and never changes stable flag-off synthesis semantics.
+    if belief_model_enabled() and not belief_automation_enabled():
+        return _blocked_output(normalized_uid, "belief_automation_paused", status="disabled")
     if max_catch_up_days < 1 or max_catch_up_days > MAX_CATCH_UP_DAYS:
         raise ValueError("max_catch_up_days must be between 1 and the bounded maximum")
     if now.tzinfo is None or now.utcoffset() is None:
@@ -4268,6 +4472,8 @@ def _load_or_stage_daily_summary_candidates(
     )[:96]
 
     def build_candidate_page() -> Tuple[dict[str, Any], ...]:
+        from utils.llm.working_observations import normalize_scoped_claim_arguments
+
         summary_rows = tuple((row.conversation_id, row.summary_text) for row in conversation_rows)
         transcript_lookup = {row.conversation_id: row.transcript_text for row in conversation_rows}
         owner_lookup = {row.conversation_id: row.owner_evidence for row in conversation_rows}
@@ -4324,12 +4530,21 @@ def _load_or_stage_daily_summary_candidates(
                 continue
             about = " ".join(str(getattr(memory, "about", "") or "").split())
             basis = str(getattr(memory, "basis", "") or "").strip().lower()
+            arguments = (
+                normalize_scoped_claim_arguments(getattr(memory, "arguments", {}), basis=basis)
+                if belief_model_enabled()
+                else {}
+            )
             if about.casefold() in {"", "unknown", "unclear", "uncertain"}:
                 dropped_subjectless += 1
                 continue
-            if basis not in {"decided", "observed"}:
-                if basis == "proposed":
-                    dropped_basis_proposed += 1
+            if basis not in {"decided", "proposed", "observed"}:
+                continue
+            # Preserve proposed plans only when the model has explicitly
+            # represented them as proposals.  This keeps legacy model output
+            # conservative while allowing the typed decision contract through.
+            if basis == "proposed" and arguments.get("decision") != "proposed":
+                dropped_basis_proposed += 1
                 continue
             if about.casefold() in owner_aliases:
                 if not any(may_attribute_to_owner(owner_lookup[conversation_id]) for conversation_id in cited):
@@ -4373,8 +4588,10 @@ def _load_or_stage_daily_summary_candidates(
                     subject_entity_id=subject_entity_id,
                     # A slot names a standing attribute; the canonical occupancy
                     # check turns an occupied-slot add into an amend, which is
-                    # how the daily run maintains the rendered profile.
+                    # how the daily run maintains the rendered profile. A
+                    # proposal or passive observation is always unslotted.
                     slot=(str(getattr(memory, "slot", "") or "").strip() or None) if basis == "decided" else None,
+                    arguments=arguments,
                 )
             )
             if len(candidates) >= max_candidates:
@@ -4807,8 +5024,14 @@ def produce_completed_day_daily_summary_sources(
     )
     if staged is None:
         # Model/provider failures and malformed existing stages are source
-        # incompleteness, never permission to re-extract or advance.
-        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        # incompleteness, never permission to re-extract or advance.  The
+        # dispatch evidence still carries the admitted request identities and
+        # any observed usage: a consumed gateway attempt must stay joinable to
+        # this run even when its output never staged.
+        return DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence=dispatch_evidence if dispatch_evidence else None,
+        )
     candidates, folder_assignments = staged
     if folder_assignments:
         # Folder assignment is cosmetic and idempotent; a partial failure here
@@ -5316,21 +5539,19 @@ def run_daily_memory_sweep_scheduler(
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
 
     # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
-    # decision. Run it before authority, kill-switch, and cohort gates so a
-    # disabled/skipped account cannot retain transcript-derived pages forever.
+    # decision. Run it before authority or automation gates so a disabled or
+    # paused account cannot retain transcript-derived pages forever.
     drain_sweep_uids(bounded_uids, lambda uid: (cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now), cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now), ProcessOutcome.ack())[-1])  # fmt: skip
     resolved_authority = authority or daily_memory_sweep_authority_from_environment()
     if not resolved_authority.may_write:
         return DailySweepSchedulerSummary()
-    resolved_cohort = cohort_authority or daily_memory_sweep_cohort_authority_from_environment()
-    # A write-enabled scheduler must always have an explicit backend cohort
-    # gate.  A disabled/missing cohort is not an unrestricted all-user mode;
-    # it is a closed rollout.  The flag name is deployment-fixed and supplied
-    # only by the server-owned authority seam.
-    if not resolved_cohort.enabled:
-        return DailySweepSchedulerSummary(errors=("cohort_disabled",))
-    if not resolved_cohort.cohort_name:
-        return DailySweepSchedulerSummary(errors=("cohort_name_missing",))
+    # The product Beta authority is all-user. Keep the old arguments in the
+    # callable for deployment/test compatibility, but do not consult a
+    # per-user flag or fail closed when its resolver/configuration is absent.
+    # ``qa_run_id`` remains the explicit, bounded qualification path.
+    _ = cohort_authority, cohort_authorizer
+    if belief_model_enabled() and not belief_automation_enabled():
+        return DailySweepSchedulerSummary(errors=("belief_automation_paused",))
     attempted = committed_users = blocked_users = 0
     committed = idempotent = skipped = 0
     errors: List[str] = []
@@ -5342,37 +5563,6 @@ def run_daily_memory_sweep_scheduler(
         nonlocal attempted, committed_users, blocked_users, committed, idempotent, skipped
         attempted += 1
         try:
-            # This callback is intentionally read-only.  A PostHog client can
-            # be supplied by the maintenance deployment, but no
-            # identify/flag mutation is performed by this scheduler.
-            if not callable(cohort_authorizer):
-                blocked_users += 1
-                failed_uids.append(uid)
-                errors.append(f"uid={uid}:cohort_unavailable")
-                return ProcessOutcome.reject("cohort_unavailable", reason="cohort_unavailable")
-            try:
-                enrolled = cohort_authorizer(uid, resolved_cohort.cohort_name)
-            except TypeError:
-                enrolled = cohort_authorizer(uid)
-            if isinstance(enrolled, DailySweepCohortDecision):
-                cohort_decision = enrolled
-            elif enrolled is True:
-                cohort_decision = DailySweepCohortDecision.enabled
-            elif enrolled is False:
-                cohort_decision = DailySweepCohortDecision.disabled
-            else:
-                cohort_decision = DailySweepCohortDecision.unavailable
-            if cohort_decision is DailySweepCohortDecision.disabled:
-                # A definite false assignment is a successful bounded
-                # decision and may advance the fair page cursor.
-                blocked_users += 1
-                completed_uids.append(uid)
-                return ProcessOutcome.ack()
-            if cohort_decision is not DailySweepCohortDecision.enabled:
-                blocked_users += 1
-                failed_uids.append(uid)
-                errors.append(f"uid={uid}:cohort_unavailable")
-                return ProcessOutcome.reject("cohort_unavailable", reason="cohort_unavailable")
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
             if control.writer_mode is not WriterMode.ledger:
                 # An enrolled account that has not completed ledger cutover
@@ -5461,6 +5651,18 @@ def run_daily_memory_sweep_scheduler(
                     raise ValueError("daily sweep source provider returned an invalid source bundle")
                 if sources.model_dispatch_evidence:
                     model_dispatch_evidence.append(dict(sources.model_dispatch_evidence))
+                if not sources.complete:
+                    # An incomplete source is the provider's documented
+                    # fail-closed outcome (model gate closed, fenced invocation
+                    # blocked, malformed stage, or budget refusal).  The cursor
+                    # must not advance, and the day must surface as a named
+                    # blocked outcome instead of the opaque ``ValidationError``
+                    # that ``build_daily_sweep_input`` raises on incomplete
+                    # packets.
+                    blocked_users += 1
+                    failed_uids.append(uid)
+                    errors.append(f"uid={uid}:source_incomplete:{local_date.isoformat()}")
+                    return ProcessOutcome.reject("source_incomplete", reason="source_incomplete")
                 packets[local_date] = build_daily_sweep_input(
                     uid,
                     local_date,

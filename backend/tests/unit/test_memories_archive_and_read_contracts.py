@@ -273,6 +273,41 @@ def test_get_memories_forwards_include_archive():
     assert service.read_page.call_args.kwargs["include_archive"] is True
 
 
+def test_get_memories_offset_temporal_view_passes_view_into_service_read():
+    """Offset fallback must not post-filter one already-paged released window:
+    the temporal selector and anchor belong inside the service read so
+    history rows are admitted before offset/limit slicing."""
+    mem_mod = _load_memories_router()
+    service = MagicMock()
+    service.read.return_value = []
+    scope_request = types.SimpleNamespace(device_scope="all", client_device_id=None)
+    anchor = datetime(2026, 9, 13, tzinfo=timezone.utc)
+    with (
+        patch.object(mem_mod, "MemoryService", return_value=service),
+        patch.object(mem_mod, "belief_model_enabled", return_value=True),
+        patch.object(mem_mod, "normalize_temporal_read_view", side_effect=lambda value: value),
+        patch.object(mem_mod, "_resolve_get_memories_device_scope", return_value=scope_request),
+        patch.object(mem_mod, "_validate_device_scope_request"),
+        patch.object(mem_mod, "list_read_budget_for_request", return_value=MagicMock(truncated=False)),
+    ):
+        mem_mod.get_memories(
+            response=MagicMock(),
+            request=MagicMock(),
+            limit=50,
+            offset=50,
+            include_archive=False,
+            view="history",
+            as_of=anchor,
+            uid="uid-1",
+            device_scope="all",
+            client_device_id=None,
+            x_app_platform=None,
+            x_device_id_hash=None,
+        )
+    assert service.read.call_args.kwargs["view"] == "history"
+    assert service.read.call_args.kwargs["as_of"] == anchor
+
+
 def test_ledger_history_route_is_explicit_owner_scoped_and_bounded():
     mem_mod = _load_memories_router()
     service = MagicMock()
@@ -308,6 +343,44 @@ def test_ledger_history_route_is_explicit_owner_scoped_and_bounded():
     )
     budget.observe.assert_called_once_with("truncated")
     assert response_headers[mem_mod.OMI_LIST_TRUNCATED_HEADER] == mem_mod.OMI_LIST_TRUNCATED_VALUE
+
+
+def test_ledger_history_route_signs_and_consumes_keyset_cursor(monkeypatch):
+    """A bounded history sentinel must resume after the raw provider row."""
+    mem_mod = _load_memories_router()
+    service = MagicMock()
+    boundary = (datetime(2026, 8, 23, tzinfo=timezone.utc), 'history-boundary')
+    service.read_ledger_history_page.return_value = types.SimpleNamespace(
+        memories=(), truncated=True, scanned_count=501, next_start_after=boundary
+    )
+    response_headers = {}
+
+    def capture_response(values, _exposure, headers=None):
+        response_headers.clear()
+        response_headers.update(headers or {})
+        return values
+
+    monkeypatch.setenv('MEMORY_V3_CURSOR_SECRET', 'history-cursor-test-secret')
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod, 'list_read_budget_for_request', return_value=MagicMock(truncated=False)),
+        patch.object(mem_mod, 'cursor_secret', return_value=b'history-cursor-test-secret'),
+        patch.object(mem_mod, 'cursor_ttl_seconds', return_value=86_400),
+        patch.object(mem_mod, 'memory_list_response', side_effect=capture_response),
+    ):
+        mem_mod.get_ledger_history(response=MagicMock(), request=None, limit=500, offset=0, uid='uid-1')
+        cursor = response_headers[mem_mod._MEMORY_NEXT_CURSOR_HEADER]
+        service.read_ledger_history_page.reset_mock()
+        mem_mod.get_ledger_history(
+            response=MagicMock(), request=None, limit=500, offset=500, cursor=cursor, uid='uid-1'
+        )
+
+    assert service.read_ledger_history_page.call_args.kwargs == {
+        'limit': 500,
+        'offset': 0,
+        'budget': service.read_ledger_history_page.call_args.kwargs['budget'],
+        'start_after': boundary,
+    }
 
 
 def test_update_memory_read_status_persists_through_service():

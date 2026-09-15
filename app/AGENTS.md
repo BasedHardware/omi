@@ -148,7 +148,7 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 
 ## App Flows & E2E
 
-- See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
+- Flows: `e2e/SKILL.md`. Own-voice enrollment: [guide](../.github/agent-docs/mobile-voice-enrollment.md).
 - See `e2e/flows/*.yaml` for individual flow definitions
 
 ## Verifying UI Changes (agent-flutter)

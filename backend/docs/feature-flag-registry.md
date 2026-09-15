@@ -43,6 +43,21 @@ Whole environment or Cloud Run job, declared in
 `backend/deploy/runtime_env/{_base,dev.overlay,prod.overlay}.yaml`. Use this
 for fleet-wide backend switches. Do not put those in PostHog.
 
+Memory belief processing uses two deployment-wide runtime controls:
+
+* `MEMORY_BELIEF_MODEL_ENABLED` is the positive dev-on/prod-off processing
+  gate. It is declared for the listener, pusher, Cloud Run memory services,
+  desktop-backend, and belief jobs.
+* `MEMORY_BELIEF_AUTOMATION_PAUSED` is a reversible incident stop. It defaults
+  to `false` in every environment and pauses automated evidence, synthesis, and
+  backfill admission while leaving authenticated memory reads and TTL/expiry
+  maintenance available. It is intentionally deployment-wide; it is not a
+  PostHog user cohort or a per-UID product rollout.
+
+The source of truth is the composed manifest (`backend/deploy/runtime_env.yaml`)
+plus the GKE listener/pusher values. A flag value in this registry describes
+repository capability, not a deployed or currently serving value.
+
 ## Rules
 
 1. If Swift or Python names a PostHog key, the PostHog row must exist (even

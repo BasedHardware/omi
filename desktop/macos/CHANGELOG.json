@@ -2,6 +2,21 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.351",
+      "date": "2026-09-15",
+      "changes": [
+        "Memory lists now use server-owned currency assessments, keep unknown classifications visible, expose Useful now and discoverable History views behind the Beta capability header, and let you tell Omi which memories to use without deleting them"
+      ]
+    },
+    {
+      "version": "0.12.350",
+      "date": "2026-09-14",
+      "changes": [
+        "Always-on listening no longer switches itself off when your microphone is briefly taken by another audio app — Omi now keeps trying to reconnect for several minutes instead of giving up after six seconds",
+        "Fixed chat-only apps not opening their own conversation and improved delegated agent provider and file-path reliability"
+      ]
+    },
+    {
       "version": "0.12.349",
       "date": "2026-09-14",
       "changes": [

@@ -509,10 +509,20 @@ def _record_pt_target_observation(ready: bool) -> None:
 
 def _provisioned_model() -> str:
     """The model that currently owns prepaid capacity."""
-    return ptr.resolve_pt_model(
-        target_dedicated_ready=_pt_target_is_ready(),
-        override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''),
-    )
+    try:
+        return ptr.resolve_pt_model(
+            target_dedicated_ready=_pt_target_is_ready(),
+            override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''),
+        )
+    except ValueError as exc:
+        # A prohibited or undeclared operator pin (e.g. a Pro/image-output
+        # model) must never become a served model. Fail the request closed
+        # instead of dispatching PayGo (SCA-481).
+        raise RoutingFailure(
+            code='routing_invalid_operator_pin',
+            message=str(exc),
+            phase='routing',
+        ) from exc
 
 
 def _overflow_enabled() -> bool:
