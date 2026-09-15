@@ -1068,16 +1068,14 @@ export function deviceSerialMatchesId(
   deviceId: string,
   serial: string,
 ): boolean {
-  const id = visibleDisplayText(deviceId);
-  const copy = visibleDisplayText(serial);
-  if (id === '' || copy === '') {
+  if (deviceId === '' || serial === '') {
     return false;
   }
-  if (copy === id) {
+  if (serial === deviceId) {
     return true;
   }
   const normalize = (value: string) => value.replace(/[:\-]/g, '').toUpperCase();
-  return normalize(copy) === normalize(id);
+  return normalize(serial) === normalize(deviceId);
 }
 
 export function deviceIdentityChipCopy(value: string): string {

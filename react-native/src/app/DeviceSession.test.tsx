@@ -96,6 +96,47 @@ test('connected device omits serial when it duplicates Device ID', async () => {
   await act(async () => renderer.unmount());
 });
 
+test('connected device names Flutter home_device padded BLE serial instead of remapping to Device ID', async () => {
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'AA:BB:CC:DD:EE:FF',
+        name: 'Omi',
+        connected: true,
+        rssi: -40,
+        information: {
+          model: 'Omi Dev Kit',
+          firmware: '1.2.3',
+          serial: '  aabbccddeeff  ',
+        },
+      },
+    ],
+    connectedDeviceId: 'AA:BB:CC:DD:EE:FF',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain(`"${deviceSerialNumberCopy()}"`);
+  expect(output).toContain(
+    `"${deviceSerialNumberCopy()}",": ","  aab•••ff  "`,
+  );
+  expect(output).not.toContain('": ","aabbccddeeff"');
+  await act(async () => renderer.unmount());
+});
+
 test('connected device names Flutter home_device truncated Device ID and Serial Number', async () => {
   const snapshot = {
     bluetooth: 'poweredOn',

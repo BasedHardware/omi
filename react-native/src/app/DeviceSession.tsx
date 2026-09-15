@@ -26,7 +26,6 @@ import {
   firmwareLatestVersionCopy,
   firmwareWhatsNewCopy,
   desktopReadErrorCopy,
-  visibleDisplayText,
 } from '../desktopReadClient';
 import {firmwareLatestQuery, loadOmiLatestFirmware} from '../legacyOmiFirmware';
 
@@ -459,9 +458,7 @@ export function DeviceSession({
         ] as const
       ).flatMap(([field, label]) => {
         if (field === 'serial') {
-          const serial = visibleDisplayText(
-            connected.information?.serial ?? '',
-          );
+          const serial = connected.information?.serial ?? '';
           if (serial !== '' && deviceSerialMatchesId(connected.id, serial)) {
             return [];
           }

@@ -196,6 +196,7 @@ import {
   deviceUnknownCopy,
   deviceInformationCopy,
   deviceIdentityChipCopy,
+  deviceSerialMatchesId,
   deviceFoundShortIdCopy,
   deviceFoundNameCopy,
   deviceFoundSavedCopy,
@@ -2149,6 +2150,20 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(deviceIdentityChipCopy('AA:BB:CC:DD:EE:FF')).toBe('AA:BB•••E:FF');
   expect(deviceIdentityChipCopy('SERIALNUMBER9911')).toBe('SERIA•••9911');
   expect(deviceIdentityChipCopy('Unknown')).toBe('Unknown');
+  expect(deviceSerialMatchesId('AA:BB:CC:DD:EE:FF', 'aabbccddeeff')).toBe(true);
+  expect(deviceSerialMatchesId('AA:BB:CC:DD:EE:FF', 'AA:BB:CC:DD:EE:FF')).toBe(
+    true,
+  );
+  expect(deviceSerialMatchesId('ABC123', 'ABC123')).toBe(true);
+  expect(deviceSerialMatchesId('ABC123', '  ABC123  ')).toBe(false);
+  expect(deviceSerialMatchesId('ABC123', 'ABC123 ')).toBe(false);
+  expect(deviceSerialMatchesId('ABC123', '\u0085ABC123')).toBe(false);
+  expect(deviceSerialMatchesId('  ABC123  ', '  ABC123  ')).toBe(true);
+  expect(deviceSerialMatchesId('AA:BB:CC:DD:EE:FF', '  aabbccddeeff  ')).toBe(
+    false,
+  );
+  expect(deviceSerialMatchesId('ABC123', '')).toBe(false);
+  expect(deviceSerialMatchesId('ABC123', 'SN-9911')).toBe(false);
   expect(deviceFoundShortIdCopy('AA:BB:CC:DD:EE:FF')).toBe('AABBCC');
   expect(deviceFoundShortIdCopy('11:22:33:44:55:66')).toBe('112233');
   expect(deviceFoundShortIdCopy('omi-test')).toBe('omi-te');
