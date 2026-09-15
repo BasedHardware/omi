@@ -129,6 +129,8 @@ def _subject_slug(subject: Any) -> Optional[str]:
 
 
 def _format_book(doc: dict[str, Any], index: int) -> str:
+    if not isinstance(doc, dict):
+        return f"{index}. Untitled"
     title = _clean_text(doc.get("title")) or "Untitled"
     authors = _join_values(doc.get("author_name")) or "unknown author"
     year = doc.get("first_publish_year") or "unknown year"
@@ -147,6 +149,8 @@ def _format_book(doc: dict[str, Any], index: int) -> str:
 
 
 def _format_subject_work(work: dict[str, Any], index: int) -> str:
+    if not isinstance(work, dict):
+        return f"{index}. Untitled"
     title = _clean_text(work.get("title")) or "Untitled"
     authors = ", ".join(
         _clean_text(author.get("name"))
@@ -326,7 +330,7 @@ async def get_book_details(payload: dict[str, Any]):
                 params={"bibkeys": f"ISBN:{isbn}", "format": "json", "jscmd": "data"},
             )
             book = data.get(f"ISBN:{isbn}") if isinstance(data, dict) else None
-            if not isinstance(book, dict):
+            if not isinstance(book, dict) or not book:
                 return ChatToolResponse(result=f"No Open Library details found for ISBN {isbn}.")
 
             title = _clean_text(book.get("title")) or "Untitled"
@@ -362,7 +366,7 @@ async def get_book_details(payload: dict[str, Any]):
             return ChatToolResponse(error="Provide a valid Open Library work_id like OL45883W or an ISBN.")
 
         data = await _request_json(f"/works/{work_id}.json")
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or not data:
             return ChatToolResponse(result=f"No Open Library details found for work {work_id}.")
 
         title = _clean_text(data.get("title")) or "Untitled"
@@ -407,7 +411,8 @@ async def search_subject(payload: dict[str, Any]):
         if not works:
             return ChatToolResponse(result=f"No books found for subject {subject}.")
 
-        title = (_clean_text(data.get("name")) if isinstance(data, dict) else None) or subject
+        title = _clean_text(data.get("name")) if isinstance(data, dict) else None
+        title = title or subject
         lines = [_format_subject_work(work, i + 1) for i, work in enumerate(works)]
         return ChatToolResponse(result=f"Open Library books for subject {title}:\n\n" + "\n\n".join(lines))
     except httpx.HTTPStatusError as exc:
