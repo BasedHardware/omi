@@ -1740,7 +1740,7 @@ export function fairUseCopy(
     const caseRef = visibleDisplayText(status.caseRef);
     rows.push({
       title: 'Fair Use',
-      copy: caseRef === '' ? stage : `${stage} · ${caseRef}`,
+      copy: status.caseRef === '' ? stage : `${stage} · ${caseRef}`,
     });
   }
   rows.push(

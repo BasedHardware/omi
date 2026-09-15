@@ -1725,6 +1725,58 @@ test('names Flutter FairUsePage whitespace GET message instead of omitting the b
   ]);
 });
 
+test('names Flutter FairUsePage whitespace GET caseRef instead of omitting the slot', () => {
+  const restrict = {
+    stage: 'restrict',
+    message: '',
+    speechHoursToday: 0,
+    speechHours3day: 0,
+    speechHoursWeekly: 0,
+    dailyHours: 2,
+    threeDayHours: 8,
+    weeklyHours: 10,
+    dailyLimitMs: 1_800_000,
+    usedMs: 0,
+    exhausted: false,
+  };
+  expect(fairUseCopy({...restrict, caseRef: ' \t'})).toEqual([
+    {title: 'Fair Use', copy: 'Restricted · '},
+    {title: 'Speech Usage', copy: ''},
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {title: fairUseDailyTranscriptionCopy(), copy: '0m / 30m'},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
+  ]);
+  expect(fairUseCopy({...restrict, caseRef: '\u0085'})).toEqual([
+    {title: 'Fair Use', copy: 'Restricted · '},
+    {title: 'Speech Usage', copy: ''},
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {title: fairUseDailyTranscriptionCopy(), copy: '0m / 30m'},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
+  ]);
+  expect(fairUseCopy({...restrict, caseRef: ''})).toEqual([
+    {title: 'Fair Use', copy: 'Restricted'},
+    {title: 'Speech Usage', copy: ''},
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {title: fairUseDailyTranscriptionCopy(), copy: '0m / 30m'},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
+  ]);
+});
+
 test('daily summary copy names GET headlines and omits Flutter DailySummaryCard unused stats', () => {
   const now = new Date(2026, 8, 10);
   expect(dailySummaryDateCopy('2026-09-10', now)).toBe('Today');
