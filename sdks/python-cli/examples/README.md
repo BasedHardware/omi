@@ -1,5 +1,4 @@
 # omi-cli examples
-
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
@@ -17,3 +16,4 @@
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
 * [`quickstart.ca.md`](quickstart.ca.md) — guia d'inici ràpid per a omi-cli en català (Catalan Quickstart).
+* [`quickstart.ar.md`](quickstart.ar.md) — العربية (Arabic Quickstart).
