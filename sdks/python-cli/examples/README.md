@@ -15,3 +15,6 @@
   русском (Russian Quickstart).
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
+* [`quickstart.ig.md`](quickstart.ig.md) — Ntuziaka Mmalite Ngwa Ngwa (Igbo Quickstart).
+* [`quickstart.yo.md`](quickstart.yo.md) — Ìtọ́nisọ̀nà Ìbẹ̀rẹ̀ Kíákíá (Yoruba Quickstart).
+* [`quickstart.ha.md`](quickstart.ha.md) — Jagorar Fara Sauri (Hausa Quickstart).
