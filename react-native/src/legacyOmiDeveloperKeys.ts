@@ -1,5 +1,4 @@
 import type {OmiBackend} from './omiNativeTypes';
-import {visibleDisplayText} from './desktopReadClient';
 
 class DeveloperKeyError extends Error {
   constructor() {
@@ -68,7 +67,7 @@ function optionalScopes(value: unknown): string[] | undefined {
   }
   const scopes: string[] = [];
   for (const raw of value) {
-    const scope = visibleDisplayText(text(raw, 1_000_000));
+    const scope = text(raw, 1_000_000);
     scopes.push(scope);
   }
   return scopes.length === 0 ? undefined : scopes;

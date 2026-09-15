@@ -215,9 +215,75 @@ test('names Flutter DevApiKeyListItem empty GET scopes instead of inventing Read
       name: 'Local',
       keyPrefix: 'omi_sk_ab',
       createdAtMs: Date.parse('2026-09-09T12:00:00.000Z'),
-      scopes: ['', ''],
+      scopes: [' \t', ''],
     },
     {id: 'key-neighbor', name: 'Cursor', keyPrefix: 'omi_mcp_cd', createdAtMs: createdMs},
+  ]);
+});
+
+test('names Flutter DevApiKeyListItem padded GET scopes', () => {
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-padded-read',
+          name: 'Padded',
+          key_prefix: 'omi_sk_ab',
+          created_at: createdAt,
+          scopes: ['  conversations:read  '],
+        },
+        {
+          id: 'key-trailing-read',
+          name: 'Trailing',
+          key_prefix: 'omi_sk_cd',
+          created_at: createdAt,
+          scopes: ['conversations:read '],
+        },
+        {
+          id: 'key-next-line-read',
+          name: 'NextLine',
+          key_prefix: 'omi_sk_ef',
+          created_at: createdAt,
+          scopes: ['conversations:read\u0085'],
+        },
+        {
+          id: 'key-exact-read',
+          name: 'Exact',
+          key_prefix: 'omi_sk_gh',
+          created_at: createdAt,
+          scopes: ['conversations:read'],
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'key-padded-read',
+      name: 'Padded',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: createdMs,
+      scopes: ['  conversations:read  '],
+    },
+    {
+      id: 'key-trailing-read',
+      name: 'Trailing',
+      keyPrefix: 'omi_sk_cd',
+      createdAtMs: createdMs,
+      scopes: ['conversations:read '],
+    },
+    {
+      id: 'key-next-line-read',
+      name: 'NextLine',
+      keyPrefix: 'omi_sk_ef',
+      createdAtMs: createdMs,
+      scopes: ['conversations:read\u0085'],
+    },
+    {
+      id: 'key-exact-read',
+      name: 'Exact',
+      keyPrefix: 'omi_sk_gh',
+      createdAtMs: createdMs,
+      scopes: ['conversations:read'],
+    },
   ]);
 });
 

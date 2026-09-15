@@ -2712,6 +2712,68 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
   ).toBe(false);
 });
 
+test('Settings names Flutter DevApiKeyListItem padded GET scopes without Read', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'dev-padded',
+            name: 'Padded',
+            key_prefix: 'omi_sk_ab',
+            created_at: '2026-09-09T12:00:00.000Z',
+            scopes: ['  conversations:read  '],
+          },
+          {
+            id: 'dev-exact',
+            name: 'Exact',
+            key_prefix: 'omi_sk_cd',
+            created_at: '2026-09-09T12:00:00.000Z',
+            scopes: ['conversations:read'],
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/mcp/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'mcp-1',
+            name: 'Cursor',
+            key_prefix: 'omi_mcp_cd',
+            created_at: '2026-09-09T12:00:00.000Z',
+            scopes: ['  conversations:read  '],
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  const created = developerKeyCreatedCopy(
+    Date.parse('2026-09-09T12:00:00.000Z'),
+  );
+  expect(tree).toContain(`Padded · omi_sk_ab*** · ${created}`);
+  expect(tree).not.toContain(`Padded · omi_sk_ab*** · ${created} · Read`);
+  expect(tree).toContain(`Exact · omi_sk_cd*** · ${created} · Read`);
+  expect(tree).toContain('Cursor · omi_mcp_cd');
+  expect(tree).not.toContain('Cursor · omi_mcp_cd · Read');
+  expect(tree).not.toContain('Full Access');
+  expect(tree).not.toContain('Read Only');
+  expect(tree).not.toContain('Revoke');
+});
+
 test('Settings names GET developer-key empty scopes Read Only without inventing it on MCP keys', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

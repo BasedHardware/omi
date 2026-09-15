@@ -2453,6 +2453,41 @@ test('developer key copy names GET empty scopes Read Only without inventing it o
   ).toBe('Write');
   expect(developerKeyScopeCopy([''], {emptyCopy: 'Read Only'})).toBe('');
   expect(developerKeyScopeCopy([' \t\n'], {emptyCopy: 'Read Only'})).toBe('');
+  expect(developerKeyScopeCopy(['  conversations:read  '])).toBe('');
+  expect(developerKeyScopeCopy(['conversations:read '])).toBe('');
+  expect(developerKeyScopeCopy(['conversations:read\u0085'])).toBe('');
+  expect(developerKeyScopeCopy(['\u0085conversations:read'])).toBe('Read');
+  expect(developerKeyScopeCopy([' conversations:read'])).toBe('Read');
+  expect(developerKeyScopeCopy(['conversations:read'])).toBe('Read');
+  expect(developerKeyScopeCopy(['  conversations:write  '])).toBe('');
+  expect(developerKeyScopeCopy(['conversations:write'])).toBe('Write');
+  expect(
+    developerKeyScopeCopy(
+      [
+        '  conversations:read  ',
+        '  conversations:write  ',
+        '  memories:read  ',
+        '  memories:write  ',
+        '  action_items:read  ',
+        '  action_items:write  ',
+        '  goals:read  ',
+        '  goals:write  ',
+      ],
+      {emptyCopy: 'Read Only'},
+    ),
+  ).toBe('');
+  expect(
+    developerKeyScopeCopy([
+      'conversations:read',
+      'conversations:write',
+      'memories:read',
+      'memories:write',
+      'action_items:read',
+      'action_items:write',
+      'goals:read',
+      'goals:write',
+    ]),
+  ).toBe('Full Access');
   expect(
     developerKeysCopy(
       [
