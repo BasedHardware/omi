@@ -2552,6 +2552,89 @@ test('legacy processing details name Flutter inProgress instead of GET title', (
   expect(completed).not.toContain(processingConversationDetailTitleCopy());
 });
 
+test('legacy conversation details name Flutter GetEditTextField empty GET title whitespace', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: ' \t\n',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const whitespace = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1', title: ' \t\n'},
+  });
+  expect(
+    whitespace.root.findAll(
+      node => node.type === Text && node.props.children === ' \t\n',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(text(whitespace)).toContain(' \t\n');
+  expect(text(whitespace)).not.toContain(
+    processingConversationDetailTitleCopy(),
+  );
+  expect(text(whitespace)).not.toContain('Conversation title unavailable');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: '  Morning walk  ',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const padded = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1', title: '  Morning walk  '},
+  });
+  expect(
+    padded.root.findAll(
+      node => node.type === Text && node.props.children === '  Morning walk  ',
+    ).length,
+  ).toBeGreaterThan(0);
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: '\u0085',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const nextLine = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1', title: '\u0085'},
+  });
+  expect(
+    nextLine.root.findAll(
+      node => node.type === Text && node.props.children === '\u0085',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
 test('legacy processing details name Flutter Content tab instead of Transcript', () => {
   mockLegacy.mockReturnValue({
     result: {

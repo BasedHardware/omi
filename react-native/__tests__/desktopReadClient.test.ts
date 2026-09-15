@@ -841,20 +841,20 @@ test('conversation display title names Flutter empty GET titles', () => {
   );
   expect(conversationDisplayTitle({title: '', status: 'completed'})).toBe('');
   expect(conversationDisplayTitle({title: ' \t\n', status: 'processing'})).toBe(
-    '',
+    ' \t\n',
   );
   expect(conversationDisplayTitle({title: ' \t\n', status: 'completed'})).toBe(
-    '',
+    ' \t\n',
   );
   expect(conversationDisplayTitle({title: '\u0085', status: 'completed'})).toBe(
-    '',
+    '\u0085',
   );
   expect(
     conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
   ).toBe('Morning walk');
   expect(
     conversationDisplayTitle({title: '  Morning walk  ', status: 'completed'}),
-  ).toBe('Morning walk');
+  ).toBe('  Morning walk  ');
 });
 
 test('compact recaps keep list overview speech when GET title is empty', () => {
@@ -886,6 +886,13 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
       status: 'completed',
     }),
   ).toBe('Morning walk');
+  expect(
+    conversationRecapTitle({
+      title: '  Morning walk  ',
+      summary: 'Discussed the launch.',
+      status: 'completed',
+    }),
+  ).toBe('  Morning walk  ');
   expect(
     conversationRecapTitle({
       title: '',

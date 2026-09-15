@@ -940,6 +940,56 @@ test('Home and Library rows omit Flutter ConversationListItem Failed chips', () 
   expect(textOf(plain)).not.toContain('Failed');
 });
 
+test('Home and Library rows name Flutter ConversationListItem empty GET title whitespace', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'recording:whitespace-title',
+    title: ' \t\n',
+    summary: '',
+    searchableText: '',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let whitespace!: ReactTestRenderer.ReactTestRenderer;
+  let padded!: ReactTestRenderer.ReactTestRenderer;
+  let nextLine!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    whitespace = ReactTestRenderer.create(<ReadRow item={item} />);
+    padded = ReactTestRenderer.create(
+      <ConversationRow item={{...item, title: '  Morning walk  '}} />,
+    );
+    nextLine = ReactTestRenderer.create(
+      <ReadRow item={{...item, title: '\u0085'}} />,
+    );
+  });
+  expect(
+    whitespace.root.findAll(
+      node => node.type === Text && node.props.children === ' \t\n',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    padded.root.findAll(
+      node => node.type === Text && node.props.children === '  Morning walk  ',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    nextLine.root.findAll(
+      node => node.type === Text && node.props.children === '\u0085',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(textOf(whitespace)).not.toContain('Conversation title unavailable');
+  expect(textOf(padded)).not.toContain('Conversation title unavailable');
+});
+
 test('Home and Library rows omit Flutter ConversationListItem Processing chips', () => {
   const processing: ConversationProjection = {
     kind: 'conversation',

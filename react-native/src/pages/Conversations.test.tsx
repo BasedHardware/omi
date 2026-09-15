@@ -1633,6 +1633,78 @@ test('conversation list names Flutter empty GET titles without Failed chips', ()
   expect(copy).not.toContain(conversationStatusCopy('in_progress'));
 });
 
+test('conversation list names Flutter ConversationListItem empty GET title whitespace', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: ' \t\n',
+    summary: '',
+    searchableText: '',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    source: 'listen' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'recording:whitespace-title',
+                status: 'completed',
+              },
+              {
+                ...base,
+                id: 'recording:padded-title',
+                title: '  Morning walk  ',
+                searchableText: '  Morning walk  ',
+                status: 'completed',
+              },
+              {
+                ...base,
+                id: 'recording:next-line-title',
+                title: '\u0085',
+                searchableText: '\u0085',
+                status: 'completed',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const titles = renderer.root.findAll(
+    node =>
+      node.type === Text &&
+      (node.props.children === ' \t\n' ||
+        node.props.children === '  Morning walk  ' ||
+        node.props.children === '\u0085'),
+  );
+  expect(titles.length).toBeGreaterThan(2);
+  expect(textOf(renderer)).toContain(' \t\n');
+  expect(textOf(renderer)).toContain('  Morning walk  ');
+  expect(textOf(renderer)).toContain('\u0085');
+  expect(textOf(renderer)).not.toContain('Conversation title unavailable');
+});
+
 test('conversation list omits Flutter ConversationListItem Processing chips', () => {
   const base = {
     kind: 'conversation' as const,

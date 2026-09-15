@@ -40,7 +40,7 @@ export function conversationDisplayTitle(item: {
   title: string;
   status: string;
 }): string {
-  return visibleDisplayText(item.title);
+  return item.title;
 }
 
 function conversationListUsesListenExcerpt(id: string | undefined): boolean {
@@ -81,7 +81,7 @@ export function conversationRecapTitle(item: {
     return summary;
   }
   if (title !== '') {
-    return title;
+    return conversationDisplayTitle(item);
   }
   if (item.discarded === true) {
     return conversationDisplayTitle(item);
