@@ -1217,6 +1217,90 @@ test('old chat history names resolved GET apps and omits unresolved ids', async 
   expect(page.appsError).toBeUndefined();
 });
 
+test('old chat history names Flutter AIMessage padded GET plugin_id instead of remapping to a catalog name', async () => {
+  const request = jest.fn(async (input: {path: string}) => {
+    if (input.path.startsWith('/v2/messages')) {
+      return {
+        id: 'history',
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'old-ai',
+            text: 'Saved.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:01Z',
+            plugin_id: 'notes',
+          },
+          {
+            id: 'old-padded',
+            text: 'Saved.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:02Z',
+            plugin_id: '  notes  ',
+          },
+          {
+            id: 'old-trailing',
+            text: 'Saved.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:03Z',
+            plugin_id: 'notes ',
+          },
+          {
+            id: 'old-next-line',
+            text: 'Saved.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:04Z',
+            plugin_id: '\u0085notes',
+          },
+        ]),
+      };
+    }
+    if (input.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          image: 'https://cdn.example.test/notes.png',
+        }),
+      };
+    }
+    return {id: 'app', status: 404, body: '{}'};
+  });
+  const backend = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const page = await loadNewestChatHistory(backend);
+  expect(page.messages.find(item => item.id === 'old-ai')).toEqual(
+    expect.objectContaining({
+      appId: 'notes',
+      appName: 'Notes',
+      appImage: 'https://cdn.example.test/notes.png',
+    }),
+  );
+  expect(page.messages.find(item => item.id === 'old-padded')).toEqual(
+    expect.objectContaining({appId: '  notes  '}),
+  );
+  expect(
+    page.messages.find(item => item.id === 'old-padded'),
+  ).not.toHaveProperty('appName');
+  expect(page.messages.find(item => item.id === 'old-trailing')).toEqual(
+    expect.objectContaining({appId: 'notes '}),
+  );
+  expect(
+    page.messages.find(item => item.id === 'old-trailing'),
+  ).not.toHaveProperty('appName');
+  expect(page.messages.find(item => item.id === 'old-next-line')).toEqual(
+    expect.objectContaining({appId: '\u0085notes'}),
+  );
+  expect(
+    page.messages.find(item => item.id === 'old-next-line'),
+  ).not.toHaveProperty('appName');
+  expect(page.appsError).toBeUndefined();
+});
+
 test('old chat history names a failed GET apps catalog instead of empty success', async () => {
   const request = jest.fn(async (input: {path: string}) => {
     if (input.path.startsWith('/v2/messages')) {

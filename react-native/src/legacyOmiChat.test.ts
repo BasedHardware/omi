@@ -1014,6 +1014,85 @@ test('old chat history keeps GET plugin_id over app_id and omits empty ids', () 
   );
 });
 
+test('old chat history names Flutter AIMessage padded GET plugin_id instead of remapping to a catalog name', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'exact',
+        sender: 'ai',
+        text: 'Saved.',
+        created_at: '2026-09-07T01:02:03Z',
+        plugin_id: 'notes',
+      },
+      {
+        id: 'padded',
+        sender: 'ai',
+        text: 'Saved.',
+        created_at: '2026-09-07T01:02:04Z',
+        plugin_id: '  notes  ',
+        app_id: 'logger',
+      },
+      {
+        id: 'trailing',
+        sender: 'ai',
+        text: 'Saved.',
+        created_at: '2026-09-07T01:02:05Z',
+        plugin_id: 'notes ',
+      },
+      {
+        id: 'next-line',
+        sender: 'ai',
+        text: 'Saved.',
+        created_at: '2026-09-07T01:02:06Z',
+        plugin_id: '\u0085notes',
+      },
+      {
+        id: 'app-padded',
+        sender: 'ai',
+        text: 'Logged.',
+        created_at: '2026-09-07T01:02:07Z',
+        app_id: '  logger  ',
+      },
+      {
+        id: 'whitespace',
+        sender: 'ai',
+        text: 'Plain.',
+        created_at: '2026-09-07T01:02:08Z',
+        plugin_id: ' \t',
+      },
+      {
+        id: 'empty',
+        sender: 'ai',
+        text: 'Plain.',
+        created_at: '2026-09-07T01:02:09Z',
+        plugin_id: '',
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'exact')).toEqual(
+    expect.objectContaining({appId: 'notes'}),
+  );
+  expect(page.messages.find(row => row.id === 'padded')).toEqual(
+    expect.objectContaining({appId: '  notes  '}),
+  );
+  expect(page.messages.find(row => row.id === 'trailing')).toEqual(
+    expect.objectContaining({appId: 'notes '}),
+  );
+  expect(page.messages.find(row => row.id === 'next-line')).toEqual(
+    expect.objectContaining({appId: '\u0085notes'}),
+  );
+  expect(page.messages.find(row => row.id === 'app-padded')).toEqual(
+    expect.objectContaining({appId: '  logger  '}),
+  );
+  expect(page.messages.find(row => row.id === 'whitespace')).not.toHaveProperty(
+    'appId',
+  );
+  expect(page.messages.find(row => row.id === 'empty')).not.toHaveProperty(
+    'appId',
+  );
+});
+
 test('old chat history names GET content_blocks without inventing writes', () => {
   const page = parseOmiHistory(
     JSON.stringify([

@@ -282,8 +282,7 @@ function parseOmiChatAppId(row: Record<string, unknown>): string | undefined {
   if (typeof raw !== 'string') {
     return undefined;
   }
-  const id = visibleDisplayText(raw);
-  return id === '' ? undefined : id;
+  return visibleDisplayText(raw) === '' ? undefined : raw;
 }
 
 function wireString(

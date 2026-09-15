@@ -324,3 +324,71 @@ test('attachOmiChatAppNames keeps unresolved app ids off the named chrome', asyn
   );
   expect(request).toHaveBeenCalledTimes(3);
 });
+
+test('attachOmiChatAppNames names Flutter AIMessage padded GET plugin_id instead of remapping to a catalog name', async () => {
+  const request = jest.fn(async (input: {path: string}) => {
+    if (input.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          image: 'https://cdn.example.test/notes.png',
+        }),
+      };
+    }
+    return {id: 'app', status: 404, body: '{}'};
+  });
+  const backend = {request} as unknown as OmiBackend;
+  const messages = await attachOmiChatAppNames(backend, [
+    {
+      id: 'exact',
+      text: 'Saved.',
+      sender: 'ai',
+      createdAt: 1,
+      generationOutcome: null,
+      appId: 'notes',
+    },
+    {
+      id: 'padded',
+      text: 'Saved.',
+      sender: 'ai',
+      createdAt: 2,
+      generationOutcome: null,
+      appId: '  notes  ',
+    },
+    {
+      id: 'trailing',
+      text: 'Saved.',
+      sender: 'ai',
+      createdAt: 3,
+      generationOutcome: null,
+      appId: 'notes ',
+    },
+    {
+      id: 'next-line',
+      text: 'Saved.',
+      sender: 'ai',
+      createdAt: 4,
+      generationOutcome: null,
+      appId: '\u0085notes',
+    },
+  ]);
+  expect(messages[0]).toMatchObject({
+    appId: 'notes',
+    appName: 'Notes',
+    appImage: 'https://cdn.example.test/notes.png',
+  });
+  expect(messages[1]).toEqual(
+    expect.objectContaining({appId: '  notes  '}),
+  );
+  expect(messages[1]).not.toHaveProperty('appName');
+  expect(messages[1]).not.toHaveProperty('appImage');
+  expect(messages[2]).toEqual(expect.objectContaining({appId: 'notes '}));
+  expect(messages[2]).not.toHaveProperty('appName');
+  expect(messages[3]).toEqual(
+    expect.objectContaining({appId: '\u0085notes'}),
+  );
+  expect(messages[3]).not.toHaveProperty('appName');
+});
