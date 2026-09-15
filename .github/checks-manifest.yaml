@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: gcal-null-params-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
+    triggers: ["plugins/omi-google-calendar-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13937: the Omi backend sends JSON null for omitted optional tool params and body.get(key, default) only applies defaults to absent keys, so min(None, 30) crashed list_events and sibling handlers trusted untyped optionals; the suite executes the production tool handlers through the calendar_api_request seam"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
