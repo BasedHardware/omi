@@ -34,6 +34,15 @@ const conversation = {
   folder_id: null,
 };
 
+function omiMemory(row: Record<string, unknown>) {
+  return {
+    uid: 'user-1',
+    created_at: '2026-09-07T00:00:00Z',
+    updated_at: '2026-09-07T00:00:00Z',
+    ...row,
+  };
+}
+
 test('old conversations keep GET photo counts and omit empty lists', async () => {
   const {api} = backend([
     {
@@ -704,15 +713,17 @@ test('old bare conversation array preserves nullable metadata and offset paginat
 });
 
 test('old memories strip namespaced entity prefixes without inventing provenance digests', async () => {
-  const {api} = backend([
-    {
-      id: 'fact',
-      content:
-        'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-    },
-  ]);
+  const {api} = backend(
+    [
+      {
+        id: 'fact',
+        content:
+          'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+    ].map(omiMemory),
+  );
   const result = await loadMemories(api);
   expect(result.apiContract).toBe('omi');
   expect(result.items[0]).toMatchObject({
@@ -729,15 +740,17 @@ test('old memories strip namespaced entity prefixes without inventing provenance
 });
 
 test('old memories strip namespaced entity prefixes separated by NEXT LINE', async () => {
-  const {api} = backend([
-    {
-      id: 'fact-nel',
-      content:
-        'entity:qa:000008\u0085qa_memory (observed 2026-07-30T12:00:00.000Z).',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-    },
-  ]);
+  const {api} = backend(
+    [
+      {
+        id: 'fact-nel',
+        content:
+          'entity:qa:000008\u0085qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+    ].map(omiMemory),
+  );
   const result = await loadMemories(api);
   expect(result.items[0]).toMatchObject({
     title: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
@@ -753,14 +766,16 @@ test('old memories strip namespaced entity prefixes separated by NEXT LINE', asy
 });
 
 test('old empty memory content stays searchable instead of a blank row', async () => {
-  const {api} = backend([
-    {
-      id: 'blank',
-      content: '',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-    },
-  ]);
+  const {api} = backend(
+    [
+      {
+        id: 'blank',
+        content: '',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+    ].map(omiMemory),
+  );
   const result = await loadMemories(api);
   expect(result.items[0]).toMatchObject({
     title: '',
@@ -770,20 +785,22 @@ test('old empty memory content stays searchable instead of a blank row', async (
 });
 
 test('old memories name empty GET conversation_id as omitted instead of hiding neighbors', async () => {
-  const {api} = backend([
-    {
-      id: 'empty-citation',
-      content: 'Prefers concise recaps.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: '',
-    },
-    {
-      id: 'cited',
-      content: 'Likes walking.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: 'old-conversation',
-    },
-  ]);
+  const {api} = backend(
+    [
+      {
+        id: 'empty-citation',
+        content: 'Prefers concise recaps.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: '',
+      },
+      {
+        id: 'cited',
+        content: 'Likes walking.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: 'old-conversation',
+      },
+    ].map(omiMemory),
+  );
   const result = await loadMemories(api);
   expect(result.items).toHaveLength(2);
   expect(result.items[0]).toMatchObject({
@@ -796,45 +813,49 @@ test('old memories name empty GET conversation_id as omitted instead of hiding n
   });
   await expect(
     loadMemories(
-      backend([
-        {
-          id: 'bad-citation',
-          content: 'Prefers concise recaps.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: 1,
-        },
-      ]).api,
+      backend(
+        [
+          {
+            id: 'bad-citation',
+            content: 'Prefers concise recaps.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: 1,
+          },
+        ].map(omiMemory),
+      ).api,
     ),
   ).rejects.toThrow('Omi text is malformed');
 });
 
 test('old memories keep GET ledger slot, playbook body, baseline, and known devices', async () => {
-  const {api} = backend([
-    {
-      id: 'ledger',
-      content: 'Prefers concise recaps.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-      slot: 'identity.full_name',
-      body: 'Open with the weekly recap.',
-      kind: 'document',
-      ledger_schema_version: 'knowledge_ledger.v1',
-      is_baseline: true,
-      primary_capture_device: 'macos_ab12cd34',
-    },
-    {
-      id: 'omitted',
-      content: 'Likes walking.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-      slot: ' \t\n',
-      body: 'Hidden fact body.',
-      kind: 'fact',
-      ledger_schema_version: 'knowledge_ledger.v1',
-      is_baseline: false,
-      primary_capture_device: 'windows_ab12cd34',
-    },
-  ]);
+  const {api} = backend(
+    [
+      {
+        id: 'ledger',
+        content: 'Prefers concise recaps.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        slot: 'identity.full_name',
+        body: 'Open with the weekly recap.',
+        kind: 'document',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        is_baseline: true,
+        primary_capture_device: 'macos_ab12cd34',
+      },
+      {
+        id: 'omitted',
+        content: 'Likes walking.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        slot: ' \t\n',
+        body: 'Hidden fact body.',
+        kind: 'fact',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        is_baseline: false,
+        primary_capture_device: 'windows_ab12cd34',
+      },
+    ].map(omiMemory),
+  );
   const result = await loadMemories(api);
   expect(result.items[0]).toMatchObject({
     ledgerSlot: 'identity.full_name',
@@ -849,42 +870,44 @@ test('old memories keep GET ledger slot, playbook body, baseline, and known devi
 });
 
 test('old memories name GET knowledge-ledger History chrome Flutter paints on non-current rows', async () => {
-  const {api} = backend([
-    {
-      id: 'current',
-      content: 'Prefers concise recaps.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-      kind: 'fact',
-      ledger_schema_version: 'knowledge_ledger.v1',
-      intent_backed: true,
-    },
-    {
-      id: 'rejected',
-      content: 'Previous name was Sam.',
-      created_at: '2026-09-06T00:00:00Z',
-      conversation_id: null,
-      kind: 'fact',
-      ledger_schema_version: 'knowledge_ledger.v1',
-      intent_backed: true,
-      user_review: false,
-    },
-    {
-      id: 'omitted-intent',
-      content: 'Used to live in Berlin.',
-      created_at: '2026-09-05T00:00:00Z',
-      conversation_id: null,
-      kind: 'document',
-      ledger_schema_version: 'knowledge_ledger.v1',
-    },
-    {
-      id: 'plain',
-      content: 'Likes walking.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-      user_review: false,
-    },
-  ]);
+  const {api} = backend(
+    [
+      {
+        id: 'current',
+        content: 'Prefers concise recaps.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        kind: 'fact',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        intent_backed: true,
+      },
+      {
+        id: 'rejected',
+        content: 'Previous name was Sam.',
+        created_at: '2026-09-06T00:00:00Z',
+        conversation_id: null,
+        kind: 'fact',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        intent_backed: true,
+        user_review: false,
+      },
+      {
+        id: 'omitted-intent',
+        content: 'Used to live in Berlin.',
+        created_at: '2026-09-05T00:00:00Z',
+        conversation_id: null,
+        kind: 'document',
+        ledger_schema_version: 'knowledge_ledger.v1',
+      },
+      {
+        id: 'plain',
+        content: 'Likes walking.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        user_review: false,
+      },
+    ].map(omiMemory),
+  );
   const result = await loadMemories(api);
   expect(result.items[0]).not.toHaveProperty('history');
   expect(result.items[1]).toMatchObject({history: true});
@@ -893,22 +916,24 @@ test('old memories name GET knowledge-ledger History chrome Flutter paints on no
 });
 
 test('old memories name GET locked and omit unlocked rows', async () => {
-  const {api} = backend([
-    {
-      id: 'locked',
-      content: 'Prefers concise recaps.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-      is_locked: true,
-    },
-    {
-      id: 'open',
-      content: 'Likes walking.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-      is_locked: false,
-    },
-  ]);
+  const {api} = backend(
+    [
+      {
+        id: 'locked',
+        content: 'Prefers concise recaps.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        is_locked: true,
+      },
+      {
+        id: 'open',
+        content: 'Likes walking.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        is_locked: false,
+      },
+    ].map(omiMemory),
+  );
   const result = await loadMemories(api);
   expect(result.items[0]).toMatchObject({locked: true});
   expect(result.items[1]).not.toHaveProperty('locked');
@@ -917,69 +942,147 @@ test('old memories name GET locked and omit unlocked rows', async () => {
 test('old memories fail closed for malformed ledger chrome', async () => {
   await expect(
     loadMemories(
-      backend([
-        {
-          id: 'bad-slot',
-          content: 'Prefers concise recaps.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-          slot: 1,
-        },
-      ]).api,
+      backend(
+        [
+          {
+            id: 'bad-slot',
+            content: 'Prefers concise recaps.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+            slot: 1,
+          },
+        ].map(omiMemory),
+      ).api,
     ),
   ).rejects.toThrow('Omi text is malformed');
   await expect(
     loadMemories(
-      backend([
-        {
-          id: 'bad-baseline',
-          content: 'Prefers concise recaps.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-          is_baseline: 'true',
-        },
-      ]).api,
+      backend(
+        [
+          {
+            id: 'bad-baseline',
+            content: 'Prefers concise recaps.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+            is_baseline: 'true',
+          },
+        ].map(omiMemory),
+      ).api,
     ),
   ).rejects.toThrow('Omi boolean is malformed');
   await expect(
     loadMemories(
-      backend([
-        {
-          id: 'bad-locked',
-          content: 'Prefers concise recaps.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-          is_locked: 'true',
-        },
-      ]).api,
+      backend(
+        [
+          {
+            id: 'bad-locked',
+            content: 'Prefers concise recaps.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+            is_locked: 'true',
+          },
+        ].map(omiMemory),
+      ).api,
     ),
   ).rejects.toThrow('Omi boolean is malformed');
   await expect(
     loadMemories(
-      backend([
-        {
-          id: 'bad-intent',
-          content: 'Prefers concise recaps.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-          intent_backed: 'true',
-        },
-      ]).api,
+      backend(
+        [
+          {
+            id: 'bad-intent',
+            content: 'Prefers concise recaps.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+            intent_backed: 'true',
+          },
+        ].map(omiMemory),
+      ).api,
     ),
   ).rejects.toThrow('Omi boolean is malformed');
   await expect(
     loadMemories(
-      backend([
-        {
-          id: 'bad-review',
-          content: 'Prefers concise recaps.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-          user_review: 'false',
-        },
-      ]).api,
+      backend(
+        [
+          {
+            id: 'bad-review',
+            content: 'Prefers concise recaps.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+            user_review: 'false',
+          },
+        ].map(omiMemory),
+      ).api,
     ),
   ).rejects.toThrow('Omi boolean is malformed');
+});
+
+test('old memories name Flutter MemoriesPage fromJson omitted GET uid and updated_at', async () => {
+  const row = omiMemory({
+    id: 'fact',
+    content: 'Prefers concise recaps.',
+    conversation_id: null,
+  });
+  await expect(
+    loadMemories(backend([{...row, uid: undefined}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(backend([{...row, uid: 1}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(backend([{...row, updated_at: undefined}]).api),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadMemories(backend([{...row, updated_at: null}]).api),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadMemories(backend([{...row, updated_at: ''}]).api),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadMemories(backend([{...row, updated_at: 'not-a-date'}]).api),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadMemories(backend([{...row, created_at: undefined}]).api),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  const kept = await loadMemories(backend([{...row, uid: ''}]).api);
+  expect(kept.items[0]).toMatchObject({id: 'fact'});
+});
+
+test('old memories name Flutter MemoriesPage fromJson invalid GET evidence', async () => {
+  const row = omiMemory({
+    id: 'fact',
+    content: 'Prefers concise recaps.',
+    conversation_id: null,
+  });
+  await expect(
+    loadMemories(backend([{...row, evidence: 'bad'}]).api),
+  ).rejects.toThrow('Omi list is malformed');
+  await expect(
+    loadMemories(backend([{...row, evidence: [{title: 'Calendar'}]}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(backend([{...row, category: 1}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(backend([{...row, category: null}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(backend([{...row, is_locked: null}]).api),
+  ).rejects.toThrow('Omi boolean is malformed');
+  const kept = await loadMemories(
+    backend([
+      {
+        ...row,
+        evidence: [{evidence_id: 'ev-1', independence_group: 'g1'}],
+        category: 'interesting',
+        app_id: null,
+        tags: null,
+      },
+    ]).api,
+  );
+  expect(kept.items).toHaveLength(1);
+  expect(kept.items[0]).toMatchObject({id: 'fact'});
+  expect(kept.items[0]).not.toHaveProperty('evidence');
 });
 
 test('old empty task descriptions stay searchable instead of failing the page', async () => {
@@ -1130,14 +1233,16 @@ test('fails closed for malformed GET task export fields', async () => {
 });
 
 test('old memories use v3 content without manufacturing canonical provenance', async () => {
-  const {api, request} = backend([
-    {
-      id: 'fact',
-      content: 'I enjoy walking.',
-      created_at: '2026-09-07T00:00:00Z',
-      conversation_id: null,
-    },
-  ]);
+  const {api, request} = backend(
+    [
+      {
+        id: 'fact',
+        content: 'I enjoy walking.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+    ].map(omiMemory),
+  );
   const result = await loadMemories(api);
   expect(request).toHaveBeenCalledWith(
     expect.objectContaining({path: '/v3/memories?limit=50&offset=0'}),
@@ -1158,33 +1263,37 @@ test('old memories name GET ledger-history rows Flutter merges onto the current 
       return {
         id: 'read',
         status: 200,
-        body: JSON.stringify([
-          {
-            id: 'closed-fact',
-            content: 'Previous name was Sam.',
-            created_at: '2026-09-06T00:00:00Z',
-            conversation_id: null,
-          },
-          {
-            id: 'fact',
-            content: 'Duplicate of the current row.',
-            created_at: '2026-09-07T00:00:00Z',
-            conversation_id: null,
-          },
-        ]),
+        body: JSON.stringify(
+          [
+            {
+              id: 'closed-fact',
+              content: 'Previous name was Sam.',
+              created_at: '2026-09-06T00:00:00Z',
+              conversation_id: null,
+            },
+            {
+              id: 'fact',
+              content: 'Duplicate of the current row.',
+              created_at: '2026-09-07T00:00:00Z',
+              conversation_id: null,
+            },
+          ].map(omiMemory),
+        ),
       };
     }
     return {
       id: 'read',
       status: 200,
-      body: JSON.stringify([
-        {
-          id: 'fact',
-          content: 'I enjoy walking.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-        },
-      ]),
+      body: JSON.stringify(
+        [
+          {
+            id: 'fact',
+            content: 'I enjoy walking.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+          },
+        ].map(omiMemory),
+      ),
     };
   });
   const api = {
@@ -1213,14 +1322,16 @@ test('old memories keep the current list when ledger-history is unavailable', as
     return {
       id: 'read',
       status: 200,
-      body: JSON.stringify([
-        {
-          id: 'fact',
-          content: 'I enjoy walking.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-        },
-      ]),
+      body: JSON.stringify(
+        [
+          {
+            id: 'fact',
+            content: 'I enjoy walking.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+          },
+        ].map(omiMemory),
+      ),
     };
   });
   const api = {
@@ -1239,14 +1350,16 @@ test('old memories keep the current list when ledger-history 200 cannot project'
     return {
       id: 'read',
       status: 200,
-      body: JSON.stringify([
-        {
-          id: 'fact',
-          content: 'I enjoy walking.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-        },
-      ]),
+      body: JSON.stringify(
+        [
+          {
+            id: 'fact',
+            content: 'I enjoy walking.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+          },
+        ].map(omiMemory),
+      ),
     };
   });
   const api = {
@@ -1258,12 +1371,12 @@ test('old memories keep the current list when ledger-history 200 cannot project'
 });
 
 function ledgerHistoryRow(id: string) {
-  return {
+  return omiMemory({
     id,
     content: `History ${id}`,
     created_at: '2026-09-06T00:00:00Z',
     conversation_id: null,
-  };
+  });
 }
 
 function ledgerHistoryPage(offset: number, count: number) {
@@ -1287,14 +1400,16 @@ test('old memories name Flutter ledger-history 10-page cap as partial', async ()
     return {
       id: 'read',
       status: 200,
-      body: JSON.stringify([
-        {
-          id: 'fact',
-          content: 'I enjoy walking.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-        },
-      ]),
+      body: JSON.stringify(
+        [
+          {
+            id: 'fact',
+            content: 'I enjoy walking.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+          },
+        ].map(omiMemory),
+      ),
     };
   });
   const api = {
@@ -1334,14 +1449,16 @@ test('old memories omit ledger-history partial chrome before the Flutter 10-page
     return {
       id: 'read',
       status: 200,
-      body: JSON.stringify([
-        {
-          id: 'fact',
-          content: 'I enjoy walking.',
-          created_at: '2026-09-07T00:00:00Z',
-          conversation_id: null,
-        },
-      ]),
+      body: JSON.stringify(
+        [
+          {
+            id: 'fact',
+            content: 'I enjoy walking.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+          },
+        ].map(omiMemory),
+      ),
     };
   });
   const api = {
@@ -1580,7 +1697,7 @@ test.each([
     loadConversations,
     [{...conversation, photos: 'nope'}],
   ],
-  ['memory content', loadMemories, [{id: 'fact', content: 42}]],
+  ['memory content', loadMemories, [{id: 'fact', content: 42}].map(omiMemory)],
   [
     'task completion',
     loadTasks,
@@ -1625,15 +1742,17 @@ test('rejects cross-contract and unbounded offset cursors before old transport',
   expect(request).not.toHaveBeenCalled();
 });
 
-test('minimal old memories retain unknown time and fetch additional offset pages', async () => {
+test('minimal old memories fetch additional offset pages', async () => {
   const {api, request} = backend(
-    Array.from({length: 50}, (_, i) => ({
-      id: `fact-${i}`,
-      content: `Fact ${i}`,
-    })),
+    Array.from({length: 50}, (_, i) =>
+      omiMemory({
+        id: `fact-${i}`,
+        content: `Fact ${i}`,
+      }),
+    ),
   );
   const first = await loadMemories(api);
-  expect(first.items[0]).toMatchObject({timestamp: null, citations: []});
+  expect(first.items[0]).toMatchObject({timestamp: 1788739200, citations: []});
   await loadMemories(api, first.page.nextCursor);
   expect(request).toHaveBeenLastCalledWith(
     expect.objectContaining({path: '/v3/memories?limit=50&offset=50'}),

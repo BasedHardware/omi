@@ -77,6 +77,127 @@ function integer(value: unknown): number {
   }
   return parsed;
 }
+function presentBool(value: unknown): void {
+  if (value === undefined) return;
+  if (typeof value !== 'boolean') throw new Error('Omi boolean is malformed');
+}
+function presentDefaultInt(value: unknown): void {
+  if (value === undefined) return;
+  if (value === null) throw new Error('Omi order is malformed');
+  integer(value);
+}
+function presentNullableString(value: unknown): void {
+  if (value === undefined || value === null) return;
+  text(value);
+}
+function presentDefaultString(value: unknown): void {
+  if (value === undefined) return;
+  text(value);
+}
+function presentNullableDate(value: unknown): void {
+  date(value);
+}
+function presentDefaultDouble(value: unknown): void {
+  if (value === undefined) return;
+  if (value === null) throw new Error('Omi order is malformed');
+  presentNullableDouble(value);
+}
+function presentNullableDouble(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (value.trim() === '' || !Number.isFinite(parsed)) {
+      throw new Error('Omi order is malformed');
+    }
+    return;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error('Omi order is malformed');
+  }
+}
+function presentNullableStringList(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) throw new Error('Omi list is malformed');
+  for (const item of value) {
+    text(item);
+  }
+}
+function presentNullableMap(value: unknown): void {
+  if (value === undefined || value === null) return;
+  object(value);
+}
+function presentEvidence(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) throw new Error('Omi list is malformed');
+  for (const item of value) {
+    const evidence = object(item);
+    text(evidence.evidence_id);
+    text(evidence.independence_group);
+    presentNullableMap(evidence.artifact_ref);
+    presentDefaultDouble(evidence.capture_confidence);
+    presentNullableString(evidence.client_device_id);
+    presentNullableDate(evidence.created_at);
+    presentDefaultString(evidence.extractor_id);
+    presentDefaultString(evidence.extractor_version);
+    presentDefaultString(evidence.redaction_status);
+    presentNullableString(evidence.source_id);
+    presentDefaultString(evidence.source_signal);
+    presentDefaultString(evidence.source_type);
+  }
+}
+function validateGeneratedMemory(row: Record<string, unknown>): void {
+  text(row.uid);
+  if (milliseconds(row.created_at) === null) {
+    throw new Error('Omi timestamp is malformed');
+  }
+  if (milliseconds(row.updated_at) === null) {
+    throw new Error('Omi timestamp is malformed');
+  }
+  presentNullableString(row.app_id);
+  presentNullableMap(row.arguments);
+  presentNullableDate(row.as_of);
+  presentNullableString(row.belief_class);
+  presentNullableString(row.canonical_memory_id);
+  presentNullableDouble(row.capture_confidence);
+  presentNullableStringList(row.capture_device_ids);
+  presentDefaultString(row.category);
+  presentDefaultInt(row.curation_weight);
+  presentNullableDouble(row.currency);
+  presentNullableString(row.currency_band);
+  presentNullableString(row.data_protection_level);
+  presentNullableString(row.durability);
+  presentBool(row.edited);
+  presentEvidence(row.evidence);
+  presentNullableDouble(row.half_life_days);
+  presentNullableString(row.headline);
+  presentBool(row.intent_backed);
+  presentBool(row.is_baseline);
+  presentBool(row.is_dismissed);
+  presentBool(row.is_locked);
+  presentBool(row.is_read);
+  presentBool(row.kg_extracted);
+  presentNullableString(row.layer);
+  presentNullableString(row.ledger_status);
+  presentBool(row.manually_added);
+  presentNullableString(row.memory_id);
+  presentNullableString(row.memory_tier);
+  presentNullableStringList(row.object_entity_ids);
+  presentNullableString(row.predicate);
+  presentNullableMap(row.qualifiers);
+  presentBool(row.reviewed);
+  presentNullableString(row.scoring);
+  presentDefaultString(row.subject_attribution);
+  presentNullableString(row.subject_entity_id);
+  presentNullableString(row.subject_scope);
+  presentNullableStringList(row.tags);
+  presentNullableMap(row.trigger_condition);
+  presentNullableStringList(row.uncertainty_reasons);
+  presentNullableDate(row.valid_at);
+  presentNullableDate(row.valid_to);
+  presentNullableDouble(row.veracity);
+  presentNullableString(row.visibility);
+  presentNullableString(row.write_reason);
+}
 function rows(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value) || value.length > limit)
     throw new Error('Omi list is malformed');
@@ -297,6 +418,7 @@ export async function loadOmiConversations(
   return {apiContract: 'omi', items, page: page(start, items.length)};
 }
 function memoryItem(row: Record<string, unknown>): MemoryProjection {
+  validateGeneratedMemory(row);
   const content = text(row.content),
     created = milliseconds(row.created_at);
   const parsedConversationId =
