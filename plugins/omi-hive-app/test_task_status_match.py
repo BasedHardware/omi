@@ -141,5 +141,24 @@ class UpdateTaskStatusByName(unittest.TestCase):
         self.assertIsNone(result.error)
 
 
+class TaskListingsCarryIds(unittest.TestCase):
+    """The ambiguity path asks for a task_id, so the listings the model reads must show one."""
+
+    def test_search_and_project_tasks_print_ids(self):
+        found = [task("a1", "Deploy staging"), task("a2", "Deploy prod")]
+        search_request = Mock(json=AsyncMock(return_value={"uid": "u1", "query": "deploy"}))
+        tasks_request = Mock(json=AsyncMock(return_value={"uid": "u1", "project_id": "p1", "project_name": "Ops"}))
+        with (
+            patch.object(hive, "is_connected", return_value=True),
+            patch.object(hive, "search_tasks", return_value=found),
+            patch.object(hive, "get_project_tasks", return_value=found),
+        ):
+            search = asyncio.run(hive.tool_hive_search(search_request))
+            listing = asyncio.run(hive.tool_hive_get_tasks(tasks_request))
+        for result in (search.result, listing.result):
+            self.assertIn("`a1`", result)
+            self.assertIn("`a2`", result)
+
+
 if __name__ == "__main__":
     unittest.main()

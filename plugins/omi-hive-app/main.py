@@ -680,7 +680,7 @@ async def tool_hive_get_tasks(request: Request):
         results = []
         for i, task in enumerate(tasks[:limit], 1):
             status = f" [{task.status}]" if task.status else ""
-            results.append(f"{i}. **{task.name}**{status}")
+            results.append(f"{i}. **{task.name}**{status} (`{task.id}`)")
         
         return ChatToolResponse(
             result=f"📝 Tasks in **{target_project.name}**:\n\n" + "\n".join(results)
@@ -825,7 +825,7 @@ async def tool_hive_search(request: Request):
         for i, task in enumerate(tasks, 1):
             project_info = f" (in {task.project_name})" if task.project_name else ""
             status = f" [{task.status}]" if task.status else ""
-            results.append(f"{i}. **{task.name}**{status}{project_info}")
+            results.append(f"{i}. **{task.name}**{status}{project_info} (`{task.id}`)")
         
         return ChatToolResponse(
             result=f"🔍 Found {len(tasks)} results for '{query}':\n\n" + "\n".join(results)
