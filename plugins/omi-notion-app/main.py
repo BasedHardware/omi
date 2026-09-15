@@ -244,7 +244,7 @@ def format_page_info(page: dict, include_content: bool = False) -> str:
     parts = [
         f"**{title}**",
         f"  Created: {created} | Edited: {last_edited}",
-        f"  ID: `{page_id[:20]}...`"
+        f"  ID: `{page_id}`"
     ]
 
     if url:
@@ -266,7 +266,7 @@ def format_database_info(db: dict) -> str:
 
     parts = [
         f"**{title}**",
-        f"  ID: `{db_id[:20]}...`",
+        f"  ID: `{db_id}`",
         f"  Properties: {', '.join(prop_names)}"
     ]
 
@@ -910,7 +910,7 @@ async def tool_query_database(request: Request):
             url = entry.get("url", "")
 
             result_parts.append(f"- **{title}**")
-            result_parts.append(f"  ID: `{entry_id[:20]}...`")
+            result_parts.append(f"  ID: `{entry_id}`")
             if url:
                 result_parts.append(f"  URL: {url}")
             result_parts.append("")
