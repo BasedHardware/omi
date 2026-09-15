@@ -3687,6 +3687,91 @@ test('Settings names HTTP 404 usage period GET Flutter usageLoadError instead of
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter UsagePage fromJson invalid GET speech_seconds instead of empty success', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=monthly') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          monthly: {
+            transcription_seconds: 180,
+            words_transcribed: 40,
+            insights_gained: 5,
+            memories_created: 2,
+            speech_seconds: 'bad',
+          },
+        }),
+      };
+    }
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/users/me/usage?period=')
+    ) {
+      return {id: request.id, status: 200, body: '{}'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Ada');
+  expect(tree).toContain('This Month');
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain('This Month · Listening');
+  expect(tree).not.toContain('3 minutes');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET primary language without a write sheet', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

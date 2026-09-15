@@ -38,22 +38,60 @@ function requiredUsageInteger(value: unknown): number {
   throw new UsageError();
 }
 
-export function parseOmiUsagePeriod(
-  body: string,
-  period: OmiUsagePeriod,
-): OmiUsageStats | null {
-  const record = object(JSON.parse(body));
-  const raw = record[period];
-  if (raw === undefined || raw === null) {
-    return null;
-  }
-  const stats = object(raw);
+const USAGE_PERIODS = ['today', 'monthly', 'yearly', 'all_time'] as const;
+
+function usageStats(value: unknown): OmiUsageStats {
+  const stats = object(value);
+  requiredUsageInteger(stats.speech_seconds);
   return {
     transcriptionSeconds: requiredUsageInteger(stats.transcription_seconds),
     wordsTranscribed: requiredUsageInteger(stats.words_transcribed),
     insightsGained: requiredUsageInteger(stats.insights_gained),
     memoriesCreated: requiredUsageInteger(stats.memories_created),
   };
+}
+
+function optionalUsageStats(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  usageStats(value);
+}
+
+function optionalUsageHistory(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new UsageError();
+  }
+  for (const raw of value) {
+    const point = object(raw);
+    if (typeof point.date !== 'string') {
+      throw new UsageError();
+    }
+    requiredUsageInteger(point.transcription_seconds);
+    requiredUsageInteger(point.words_transcribed);
+    requiredUsageInteger(point.insights_gained);
+    requiredUsageInteger(point.memories_created);
+    requiredUsageInteger(point.speech_seconds);
+  }
+}
+
+export function parseOmiUsagePeriod(
+  body: string,
+  period: OmiUsagePeriod,
+): OmiUsageStats | null {
+  const record = object(JSON.parse(body));
+  for (const key of USAGE_PERIODS) {
+    optionalUsageStats(record[key]);
+  }
+  optionalUsageHistory(record.history);
+  const raw = record[period];
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  return usageStats(raw);
 }
 
 export async function loadOmiUsagePeriod(

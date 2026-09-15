@@ -4156,6 +4156,41 @@ test('Settings names GET usage monthly yearly all-time without Upgrade', async (
   });
 });
 
+test('Settings names Flutter UsagePage fromJson invalid GET speech_seconds instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=monthly') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          monthly: {
+            transcription_seconds: 180,
+            words_transcribed: 40,
+            insights_gained: 5,
+            memories_created: 2,
+            speech_seconds: 'bad',
+          },
+        }),
+      };
+    }
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/users/me/usage?period=')
+    ) {
+      return {id: request.id, status: 200, body: '{}'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('This Month');
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain('This Month · Listening');
+  expect(tree).not.toContain('3 minutes');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names a failed usage period GET instead of empty success', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -111,6 +111,131 @@ test('fails closed for malformed GET usage periods', () => {
   expect(() => parseOmiUsagePeriod('{', 'monthly')).toThrow();
 });
 
+test('names Flutter UsagePage fromJson invalid GET speech_seconds instead of period success', () => {
+  expect(() =>
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        monthly: {
+          transcription_seconds: 180,
+          words_transcribed: 40,
+          insights_gained: 5,
+          memories_created: 2,
+          speech_seconds: 'bad',
+        },
+      }),
+      'monthly',
+    ),
+  ).toThrow('Omi usage is malformed');
+  expect(() =>
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        monthly: {
+          transcription_seconds: 180,
+          words_transcribed: 40,
+          insights_gained: 5,
+          memories_created: 2,
+        },
+        today: {transcription_seconds: '12.5'},
+      }),
+      'monthly',
+    ),
+  ).toThrow('Omi usage is malformed');
+  expect(() =>
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        monthly: {
+          transcription_seconds: 180,
+          words_transcribed: 40,
+          insights_gained: 5,
+          memories_created: 2,
+        },
+        history: [{date: 1}],
+      }),
+      'monthly',
+    ),
+  ).toThrow('Omi usage is malformed');
+  expect(() =>
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        monthly: {
+          transcription_seconds: 180,
+          words_transcribed: 40,
+          insights_gained: 5,
+          memories_created: 2,
+        },
+        history: {date: '2026-09-09'},
+      }),
+      'monthly',
+    ),
+  ).toThrow('Omi usage is malformed');
+  expect(() =>
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        monthly: {
+          transcription_seconds: 180,
+          words_transcribed: 40,
+          insights_gained: 5,
+          memories_created: 2,
+        },
+        history: [{transcription_seconds: 1}],
+      }),
+      'monthly',
+    ),
+  ).toThrow('Omi usage is malformed');
+});
+
+test('keeps GET usage periods when speech_seconds, sibling buckets, or history are omitted or valid', () => {
+  expect(
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        monthly: {
+          transcription_seconds: 180,
+          words_transcribed: 40,
+          insights_gained: 5,
+          memories_created: 2,
+          speech_seconds: 99,
+        },
+        today: {
+          transcription_seconds: 90,
+          words_transcribed: 12,
+          insights_gained: 3,
+          memories_created: 1,
+        },
+        history: [
+          {date: '', speech_seconds: '0'},
+          {date: '2026-09-09', transcription_seconds: 1},
+        ],
+      }),
+      'monthly',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 180,
+    wordsTranscribed: 40,
+    insightsGained: 5,
+    memoriesCreated: 2,
+  });
+  expect(
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        monthly: {
+          transcription_seconds: 180,
+          words_transcribed: 40,
+          insights_gained: 5,
+          memories_created: 2,
+        },
+        history: null,
+        today: null,
+      }),
+      'monthly',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 180,
+    wordsTranscribed: 40,
+    insightsGained: 5,
+    memoriesCreated: 2,
+  });
+});
+
 test('loadOmiUsagePeriod names resolved GET periods and fails closed on HTTP failures', async () => {
   const request = jest.fn(async () => ({
     id: 'usage',
