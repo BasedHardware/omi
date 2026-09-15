@@ -48,7 +48,6 @@ async def connect(request: Request, uid: str = Form(...)):
 
     status = "enabled"
 
-    print({'uid': uid, 'status': status})
     # Should validate uid is valid user on Omi backend before insert
     store_zapier_user_status(uid, status)
 
@@ -65,8 +64,6 @@ async def disconnect(request: Request, uid: str = Form(...)):
         raise HTTPException(status_code=400, detail='UID is required')
 
     status = "disabled"
-
-    print({'uid': uid, 'status': status})
 
     # Should validate uid is valid user on Omi backend before insert
     store_zapier_user_status(uid, status)
@@ -92,7 +89,6 @@ async def subscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     if status != "enabled":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    print({'uid': uid, 'target_url': subscriber.target_url})
     store_zapier_subscribes(uid, subscriber.target_url)
     return {}
 
@@ -114,7 +110,6 @@ async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     if status != "enabled":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    print({'uid': uid, 'target_url': subscriber.target_url})
     remove_zapier_subscribes(uid, subscriber.target_url)
     return {}
 
@@ -144,10 +139,8 @@ async def get_trigger_conversation_sample(request: Request, uid: str):
 
     # Get latest from Omi
     ok = get_omi().get_latest_conversation(uid)
-    print(ok)
     if "error" in ok:
         err = ok["error"]
-        print(err)
         raise HTTPException(status_code=err["status"] if "status" in err else 500, detail='Can not create memory')
 
     conversation = ok["result"]
@@ -178,11 +171,6 @@ async def auth_zapier_me(request: Request, uid: str):
     User - Zapier authentication status.
     """
 
-    print(
-        {
-            'uid': uid,
-        }
-    )
     status = get_zapier_user_status(uid)
     if status != "enabled":
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -234,14 +222,11 @@ def zapier_action_conversations(create_conversation: ZapierActionCreateConversat
     )
 
     ok = get_omi().create_conversation(conversation, uid)
-    print(ok)
     if "error" in ok:
         err = ok["error"]
-        print(err)
         raise HTTPException(status_code=err["status"] if "status" in err else 500, detail='Can not create memory')
         return
     result = ok["result"]
-    print(result)
 
     return EndpointResponse(message="Your memories are synced with Omi.")
 
@@ -271,10 +256,6 @@ def create_zapier_conversation(uid: str, conversation: Conversation):
         ok = get_zapier().send_hook_conversation_created(target_url, data)
         # with graceful error
         if "error" in ok:
-            err = ok["error"]
-            print(sub)
-            print(err)
-
             continue
 
     return True

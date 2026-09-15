@@ -29,7 +29,7 @@ class ClickUpClient:
         try:
             response = requests.post(
                 "https://api.clickup.com/api/v2/oauth/token",
-                params={
+                data={
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "code": code
@@ -38,17 +38,19 @@ class ClickUpClient:
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"🔍 OAuth Response: {data}", flush=True)
                 
                 return {
                     "access_token": data.get("access_token"),
                     "token_type": data.get("token_type", "Bearer")
                 }
             else:
-                raise Exception(f"Token exchange failed: {response.status_code} - {response.text}")
+                raise Exception(f"Token exchange failed: HTTP {response.status_code}")
                 
-        except Exception as e:
-            print(f"❌ Token exchange error: {e}", flush=True)
+        except requests.RequestException:
+            print("❌ Token exchange failed", flush=True)
+            raise RuntimeError("Token exchange request failed") from None
+        except Exception:
+            print("❌ Token exchange failed", flush=True)
             raise
     
     def get_authorized_user(self, access_token: str) -> dict:

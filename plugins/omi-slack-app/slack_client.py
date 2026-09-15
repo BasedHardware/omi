@@ -53,8 +53,6 @@ class SlackClient:
             if response.status_code == 200:
                 data = response.json()
                 if data.get("ok"):
-                    print(f"🔍 OAuth Response Keys: {list(data.keys())}", flush=True)
-                    
                     # Use the USER token (authed_user) instead of bot token
                     authed_user = data.get("authed_user", {})
                     user_token = authed_user.get("access_token")
@@ -67,7 +65,6 @@ class SlackClient:
                         print(f"⚠️  Check Slack app settings - ensure User Token Scopes are set", flush=True)
                     else:
                         print("✅ Using USER token (messages will appear as user)", flush=True)
-                        print(f"✅ User token starts with: {user_token[:15]}...", flush=True)
                     
                     return {
                         "access_token": user_token,

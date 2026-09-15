@@ -114,7 +114,6 @@ class NotionClient:
         )
         if resp.status_code != 200:
             resp_json = resp.json()
-            print(f"Error: HTTP_{resp.status_code} {resp_json}")
             return {
                 "error": {
                     "status": resp.status_code,
@@ -122,8 +121,6 @@ class NotionClient:
                     "message": resp_json["message"] if "message" in resp_json else "",
                 },
             }
-
-        print(resp.json())
 
         return {"result": NotionDatabaseModel.from_dict(resp.json())}
 
@@ -152,7 +149,6 @@ class NotionClient:
         )
         if resp.status_code != 200:
             resp_json = resp.json()
-            print(f"Error: HTTP_{resp.status_code} {resp_json}")
             return {
                 "error": {
                     "status": resp.status_code,
@@ -160,8 +156,6 @@ class NotionClient:
                     "message": resp_json["message"] if "message" in resp_json else "",
                 },
             }
-
-        print(resp.json())
 
         return {"result": NotionOAuthModel.from_dict(resp.json())}
 
@@ -182,7 +176,6 @@ class NotionClient:
         )
         if resp.status_code != 200:
             resp_json = resp.json()
-            print(f"Error: HTTP_{resp.status_code} {resp_json}")
             return {
                 "error": {
                     "status": resp.status_code,
@@ -190,8 +183,6 @@ class NotionClient:
                     "message": resp_json["message"] if "message" in resp_json else "",
                 },
             }
-
-        print(resp.json())
 
         return {"result": NotionDatabaseModel.multi_from_dict(resp.json()["results"])}
 

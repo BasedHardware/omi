@@ -19,8 +19,6 @@ api_key = os.getenv('OPENAI_API_KEY')
 if not api_key:
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
-print(f"API key loaded (last 4 chars): ...{api_key[-4:]}")
-
 client = OpenAI(api_key=api_key)
 
 # OMI App credentials for notifications
@@ -157,15 +155,19 @@ def send_omi_notification(uid: str, message: str):
         headers = {"Authorization": f"Bearer {omi_app_secret}", "Content-Type": "application/json"}
         params = {"uid": uid, "message": message}
 
-        logger.info(f"Sending notification to OMI for uid {uid}: {message}")
+        logger.info(f"Sending notification to OMI for uid {uid[:8]}...")
 
         response = requests.post(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
 
-        logger.info(f"Successfully sent notification to OMI for uid {uid}")
+        logger.info(f"Successfully sent notification to OMI for uid {uid[:8]}...")
         return True
     except Exception as e:
-        logger.error(f"Error sending notification to OMI: {str(e)}")
+        if isinstance(e, requests.exceptions.HTTPError):
+            status = getattr(e.response, 'status_code', 'error')
+            logger.error(f"Error sending notification to OMI: HTTP {status}")
+        else:
+            logger.error(f"Error sending notification to OMI: {type(e).__name__}")
         return False
 
 
