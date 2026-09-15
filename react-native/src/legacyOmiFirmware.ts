@@ -80,10 +80,7 @@ export function parseOmiLatestFirmware(
   if (typeof record.version !== 'string') {
     throw new FirmwareError();
   }
-  const version = visibleDisplayText(record.version);
-  if (version === '') {
-    return null;
-  }
+  const version = record.version;
   if (
     record.min_version !== undefined &&
     record.min_version !== null &&
@@ -92,9 +89,7 @@ export function parseOmiLatestFirmware(
     throw new FirmwareError();
   }
   const minVersion =
-    typeof record.min_version === 'string'
-      ? visibleDisplayText(record.min_version)
-      : '';
+    typeof record.min_version === 'string' ? record.min_version : '';
   const changelog = firmwareChangelog(record.changelog);
   return {
     version,

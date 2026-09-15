@@ -37,8 +37,63 @@ test('parses GET latest firmware and omits empty or draft versions', () => {
     draft: true,
     minVersion: '1.0.0',
   });
-  expect(parseOmiLatestFirmware(JSON.stringify({version: ' \t'}))).toBeNull();
+  expect(parseOmiLatestFirmware(JSON.stringify({version: ' \t'}))).toEqual({
+    version: ' \t',
+    draft: false,
+    minVersion: null,
+  });
   expect(parseOmiLatestFirmware(JSON.stringify({}))).toBeNull();
+});
+
+test('names Flutter FirmwareUpdate padded GET version instead of remapping to latest', () => {
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '  1.3.0  ', min_version: '1.0.0'}),
+    ),
+  ).toEqual({
+    version: '  1.3.0  ',
+    draft: false,
+    minVersion: '1.0.0',
+  });
+  expect(
+    parseOmiLatestFirmware(JSON.stringify({version: '1.3.0 '})),
+  ).toEqual({
+    version: '1.3.0 ',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(JSON.stringify({version: '\u00851.3.0'})),
+  ).toEqual({
+    version: '\u00851.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '1.3.0', min_version: '  1.0.0  '}),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: '  1.0.0  ',
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '1.3.0', min_version: '1.0.0 '}),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: '1.0.0 ',
+  });
+  expect(
+    parseOmiLatestFirmware(JSON.stringify({version: ''})),
+  ).toEqual({
+    version: '',
+    draft: false,
+    minVersion: null,
+  });
 });
 
 test('names Flutter FirmwareUpdate empty GET changelog lines instead of omitting them', () => {

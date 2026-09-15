@@ -2244,7 +2244,7 @@ test('firmware update copy names GET latest without Available on current or draf
       draft: false,
       minVersion: null,
     }),
-  ).toEqual({latest: '1.2.3-beta', available: false});
+  ).toEqual({latest: '1.2.3-beta', available: false, upToDate: true});
   expect(firmwareUpdateCopy('1.2.3', null)).toBeNull();
   expect(
     firmwareUpdateCopy('1.2.3', {
@@ -2280,6 +2280,65 @@ test('firmware update copy names GET latest without Available on current or draf
       changelog: ['Fixed BLE reconnect'],
     }),
   ).toBeNull();
+});
+
+test('firmware update copy names Flutter FirmwareUpdate padded GET version as up to date instead of available', () => {
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '  1.3.0  ',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '  1.3.0  ', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0 ',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '1.3.0 ', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '\u00851.3.0',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '\u00851.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '  1.0.0  ',
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '1.0.0 ',
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: ' \t',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: ' \t', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '1.3.0', available: true});
 });
 
 test('firmware update copy names Flutter FirmwareUpdate empty GET min_version as up to date instead of available', () => {

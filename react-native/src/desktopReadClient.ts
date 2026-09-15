@@ -1811,7 +1811,7 @@ export function fairUseCopy(
 }
 
 function dottedVersionParts(value: string): number[] | null {
-  const parts = visibleDisplayText(value).split('.');
+  const parts = value.split('.');
   if (parts.length === 0 || parts.some(part => part === '' || !/^[0-9]+$/.test(part))) {
     return null;
   }
@@ -1977,10 +1977,7 @@ export function firmwareUpdateCopy(
   if (details === null || details.draft) {
     return null;
   }
-  const latest = visibleDisplayText(details.version);
-  if (latest === '') {
-    return null;
-  }
+  const latest = details.version;
   const current = dottedVersionParts(currentFirmware);
   const newest = dottedVersionParts(latest);
   const minimum =
@@ -1989,8 +1986,9 @@ export function firmwareUpdateCopy(
       : dottedVersionParts(details.minVersion);
   const upToDate =
     current !== null &&
-    newest !== null &&
-    (minimum === null || compareDottedVersion(newest, current) === 0);
+    (newest === null ||
+      minimum === null ||
+      compareDottedVersion(newest, current) === 0);
   const available =
     current !== null &&
     newest !== null &&
