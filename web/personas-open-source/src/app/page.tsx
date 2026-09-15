@@ -25,7 +25,7 @@ import {
   getDoc,
 } from 'firebase/firestore';
 import { toast } from 'sonner';
-import { Mixpanel } from '@/lib/mixpanel';
+import { PostHog } from '@/lib/posthog';
 import { useInView } from 'react-intersection-observer';
 import { ulid } from 'ulid';
 import { auth, googleProvider } from '@/lib/firebase';
@@ -412,8 +412,8 @@ export default function HomePage() {
       return;
     }
 
-    // Track the click event in Mixpanel
-    Mixpanel.track('Create Persona Clicked', {
+    // Track the click event in PostHog
+    PostHog.track('Create Persona Clicked', {
       input: handleToUse,
       timestamp: new Date().toISOString(),
     });
@@ -497,16 +497,18 @@ export default function HomePage() {
   const BOTS_PER_PAGE = 50;
 
   useEffect(() => {
-    // Identify the user first
-    Mixpanel.identify();
-
-    // Then track the page view
-    Mixpanel.track('Page View', {
+    // Track the page view
+    PostHog.track('Page View', {
       page: 'Home',
       url: window.location.pathname,
       timestamp: new Date().toISOString(),
     });
   }, []);
+
+  useEffect(() => {
+    // Identify once the Firebase uid is available.
+    if (currentUserUid) PostHog.identify(currentUserUid);
+  }, [currentUserUid]);
 
   const fetchChatbots = async (isInitial = true) => {
     try {
@@ -920,7 +922,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
   };
 
   const handleShowAllIntegrationsClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    Mixpanel.track('Show All Integrations Clicked', {
+    PostHog.track('Show All Integrations Clicked', {
       timestamp: new Date().toISOString(),
     });
 
@@ -955,8 +957,8 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       return;
     }
 
-    // Track the click event in Mixpanel
-    Mixpanel.track('Integration Clicked', {
+    // Track the click event in PostHog
+    PostHog.track('Integration Clicked', {
       provider: provider,
       timestamp: new Date().toISOString(),
     });
