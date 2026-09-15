@@ -2448,6 +2448,33 @@ export function taskCardDescription(
   return undefined;
 }
 
+function chatContentBlockKeepsPaddedTitle(eyebrow: string): boolean {
+  switch (eyebrow) {
+    case 'Goal':
+    case 'Memory':
+    case 'Conversation':
+    case 'Question':
+    case 'Discovery':
+    case 'Recommended next steps':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function chatContentBlockKeepsPaddedDetail(eyebrow: string): boolean {
+  switch (eyebrow) {
+    case 'Goal':
+    case 'Memory':
+    case 'Conversation':
+    case 'Question':
+    case 'Recommended next steps':
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function paintedChatContentBlock(
   block: {
     eyebrow: string;
@@ -2494,13 +2521,17 @@ export function paintedChatContentBlock(
       ? title ?? ''
       : title === undefined
         ? ''
-        : visibleDisplayText(title);
+        : chatContentBlockKeepsPaddedTitle(block.eyebrow)
+          ? title
+          : visibleDisplayText(title);
   const visibleDetail =
     expanded && block.more !== undefined
       ? visibleDisplayText(block.more)
       : block.detail === undefined
         ? ''
-        : visibleDisplayText(block.detail);
+        : chatContentBlockKeepsPaddedDetail(block.eyebrow)
+          ? block.detail
+          : visibleDisplayText(block.detail);
   return {
     eyebrow: block.eyebrow,
     ...(joined !== undefined || paintedTitle !== ''

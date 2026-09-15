@@ -3326,6 +3326,80 @@ test('discovery chrome names GET fullText Show more without leaking the wire key
   expect(chatDiscoveryShowLessCopy()).toBe('Show less');
 });
 
+test('names Flutter ChatBlockLinkCard padded GET summaries instead of colliding with trim', () => {
+  expect(
+    paintedChatContentBlock({eyebrow: 'Goal', title: '  padded  '}),
+  ).toEqual({eyebrow: 'Goal', title: '  padded  '});
+  expect(
+    paintedChatContentBlock({eyebrow: 'Memory', title: '  padded  '}),
+  ).toEqual({eyebrow: 'Memory', title: '  padded  '});
+  expect(
+    paintedChatContentBlock({
+      eyebrow: 'Conversation',
+      title: '  padded  ',
+    }),
+  ).toEqual({eyebrow: 'Conversation', title: '  padded  '});
+  expect(
+    paintedChatContentBlock({
+      eyebrow: 'Recommended next steps',
+      title: '  padded  ',
+    }),
+  ).toEqual({eyebrow: 'Recommended next steps', title: '  padded  '});
+  expect(
+    paintedChatContentBlock({
+      eyebrow: 'Question',
+      title: '  padded  ',
+      detail: '  padded   ·   also  ',
+    }),
+  ).toEqual({
+    eyebrow: 'Question',
+    title: '  padded  ',
+    detail: '  padded   ·   also  ',
+  });
+  expect(
+    paintedChatContentBlock({
+      eyebrow: 'Discovery',
+      title: '  padded  ',
+      detail: '  padded body  ',
+      more: '  padded more  ',
+    }),
+  ).toEqual({
+    eyebrow: 'Discovery',
+    title: '  padded  ',
+    detail: 'padded body',
+  });
+  expect(
+    paintedChatContentBlock(
+      {
+        eyebrow: 'Discovery',
+        title: '  padded  ',
+        detail: '  padded body  ',
+        more: '  padded more  ',
+      },
+      undefined,
+      true,
+    ),
+  ).toEqual({
+    eyebrow: 'Discovery',
+    title: '  padded  ',
+    detail: 'padded more',
+  });
+  expect(
+    paintedChatContentBlock({
+      eyebrow: 'Processing',
+      title: '  padded  ',
+      detail: '  padded  ',
+    }),
+  ).toEqual({eyebrow: 'Processing', title: 'padded', detail: 'padded'});
+  expect(
+    paintedChatContentBlock({
+      eyebrow: 'Completed',
+      title: '  padded  ',
+      detail: '  padded  ',
+    }),
+  ).toEqual({eyebrow: 'Completed', title: 'padded', detail: 'padded'});
+});
+
 test('chat attachment thumbnails keep http image GET urls and omit local or non-image paths', () => {
   expect(
     chatAttachmentThumbnailUrl({

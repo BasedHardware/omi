@@ -1781,3 +1781,130 @@ test('keeps GET chat content_blocks when more than 24', () => {
     'Neighbor stays.',
   );
 });
+
+test('names Flutter ChatBlockLinkCard padded GET summaries instead of colliding with trim', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'padded-1',
+        sender: 'ai',
+        text: 'Here is what I found.',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'goalLink',
+            id: 'g-padded',
+            goalId: 'goal-1',
+            summary: '  padded  ',
+          },
+          {
+            type: 'memoryLink',
+            id: 'm-padded',
+            memoryId: 'mem-1',
+            summary: '  padded  ',
+          },
+          {
+            type: 'conversation_link',
+            id: 'c-padded',
+            conversation_id: 'conv-1',
+            summary: '  padded  ',
+            recommended_action_items: [{description: '  padded  '}],
+          },
+          {
+            type: 'captureLink',
+            id: 'cap-padded',
+            conversationId: 'conv-2',
+            summary: '  padded  ',
+          },
+          {
+            type: 'questionCard',
+            id: 'q-padded',
+            questionId: 'q-1',
+            text: '  padded  ',
+            subject: {kind: 'task', id: 'task-1'},
+            options: [
+              {optionId: 'yes', label: '  padded  '},
+              {option_id: 'no', label: '  also  '},
+            ],
+          },
+          {
+            type: 'discoveryCard',
+            id: 'd-padded',
+            title: '  padded  ',
+            summary: '  padded body  ',
+            full_text: '  padded more  ',
+          },
+          {
+            type: 'agent_spawn',
+            id: 'a-padded',
+            session_id: 'sess-1',
+            run_id: 'run-1',
+            title: '  padded  ',
+            objective: '  padded  ',
+          },
+        ],
+      },
+      {
+        id: 'whitespace-drop',
+        sender: 'ai',
+        text: 'Neighbor stays.',
+        created_at: '2026-09-07T01:02:04Z',
+        content_blocks: [
+          {
+            type: 'goalLink',
+            id: 'g-ws',
+            goalId: 'goal-ws',
+            summary: ' \t',
+          },
+          {
+            type: 'memoryLink',
+            id: 'm-nl',
+            memoryId: 'mem-nl',
+            summary: '\u0085',
+          },
+          {
+            type: 'conversation_link',
+            id: 'c-ws',
+            conversation_id: 'conv-ws',
+            summary: ' \t',
+          },
+          {
+            type: 'goalLink',
+            id: 'g-kept',
+            goalId: 'goal-kept',
+            summary: 'Kept neighbor',
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'padded-1')?.contentBlocks).toEqual(
+    [
+      {eyebrow: 'Goal', title: '  padded  ', goalId: 'goal-1'},
+      {eyebrow: 'Memory', title: '  padded  ', memoryId: 'mem-1'},
+      {eyebrow: 'Conversation', title: '  padded  '},
+      {eyebrow: 'Recommended next steps', title: '  padded  '},
+      {eyebrow: 'Conversation', title: '  padded  '},
+      {
+        eyebrow: 'Question',
+        title: '  padded  ',
+        detail: '  padded   ·   also  ',
+      },
+      {
+        eyebrow: 'Discovery',
+        title: '  padded  ',
+        detail: 'padded body',
+        more: 'padded more',
+      },
+      {
+        eyebrow: 'Processing',
+        title: 'padded',
+        detail: 'padded',
+      },
+    ],
+  );
+  expect(
+    page.messages.find(row => row.id === 'whitespace-drop')?.contentBlocks,
+  ).toEqual([{eyebrow: 'Goal', title: 'Kept neighbor', goalId: 'goal-kept'}]);
+});

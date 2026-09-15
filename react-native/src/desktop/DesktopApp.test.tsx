@@ -885,6 +885,43 @@ test('desktop chat names Flutter TaskCardBlock empty GET descriptions', () => {
   ).toBeGreaterThan(0);
 });
 
+test('desktop chat names Flutter ChatBlockLinkCard padded GET summaries', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'padded-link',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {eyebrow: 'Goal', title: '  padded  '},
+          {
+            eyebrow: 'Discovery',
+            title: '  padded  ',
+            detail: 'padded body',
+          },
+          {
+            eyebrow: 'Processing',
+            title: '  padded  ',
+            detail: '  padded  ',
+          },
+        ],
+      },
+    ],
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Goal:   padded  ',
+    ).length,
+  ).toBeGreaterThan(0);
+  const copy = renderedText(renderer);
+  expect(copy).toContain('  padded  ');
+  expect(copy).toContain('padded body');
+  expect(copy).toContain('padded');
+  expect(copy).not.toContain('Open in Goals');
+});
+
 test('desktop chat names GET content_blocks without inventing write actions', () => {
   const renderer = renderDesktop({
     messages: [

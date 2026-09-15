@@ -2394,6 +2394,68 @@ test('a chat message names Flutter TaskCardBlock empty GET descriptions', () => 
   });
 });
 
+test('a chat message names Flutter ChatBlockLinkCard padded GET summaries', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-padded-link',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {eyebrow: 'Goal', title: '  padded  '},
+          {
+            eyebrow: 'Question',
+            title: '  padded  ',
+            detail: '  padded   ·   also  ',
+          },
+          {
+            eyebrow: 'Discovery',
+            title: '  padded  ',
+            detail: 'padded body',
+          },
+          {
+            eyebrow: 'Processing',
+            title: '  padded  ',
+            detail: '  padded  ',
+          },
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Goal:   padded  ',
+    ).length,
+  ).toBeGreaterThan(0);
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('  padded  ');
+  expect(copies).toContain('  padded   ·   also  ');
+  expect(copies).toContain('padded body');
+  expect(copies).toContain('padded');
+  expect(copies).not.toContain('Open in Goals');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('a chat message names loaded GET goal_link miss No longer available without leaking ids', () => {
   const renderer = render(
     <ChatMessageRow

@@ -604,6 +604,56 @@ test('conversation-detail history names Flutter TaskCardBlock empty GET descript
   ).toBeGreaterThan(0);
 });
 
+test('conversation-detail history names Flutter ChatBlockLinkCard padded GET summaries', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-padded-link',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          contentBlocks: [
+            {eyebrow: 'Goal', title: '  padded  '},
+            {
+              eyebrow: 'Discovery',
+              title: '  padded  ',
+              detail: 'padded body',
+            },
+          ],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loading: false,
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Goal:   padded  ',
+    ).length,
+  ).toBeGreaterThan(0);
+  const tree = text(view);
+  expect(tree).toContain('  padded  ');
+  expect(tree).toContain('padded body');
+  expect(tree).not.toContain('Open in Goals');
+});
+
 test('conversation-detail history names loaded GET goal_link miss No longer available without leaking ids', () => {
   mockChat.mockReturnValue({
     result: {

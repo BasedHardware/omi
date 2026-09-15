@@ -295,7 +295,7 @@ function wireString(
   if (typeof value !== 'string') {
     return undefined;
   }
-  return value.trim() === '' ? undefined : value;
+  return visibleDisplayText(value) === '' ? undefined : value;
 }
 
 function contentBlockChrome(
@@ -303,12 +303,10 @@ function contentBlockChrome(
   title?: string,
   detail?: string,
 ): {eyebrow: string; title?: string; detail?: string} {
-  const visibleTitle = title === undefined ? '' : visibleDisplayText(title);
-  const visibleDetail = detail === undefined ? '' : visibleDisplayText(detail);
   return {
     eyebrow,
-    ...(visibleTitle === '' ? {} : {title: visibleTitle}),
-    ...(visibleDetail === '' ? {} : {detail: visibleDetail}),
+    ...(title === undefined || title === '' ? {} : {title}),
+    ...(detail === undefined || detail === '' ? {} : {detail}),
   };
 }
 
@@ -446,7 +444,7 @@ function parseMemoryReviewItems(
     rows.push(
       contentBlockChrome(
         'Things I learned today',
-        content,
+        visibleDisplayText(content),
         memoryReviewCategoryLabel(wireString(item, 'category')),
       ),
     );
@@ -529,11 +527,7 @@ function parseQuestionOptionLabels(
     if (label === undefined) {
       continue;
     }
-    const visible = visibleDisplayText(label);
-    if (visible === '') {
-      continue;
-    }
-    labels.push(visible);
+    labels.push(label);
   }
   return labels.length === 0 ? undefined : labels.join(' · ');
 }
@@ -588,7 +582,7 @@ function parseContentBlock(
           ...contentBlockChrome(
             'Discovery',
             wireString(row, 'title'),
-            summary,
+            summaryVisible === '' ? undefined : summaryVisible,
           ),
           ...(fullVisible !== '' && fullVisible !== summaryVisible
             ? {more: fullVisible}
@@ -703,8 +697,8 @@ function parseContentBlock(
       return [
         contentBlockChrome(
           'Processing',
-          wireString(row, 'title') ?? '',
-          wireString(row, 'objective') ?? '',
+          visibleDisplayText(wireString(row, 'title') ?? ''),
+          visibleDisplayText(wireString(row, 'objective') ?? ''),
         ),
       ];
     }
@@ -713,8 +707,8 @@ function parseContentBlock(
       return [
         contentBlockChrome(
           agentCompletionEyebrow(wireString(row, 'status') ?? 'completed'),
-          wireString(row, 'title') ?? '',
-          wireString(row, 'output') ?? '',
+          visibleDisplayText(wireString(row, 'title') ?? ''),
+          visibleDisplayText(wireString(row, 'output') ?? ''),
         ),
       ];
     case 'memoryReviewCard':
