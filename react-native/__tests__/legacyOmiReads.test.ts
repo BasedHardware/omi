@@ -249,6 +249,22 @@ test('old discarded conversations name GET people names on transcript_segments',
     },
     {
       ...conversation,
+      id: 'discarded-empty-name',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Anonymous empty',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 1,
+          person_id: 'person-empty',
+        },
+      ],
+    },
+    {
+      ...conversation,
       id: 'discarded-empty-person',
       discarded: true,
       structured: {title: '', overview: 'Actual overview'},
@@ -293,6 +309,7 @@ test('old discarded conversations name GET people names on transcript_segments',
   expect(result.items.map(row => row.id)).toEqual([
     'discarded-named',
     'discarded-unresolved',
+    'discarded-empty-name',
     'discarded-empty-person',
     'neighbor',
   ]);
@@ -303,9 +320,12 @@ test('old discarded conversations name GET people names on transcript_segments',
     '[00:00:00 - 00:00:01] Speaker 1: Later speech',
   );
   expect(result.items[2].title).toBe(
+    '[00:00:00 - 00:00:01] : Anonymous empty',
+  );
+  expect(result.items[3].title).toBe(
     '[00:00:00 - 00:00:01] Speaker 1: Anonymous',
   );
-  expect(result.items[3].title).toBe('Real title');
+  expect(result.items[4].title).toBe('Real title');
 });
 
 test('old discarded conversations keep neighboring titles when people names are unavailable', async () => {

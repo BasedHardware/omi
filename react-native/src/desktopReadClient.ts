@@ -152,8 +152,8 @@ export function conversationDiscardedTranscriptCopy(
     const speakerName =
       segment.isUser === true
         ? 'User'
-        : personName !== undefined && personName !== ''
-          ? personName
+        : personName !== undefined
+          ? visibleDisplayText(personName)
           : `Speaker ${
               discardedTranscriptSpeakerId(segment.speaker) -
               (minSpeakerId ?? 0) +
