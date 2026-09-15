@@ -644,9 +644,7 @@ export function MobileAppSurface({
                     <Text numberOfLines={5} style={styles.recapTitle}>
                       {summary.headline}
                     </Text>
-                    {summary.dateLabel !== '' ? (
-                      <Text style={styles.recapDate}>{summary.dateLabel}</Text>
-                    ) : null}
+                    <Text style={styles.recapDate}>{summary.dateLabel}</Text>
                   </View>
                 )}
                 showsHorizontalScrollIndicator={false}

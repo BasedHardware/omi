@@ -1941,6 +1941,54 @@ test('compact Home names Flutter DailySummaryCard empty GET headlines without hi
   act(() => renderer.unmount());
 });
 
+test('compact Home names Flutter DailySummaryCard empty GET dates without omitting the date chip', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [
+            {id: 'sum-empty-date', date: '', headline: 'Empty date'},
+            {id: 'sum-whitespace-date', date: ' \t', headline: 'Whitespace date'},
+            {id: 'sum-omitted-date', headline: 'Omitted date'},
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          backend: {request} as never,
+          recaps: [],
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Daily Recaps');
+  expect(tree).toContain('Empty date');
+  expect(tree).toContain('Whitespace date');
+  expect(tree).toContain('Omitted date');
+  expect(tree).not.toContain('Yesterday');
+  const dateChips = renderer.root.findAll(
+    node =>
+      String(node.type) === 'Text' &&
+      node.props.style?.alignSelf === 'flex-end',
+  );
+  expect(dateChips.map(chip => chip.props.children)).toEqual(['', '', '']);
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('No daily recaps yet');
+  expect(tree).not.toContain('View All Daily Recaps');
+  act(() => renderer.unmount());
+});
+
 test('compact Home hides empty GET daily summaries instead of claiming emptiness', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
