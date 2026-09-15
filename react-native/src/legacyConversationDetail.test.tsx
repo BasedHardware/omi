@@ -618,6 +618,65 @@ test('keeps GET conversation transcript translation language longer than 32', as
   });
 });
 
+test('names Flutter TranscriptWidget empty GET text', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          text: '',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 1,
+        },
+        {
+          text: ' \t',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 1,
+          end: 2,
+        },
+        {
+          text: '\u0085',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 2,
+          end: 3,
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: '',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        start: 0,
+        end: 1,
+      },
+      {
+        text: ' \t',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        start: 1,
+        end: 2,
+      },
+      {
+        text: '\u0085',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        start: 2,
+        end: 3,
+      },
+    ],
+  });
+});
+
 test('names GET transcript stt_provider unknown as Flutter Omi', async () => {
   mockRequest.mockResolvedValue(
     response({

@@ -301,16 +301,13 @@ function LegacyConversationBody({
     legacyTranscriptCanDisplaySeconds(detail.transcript.segments);
   const transcriptSegments =
     detail.transcript.status === 'loaded'
-      ? detail.transcript.segments.flatMap(segment => {
+      ? detail.transcript.segments.map(segment => {
           const text = visibleDisplayText(segment.text);
-          if (text === '') {
-            return [];
-          }
           const speaker =
             segment.speaker === null
               ? null
               : visibleDisplayText(segment.speaker);
-          return [{...segment, text, speaker: speaker === '' ? null : speaker}];
+          return {...segment, text, speaker: speaker === '' ? null : speaker};
         })
       : [];
   const address = conversation.discarded

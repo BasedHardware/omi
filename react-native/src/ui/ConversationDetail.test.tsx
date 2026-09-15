@@ -762,6 +762,45 @@ test('legacy empty unlocked transcripts omit invented empty chrome instead of un
   expect(copy).not.toContain('Transcript unavailable');
 });
 
+test('legacy processing empty GET transcript text names Flutter TranscriptWidget instead of noContentToDisplay', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: ' \t\n',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', status: 'processing'},
+    }),
+  );
+  expect(copy).toContain('Speaker 1');
+  expect(copy).not.toContain(processingConversationNoContentCopy());
+  expect(copy).not.toContain('The transcript is empty.');
+  expect(copy).not.toContain('Transcript unavailable');
+});
+
 test('legacy processing empty transcript names Flutter noContentToDisplay without photos', () => {
   mockLegacy.mockReturnValue({
     result: {
@@ -789,7 +828,7 @@ test('legacy processing empty transcript names Flutter noContentToDisplay withou
   expect(copy).not.toContain('Transcript unavailable');
 });
 
-test('legacy NEXT LINE-only segments stay empty instead of blank speaker lines', () => {
+test('legacy conversation details name Flutter TranscriptWidget empty GET text', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -816,16 +855,27 @@ test('legacy NEXT LINE-only segments stay empty instead of blank speaker lines',
     },
     reload: jest.fn(),
   });
-  const copy = text(
-    render({
-      apiContract: 'omi',
-      conversation: {...conversation, id: 'old-1'},
-    }),
-  );
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  const emptyText = view.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyText.length).toBeGreaterThan(0);
+  expect(copy).toContain('Speaker 1');
   expect(copy).not.toContain('The transcript is empty.');
   expect(copy).not.toContain(processingConversationNoContentCopy());
   expect(copy).not.toContain('\u0085');
-  expect(copy).not.toContain('Speaker');
+  expect(copy).not.toContain('Speaker ·');
 });
 
 test('legacy conversation details name Flutter empty GET speakers', () => {
