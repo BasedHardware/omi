@@ -6,6 +6,25 @@ from typing import Any
 
 from services.graph_client import GraphClient
 
+# Page size for each calendarView request ($top is per-page, not a total cap).
+CALENDAR_PAGE_SIZE = 50
+# Default and hard cap for list_upcoming's `limit` — see issue #13913.
+MAX_UPCOMING_EVENTS = 500
+# Sanity ceiling on the lookahead window.
+MAX_UPCOMING_DAYS = 366
+
+
+def _safe_int(value: Any, default: int, *, max_value: int) -> int:
+    """Coerce an optional tool argument; explicit JSON null/blank/non-numeric
+    values fall back to ``default`` instead of raising TypeError downstream."""
+    if value is None or value == "":
+        return default
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(value, max_value))
+
 
 def _slim_event(e: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(e, dict):
@@ -30,15 +49,13 @@ def _slim_event(e: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# calendarView is server-paged: $top is the page size, and anything past it
-# only arrives via @odata.nextLink. Events are ordered by start, so a single
-# page silently drops the *later* events in the window — exactly the ones a
-# "what's on next month" question is about.
-CALENDAR_PAGE_SIZE = 50
-MAX_EVENTS = 500
-
-
-async def list_upcoming(user_id: str, days: int = 1, limit: int = MAX_EVENTS) -> list[dict[str, Any]]:
+async def list_upcoming(
+    user_id: str,
+    days: int = 1,
+    limit: int = MAX_UPCOMING_EVENTS,
+) -> list[dict[str, Any]]:
+    days = _safe_int(days, 1, max_value=MAX_UPCOMING_DAYS)
+    limit = _safe_int(limit, MAX_UPCOMING_EVENTS, max_value=MAX_UPCOMING_EVENTS)
     start = datetime.now(timezone.utc)
     end = start + timedelta(days=days)
     try:
@@ -52,7 +69,7 @@ async def list_upcoming(user_id: str, days: int = 1, limit: int = MAX_EVENTS) ->
                 "startDateTime": start.isoformat(),
                 "endDateTime": end.isoformat(),
                 "$orderby": "start/dateTime",
-                "$top": min(CALENDAR_PAGE_SIZE, limit),
+                "$top": CALENDAR_PAGE_SIZE,
             },
             max_items=limit,
         )
