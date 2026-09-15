@@ -141,7 +141,7 @@ export function parseOmiCalendarCaptureGaps(
     seen.add(eventId);
     optionalText(row.status);
     optionalText(row.coverage);
-    const title = visibleDisplayText(text(row.title, 1_000_000));
+    const title = text(row.title, 1_000_000);
     items.push({
       eventId,
       title,
