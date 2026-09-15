@@ -292,9 +292,15 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
             
             if response.status_code == 200:
                 result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                choices = result.get("choices") if isinstance(result, dict) else None
+                first = choices[0] if choices else None
+                message = first.get("message") if isinstance(first, dict) else None
+                content = message.get("content") if isinstance(message, dict) else None
+                answer = content.strip() if isinstance(content, str) else ""
                 
-                if answer.upper() != "NONE":
+                if not answer:
+                    logger.error("OpenAI response had no usable choice content - skipping batch")
+                elif answer.upper() != "NONE":
                     batch_valid = [n.strip() for n in answer.split(",") if n.strip()]
                     valid_names.extend(batch_valid)
             else:
@@ -1014,7 +1020,10 @@ def calculate_iq_with_ai(people_dict: dict) -> dict:
     # Prepare batch for AI analysis
     people_to_analyze = []
     for name_lower, data in people_dict.items():
-        context = " | ".join(data.get("context_snippets", [])[:10])  # More snippets
+        snippets = data.get("context_snippets", [])
+        if not isinstance(snippets, list):
+            snippets = []
+        context = " | ".join(str(s) for s in snippets[:10])  # More snippets
         if context:
             people_to_analyze.append({
                 "name": data["name"],
@@ -1078,10 +1087,16 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
             
             if response.status_code == 200:
                 result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                choices = result.get("choices") if isinstance(result, dict) else None
+                first = choices[0] if choices else None
+                message = first.get("message") if isinstance(first, dict) else None
+                content = message.get("content") if isinstance(message, dict) else None
+                answer = content.strip() if isinstance(content, str) else ""
                 
                 # Parse JSON from response
                 try:
+                    if not answer:
+                        raise ValueError("OpenAI response had no usable choice content")
                     # Find JSON array in response
                     import re
                     json_match = re.search(r'\[.*\]', answer, re.DOTALL)
