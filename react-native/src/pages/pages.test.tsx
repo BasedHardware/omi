@@ -1414,8 +1414,8 @@ test('Settings names GET subscription period quotas without Upgrade', async () =
         id: request.id,
         status: 200,
         body: JSON.stringify({
-          plan: 'basic',
-          status: 'active',
+          transcription_seconds_used: 0,
+          transcription_seconds_limit: 0,
           words_transcribed_used: 12,
           words_transcribed_limit: 10000,
           insights_gained_used: 3,
@@ -1453,8 +1453,12 @@ test('Settings names Flutter UsagePage empty GET chatQuotaUnit without omitting 
         id: request.id,
         status: 200,
         body: JSON.stringify({
-          plan: 'basic',
-          status: 'active',
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 0,
+          transcription_seconds_used: 0,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
           chat_quota_used: 5,
           chat_quota_unit: ' \t',
           subscription: {
@@ -1484,10 +1488,13 @@ test('Settings names GET subscription transcription quota as minutes this month'
         id: request.id,
         status: 200,
         body: JSON.stringify({
-          plan: 'basic',
-          status: 'active',
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
           transcription_seconds_used: 90,
           transcription_seconds_limit: 3600,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          subscription: {plan: 'basic', status: 'active'},
         }),
       };
     }
@@ -1513,6 +1520,34 @@ test('Settings names malformed GET subscription Flutter load-error instead of Pl
   const tree = textOf(renderer);
   expect(tree).toContain(subscriptionLoadErrorCopy());
   expect(tree).not.toContain('Plan is unavailable.');
+  expect(tree).not.toContain('Free Plan');
+  expect(tree).not.toContain('Upgrade');
+});
+
+test('Settings names Flutter UsagePage fromJson invalid GET available_plans instead of Free Plan', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 3600,
+          transcription_seconds_used: 90,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          available_plans: [{title: 'Plus'}],
+          subscription: {plan: 'basic', status: 'active'},
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain(subscriptionLoadErrorCopy());
   expect(tree).not.toContain('Free Plan');
   expect(tree).not.toContain('Upgrade');
 });

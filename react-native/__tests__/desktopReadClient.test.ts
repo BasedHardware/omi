@@ -5420,6 +5420,153 @@ test('names JSON-null GET connected_accounts as omitted instead of hiding neighb
   ).toThrow('App 0 connected_accounts are malformed');
 });
 
+test('names Flutter UsagePage fromJson invalid GET subscription extras', () => {
+  const valid = {
+    insights_gained_limit: 0,
+    insights_gained_used: 0,
+    transcription_seconds_limit: 0,
+    transcription_seconds_used: 0,
+    words_transcribed_limit: 0,
+    words_transcribed_used: 0,
+    subscription: {plan: 'basic', status: 'active'},
+  };
+  expect(parseCloudSubscription(valid, 'Subscription response')).toEqual(
+    expect.objectContaining({
+      plan: 'basic',
+      status: 'active',
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    }),
+  );
+  expect(
+    parseCloudSubscription(
+      {
+        ...valid,
+        available_plans: [],
+        phone_call_quota: null,
+        transcription_allowance: null,
+        chat_quota_allowed: true,
+        show_subscription_ui: false,
+      },
+      'Subscription response',
+    ),
+  ).toEqual(expect.objectContaining({plan: 'basic', status: 'active'}));
+  expect(
+    parseCloudSubscription(
+      {
+        ...valid,
+        available_plans: [{id: 'plus', title: 'Plus'}],
+        phone_call_quota: {has_access: false, is_paid: false},
+        transcription_allowance: {mode: 'allowed'},
+        subscription: {
+          plan: 'basic',
+          status: 'active',
+          features: [],
+          limits: {},
+        },
+      },
+      'Subscription response',
+    ),
+  ).toEqual(expect.objectContaining({plan: 'basic'}));
+  expect(() =>
+    parseCloudSubscription(
+      {plan: 'basic', status: 'active'},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response insights_gained_limit is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {subscription: {plan: 'basic', status: 'active'}},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response insights_gained_limit is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...valid, transcription_seconds_used: 'bad'},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response transcription_seconds_used is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...valid, available_plans: 'bad'},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response available_plans is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...valid, available_plans: [{title: 'Plus'}]},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response available_plans[0] is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...valid, phone_call_quota: {has_access: true}},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response phone_call_quota is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...valid, transcription_allowance: {}},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response transcription_allowance is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...valid, chat_quota_allowed: 'yes'},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response chat_quota_allowed is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...valid, show_subscription_ui: 'yes'},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response show_subscription_ui is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...valid, chat_quota_unit: 1},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response chat_quota_unit is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {
+        ...valid,
+        subscription: {plan: 'basic', status: 'active', features: [1]},
+      },
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response subscription features is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {
+        ...valid,
+        subscription: {plan: 'basic', status: 'active', limits: 'bad'},
+      },
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response subscription limits is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {
+        ...valid,
+        subscription: {
+          plan: 'basic',
+          status: 'active',
+          cancel_at_period_end: 'yes',
+        },
+      },
+      'Subscription response',
+    ),
+  ).toThrow(
+    'Subscription response subscription cancel_at_period_end is malformed',
+  );
+});
+
 test('names GET subscription quota integer strings instead of omitting Plan usage', () => {
   expect(
     parseCloudSubscription(
@@ -5464,37 +5611,55 @@ test('names GET subscription quota integer strings instead of omitting Plan usag
 });
 
 test('keeps empty subscription plan tokens instead of failing Settings Plan', () => {
+  const quota = {
+    insights_gained_limit: 0,
+    insights_gained_used: 0,
+    transcription_seconds_limit: 0,
+    transcription_seconds_used: 0,
+    words_transcribed_limit: 0,
+    words_transcribed_used: 0,
+  };
   expect(
-    parseCloudSubscription({plan: '', status: ''}, 'Subscription response'),
+    parseCloudSubscription(
+      {...quota, subscription: {plan: '', status: ''}},
+      'Subscription response',
+    ),
   ).toEqual(
     expect.objectContaining({
       plan: '',
       status: '',
-      transcriptionSecondsUsed: null,
-      transcriptionSecondsLimit: null,
-      wordsTranscribedUsed: null,
-      wordsTranscribedLimit: null,
-      insightsGainedUsed: null,
-      insightsGainedLimit: null,
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
       chatQuotaUsed: 0,
       chatQuotaUnit: null,
     }),
   );
   expect(
     parseCloudSubscription(
-      {plan: 'plus', status: 'active'},
+      {...quota, subscription: {plan: 'plus', status: 'active'}},
       'Subscription response',
     ),
   ).toEqual(expect.objectContaining({plan: 'plus', status: 'active'}));
   expect(
-    parseCloudSubscription({status: 'active'}, 'Subscription response'),
+    parseCloudSubscription(
+      {...quota, subscription: {status: 'active'}},
+      'Subscription response',
+    ),
   ).toEqual(expect.objectContaining({plan: 'basic', status: 'active'}));
   expect(
-    parseCloudSubscription({plan: 'plus'}, 'Subscription response'),
+    parseCloudSubscription(
+      {...quota, subscription: {plan: 'plus'}},
+      'Subscription response',
+    ),
   ).toEqual(expect.objectContaining({plan: 'plus', status: 'active'}));
   expect(
     parseCloudSubscription(
       {
+        ...quota,
         transcription_seconds_used: 90,
         transcription_seconds_limit: 1800,
         subscription: {status: 'active'},
@@ -5511,21 +5676,34 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
   );
   expect(() =>
     parseCloudSubscription({plan: 1, status: 'active'}, 'Subscription response'),
-  ).toThrow('Subscription response is malformed');
+  ).toThrow('Subscription response insights_gained_limit is malformed');
   expect(() =>
     parseCloudSubscription(
       {plan: null, status: 'active'},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response insights_gained_limit is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {...quota, subscription: {plan: 1, status: 'active'}},
       'Subscription response',
     ),
   ).toThrow('Subscription response is malformed');
 });
 
 test('names omitted GET subscription chat_quota_used as zero instead of hiding Chat this month', () => {
+  const quota = {
+    insights_gained_limit: 0,
+    insights_gained_used: 0,
+    transcription_seconds_limit: 0,
+    transcription_seconds_used: 0,
+    words_transcribed_limit: 0,
+    words_transcribed_used: 0,
+  };
   expect(
     parseCloudSubscription(
       {
-        plan: 'plus',
-        status: 'active',
+        ...quota,
         chat_quota_unit: 'messages',
         subscription: {
           plan: 'plus',
@@ -5546,8 +5724,7 @@ test('names omitted GET subscription chat_quota_used as zero instead of hiding C
     subscriptionPeriodCopy(
       parseCloudSubscription(
         {
-          plan: 'plus',
-          status: 'active',
+          ...quota,
           chat_quota_unit: 'messages',
           subscription: {
             plan: 'plus',
@@ -5568,9 +5745,9 @@ test('names omitted GET subscription chat_quota_used as zero instead of hiding C
     subscriptionPeriodCopy(
       parseCloudSubscription(
         {
-          plan: 'plus',
-          status: 'active',
+          ...quota,
           chat_quota_unit: 'cost_usd',
+          subscription: {plan: 'plus', status: 'active'},
         },
         'Subscription response',
       ),
@@ -5584,23 +5761,34 @@ test('names omitted GET subscription chat_quota_used as zero instead of hiding C
   expect(
     subscriptionPeriodCopy(
       parseCloudSubscription(
-        {plan: 'plus', status: 'active'},
+        {
+          ...quota,
+          subscription: {plan: 'plus', status: 'active'},
+        },
         'Subscription response',
       ),
     ),
   ).toBeNull();
   expect(() =>
     parseCloudSubscription(
-      {plan: 'plus', status: 'active', chat_quota_used: null},
+      {
+        ...quota,
+        chat_quota_used: null,
+        subscription: {plan: 'plus', status: 'active'},
+      },
       'Subscription response',
     ),
-  ).toThrow('Subscription response is malformed');
+  ).toThrow('Subscription response chat_quota_used is malformed');
   expect(() =>
     parseCloudSubscription(
-      {plan: 'plus', status: 'active', chat_quota_used: 'nope'},
+      {
+        ...quota,
+        chat_quota_used: 'nope',
+        subscription: {plan: 'plus', status: 'active'},
+      },
       'Subscription response',
     ),
-  ).toThrow('Subscription response is malformed');
+  ).toThrow('Subscription response chat_quota_used is malformed');
 });
 
 test('subscription period copy names GET words insights and chat quotas without Upgrade', () => {
@@ -5652,8 +5840,8 @@ test('subscription period copy names GET words insights and chat quotas without 
   expect(
     parseCloudSubscription(
       {
-        plan: 'basic',
-        status: 'active',
+        transcription_seconds_used: 0,
+        transcription_seconds_limit: 0,
         words_transcribed_used: 12,
         words_transcribed_limit: 10000,
         insights_gained_used: 3,
@@ -5715,8 +5903,12 @@ test('names Flutter UsagePage empty GET chatQuotaUnit instead of omitting Chat t
     subscriptionPeriodCopy(
       parseCloudSubscription(
         {
-          plan: 'plus',
-          status: 'active',
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 0,
+          transcription_seconds_used: 0,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
           chat_quota_used: 5,
           chat_quota_unit: ' \t',
           subscription: {
@@ -6016,7 +6208,15 @@ test('loadAccountSettings nested non-retryable 503s keep slices independent with
     if (request.path === '/v1/users/me/subscription') {
       return {
         status: 200,
-        body: JSON.stringify({plan: 'plus', status: 'active'}),
+        body: JSON.stringify({
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 0,
+          transcription_seconds_used: 0,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          subscription: {plan: 'plus', status: 'active'},
+        }),
       };
     }
     if (request.path === '/v1/users/store-recording-permission') {
@@ -6191,6 +6391,51 @@ test('loadAccountSettings names malformed GET subscription Flutter load-error', 
   );
 });
 
+test('loadAccountSettings names Flutter UsagePage fromJson invalid GET available_plans', async () => {
+  const backend = backendFor(request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        status: 200,
+        body: JSON.stringify({uid: 'user-1', email: 'ada@example.test'}),
+      };
+    }
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 0,
+          transcription_seconds_used: 0,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          available_plans: [{title: 'Plus'}],
+          subscription: {plan: 'basic', status: 'active'},
+        }),
+      };
+    }
+    if (request.path === '/v1/users/store-recording-permission') {
+      return {
+        status: 200,
+        body: JSON.stringify({store_recording_permission: true}),
+      };
+    }
+    if (request.path === '/v1/users/training-data-opt-in') {
+      return {status: 200, body: JSON.stringify({opted_in: false})};
+    }
+    if (request.path === '/v1/users/private-cloud-sync') {
+      return {
+        status: 200,
+        body: JSON.stringify({private_cloud_sync_enabled: false}),
+      };
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadAccountSettings(backend);
+  expect(snapshot.subscription).toBeNull();
+  expect(snapshot.subscriptionError).toBe(subscriptionLoadErrorCopy());
+});
+
 test('loadAccountSettings names GET usage today without inventing zeros', async () => {
   const backend = backendFor(request => {
     if (request.path === '/v1/users/me/usage?period=today') {
@@ -6212,7 +6457,15 @@ test('loadAccountSettings names GET usage today without inventing zeros', async 
     if (request.path === '/v1/users/me/subscription') {
       return {
         status: 200,
-        body: JSON.stringify({plan: 'plus', status: 'active'}),
+        body: JSON.stringify({
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 0,
+          transcription_seconds_used: 0,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          subscription: {plan: 'plus', status: 'active'},
+        }),
       };
     }
     if (request.path === '/v1/users/store-recording-permission') {
@@ -6286,7 +6539,15 @@ test('loadAccountSettings names GET primary language without inventing Not set',
     if (request.path === '/v1/users/me/subscription') {
       return {
         status: 200,
-        body: JSON.stringify({plan: 'plus', status: 'active'}),
+        body: JSON.stringify({
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_limit: 0,
+          transcription_seconds_used: 0,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          subscription: {plan: 'plus', status: 'active'},
+        }),
       };
     }
     if (request.path === '/v1/users/store-recording-permission') {

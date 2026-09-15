@@ -386,15 +386,297 @@ export function parseCloudUsage(
   };
 }
 
+function malformed(label: string): never {
+  throw new Error(`${label} is malformed`);
+}
+
+function requiredPresentInteger(value: unknown, label: string): number {
+  if (value === undefined || value === null) {
+    malformed(label);
+  }
+  if (typeof value === 'string') {
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      malformed(label);
+    }
+    return Number(value);
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    return value;
+  }
+  malformed(label);
+}
+
+function optionalNullableInteger(value: unknown, label: string): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  return requiredPresentInteger(value, label);
+}
+
+function optionalBooleanDefault(
+  value: unknown,
+  label: string,
+  defaultValue: boolean,
+): boolean {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  malformed(label);
+}
+
+function optionalNullableString(value: unknown, label: string): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  malformed(label);
+}
+
+function optionalStringList(value: unknown, label: string): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    malformed(label);
+  }
+  return value.map(item => {
+    if (typeof item !== 'string') {
+      malformed(label);
+    }
+    return item;
+  });
+}
+
+function optionalFiniteDefault(
+  value: unknown,
+  label: string,
+  defaultValue: number,
+): number {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  const parsed = optionalFiniteNumber(value);
+  if (parsed === null) {
+    malformed(label);
+  }
+  return parsed;
+}
+
+function optionalNullableFinite(value: unknown, label: string): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const parsed = optionalFiniteNumber(value);
+  if (parsed === null) {
+    malformed(label);
+  }
+  return parsed;
+}
+
+function parseSubscriptionPricingOption(value: unknown, label: string): void {
+  const record = object(value, label);
+  if (typeof record.id !== 'string') {
+    malformed(label);
+  }
+  if (typeof record.price_string !== 'string') {
+    malformed(label);
+  }
+  if (typeof record.title !== 'string') {
+    malformed(label);
+  }
+  optionalNullableString(record.description, `${label} description`);
+}
+
+function parseSubscriptionPlan(value: unknown, label: string): void {
+  const record = object(value, label);
+  if (typeof record.id !== 'string') {
+    malformed(label);
+  }
+  if (typeof record.title !== 'string') {
+    malformed(label);
+  }
+  optionalNullableString(record.description, `${label} description`);
+  optionalNullableString(record.eyebrow, `${label} eyebrow`);
+  optionalNullableString(record.subtitle, `${label} subtitle`);
+  optionalStringList(record.features, `${label} features`);
+  optionalBooleanDefault(record.legacy, `${label} legacy`, false);
+  if (record.prices === undefined) {
+    return;
+  }
+  if (!Array.isArray(record.prices)) {
+    malformed(`${label} prices`);
+  }
+  record.prices.forEach((item, index) => {
+    parseSubscriptionPricingOption(item, `${label} prices[${index}]`);
+  });
+}
+
+function parsePhoneCallQuota(value: unknown, label: string): void {
+  const record = object(value, label);
+  optionalStringList(record.allowed_countries, `${label} allowed_countries`);
+  if (typeof record.has_access !== 'boolean') {
+    malformed(label);
+  }
+  if (typeof record.is_paid !== 'boolean') {
+    malformed(label);
+  }
+  optionalNullableInteger(
+    record.max_duration_seconds,
+    `${label} max_duration_seconds`,
+  );
+  optionalNullableInteger(record.monthly_limit, `${label} monthly_limit`);
+  if (record.monthly_used !== undefined) {
+    requiredPresentInteger(record.monthly_used, `${label} monthly_used`);
+  }
+  optionalNullableInteger(record.remaining, `${label} remaining`);
+  optionalNullableInteger(record.reset_at, `${label} reset_at`);
+}
+
+function parseTranscriptionAllowance(value: unknown, label: string): void {
+  const record = object(value, label);
+  if (typeof record.mode !== 'string') {
+    malformed(label);
+  }
+  if (record.reason !== undefined && typeof record.reason !== 'string') {
+    malformed(`${label} reason`);
+  }
+  optionalNullableInteger(
+    record.remaining_seconds,
+    `${label} remaining_seconds`,
+  );
+}
+
+function parsePlanLimits(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  if (value === undefined) {
+    return {};
+  }
+  const record = object(value, label);
+  optionalNullableFinite(
+    record.chat_cost_usd_per_month,
+    `${label} chat_cost_usd_per_month`,
+  );
+  optionalNullableInteger(
+    record.chat_questions_per_month,
+    `${label} chat_questions_per_month`,
+  );
+  optionalNullableInteger(record.insights_gained, `${label} insights_gained`);
+  optionalNullableInteger(
+    record.transcription_seconds,
+    `${label} transcription_seconds`,
+  );
+  optionalNullableInteger(
+    record.words_transcribed,
+    `${label} words_transcribed`,
+  );
+  return record;
+}
+
 export function parseCloudSubscription(
   value: unknown,
   label: string,
 ): CloudSubscription {
   const record = object(value, label);
-  const subscription =
-    record.subscription === undefined
-      ? record
-      : object(record.subscription, `${label} subscription`);
+  if (record.available_plans !== undefined) {
+    if (!Array.isArray(record.available_plans)) {
+      malformed(`${label} available_plans`);
+    }
+    record.available_plans.forEach((item, index) => {
+      parseSubscriptionPlan(item, `${label} available_plans[${index}]`);
+    });
+  }
+  optionalBooleanDefault(
+    record.chat_quota_allowed,
+    `${label} chat_quota_allowed`,
+    true,
+  );
+  optionalFiniteDefault(
+    record.chat_quota_percent,
+    `${label} chat_quota_percent`,
+    0,
+  );
+  optionalNullableInteger(
+    record.chat_quota_reset_at,
+    `${label} chat_quota_reset_at`,
+  );
+  const chatQuotaUnit = optionalNullableString(
+    record.chat_quota_unit,
+    `${label} chat_quota_unit`,
+  );
+  const chatQuotaUsed = optionalFiniteDefault(
+    record.chat_quota_used,
+    `${label} chat_quota_used`,
+    0,
+  );
+  optionalNullableInteger(
+    record.desktop_grandfather_until,
+    `${label} desktop_grandfather_until`,
+  );
+  const insightsGainedLimit = requiredPresentInteger(
+    record.insights_gained_limit,
+    `${label} insights_gained_limit`,
+  );
+  const insightsGainedUsed = requiredPresentInteger(
+    record.insights_gained_used,
+    `${label} insights_gained_used`,
+  );
+  const phoneCallQuota = optionalNullableObject(
+    record.phone_call_quota,
+    `${label} phone_call_quota`,
+  );
+  if (phoneCallQuota !== null) {
+    parsePhoneCallQuota(phoneCallQuota, `${label} phone_call_quota`);
+  }
+  optionalBooleanDefault(
+    record.show_subscription_ui,
+    `${label} show_subscription_ui`,
+    true,
+  );
+  const subscription = object(
+    record.subscription,
+    `${label} subscription`,
+  );
+  optionalBooleanDefault(
+    subscription.cancel_at_period_end,
+    `${label} subscription cancel_at_period_end`,
+    false,
+  );
+  optionalNullableInteger(
+    subscription.current_period_end,
+    `${label} subscription current_period_end`,
+  );
+  optionalNullableInteger(
+    subscription.current_period_start,
+    `${label} subscription current_period_start`,
+  );
+  optionalNullableString(
+    subscription.current_price_id,
+    `${label} subscription current_price_id`,
+  );
+  optionalBooleanDefault(
+    subscription.deprecated,
+    `${label} subscription deprecated`,
+    false,
+  );
+  optionalNullableString(
+    subscription.deprecation_message,
+    `${label} subscription deprecation_message`,
+  );
+  optionalStringList(
+    subscription.features,
+    `${label} subscription features`,
+  );
+  const limits = parsePlanLimits(
+    subscription.limits,
+    `${label} subscription limits`,
+  );
   const plan =
     subscription.plan === undefined
       ? 'basic'
@@ -408,47 +690,64 @@ export function parseCloudSubscription(
       ? subscription.status
       : null;
   if (plan === null || status === null) {
-    throw new Error(`${label} is malformed`);
+    malformed(label);
   }
-  const rawLimits = subscription.limits;
-  const limits =
-    rawLimits !== undefined &&
-    rawLimits !== null &&
-    typeof rawLimits === 'object' &&
-    !Array.isArray(rawLimits)
-      ? (rawLimits as Record<string, unknown>)
-      : null;
-  const chatQuotaUnit =
-    typeof record.chat_quota_unit === 'string' ? record.chat_quota_unit : null;
-  const chatQuotaUsed =
-    record.chat_quota_used === undefined
-      ? 0
-      : optionalFiniteNumber(record.chat_quota_used);
-  if (chatQuotaUsed === null) {
-    throw new Error(`${label} is malformed`);
+  optionalNullableString(
+    subscription.stripe_subscription_id,
+    `${label} subscription stripe_subscription_id`,
+  );
+  const transcriptionAllowance = optionalNullableObject(
+    record.transcription_allowance,
+    `${label} transcription_allowance`,
+  );
+  if (transcriptionAllowance !== null) {
+    parseTranscriptionAllowance(
+      transcriptionAllowance,
+      `${label} transcription_allowance`,
+    );
   }
   return {
     plan,
     status,
-    transcriptionSecondsUsed: optionalInteger(
+    transcriptionSecondsUsed: requiredPresentInteger(
       record.transcription_seconds_used,
+      `${label} transcription_seconds_used`,
     ),
-    transcriptionSecondsLimit: optionalInteger(
+    transcriptionSecondsLimit: requiredPresentInteger(
       record.transcription_seconds_limit,
+      `${label} transcription_seconds_limit`,
     ),
-    wordsTranscribedUsed: optionalInteger(record.words_transcribed_used),
-    wordsTranscribedLimit: optionalInteger(record.words_transcribed_limit),
-    insightsGainedUsed: optionalInteger(record.insights_gained_used),
-    insightsGainedLimit: optionalInteger(record.insights_gained_limit),
+    wordsTranscribedUsed: requiredPresentInteger(
+      record.words_transcribed_used,
+      `${label} words_transcribed_used`,
+    ),
+    wordsTranscribedLimit: requiredPresentInteger(
+      record.words_transcribed_limit,
+      `${label} words_transcribed_limit`,
+    ),
+    insightsGainedUsed,
+    insightsGainedLimit,
     chatQuotaUsed,
     chatQuotaUnit,
-    chatQuestionsPerMonth:
-      limits === null ? null : optionalInteger(limits.chat_questions_per_month),
-    chatCostUsdPerMonth:
-      limits === null
-        ? null
-        : optionalFiniteNumber(limits.chat_cost_usd_per_month),
+    chatQuestionsPerMonth: optionalNullableInteger(
+      limits.chat_questions_per_month,
+      `${label} subscription limits chat_questions_per_month`,
+    ),
+    chatCostUsdPerMonth: optionalNullableFinite(
+      limits.chat_cost_usd_per_month,
+      `${label} subscription limits chat_cost_usd_per_month`,
+    ),
   };
+}
+
+function optionalNullableObject(
+  value: unknown,
+  label: string,
+): Record<string, unknown> | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  return object(value, label);
 }
 
 export function parseStoreRecordingPermission(
