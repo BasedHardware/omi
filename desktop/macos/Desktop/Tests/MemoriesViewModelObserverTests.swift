@@ -91,7 +91,8 @@ final class MemoriesViewModelObserverTests: XCTestCase {
     // default-scope full sync for this throwaway user (key mirrors
     // performFullSyncIfNeeded) and serve the cache reconcile an empty
     // terminal page through its own seam.
-    UserDefaults.standard.set(true, forKey: "memoriesDefaultScopeSyncCompleted_v3_\(testUserId)")
+    let defaultScopeSyncKey = "memoriesDefaultScopeSyncCompleted_v3_\(testUserId)"
+    UserDefaults.standard.set(true, forKey: defaultScopeSyncKey)
     viewModel.reconcilePageFetch = { _, _, _ in
       APIClient.MemoryListPage(
         memories: [],
