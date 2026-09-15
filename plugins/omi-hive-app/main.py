@@ -5,7 +5,39 @@ This app provides Hive project management integration through API key authentica
 and chat tools for managing projects, tasks, actions, and searching.
 """
 import os
+import re
+import unicodedata
 from typing import Optional, Dict, Any, List
+
+def _sanitize_md(text: str) -> str:
+    """Sanitize text to avoid Markdown syntax injection or broken UI formatting."""
+    if not text:
+        return ""
+    clean = str(text).replace("\r", "").replace("\n", " ").strip()
+    for ch in ["\\", "`", "*", "_", "[", "]", "(", ")", "<", ">"]:
+        clean = clean.replace(ch, f"\\{ch}")
+    return clean
+
+def _normalize_text(s: str) -> str:
+    """Normalize text using Unicode NFKC form, collapsed whitespace, and casefolded comparison."""
+    if not s:
+        return ""
+    norm = unicodedata.normalize('NFKC', str(s))
+    return re.sub(r'\s+', ' ', norm).strip().casefold()
+
+def _extract_error_message(result: Dict[str, Any], default: str = "Unknown error") -> str:
+    """Safely extract error message from API result payload."""
+    if not isinstance(result, dict) or "errors" not in result:
+        return default
+    errors = result.get("errors")
+    if isinstance(errors, list) and len(errors) > 0:
+        first = errors[0]
+        if isinstance(first, dict):
+            return first.get("message", default)
+        return str(first)
+    if isinstance(errors, str):
+        return errors
+    return default
 
 import requests
 from dotenv import load_dotenv
@@ -465,7 +497,10 @@ def search_tasks(uid: str, query: str, limit: int = 10) -> List[HiveTask]:
     if not isinstance(actions_data, list):
         actions_data = [result] if result.get("_id") else []
     
-    query_lower = query.lower()
+    query_clean = re.sub(r'\s+', ' ', query).strip().lower()
+    if not query_clean:
+        return []
+    
     tasks = []
     count = 0
     
@@ -476,8 +511,11 @@ def search_tasks(uid: str, query: str, limit: int = 10) -> List[HiveTask]:
         title = a.get("title") or a.get("name", "")
         desc = a.get("description", "")
         
-        # Simple case-insensitive match
-        if query_lower in title.lower() or (desc and query_lower in desc.lower()):
+        # Safe normalized case-insensitive match
+        title_norm = re.sub(r'\s+', ' ', str(title)).lower()
+        desc_norm = re.sub(r'\s+', ' ', str(desc)).lower() if desc else ""
+        
+        if query_clean in title_norm or (desc_norm and query_clean in desc_norm):
             project = a.get("project")
             project_id = ""
             project_name = ""
@@ -680,7 +718,7 @@ async def tool_hive_get_tasks(request: Request):
         results = []
         for i, task in enumerate(tasks[:limit], 1):
             status = f" [{task.status}]" if task.status else ""
-            results.append(f"{i}. **{task.name}**{status}")
+            results.append(f"{i}. **{task.name}** (ID: `{task.id}`){status}")
         
         return ChatToolResponse(
             result=f"📝 Tasks in **{target_project.name}**:\n\n" + "\n".join(results)
@@ -780,7 +818,7 @@ async def tool_hive_create_task(request: Request):
         result = hive_rest_request(uid, "POST", "actions/create", data=create_data)
         
         if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+            error_msg = _extract_error_message(result)
             return ChatToolResponse(error=f"Failed to create task: {error_msg}")
         
         success_msg = f"✅ Created task **{task_name}** in project **{target_project.name}**!"
@@ -825,7 +863,7 @@ async def tool_hive_search(request: Request):
         for i, task in enumerate(tasks, 1):
             project_info = f" (in {task.project_name})" if task.project_name else ""
             status = f" [{task.status}]" if task.status else ""
-            results.append(f"{i}. **{task.name}**{status}{project_info}")
+            results.append(f"{i}. **{task.name}** (ID: `{task.id}`){status}{project_info}")
         
         return ChatToolResponse(
             result=f"🔍 Found {len(tasks)} results for '{query}':\n\n" + "\n".join(results)
@@ -851,6 +889,18 @@ async def tool_hive_update_task_status(request: Request):
         if not uid:
             return ChatToolResponse(error="User ID is required")
         
+        if task_id is not None:
+            task_id = str(task_id).strip()
+            if not task_id:
+                task_id = None
+            elif not re.match(r'^[a-zA-Z0-9_\-]{1,128}$', task_id):
+                return ChatToolResponse(error="Invalid task_id format")
+
+        if task_name is not None:
+            task_name = str(task_name).strip()
+            if not task_name:
+                task_name = None
+
         if not task_name and not task_id:
             return ChatToolResponse(error="Task name or ID is required")
         
@@ -863,23 +913,57 @@ async def tool_hive_update_task_status(request: Request):
             
         # If no task_id, find task by name
         if not task_id and task_name:
-            tasks = search_tasks(uid, task_name, limit=5)
+            tasks = search_tasks(uid, task_name, limit=20)
             if not tasks:
                 return ChatToolResponse(error=f"Could not find task: {task_name}")
             
-            # Find closest match
-            best_match = None
-            task_name_lower = task_name.lower()
-            for t in tasks:
-                if t.name.lower() == task_name_lower:
-                    best_match = t
-                    break
+            task_name_norm = _normalize_text(task_name)
             
-            if not best_match:
-                best_match = tasks[0] # Use first result as fallback
+            # Helper to safely format candidate list with markdown sanitization and length limit
+            def _format_candidates(matched_list: list) -> str:
+                items = []
+                for t in matched_list[:5]:
+                    safe_t_name = _sanitize_md(t.name)
+                    proj = f" (in {_sanitize_md(t.project_name)})" if getattr(t, "project_name", None) else ""
+                    st = f" [{t.status}]" if getattr(t, "status", None) else ""
+                    tid = getattr(t, "id", "")
+                    items.append(f"- **{safe_t_name}** (ID: `{tid}`){st}{proj}")
+                if len(matched_list) > 5:
+                    items.append(f"... and {len(matched_list) - 5} more tasks")
+                return "\n".join(items)
+
+            # 1. Check for exact title matches (case-insensitive & whitespace-normalized)
+            exact_matches = [
+                t for t in tasks 
+                if hasattr(t, "name") and isinstance(t.name, str) and _normalize_text(t.name) == task_name_norm
+            ]
+            if len(exact_matches) == 1:
+                best_match = exact_matches[0]
+            elif len(exact_matches) > 1:
+                candidate_text = _format_candidates(exact_matches)
+                return ChatToolResponse(
+                    result=f"Multiple tasks found with the exact name '{task_name}'. Please specify which task to update by providing its task_id:\n\n{candidate_text}"
+                )
+            else:
+                # 2. Check for partial substring matches
+                partial_matches = [
+                    t for t in tasks 
+                    if hasattr(t, "name") and isinstance(t.name, str) and task_name_norm in _normalize_text(t.name)
+                ]
+                if len(partial_matches) == 1:
+                    best_match = partial_matches[0]
+                elif len(partial_matches) > 1:
+                    candidate_text = _format_candidates(partial_matches)
+                    return ChatToolResponse(
+                        result=f"Multiple tasks matched '{task_name}'. Please specify by task_id or use the exact task name:\n\n{candidate_text}"
+                    )
+                else:
+                    return ChatToolResponse(error=f"Could not find task matching: {task_name}")
                 
             task_id = best_match.id
-            task_name = best_match.name
+            resolved_task_name = best_match.name
+        else:
+            resolved_task_name = None
 
         # Map status common terms to Hive status
         # Hive usually uses 'completed' or 'todo'
@@ -896,11 +980,16 @@ async def tool_hive_update_task_status(request: Request):
         result = hive_rest_request(uid, "PUT", f"actions/{task_id}", data={"status": hive_status})
         
         if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+            error_msg = _extract_error_message(result)
             return ChatToolResponse(error=f"Failed to update task: {error_msg}")
             
+        if resolved_task_name:
+            display_target = f"**{_sanitize_md(resolved_task_name)}** (ID: `{task_id}`)"
+        else:
+            display_target = f"task (ID: `{task_id}`)"
+
         return ChatToolResponse(
-            result=f"✅ Updated task **{task_name}** status to **{hive_status}**!"
+            result=f"✅ Updated {display_target} status to **{hive_status}**!"
         )
     
     except Exception as e:
