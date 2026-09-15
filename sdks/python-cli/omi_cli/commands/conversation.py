@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import typer
 
@@ -17,6 +17,7 @@ from omi_cli.models import ConversationTextSource
 from omi_cli.output import shorten
 
 if TYPE_CHECKING:
+    from omi_cli.client import OmiClient
     from omi_cli.main import AppContext
 
 
@@ -32,11 +33,54 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
 
 _LIST_COLUMNS = ["id", "title", "category", "started_at", "source"]
 
+# GET /v1/dev/user/conversations clamps ``limit`` server-side to these values and does
+# not report the effective limit, so one request cannot honour a larger ``--limit``.
+_SERVER_PAGE_MAX = 100
+_SERVER_PAGE_MAX_WITH_TRANSCRIPT = 25
+
+
+def _fetch_conversations(
+    client: "OmiClient",
+    *,
+    limit: int,
+    offset: int,
+    include_transcript: bool,
+    filters: dict[str, object],
+) -> list[Any]:
+    """Return the ``[offset, offset + limit)`` window as the API would if it honoured ``limit``.
+
+    Requests are split into server-sized pages that advance by the *requested* page size,
+    not the rows returned: the API filters locked conversations after paging, so a short
+    (or even empty) page is not exhaustion (same contract as action-item paging). The
+    whole window is always covered; a trailing empty page costs one cheap request.
+    """
+    page_max = _SERVER_PAGE_MAX_WITH_TRANSCRIPT if include_transcript else _SERVER_PAGE_MAX
+    items: list[Any] = []
+    cursor = offset
+    remaining = limit
+    while remaining > 0:
+        page_limit = min(page_max, remaining)
+        page = client.get(
+            "/v1/dev/user/conversations",
+            params={**filters, "limit": page_limit, "offset": cursor, "include_transcript": include_transcript},
+        )
+        if page:
+            items.extend(page)
+        cursor += page_limit
+        remaining -= page_limit
+    return items
+
 
 @app.command("list", help="List conversations.")
 def list_conversations(
     typer_ctx: typer.Context,
-    limit: int = typer.Option(25, "--limit", min=1, max=200),
+    limit: int = typer.Option(
+        25,
+        "--limit",
+        min=1,
+        max=200,
+        help="Max items to return (fetched in API-sized pages above 100, or 25 with --include-transcript).",
+    ),
     offset: int = typer.Option(0, "--offset", min=0),
     start_date: Optional[datetime] = typer.Option(
         None, "--start-date", formats=ISO_DATETIME_FORMATS, help="ISO datetime lower bound."
@@ -49,15 +93,15 @@ def list_conversations(
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/conversations",
-            params={
-                "limit": limit,
-                "offset": offset,
+        items = _fetch_conversations(
+            client,
+            limit=limit,
+            offset=offset,
+            include_transcript=include_transcript,
+            filters={
                 "start_date": start_date.isoformat() if start_date else None,
                 "end_date": end_date.isoformat() if end_date else None,
                 "categories": categories,
-                "include_transcript": include_transcript,
             },
         )
     if ctx.renderer.json_mode:
