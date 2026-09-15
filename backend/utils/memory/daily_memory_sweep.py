@@ -1867,7 +1867,8 @@ def repair_daily_sweep_model_invocation(
     authority = str(repair_authority or "").strip()
     if not authority or len(authority) > 128:
         raise ValueError("daily sweep invocation repair requires a bounded repair authority")
-    if not isinstance(invocation_id, str) or not invocation_id.strip() or len(invocation_id) > 128:
+    normalized_invocation_id = str(invocation_id or "").strip()
+    if not normalized_invocation_id or len(normalized_invocation_id) > 128:
         raise ValueError("daily sweep invocation repair requires a bounded invocation id")
     evidence = dict(provider_outcome_evidence or {})
     recorded_attempts = evidence.get("attempts")
@@ -1879,15 +1880,15 @@ def repair_daily_sweep_model_invocation(
         if not isinstance(attempt, Mapping) or not isinstance(attempt.get("request_id"), str):
             raise ValueError("daily sweep invocation repair evidence attempts must carry request ids")
 
-    fence_ref = _model_invocation_fence_ref(db_client, invocation_id)
-    repair_ref = _model_invocation_repair_ref(db_client, uid, invocation_id)
+    fence_ref = _model_invocation_fence_ref(db_client, normalized_invocation_id)
+    repair_ref = _model_invocation_repair_ref(db_client, uid, normalized_invocation_id)
     fence_snapshot = fence_ref.get()
     fence_payload = fence_snapshot.to_dict() if getattr(fence_snapshot, "exists", False) else None
     if not isinstance(fence_payload, dict):
         raise ValueError("daily sweep invocation repair requires an existing invocation fence")
     identity = {
         "uid": uid,
-        "invocation_id": invocation_id,
+        "invocation_id": normalized_invocation_id,
         "account_generation": fence_payload.get("account_generation"),
         "source_generation": fence_payload.get("source_generation"),
         "sweep_generation": fence_payload.get("sweep_generation"),
@@ -1907,7 +1908,7 @@ def repair_daily_sweep_model_invocation(
     if prior_state not in {"pending", "indeterminate", "payload_expired"}:
         raise ValueError(f"daily sweep invocation in state {prior_state!r} is not repairable")
 
-    user_snapshot = _model_invocation_ref(db_client, uid, invocation_id).get()
+    user_snapshot = _model_invocation_ref(db_client, uid, normalized_invocation_id).get()
     user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else None
     lease_deadline: Optional[datetime] = None
     for candidate_deadline in (
