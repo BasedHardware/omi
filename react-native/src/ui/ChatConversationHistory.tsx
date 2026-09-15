@@ -129,10 +129,9 @@ export function ChatConversationHistory({
                 daySummary === '' ? [] : chatDaySummaryItems(message.text);
               const showSummaryItems =
                 daySummary !== '' && message.generationOutcome !== 'failed';
-              const citations = (message.memories ?? []).flatMap(memory => {
-                const copy = chatMemoryCitationCopy(memory);
-                return copy === null ? [] : [copy];
-              });
+              const citations = (message.memories ?? []).map(memory =>
+                chatMemoryCitationCopy(memory),
+              );
               return (
                 <View key={message.id}>
                   {quoted.context !== null ? (

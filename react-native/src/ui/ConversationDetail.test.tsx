@@ -215,6 +215,48 @@ test('conversation-detail history names GET followUp text without send chips', (
   ).toHaveLength(0);
 });
 
+test('conversation-detail history names GET memory citations with empty titles', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-empty-cited',
+          sender: 'ai',
+          text: 'I found that meeting.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          memories: [
+            {title: '', emoji: '🧠'},
+            {title: '  '},
+            {title: '\u0085', emoji: '🚀'},
+          ],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const tree = text(view);
+  expect(tree).toContain('I found that meeting.');
+  expect(tree).toContain('🧠');
+  expect(tree).toContain('🚀');
+  expect(tree).not.toContain('\u0085');
+});
+
 test('conversation-detail history names GET content_blocks without inventing write actions', () => {
   mockChat.mockReturnValue({
     result: {

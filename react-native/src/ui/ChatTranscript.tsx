@@ -231,10 +231,9 @@ const ChatMessageRow = memo(function ChatMessageRow({
     daySummary === '' ? [] : chatDaySummaryItems(message.text);
   const showSummaryItems =
     daySummary !== '' && message.generationOutcome !== 'failed';
-  const citations = (message.memories ?? []).flatMap(memory => {
-    const copy = chatMemoryCitationCopy(memory);
-    return copy === null ? [] : [copy];
-  });
+  const citations = (message.memories ?? []).map(memory =>
+    chatMemoryCitationCopy(memory),
+  );
   return (
     <Animated.View
       accessibilityLabel={

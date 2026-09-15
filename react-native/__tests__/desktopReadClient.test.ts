@@ -94,6 +94,7 @@ import {
   chatDaySummaryItems,
   chatDaySummaryRowCopy,
   chatAppAttributionCopy,
+  chatMemoryCitationCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -3051,6 +3052,20 @@ test('chat app attribution names a resolved GET app and omits empty names', () =
   expect(chatAppAttributionCopy('Notes')).toBe('Notes');
   expect(chatAppAttributionCopy(' \t')).toBe('');
   expect(chatAppAttributionCopy(undefined)).toBe('');
+});
+
+test('chat memory citation copy names Flutter empty GET titles', () => {
+  expect(
+    chatMemoryCitationCopy({title: 'Morning standup', emoji: '🚀'}),
+  ).toBe('🚀 Morning standup');
+  expect(chatMemoryCitationCopy({title: 'Notes'})).toBe('Notes');
+  expect(chatMemoryCitationCopy({title: 'Notes', emoji: ''})).toBe('Notes');
+  expect(chatMemoryCitationCopy({title: '', emoji: '🧠'})).toBe('🧠');
+  expect(chatMemoryCitationCopy({title: '  ', emoji: '✨'})).toBe('✨');
+  expect(chatMemoryCitationCopy({title: '\u0085', emoji: '🧠'})).toBe('🧠');
+  expect(chatMemoryCitationCopy({title: ''})).toBe('');
+  expect(chatMemoryCitationCopy({title: ' \t'})).toBe('');
+  expect(chatMemoryCitationCopy({title: '', emoji: ' \t'})).toBe('');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

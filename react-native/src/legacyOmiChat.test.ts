@@ -87,7 +87,7 @@ test('old chat history keeps GET day_summary type instead of dropping it as a no
   expect(page.messages.find(row => row.id === 'text-1')?.type).toBeUndefined();
 });
 
-test('old chat history keeps GET memory citations and omits empty titles', () => {
+test('old chat history keeps GET memory citations including empty titles', () => {
   const page = parseOmiHistory(
     JSON.stringify([
       {

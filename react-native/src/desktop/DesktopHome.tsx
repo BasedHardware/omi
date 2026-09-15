@@ -160,10 +160,9 @@ function AskExchange({
           daySummary === '' ? [] : chatDaySummaryItems(item.text);
         const showSummaryItems =
           daySummary !== '' && item.generationOutcome !== 'failed';
-        const citations = (item.memories ?? []).flatMap(memory => {
-          const copy = chatMemoryCitationCopy(memory);
-          return copy === null ? [] : [copy];
-        });
+        const citations = (item.memories ?? []).map(memory =>
+          chatMemoryCitationCopy(memory),
+        );
         return (
           <View key={item.id} style={styles.exchangeRow}>
             <Text style={styles.rowMeta}>{chatSenderCopy(item.sender)}</Text>

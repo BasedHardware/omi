@@ -1515,6 +1515,49 @@ test('a day_summary chat message names GET text as Flutter numbered rows', () =>
   });
 });
 
+test('a chat message names GET memory citations with empty titles', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-empty-cited',
+        text: 'I found that meeting.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        memories: [
+          {title: '', emoji: '🧠'},
+          {title: '  '},
+          {title: '\u0085', emoji: '🚀'},
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('🧠');
+  expect(copies).toContain('🚀');
+  expect(copies.filter(copy => copy === '')).toEqual(['']);
+  expect(copies).not.toContain('\u0085');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('a chat message names GET memory citations without inventing a conversation open', () => {
   const renderer = render(
     <ChatMessageRow
@@ -1551,7 +1594,7 @@ test('a chat message names GET memory citations without inventing a conversation
     });
   expect(copies).toContain('🚀 Morning standup');
   expect(copies).toContain('Notes');
-  expect(copies).not.toContain('🧠');
+  expect(copies).toContain('🧠');
   expect(copies).not.toContain('\u0085');
   act(() => {
     renderer.unmount();

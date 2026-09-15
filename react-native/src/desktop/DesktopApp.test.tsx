@@ -754,6 +754,30 @@ test('desktop chat names GET day_summary instead of a normal Omi turn', () => {
   expect(copy).not.toContain('day_summary');
 });
 
+test('desktop chat names GET memory citations with empty titles', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'empty-cited-1',
+        text: 'I found that meeting.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        memories: [
+          {title: '', emoji: '🧠'},
+          {title: '  '},
+          {title: '\u0085', emoji: '🚀'},
+        ],
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('I found that meeting.');
+  expect(copy).toContain('🧠');
+  expect(copy).toContain('🚀');
+  expect(copy).not.toContain('\u0085');
+});
+
 test('desktop chat names GET content_blocks without inventing write actions', () => {
   const renderer = renderDesktop({
     messages: [

@@ -2621,13 +2621,13 @@ export function chatAppAttributionCopy(
 export function chatMemoryCitationCopy(memory: {
   title: string;
   emoji?: string | null;
-}): string | null {
+}): string {
   const title = visibleDisplayText(memory.title);
-  if (title === '') {
-    return null;
-  }
   const emoji = visibleDisplayText(memory.emoji ?? '');
-  return emoji === '' ? title : `${emoji} ${title}`;
+  if (emoji === '') {
+    return title;
+  }
+  return title === '' ? emoji : `${emoji} ${title}`;
 }
 
 export function chatEvidenceKindCopy(kind: string): string {
