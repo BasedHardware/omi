@@ -1705,6 +1705,75 @@ test('conversation list names Flutter ConversationListItem empty GET title white
   expect(textOf(renderer)).not.toContain('Conversation title unavailable');
 });
 
+test('conversation list names Flutter ConversationListItem empty GET ids without hiding neighbors', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Empty id',
+    summary: '',
+    searchableText: 'Empty id',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    source: 'listen' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+    status: 'completed' as const,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'kept',
+                title: 'Kept title',
+                searchableText: 'Kept title',
+              },
+              {
+                ...base,
+                id: '',
+              },
+              {
+                ...base,
+                id: ' \t',
+                title: 'Whitespace id',
+                searchableText: 'Whitespace id',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Kept title');
+  expect(copy).toContain('Empty id');
+  expect(copy).toContain('Whitespace id');
+  expect(copy).not.toContain('Conversations could not be loaded.');
+  expect(copy).not.toContain(conversationsEmptyCopy());
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Open conversation Empty id',
+    ),
+  ).toBeDefined();
+});
+
 test('conversation list omits Flutter ConversationListItem Processing chips', () => {
   const base = {
     kind: 'conversation' as const,

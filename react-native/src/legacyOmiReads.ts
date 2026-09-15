@@ -32,9 +32,7 @@ function text(value: unknown, fallback?: string): string {
   return value;
 }
 function id(value: unknown): string {
-  const result = text(value);
-  if (!result) throw new Error('Omi ID is malformed');
-  return result;
+  return text(value);
 }
 function bool(value: unknown, fallback = false): boolean {
   if (value === undefined || value === null) return fallback;
@@ -205,8 +203,10 @@ function rows(value: unknown): Record<string, unknown>[] {
   return value.map(item => {
     const row = object(item),
       key = id(row.id);
-    if (seen.has(key)) throw new Error('Omi IDs are duplicated');
-    seen.add(key);
+    if (key !== '') {
+      if (seen.has(key)) throw new Error('Omi IDs are duplicated');
+      seen.add(key);
+    }
     return row;
   });
 }

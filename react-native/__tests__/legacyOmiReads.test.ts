@@ -705,6 +705,67 @@ test('old conversations name omitted or JSON-null GET structured.emoji as Flutte
   ).rejects.toThrow('Omi text is malformed');
 });
 
+test('names Flutter ConversationListItem empty GET ids instead of omitting neighboring conversations', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'kept',
+      structured: {title: 'Kept title', overview: 'Actual overview'},
+    },
+    {
+      ...conversation,
+      id: '',
+      structured: {title: 'Empty id', overview: 'Actual overview'},
+    },
+    {
+      ...conversation,
+      id: ' \t',
+      structured: {title: 'Whitespace id', overview: 'Actual overview'},
+    },
+    {
+      ...conversation,
+      id: '\u0085',
+      structured: {title: 'Next line id', overview: 'Actual overview'},
+    },
+    {
+      ...conversation,
+      id: '  padded  ',
+      structured: {title: 'Padded id', overview: 'Actual overview'},
+    },
+    {
+      ...conversation,
+      id: '',
+      structured: {title: 'Second empty id', overview: 'Actual overview'},
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items.map(row => ({id: row.id, title: row.title}))).toEqual([
+    {id: 'kept', title: 'Kept title'},
+    {id: '', title: 'Empty id'},
+    {id: ' \t', title: 'Whitespace id'},
+    {id: '\u0085', title: 'Next line id'},
+    {id: '  padded  ', title: 'Padded id'},
+    {id: '', title: 'Second empty id'},
+  ]);
+  await expect(
+    loadConversations(backend([{...conversation, id: undefined}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadConversations(backend([{...conversation, id: null}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadConversations(backend([{...conversation, id: 1}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {...conversation, id: 'same'},
+        {...conversation, id: 'same'},
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi IDs are duplicated');
+});
+
 test('old conversations keep GET captured_at_ms and omit missing values', async () => {
   const {api} = backend([
     {
@@ -824,6 +885,105 @@ test('old empty memory content stays searchable instead of a blank row', async (
     summary: '',
     searchableText: '',
   });
+});
+
+test('names Flutter MemoryItem empty GET ids instead of omitting neighboring memories', async () => {
+  const {api} = backend(
+    [
+      {
+        id: 'kept',
+        content: 'Kept title',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+      {
+        id: '',
+        content: 'Empty id',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+      {
+        id: ' \t',
+        content: 'Whitespace id',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+      {
+        id: '\u0085',
+        content: 'Next line id',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+      {
+        id: '  padded  ',
+        content: 'Padded id',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+      {
+        id: '',
+        content: 'Second empty id',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+      },
+    ].map(omiMemory),
+  );
+  const result = await loadMemories(api);
+  expect(result.items.map(row => ({id: row.id, title: row.title}))).toEqual([
+    {id: 'kept', title: 'Kept title'},
+    {id: '', title: 'Empty id'},
+    {id: ' \t', title: 'Whitespace id'},
+    {id: '\u0085', title: 'Next line id'},
+    {id: '  padded  ', title: 'Padded id'},
+    {id: '', title: 'Second empty id'},
+  ]);
+  await expect(
+    loadMemories(
+      backend(
+        [{content: 'Omitted id', created_at: '2026-09-07T00:00:00Z'}].map(
+          omiMemory,
+        ),
+      ).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(
+      backend(
+        [{id: null, content: 'Null id', created_at: '2026-09-07T00:00:00Z'}].map(
+          omiMemory,
+        ),
+      ).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(
+      backend(
+        [{id: 1, content: 'Numeric id', created_at: '2026-09-07T00:00:00Z'}].map(
+          omiMemory,
+        ),
+      ).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(
+      backend(
+        [
+          {
+            id: 'same',
+            content: 'First',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+          },
+          {
+            id: 'same',
+            content: 'Second',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+          },
+        ].map(omiMemory),
+      ).api,
+    ),
+  ).rejects.toThrow('Omi IDs are duplicated');
 });
 
 test('old memories name empty GET conversation_id as omitted instead of hiding neighbors', async () => {
@@ -1125,6 +1285,64 @@ test('old memories name Flutter MemoriesPage fromJson invalid GET evidence', asy
   expect(kept.items).toHaveLength(1);
   expect(kept.items[0]).toMatchObject({id: 'fact'});
   expect(kept.items[0]).not.toHaveProperty('evidence');
+});
+
+test('names Flutter ActionItemsPage empty GET ids instead of omitting neighboring tasks', async () => {
+  const {api} = backend({
+    action_items: [
+      {id: 'kept', description: 'Kept title', completed: false},
+      {id: '', description: 'Empty id', completed: false},
+      {id: ' \t', description: 'Whitespace id', completed: false},
+      {id: '\u0085', description: 'Next line id', completed: false},
+      {id: '  padded  ', description: 'Padded id', completed: false},
+      {id: '', description: 'Second empty id', completed: false},
+    ],
+    has_more: false,
+  });
+  const result = await loadTasks(api);
+  expect(result.items.map(row => ({id: row.id, title: row.title}))).toEqual([
+    {id: 'kept', title: 'Kept title'},
+    {id: '', title: 'Empty id'},
+    {id: ' \t', title: 'Whitespace id'},
+    {id: '\u0085', title: 'Next line id'},
+    {id: '  padded  ', title: 'Padded id'},
+    {id: '', title: 'Second empty id'},
+  ]);
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [{description: 'Omitted id', completed: false}],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [{id: null, description: 'Null id', completed: false}],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [{id: 1, description: 'Numeric id', completed: false}],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [
+          {id: 'same', description: 'First', completed: false},
+          {id: 'same', description: 'Second', completed: false},
+        ],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi IDs are duplicated');
 });
 
 test('old empty task descriptions stay searchable instead of failing the page', async () => {

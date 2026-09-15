@@ -107,6 +107,41 @@ test('task page names Flutter empty GET titles', () => {
   act(() => renderer.unmount());
 });
 
+test('task page names Flutter ActionItemsPage empty GET ids without hiding neighbors', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [
+              {...task, id: 'kept', title: 'Kept title'},
+              {...task, id: '', title: 'Empty id'},
+              {...task, id: ' \t', title: 'Whitespace id'},
+            ],
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(control(renderer, 'Task: Kept title')).toBeDefined();
+  expect(control(renderer, 'Task: Empty id')).toBeDefined();
+  expect(control(renderer, 'Task: Whitespace id')).toBeDefined();
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Kept title');
+  expect(copy).toContain('Empty id');
+  expect(copy).toContain('Whitespace id');
+  expect(copy).not.toContain('Tasks could not be loaded.');
+  act(() => renderer.unmount());
+});
+
 test('task search does not match invented empty-title copy', () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {

@@ -646,6 +646,56 @@ test('Memories names Flutter MemoryItem empty GET content', async () => {
   }
 });
 
+test('Memories names Flutter MemoryItem empty GET ids without hiding neighbors', async () => {
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              memory('kept'),
+              {
+                ...memory(''),
+                title: 'Empty id',
+                summary: 'Empty id',
+                searchableText: 'Empty id',
+              },
+              {
+                ...memory(' \t'),
+                title: 'Whitespace id',
+                summary: 'Whitespace id',
+                searchableText: 'Whitespace id',
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(ids(view)).toEqual(['kept', '', ' \t']);
+    expect(
+      view.root.find(
+        node => node.props.accessibilityLabel === 'Memory: Empty id',
+      ),
+    ).toBeDefined();
+    expect(
+      view.root.find(
+        node => node.props.accessibilityLabel === 'Memory: Whitespace id',
+      ),
+    ).toBeDefined();
+    expect(textOf(view)).not.toContain(memoriesLoadErrorCopy());
+  } finally {
+    await act(async () => {
+      view.unmount();
+    });
+  }
+});
+
 test('Memories rows omit Flutter MemoryItem unused timestamp and citation count', () => {
   const timestamp = Date.parse('2026-09-07T12:00:00.000Z') / 1000;
   let view!: Renderer.ReactTestRenderer;
