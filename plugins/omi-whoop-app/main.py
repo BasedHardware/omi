@@ -38,6 +38,51 @@ def log(msg: str):
     sys.stdout.flush()
 
 
+def _coerce_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    """Coerce an optional tool argument into a bounded int.
+
+    The Omi backend forwards every non-required chat-tool parameter, so a call
+    that omits `days`/`max_results` arrives as an explicit JSON `null` rather
+    than a missing key. Booleans, unparseable strings and `None` therefore have
+    to fall back to the documented default, and every accepted value is clamped
+    into the documented range so an empty date window or a non-positive upstream
+    `limit` can never be produced. Numeric floats are truncated (2.5 -> 2), and
+    only non-finite floats fall back to the default.
+    """
+    if isinstance(value, bool) or value is None:
+        return default
+
+    if isinstance(value, int):
+        coerced = value
+    elif isinstance(value, float):
+        # Reject NaN/inf rather than raising on int() conversion.
+        if value != value or value in (float("inf"), float("-inf")):
+            return default
+        coerced = int(value)
+    elif isinstance(value, str):
+        try:
+            coerced = int(value.strip())
+        except (TypeError, ValueError, OverflowError):
+            # int() rejects non-integer strings such as "1e309" with ValueError;
+            # these inputs must fall back to the documented default.
+            return default
+    else:
+        return default
+
+    return max(minimum, min(coerced, maximum))
+
+
+def _http_error_message(response: Any) -> str:
+    """Describe a failed Whoop response without ever returning a blank reason.
+
+    Whoop answers some error routes with an empty body, which used to surface as
+    `Failed to get ...: ` with no cause at all. The status code is always
+    reported when the body carries no information.
+    """
+    body = (getattr(response, "text", "") or "").strip()
+    return body if body else f"HTTP {getattr(response, 'status_code', 'error')}"
+
+
 # Whoop OAuth2 Configuration
 WHOOP_CLIENT_ID = os.getenv("WHOOP_CLIENT_ID", "")
 WHOOP_CLIENT_SECRET = os.getenv("WHOOP_CLIENT_SECRET", "")
@@ -148,7 +193,7 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
             return response.json()
         else:
             log(f"Whoop API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            return {"error": _http_error_message(response), "status_code": response.status_code}
 
     except Exception as e:
         log(f"Whoop API request error: {e}")
@@ -657,8 +702,8 @@ async def tool_get_workouts(request: Request):
         log(f"=== GET_WORKOUTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        days = _coerce_int(body.get("days"), default=7, minimum=1, maximum=30)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -818,10 +863,22 @@ async def tool_get_body_measurements(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
-        result = whoop_api_request(uid, "GET", "/body_measurement")
+        result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
-        if not result or "error" in result:
+        # WHOOP documents 404 for this user-scoped route as "Requested resource
+        # not found", which is the ordinary state for a user who has not entered
+        # body measurements yet. Reporting it as a failure made the friendly
+        # empty branch below unreachable for exactly the users who need it.
+        if result and result.get("status_code") == 404:
+            return ChatToolResponse(result="No body measurements available.")
+
+        if result and "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
+
+        if not result or not any(
+            result.get(field) for field in ("height_meter", "weight_kilogram", "max_heart_rate")
+        ):
+            return ChatToolResponse(result="No body measurements available.")
 
         height_m = result.get("height_meter")
         weight_kg = result.get("weight_kilogram")
