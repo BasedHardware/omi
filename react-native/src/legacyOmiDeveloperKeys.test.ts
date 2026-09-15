@@ -369,7 +369,7 @@ test('keeps GET developer keys when a name exceeds 10000', () => {
   ]);
 });
 
-test('loadOmiDevApiKeys and loadOmiMcpApiKeys name resolved GET keys and omit failures', async () => {
+test('loadOmiDevApiKeys and loadOmiMcpApiKeys name resolved GET keys', async () => {
   const request = jest.fn(async (input: {path: string}) => {
     if (input.path === '/v1/dev/keys') {
       return {
@@ -410,8 +410,21 @@ test('loadOmiDevApiKeys and loadOmiMcpApiKeys name resolved GET keys and omit fa
     expectedApiContract: 'omi',
     path: '/v1/mcp/keys',
   });
-  request.mockResolvedValueOnce({id: 'dev', status: 404, body: '[]'});
-  expect(await loadOmiDevApiKeys(backend)).toBeNull();
+});
+
+test('loadOmiDevApiKeys and loadOmiMcpApiKeys name HTTP 404 instead of empty success', async () => {
+  const request = jest.fn(async () => ({
+    id: 'keys',
+    status: 404,
+    body: '[]',
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiDevApiKeys(backend)).rejects.toThrow(
+    'Omi developer keys are malformed',
+  );
+  await expect(loadOmiMcpApiKeys(backend)).rejects.toThrow(
+    'Omi developer keys are malformed',
+  );
 });
 
 test('loadOmiDevApiKeys and loadOmiMcpApiKeys keep honest GET empty keys', async () => {

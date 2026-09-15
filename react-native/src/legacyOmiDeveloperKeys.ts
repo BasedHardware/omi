@@ -106,9 +106,6 @@ async function loadKeys(
     expectedApiContract: 'omi',
     path,
   });
-  if (response.status === 404) {
-    return null;
-  }
   if (
     response.status !== 200 ||
     response.body === null ||

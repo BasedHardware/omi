@@ -2685,7 +2685,7 @@ test('Settings names Flutter noApiKeys for empty GET developer and MCP keys', as
   expect(tree).not.toContain('Revoke');
 });
 
-test('Settings omits Worker 404 developer and MCP keys instead of No API keys yet', async () => {
+test('Settings names HTTP 404 developer and MCP keys GET Flutter error instead of omitting', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => ({
     id: request.id,
@@ -2699,6 +2699,11 @@ test('Settings omits Worker 404 developer and MCP keys instead of No API keys ye
       .props.onPress();
   });
   const tree = textOf(renderer);
+  expect(tree).toContain('Developer API');
+  expect(tree).toContain('MCP');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi developer keys are malformed')),
+  );
   expect(tree).not.toContain('No API keys yet');
   expect(tree).not.toContain('Create');
   expect(tree).not.toContain('Revoke');
