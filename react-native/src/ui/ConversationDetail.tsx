@@ -20,6 +20,7 @@ import {
   conversationActionItemsEmptyDescriptionCopy,
   conversationNoFolderCopy,
   conversationCalendarAttendeesChipCopy,
+  calendarEventDisplayTitle,
   legacyTranscriptCanDisplaySeconds,
   legacyTranscriptTimestampCopy,
   visibleDisplayText,
@@ -339,7 +340,7 @@ function LegacyConversationBody({
     ? ''
     : visibleDisplayText(detail.appsError ?? '');
   const peopleError = visibleDisplayText(detail.peopleError ?? '');
-  const calendarTitle = visibleDisplayText(detail.calendarEvent?.title ?? '');
+  const calendarTitle = calendarEventDisplayTitle(detail.calendarEvent?.title);
   const calendarAttendees = (detail.calendarEvent?.attendees ?? [])
     .map(name => visibleDisplayText(name))
     .filter(name => name !== '')
@@ -466,7 +467,7 @@ function LegacyConversationBody({
       ) : (
         <Text style={[styles.conversationDetailField, ink]}>{address}</Text>
       )}
-      {calendarTitle === '' ? null : (
+      {detail.calendarEvent === undefined ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {calendarTitle}
         </Text>

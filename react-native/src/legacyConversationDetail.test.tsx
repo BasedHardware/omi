@@ -224,8 +224,10 @@ test('keeps GET calendar event title and attendees and omits missing events', as
     }),
   );
   const untitled = await loadLegacyConversationDetail(backend, fixture.id);
-  expect(untitled.calendarEvent).not.toHaveProperty('title');
-  expect(untitled.calendarEvent?.attendees).toEqual([]);
+  expect(untitled.calendarEvent).toMatchObject({
+    title: '',
+    attendees: [],
+  });
   expect(untitled.calendarEvent).not.toHaveProperty('shareMailto');
   mockRequest.mockResolvedValue(response(fixture));
   expect(

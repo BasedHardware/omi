@@ -712,6 +712,12 @@ export function conversationCalendarAttendeeChipName(attendee: string): string {
   return firstName === undefined ? '' : firstName;
 }
 
+export function calendarEventDisplayTitle(
+  title: string | null | undefined,
+): string {
+  return visibleDisplayText(title ?? '');
+}
+
 export function conversationCalendarAttendeesChipCopy(
   attendees: readonly string[] | null | undefined,
 ): string | null {

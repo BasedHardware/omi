@@ -130,6 +130,7 @@ import {
   conversationListTag,
   conversationVisibilityCopy,
   conversationCalendarAttendeesChipCopy,
+  calendarEventDisplayTitle,
   conversationUnknownAppCopy,
   conversationUnknownLocationCopy,
   conversationLocationAddressCopy,
@@ -3558,6 +3559,15 @@ test('conversation calendar attendee chip names Flutter GetSummaryWidgets first 
     ]),
   ).toBe('Alex, Sam +1');
   expect(conversationCalendarAttendeesChipCopy([' \t\n'])).toBeNull();
+});
+
+test('calendar event display title names Flutter empty GET titles', () => {
+  expect(calendarEventDisplayTitle('')).toBe('');
+  expect(calendarEventDisplayTitle(' \t\n')).toBe('');
+  expect(calendarEventDisplayTitle('\u00A0')).toBe('');
+  expect(calendarEventDisplayTitle('\u0085')).toBe('');
+  expect(calendarEventDisplayTitle(undefined)).toBe('');
+  expect(calendarEventDisplayTitle('  Standup  ')).toBe('Standup');
 });
 
 test('conversation unknown-app copy names Flutter catalog-miss attribution', () => {

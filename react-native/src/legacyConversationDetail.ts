@@ -9,6 +9,7 @@ import {
   conversationLocationAddressCopy,
   desktopReadErrorCopy,
   transcriptSttProviderCopy,
+  calendarEventDisplayTitle,
   visibleDisplayText,
 } from './desktopReadClient';
 import {loadOmiFolder} from './legacyOmiFolders';
@@ -29,7 +30,7 @@ export type LegacyConversationDetail = {
   appSummaryDescription?: string;
   appSummaryImageUri?: string;
   calendarEvent?: {
-    title?: string;
+    title: string;
     attendees: string[];
     startCopy?: string;
     endCopy?: string;
@@ -253,7 +254,7 @@ function calendarEvent(
   }
   const event = object(value);
   text(event.event_id, 1_000_000);
-  const title = visibleDisplayText(text(event.title));
+  const title = calendarEventDisplayTitle(text(event.title));
   const startCopy = calendarEventTimeCopy(event.start_time);
   const endCopy = calendarEventTimeCopy(event.end_time);
   if (
@@ -298,7 +299,7 @@ function calendarEvent(
     return undefined;
   }
   return {
-    ...(title === '' ? {} : {title}),
+    title,
     attendees,
     ...(startCopy === '' ? {} : {startCopy}),
     ...(endCopy === '' ? {} : {endCopy}),

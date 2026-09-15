@@ -2447,6 +2447,42 @@ test('conversation details name GET private and shared visibility', () => {
   expect(hidden).not.toContain('Public');
 });
 
+test('legacy conversation details name Flutter CalendarEventDetailsSheet empty GET titles', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        calendarEvent: {
+          title: ' \t\n',
+          attendees: [],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+        },
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const emptyTitles = view.root.findAll(
+    node => node.type === Text && node.props.children === '',
+  );
+  expect(emptyTitles.length).toBeGreaterThan(0);
+  expect(text(view)).toContain('3:00 PM – 4:00 PM');
+  expect(text(view)).not.toContain('Calendar event unavailable');
+  expect(text(view)).not.toContain('Event title unavailable');
+});
+
 test('legacy conversation details name GET calendar event title and attendees', () => {
   mockLegacy.mockReturnValue({
     result: {
