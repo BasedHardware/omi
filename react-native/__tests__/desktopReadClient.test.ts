@@ -1942,7 +1942,19 @@ test('firmware update copy names GET latest without Available on current or draf
   ).toEqual({
     latest: '1.3.0',
     available: true,
-    changelog: ['Fixed BLE reconnect', 'Battery improvements'],
+    changelog: ['Fixed BLE reconnect', '', 'Battery improvements'],
+  });
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: null,
+      changelog: [' \t'],
+    }),
+  ).toEqual({
+    latest: '1.3.0',
+    available: true,
+    changelog: [''],
   });
   expect(
     firmwareUpdateCopy('1.2.3', {

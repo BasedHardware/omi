@@ -715,6 +715,61 @@ test('connected device names GET latest firmware without an OTA control', async 
   omiBackend.request.mockReset();
 });
 
+test('connected device names Flutter FirmwareUpdate empty GET changelog lines without omitting What\'s New', async () => {
+  omiBackend.request.mockReset();
+  omiBackend.request.mockResolvedValue({
+    id: 'omi-firmware-latest',
+    status: 200,
+    body: JSON.stringify({
+      version: '1.3.0',
+      changelog: [' \t'],
+    }),
+  });
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'omi-test',
+        name: 'Omi',
+        connected: true,
+        rssi: -40,
+        information: {
+          model: 'Omi Dev Kit',
+          firmware: '1.2.3',
+          hardware: '1',
+          manufacturer: 'Based Hardware',
+        },
+      },
+    ],
+    connectedDeviceId: 'omi-test',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain(`"${firmwareWhatsNewCopy()}"`);
+  expect(output).toContain(
+    `"${firmwareLatestVersionCopy()}",": ","1.3.0"`,
+  );
+  expect(output).not.toContain('Install');
+  expect(output).not.toContain('Current Version');
+  await act(async () => renderer.unmount());
+  omiBackend.request.mockReset();
+});
+
 test('connected device names GET latest firmware up to date without Latest Version', async () => {
   omiBackend.request.mockReset();
   omiBackend.request.mockResolvedValue({

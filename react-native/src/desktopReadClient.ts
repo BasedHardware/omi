@@ -1964,10 +1964,9 @@ export function firmwareUpdateCopy(
     newest !== null &&
     (minimum === null || compareDottedVersion(current, minimum) >= 0) &&
     compareDottedVersion(newest, current) > 0;
-  const changelog = (details.changelog ?? []).flatMap(item => {
-    const copy = visibleDisplayText(item);
-    return copy === '' ? [] : [copy];
-  });
+  const changelog = (details.changelog ?? []).map(item =>
+    visibleDisplayText(item),
+  );
   return {
     latest,
     available,
