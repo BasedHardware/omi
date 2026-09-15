@@ -2862,6 +2862,7 @@ test('legacy conversation details name Flutter GetSummaryWidgets empty GET atten
   });
   expect(emptyAttendees.length).toBeGreaterThan(0);
   expect(text(view)).toContain('Standup');
+  expect(text(view)).toContain(' \t\n');
   expect(text(view)).toContain('3:00 PM – 4:00 PM');
   expect(text(view)).not.toContain('Attendees unavailable');
 });

@@ -334,9 +334,7 @@ function LegacyConversationBody({
   const peopleError = visibleDisplayText(detail.peopleError ?? '');
   const calendarTitle = calendarEventDisplayTitle(detail.calendarEvent?.title);
   const calendarAttendeesList = detail.calendarEvent?.attendees ?? [];
-  const calendarAttendees = calendarAttendeesList
-    .map(name => visibleDisplayText(name))
-    .join(', ');
+  const calendarAttendees = calendarAttendeesList.join(', ');
   const calendarStart = visibleDisplayText(
     detail.calendarEvent?.startCopy ?? '',
   );
