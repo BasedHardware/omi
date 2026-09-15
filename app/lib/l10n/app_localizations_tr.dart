@@ -439,6 +439,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get autoSyncDescription => 'Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin';
 
   @override
+  String get omiButtonActions => 'Omi Düğme İşlemleri';
+
+  @override
   String get deviceSettings => 'Cihaz Ayarları';
 
   @override

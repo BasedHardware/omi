@@ -138,6 +138,7 @@
     "offlineSync": "Bezsaistes sinhronizācija",
     "autoSync": "Automātiska sinhronizācija",
     "autoSyncDescription": "Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota",
+    "omiButtonActions": "Omi pogas darbības",
     "deviceSettings": "Ierīces iestatījumi",
     "integrations": "Integrācijas",
     "feedbackBug": "Atsauksmes / Kļūda",

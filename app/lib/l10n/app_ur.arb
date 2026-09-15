@@ -557,6 +557,7 @@
     "offlineSync": "آفلائن ہم وقت",
     "autoSync": "خودکار مطابقت",
     "autoSyncDescription": "جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں",
+    "omiButtonActions": "Omi بٹن کے اعمال",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

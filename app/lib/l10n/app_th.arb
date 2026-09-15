@@ -138,6 +138,7 @@
     "offlineSync": "ซิงค์ออฟไลน์",
     "autoSync": "ซิงค์อัตโนมัติ",
     "autoSyncDescription": "ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ",
+    "omiButtonActions": "การทำงานของปุ่ม Omi",
     "deviceSettings": "การตั้งค่าอุปกรณ์",
     "integrations": "การเชื่อมต่อ",
     "feedbackBug": "คำติชม / รายงานข้อผิดพลาด",

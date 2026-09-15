@@ -439,6 +439,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get autoSyncDescription => 'Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse';
 
   @override
+  String get omiButtonActions => 'Omi nupu toimingud';
+
+  @override
   String get deviceSettings => 'Seadme seaded';
 
   @override

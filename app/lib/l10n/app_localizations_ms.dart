@@ -438,6 +438,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get autoSyncDescription => 'Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan';
 
   @override
+  String get omiButtonActions => 'Tindakan Butang Omi';
+
+  @override
   String get deviceSettings => 'Tetapan Peranti';
 
   @override

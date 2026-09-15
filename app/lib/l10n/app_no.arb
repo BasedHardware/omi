@@ -138,6 +138,7 @@
     "offlineSync": "Offline-synkronisering",
     "autoSync": "Automatisk synkronisering",
     "autoSyncDescription": "Synkroniser frakoblede opptak automatisk når enheten din kobles til",
+    "omiButtonActions": "Omi-knapphandlinger",
     "deviceSettings": "Enhetsinnstillinger",
     "integrations": "Integrasjoner",
     "feedbackBug": "Tilbakemelding / Feil",
