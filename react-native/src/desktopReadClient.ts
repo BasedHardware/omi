@@ -2233,7 +2233,7 @@ export function appSectionCategoryCopy(
 }
 
 export function appDisplayName(name: string): string {
-  return visibleDisplayText(name);
+  return name;
 }
 
 export function deviceDisplayName(name: string): string {

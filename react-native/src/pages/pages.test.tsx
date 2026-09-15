@@ -873,9 +873,10 @@ test('Connectors names Flutter empty GET app names', async () => {
     return {id: request.id, status: 404, body: null};
   });
   const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain(' \t\n');
   expect(textOf(renderer)).not.toContain('App name unavailable');
   expect(textOf(renderer)).not.toContain('Not installed');
-  expect(labelsOf(renderer)).toContain('Install ');
+  expect(labelsOf(renderer)).toContain('Install  \t\n');
 });
 
 test('nested non-retryable Apps enable writes latch Install', async () => {

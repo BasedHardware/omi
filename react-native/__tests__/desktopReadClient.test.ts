@@ -2690,9 +2690,9 @@ test('app attribution keeps category when an author is present', () => {
 
 test('app display name names Flutter empty GET names', () => {
   expect(appDisplayName('')).toBe('');
-  expect(appDisplayName(' \t\n')).toBe('');
-  expect(appDisplayName('\u00A0')).toBe('');
-  expect(appDisplayName('  Owned app  ')).toBe('Owned app');
+  expect(appDisplayName(' \t\n')).toBe(' \t\n');
+  expect(appDisplayName('\u00A0')).toBe('\u00A0');
+  expect(appDisplayName('  Owned app  ')).toBe('  Owned app  ');
 });
 
 test('app rating copy keeps GET scores instead of inventing zeros', () => {
@@ -2722,10 +2722,11 @@ test('app list private name copy names Flutter AppListItem lock and omits Catego
   expect(appListPrivateNameCopy('Owned app', false, false)).toBe('Owned app');
   expect(appListPrivateNameCopy('Owned app', false, true)).toBe('Owned app');
   expect(appListPrivateNameCopy('  Owned app  ', true, false)).toBe(
-    'Owned app 🔒',
+    '  Owned app   🔒',
   );
   expect(appListPrivateNameCopy('', true, false)).toBe(' 🔒');
-  expect(appListPrivateNameCopy(' \t', true, true)).toBe('');
+  expect(appListPrivateNameCopy(' \t', true, true)).toBe(' \t');
+  expect(appListPrivateNameCopy(' \t', true, false)).toBe(' \t 🔒');
 });
 
 test('app list description copy names Flutter AppListItem truncated GET description', () => {

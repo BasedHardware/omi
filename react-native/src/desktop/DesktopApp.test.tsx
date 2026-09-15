@@ -2377,6 +2377,7 @@ test('Apps gallery names Flutter empty GET app names', async () => {
     await Promise.resolve();
   });
   const tree = renderedText(renderer);
+  expect(tree).toContain(' \t\n');
   expect(tree).not.toContain('App name unavailable');
   expect(tree).not.toContain('App details unavailable');
   expect(tree).toContain('Not connected');
