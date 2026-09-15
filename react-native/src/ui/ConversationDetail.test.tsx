@@ -3772,6 +3772,85 @@ test('legacy conversation details name GET calendar Share with attendees', () =>
   openURL.mockRestore();
 });
 
+test('legacy conversation details name Flutter CalendarEventDetailsSheet padded GET attendee_emails', () => {
+  const paddedMailto = `mailto:  sam@example.com  ?subject=${encodeURIComponent(
+    'Notes: Standup',
+  )}`;
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        calendarEvent: {
+          title: 'Standup',
+          attendees: ['Alex Chen'],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+          shareMailto: paddedMailto,
+        },
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const padded = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(text(padded)).toContain('Share with attendees');
+  const paddedLinks = padded.root.findAll(
+    node =>
+      node.props.accessibilityRole === 'link' &&
+      node.props.accessibilityLabel === 'Share with attendees' &&
+      typeof node.props.onPress === 'function',
+  );
+  expect(paddedLinks.length).toBeGreaterThan(0);
+  const paddedOpenURL = jest
+    .spyOn(Linking, 'openURL')
+    .mockResolvedValue(undefined as never);
+  act(() => {
+    paddedLinks[0].props.onPress();
+  });
+  expect(paddedOpenURL).toHaveBeenCalledWith(paddedMailto);
+  paddedOpenURL.mockRestore();
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        calendarEvent: {
+          title: 'Standup',
+          attendees: [],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+          shareMailto: `mailto: \t,?subject=${encodeURIComponent(
+            'Notes: Standup',
+          )}`,
+        },
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const whitespace = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(text(whitespace)).toContain('Share with attendees');
+});
+
 test('legacy conversation details omit Flutter PhotosGrid photo-count text', () => {
   mockLegacy.mockReturnValue({
     result: {

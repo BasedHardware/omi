@@ -274,10 +274,7 @@ function calendarEvent(
   }
   const attendeeEmails = (
     Array.isArray(event.attendee_emails) ? event.attendee_emails : []
-  ).flatMap(raw => {
-    const email = visibleDisplayText(text(raw));
-    return email === '' ? [] : [email];
-  });
+  ).map(raw => text(raw));
   const htmlLink =
     event.html_link === undefined || event.html_link === null
       ? undefined
