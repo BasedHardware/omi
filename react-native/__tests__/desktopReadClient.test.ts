@@ -1290,7 +1290,37 @@ test('discarded conversation titles use Flutter transcript excerpt and people na
       ],
       new Map([['person-alex', ' \t\n']]),
     ),
-  ).toBe('[00:00:00 - 00:00:01] : Named');
+  ).toBe('[00:00:00 - 00:00:01]  \t\n: Named');
+  expect(
+    conversationDiscardedTranscriptCopy(
+      [
+        {
+          text: 'Named',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          start: 0,
+          end: 1,
+          personId: 'person-alex',
+        },
+      ],
+      new Map([['person-alex', '  Alex  ']]),
+    ),
+  ).toBe('[00:00:00 - 00:00:01]   Alex  : Named');
+  expect(
+    conversationDiscardedTranscriptCopy(
+      [
+        {
+          text: 'Named',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          start: 0,
+          end: 1,
+          personId: 'person-alex',
+        },
+      ],
+      new Map([['person-alex', '\u0085']]),
+    ),
+  ).toBe('[00:00:00 - 00:00:01] \u0085: Named');
   expect(
     conversationDiscardedTranscriptCopy(
       [

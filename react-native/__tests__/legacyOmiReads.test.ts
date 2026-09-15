@@ -365,7 +365,7 @@ test('old discarded conversations name GET people names on transcript_segments',
     '[00:00:00 - 00:00:01] Speaker 1: Later speech',
   );
   expect(result.items[2].title).toBe(
-    '[00:00:00 - 00:00:01] : Anonymous empty',
+    '[00:00:00 - 00:00:01]  \t: Anonymous empty',
   );
   expect(result.items[3].title).toBe(
     '[00:00:00 - 00:00:01] Speaker 1: Anonymous',
