@@ -5,6 +5,7 @@ This app provides Hive project management integration through API key authentica
 and chat tools for managing projects, tasks, actions, and searching.
 """
 import os
+import re
 from typing import Optional, Dict, Any, List
 
 import requests
@@ -503,8 +504,26 @@ def search_tasks(uid: str, query: str, limit: int = 10) -> List[HiveTask]:
                 project_name=project_name,
             ))
             count += 1
-            
+
     return tasks
+
+
+def _normalize_title(value: Optional[str]) -> str:
+    """Normalize a task title for comparison: collapse whitespace, strip, casefold."""
+    return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+
+def _format_task_lines(tasks: List[HiveTask]) -> List[str]:
+    """
+    Format tasks as numbered lines including each task id, so the model has a
+    `task_id` it can pass back to tools that mutate a task (#13976).
+    """
+    lines = []
+    for i, task in enumerate(tasks, 1):
+        status = f" [{task.status}]" if task.status else ""
+        project_info = f" (in {task.project_name})" if task.project_name else ""
+        lines.append(f"{i}. **{task.name}**{status}{project_info} — id: `{task.id}`")
+    return lines
 
 
 # ============================================
@@ -683,12 +702,9 @@ async def tool_hive_get_tasks(request: Request):
         if not tasks:
             return ChatToolResponse(result=f"No tasks found in **{target_project.name}**.")
         
-        # Format results
-        results = []
-        for i, task in enumerate(tasks[:limit], 1):
-            status = f" [{task.status}]" if task.status else ""
-            results.append(f"{i}. **{task.name}**{status}")
-        
+        # Format results (with ids so the model can pass task_id to mutations)
+        results = _format_task_lines(tasks[:limit])
+
         return ChatToolResponse(
             result=f"📝 Tasks in **{target_project.name}**:\n\n" + "\n".join(results)
         )
@@ -827,13 +843,9 @@ async def tool_hive_search(request: Request):
         if not tasks:
             return ChatToolResponse(result=f"No results found for '{query}'")
         
-        # Format results
-        results = []
-        for i, task in enumerate(tasks, 1):
-            project_info = f" (in {task.project_name})" if task.project_name else ""
-            status = f" [{task.status}]" if task.status else ""
-            results.append(f"{i}. **{task.name}**{status}{project_info}")
-        
+        # Format results (with ids so the model can pass task_id to mutations)
+        results = _format_task_lines(tasks)
+
         return ChatToolResponse(
             result=f"🔍 Found {len(tasks)} results for '{query}':\n\n" + "\n".join(results)
         )
@@ -868,25 +880,38 @@ async def tool_hive_update_task_status(request: Request):
         if not is_connected(uid):
             return ChatToolResponse(error="Please connect your Hive account first in the app settings.")
             
-        # If no task_id, find task by name
+        # If no task_id, resolve task_name to exactly one task. A status change
+        # mutates the task, so the name may never fall back to the first
+        # substring hit — that can complete a task the user did not name
+        # (#13976). Only an unambiguous match (a single exact title, or a
+        # single partial hit) is resolved; anything else is handed back with
+        # candidate ids so the model can retry with `task_id`.
         if not task_id and task_name:
-            tasks = search_tasks(uid, task_name, limit=5)
+            # Search the whole fetched window so an exact title past the
+            # fifth substring hit is still considered.
+            tasks = search_tasks(uid, task_name, limit=50)
             if not tasks:
                 return ChatToolResponse(error=f"Could not find task: {task_name}")
-            
-            # Find closest match
-            best_match = None
-            task_name_lower = task_name.lower()
-            for t in tasks:
-                if t.name.lower() == task_name_lower:
-                    best_match = t
-                    break
-            
-            if not best_match:
-                best_match = tasks[0] # Use first result as fallback
-                
-            task_id = best_match.id
-            task_name = best_match.name
+
+            task_name_norm = _normalize_title(task_name)
+            exact_matches = [t for t in tasks if _normalize_title(t.name) == task_name_norm]
+            candidates = exact_matches if exact_matches else tasks
+
+            if len(candidates) != 1:
+                listing = _format_task_lines(candidates[:10])
+                if len(candidates) > 10:
+                    listing.append(f"... and {len(candidates) - 10} more")
+                qualifier = "share the exact title" if exact_matches else "match the name"
+                return ChatToolResponse(
+                    result=(
+                        f"Multiple tasks {qualifier} '{task_name}'. "
+                        "Call hive_update_task_status again with `task_id` set to one of:\n\n"
+                        + "\n".join(listing)
+                    )
+                )
+
+            task_id = candidates[0].id
+            task_name = candidates[0].name
 
         # Map status common terms to Hive status
         # Hive usually uses 'completed' or 'todo'
@@ -907,7 +932,7 @@ async def tool_hive_update_task_status(request: Request):
             return ChatToolResponse(error=f"Failed to update task: {error_msg}")
             
         return ChatToolResponse(
-            result=f"✅ Updated task **{task_name}** status to **{hive_status}**!"
+            result=f"✅ Updated task **{task_name or task_id}** status to **{hive_status}**!"
         )
     
     except Exception as e:
@@ -1022,7 +1047,7 @@ async def get_omi_tools_manifest():
             },
             {
                 "name": "hive_update_task_status",
-                "description": "Update the status of a task in Hive. Use this when the user wants to complete a task, mark it as in progress, or change its status.",
+                "description": "Update the status of a task in Hive. Use this when the user wants to complete a task, mark it as in progress, or change its status. If task_name matches multiple tasks, nothing is updated and the matching tasks are returned with their ids so you can retry with task_id.",
                 "endpoint": "/tools/hive_update_task_status",
                 "method": "POST",
                 "parameters": {

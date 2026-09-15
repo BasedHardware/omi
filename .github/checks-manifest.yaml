@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: hive-app-tests
+    command: ["python3", "plugins/omi-hive-app/test_main.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13976: hive_update_task_status mutated the first substring search hit when no title matched exactly; it must resolve only an unambiguous match, and hive_search/hive_get_tasks must print task ids so the model can pass task_id"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
