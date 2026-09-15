@@ -83,6 +83,7 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           CONFIRMATION: ${{ inputs.confirmation }}
           INVOCATION_ID: ${{ inputs.invocation_id }}
+          RESUME_EXECUTION: ${{ inputs.resume_execution }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
