@@ -192,42 +192,51 @@ def export_memories(
     """
     Export all user memories to a JSON file.
 
-    Fetches all memories using pagination and writes them atomically to the
-    specified output file to prevent partial writes.
+    Fetches all memories using pagination and streams them directly to the
+    output file to prevent memory exhaustion for large datasets.
     """
     ctx = _ctx(typer_ctx)
-    all_memories = []
     limit = 100
     offset = 0
-
-    with ctx.make_client() as client:
-        while True:
-            page = client.get("/v1/dev/user/memories", params={"limit": limit, "offset": offset})
-
-            # Fail-fast: if API returns None but we expected a page, stop and fail.
-            if page is None:
-                if offset == 0:
-                    # No memories at all is a valid state.
-                    break
-                raise RuntimeError(
-                    f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write."
-                )
-
-            all_memories.extend(page)
-            if len(page) < limit:
-                break
-            offset += limit
 
     # Atomic write: write to temp file first, then rename to target.
     output.parent.mkdir(parents=True, exist_ok=True)
     temp_file = tempfile.NamedTemporaryFile("w", dir=output.parent, delete=False, encoding="utf-8")
+    
     try:
-        json.dump(all_memories, temp_file, indent=4, ensure_ascii=False)
-        temp_file.close()
-        os.replace(temp_file.name, output)
+        with ctx.make_client() as client:
+            temp_file.write("[")
+            first_item = True
+            
+            while True:
+                page = client.get("/v1/dev/user/memories", params={"limit": limit, "offset": offset})
+
+                # Fail-fast: if API returns None but we expected a page, stop and fail.
+                if page is None:
+                    if offset == 0:
+                        # No memories at all is a valid state.
+                        break
+                    raise RuntimeError(
+                        f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write."
+                    )
+
+                for item in page:
+                    if not first_item:
+                        temp_file.write(",")
+                    json.dump(item, temp_file, ensure_ascii=False)
+                    first_item = False
+                
+                if not page:
+                    break
+                
+                offset += limit
+
+            temp_file.write("]")
+            temp_file.close()
+            os.replace(temp_file.name, output)
     except Exception:
         if os.path.exists(temp_file.name):
             os.remove(temp_file.name)
         raise
 
-    ctx.renderer.success(f"Exported [bold]{len(all_memories)}[/bold] memories to [bold]{output}[/bold].")
+    ctx.renderer.success(f"Exported all memories to [bold]{output}[/bold] via streaming.")
