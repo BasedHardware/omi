@@ -731,7 +731,11 @@ test('Home and Tasks rows name Flutter empty GET descriptions', () => {
   });
   expect(textOf(home)).not.toContain('Task title unavailable');
   expect(textOf(tasks)).not.toContain('Task title unavailable');
-  expect(textOf(tasks)).not.toContain(' \t\n');
+  expect(
+    tasks.root
+      .findAllByType(Text)
+      .some(node => node.props.children === ' \t\n'),
+  ).toBe(true);
   expect(home.root.findAllByType(Text).length).toBeGreaterThan(0);
   expect(tasks.root.findAllByType(Text).length).toBeGreaterThan(0);
 });

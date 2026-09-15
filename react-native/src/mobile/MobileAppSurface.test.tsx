@@ -808,9 +808,15 @@ test('compact Tasks tab names Flutter ActionItemsPage empty GET descriptions', (
     tasks: [{id: 'task-1', title: ' \t\n', completed: false}],
   });
   expect(renderedText(renderer)).not.toContain('Task title unavailable');
-  expect(renderedText(renderer)).not.toContain(' \t\n');
   expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Complete '),
+    renderer.root
+      .findAllByType(Text)
+      .some(node => node.props.children === ' \t\n'),
+  ).toBe(true);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Complete  \t\n',
+    ),
   ).toBeDefined();
 });
 

@@ -3845,10 +3845,10 @@ test('task display summary omits Flutter ActionItemsPage row due dates', () => {
 
 test('task display title names Flutter empty GET titles', () => {
   expect(taskDisplayTitle({title: ''})).toBe('');
-  expect(taskDisplayTitle({title: ' \t\n'})).toBe('');
-  expect(taskDisplayTitle({title: '\u0085'})).toBe('');
+  expect(taskDisplayTitle({title: ' \t\n'})).toBe(' \t\n');
+  expect(taskDisplayTitle({title: '\u0085'})).toBe('\u0085');
   expect(taskDisplayTitle({title: 'Prepare demo'})).toBe('Prepare demo');
-  expect(taskDisplayTitle({title: '  Prepare demo  '})).toBe('Prepare demo');
+  expect(taskDisplayTitle({title: '  Prepare demo  '})).toBe('  Prepare demo  ');
 });
 
 test('task indent padding uses Flutter 28px steps instead of a flat list', () => {
@@ -5194,7 +5194,7 @@ test('keeps ratified empty task descriptions instead of failing the page', async
     expect.objectContaining({
       id: 'task2_abc',
       title: ' \t\n',
-      searchableText: '',
+      searchableText: ' \t\n',
     }),
     expect.objectContaining({
       id: 'task3_abc',

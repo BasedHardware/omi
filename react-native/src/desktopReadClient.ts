@@ -2858,7 +2858,7 @@ export function taskDisplaySummary(_item: {
 }
 
 export function taskDisplayTitle(item: {title: string}): string {
-  return visibleDisplayText(item.title);
+  return item.title;
 }
 
 const TASK_EXPORT_PLATFORM_COPY: Record<string, string> = {

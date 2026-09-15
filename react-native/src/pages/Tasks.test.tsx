@@ -101,9 +101,13 @@ test('task page names Flutter empty GET titles', () => {
     .flat()
     .join(' ');
   expect(copy).not.toContain('Task title unavailable');
-  expect(copy).not.toContain(' \t\n');
-  expect(control(renderer, 'Task ')).toBeDefined();
-  expect(control(renderer, 'Task: ')).toBeDefined();
+  expect(
+    renderer.root
+      .findAllByType(Text)
+      .some(node => node.props.children === ' \t\n'),
+  ).toBe(true);
+  expect(control(renderer, 'Task  \t\n')).toBeDefined();
+  expect(control(renderer, 'Task:  \t\n')).toBeDefined();
   act(() => renderer.unmount());
 });
 
