@@ -1556,7 +1556,7 @@ export function dailySummaryCopy(
   now: Date = new Date(),
 ): {title: string; copy: string}[] {
   return rows.map(row => {
-    const headline = visibleDisplayText(row.headline);
+    const headline = row.headline;
     const date = dailySummaryDateCopy(row.date, now);
     return {
       title: 'Daily summary',

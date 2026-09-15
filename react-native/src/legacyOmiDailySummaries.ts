@@ -87,7 +87,7 @@ function headlineCopy(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  return visibleDisplayText(text(value, 1_000_000));
+  return text(value, 1_000_000);
 }
 
 function summaryStats(value: unknown): {

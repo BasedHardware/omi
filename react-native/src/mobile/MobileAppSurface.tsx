@@ -469,7 +469,7 @@ export function MobileAppSurface({
     const now = new Date();
     return dailySummaries.map(row => ({
       dateLabel: dailySummaryDateCopy(row.date, now),
-      headline: visibleDisplayText(row.headline),
+      headline: row.headline,
       id: row.id,
     }));
   }, [dailySummaries]);

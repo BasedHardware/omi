@@ -1843,7 +1843,7 @@ test('daily summary copy names GET headlines and omits Flutter DailySummaryCard 
   ).toEqual([
     {title: 'Daily summary', copy: 'Today · Met with the team'},
     {title: 'Daily summary', copy: 'Shipped the recap'},
-    {title: 'Daily summary', copy: 'Tue, Sep 8'},
+    {title: 'Daily summary', copy: 'Tue, Sep 8 ·  \t'},
     {
       title: 'Daily summary',
       copy: dailySummaryDefaultHeadlineCopy(),

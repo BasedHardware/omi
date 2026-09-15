@@ -5,7 +5,7 @@ import {
 } from './legacyOmiDailySummaries';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('names Flutter DailySummaryCard empty GET headlines instead of omitting the summary', () => {
+test('names Flutter DailySummaryCard empty GET headlines instead of omitting them', () => {
   const rows = parseOmiDailySummaries(
     JSON.stringify({
       summaries: [
@@ -33,7 +33,7 @@ test('names Flutter DailySummaryCard empty GET headlines instead of omitting the
       date: '2026-09-09',
       headline: 'Met with the team',
     },
-    {id: 'sum-empty', date: '2026-09-08', headline: ''},
+    {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
     {id: 'sum-blank', date: '2026-09-07', headline: ''},
   ]);
 });
@@ -107,7 +107,7 @@ test('parses GET daily summary headlines and omits unused stats', () => {
       watchingMinutes: 10,
       proactiveMoments: 1,
     },
-    {id: 'sum-empty', date: '2026-09-08', headline: ''},
+    {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
     {id: 'sum-2', date: '', headline: 'Shipped the recap'},
   ]);
 });
@@ -135,7 +135,7 @@ test('names Flutter DailySummaryCard omitted or JSON-null GET headlines as Your 
       date: '2026-09-09',
       headline: dailySummaryDefaultHeadlineCopy(),
     },
-    {id: 'sum-empty', date: '2026-09-08', headline: ''},
+    {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
   ]);
 });
 
