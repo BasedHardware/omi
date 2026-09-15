@@ -527,7 +527,7 @@ test('names Flutter TranscriptWidget empty GET translations', async () => {
         isUser: true,
         start: 0.25,
         end: 4.5,
-        translations: ['Hola alli', '', '', ''],
+        translations: ['Hola alli', ' \t', '', '\u0085'],
       },
     ],
   });

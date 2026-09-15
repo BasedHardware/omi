@@ -701,7 +701,7 @@ function LegacyConversationBody({
                 <Text
                   key={`translation-${index}-${tIndex}`}
                   style={[styles.conversationDetailField, ink]}>
-                  {visibleDisplayText(translation)}
+                  {translation}
                 </Text>
               ))}
               {(segment.translations ?? []).length > 0 ? (

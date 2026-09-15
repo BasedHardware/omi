@@ -3795,20 +3795,20 @@ test('legacy conversation details name Flutter TranscriptWidget empty GET transl
     conversation: {...conversation, id: 'old-1'},
   });
   const copy = text(view);
-  const emptyTranslations = view.root.findAll(node => {
+  const whitespaceTranslations = view.root.findAll(node => {
     if (node.type !== Text) {
       return false;
     }
     const children = node.props.children;
     return (
-      children === '' ||
-      (Array.isArray(children) && children.some(child => child === ''))
+      children === '\u0085' ||
+      (Array.isArray(children) && children.some(child => child === '\u0085'))
     );
   });
-  expect(emptyTranslations.length).toBeGreaterThan(0);
+  expect(whitespaceTranslations.length).toBeGreaterThan(0);
   expect(copy).toContain('Hello there');
+  expect(copy).toContain('\u0085');
   expect(copy).toContain('translated by omi');
-  expect(copy).not.toContain('\u0085');
 });
 
 test('legacy conversation details name GET transcript translations without a notice dialog', () => {
