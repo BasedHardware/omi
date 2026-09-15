@@ -1086,6 +1086,33 @@ test('Home and Library rows omit Flutter ConversationListItem Processing chips',
   expect(textOf(chat)).not.toContain('In progress');
 });
 
+test('library conversation rows omit Flutter MergingIndicator when GET status is padded', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'recording:padded-merging',
+    title: 'Standup recap',
+    summary: 'Notes',
+    searchableText: 'Standup recap\nNotes',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: '  merging  ',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let padded!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    padded = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  expect(textOf(padded)).toContain('Standup recap');
+  expect(textOf(padded)).not.toContain('Merging...');
+});
+
 test('Home and Library rows omit Flutter ConversationListItem unused overview', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

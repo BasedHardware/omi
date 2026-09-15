@@ -1860,6 +1860,60 @@ test('conversation list omits Flutter ConversationListItem Processing chips', ()
   expect(copy).not.toContain(conversationStatusCopy('in_progress'));
 });
 
+test('conversation list omits Flutter MergingIndicator when GET status is padded', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Standup recap',
+    summary: 'Notes',
+    searchableText: 'Standup recap\nNotes',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    source: 'listen' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'recording:padded-merging',
+                status: '  merging  ',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Standup recap');
+  expect(copy).not.toContain('Merging...');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Merging... conversation',
+    ),
+  ).toHaveLength(0);
+});
+
 test('conversation list omits Flutter ConversationListItem unused overview', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

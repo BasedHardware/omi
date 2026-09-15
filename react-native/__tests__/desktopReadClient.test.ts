@@ -1383,6 +1383,9 @@ test('conversation list status copy names Flutter MergingIndicator without Faile
   expect(conversationListStatusCopy('queued')).toBeNull();
   expect(conversationListStatusCopy('')).toBeNull();
   expect(conversationListStatusCopy(' \t\n')).toBeNull();
+  expect(conversationListStatusCopy('  merging  ')).toBeNull();
+  expect(conversationListStatusCopy('merging ')).toBeNull();
+  expect(conversationListStatusCopy('\u0085merging')).toBeNull();
 });
 
 test('account subscription copy is not a raw wire token', () => {

@@ -4266,6 +4266,31 @@ test('wide Home search rows omit Flutter ConversationListItem Processing chips',
   expect(mergingTree).toContain('Standup recap');
   expect(mergingTree).toContain('Merging...');
   expect(mergingTree).not.toContain('Processing');
+  const paddedMerging = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:padded-merging-home-search',
+        title: 'Standup recap',
+        summary: 'Notes',
+        searchableText: 'Standup recap\nNotes',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        starred: false,
+        status: '  merging  ',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const paddedTree = JSON.stringify(paddedMerging.toJSON());
+  expect(paddedTree).toContain('Standup recap');
+  expect(paddedTree).not.toContain('Merging...');
 });
 
 test('wide Home search rows omit Flutter ConversationListItem unused overview', () => {

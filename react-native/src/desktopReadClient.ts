@@ -206,8 +206,7 @@ export function conversationStatusCopy(status: string): string {
 }
 
 export function conversationListStatusCopy(status: string): string | null {
-  const trimmed = visibleDisplayText(status);
-  if (trimmed === 'merging') {
+  if (status === 'merging') {
     return 'Merging...';
   }
   return null;
