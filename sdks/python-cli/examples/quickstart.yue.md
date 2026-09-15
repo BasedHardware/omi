@@ -36,26 +36,26 @@ omi auth login
 
 瀏覽器會自動彈出。登入你嘅帳號並授權，終端機就會保存登入憑證。
 
-### 方法二：使用 Token
+### 方法二：使用 API Key
 
 如果你已經喺網頁後台複製咗 token：
 
 ```sh
-omi auth token
+omi auth login --api-key <key>
 ```
 
-根據提示貼上你嘅 token。
+根據提示貼上你嘅 API Key (app.omi.me -> Developer -> API Keys)。
 
 如需喺指令碼或者臨時工作流程入面使用，可以設置環境變數：
 
 ```sh
-export OMI_API_TOKEN="your-token-here"
+export OMI_API_KEY="your-token-here"
 ```
 
 檢查連線狀態同埋你嘅使用者名稱：
 
 ```sh
-omi auth status
+omi auth whoami
 ```
 
 如果終端機顯示你嘅使用者名稱，代表連線成功。
@@ -134,8 +134,8 @@ omi memory list --limit 10 --offset 10
 omi auth logout
 ```
 
-如果之前有設置過 `OMI_API_TOKEN` 環境變數，亦請記得清除：
+如果之前有設置過 `OMI_API_KEY` 環境變數，亦請記得清除：
 
 ```sh
-unset OMI_API_TOKEN
+unset OMI_API_KEY
 ```
