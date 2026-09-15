@@ -151,13 +151,24 @@ MESSAGE: Hello everyone, this is a test message"""
                     break
             
             if not channel_id:
-                # Try fuzzy match
+                # Disambiguated fuzzy match:
+                ch_clean = channel_name.lower().replace('-', '').replace('_', '')
+                candidates = []
                 for name, id in channel_map.items():
-                    if channel_name.lower() in name.lower() or name.lower() in channel_name.lower():
-                        channel_id = id
-                        channel_name = name
-                        print(f"🔍 Fuzzy matched '{channel_name}' to '{name}'", flush=True)
-                        break
+                    name_lower = name.lower()
+                    name_clean = name_lower.replace('-', '').replace('_', '')
+                    if channel_name.lower() in name_lower or ch_clean in name_clean:
+                        candidates.append((id, name))
+                    elif len(name_lower) >= 4 and name_lower in channel_name.lower():
+                        candidates.append((id, name))
+
+                if len(candidates) == 1:
+                    channel_id, channel_name = candidates[0]
+                    print(f"🔍 Fuzzy matched '{channel_name}' to '{candidates[0][1]}'", flush=True)
+                elif len(candidates) > 1:
+                    matched_names = [c[1] for c in candidates]
+                    print(f"⚠️  Ambiguous channel '{channel_name}' matched multiple channels: {matched_names}; refusing fuzzy send", flush=True)
+                    return None, None, message
             
             if not channel_id:
                 print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
