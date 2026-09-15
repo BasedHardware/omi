@@ -130,6 +130,7 @@ CI runs `flutter test` and `app/scripts/analyze_ratchet.sh`: errors fail; new in
 ### Auth Methods
 - Google Sign In (`google_sign_in` package)
 - Apple Sign In (`sign_in_with_apple` package, includes PKCE via nonce+sha256)
+- Web OAuth (`USE_WEB_AUTH`) via `/v1/auth/authorize`; `local_dev` completes this against the Firebase Auth emulator without Safari
 - Firebase Auth as the identity layer
 
 ### Request Headers

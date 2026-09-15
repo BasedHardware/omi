@@ -79,6 +79,16 @@ firebase_admin_stub.__path__ = []
 firebase_auth_stub = _install_module("firebase_admin.auth")
 firebase_auth_stub.verify_id_token = MagicMock()
 
+
+class _UserNotFoundError(Exception):
+    pass
+
+
+firebase_auth_stub.UserNotFoundError = _UserNotFoundError
+firebase_auth_stub.get_user = MagicMock()
+firebase_auth_stub.create_user = MagicMock()
+firebase_auth_stub.create_custom_token = MagicMock(return_value=b"emulator-custom-token")
+
 jwt_stub = _install_module("jwt")
 jwt_stub.__path__ = []
 jwt_stub.encode = MagicMock(return_value="test-jwt")
@@ -226,6 +236,7 @@ def test_default_omi_redirect_unchanged() -> None:
 # at /v1/auth/token exchange time (#7020)
 # ---------------------------------------------------------------------------
 
+from fastapi.responses import JSONResponse, RedirectResponse
 from unittest.mock import AsyncMock
 
 from routers.auth import (  # noqa: E402
@@ -239,6 +250,11 @@ from routers.auth import (  # noqa: E402
 
 _PKCE_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 _PKCE_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+
+@pytest.fixture(autouse=True)
+def _clear_auth_emulator_host(monkeypatch):
+    monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
 
 
 class TestPkceBinding:
@@ -830,3 +846,127 @@ class TestTokenEdgeCases:
                 )
             )
         assert exc_info.value.status_code == 400
+
+
+class TestEmulatorAuthorize:
+    """Local_dev completes PKCE against the Auth emulator — no Google client ID."""
+
+    def test_json_mode_rejected_without_emulator(self, monkeypatch):
+        import asyncio
+
+        monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
+        request = MagicMock()
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.get_event_loop().run_until_complete(
+                auth_authorize(
+                    request=request,
+                    provider="google",
+                    redirect_uri="omi-dev://auth/callback",
+                    state="state",
+                    code_challenge=_PKCE_CHALLENGE,
+                    code_challenge_method="S256",
+                    response_mode="json",
+                )
+            )
+        assert exc_info.value.status_code == 400
+        assert "emulator" in exc_info.value.detail.lower()
+
+    def test_json_mode_returns_code_when_emulator_active(self, monkeypatch):
+        import asyncio
+
+        monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", "127.0.0.1:9099")
+        request = MagicMock()
+        request.cookies.get.return_value = None
+        with patch("routers.auth.set_auth_session"), patch("routers.auth.set_auth_code") as mock_set_code, patch(
+            "routers.auth._google_auth_redirect",
+            new_callable=AsyncMock,
+        ) as google:
+            result = asyncio.get_event_loop().run_until_complete(
+                auth_authorize(
+                    request=request,
+                    provider="google",
+                    redirect_uri="omi-dev://auth/callback",
+                    state="flow1",
+                    code_challenge=_PKCE_CHALLENGE,
+                    code_challenge_method="S256",
+                    response_mode="json",
+                )
+            )
+        google.assert_not_called()
+        assert isinstance(result, JSONResponse)
+        body = json.loads(result.body)
+        assert body["state"] == "flow1"
+        assert isinstance(body["code"], str) and body["code"]
+        mock_set_code.assert_called_once()
+
+    def test_emulator_redirects_to_app_scheme_without_google(self, monkeypatch):
+        import asyncio
+
+        monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", "127.0.0.1:9099")
+        request = MagicMock()
+        request.cookies.get.return_value = None
+        with patch("routers.auth.set_auth_session"), patch("routers.auth.set_auth_code"), patch(
+            "routers.auth._google_auth_redirect",
+            new_callable=AsyncMock,
+        ) as google:
+            result = asyncio.get_event_loop().run_until_complete(
+                auth_authorize(
+                    request=request,
+                    provider="google",
+                    redirect_uri="omi-dev://auth/callback",
+                    state="flow2",
+                    code_challenge=_PKCE_CHALLENGE,
+                    code_challenge_method="S256",
+                )
+            )
+        google.assert_not_called()
+        assert isinstance(result, RedirectResponse)
+        location = result.headers["location"]
+        assert location.startswith("omi-dev://auth/callback")
+        assert "code=" in location
+        assert "state=flow2" in location
+
+    def test_token_mints_emulator_custom_token(self, monkeypatch):
+        import asyncio
+
+        monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", "127.0.0.1:9099")
+        code_data = json.dumps(
+            {
+                "credentials": json.dumps(
+                    {
+                        "provider": "google",
+                        "id_token": "emulator",
+                        "access_token": "emulator",
+                        "provider_id": "emulator.local",
+                        "emulator": True,
+                        "email": "google-local@omi.test",
+                    }
+                ),
+                "redirect_uri": "omi-dev://auth/callback",
+                "code_challenge": _PKCE_CHALLENGE,
+                "code_challenge_method": "S256",
+            }
+        )
+        request = MagicMock()
+        with patch("routers.auth.get_auth_code", return_value=code_data), patch("routers.auth.delete_auth_code"), patch(
+            "routers.auth._generate_emulator_custom_token",
+            new_callable=AsyncMock,
+            return_value="emu-custom-token",
+        ) as mint, patch(
+            "routers.auth._generate_custom_token",
+            new_callable=AsyncMock,
+        ) as google_mint:
+            result = asyncio.get_event_loop().run_until_complete(
+                auth_token(
+                    request=request,
+                    grant_type="authorization_code",
+                    code="c",
+                    redirect_uri="omi-dev://auth/callback",
+                    use_custom_token=True,
+                    code_verifier=_PKCE_VERIFIER,
+                )
+            )
+        google_mint.assert_not_called()
+        mint.assert_called_once()
+        assert result["custom_token"] == "emu-custom-token"
+        assert result["provider"] == "google"
