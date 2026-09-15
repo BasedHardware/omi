@@ -1,0 +1,183 @@
+"""Regression tests for the Whoop chat tools' input coercion (#13931).
+
+The Omi backend forwards every non-required chat-tool parameter, so a call that
+omits `days`/`max_results` reaches the plugin as an explicit JSON `null`. These
+tests drive the production handlers through the `requests.get` seam with a fake
+transport, so they exercise the real endpoint code and never touch the network.
+"""
+import json
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+try:
+    from fastapi.testclient import TestClient
+except ModuleNotFoundError:  # pragma: no cover - fastapi is a plugin dependency
+    TestClient = None
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+if TestClient is not None:
+    import main
+
+
+class FakeResponse:
+    """Minimal stand-in for requests.Response."""
+
+    def __init__(self, status_code=200, payload=None, text=""):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = text if payload is None else json.dumps(payload)
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no json body")
+        return self._payload
+
+
+def _workout_payload():
+    return {
+        "records": [
+            {
+                "id": "w1",
+                "start": "2026-09-14T07:00:00.000Z",
+                "end": "2026-09-14T08:00:00.000Z",
+                "sport_name": "running",
+                "score": {"strain": 12.5, "average_heart_rate": 142, "max_heart_rate": 171},
+            }
+        ]
+    }
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx test dependencies are not installed")
+class WorkoutInputCoercionTests(unittest.TestCase):
+    """`days`/`max_results` arrive as JSON null and must not reach min()/WHOOP."""
+
+    def setUp(self):
+        self.client = TestClient(main.app)
+        token_patcher = patch("main.get_valid_access_token", return_value="test-token")
+        self.addCleanup(token_patcher.stop)
+        token_patcher.start()
+        self.calls = []
+
+    def _patch_get(self, response):
+        def fake_get(url, headers=None, params=None, timeout=None):
+            self.calls.append({"url": url, "headers": headers, "params": params})
+            return response
+
+        patcher = patch("main.requests.get", side_effect=fake_get)
+        patcher.start()
+        return patcher
+
+    def _post(self, body):
+        return self.client.post("/tools/get_workouts", json=body)
+
+    def test_json_null_optionals_fall_back_to_defaults(self):
+        """Regression: min(None, 30) raised TypeError and the tool always failed."""
+        self._patch_get(FakeResponse(200, _workout_payload()))
+
+        response = self._post({"uid": "u1", "days": None, "max_results": None})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNone(payload.get("error"), payload.get("error"))
+        self.assertIn("**Workouts (Last 7 Days)**", payload["result"])
+
+        params = self.calls[0]["params"]
+        self.assertEqual(params["limit"], 10)
+        start, end = params["start"], params["end"]
+        # A 7-day window: the start date is exactly 7 days before the end date.
+        self.assertEqual(start[:10], "2026-09-08")
+        self.assertGreater(end[:10], start[:10])
+
+    def test_missing_and_null_optionals_agree(self):
+        self._patch_get(FakeResponse(200, _workout_payload()))
+        omitted = self._post({"uid": "u1"}).json()
+        nulled = self._post({"uid": "u1", "days": None, "max_results": None}).json()
+
+        self.assertIsNone(omitted.get("error"))
+        self.assertIsNone(nulled.get("error"))
+        self.assertIn("**Workouts (Last 7 Days)**", omitted["result"])
+        self.assertIn("**Workouts (Last 7 Days)**", nulled["result"])
+
+    def test_numeric_strings_are_coerced(self):
+        self._patch_get(FakeResponse(200, _workout_payload()))
+
+        response = self._post({"uid": "u1", "days": "3", "max_results": "25"})
+
+        self.assertIsNone(response.json().get("error"))
+        self.assertIn("**Workouts (Last 3 Days)**", response.json()["result"])
+        self.assertEqual(self.calls[0]["params"]["limit"], 25)
+
+    def test_non_positive_values_are_clamped_to_one(self):
+        for value in (0, -2, "-5"):
+            with self.subTest(value=value):
+                self.calls = []
+                patcher = self._patch_get(FakeResponse(200, _workout_payload()))
+                try:
+                    response = self._post({"uid": "u1", "days": value, "max_results": value})
+                finally:
+                    patcher.stop()
+
+                self.assertIsNone(response.json().get("error"))
+                self.assertIn("**Workouts (Last 1 Days)**", response.json()["result"])
+                params = self.calls[0]["params"]
+                self.assertEqual(params["limit"], 1)
+                # start == end is an empty window; the clamped window is one day.
+                self.assertNotEqual(params["start"][:10], params["end"][:10])
+
+    def test_oversized_values_are_capped(self):
+        self._patch_get(FakeResponse(200, _workout_payload()))
+
+        response = self._post({"uid": "u1", "days": 999, "max_results": 999})
+
+        self.assertIsNone(response.json().get("error"))
+        self.assertIn("**Workouts (Last 30 Days)**", response.json()["result"])
+        self.assertEqual(self.calls[0]["params"]["limit"], 50)
+
+    def test_unparseable_values_fall_back_to_defaults(self):
+        for value in ("soon", "", "1.5", True, [], {}):
+            with self.subTest(value=value):
+                self.calls = []
+                patcher = self._patch_get(FakeResponse(200, _workout_payload()))
+                try:
+                    response = self._post({"uid": "u1", "days": value, "max_results": value})
+                finally:
+                    patcher.stop()
+
+                payload = response.json()
+                self.assertIsNone(payload.get("error"), f"{value!r} -> {payload.get('error')}")
+                self.assertIn("**Workouts (Last 7 Days)**", payload["result"])
+                self.assertEqual(self.calls[0]["params"]["limit"], 10)
+
+    def test_numeric_floats_are_truncated(self):
+        self._patch_get(FakeResponse(200, _workout_payload()))
+
+        response = self._post({"uid": "u1", "days": 2.5, "max_results": 2.5})
+
+        self.assertIsNone(response.json().get("error"))
+        self.assertIn("**Workouts (Last 2 Days)**", response.json()["result"])
+        self.assertEqual(self.calls[0]["params"]["limit"], 2)
+
+
+class CoerceIntUnitTests(unittest.TestCase):
+    """The boundary helper itself, exercised without HTTP."""
+
+    def test_documented_range_is_enforced(self):
+        self.assertEqual(main._coerce_int(None, 7, 1, 30), 7)
+        self.assertEqual(main._coerce_int(0, 7, 1, 30), 1)
+        self.assertEqual(main._coerce_int(-99, 7, 1, 30), 1)
+        self.assertEqual(main._coerce_int(31, 7, 1, 30), 30)
+        self.assertEqual(main._coerce_int("12", 7, 1, 30), 12)
+        self.assertEqual(main._coerce_int(12, 7, 1, 30), 12)
+        self.assertEqual(main._coerce_int(2.5, 7, 1, 30), 2)
+
+    def test_unusable_values_use_the_default(self):
+        for value in (None, True, False, "abc", "", [], {}, float("nan"), float("inf")):
+            with self.subTest(value=value):
+                self.assertEqual(main._coerce_int(value, 10, 1, 50), 10)
+
+
+if __name__ == "__main__":
+    unittest.main()

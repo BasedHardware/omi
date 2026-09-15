@@ -1006,6 +1006,16 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: whoop-app-workouts-input-tests
+    command: ["python3", "plugins/omi-whoop-app/test_workouts_input_coercion.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13931: the backend forwards omitted non-required chat-tool parameters as explicit JSON null, so days/max_results reached min() as None and every ordinary get_workouts call failed; the suite drives the production handler through the requests seam to prove null/blank/non-positive/oversized inputs resolve to the documented 7/30 and 10/50 bounds"
+  - id: whoop-app-body-measurement-tests
+    command: ["python3", "plugins/omi-whoop-app/test_body_measurements.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13927: get_body_measurements requested /v1/body_measurement, a route Whoop has never served, and the empty 404 body was reported as the error text so the tool failed with a blank reason; the suite asserts the documented /user/measurement/body route plus a status-bearing error when the upstream body is empty"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
