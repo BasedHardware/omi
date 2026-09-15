@@ -2335,20 +2335,20 @@ test('app section category copy names Flutter CategorySection GET category and o
   expect(appSectionCategoryCopy(' \t', true)).toBeNull();
 });
 
-test('empty app source stays visible instead of a blank meta line', () => {
+test('app display source names Flutter empty GET details', () => {
   expect(appDisplaySource({author: '', category: '', description: ''})).toBe(
-    'App details unavailable',
+    '',
   );
   expect(
     appDisplaySource({author: ' \t\n', category: ' \t', description: '\u00A0'}),
-  ).toBe('App details unavailable');
+  ).toBe('');
   expect(
     appDisplaySource({
       author: '\u0085',
       category: '\u0085',
       description: '\u0085',
     }),
-  ).toBe('App details unavailable');
+  ).toBe('');
   expect(
     appDisplaySource({
       author: '  Omi  ',

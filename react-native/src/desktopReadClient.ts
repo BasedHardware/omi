@@ -2251,7 +2251,7 @@ export function appDisplaySource(app: {
     return category;
   }
   const description = visibleDisplayText(app.description);
-  return description !== '' ? description : 'App details unavailable';
+  return description;
 }
 
 export function appDisplayAttribution(app: {
