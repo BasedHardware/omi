@@ -83,14 +83,13 @@ export function importJobPendingCopy(): string {
 }
 
 export function importJobStatusCopy(status: string): string {
-  const trimmed = visibleDisplayText(status);
-  if (trimmed === 'processing') {
+  if (status === 'processing') {
     return 'Processing';
   }
-  if (trimmed === 'completed') {
+  if (status === 'completed') {
     return 'Completed';
   }
-  if (trimmed === 'failed') {
+  if (status === 'failed') {
     return 'Failed';
   }
   return importJobPendingCopy();
@@ -143,8 +142,7 @@ export function importJobEstimatedTimeRemainingCopy(time: string): string {
 }
 
 export function importJobShowsFileProgress(status: string): boolean {
-  const trimmed = visibleDisplayText(status);
-  return trimmed !== 'completed' && trimmed !== 'failed';
+  return status !== 'completed' && status !== 'failed';
 }
 
 export function importJobEstimatedRemainingCopy(
@@ -173,10 +171,7 @@ export function importJobRowCopy(
   now: Date = new Date(),
 ): string {
   const parts = [importJobStatusCopy(job.status)];
-  if (
-    visibleDisplayText(job.status) === 'completed' &&
-    typeof job.createdAtMs === 'number'
-  ) {
+  if (job.status === 'completed' && typeof job.createdAtMs === 'number') {
     const stamp = importJobTimestampCopy(job.createdAtMs, now);
     if (stamp !== '') {
       parts.push(stamp);
@@ -241,7 +236,7 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
       throw new ImportJobError();
     }
     seen.add(id);
-    const status = visibleDisplayText(text(row.status, 1_000_000));
+    const status = text(row.status, 1_000_000);
     const created = createdAtMs(row.created_at);
     const conversationsCreated = optionalCount(row.conversations_created);
     const conversationsSkipped = optionalCount(row.conversations_skipped);

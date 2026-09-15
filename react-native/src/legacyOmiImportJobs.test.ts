@@ -71,6 +71,130 @@ test('names GET import job status unknown as Flutter Pending', () => {
   expect(importJobStatusCopy('queued')).toBe(importJobPendingCopy());
   expect(importJobStatusCopy('')).toBe(importJobPendingCopy());
   expect(importJobStatusCopy(' \t')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('\u0085')).toBe(importJobPendingCopy());
+});
+
+test('names Flutter ImportHistoryPage padded GET status', () => {
+  const now = new Date(2026, 8, 10, 20, 0);
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {
+          job_id: 'job-padded-processing',
+          status: '  processing  ',
+          processed_files: 3,
+          total_files: 10,
+        },
+        {job_id: 'job-trailing-processing', status: 'processing '},
+        {job_id: 'job-next-line-processing', status: '\u0085processing'},
+        {
+          job_id: 'job-padded-completed',
+          status: '  completed  ',
+          created_at: '2026-09-10T14:30:00.000Z',
+          conversations_created: 3,
+          total_files: 4,
+        },
+        {
+          job_id: 'job-padded-failed',
+          status: '  failed  ',
+          error: 'Zip could not be read.',
+          total_files: 4,
+        },
+        {job_id: 'job-capital', status: 'PROCESSING'},
+        {job_id: 'job-exact-processing', status: 'processing'},
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'job-padded-processing',
+      status: '  processing  ',
+      processedFiles: 3,
+      totalFiles: 10,
+    },
+    {id: 'job-trailing-processing', status: 'processing '},
+    {id: 'job-next-line-processing', status: '\u0085processing'},
+    {
+      id: 'job-padded-completed',
+      status: '  completed  ',
+      createdAtMs: Date.parse('2026-09-10T14:30:00.000Z'),
+      conversationsCreated: 3,
+      totalFiles: 4,
+    },
+    {
+      id: 'job-padded-failed',
+      status: '  failed  ',
+      error: 'Zip could not be read.',
+      totalFiles: 4,
+    },
+    {id: 'job-capital', status: 'PROCESSING'},
+    {id: 'job-exact-processing', status: 'processing'},
+  ]);
+  expect(importJobStatusCopy('  processing  ')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('processing ')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('\u0085processing')).toBe(
+    importJobPendingCopy(),
+  );
+  expect(importJobStatusCopy('  completed  ')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('completed ')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('\u0085completed')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('  failed  ')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('PROCESSING')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('processing')).toBe('Processing');
+  expect(importJobStatusCopy('completed')).toBe('Completed');
+  expect(importJobStatusCopy('failed')).toBe('Failed');
+  expect(
+    importJobRowCopy(
+      {
+        id: 'job-padded-processing',
+        status: '  processing  ',
+        processedFiles: 3,
+        totalFiles: 10,
+      },
+      now,
+    ),
+  ).toBe('Pending · Estimated: Less than a minute remaining · 3/10');
+  expect(
+    importJobRowCopy(
+      {
+        id: 'job-padded-completed',
+        status: '  completed  ',
+        createdAtMs: new Date(2026, 8, 10, 14, 30).getTime(),
+        conversationsCreated: 3,
+        totalFiles: 4,
+      },
+      now,
+    ),
+  ).toBe(
+    'Pending · 3 conversations · Estimated: Less than a minute remaining · 0/4',
+  );
+  expect(
+    importJobRowCopy({
+      id: 'job-padded-failed',
+      status: '  failed  ',
+      error: 'Zip could not be read.',
+      totalFiles: 4,
+    }),
+  ).toBe(
+    'Pending · Estimated: Less than a minute remaining · 0/4 · Zip could not be read.',
+  );
+  expect(
+    importJobRowCopy({
+      id: 'job-exact-processing',
+      status: 'processing',
+      processedFiles: 1,
+      totalFiles: 2,
+    }),
+  ).toBe('Processing · Estimated: Less than a minute remaining · 1/2');
+  expect(
+    importJobRowCopy(
+      {
+        id: 'job-exact-completed',
+        status: 'completed',
+        createdAtMs: new Date(2026, 8, 10, 14, 30).getTime(),
+      },
+      now,
+    ),
+  ).toBe('Completed · Today at 14:30');
 });
 
 test('names Flutter import timestamps from local midnight', () => {

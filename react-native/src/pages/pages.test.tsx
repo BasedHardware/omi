@@ -3191,6 +3191,69 @@ test('Settings names a failed import jobs GET instead of empty success', async (
   expect(tree).not.toContain('Limitless');
 });
 
+test('Settings names Flutter ImportHistoryPage padded GET status as Pending', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/import/jobs?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            job_id: 'job-padded-processing',
+            status: '  processing  ',
+            processed_files: 3,
+            total_files: 10,
+          },
+          {
+            job_id: 'job-padded-completed',
+            status: '  completed  ',
+            created_at: '2026-09-10T14:30:00.000Z',
+            conversations_created: 3,
+            total_files: 4,
+          },
+          {
+            job_id: 'job-padded-failed',
+            status: '  failed  ',
+            error: 'Zip could not be read.',
+          },
+          {
+            job_id: 'job-exact-processing',
+            status: 'processing',
+            processed_files: 1,
+            total_files: 2,
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Import Data');
+  expect(tree).toContain(
+    'Pending · Estimated: Less than a minute remaining · 3/10',
+  );
+  expect(tree).toContain(
+    'Pending · 3 conversations · Estimated: Less than a minute remaining · 0/4',
+  );
+  expect(tree).toContain('Pending · Zip could not be read.');
+  expect(tree).toContain(
+    'Processing · Estimated: Less than a minute remaining · 1/2',
+  );
+  expect(tree).not.toContain('Completed');
+  expect(tree).not.toContain('Failed');
+  expect(tree).not.toContain('job-padded-processing');
+  expect(tree).not.toContain('No imports yet');
+  expect(tree).not.toContain('Limitless');
+  expect(tree).not.toContain('Start import');
+});
+
 test('Settings names Flutter ImportHistoryPage empty GET error without omitting Import Data', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
