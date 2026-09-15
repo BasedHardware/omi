@@ -775,7 +775,7 @@ test('desktop chat names Flutter ChartMessageWidget empty GET title without omit
   });
   const copy = renderedText(renderer);
   expect(copy).toContain('Here is the trend.');
-  expect(copy).toContain('\nMon · 12\n · 1');
+  expect(copy).toContain('\nMon · 12\n \t · 1');
   expect(copy).not.toContain('Here is the trend.\nMon · 12');
 });
 

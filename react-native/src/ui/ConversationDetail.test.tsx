@@ -299,7 +299,7 @@ test('conversation-detail history names Flutter ChartMessageWidget empty GET tit
   });
   const tree = text(view);
   expect(tree).toContain('Here is the trend.');
-  expect(tree).toContain('\nMon · 12\n · 1');
+  expect(tree).toContain('\nMon · 12\n \t · 1');
   expect(tree).not.toContain('Here is the trend.\nMon · 12');
 });
 

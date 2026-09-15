@@ -2409,17 +2409,16 @@ export function chatChartCopy(chart: {
   title: string;
   points: readonly {label: string; value: number}[];
 }): string | null {
-  const title = visibleDisplayText(chart.title);
   const lines = chart.points.flatMap(point => {
     if (!Number.isFinite(point.value)) {
       return [];
     }
-    return [`${visibleDisplayText(point.label)} · ${point.value}`];
+    return [`${point.label} · ${point.value}`];
   });
   if (lines.length === 0) {
     return null;
   }
-  return `${title}\n${lines.join('\n')}`;
+  return `${chart.title}\n${lines.join('\n')}`;
 }
 
 export type TaskCardLookup = {

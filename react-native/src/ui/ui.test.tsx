@@ -1715,7 +1715,7 @@ test('a chat message names Flutter ChartMessageWidget empty GET title without om
       }
       return [];
     });
-  expect(copies).toContain('Here is the trend.\n\nMon · 12\n · 1');
+  expect(copies).toContain('Here is the trend.\n\nMon · 12\n \t · 1');
   expect(copies).not.toContain('Here is the trend.\nMon · 12');
   act(() => {
     renderer.unmount();
