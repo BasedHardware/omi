@@ -60,7 +60,7 @@ test('parses GET app changelogs with Flutter omitted-icon ✨', () => {
     {
       key: 'ann-1:3',
       title: "What's New in 1.2.0",
-      copy: 'Empty icon · ',
+      copy: ' · Empty icon · ',
     },
     {
       key: 'ann-1:4',
@@ -71,6 +71,41 @@ test('parses GET app changelogs with Flutter omitted-icon ✨', () => {
   expect(appChangelogHeading('')).toBe("What's New");
   expect(appChangelogHeading('  ')).toBe("What's New");
   expect(appChangelogsLoadErrorCopy()).toBe('Failed to load changelogs');
+});
+
+test('names Flutter ChangelogSheet empty GET icons instead of omitting the prefix', () => {
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-empty-icon',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {
+            changes: [
+              {title: 'Empty icon', description: 'Kept description.', icon: ''},
+              {
+                title: 'Whitespace icon',
+                description: 'Kept description.',
+                icon: ' \t',
+              },
+            ],
+          },
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-empty-icon:0',
+      title: "What's New in 1.2.0",
+      copy: ' · Empty icon · Kept description.',
+    },
+    {
+      key: 'ann-empty-icon:1',
+      title: "What's New in 1.2.0",
+      copy: ' · Whitespace icon · Kept description.',
+    },
+  ]);
 });
 
 test('names Flutter ChangelogSheet empty GET app_version as What\'s New in ', () => {

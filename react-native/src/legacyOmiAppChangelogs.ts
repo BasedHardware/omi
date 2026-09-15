@@ -56,7 +56,7 @@ export function appChangelogRowCopy(
 ): string {
   const prefix = visibleDisplayText(icon);
   const body = title === '' ? description : `${title} · ${description}`;
-  return prefix === '' ? body : body === '' ? prefix : `${prefix} · ${body}`;
+  return body === '' ? prefix : `${prefix} · ${body}`;
 }
 
 export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {

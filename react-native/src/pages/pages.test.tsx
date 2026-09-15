@@ -3507,6 +3507,44 @@ test('Settings names Flutter ChangelogSheet empty GET descriptions without omitt
   expect(tree).not.toContain('Dismiss');
 });
 
+test('Settings names Flutter ChangelogSheet empty GET icons without omitting What\'s New', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'ann-empty-icon',
+            type: 'changelog',
+            app_version: '1.2.0',
+            content: {
+              changes: [
+                {title: 'Empty icon', description: 'Kept description.', icon: ''},
+                {
+                  title: 'Whitespace icon',
+                  description: 'Kept description.',
+                  icon: ' \t',
+                },
+              ],
+            },
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New in 1.2.0");
+  expect(tree).toContain(' · Empty icon · Kept description.');
+  expect(tree).toContain(' · Whitespace icon · Kept description.');
+  expect(tree).not.toContain('✨ · Empty icon');
+  expect(tree).not.toContain('ann-empty-icon');
+  expect(tree).not.toContain('Dismiss');
+});
+
 test('Settings names GET app changelogs without dismiss', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
