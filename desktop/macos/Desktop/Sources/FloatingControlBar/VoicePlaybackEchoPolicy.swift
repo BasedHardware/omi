@@ -101,6 +101,27 @@ enum VoicePlaybackEchoPolicy {
     return .keepResidue(String(transcript[tokens[leading].start..<upperBound]))
   }
 
+  /// Whether an utterance too short for `classify` to attribute is a run of Omi's own words.
+  ///
+  /// `classify` refuses to call fewer than `minimumWordCount` words an echo, because
+  /// deleting a short utterance from the transcript risks deleting the user. Barge-in carries
+  /// the opposite risk: acting on Omi's own words stops the answer Omi is giving. Measured
+  /// live: playback began "Fun fact: A day on Venus is longer than a year on Venus—it rotates
+  /// so slowly…", the microphone window closed on its first two words, and `Fun fact.` reached
+  /// barge-in as the user speaking. The rest of the answer was never heard.
+  ///
+  /// So the check is exact and contiguous: every word, in order, inside what was played in
+  /// the last few seconds. A short interruption ("Stop.", "Wait, what?") is not a run of the
+  /// answer and still interrupts; neither does a scattering of the answer's words.
+  static func isShortPlaybackFragment(_ transcript: String, spokenWords: [String]) -> Bool {
+    let incoming = words(transcript)
+    guard !incoming.isEmpty, incoming.count < minimumWordCount, incoming.count <= spokenWords.count
+    else { return false }
+    return (0...(spokenWords.count - incoming.count)).contains { start in
+      spokenWords[start..<(start + incoming.count)].elementsEqual(incoming)
+    }
+  }
+
   private static func sentenceBreakPrecedes(
     _ token: (word: String, start: String.Index, end: String.Index),
     in transcript: String,

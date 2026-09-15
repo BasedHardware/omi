@@ -15,19 +15,24 @@ enum VoiceBargeInPolicy: Sendable {
   ///   - previouslyHeard: The text already stored for this segment id, if the segment is a
   ///     re-delivery rather than a new one.
   ///   - isSpeaking: Whether voice playback/synthesis is currently active.
+  ///   - spokenWords: What playback said in the last few seconds, so a short run of Omi's
+  ///     own words heard back does not stop the answer it came from.
   /// - Returns: True if playback should be halted immediately.
   static func shouldInterrupt(
     isUser: Bool,
     speaker: Int,
     text: String,
     previouslyHeard: String? = nil,
-    isSpeaking: Bool
+    isSpeaking: Bool,
+    spokenWords: [String] = []
   ) -> Bool {
     guard isSpeaking else { return false }
     guard isUser || speaker == 0 else { return false }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return false }
-    return !newSpeech(in: trimmed, alreadyHeard: previouslyHeard).isEmpty
+    let heard = newSpeech(in: trimmed, alreadyHeard: previouslyHeard)
+    guard !heard.isEmpty else { return false }
+    return !VoicePlaybackEchoPolicy.isShortPlaybackFragment(String(heard), spokenWords: spokenWords)
   }
 
   /// The part of a segment nobody has heard yet.

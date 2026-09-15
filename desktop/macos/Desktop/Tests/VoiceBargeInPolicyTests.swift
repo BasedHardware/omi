@@ -107,4 +107,58 @@ final class VoiceBargeInPolicyTests: XCTestCase {
         isUser: true, speaker: 0, text: "Wait, stop talking.", previouslyHeard: "What about you?",
         isSpeaking: true))
   }
+
+  // MARK: - Omi's own words heard back
+
+  /// Playback as it was synthesised in the live session where the answer stopped after two words.
+  private let venusAnswer = VoicePlaybackEchoPolicy.words(
+    "Fun fact: A day on Venus is longer than a year on Venus—it rotates so slowly that one "
+      + "rotation takes about 243 Earth days, while its orbit takes about 225.")
+
+  /// The live failure: the microphone window closed on the answer's first two words, and
+  /// `Fun fact.` stopped the answer it came from.
+  func testShortRunOfTheCurrentAnswerDoesNotInterrupt() {
+    XCTAssertFalse(
+      VoiceBargeInPolicy.shouldInterrupt(
+        isUser: true, speaker: 0, text: "Fun fact.", isSpeaking: true, spokenWords: venusAnswer))
+  }
+
+  func testShortRunFromTheMiddleOfTheAnswerDoesNotInterrupt() {
+    XCTAssertFalse(
+      VoiceBargeInPolicy.shouldInterrupt(
+        isUser: true, speaker: 0, text: "Earth days,", isSpeaking: true, spokenWords: venusAnswer))
+  }
+
+  func testShortInterruptionThatIsNotInTheAnswerStillInterrupts() {
+    XCTAssertTrue(
+      VoiceBargeInPolicy.shouldInterrupt(
+        isUser: true, speaker: 0, text: "Stop.", isSpeaking: true, spokenWords: venusAnswer))
+    XCTAssertTrue(
+      VoiceBargeInPolicy.shouldInterrupt(
+        isUser: true, speaker: 0, text: "Wait, what?", isSpeaking: true, spokenWords: venusAnswer))
+  }
+
+  /// Words the answer contains, but not as a run of it, are the user talking.
+  func testAnswerWordsOutOfOrderStillInterrupt() {
+    XCTAssertTrue(
+      VoiceBargeInPolicy.shouldInterrupt(
+        isUser: true, speaker: 0, text: "Venus fact.", isSpeaking: true, spokenWords: venusAnswer))
+  }
+
+  /// Four words or more are `VoicePlaybackEchoPolicy.classify`'s call, made before barge-in
+  /// runs; this check never widens past what that policy declines to attribute.
+  func testFourWordRunIsLeftToTheEchoPolicy() {
+    XCTAssertFalse(
+      VoicePlaybackEchoPolicy.isShortPlaybackFragment("a day on Venus", spokenWords: venusAnswer))
+    XCTAssertTrue(
+      VoiceBargeInPolicy.shouldInterrupt(
+        isUser: true, speaker: 0, text: "a day on Venus", isSpeaking: true, spokenWords: venusAnswer))
+  }
+
+  /// With nothing played recently there is nothing to be an echo of.
+  func testShortSpeechWithNoPlaybackHistoryStillInterrupts() {
+    XCTAssertTrue(
+      VoiceBargeInPolicy.shouldInterrupt(
+        isUser: true, speaker: 0, text: "Fun fact.", isSpeaking: true, spokenWords: []))
+  }
 }

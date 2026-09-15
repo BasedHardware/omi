@@ -88,7 +88,8 @@ extension AppState {
         previouslyHeard: segment.id.flatMap { id in
           speakerSegments.first(where: { $0.segmentId == id })?.text
         },
-        isSpeaking: FloatingBarVoicePlaybackService.shared.isSpeaking
+        isSpeaking: FloatingBarVoicePlaybackService.shared.isSpeaking,
+        spokenWords: FloatingBarVoicePlaybackService.shared.recentlySpokenWords
       ) {
         log("Transcription [BARGE-IN]: User spoke mid-playback; interrupting voice output")
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
