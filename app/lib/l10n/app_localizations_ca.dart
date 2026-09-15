@@ -10039,4 +10039,8 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Encara en curs: això està trigant més del normal.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons.';
 }

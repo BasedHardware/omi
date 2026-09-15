@@ -17,6 +17,7 @@ dependencies:
   provider: ^6.1.2
   connectivity_plus: ^6.0.3
   flutter_provider_utilities: ^1.0.6
+  clock: ^1.1.1
 
   # Localizations
   flutter_localizations:

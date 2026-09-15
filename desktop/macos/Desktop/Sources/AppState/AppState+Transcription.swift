@@ -524,8 +524,11 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localService = localMicService
       let mixer = audioMixer
+      // A dictation app holding the mic replaces the chunk with silence (`DictationMicSuppression`).
+      let dictationGate = ensureDictationMicSuppressionMonitor().gate
       try await mic.startCapture(
-        onAudioChunk: { audioData in
+        onAudioChunk: { rawAudioData in
+          let audioData = dictationGate.gated(rawAudioData)
           if useLocalSTT {
             localService?.appendAudio(audioData)
           } else {
@@ -629,6 +632,7 @@ extension AppState {
       meetingDetector?.stop()
       meetingDetector = nil
       meetingDetectorMode = nil
+      stopDictationMicSuppressionMonitor()
       isAwaitingMeeting = false
       return
     }
@@ -1436,6 +1440,7 @@ extension AppState {
     meetingDetector?.stop()
     meetingDetector = nil
     meetingDetectorMode = nil
+    stopDictationMicSuppressionMonitor()
     captureGateInFlight = false
     captureReconcilePending = false
     pendingCoreAudioCaptureRecoveryReason = nil

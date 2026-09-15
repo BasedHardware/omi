@@ -4,6 +4,16 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: linear-exact-issue-lookup-tests
+    command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit"
+  - id: plugin-db-transcript-segments-tests
+    command: ["python3", "plugins/test_db_transcript_segments.py"]
+    triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
+    lanes: ["local", "ci"]
+    reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
@@ -813,9 +823,9 @@ checks:
     reason: "desktop Swift production or test structure changed"
   - id: desktop-chat-selection-boundary
     command: ["python3", ".github/scripts/check_chat_selection_boundary.py"]
-    triggers: ["desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "PR #10834 reopened FC-selection-overlay-layout-loop in Omi Beta 0.12.146; SwiftUI has no type-level way to exclude SelectionOverlay from the live transcript, so this narrow boundary protects the three authoritative render files"
+    reason: "PR #10834 reopened FC-selection-overlay-layout-loop in Omi Beta 0.12.146; SwiftUI has no type-level way to exclude SelectionOverlay, so this boundary protects the authoritative render files with a blanket ban and adds a repo-wide chained-modifier rule: OmiMarkdown followed by enabled native selection fails CI on any desktop surface, which is what would have caught conversation detail when its markdown gained a SwiftUI-selection ancestor"
   - id: desktop-chat-selection-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_chat_selection_boundary.py"]
     triggers: [".github/scripts/check_chat_selection_boundary.py", ".github/scripts/test_check_chat_selection_boundary.py", ".github/checks-manifest.yaml"]
@@ -975,6 +985,27 @@ checks:
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
+
+  - id: plugin-mentor-session-auth-tests
+    command: ["bash", "scripts/run-plugin-mentor-session-auth-tests.sh"]
+    triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
+  - id: github-app-client-tests
+    command: ["python3", "plugins/omi-github-app/test_github_client.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13545: repository labels silently truncated at 100 because fetchers never followed next links; the suite asserts pagination and fail-closed item handling and must run in CI to catch a regression"
+  - id: clickup-app-client-tests
+    command: ["python3", "plugins/omi-clickup-app/test_clickup_client.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13808: get_all_lists read only /space/{id}/list, which ClickUp v2 limits to folderless lists, so every list inside a folder was invisible to the picker and to task routing; the suite asserts folder discovery and that a failed folder request does not pass as a workspace with no folders"
+  - id: clickup-app-settings-page-tests
+    command: ["python3", "plugins/omi-clickup-app/test_settings_page.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

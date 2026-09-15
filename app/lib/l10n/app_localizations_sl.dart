@@ -10012,4 +10012,8 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.';
 }

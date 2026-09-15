@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +18,47 @@ def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[st
     if locations != sorted(locations):
         return [f"{workflow}: release steps are not ordered as {fragments!r}"]
     return []
+
+
+_BROKEN_REUSE_EXTRACT = 'print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+_SHELL_SAFE_JSON_DUMPS_REUSE = 'json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+_REUSE_COMPARES_TO_JSON_TRUE = re.compile(
+    r'\[\[\s*(?:["\']?\$\{reuse\}|["\']?\$reuse["\']?)\s*==\s*["\']true["\']\s*\]\]',
+)
+_AGENT_VM_RESOLVER = "resolve_agent_vm_sha_release.py"
+
+
+def _agent_vm_resolver_step_contexts(text: str) -> list[str]:
+    """Return workflow step blocks that invoke the SHA-keyed Agent VM resolver."""
+    contexts: list[str] = []
+    start = 0
+    while True:
+        idx = text.find(_AGENT_VM_RESOLVER, start)
+        if idx < 0:
+            break
+        block_start = text.rfind("\n      - ", 0, idx)
+        if block_start < 0:
+            block_start = 0
+        block_end = text.find("\n      - ", idx)
+        if block_end < 0:
+            block_end = len(text)
+        contexts.append(text[block_start:block_end])
+        start = idx + len(_AGENT_VM_RESOLVER)
+    return contexts
+
+
+def _context_has_shell_safe_reuse_extract(context: str) -> bool:
+    if _SHELL_SAFE_JSON_DUMPS_REUSE in context and "reuse=" in context:
+        return True
+    if "reuse=" not in context:
+        return False
+    return bool(
+        re.search(
+            r'reuse\s*=\s*"\$\([^)]*workflow_json_field_for_shell\.py[^)]*\breuse\b',
+            context,
+            flags=re.DOTALL,
+        )
+    )
 
 
 def _step_block(text: str, name: str) -> str | None:
@@ -180,6 +222,18 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     for fragment in required:
         if fragment not in text:
             errors.append(f"{workflow}: missing release boundary {fragment!r}")
+
+    for context in _agent_vm_resolver_step_contexts(text):
+        if _BROKEN_REUSE_EXTRACT in context:
+            errors.append(
+                f"{workflow}: Agent VM SHA reuse guard must not print a JSON boolean with Python repr "
+                '(use json.dumps or .github/scripts/workflow_json_field_for_shell.py)'
+            )
+        if _REUSE_COMPARES_TO_JSON_TRUE.search(context) and not _context_has_shell_safe_reuse_extract(context):
+            errors.append(
+                f"{workflow}: reuse branch compares to JSON true but no shell-safe reuse extraction is present "
+                "in the Agent VM resolver step"
+            )
 
     # Bound to the step, not to the file. attach_cloud_run_gmp_sidecar.py made
     # --expected-env-state required and only the backend caller was updated;

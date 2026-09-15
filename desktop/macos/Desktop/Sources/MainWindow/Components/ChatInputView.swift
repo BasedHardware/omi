@@ -177,7 +177,12 @@ struct ChatInputView: View {
                 textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
                 onSubmit: handleSubmit,
                 onMarkedTextChange: { hasMarkedText = $0 },
-                focusRequest: caretClaims
+                focusRequest: caretClaims,
+                // Without these the NSTextView swallows the drag before the SwiftUI `.onDrop` below
+                // ever sees it, so only the padding around the field — never the field itself —
+                // could stage a file.
+                onFileDrop: editorFileDropHandler,
+                onFileDragTargeted: editorFileDragTargetedHandler
               )
               // Typing with nothing focused means this composer, not the page's search bar behind it.
               .straysTypingHere(priority: .primary) { caretClaims &+= 1 }
@@ -287,6 +292,28 @@ struct ChatInputView: View {
         onAttachmentsAdded?(urls)
       }
     }
+  }
+
+  /// Same staging path and cap as `handleDrop`, for a single file dropped on the editor interior.
+  private func stageDroppedFile(_ url: URL) {
+    guard currentAttachments.count < kMaxChatAttachments else { return }
+    onAttachmentsAdded?([url])
+  }
+
+  // Split out of `body`, and using `if`/`else` rather than a ternary — a closure-typed ternary here
+  // defeats the type checker (SR-style "failed to produce diagnostic" crash).
+  private var editorFileDropHandler: ((URL) -> Void)? {
+    if attachmentsEnabled {
+      return stageDroppedFile
+    }
+    return nil
+  }
+
+  private var editorFileDragTargetedHandler: ((Bool) -> Void)? {
+    if attachmentsEnabled {
+      return { isDropTargeted = $0 }
+    }
+    return nil
   }
 
   private func handleDrop(providers: [NSItemProvider]) -> Bool {

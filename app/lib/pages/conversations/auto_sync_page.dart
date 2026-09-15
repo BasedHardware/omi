@@ -15,6 +15,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/sync/sync_card_progress_line.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
@@ -191,9 +192,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:
           title = l.syncCardDownloadingTitle;
-          final cur = s.currentFile ?? 0;
-          final tot = s.totalFiles ?? 0;
-          if (tot > 0) progressText = l.syncCardProgressOf(cur, tot);
+          progressText = SyncCardProgressLine.subtitle(
+            phase: s.phase,
+            currentFile: s.currentFile,
+            totalFiles: s.totalFiles,
+            counterLabel: (processed, total) => l.syncCardProgressOf(processed, total),
+          );
           break;
         case SyncPhase.waitingForInternet:
           title = l.syncCardWaitingInternet;
@@ -201,9 +205,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           break;
         case SyncPhase.uploadingToCloud:
           title = l.syncCardUploadingTitle;
-          final cur = s.currentFile ?? 0;
-          final tot = s.totalFiles ?? 0;
-          if (tot > 0) progressText = l.syncCardProgressOf(cur, tot);
+          progressText = SyncCardProgressLine.subtitle(
+            phase: s.phase,
+            currentFile: s.currentFile,
+            totalFiles: s.totalFiles,
+            counterLabel: (processed, total) => l.syncCardProgressOf(processed, total),
+          );
           break;
         case SyncPhase.processingOnServer:
           title = l.syncCardProcessing;
@@ -218,9 +225,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (uploaded > 0) {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;
-      // Uploaded WAL counts are queue state, not server segment progress. A
-      // localized background hint avoids presenting them as a completion meter.
-      progressText = l.syncProcessingBackgroundHint;
+      final counts = p.offlineServerProcessingCounts;
+      progressText = SyncCardProgressLine.serverProcessingSubtitle(
+            processed: counts.processed,
+            total: counts.total,
+            counterLabel: (processed, total) => l.processingProgress(processed, total),
+          ) ??
+          l.syncProcessingBackgroundHint;
     } else if (attention > 0) {
       title = l.syncCardNeedsAttention(attention);
       titleColor = Colors.orangeAccent;

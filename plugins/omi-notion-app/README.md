@@ -126,9 +126,33 @@ When users connect their Notion workspace, they must grant access to specific pa
 
 ## Regression tests
 
+Page creation and content appends share a planner for Notion's
+[request limits](https://developers.notion.com/reference/request-limits).
+Nonblank lines keep their text and order; long lines use multiple rich-text
+items, then continuation paragraph blocks when one block cannot fit. Requests
+contain at most 100 children and 100 rich-text items per paragraph, with text
+chunks bounded to 2000 UTF-16 units without splitting Unicode characters. The
+500,000-byte budget includes the exact escaped JSON sent over HTTP, including
+the parent and title on page creation. Oversized page properties fail before
+any write.
+
+Batches are sent in order. A failed write stops the operation without replaying
+earlier requests. The error includes the page ID and confirmed paragraph-block
+count (including a page already created), since a failed transport response may
+still have committed. Inspect the page before retrying to avoid duplicate text.
+The [append response](https://developers.notion.com/reference/patch-block-children)
+must have the documented list shape and returned block identities before a
+batch is confirmed. A valid paginated response acknowledges the submitted
+request, so confirmed counts track accepted request batches rather than the
+number of returned results. Malformed responses stop the operation with only
+earlier accepted batches included in the error count.
+
 Run `python3 plugins/omi-notion-app/test_main.py` from the repository root.
 The hermetic tests import the production module with framework/storage doubles
 and exercise `get_page` through its real HTTP helper: failed content retrieval
 must return a sanitized tool error retaining the independently retrieved page
 metadata (including archive status), while empty and populated successful reads
-retain their output. No live workspace or credentials are used.
+retain their output. Create/append tests capture the production HTTP bodies to
+check text, array, serialized-byte and Unicode boundaries, ordered writes,
+small-input compatibility, and partial failures. No live workspace or
+credentials are used.

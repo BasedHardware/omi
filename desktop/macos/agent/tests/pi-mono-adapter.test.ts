@@ -1068,6 +1068,36 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     await adapter.stop();
   });
 
+  it("starts Pi in the kernel-admitted working directory", async () => {
+    const adapter = new PiMonoAdapter({ authToken: "test-token" }, "/fake/pi", "/fake/ext.ts");
+
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-artifacts" });
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { cwd?: string },
+    ];
+    expect(options.cwd).toBe("/tmp/omi-admitted-artifacts");
+    await adapter.stop();
+  });
+
+  it("restarts a pinned Pi worker before rebinding it to another admitted directory", async () => {
+    const adapter = new PiMonoAdapter({ authToken: "test-token" }, "/fake/pi", "/fake/ext.ts");
+
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-a" });
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-b" });
+
+    expect(spawn).toHaveBeenCalledTimes(2);
+    const [, , secondOptions] = vi.mocked(spawn).mock.calls[1] as [
+      string,
+      string[],
+      { cwd?: string },
+    ];
+    expect(secondOptions.cwd).toBe("/tmp/omi-admitted-b");
+    await adapter.stop();
+  });
+
   it("scrubs OMI_API_KEY into the subprocess env from authToken", async () => {
     const config: HarnessConfig = {
       authToken: "firebase-id-token-xyz",
@@ -1248,6 +1278,35 @@ describe("tool_use event filtering", () => {
 });
 
 describe("PiMonoAdapter served-model attribution", () => {
+  it("returns response-observed provider and model identities from a runtime attempt", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const execution = runtime.executeAttempt(
+      makeAttemptContext(),
+      () => {},
+      new AbortController().signal,
+    );
+
+    (adapter as any).handleEvent(JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+        model: "omi-sonnet",
+        responseModel: "gpt-5.6-luna",
+        provider: "openai-codex",
+      },
+    }));
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+
+    await expect(execution).resolves.toMatchObject({
+      terminalStatus: "succeeded",
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-5.6-luna"],
+    });
+  });
+
   it("reports the response-observed model once per prompt, preferring responseModel", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");

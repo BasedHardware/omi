@@ -312,9 +312,21 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> init() async {
     final generation = _sessionGeneration;
-    await _ensureClientDeviceInitialized();
+    // Device-id hydration and saved-filter loading are best-effort. A failure
+    // here (secure storage / SharedPreferences hiccup) must NOT abort init
+    // before loadMemories() runs, or _loading stays at its constructor default
+    // `true` and the screen is stuck on the loading skeleton forever.
+    try {
+      await _ensureClientDeviceInitialized();
+    } catch (e) {
+      Logger.error('MemoriesProvider: client-device init failed (non-fatal): $e');
+    }
     if (generation != _sessionGeneration) return;
-    await _loadFilter();
+    try {
+      await _loadFilter();
+    } catch (e) {
+      Logger.error('MemoriesProvider: filter load failed (non-fatal): $e');
+    }
     if (generation != _sessionGeneration) return;
     await loadMemories();
     if (generation != _sessionGeneration) return;
@@ -402,7 +414,14 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
 
     if (_filterThisDeviceOnly) {
-      await _ensureClientDeviceInitialized();
+      // Best-effort: if device-id hydration fails, fall through and load all
+      // memories (local device filtering is skipped) rather than leaving
+      // _loading stuck true, which was set just above.
+      try {
+        await _ensureClientDeviceInitialized();
+      } catch (e) {
+        Logger.error('MemoriesProvider: device init during load failed (non-fatal): $e');
+      }
       if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;
       }

@@ -202,10 +202,18 @@ jobs:
 
       - name: Probe deployed development Pusher finalization semantics
         env:
-          # Development Pusher runs in based-hardware-dev but the backend it
-          # exercises authenticates against the production Firebase project.
-          # Sign through IAM as an explicitly named based-hardware principal;
-          # do not pass the dev deploy credential or materialize a key here.
+          # The development backend authenticates against production Firebase
+          # (--firebase-project based-hardware below), while this lane's deploy
+          # identity belongs to based-hardware-dev, so signing as the deploy
+          # identity can never pass firebase_release_probe_token.py's closed
+          # signer/project_mismatch check -- the failure that froze this lane
+          # on every run since 2026-08-31. Name the Firebase project's own
+          # signer and impersonate it via IAM signJwt instead: no
+          # service-account key is staged on this backend image builder
+          # (the key-secret guard
+          # test_backend_deploy_workflows_do_not_materialize_an_ignored_service_account_key
+          # forbids one here). The deploy identity needs
+          # roles/iam.serviceAccountTokenCreator on that signer.
           FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail

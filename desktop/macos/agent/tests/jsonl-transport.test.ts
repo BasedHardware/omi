@@ -13,6 +13,7 @@ import {
 import { updateContextSource } from "../src/runtime/context-snapshot.js";
 import { stableJsonHash } from "../src/runtime/kernel-support.js";
 import { recordJournalTurn, terminalizeJournalTurn } from "../src/runtime/conversation-journal.js";
+import { readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
 import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const roots: string[] = [];
@@ -614,15 +615,16 @@ describe("JsonlTransport kernel-owned query contract", () => {
     });
     store.close();
   });
-  it("requires a canonical session and uses its pinned adapter/model/cwd", async () => {
+  it("requires a canonical session and uses its pinned adapter/cwd", async () => {
     const { store, adapter, session, sent, transport } = fixture();
     await transport.handleQuery(query(session.sessionId));
 
     expect(adapter.opened).toHaveLength(1);
     expect(adapter.opened[0]).toMatchObject({
       cwd: "/tmp/pinned-workspace",
-      model: "pinned-model",
     });
+    expect(adapter.opened[0].model).toBeUndefined();
+    expect(readSessionExecutionProfile(store, session.sessionId).modelProfile).toBe("pinned-model");
     expect(adapter.opened[0].systemPrompt).toContain("desktop kernel is the authority");
     expect(sent.at(-1)).toMatchObject({
       type: "result",
