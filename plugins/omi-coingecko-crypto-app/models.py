@@ -31,9 +31,11 @@ class GetCryptoPriceRequest(BaseModel):
         description="Target currency code (e.g., 'usd', 'eur', 'gbp', 'jpy').",
     )
 
-    @field_validator("vs_currency")
+    @field_validator("vs_currency", mode="before")
     @classmethod
-    def normalize_vs_currency(cls, v: str) -> str:
+    def normalize_vs_currency(cls, v) -> str:
+        if not isinstance(v, str):
+            return v
         cleaned = v.strip().lower()
         if len(cleaned) < 2:
             raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")
@@ -44,8 +46,10 @@ class GetCryptoPriceRequest(BaseModel):
     def normalize_coin_ids(cls, v: Union[List[str], str]) -> List[str]:
         if isinstance(v, str):
             ids = [i.strip().lower() for i in v.split(",") if i.strip()]
-        else:
+        elif isinstance(v, (list, tuple)):
             ids = [i.strip().lower() for i in v if isinstance(i, str) and i.strip()]
+        else:
+            raise ValueError("coin_ids must be a string or a list of strings.")
         if not ids:
             raise ValueError("At least one valid coin ID must be provided.")
         # Deduplicate while preserving order, max 10
@@ -64,9 +68,11 @@ class SearchCryptoCoinsRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=100, description="Coin name, ticker symbol, or keyword.")
     max_results: int = Field(default=5, ge=1, le=15, description="Maximum number of search results to return.")
 
-    @field_validator("query")
+    @field_validator("query", mode="before")
     @classmethod
-    def normalize_query(cls, v: str) -> str:
+    def normalize_query(cls, v) -> str:
+        if not isinstance(v, str):
+            return v
         cleaned = v.strip()
         if not cleaned:
             raise ValueError("Query string cannot be empty.")
@@ -90,9 +96,11 @@ class GetCryptoMarketOverviewRequest(BaseModel):
         description="Target currency code, e.g. 'usd'.",
     )
 
-    @field_validator("vs_currency")
+    @field_validator("vs_currency", mode="before")
     @classmethod
-    def normalize_vs_currency(cls, v: str) -> str:
+    def normalize_vs_currency(cls, v) -> str:
+        if not isinstance(v, str):
+            return v
         cleaned = v.strip().lower()
         if len(cleaned) < 2:
             raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")

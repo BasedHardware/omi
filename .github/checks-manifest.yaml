@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: coingecko-crypto-tests
+    command: ["python3", "plugins/omi-coingecko-crypto-app/test_main.py"]
+    triggers: ["plugins/omi-coingecko-crypto-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13935: CoinGecko /coins/markets returns a dict on error payloads (429/error bodies) whose string keys crashed .get() iteration; the app must also survive missing lifespan client state and string-typed numeric fields"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
