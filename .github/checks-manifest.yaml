@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: whoop-app-workouts-input-tests
+    command: ["python3", "plugins/omi-whoop-app/test_workouts_input_coercion.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "get_workouts compared the raw optional days/max_results values with min(), and the backend forwards omitted optionals as JSON null, so an ordinary workouts request crashed with TypeError; the suite executes the handler and asserts null, string, non-positive and oversized inputs become a bounded request"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
