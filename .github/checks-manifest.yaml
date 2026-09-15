@@ -49,6 +49,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13920: tool_list_my_issues and tool_list_recent_issues interpolated limit and team into GraphQL text, so null/string/over-cap limits produced malformed queries and crafted team keys could inject GraphQL; limits must be coerced and inputs bound as variables"
+  - id: coingecko-crypto-tests
+    command: ["python3", "plugins/omi-coingecko-crypto-app/test_main.py"]
+    triggers: ["plugins/omi-coingecko-crypto-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13935: verify coingecko endpoints against non-list error payloads, dict iteration crashes, lifespan fallback, and input validation"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
