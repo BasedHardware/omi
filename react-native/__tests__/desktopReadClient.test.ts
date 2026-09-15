@@ -3094,7 +3094,7 @@ test('task card chrome names loaded GET task description and omits ids', () => {
       {eyebrow: 'Task', taskId: 'task-join'},
       [{id: 'task-join', title: ' \t'}],
     ),
-  ).toEqual({eyebrow: 'Task', title: ''});
+  ).toEqual({eyebrow: 'Task', title: ' \t'});
   expect(
     JSON.stringify(
       paintedChatContentBlock({eyebrow: 'Task', taskId: 'task-join'}, tasks),
@@ -3122,7 +3122,13 @@ test('names Flutter TaskCardBlock empty GET descriptions instead of omitting the
   ).toBe('');
   expect(
     taskCardDescription('task-join', [{id: 'task-join', title: ' \t'}]),
-  ).toBe('');
+  ).toBe(' \t');
+  expect(
+    taskCardDescription('task-join', [{id: 'task-join', title: '\u0085'}]),
+  ).toBe('\u0085');
+  expect(
+    taskCardDescription('task-join', [{id: 'task-join', title: '  padded  '}]),
+  ).toBe('  padded  ');
   expect(
     taskCardDescription('task-alias', [
       {id: 'other', taskId: 'task-alias', title: ''},
@@ -3139,7 +3145,19 @@ test('names Flutter TaskCardBlock empty GET descriptions instead of omitting the
       {eyebrow: 'Task', taskId: 'task-join'},
       [{id: 'task-join', title: ' \t'}],
     ),
-  ).toEqual({eyebrow: 'Task', title: ''});
+  ).toEqual({eyebrow: 'Task', title: ' \t'});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Task', taskId: 'task-join'},
+      [{id: 'task-join', title: '\u0085'}],
+    ),
+  ).toEqual({eyebrow: 'Task', title: '\u0085'});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Task', taskId: 'task-join'},
+      [{id: 'task-join', title: '  padded  '}],
+    ),
+  ).toEqual({eyebrow: 'Task', title: '  padded  '});
   expect(
     paintedChatContentBlock(
       {eyebrow: 'Task', taskId: 'task-alias'},

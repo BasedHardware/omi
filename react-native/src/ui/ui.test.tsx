@@ -2385,7 +2385,7 @@ test('a chat message names Flutter TaskCardBlock empty GET descriptions', () => 
   );
   expect(
     whitespace.root.findAll(
-      node => node.props.accessibilityLabel === 'Task: ',
+      node => node.props.accessibilityLabel === 'Task:  \t',
     ).length,
   ).toBeGreaterThan(0);
   act(() => {

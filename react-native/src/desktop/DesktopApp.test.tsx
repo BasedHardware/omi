@@ -852,6 +852,38 @@ test('desktop chat names Flutter TaskCardBlock empty GET descriptions', () => {
   expect(copy).not.toContain(chatBlockUnavailableCopy());
   expect(copy).not.toContain('Loading');
   expect(copy).not.toContain('task-join');
+  const whitespaceTask = {
+    ...emptyTask,
+    title: ' \t',
+  };
+  const whitespace = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        ...outcomes.tasks,
+        value: {
+          ...outcomes.tasks.value,
+          items: [whitespaceTask],
+        },
+      },
+    },
+    reads: [...outcomes.conversations.value.items, whitespaceTask],
+    messages: [
+      {
+        id: 'whitespace-task-desc',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+      },
+    ],
+  });
+  expect(
+    whitespace.root.findAll(
+      node => node.props.accessibilityLabel === 'Task:  \t',
+    ).length,
+  ).toBeGreaterThan(0);
 });
 
 test('desktop chat names GET content_blocks without inventing write actions', () => {

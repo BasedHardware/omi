@@ -2443,7 +2443,7 @@ export function taskCardDescription(
     if (task.id !== taskId && task.taskId !== taskId) {
       continue;
     }
-    return visibleDisplayText(task.title);
+    return task.title;
   }
   return undefined;
 }
@@ -2489,7 +2489,12 @@ export function paintedChatContentBlock(
           chatBlockUnavailableCopy()
       : undefined;
   const title = block.title ?? joined;
-  const visibleTitle = title === undefined ? '' : visibleDisplayText(title);
+  const paintedTitle =
+    joined !== undefined
+      ? title ?? ''
+      : title === undefined
+        ? ''
+        : visibleDisplayText(title);
   const visibleDetail =
     expanded && block.more !== undefined
       ? visibleDisplayText(block.more)
@@ -2498,8 +2503,8 @@ export function paintedChatContentBlock(
         : visibleDisplayText(block.detail);
   return {
     eyebrow: block.eyebrow,
-    ...(joined !== undefined || visibleTitle !== ''
-      ? {title: visibleTitle}
+    ...(joined !== undefined || paintedTitle !== ''
+      ? {title: paintedTitle}
       : {}),
     ...(visibleDetail === '' ? {} : {detail: visibleDetail}),
   };

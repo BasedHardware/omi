@@ -600,7 +600,7 @@ test('conversation-detail history names Flutter TaskCardBlock empty GET descript
   });
   expect(
     whitespace.root.findAll(
-      node => node.props.accessibilityLabel === 'Task: ',
+      node => node.props.accessibilityLabel === 'Task:  \t',
     ).length,
   ).toBeGreaterThan(0);
 });
