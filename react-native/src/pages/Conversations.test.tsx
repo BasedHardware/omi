@@ -3114,12 +3114,18 @@ test('conversation list names GET calendar capture gaps without a write sheet', 
     await Promise.resolve();
   });
   const tree = textOf(renderer);
-  expect(tree).toContain('Not captured (1)');
+  expect(tree).toContain('Not captured (2)');
   expect(tree).toContain('Design review');
   expect(tree).toContain(
     captureGapTimeRangeCopy(
       Date.parse('2026-09-07T15:00:00.000Z'),
       Date.parse('2026-09-07T16:30:00.000Z'),
+    ),
+  );
+  expect(tree).toContain(
+    captureGapTimeRangeCopy(
+      Date.parse('2026-09-07T17:00:00.000Z'),
+      Date.parse('2026-09-07T18:00:00.000Z'),
     ),
   );
   expect(tree).toContain('Work chat');
@@ -3148,7 +3154,7 @@ test('conversation list names GET calendar capture gaps without a write sheet', 
     search.props.onChangeText('Work');
   });
   expect(textOf(renderer)).toContain('Work chat');
-  expect(textOf(renderer)).not.toContain('Not captured (1)');
+  expect(textOf(renderer)).not.toContain('Not captured (2)');
   expect(textOf(renderer)).not.toContain('Design review');
   await act(async () => {
     search.props.onChangeText('');

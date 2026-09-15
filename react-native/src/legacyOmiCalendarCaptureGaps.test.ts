@@ -52,7 +52,7 @@ test('spans GET capture-gaps from loaded local conversation days', () => {
   expect(calendarCaptureGapSpan([])).toBeNull();
 });
 
-test('parses GET capture-gap titles and omits empty titles', () => {
+test('names Flutter CaptureGapListItem empty GET titles instead of omitting the gap', () => {
   const rows = parseOmiCalendarCaptureGaps(
     JSON.stringify([
       {
@@ -69,6 +69,12 @@ test('parses GET capture-gap titles and omits empty titles', () => {
         start_time: '2026-09-07T16:00:00.000Z',
         end_time: '2026-09-07T17:00:00.000Z',
       },
+      {
+        event_id: 'event-blank',
+        title: '',
+        start_time: '2026-09-07T17:00:00.000Z',
+        end_time: '2026-09-07T18:00:00.000Z',
+      },
     ]),
   );
   expect(rows).toEqual([
@@ -77,6 +83,18 @@ test('parses GET capture-gap titles and omits empty titles', () => {
       title: 'Standup',
       startMs: Date.parse('2026-09-07T15:00:00.000Z'),
       endMs: Date.parse('2026-09-07T15:30:00.000Z'),
+    },
+    {
+      eventId: 'event-empty',
+      title: '',
+      startMs: Date.parse('2026-09-07T16:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T17:00:00.000Z'),
+    },
+    {
+      eventId: 'event-blank',
+      title: '',
+      startMs: Date.parse('2026-09-07T17:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T18:00:00.000Z'),
     },
   ]);
 });
