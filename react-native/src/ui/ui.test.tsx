@@ -3226,6 +3226,56 @@ test('wide Home search memory rows omit Flutter MemoryItem unused timestamp and 
   expect(tree).not.toContain('citation-v1:launch');
 });
 
+test('wide Home search memory rows name Flutter MemoryItem empty GET content', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-blank-home-search',
+        title: '',
+        summary: '',
+        searchableText: '',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      }}
+    />,
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Memory text unavailable',
+  );
+  const whitespace = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-whitespace-home-search',
+        title: ' \t',
+        summary: ' \t',
+        searchableText: ' \t',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      }}
+    />,
+  );
+  expect(
+    whitespace.root.findAll(
+      node =>
+        String(node.type) === 'Text' && node.props.children === ' \t',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
 test('wide Home search memory rows omit Flutter MemoryItem unused synthesized-memory chrome', () => {
   const renderer = render(
     <ProjectionRow

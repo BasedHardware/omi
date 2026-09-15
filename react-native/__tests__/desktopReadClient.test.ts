@@ -3624,11 +3624,17 @@ test('memory display text names Flutter empty GET content', () => {
   expect(memoryDisplayTitle({title: 'A walk.', summary: 'A walk.'})).toBe(
     'A walk.',
   );
-  expect(memoryDisplayTitle({title: ' \t', summary: ''})).toBe('');
-  expect(memoryDisplayBody({title: '', summary: ' \t\n'})).toBe('');
-  expect(memoryDisplayTitle({title: ' \t', summary: 'A walk.'})).toBe(
-    'A walk.',
+  expect(memoryDisplayTitle({title: ' \t', summary: ''})).toBe(' \t');
+  expect(memoryDisplayTitle({title: '\u0085', summary: ''})).toBe('\u0085');
+  expect(memoryDisplayTitle({title: '  padded  ', summary: ''})).toBe(
+    '  padded  ',
   );
+  expect(memoryDisplayBody({title: '', summary: ' \t\n'})).toBe(' \t\n');
+  expect(memoryDisplayBody({title: '', summary: '\u0085'})).toBe('\u0085');
+  expect(memoryDisplayBody({title: '', summary: '  padded  '})).toBe(
+    '  padded  ',
+  );
+  expect(memoryDisplayTitle({title: ' \t', summary: 'A walk.'})).toBe(' \t');
 });
 
 test('memory citation copy matches the citation count', () => {

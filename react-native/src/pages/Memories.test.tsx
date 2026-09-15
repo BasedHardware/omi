@@ -573,6 +573,7 @@ test('Memories rows omit Flutter MemoryItem unused synthesized-memory chrome', (
 
 test('Memories names Flutter MemoryItem empty GET content', async () => {
   let view!: Renderer.ReactTestRenderer;
+  let whitespace!: Renderer.ReactTestRenderer;
   await act(async () => {
     view = Renderer.create(
       <MemoriesPage
@@ -602,6 +603,32 @@ test('Memories names Flutter MemoryItem empty GET content', async () => {
         node => node.props.accessibilityLabel === 'Memory: ',
       ),
     ).toBeDefined();
+    await act(async () => {
+      whitespace = Renderer.create(
+        <MemoriesPage
+          outcome={{
+            status: 'success',
+            value: {
+              items: [
+                {
+                  ...memory('whitespace'),
+                  title: ' \t',
+                  summary: ' \t',
+                  searchableText: ' \t',
+                },
+              ],
+              page: page(null),
+            },
+          }}
+          loading={false}
+        />,
+      );
+    });
+    expect(
+      whitespace.root.find(
+        node => node.props.accessibilityLabel === 'Memory:  \t',
+      ),
+    ).toBeDefined();
     act(() => {
       view.root
         .find(
@@ -612,7 +639,10 @@ test('Memories names Flutter MemoryItem empty GET content', async () => {
     expect(textOf(view)).not.toContain('Memory text unavailable');
     expect(textOf(view)).toContain(memoriesSearchEmptyCopy());
   } finally {
-    await act(async () => view.unmount());
+    await act(async () => {
+      view.unmount();
+      whitespace?.unmount();
+    });
   }
 });
 

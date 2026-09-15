@@ -109,6 +109,24 @@ test('Home currents name Flutter MemoryItem empty GET content', () => {
   expect(textOf(card)).not.toContain('Memory text unavailable');
   expect(home.root.findAllByType(Text).length).toBeGreaterThan(0);
   expect(card.root.findAllByType(Text).length).toBeGreaterThan(0);
+  const whitespaceItem: MemoryProjection = {
+    ...item,
+    title: ' \t',
+    summary: ' \t',
+    searchableText: ' \t',
+  };
+  let whitespaceHome!: ReactTestRenderer.ReactTestRenderer;
+  let whitespaceCard!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    whitespaceHome = ReactTestRenderer.create(
+      <ReadRow item={whitespaceItem} />,
+    );
+    whitespaceCard = ReactTestRenderer.create(
+      <MemoryRow item={whitespaceItem} />,
+    );
+  });
+  expect(textOf(whitespaceHome)).toContain(' \t');
+  expect(textOf(whitespaceCard)).toContain(' \t');
 });
 
 test('Home currents name GET locked memories and omit unlocked rows', () => {

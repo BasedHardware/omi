@@ -2720,18 +2720,14 @@ export function memoryDisplayTitle(item: {
   title: string;
   summary: string;
 }): string {
-  const title = visibleDisplayText(item.title);
-  const summary = visibleDisplayText(item.summary);
-  return visibleMemoryText(title !== '' ? title : summary);
+  return visibleMemoryText(item.title !== '' ? item.title : item.summary);
 }
 
 export function memoryDisplayBody(item: {
   title: string;
   summary: string;
 }): string {
-  const title = visibleDisplayText(item.title);
-  const summary = visibleDisplayText(item.summary);
-  return visibleMemoryText(summary !== '' ? summary : title);
+  return visibleMemoryText(item.summary !== '' ? item.summary : item.title);
 }
 
 export function memoryCitationCopy(citations: readonly string[]): string {
@@ -2867,8 +2863,7 @@ export function taskIndentPadding(indentLevel: number): number {
 }
 
 function visibleMemoryText(text: string): string {
-  const parsed = parseMemoryText(text);
-  return visibleDisplayText(parsed.body);
+  return parseMemoryText(text).body;
 }
 
 export function conversationGroupLabel(
