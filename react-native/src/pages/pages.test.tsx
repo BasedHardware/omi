@@ -1306,7 +1306,7 @@ test('Settings names Flutter notSet for empty GET name and email', async () => {
         status: 200,
         body: JSON.stringify({
           uid: 'user-1',
-          name: ' \t',
+          name: '',
           email: null,
         }),
       };
@@ -1320,6 +1320,32 @@ test('Settings names Flutter notSet for empty GET name and email', async () => {
   expect(tree).not.toContain('Email not set on this account.');
   expect(tree).toContain('User ID');
   expect(tree).toContain('user-1');
+});
+
+test('Settings names Flutter Profile padded GET name instead of remapping to a chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: '  user-42  ',
+          name: '  Ada  ',
+          email: '  ada@example.com  ',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('  Ada  ');
+  expect(tree).toContain('  ada@example.com  ');
+  expect(tree).toContain('  u•••••2  ');
+  expect(tree).not.toContain('use•••••-42');
+  expect(tree).not.toContain('Name not set on this account.');
+  expect(tree).not.toContain('Email not set on this account.');
 });
 
 test('Settings names GET usage today without Upgrade', async () => {

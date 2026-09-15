@@ -8,11 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {
-  accountFieldCopy,
-  clockLabel,
-  visibleDisplayText,
-} from '../desktopReadClient';
+import {clockLabel, visibleDisplayText} from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
 import {desktopTokens as token} from './tokens';
 import type {useRewindCapture} from '../app/useRewindCapture';
@@ -57,7 +53,8 @@ function formatRewindCaptureTime(capturedAtMs: number): string {
 }
 
 function rewindAppName(appName: string): string {
-  return accountFieldCopy(appName, 'Captured screen');
+  const trimmed = visibleDisplayText(appName);
+  return trimmed !== '' ? trimmed : 'Captured screen';
 }
 
 export function rewindLaterPageCanRetry(error: unknown): boolean {

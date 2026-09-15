@@ -40,6 +40,7 @@ import {
   permissionsTitleCopy,
   accountFieldCopy,
   connectionIdentityCopy,
+  visibleDisplayText,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usagePeriodStatsCopy,
@@ -1321,7 +1322,9 @@ export function SettingsPage({
                 <SettingRow
                   title="Plan"
                   copy={accountFieldCopy(
-                    serviceSettings.entitlement.planLabel,
+                    visibleDisplayText(
+                      serviceSettings.entitlement.planLabel,
+                    ),
                     'Plan unavailable',
                   )}
                 />

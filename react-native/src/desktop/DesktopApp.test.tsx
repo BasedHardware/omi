@@ -7513,15 +7513,15 @@ test('Settings shows already-loaded Account id and Name not set', async () => {
   expect(tree).not.toContain('Signed in to Omi');
 });
 
-test('Settings treats whitespace-only Account name and email as unset', async () => {
+test('Settings names Flutter Profile padded GET name instead of remapping to a chip', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
   loadAccountSettings.mockResolvedValueOnce({
     profile: {
-      uid: 'user-42',
-      name: ' \t\n',
-      email: ' \t',
+      uid: '  user-42  ',
+      name: '  Ada  ',
+      email: '  ada@example.com  ',
       company: ' \t',
       job: '\u00A0',
       dataProtectionLevel: null,
@@ -7552,7 +7552,10 @@ test('Settings treats whitespace-only Account name and email as unset', async ()
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain(primaryLanguageNotSetCopy());
+  expect(tree).toContain('  Ada  ');
+  expect(tree).toContain('  ada@example.com  ');
+  expect(tree).toContain('  u•••••2  ');
+  expect(tree).not.toContain('use•••••-42');
   expect(tree).not.toContain('Name not set on this account.');
   expect(tree).not.toContain('Email not set on this account.');
   expect(tree).not.toContain('Company');
@@ -7604,7 +7607,7 @@ test('Settings treats NEXT LINE-only company and job as unset', async () => {
   expect(tree).not.toContain('\u0085');
 });
 
-test('Settings treats whitespace-only Account id as unavailable', async () => {
+test('Settings names Flutter Profile whitespace GET uid instead of remapping to unavailable', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
@@ -7643,7 +7646,8 @@ test('Settings treats whitespace-only Account id as unavailable', async () => {
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Account id unavailable');
+  expect(tree).toContain(' \t\n');
+  expect(tree).not.toContain('Account id unavailable');
   expect(tree).toContain('Ada');
   expect(tree).not.toContain('Signed in to Omi');
 });

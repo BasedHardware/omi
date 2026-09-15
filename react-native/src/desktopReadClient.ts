@@ -1060,8 +1060,10 @@ export function accountFieldCopy(
   value: string | null | undefined,
   unset: string,
 ): string {
-  const trimmed = visibleDisplayText(value ?? '');
-  return trimmed !== '' ? trimmed : unset;
+  if (value == null || value === '') {
+    return unset;
+  }
+  return value;
 }
 
 export function deviceSerialMatchesId(

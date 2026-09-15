@@ -2750,7 +2750,9 @@ test('developer key copy names GET empty keys Flutter No API keys yet plus creat
     'fir•••••xyz',
   );
   expect(userIdChipCopy('')).toBe('Account id unavailable');
-  expect(userIdChipCopy(' \t')).toBe('Account id unavailable');
+  expect(userIdChipCopy(' \t')).toBe(' \t');
+  expect(userIdChipCopy('  user-42  ')).toBe('  u•••••2  ');
+  expect(userIdChipCopy('\u0085user-42')).toBe('\u0085us•••••-42');
   expect(signOutTitleCopy()).toBe('Sign Out');
   expect(privacyPolicyTitleCopy()).toBe('Privacy Policy');
   expect(termsOfServiceTitleCopy()).toBe('Terms of Service');
@@ -2871,17 +2873,24 @@ test('developer webhook rows name Flutter webhook empty GET URLs', () => {
   ).toBe('Enabled · 12s');
 });
 
-test('whitespace-only account fields stay unset instead of a blank row', () => {
+test('account fields name Flutter Profile padded GET name instead of remapping to a chip', () => {
   expect(accountFieldCopy(null, primaryLanguageNotSetCopy())).toBe(
     primaryLanguageNotSetCopy(),
   );
-  expect(accountFieldCopy(' \t\n', primaryLanguageNotSetCopy())).toBe(
+  expect(accountFieldCopy('', primaryLanguageNotSetCopy())).toBe(
     primaryLanguageNotSetCopy(),
   );
+  expect(accountFieldCopy(' \t\n', primaryLanguageNotSetCopy())).toBe(' \t\n');
   expect(accountFieldCopy('\u00A0', primaryLanguageNotSetCopy())).toBe(
-    primaryLanguageNotSetCopy(),
+    '\u00A0',
   );
-  expect(accountFieldCopy('  Ada  ', primaryLanguageNotSetCopy())).toBe('Ada');
+  expect(accountFieldCopy('\u0085Ada', primaryLanguageNotSetCopy())).toBe(
+    '\u0085Ada',
+  );
+  expect(accountFieldCopy('  Ada  ', primaryLanguageNotSetCopy())).toBe(
+    '  Ada  ',
+  );
+  expect(accountFieldCopy('Ada', primaryLanguageNotSetCopy())).toBe('Ada');
 });
 
 test('whitespace-only connection identity stays unavailable', () => {
