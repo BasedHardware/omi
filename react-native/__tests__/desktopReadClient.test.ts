@@ -4210,6 +4210,12 @@ test('conversation list source tags name only Flutter GET remaps', () => {
   expect(conversationListSourceTag({source: 'omi'})).toBeNull();
   expect(conversationListSourceTag({source: 'phone'})).toBeNull();
   expect(conversationListSourceTag({source: ' \t\n'})).toBeNull();
+  expect(conversationListSourceTag({source: '  screenpipe  '})).toBeNull();
+  expect(conversationListSourceTag({source: 'screenpipe '})).toBeNull();
+  expect(conversationListSourceTag({source: '\u0085screenpipe'})).toBeNull();
+  expect(conversationListSourceTag({source: '  openglass  '})).toBeNull();
+  expect(conversationListSourceTag({source: '  sdcard  '})).toBeNull();
+  expect(conversationListSourceTag({source: '  rayban_meta  '})).toBeNull();
   expect(
     conversationListTag({
       discarded: false,
@@ -4217,6 +4223,20 @@ test('conversation list source tags name only Flutter GET remaps', () => {
       source: 'screenpipe',
     }),
   ).toBe('Screenpipe');
+  expect(
+    conversationListTag({
+      discarded: false,
+      category: 'work',
+      source: '  screenpipe  ',
+    }),
+  ).toBe('Work');
+  expect(
+    conversationListTag({
+      discarded: true,
+      category: 'work',
+      source: '  screenpipe  ',
+    }),
+  ).toBe(conversationListDiscardedCopy());
   expect(
     conversationListTag({
       discarded: true,

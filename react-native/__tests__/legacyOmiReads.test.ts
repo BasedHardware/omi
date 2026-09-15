@@ -619,6 +619,18 @@ test('old conversations keep GET source wire values', async () => {
   expect(result.items[1]).toMatchObject({source: 'omi'});
 });
 
+test('old conversations keep padded GET source wire values', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'padded-source',
+      source: '  screenpipe  ',
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0]).toMatchObject({source: '  screenpipe  '});
+});
+
 test('old conversations keep wire-non-empty emoji and empty GET emoji', async () => {
   const {api} = backend([
     {

@@ -2258,6 +2258,66 @@ test('conversation list names GET source remaps and omits ordinary sources', () 
   expect(copy).not.toContain('omi');
 });
 
+test('conversation list names Flutter getTag category when GET source is padded', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'omi-padded-screenpipe',
+                source: '  screenpipe  ',
+                category: 'work',
+              },
+              {
+                ...base,
+                id: 'omi-padded-discarded-screenpipe',
+                title: 'Discarded pipe',
+                source: '  screenpipe  ',
+                discarded: true,
+                category: 'work',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Work');
+  expect(copy).toContain('Discarded');
+  expect(copy).not.toContain('Screenpipe');
+});
+
 test('conversation list names Flutter ConversationListItem empty GET category tags', () => {
   const base = {
     kind: 'conversation' as const,

@@ -1273,6 +1273,40 @@ test('library conversation rows name GET source remaps and omit ordinary sources
   expect(textOf(ordinary)).not.toContain('omi');
 });
 
+test('library conversation rows name Flutter getTag category when GET source is padded', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'omi-padded-screenpipe',
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: '  screenpipe  ',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+    category: 'work',
+  };
+  let padded!: ReactTestRenderer.ReactTestRenderer;
+  let discarded!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    padded = ReactTestRenderer.create(<ConversationRow item={item} />);
+    discarded = ReactTestRenderer.create(
+      <ConversationRow item={{...item, discarded: true}} />,
+    );
+  });
+  expect(textOf(padded)).toContain('Work');
+  expect(textOf(padded)).not.toContain('Screenpipe');
+  expect(textOf(discarded)).toContain(conversationListDiscardedCopy());
+  expect(textOf(discarded)).not.toContain('Screenpipe');
+});
+
 test('library conversation rows omit Flutter getTag source remaps when GET category is empty', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

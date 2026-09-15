@@ -4129,6 +4129,27 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
   const screenpipeTree = JSON.stringify(screenpipe.toJSON());
   expect(screenpipeTree).toContain('Screenpipe');
   expect(screenpipeTree).not.toContain('Work');
+  const paddedScreenpipe = render(
+    <ProjectionRow
+      item={{...item, source: '  screenpipe  ', category: 'work'}}
+    />,
+  );
+  const paddedTree = JSON.stringify(paddedScreenpipe.toJSON());
+  expect(paddedTree).toContain('Work');
+  expect(paddedTree).not.toContain('Screenpipe');
+  const paddedDiscarded = render(
+    <ProjectionRow
+      item={{
+        ...item,
+        source: '  screenpipe  ',
+        discarded: true,
+        category: 'work',
+      }}
+    />,
+  );
+  const paddedDiscardedTree = JSON.stringify(paddedDiscarded.toJSON());
+  expect(paddedDiscardedTree).toContain('Discarded');
+  expect(paddedDiscardedTree).not.toContain('Screenpipe');
   const whitespaceTag = render(
     <ProjectionRow item={{...item, source: 'omi', category: ' \t'}} />,
   );

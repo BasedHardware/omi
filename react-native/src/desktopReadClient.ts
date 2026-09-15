@@ -401,7 +401,7 @@ export function conversationListCategory(item: {
 export function conversationListSourceTag(item: {
   source?: string | null;
 }): string | null {
-  const source = visibleDisplayText(item.source ?? '');
+  const source = item.source ?? '';
   if (source === 'screenpipe') {
     return 'Screenpipe';
   }
