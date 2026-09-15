@@ -19,8 +19,6 @@ api_key = os.getenv('OPENAI_API_KEY')
 if not api_key:
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
-print(f"API key loaded (last 4 chars): ...{api_key[-4:]}")
-
 client = OpenAI(api_key=api_key)
 
 # OMI App credentials for notifications
@@ -126,7 +124,7 @@ class WebhookResponse(BaseModel):
 def get_openai_response(text):
     """Get response from OpenAI for the user's question"""
     try:
-        logger.info(f"Sending question to OpenAI: {text}")
+        logger.info(f"Sending question to OpenAI ({len(text)} chars)")
 
         response = client.chat.completions.create(
             model="gpt-4.1-mini",
@@ -143,10 +141,10 @@ def get_openai_response(text):
         )
 
         answer = response.choices[0].message.content.strip()
-        logger.info(f"Received response from OpenAI: {answer}")
+        logger.info("Received response from OpenAI")
         return answer
     except Exception as e:
-        logger.error(f"Error getting OpenAI response: {str(e)}")
+        logger.error(f"Error getting OpenAI response: {type(e).__name__}")
         return "I'm sorry, I encountered an error processing your request."
 
 
@@ -157,7 +155,7 @@ def send_omi_notification(uid: str, message: str):
         headers = {"Authorization": f"Bearer {omi_app_secret}", "Content-Type": "application/json"}
         params = {"uid": uid, "message": message}
 
-        logger.info(f"Sending notification to OMI for uid {uid}: {message}")
+        logger.info(f"Sending notification to OMI for uid {uid}")
 
         response = requests.post(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
@@ -165,14 +163,14 @@ def send_omi_notification(uid: str, message: str):
         logger.info(f"Successfully sent notification to OMI for uid {uid}")
         return True
     except Exception as e:
-        logger.error(f"Error sending notification to OMI: {str(e)}")
+        logger.error(f"Error sending notification to OMI: {type(e).__name__}")
         return False
 
 
 @router.post('/webhook')
 async def webhook(request: WebhookRequest):
     logger.info("Received webhook POST request")
-    logger.info(f"Received data: {request.dict()}")
+    logger.info("Received webhook payload")
 
     session_id = request.session_id
     uid = request.uid or session_id  # Use session_id as uid if uid is not provided
@@ -188,7 +186,7 @@ async def webhook(request: WebhookRequest):
     has_processed = False
 
     # Add debug logging
-    logger.debug(f"Current buffer state for session {session_id}: {buffer_data}")
+    logger.debug(f"Current buffer state for session {session_id}: {sorted(buffer_data.keys())}")
 
     # Check and handle cooldown
     last_notification_time = notification_cooldowns.get(session_id, 0)
@@ -213,7 +211,7 @@ async def webhook(request: WebhookRequest):
             continue
 
         text = segment['text'].lower().strip()
-        logger.info(f"Processing text segment: '{text}'")
+        logger.info(f"Processing text segment ({len(text)} chars)")
 
         # Check for complete trigger phrases first
         if (
@@ -232,7 +230,8 @@ async def webhook(request: WebhookRequest):
             question_part = question_after_trigger(text)
             if question_part:
                 buffer_data['collected_question'].append(question_part)
-                logger.info(f"Collected question part from trigger: {question_part}")
+                has_part = bool(question_part)
+                logger.info(f"Collected question part from trigger: {has_part}")
             continue
 
         # Check for partial triggers
@@ -260,7 +259,7 @@ async def webhook(request: WebhookRequest):
                         question_part = question_after_trigger(text)
                         if question_part:
                             buffer_data['collected_question'].append(question_part)
-                            logger.info(f"Collected question part from second trigger part: {question_part}")
+                            logger.info("Collected question part from second trigger part")
                         continue
                 else:
                     # Reset partial trigger if too much time has passed
@@ -273,8 +272,8 @@ async def webhook(request: WebhookRequest):
 
             if time_since_trigger <= QUESTION_AGGREGATION_TIME:
                 buffer_data['collected_question'].append(text)
-                logger.info(f"Collecting question part: {text}")
-                logger.info(f"Current collected question: {' '.join(buffer_data['collected_question'])}")
+                logger.info(f"Collecting question part ({len(text)} chars)")
+                logger.info(f"Collected {len(buffer_data['collected_question'])} question part(s)")
 
             # Check if we should process the question
             should_process = (
@@ -289,9 +288,10 @@ async def webhook(request: WebhookRequest):
                 if not full_question.endswith('?'):
                     full_question += '?'
 
-                logger.info(f"Processing complete question: {full_question}")
+                qlen = len(full_question)
+                logger.info(f"Processing complete question ({qlen} chars)")
                 response = get_openai_response(full_question)
-                logger.info(f"Got response from OpenAI: {response}")
+                logger.info("Got response from OpenAI")
 
                 # Send notification using OMI endpoint
                 if uid:
@@ -326,7 +326,7 @@ async def setup_status():
         # Always return true for setup status
         return {"is_setup_completed": True}
     except Exception as e:
-        logger.error(f"Error checking setup status: {str(e)}")
+        logger.error(f"Error checking setup status: {type(e).__name__}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

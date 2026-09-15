@@ -59,7 +59,7 @@ async def redirect_to_chatgpt(uid: str = ""):
         chatgpt_url = f"https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omi?prompt=here%20is%20my%20omi%20uid%20{encoded_uid}"
         return RedirectResponse(url=chatgpt_url, status_code=302)
     except Exception as e:
-        logger.error(f"Error in redirect: {str(e)}")
+        logger.error(f"Error in redirect: {type(e).__name__}")
         return RedirectResponse(url="/chatgpt?error=redirect_failed", status_code=302)
 
 

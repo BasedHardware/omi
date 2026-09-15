@@ -1048,6 +1048,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13941: get_conversations silently dropped an unparseable start_date/end_date and returned the unfiltered list while search_conversations surfaced the backend 400 opaquely; malformed dates must raise a field-naming ValueError before any request"
 
+  - id: plugin-oauth-client-log-safety-tests
+    command: ["python3", "plugins/oauth/test_client_log_safety.py"]
+    triggers: ["plugins/**/*.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

@@ -50,9 +50,9 @@ class GitHubClient:
                 if "access_token" in token_data:
                     return token_data
                 else:
-                    raise Exception(f"No access token in response: {token_data}")
+                    raise Exception("No access token in token exchange response")
             else:
-                raise Exception(f"Token exchange failed: {response.status_code} - {response.text}")
+                raise Exception(f"Token exchange failed: {response.status_code}")
                 
         except Exception as e:
             print(f"❌ Token exchange error: {e}")
@@ -196,7 +196,7 @@ class GitHubClient:
                     "title": issue["title"]
                 }
             else:
-                error_msg = response.json().get("message", response.text)
+                error_msg = response.json().get("message", f"HTTP {response.status_code}")
                 print(f"❌ GitHub API error: {response.status_code} - {error_msg}")
                 return {
                     "success": False,
@@ -377,7 +377,7 @@ class GitHubClient:
                     "comment_url": comment["html_url"]
                 }
             else:
-                error_msg = response.json().get("message", response.text)
+                error_msg = response.json().get("message", f"HTTP {response.status_code}")
                 print(f"❌ GitHub API error: {response.status_code} - {error_msg}")
                 return {
                     "success": False,
@@ -434,7 +434,7 @@ class GitHubClient:
                 try:
                     error_msg = response.json().get("message")
                 except Exception:
-                    error_msg = response.text
+                    error_msg = f"HTTP {response.status_code}"
                 print(f"⚠️  Could not fetch repo permissions: {response.status_code} - {error_msg}")
                 return {
                     "_error": error_msg or "Unknown error",

@@ -101,7 +101,7 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
             return response.json()
         else:
             log(f"Notion API error: HTTP {response.status_code}")
-            return {"error": response.text, "status_code": response.status_code}
+            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
         log(f"Notion API request error: {type(e).__name__}")
@@ -1111,8 +1111,8 @@ async def notion_callback(
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            log(f"Token exchange failed: {response.status_code}")
+            return HTMLResponse(content=f"Token exchange failed: {response.status_code}", status_code=400)
 
         token_data = response.json()
         access_token = token_data.get("access_token")
@@ -1157,10 +1157,8 @@ async def notion_callback(
         """)
 
     except Exception as e:
-        log(f"OAuth error: {e}")
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        log(f"OAuth error: {type(e).__name__}")
+        return HTMLResponse(content="Authentication error", status_code=500)
 
 
 @app.get("/setup/notion")
