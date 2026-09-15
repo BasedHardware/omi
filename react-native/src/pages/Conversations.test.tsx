@@ -1944,7 +1944,7 @@ test('conversation list names Flutter New chrome for a just-created row', () => 
   expect(textOf(renderer)).toContain('1m');
 });
 
-test('conversation list names GET category and omits it when discarded or empty', () => {
+test('conversation list names GET category including Flutter ConversationListItem empty GET tags', () => {
   const base = {
     kind: 'conversation' as const,
     title: 'Morning standup',
@@ -1991,6 +1991,13 @@ test('conversation list names GET category and omits it when discarded or empty'
                 title: 'Whitespace category',
                 category: ' \u0085 ',
               },
+              {
+                ...base,
+                id: 'omi-whitespace-pipe',
+                title: 'Pipe talk',
+                source: 'screenpipe',
+                category: ' \u0085 ',
+              },
             ],
             page: {
               ...incompletePage,
@@ -2006,8 +2013,21 @@ test('conversation list names GET category and omits it when discarded or empty'
   });
   expect(textOf(renderer)).toContain('Work');
   expect(textOf(renderer)).toContain('Other');
+  expect(textOf(renderer)).toContain('Screenpipe');
   expect(textOf(renderer)).not.toContain('work');
   expect(textOf(renderer)).not.toContain('other');
+  const emptyRow = renderer.root.find(
+    node =>
+      node.props.accessibilityLabel === 'Open conversation Whitespace category',
+  );
+  expect(
+    emptyRow.findAll(
+      node =>
+        node.type === 'Text' &&
+        (node.props.children === '' || node.props.children == null),
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(textOf(renderer)).not.toContain('\u0085');
 });
 
 test('conversation list names GET source remaps and omits ordinary sources', () => {
@@ -2094,7 +2114,7 @@ test('conversation list names GET source remaps and omits ordinary sources', () 
   expect(copy).not.toContain('omi');
 });
 
-test('conversation list omits Flutter getTag source remaps when GET category is empty', () => {
+test('conversation list names Flutter ConversationListItem empty GET category tags', () => {
   const base = {
     kind: 'conversation' as const,
     title: 'Morning standup',
@@ -2151,7 +2171,7 @@ test('conversation list omits Flutter getTag source remaps when GET category is 
   expect(copy).toContain('Empty category talk');
   expect(copy).toContain('Whitespace category talk');
   expect(copy).not.toContain('Screenpipe');
-  expect(copy).not.toContain('OmiGlass');
+  expect(copy).toContain('OmiGlass');
 });
 
 test('compact conversation list omits Flutter ConversationListItem mobile tags', () => {

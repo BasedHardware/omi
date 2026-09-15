@@ -215,12 +215,10 @@ export async function loadOmiConversations(
         ? structured.emoji
         : text(structured.emoji),
     );
-    const category = visibleDisplayText(
-      conversationStructuredCategoryCopy(
-        structured.category === undefined || structured.category === null
-          ? structured.category
-          : text(structured.category),
-      ) ?? '',
+    const category = conversationStructuredCategoryCopy(
+      structured.category === undefined || structured.category === null
+        ? structured.category
+        : text(structured.category),
     );
     return {
       row,
@@ -289,7 +287,7 @@ export async function loadOmiConversations(
         locked: bool(row.is_locked),
         discarded,
         ...(emoji === undefined ? {} : {emoji}),
-        ...(category === '' ? {} : {category}),
+        ...(category === undefined ? {} : {category}),
         ...(photos === 0 ? {} : {photoCount: photos}),
         ...(row.captured_at_ms === undefined
           ? {}

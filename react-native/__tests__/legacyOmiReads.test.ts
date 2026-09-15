@@ -443,7 +443,7 @@ test('old conversations keep GET timestamps with hour-only offsets Dart DateTime
   expect(result.items[0]?.createdAt).toBe('2026-09-07T00:00:00.000Z');
 });
 
-test('old conversations keep wire-non-empty category and omit whitespace', async () => {
+test('old conversations keep wire-non-empty category and empty GET category', async () => {
   const {api} = backend([
     {
       ...conversation,
@@ -466,7 +466,7 @@ test('old conversations keep wire-non-empty category and omit whitespace', async
   ]);
   const result = await loadConversations(api);
   expect(result.items[0]).toMatchObject({category: 'work'});
-  expect(result.items[1]).not.toHaveProperty('category');
+  expect(result.items[1]).toMatchObject({category: ''});
 });
 
 test('old conversations name Flutter omitted GET category as other', async () => {

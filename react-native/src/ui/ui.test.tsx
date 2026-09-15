@@ -3708,6 +3708,16 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
   const screenpipeTree = JSON.stringify(screenpipe.toJSON());
   expect(screenpipeTree).toContain('Screenpipe');
   expect(screenpipeTree).not.toContain('Work');
+  const whitespaceTag = render(
+    <ProjectionRow item={{...item, source: 'omi', category: ' \t'}} />,
+  );
+  expect(
+    whitespaceTag.root.findAll(
+      node =>
+        node.type === 'Text' &&
+        (node.props.children === '' || node.props.children == null),
+    ).length,
+  ).toBeGreaterThan(0);
 });
 
 test('wide Home search rows omit Flutter ConversationListItem Failed chips', () => {

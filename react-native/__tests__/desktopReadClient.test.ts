@@ -3528,16 +3528,17 @@ test('conversation discarded photo copy names Flutter ConversationListItem disca
   expect(conversationDiscardedPhotoCopy({discarded: true})).toBeNull();
 });
 
-test('conversation list category names GET wire values and omits empty or discarded', () => {
+test('conversation list category names GET wire values and Flutter ConversationListItem empty GET tags', () => {
   expect(conversationListCategory({discarded: false, category: 'work'})).toBe(
     'Work',
   );
   expect(conversationListCategory({discarded: false, category: 'other'})).toBe(
     'Other',
   );
-  expect(
-    conversationListCategory({discarded: false, category: ' \t\n'}),
-  ).toBeNull();
+  expect(conversationListCategory({discarded: false, category: ' \t\n'})).toBe(
+    '',
+  );
+  expect(conversationListCategory({discarded: false, category: ''})).toBeNull();
   expect(conversationListCategory({discarded: false})).toBeNull();
   expect(
     conversationListCategory({discarded: true, category: 'work'}),
@@ -3594,7 +3595,14 @@ test('conversation list source tags name only Flutter GET remaps', () => {
       category: ' \t',
       source: 'sdcard',
     }),
-  ).toBeNull();
+  ).toBe('SD Card');
+  expect(
+    conversationListTag({
+      discarded: false,
+      category: ' \t',
+      source: 'omi',
+    }),
+  ).toBe('');
   expect(
     conversationListTag({
       discarded: true,
@@ -3735,7 +3743,7 @@ test('conversation structured category copy names Flutter omitted GET category a
   );
   expect(conversationStructuredCategoryCopy('work')).toBe('work');
   expect(conversationStructuredCategoryCopy('')).toBeUndefined();
-  expect(conversationStructuredCategoryCopy(' \t\u0085 ')).toBeUndefined();
+  expect(conversationStructuredCategoryCopy(' \t\u0085 ')).toBe('');
 });
 
 test('conversation first-party summary copy names Flutter appId-null attribution', () => {

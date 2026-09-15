@@ -1172,11 +1172,18 @@ test('library conversation rows omit Flutter getTag source remaps when GET categ
     discarded: false,
   };
   let empty!: ReactTestRenderer.ReactTestRenderer;
+  let whitespace!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     empty = ReactTestRenderer.create(<ConversationRow item={item} />);
+    whitespace = ReactTestRenderer.create(
+      <ConversationRow
+        item={{...item, title: 'Whitespace category', category: ' \u0085 '}}
+      />,
+    );
   });
   expect(textOf(empty)).toContain('Empty category talk');
   expect(textOf(empty)).not.toContain('Screenpipe');
+  expect(textOf(whitespace)).toContain('Screenpipe');
 });
 
 test('library conversation rows name Flutter ConversationListItem discarded photos only', () => {

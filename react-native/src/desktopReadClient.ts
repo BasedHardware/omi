@@ -384,9 +384,16 @@ export function conversationListCategory(item: {
   if (item.discarded) {
     return null;
   }
-  const category = visibleDisplayText(item.category ?? '');
-  if (category === '') {
+  if (
+    item.category === undefined ||
+    item.category === null ||
+    item.category === ''
+  ) {
     return null;
+  }
+  const category = visibleDisplayText(item.category);
+  if (category === '') {
+    return '';
   }
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
@@ -415,7 +422,11 @@ export function conversationListTag(item: {
   category?: string | null;
   source?: string | null;
 }): string | null {
-  if (visibleDisplayText(item.category ?? '') === '') {
+  if (
+    item.category === undefined ||
+    item.category === null ||
+    item.category === ''
+  ) {
     return null;
   }
   return conversationListSourceTag(item) ?? conversationListCategory(item);
@@ -464,7 +475,10 @@ export function conversationStructuredCategoryCopy(
     return conversationStructuredCategoryDefaultCopy();
   }
   const token = visibleDisplayText(value);
-  return token === '' ? undefined : token;
+  if (token !== '') {
+    return token;
+  }
+  return value === '' ? undefined : '';
 }
 
 export function conversationUnknownAppCopy(): string {
