@@ -2061,7 +2061,7 @@ export function developerWebhookRowCopy(webhook: {
   url: string | null;
   intervalSeconds?: string | null;
 }): string {
-  const url = visibleDisplayText(webhook.url ?? '');
+  const url = webhook.url ?? '';
   const interval = visibleDisplayText(webhook.intervalSeconds ?? '');
   const status = [
     developerWebhookStatusCopy(webhook.enabled),

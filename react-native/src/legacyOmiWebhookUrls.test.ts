@@ -44,7 +44,10 @@ test('parseOmiWebhookUrl names GET url and audio_bytes interval', () => {
   expect(parseOmiWebhookUrl('{"url":""}', 'memory_created')).toBeNull();
   expect(
     parseOmiWebhookUrl(JSON.stringify({url: ' \t\n'}), 'realtime_transcript'),
-  ).toBeNull();
+  ).toEqual({
+    url: ' \t\n',
+    intervalSeconds: null,
+  });
   expect(parseOmiWebhookUrl('{"url":",5"}', 'audio_bytes')).toEqual({
     url: null,
     intervalSeconds: '5',

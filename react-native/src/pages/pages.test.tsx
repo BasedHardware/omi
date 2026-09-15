@@ -2365,7 +2365,7 @@ test('Settings names Flutter omitted GET single_language_mode as Automatic Trans
   expect(tree).toContain('Detect 10+ languages');
 });
 
-test('Settings developer webhook URLs omit empty or whitespace values', async () => {
+test('Settings names Flutter developer webhook empty GET URLs', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/users/developer/webhooks/status') {
@@ -2390,7 +2390,7 @@ test('Settings developer webhook URLs omit empty or whitespace values', async ()
   expect(tree).toContain('Enabled');
   expect(tree).toContain('Disabled');
   expect(tree).toContain('https://example.test/day');
-  expect(tree).not.toContain(' \t\n');
+  expect(tree).toContain(' \t\n');
 });
 
 test('Settings names GET developer webhook URLs without enable writes', async () => {

@@ -7532,7 +7532,7 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).not.toContain('realtime_transcript');
 });
 
-test('Settings developer webhook URLs omit empty or whitespace values', async () => {
+test('Settings names Flutter developer webhook empty GET URLs', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
@@ -7580,7 +7580,7 @@ test('Settings developer webhook URLs omit empty or whitespace values', async ()
   expect(tree).toContain('Enabled');
   expect(tree).toContain('Disabled');
   expect(tree).toContain('https://example.test/day');
-  expect(tree).not.toContain(' \t\n');
+  expect(tree).toContain(' \t\n');
 });
 
 test('Settings names GET developer webhook URLs without enable writes', async () => {

@@ -2523,7 +2523,7 @@ test('developer webhook rows name Flutter webhook descriptions', () => {
   ).toBe('Status unavailable · https://example.test/button');
 });
 
-test('developer webhook rows omit empty or whitespace URLs', () => {
+test('developer webhook rows name Flutter webhook empty GET URLs', () => {
   expect(
     developerWebhookRowCopy({
       enabled: true,
@@ -2533,17 +2533,17 @@ test('developer webhook rows omit empty or whitespace URLs', () => {
   expect(developerWebhookRowCopy({enabled: false, url: null})).toBe('Disabled');
   expect(developerWebhookRowCopy({enabled: true, url: ''})).toBe('Enabled');
   expect(developerWebhookRowCopy({enabled: true, url: ' \t\n'})).toBe(
-    'Enabled',
+    'Enabled ·  \t\n',
   );
   expect(developerWebhookRowCopy({enabled: true, url: '\u0085'})).toBe(
-    'Enabled',
+    'Enabled · \u0085',
   );
   expect(developerWebhookRowCopy({enabled: null, url: '\u00A0'})).toBe(
-    'Status unavailable',
+    'Status unavailable · \u00A0',
   );
   expect(
     developerWebhookRowCopy({enabled: true, url: '  https://example.test/a  '}),
-  ).toBe('Enabled · https://example.test/a');
+  ).toBe('Enabled ·   https://example.test/a  ');
   expect(
     developerWebhookRowCopy({
       enabled: true,
