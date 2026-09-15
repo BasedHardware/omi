@@ -2192,7 +2192,7 @@ test('names Flutter AppResultDetailWidget empty GET names without Unknown App', 
   expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
     expect.objectContaining({
       appSummary: 'App wrote this recap',
-      appSummaryName: '',
+      appSummaryName: ' \t',
     }),
   );
 });

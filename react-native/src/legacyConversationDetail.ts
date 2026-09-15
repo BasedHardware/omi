@@ -572,9 +572,7 @@ export async function loadLegacyConversationDetail(
           )
         ).get(appRecap.appId);
   const resolvedAppName =
-    appChrome === undefined
-      ? undefined
-      : visibleDisplayText(appChrome.name);
+    appChrome === undefined ? undefined : appChrome.name;
   const appSummaryName =
     resolvedAppName === undefined
       ? appSummaryAttribution({

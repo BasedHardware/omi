@@ -30,7 +30,7 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   if (typeof row.name !== 'string') {
     throw new AppError();
   }
-  const name = visibleDisplayText(row.name);
+  const name = row.name;
   if (id !== appId) {
     throw new AppError();
   }

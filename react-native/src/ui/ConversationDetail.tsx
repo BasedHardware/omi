@@ -324,7 +324,7 @@ function LegacyConversationBody({
   const appSummaryName =
     conversation.discarded || detail.appSummaryName === undefined
       ? undefined
-      : visibleDisplayText(detail.appSummaryName);
+      : detail.appSummaryName;
   const appSummaryDescription =
     conversation.discarded || detail.appSummaryDescription === undefined
       ? undefined
