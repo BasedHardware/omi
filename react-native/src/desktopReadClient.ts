@@ -2099,9 +2099,6 @@ export function developerKeyRowCopy(
   options?: {emptyScopesCopy?: string; maskPrefix?: boolean},
 ): string {
   const name = visibleDisplayText(key.name);
-  if (name === '') {
-    return '';
-  }
   const prefix = developerKeyPrefixCopy(
     key.keyPrefix,
     options?.maskPrefix === true ? {mask: true} : undefined,
@@ -2110,7 +2107,7 @@ export function developerKeyRowCopy(
     typeof key.createdAtMs === 'number'
       ? developerKeyCreatedCopy(key.createdAtMs)
       : '';
-  const labeled = prefix === '' ? name : `${name} · ${prefix}`;
+  const labeled = name === '' ? prefix : prefix === '' ? name : `${name} · ${prefix}`;
   const scope = developerKeyScopeCopy(
     key.scopes,
     options?.emptyScopesCopy === undefined

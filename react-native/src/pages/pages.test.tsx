@@ -2424,6 +2424,48 @@ test('Settings names HTTP 500 developer and MCP keys GET instead of empty succes
   expect(tree).not.toContain('No API keys yet');
 });
 
+test('Settings names Flutter DevApiKeyListItem empty GET names without noApiKeys', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'key-empty', name: ' \t', key_prefix: 'omi_sk_cd'},
+        ]),
+      };
+    }
+    if (request.path === '/v1/mcp/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'mcp-empty', name: '', key_prefix: 'omi_mcp_cd'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Developer API');
+  expect(tree).toContain('omi_sk_cd***');
+  expect(tree).not.toContain('key-empty');
+  expect(tree).toContain('MCP');
+  expect(tree).toContain('omi_mcp_cd');
+  expect(tree).not.toContain('omi_mcp_cd***');
+  expect(tree).not.toContain('mcp-empty');
+  expect(tree).not.toContain('No API keys yet');
+  expect(tree).not.toContain('Revoke');
+  expect(tree).not.toContain('Create Key');
+});
+
 test('Settings names Flutter noApiKeys for empty GET developer and MCP keys', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

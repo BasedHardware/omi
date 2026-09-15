@@ -84,9 +84,6 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
     }
     seen.add(id);
     const name = visibleDisplayText(text(row.name, 1_000_000));
-    if (name === '') {
-      continue;
-    }
     const keyPrefix = visibleDisplayText(text(row.key_prefix, 1_000_000));
     const created = createdAtMs(row.created_at);
     const scopes = optionalScopes(row.scopes);

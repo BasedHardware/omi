@@ -5,7 +5,33 @@ import {
 } from './legacyOmiDeveloperKeys';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('parses GET developer keys and omits empty names and full secrets', () => {
+test('names Flutter DevApiKeyListItem empty GET names instead of omitting the key', () => {
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-1',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: '2026-09-09T12:00:00.000Z',
+        },
+        {id: 'key-empty', name: ' \t', key_prefix: 'omi_sk_cd'},
+        {id: 'key-blank', name: '', key_prefix: 'omi_sk_ef'},
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'key-1',
+      name: 'Local',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: Date.parse('2026-09-09T12:00:00.000Z'),
+    },
+    {id: 'key-empty', name: '', keyPrefix: 'omi_sk_cd'},
+    {id: 'key-blank', name: '', keyPrefix: 'omi_sk_ef'},
+  ]);
+});
+
+test('parses GET developer keys and omits full secrets', () => {
   expect(
     parseOmiDeveloperKeys(
       JSON.stringify([
@@ -53,6 +79,7 @@ test('parses GET developer keys and omits empty names and full secrets', () => {
         'goals:write',
       ],
     },
+    {id: 'key-empty', name: '', keyPrefix: 'omi_sk_cd'},
     {id: 'key-undated', name: 'Legacy', keyPrefix: 'omi_sk_ef'},
   ]);
 });
