@@ -1,5 +1,4 @@
 import type {OmiBackend} from './omiNativeTypes';
-import {visibleDisplayText} from './desktopReadClient';
 
 export const OMI_WEBHOOK_URL_TYPES = [
   'memory_created',
@@ -51,8 +50,8 @@ export function parseOmiWebhookUrl(
   if (comma < 0) {
     return {url: raw, intervalSeconds: null};
   }
-  const url = visibleDisplayText(raw.slice(0, comma));
-  const interval = visibleDisplayText(raw.slice(comma + 1));
+  const url = raw.slice(0, comma);
+  const interval = raw.slice(comma + 1);
   const intervalSeconds = /^[0-9]+$/.test(interval) ? interval : null;
   if (url === '' && intervalSeconds === null) {
     return null;

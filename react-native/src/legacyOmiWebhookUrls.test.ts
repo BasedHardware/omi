@@ -28,7 +28,7 @@ test('parseOmiWebhookUrl names GET url and audio_bytes interval', () => {
   });
   expect(
     parseOmiWebhookUrl(
-      '{"url":"  https://example.test/audio , 5  "}',
+      '{"url":"https://example.test/audio,5"}',
       'audio_bytes',
     ),
   ).toEqual({
@@ -57,6 +57,54 @@ test('parseOmiWebhookUrl names GET url and audio_bytes interval', () => {
   ).toEqual({
     url: 'https://example.test/a',
     intervalSeconds: null,
+  });
+});
+
+test('parseOmiWebhookUrl names Flutter developer_mode_provider padded GET audio_bytes url instead of remapping to a successful interval chip', () => {
+  expect(
+    parseOmiWebhookUrl(
+      '{"url":"  https://example.test/audio , 5  "}',
+      'audio_bytes',
+    ),
+  ).toEqual({
+    url: '  https://example.test/audio ',
+    intervalSeconds: null,
+  });
+  expect(
+    parseOmiWebhookUrl(
+      '{"url":"https://example.test/audio,5 "}',
+      'audio_bytes',
+    ),
+  ).toEqual({
+    url: 'https://example.test/audio',
+    intervalSeconds: null,
+  });
+  expect(
+    parseOmiWebhookUrl(
+      JSON.stringify({url: 'https://example.test/audio,\u00855'}),
+      'audio_bytes',
+    ),
+  ).toEqual({
+    url: 'https://example.test/audio',
+    intervalSeconds: null,
+  });
+  expect(
+    parseOmiWebhookUrl(
+      '{"url":"https://example.test/audio ,5"}',
+      'audio_bytes',
+    ),
+  ).toEqual({
+    url: 'https://example.test/audio ',
+    intervalSeconds: '5',
+  });
+  expect(
+    parseOmiWebhookUrl(
+      '{"url":"https://example.test/audio,5"}',
+      'audio_bytes',
+    ),
+  ).toEqual({
+    url: 'https://example.test/audio',
+    intervalSeconds: '5',
   });
 });
 
@@ -114,7 +162,10 @@ test('loadOmiWebhookUrls names GET rows and omits failures', async () => {
         'audio_bytes',
         {url: 'https://example.test/audio', intervalSeconds: '12'},
       ],
-      ['day_summary', {url: 'https://example.test/day', intervalSeconds: null}],
+      [
+        'day_summary',
+        {url: '  https://example.test/day  ', intervalSeconds: null},
+      ],
     ]),
   );
   expect(
