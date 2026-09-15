@@ -591,6 +591,30 @@ class AppLocalizationsBe extends AppLocalizations {
   String get doubleTapAction => 'Дзеянне двойнага дотыку';
 
   @override
+  String get singleTap => 'Адзін дотык';
+
+  @override
+  String get tripleTap => 'Трайны дотык';
+
+  @override
+  String get longPress => 'Доўгае націсканне';
+
+  @override
+  String get singleTapAction => 'Дзеянне аднаго дотыку';
+
+  @override
+  String get tripleTapAction => 'Дзеянне трайнога дотыку';
+
+  @override
+  String get powerOnOff => 'Уключыць / Выключыць';
+
+  @override
+  String get doNothing => 'Нічога не рабіць';
+
+  @override
+  String get longPressFixedSubtitle => 'Утрымлівайце 3 секунды, каб уключыць або выключыць Omi. Гэта нельга змяніць.';
+
+  @override
   String get endAndProcess => 'Завяршыць і перапрацаваць размову';
 
   @override

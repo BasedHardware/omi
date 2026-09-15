@@ -592,6 +592,30 @@ class AppLocalizationsRu extends AppLocalizations {
   String get doubleTapAction => 'Действие при двойном нажатии';
 
   @override
+  String get singleTap => 'Одиночное нажатие';
+
+  @override
+  String get tripleTap => 'Тройное нажатие';
+
+  @override
+  String get longPress => 'Долгое нажатие';
+
+  @override
+  String get singleTapAction => 'Действие при одиночном нажатии';
+
+  @override
+  String get tripleTapAction => 'Действие при тройном нажатии';
+
+  @override
+  String get powerOnOff => 'Включить / Выключить';
+
+  @override
+  String get doNothing => 'Ничего не делать';
+
+  @override
+  String get longPressFixedSubtitle => 'Удерживайте 3 секунды, чтобы включить или выключить Omi. Это нельзя изменить.';
+
+  @override
   String get endAndProcess => 'Завершить и обработать разговор';
 
   @override

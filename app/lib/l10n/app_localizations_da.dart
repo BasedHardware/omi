@@ -591,6 +591,30 @@ class AppLocalizationsDa extends AppLocalizations {
   String get doubleTapAction => 'Dobbelttryk-handling';
 
   @override
+  String get singleTap => 'Enkelttryk';
+
+  @override
+  String get tripleTap => 'Tredobbelt tryk';
+
+  @override
+  String get longPress => 'Langt tryk';
+
+  @override
+  String get singleTapAction => 'Enkelttryk-handling';
+
+  @override
+  String get tripleTapAction => 'Tredobbelt tryk-handling';
+
+  @override
+  String get powerOnOff => 'Tænd / Sluk';
+
+  @override
+  String get doNothing => 'Gør intet';
+
+  @override
+  String get longPressFixedSubtitle => 'Hold i 3 sekunder for at tænde eller slukke din Omi. Dette kan ikke ændres.';
+
+  @override
   String get endAndProcess => 'Afslut og behandl samtale';
 
   @override

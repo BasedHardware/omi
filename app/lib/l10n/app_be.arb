@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Дзеянне двойнага дотыку",
+    "singleTap": "Адзін дотык",
+    "tripleTap": "Трайны дотык",
+    "longPress": "Доўгае націсканне",
+    "singleTapAction": "Дзеянне аднаго дотыку",
+    "tripleTapAction": "Дзеянне трайнога дотыку",
+    "powerOnOff": "Уключыць / Выключыць",
+    "doNothing": "Нічога не рабіць",
+    "longPressFixedSubtitle": "Утрымлівайце 3 секунды, каб уключыць або выключыць Omi. Гэта нельга змяніць.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

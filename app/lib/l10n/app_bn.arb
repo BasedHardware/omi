@@ -756,6 +756,38 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singleTap": "একক ট্যাপ",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "tripleTap": "তিনবার ট্যাপ",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "longPress": "দীর্ঘ চাপ",
+    "@longPress": {
+        "description": "Device button gesture: hold the button"
+    },
+    "singleTapAction": "একক ট্যাপ ক্রিয়া",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTapAction": "তিনবার ট্যাপ ক্রিয়া",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    },
+    "powerOnOff": "বন্ধ করুন",
+    "@powerOnOff": {
+        "description": "Fixed long-press power-off gesture on the device button"
+    },
+    "doNothing": "কিছু করবেন না",
+    "@doNothing": {
+        "description": "Button action that ignores the gesture"
+    },
+    "longPressFixedSubtitle": "আপনার Omi বন্ধ করতে 3 সেকেন্ড ধরে রাখুন। এটি পরিবর্তন করা যাবে না।",
+    "@longPressFixedSubtitle": {
+        "description": "Explains that the long-press power-off gesture is fixed in firmware"
+    },
     "endAndProcess": "কথোপকথন শেষ এবং প্রক্রিয়া করুন",
     "@endAndProcess": {
         "description": "End and process action"

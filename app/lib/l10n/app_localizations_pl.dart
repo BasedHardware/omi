@@ -591,6 +591,30 @@ class AppLocalizationsPl extends AppLocalizations {
   String get doubleTapAction => 'Akcja podwójnego dotknięcia';
 
   @override
+  String get singleTap => 'Pojedyncze dotknięcie';
+
+  @override
+  String get tripleTap => 'Potrójne dotknięcie';
+
+  @override
+  String get longPress => 'Długie naciśnięcie';
+
+  @override
+  String get singleTapAction => 'Akcja pojedynczego dotknięcia';
+
+  @override
+  String get tripleTapAction => 'Akcja potrójnego dotknięcia';
+
+  @override
+  String get powerOnOff => 'Włącz / Wyłącz';
+
+  @override
+  String get doNothing => 'Nic nie rób';
+
+  @override
+  String get longPressFixedSubtitle => 'Przytrzymaj 3 sekundy, aby włączyć lub wyłączyć Omi. Tego nie można zmienić.';
+
+  @override
   String get endAndProcess => 'Zakończ i przetwórz rozmowę';
 
   @override

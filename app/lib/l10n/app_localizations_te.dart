@@ -593,6 +593,30 @@ class AppLocalizationsTe extends AppLocalizations {
   String get doubleTapAction => 'డబల్ ట్యాప్ చర్య';
 
   @override
+  String get singleTap => 'ఒక్క నొక్కు';
+
+  @override
+  String get tripleTap => 'మూడు నొక్కులు';
+
+  @override
+  String get longPress => 'దీర్ఘంగా నొక్కడం';
+
+  @override
+  String get singleTapAction => 'ఒక్క నొక్కు చర్య';
+
+  @override
+  String get tripleTapAction => 'మూడు నొక్కుల చర్య';
+
+  @override
+  String get powerOnOff => 'ఆన్ / ఆఫ్ చేయండి';
+
+  @override
+  String get doNothing => 'ఏమీ చేయవద్దు';
+
+  @override
+  String get longPressFixedSubtitle => 'మీ Omi ని ఆన్ లేదా ఆఫ్ చేయడానికి 3 సెకన్లు నొక్కి ఉంచండి. దీన్ని మార్చలేరు.';
+
+  @override
   String get endAndProcess => 'సంభాషణను ముగించండి & ప్రక్రియ చేయండి';
 
   @override

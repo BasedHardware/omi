@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Radnja dvostrukog dodira",
+    "singleTap": "Jedan dodir",
+    "tripleTap": "Trostruki dodir",
+    "longPress": "Dugi pritisak",
+    "singleTapAction": "Radnja jednog dodira",
+    "tripleTapAction": "Radnja trostrukog dodira",
+    "powerOnOff": "Uključivanje / Isključivanje",
+    "doNothing": "Ne radi ništa",
+    "longPressFixedSubtitle": "Držite 3 sekunde za uključivanje ili isključivanje Omija. Ovo se ne može promijeniti.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

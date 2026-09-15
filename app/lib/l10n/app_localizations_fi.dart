@@ -589,6 +589,31 @@ class AppLocalizationsFi extends AppLocalizations {
   String get doubleTapAction => 'Kaksoisnapaututstoiminto';
 
   @override
+  String get singleTap => 'Yksi napautus';
+
+  @override
+  String get tripleTap => 'Kolmoisnapautus';
+
+  @override
+  String get longPress => 'Pitkä painallus';
+
+  @override
+  String get singleTapAction => 'Yhden napautuksen toiminto';
+
+  @override
+  String get tripleTapAction => 'Kolmoisnapautuksen toiminto';
+
+  @override
+  String get powerOnOff => 'Käynnistä / Sammuta';
+
+  @override
+  String get doNothing => 'Älä tee mitään';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Pidä painettuna 3 sekuntia käynnistääksesi tai sammuttaaksesi Omin. Tätä ei voi muuttaa.';
+
+  @override
   String get endAndProcess => 'Lopeta ja käsittele keskustelu';
 
   @override

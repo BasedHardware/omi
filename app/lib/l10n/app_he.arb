@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "פעולת לחיצה כפולה",
+    "singleTap": "לחיצה בודדת",
+    "tripleTap": "לחיצה משולשת",
+    "longPress": "לחיצה ארוכה",
+    "singleTapAction": "פעולת לחיצה בודדת",
+    "tripleTapAction": "פעולת לחיצה משולשת",
+    "powerOnOff": "הפעלה / כיבוי",
+    "doNothing": "לא לעשות דבר",
+    "longPressFixedSubtitle": "החזיקו 3 שניות כדי להפעיל או לכבות את Omi. לא ניתן לשנות זאת.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

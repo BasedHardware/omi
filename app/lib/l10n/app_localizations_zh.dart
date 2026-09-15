@@ -578,6 +578,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTapAction => '双击操作';
 
   @override
+  String get singleTap => '单击';
+
+  @override
+  String get tripleTap => '三击';
+
+  @override
+  String get longPress => '长按';
+
+  @override
+  String get singleTapAction => '单击操作';
+
+  @override
+  String get tripleTapAction => '三击操作';
+
+  @override
+  String get powerOnOff => '开机 / 关机';
+
+  @override
+  String get doNothing => '不执行任何操作';
+
+  @override
+  String get longPressFixedSubtitle => '长按 3 秒可开启或关闭 Omi。此操作无法更改。';
+
+  @override
   String get endAndProcess => '结束并处理';
 
   @override

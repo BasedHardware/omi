@@ -594,6 +594,31 @@ class AppLocalizationsTl extends AppLocalizations {
   String get doubleTapAction => 'Double Tap Action';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
+
+  @override
+  String get powerOnOff => 'Buksan / Patayin';
+
+  @override
+  String get doNothing => 'Walang gawin';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Pindutin nang 3 segundo para buksan o patayin ang iyong Omi. Hindi ito mababago.';
+
+  @override
   String get endAndProcess => 'Tapusin & Proseso ang Pag-uusap';
 
   @override

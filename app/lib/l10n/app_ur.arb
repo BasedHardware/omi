@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "دوگنا تھپتھپانے کا عمل",
+    "singleTap": "ایک بار تھپتھپائیں",
+    "tripleTap": "تین بار تھپتھپائیں",
+    "longPress": "دیر تک دبائیں",
+    "singleTapAction": "ایک بار تھپتھپانے کا عمل",
+    "tripleTapAction": "تین بار تھپتھپانے کا عمل",
+    "powerOnOff": "آن / بند کریں",
+    "doNothing": "کچھ نہ کریں",
+    "longPressFixedSubtitle": "اپنے Omi کو آن یا بند کرنے کے لیے 3 سیکنڈ دبائے رکھیں۔ اسے تبدیل نہیں کیا جا سکتا۔",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

@@ -594,6 +594,31 @@ class AppLocalizationsHu extends AppLocalizations {
   String get doubleTapAction => 'Dupla érintés művelet';
 
   @override
+  String get singleTap => 'Egyszeri érintés';
+
+  @override
+  String get tripleTap => 'Háromszori érintés';
+
+  @override
+  String get longPress => 'Hosszú nyomás';
+
+  @override
+  String get singleTapAction => 'Egyszeri érintés művelet';
+
+  @override
+  String get tripleTapAction => 'Háromszori érintés művelet';
+
+  @override
+  String get powerOnOff => 'Bekapcsolás / Kikapcsolás';
+
+  @override
+  String get doNothing => 'Ne tegyen semmit';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Tartsd nyomva 3 másodpercig az Omi be- vagy kikapcsolásához. Ez nem módosítható.';
+
+  @override
   String get endAndProcess => 'Beszélgetés befejezése és feldolgozása';
 
   @override

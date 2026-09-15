@@ -592,6 +592,30 @@ class AppLocalizationsEt extends AppLocalizations {
   String get doubleTapAction => 'Topeltpuudutuse tegevus';
 
   @override
+  String get singleTap => 'Üks puudutus';
+
+  @override
+  String get tripleTap => 'Kolmekordne puudutus';
+
+  @override
+  String get longPress => 'Pikk vajutus';
+
+  @override
+  String get singleTapAction => 'Ühe puudutuse tegevus';
+
+  @override
+  String get tripleTapAction => 'Kolmekordse puudutuse tegevus';
+
+  @override
+  String get powerOnOff => 'Lülita sisse / välja';
+
+  @override
+  String get doNothing => 'Ära tee midagi';
+
+  @override
+  String get longPressFixedSubtitle => 'Hoia 3 sekundit, et Omi sisse või välja lülitada. Seda ei saa muuta.';
+
+  @override
   String get endAndProcess => 'Lõpeta ja töötle vestlus';
 
   @override

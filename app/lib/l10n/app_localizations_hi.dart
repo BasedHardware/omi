@@ -588,6 +588,30 @@ class AppLocalizationsHi extends AppLocalizations {
   String get doubleTapAction => 'डबल टैप क्रिया';
 
   @override
+  String get singleTap => 'सिंगल टैप';
+
+  @override
+  String get tripleTap => 'ट्रिपल टैप';
+
+  @override
+  String get longPress => 'लंबा प्रेस';
+
+  @override
+  String get singleTapAction => 'सिंगल टैप क्रिया';
+
+  @override
+  String get tripleTapAction => 'ट्रिपल टैप क्रिया';
+
+  @override
+  String get powerOnOff => 'चालू / बंद करें';
+
+  @override
+  String get doNothing => 'कुछ न करें';
+
+  @override
+  String get longPressFixedSubtitle => 'अपने Omi को चालू या बंद करने के लिए 3 सेकंड दबाए रखें। इसे बदला नहीं जा सकता।';
+
+  @override
   String get endAndProcess => 'समाप्त करें और संसाधित करें';
 
   @override
