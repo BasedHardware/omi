@@ -94,8 +94,11 @@ function boolean(value: unknown): boolean {
 }
 function finite(value: unknown): number {
   if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new DetailError('invalid');
+    }
     const parsed = Number(value);
-    if (value.trim() === '' || !Number.isFinite(parsed)) {
+    if (value === '' || !Number.isFinite(parsed)) {
       throw new DetailError('invalid');
     }
     return parsed;

@@ -193,6 +193,29 @@ test('old discarded conversations name GET transcript start/end numeric strings'
   expect(result.items[0]).toMatchObject({transcriptEndSeconds: 120});
 });
 
+test('names Flutter ConversationListItem padded GET start instead of remapping to a clock', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'discarded-padded-clocks',
+      discarded: true,
+      finished_at: null,
+      transcript_segments: [
+        {
+          text: 'Hello from the recording',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: '  0  ',
+          end: '120',
+        },
+      ],
+    },
+  ]);
+  await expect(loadConversations(api)).rejects.toThrow(
+    'Omi transcript is malformed',
+  );
+});
+
 test('old discarded conversations keep GET transcript_segments when more than 20000', async () => {
   const {api} = backend([
     {

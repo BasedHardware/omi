@@ -261,8 +261,11 @@ function photoCount(value: unknown): number {
 }
 function finiteClock(value: unknown): number {
   if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new Error('Omi transcript is malformed');
+    }
     const parsed = Number(value);
-    if (value.trim() === '' || !Number.isFinite(parsed)) {
+    if (value === '' || !Number.isFinite(parsed)) {
       throw new Error('Omi transcript is malformed');
     }
     return parsed;

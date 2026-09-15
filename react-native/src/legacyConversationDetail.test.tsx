@@ -141,6 +141,54 @@ test('names GET transcript start/end numeric strings', async () => {
   });
 });
 
+test('names Flutter TranscriptWidget padded GET start instead of remapping to a clock', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          start: '  0.25  ',
+          end: '4.5',
+        },
+      ],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          start: '0.25 ',
+          end: '4.5',
+        },
+      ],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          start: '\u00850.25',
+          end: '4.5',
+        },
+      ],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('names omitted GET transcript speaker as Flutter SPEAKER_00 instead of hiding Speaker 1', async () => {
   const {speaker: _omitted, ...withoutSpeaker} = fixture.transcript_segments[0];
   mockRequest.mockResolvedValue(
@@ -2312,6 +2360,61 @@ test('keeps GET geolocation maps open Flutter paints from required coordinates',
     locationMapsUrl:
       'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
   });
+});
+
+test('names Flutter GetGeolocationWidgets padded GET latitude instead of remapping to Maps', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: '123 Market St, San Francisco',
+        latitude: '  37.7749  ',
+        longitude: -122.4194,
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: '123 Market St, San Francisco',
+        latitude: '37.7749 ',
+        longitude: -122.4194,
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: '123 Market St, San Francisco',
+        latitude: '\u008537.7749',
+        longitude: -122.4194,
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: '123 Market St, San Francisco',
+        latitude: 37.7749,
+        longitude: '  -122.4194  ',
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
 });
 
 test('keeps first GET apps_results content and falls back to plugins_results', async () => {
