@@ -1,7 +1,20 @@
 """Pydantic models for Omi CoinGecko Crypto Integration App."""
 
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class _NullMeansDefault(BaseModel):
+    """The Omi backend sends every optional tool parameter the model did not
+    supply as JSON null (langchain-core 1.3.3 forwards defaulted fields), so a
+    null must mean "use the default", not "invalid request"."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_nulls(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v is not None}
+        return data
 
 
 class ChatToolResponse(BaseModel):
@@ -17,7 +30,7 @@ class ChatToolResponse(BaseModel):
         return self
 
 
-class GetCryptoPriceRequest(BaseModel):
+class GetCryptoPriceRequest(_NullMeansDefault):
     """Request model for getting cryptocurrency prices."""
 
     coin_ids: Union[List[str], str] = Field(
@@ -61,7 +74,7 @@ class GetCryptoPriceRequest(BaseModel):
         return deduped[:10]
 
 
-class SearchCryptoCoinsRequest(BaseModel):
+class SearchCryptoCoinsRequest(_NullMeansDefault):
     """Request model for searching cryptocurrency coins."""
 
     query: str = Field(..., min_length=1, max_length=100, description="Coin name, ticker symbol, or keyword.")
@@ -83,7 +96,7 @@ class SearchCryptoCoinsRequest(BaseModel):
         return cleaned
 
 
-class GetTrendingCryptoRequest(BaseModel):
+class GetTrendingCryptoRequest(_NullMeansDefault):
     """Request model for fetching top trending cryptocurrencies."""
 
     limit: Optional[int] = Field(default=5, ge=1, le=15, description="Number of trending coins to return (1-15).")
@@ -96,7 +109,7 @@ class GetTrendingCryptoRequest(BaseModel):
         return int(v)
 
 
-class GetCryptoMarketOverviewRequest(BaseModel):
+class GetCryptoMarketOverviewRequest(_NullMeansDefault):
     """Request model for getting global crypto market overview."""
 
     limit: Optional[int] = Field(default=10, ge=1, le=20, description="Number of top market cap coins to return.")
