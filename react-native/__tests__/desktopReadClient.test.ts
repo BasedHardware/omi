@@ -5570,6 +5570,60 @@ test('subscription period copy names GET words insights and chat quotas without 
   expect(subscriptionPeriodCopy(null)).toBeNull();
 });
 
+test('names Flutter UsagePage empty GET chatQuotaUnit instead of omitting Chat this month', () => {
+  const chat = {
+    wordsTranscribedUsed: null,
+    wordsTranscribedLimit: null,
+    insightsGainedUsed: null,
+    insightsGainedLimit: null,
+    chatQuotaUsed: 5,
+    chatQuestionsPerMonth: 100,
+    chatCostUsdPerMonth: null,
+  };
+  expect(subscriptionPeriodCopy({...chat, chatQuotaUnit: ''})).toEqual([
+    {
+      title: 'Chat this month',
+      copy: `5 Chat\n${chatQuotaSubtitleCopy()}\n5 of 100 messages used this month`,
+    },
+  ]);
+  expect(subscriptionPeriodCopy({...chat, chatQuotaUnit: ' \t'})).toEqual([
+    {
+      title: 'Chat this month',
+      copy: `5 Chat\n${chatQuotaSubtitleCopy()}\n5 of 100 messages used this month`,
+    },
+  ]);
+  expect(subscriptionPeriodCopy({...chat, chatQuotaUnit: '\u0085'})).toEqual([
+    {
+      title: 'Chat this month',
+      copy: `5 Chat\n${chatQuotaSubtitleCopy()}\n5 of 100 messages used this month`,
+    },
+  ]);
+  expect(subscriptionPeriodCopy({...chat, chatQuotaUnit: null})).toBeNull();
+  expect(
+    subscriptionPeriodCopy(
+      parseCloudSubscription(
+        {
+          plan: 'plus',
+          status: 'active',
+          chat_quota_used: 5,
+          chat_quota_unit: ' \t',
+          subscription: {
+            plan: 'plus',
+            status: 'active',
+            limits: {chat_questions_per_month: 100},
+          },
+        },
+        'Subscription response',
+      ),
+    ),
+  ).toEqual([
+    {
+      title: 'Chat this month',
+      copy: `5 Chat\n${chatQuotaSubtitleCopy()}\n5 of 100 messages used this month`,
+    },
+  ]);
+});
+
 test('keeps an empty Settings entitlement limitKey instead of failing the page', async () => {
   const result = await loadServiceSettings(
     backendFor(() => ({

@@ -1445,6 +1445,37 @@ test('Settings names GET subscription period quotas without Upgrade', async () =
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter UsagePage empty GET chatQuotaUnit without omitting Chat this month', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          plan: 'basic',
+          status: 'active',
+          chat_quota_used: 5,
+          chat_quota_unit: ' \t',
+          subscription: {
+            plan: 'basic',
+            status: 'active',
+            limits: {chat_questions_per_month: 100},
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Chat this month');
+  expect(tree).toContain('5 Chat');
+  expect(tree).toContain('AI chat messages used with Omi this month.');
+  expect(tree).toContain('5 of 100 messages used this month');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET subscription transcription quota as minutes this month', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

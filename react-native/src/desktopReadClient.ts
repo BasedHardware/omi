@@ -1358,7 +1358,10 @@ export function subscriptionPeriodCopy(
     });
   }
   const unit = visibleDisplayText(subscription.chatQuotaUnit ?? '');
-  if (unit !== '' && typeof subscription.chatQuotaUsed === 'number') {
+  if (
+    subscription.chatQuotaUnit != null &&
+    typeof subscription.chatQuotaUsed === 'number'
+  ) {
     if (unit === 'cost_usd') {
       const used = `$${subscription.chatQuotaUsed.toFixed(2)}`;
       const limit = subscription.chatCostUsdPerMonth;
