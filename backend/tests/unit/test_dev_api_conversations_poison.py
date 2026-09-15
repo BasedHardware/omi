@@ -187,9 +187,11 @@ def test_malformed_conversation_skipped_not_500():
     missing_structured = _valid('bad')
     del missing_structured['structured']
     page = [_valid('c1'), missing_structured, _valid('c2')]
-    with patch.object(conversations_db, 'get_conversations', return_value=page), patch.object(
-        developer_module, 'populate_folder_names', lambda *a, **k: None
-    ), patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None):
+    with (
+        patch.object(conversations_db, 'get_conversations', return_value=page),
+        patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None),
+        patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None),
+    ):
         resp = _build().get('/v1/dev/user/conversations')
     assert resp.status_code == 200
     assert [c['id'] for c in resp.json()] == ['c1', 'c2']
@@ -200,9 +202,11 @@ def test_pagination_is_clamped_before_firestore():
     # would otherwise raise (HTTP 500) and an oversized/zero limit would stream the whole
     # collection. Call the handler directly (the TestClient async path is flaky on Windows; the
     # clamp is what matters).
-    with patch.object(conversations_db, 'get_conversations', return_value=[]) as m, patch.object(
-        developer_module, 'populate_folder_names', lambda *a, **k: None
-    ), patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None):
+    with (
+        patch.object(conversations_db, 'get_conversations', return_value=[]) as m,
+        patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None),
+        patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None),
+    ):
         developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=-1)
         developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=0, include_transcript=True)
         developer_module.get_conversations(uid=_read_auth(), limit=0, offset=5)
@@ -224,3 +228,38 @@ def test_goals_limit_is_clamped_before_firestore():
     assert m.call_args_list[0].kwargs['limit'] == 1  # -1 -> 1
     assert m.call_args_list[1].kwargs['limit'] == 1000  # 99999 -> 1000
     assert m.call_args_list[2].kwargs['limit'] == 1  # 0 -> 1
+
+
+def _build_writer():
+    from dependencies import get_uid_with_conversations_write
+
+    app = FastAPI()
+    app.include_router(developer_router)
+    app.dependency_overrides[get_uid_with_conversations_write] = lambda: 'uid1'
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_patch_rejects_whitespace_only_title():
+    # PATCH accepted a whitespace-only title: it satisfied min_length=1, the handler stripped
+    # it to '' and wrote an empty structured.title/user_title. The blank must be refused
+    # before the write reaches Firestore.
+    with (
+        patch.object(conversations_db, 'get_conversation', return_value=_valid('c1')),
+        patch.object(conversations_db, 'update_conversation_title') as update_title,
+        patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None),
+    ):
+        resp = _build_writer().patch('/v1/dev/user/conversations/c1', json={'title': '   '})
+    assert resp.status_code == 422
+    assert 'title cannot be empty' in resp.text
+    update_title.assert_not_called()
+
+
+def test_patch_strips_surrounding_whitespace_from_title():
+    with (
+        patch.object(conversations_db, 'get_conversation', return_value=_valid('c1')),
+        patch.object(conversations_db, 'update_conversation_title') as update_title,
+        patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None),
+    ):
+        resp = _build_writer().patch('/v1/dev/user/conversations/c1', json={'title': '  Renamed  '})
+    assert resp.status_code == 200
+    update_title.assert_called_once_with('uid1', 'c1', 'Renamed')

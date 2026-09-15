@@ -730,6 +730,18 @@ def update_memory(
 # ******************************************************
 
 
+def _strip_optional_required_text(value: Optional[str], field_name: str) -> Optional[str]:
+    # `min_length=1` counts whitespace, so a PATCH body of '   ' passed validation and the
+    # handler stripped it to '' and persisted an empty description/title. Omitted (None) means
+    # "leave unchanged"; a supplied value must carry text, matching the POST/create handlers.
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f'{field_name} cannot be empty')
+    return stripped
+
+
 class ActionItemResponse(BaseModel):
     model_config = ConfigDict(title='DeveloperActionItem')
 
@@ -759,6 +771,11 @@ class UpdateActionItemRequest(BaseModel):
     description: Optional[str] = Field(default=None, description="New description", min_length=1, max_length=500)
     completed: Optional[bool] = Field(default=None, description="New completion status")
     due_at: Optional[datetime] = Field(default=None, description="New due date (ISO format with timezone)")
+
+    @field_validator('description')
+    @classmethod
+    def description_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _strip_optional_required_text(value, 'description')
 
 
 class BatchActionItemsRequest(BaseModel):
@@ -1124,6 +1141,11 @@ class UpdateConversationRequest(BaseModel):
         default=None, description="New title for the conversation", min_length=1, max_length=500
     )
     discarded: Optional[bool] = Field(default=None, description="Whether the conversation is discarded")
+
+    @field_validator('title')
+    @classmethod
+    def title_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _strip_optional_required_text(value, 'title')
 
 
 class DevTranscriptSegment(BaseModel):

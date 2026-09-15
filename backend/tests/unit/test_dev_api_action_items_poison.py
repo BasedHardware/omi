@@ -274,3 +274,34 @@ def test_developer_patch_rejects_empty_payload():
 
     assert exc.value.status_code == 422
     assert exc.value.detail == 'At least one field must be provided'
+
+
+def test_developer_patch_rejects_whitespace_only_description():
+    # PATCH accepted a whitespace-only description: it satisfied min_length=1, the handler
+    # stripped it to '' and persisted an empty description, while POST rejects the same input
+    # with 422. The blank must be refused before any write reaches Firestore.
+    existing, _ = _update_fixture()
+
+    with (
+        patch.object(action_items_db, 'get_action_item', return_value=existing),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+    ):
+        response = _build().patch('/v1/dev/user/action-items/a1', json={'description': '   '})
+
+    assert response.status_code == 422
+    assert 'description cannot be empty' in response.text
+    update.assert_not_called()
+
+
+def test_developer_patch_strips_surrounding_whitespace_from_description():
+    existing, _ = _update_fixture()
+    updated = {**existing, 'description': 'Updated task'}
+
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, updated]),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+    ):
+        response = _build().patch('/v1/dev/user/action-items/a1', json={'description': '  Updated task  '})
+
+    assert response.status_code == 200
+    assert update.call_args.args[2] == {'description': 'Updated task'}
