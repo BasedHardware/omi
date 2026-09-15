@@ -3905,16 +3905,22 @@ test('conversation photo count copy names GET photos without requiring discarded
 test('names Flutter MediaViewerPage whitespace GET photo descriptions instead of omitting the caption', () => {
   expect(
     conversationPhotoChrome({discarded: false, description: ' \t'}),
-  ).toBe('');
+  ).toBe(' \t');
   expect(
     conversationPhotoChrome({discarded: false, description: '\u0085'}),
-  ).toBe('');
+  ).toBe('\u0085');
   expect(
     conversationPhotoChrome({discarded: false, description: ''}),
   ).toBeUndefined();
   expect(
     conversationPhotoChrome({discarded: false, description: 'Whiteboard notes'}),
   ).toBe('Whiteboard notes');
+  expect(
+    conversationPhotoChrome({
+      discarded: false,
+      description: '  Whiteboard notes  ',
+    }),
+  ).toBe('  Whiteboard notes  ');
   expect(conversationPhotoChrome({discarded: false})).toBe(
     conversationPhotoAnalyzingCopy(),
   );

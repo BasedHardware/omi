@@ -800,11 +800,10 @@ export function conversationPhotoChrome(photo: {
   if (photo.description === undefined || photo.description === null) {
     return conversationPhotoAnalyzingCopy();
   }
-  const caption = visibleDisplayText(photo.description);
-  if (caption !== '') {
-    return caption;
+  if (photo.description === '') {
+    return undefined;
   }
-  return photo.description === '' ? undefined : '';
+  return photo.description;
 }
 
 export function conversationPhotoDataUri(

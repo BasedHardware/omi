@@ -511,10 +511,7 @@ function LegacyConversationBody({
         detail.photoRows ??
         (detail.photoCaptions ?? []).map(caption => ({caption}))
       ).flatMap((photo, index) => {
-        const caption =
-          photo.caption === undefined
-            ? undefined
-            : visibleDisplayText(photo.caption);
+        const caption = photo.caption;
         const imageUri = photo.imageUri;
         const nodes: React.JSX.Element[] = [];
         if (imageUri !== undefined && imageUri !== '') {
@@ -542,7 +539,7 @@ function LegacyConversationBody({
             </Text>,
           );
         }
-        if (caption !== undefined) {
+        if (caption !== undefined && caption !== '') {
           nodes.push(
             <Text
               key={`photo-caption-${index}`}

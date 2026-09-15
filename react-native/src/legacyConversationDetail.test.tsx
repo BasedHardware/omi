@@ -1396,7 +1396,7 @@ test('keeps GET photo counts and captions and omits empty lists', async () => {
       photoCount: 3,
       photoCaptions: [
         'Whiteboard notes',
-        '',
+        ' \t',
         conversationPhotoAnalyzingCopy(),
       ],
     },
@@ -1536,7 +1536,7 @@ test('names GET discarded photos and photos still analyzing', async () => {
         'Whiteboard notes',
         conversationPhotoDiscardedCopy(),
         conversationPhotoAnalyzingCopy(),
-        '',
+        '   ',
       ],
     },
   );
@@ -1559,14 +1559,14 @@ test('names Flutter MediaViewerPage whitespace GET photo descriptions instead of
       photoCount: 4,
       photoCaptions: [
         'Whiteboard notes',
-        '',
+        ' \t',
         conversationPhotoAnalyzingCopy(),
       ],
     },
   );
   const whitespace = await loadLegacyConversationDetail(backend, fixture.id);
   expect(whitespace.photoRows?.[1]).toEqual(
-    expect.objectContaining({caption: ''}),
+    expect.objectContaining({caption: ' \t'}),
   );
   expect(whitespace.photoRows?.[2]).not.toHaveProperty('caption');
 });

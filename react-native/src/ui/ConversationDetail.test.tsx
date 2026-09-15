@@ -3553,8 +3553,8 @@ test('legacy conversation details name Flutter MediaViewerPage whitespace GET ph
         sections: [],
         actionItems: [],
         photoCount: 2,
-        photoCaptions: ['Whiteboard notes', ''],
-        photoRows: [{caption: 'Whiteboard notes'}, {caption: ''}],
+        photoCaptions: ['Whiteboard notes', ' \t'],
+        photoRows: [{caption: 'Whiteboard notes'}, {caption: ' \t'}],
         transcript: {status: 'loaded', segments: []},
       },
     },
@@ -3566,18 +3566,75 @@ test('legacy conversation details name Flutter MediaViewerPage whitespace GET ph
   });
   const copy = text(view);
   expect(copy).toContain('Whiteboard notes');
+  expect(copy).toContain(' \t');
   expect(copy).not.toContain('2 photos');
-  const emptyCaptions = view.root.findAll(node => {
-    if (node.type !== Text) {
-      return false;
-    }
-    const children = node.props.children;
-    return (
-      children === '' ||
-      (Array.isArray(children) && children.some(child => child === ''))
-    );
+  expect(
+    view.root.findAll(
+      node => node.type === Text && node.props.children === ' \t',
+    ).length,
+  ).toBeGreaterThan(0);
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        photoCount: 2,
+        photoCaptions: ['  Whiteboard notes  ', '\u0085'],
+        photoRows: [
+          {caption: '  Whiteboard notes  '},
+          {caption: '\u0085'},
+        ],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
   });
-  expect(emptyCaptions.length).toBeGreaterThan(0);
+  const padded = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    padded.root.findAll(
+      node =>
+        node.type === Text && node.props.children === '  Whiteboard notes  ',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    padded.root.findAll(
+      node => node.type === Text && node.props.children === '\u0085',
+    ).length,
+  ).toBeGreaterThan(0);
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        photoCount: 1,
+        photoCaptions: [],
+        photoRows: [{caption: ''}],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const empty = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(text(empty)).not.toContain('1 photos');
+  expect(text(empty)).not.toContain('Caption unavailable');
 });
 
 test('legacy conversation details name GET folder name and Flutter No Folder otherwise', () => {
