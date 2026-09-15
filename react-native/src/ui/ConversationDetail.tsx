@@ -353,9 +353,8 @@ function LegacyConversationBody({
       : calendarStart !== ''
       ? calendarStart
       : calendarEnd;
-  const calendarHtmlLink = visibleDisplayText(
-    detail.calendarEvent?.htmlLink ?? '',
-  );
+  const calendarHtmlLink = detail.calendarEvent?.htmlLink;
+  const calendarHtmlLinkCopy = visibleDisplayText(calendarHtmlLink ?? '');
   const calendarShareMailto = visibleDisplayText(
     detail.calendarEvent?.shareMailto ?? '',
   );
@@ -480,15 +479,15 @@ function LegacyConversationBody({
           {calendarAttendees}
         </Text>
       )}
-      {calendarHtmlLink === '' ? null : (
+      {calendarHtmlLink === undefined ? null : (
         <FocusPressable
           accessibilityRole="link"
           accessibilityLabel="Open in Google Calendar"
           onPress={() => {
-            if (!/^https?:\/\//i.test(calendarHtmlLink)) {
+            if (!/^https?:\/\//i.test(calendarHtmlLinkCopy)) {
               return;
             }
-            Linking.openURL(calendarHtmlLink).catch(() => undefined);
+            Linking.openURL(calendarHtmlLinkCopy).catch(() => undefined);
           }}>
           <Text style={[styles.conversationDetailField, ink]}>
             Open in Google Calendar

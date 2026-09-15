@@ -280,7 +280,10 @@ function calendarEvent(
     const email = visibleDisplayText(text(raw));
     return email === '' ? [] : [email];
   });
-  const htmlLink = visibleDisplayText(omittedText(event.html_link));
+  const htmlLink =
+    event.html_link === undefined || event.html_link === null
+      ? undefined
+      : visibleDisplayText(text(event.html_link));
   const shareMailto =
     attendeeEmails.length === 0
       ? ''
@@ -300,7 +303,7 @@ function calendarEvent(
     attendees,
     ...(startCopy === '' ? {} : {startCopy}),
     ...(endCopy === '' ? {} : {endCopy}),
-    ...(htmlLink === '' ? {} : {htmlLink}),
+    ...(htmlLink === undefined ? {} : {htmlLink}),
     ...(shareMailto === '' ? {} : {shareMailto}),
   };
 }

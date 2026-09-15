@@ -2597,6 +2597,52 @@ test('legacy conversation details name Flutter GetSummaryWidgets attendee chip',
   expect(text(recording)).not.toContain('Alex, Sam +1');
 });
 
+test('legacy conversation details name Flutter CalendarEventDetailsSheet empty GET html_link', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        calendarEvent: {
+          title: 'Standup',
+          attendees: [],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+          htmlLink: '',
+        },
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(text(view)).toContain('Open in Google Calendar');
+  const links = view.root.findAll(
+    node =>
+      node.props.accessibilityRole === 'link' &&
+      node.props.accessibilityLabel === 'Open in Google Calendar' &&
+      typeof node.props.onPress === 'function',
+  );
+  expect(links.length).toBeGreaterThan(0);
+  const openURL = jest
+    .spyOn(Linking, 'openURL')
+    .mockResolvedValue(undefined as never);
+  act(() => {
+    links[0].props.onPress();
+  });
+  expect(openURL).not.toHaveBeenCalled();
+  openURL.mockRestore();
+});
+
 test('legacy conversation details name GET calendar html_link', () => {
   mockLegacy.mockReturnValue({
     result: {

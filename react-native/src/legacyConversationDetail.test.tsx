@@ -270,7 +270,23 @@ test('keeps GET calendar event html_link and omits empty links', async () => {
   );
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
-  ).not.toHaveProperty('htmlLink');
+  ).toMatchObject({htmlLink: ''});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-blank-link',
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+        html_link: '',
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
+  ).toMatchObject({htmlLink: ''});
   mockRequest.mockResolvedValue(
     response({
       ...fixture,
