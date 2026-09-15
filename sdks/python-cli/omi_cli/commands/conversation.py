@@ -48,18 +48,33 @@ def list_conversations(
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    items: list[dict] = []
+    # Server limits: 25 when include_transcript is True, 100 otherwise
+    page_size = 25 if include_transcript else 100
+    current_offset = offset
+    remaining = limit
+
     with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/conversations",
-            params={
-                "limit": limit,
-                "offset": offset,
-                "start_date": start_date.isoformat() if start_date else None,
-                "end_date": end_date.isoformat() if end_date else None,
-                "categories": categories,
-                "include_transcript": include_transcript,
-            },
-        )
+        while remaining > 0:
+            fetch_limit = min(remaining, page_size)
+            batch = client.get(
+                "/v1/dev/user/conversations",
+                params={
+                    "limit": fetch_limit,
+                    "offset": current_offset,
+                    "start_date": start_date.isoformat() if start_date else None,
+                    "end_date": end_date.isoformat() if end_date else None,
+                    "categories": categories,
+                    "include_transcript": include_transcript,
+                },
+            )
+            if not batch:
+                break
+            items.extend(batch)
+            current_offset += fetch_limit
+            remaining -= len(batch)
+            if len(batch) < fetch_limit:
+                break
     if ctx.renderer.json_mode:
         ctx.renderer.emit(items)
         return
