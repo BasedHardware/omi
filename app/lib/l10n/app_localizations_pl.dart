@@ -2058,6 +2058,15 @@ class AppLocalizationsPl extends AppLocalizations {
       'Część historii wspomnień jest niedostępna. Wyświetlana jest dotychczas otrzymana historia.';
 
   @override
+  String get memoryHistory => 'Historia';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Cofnij';
 
   @override
@@ -10024,4 +10033,8 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Nadal działa — trwa to dłużej niż zwykle.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Aby Omi wiedziało, który głos jest Twój — mów o czymkolwiek przez około 5 sekund.';
 }

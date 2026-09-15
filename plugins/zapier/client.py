@@ -126,7 +126,7 @@ class ZapierClient:
         except requests.exceptions.RequestException as e:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": f"RequestException {type(e).__name__}",
                 },
             }
         if err is None and resp.status_code != 200:
@@ -179,11 +179,10 @@ class OmiClient:
                 },
             )
         except requests.exceptions.HTTPError:
-            resp_text = f"{resp.text()}"
             err = {
                 "error": {
                     "status": resp.status_code,
-                    "message": resp_text,
+                    "message": f"HTTP_{resp.status_code}",
                 },
             }
         except requests.exceptions.Timeout:
@@ -201,7 +200,7 @@ class OmiClient:
         except requests.exceptions.RequestException as e:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": f"RequestException {type(e).__name__}",
                 },
             }
         if err is None and resp.status_code != 200:
@@ -234,11 +233,10 @@ class OmiClient:
                 },
             )
         except requests.exceptions.HTTPError:
-            resp_text = f"{resp.text()}"
             err = {
                 "error": {
                     "status": resp.status_code,
-                    "message": resp_text,
+                    "message": f"HTTP_{resp.status_code}",
                 },
             }
         except requests.exceptions.Timeout:
@@ -256,7 +254,7 @@ class OmiClient:
         except requests.exceptions.RequestException as e:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": f"RequestException {type(e).__name__}",
                 },
             }
         if err is None and resp.status_code != 200:

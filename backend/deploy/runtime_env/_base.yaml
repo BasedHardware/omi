@@ -59,7 +59,7 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -160,6 +160,9 @@ environment_shared:
           value: 'on'
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
+        MEMORY_BELIEF_AUTOMATION_PAUSED:
+          value: 'false'
+          category: rollout
         MEMORY_TYPESENSE_COLLECTION:
           value: canonical_memory_atoms
           category: memory_rollout
@@ -190,6 +193,9 @@ environment_shared:
           category: rollout
         MEMORY_ENABLED:
           value: 'on'
+        MEMORY_BELIEF_AUTOMATION_PAUSED:
+          value: 'false'
+          category: rollout
         CONVERSATION_NOTES_V2_ENABLED:
           value: 'true'
           category: rollout
@@ -225,7 +231,7 @@ environment_shared:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -241,6 +247,11 @@ environment_shared:
   region: us-central1
   desktop_backend:
     env:
+      MEMORY_BELIEF_MODEL_ENABLED:
+        category: rollout
+      MEMORY_BELIEF_AUTOMATION_PAUSED:
+        value: 'false'
+        category: rollout
       USE_VERTEX_AI:
         value: 'true'
       GOOGLE_CLOUD_PROJECT:
@@ -382,6 +393,9 @@ environment_shared:
             value: 'on'
           MEMORY_BELIEF_MODEL_ENABLED:
             category: rollout
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -480,6 +494,9 @@ environment_shared:
             category: memory_rollout
             value: 'on'
           MEMORY_BELIEF_MODEL_ENABLED:
+            category: rollout
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
             category: rollout
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'true'
@@ -582,6 +599,9 @@ environment_shared:
             value: 'on'
           MEMORY_BELIEF_MODEL_ENABLED:
             category: rollout
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
+            category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -641,6 +661,9 @@ environment_shared:
             category: memory_rollout
             value: 'on'
           MEMORY_BELIEF_MODEL_ENABLED:
+            category: rollout
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
             category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
@@ -779,6 +802,9 @@ environment_shared:
             value: 'on'
           MEMORY_BELIEF_MODEL_ENABLED:
             category: rollout
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -838,6 +864,9 @@ environment_shared:
             value: 'on'
             category: memory_rollout
           MEMORY_BELIEF_MODEL_ENABLED:
+            category: rollout
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
             category: rollout
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             category: memory_rollout

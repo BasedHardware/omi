@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 
 class SourceState(str, Enum):
@@ -79,6 +79,15 @@ class MemoryEvidence(BaseModel):
     patch_id: Optional[str] = None
     commit_id: Optional[str] = None
     client_device_id: Optional[str] = None
+    # Preserve originating evidence across adapters. Missing metadata is unknown,
+    # never evidence that the capture belongs to or was authored by the user.
+    captured_at: Optional[AwareDatetime] = None
+    source_signal: Optional[str] = None
+    extractor_id: Optional[str] = None
+    extractor_version: Optional[str] = None
+    capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    independence_group: Optional[str] = None
+    attribution: Optional[str] = None
 
     @field_validator("evidence_id", "source_type")
     @classmethod

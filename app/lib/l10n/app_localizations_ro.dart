@@ -2064,6 +2064,15 @@ class AppLocalizationsRo extends AppLocalizations {
       'O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.';
 
   @override
+  String get memoryHistory => 'Istoric';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Anulează';
 
   @override
@@ -10041,4 +10050,8 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.';
 }

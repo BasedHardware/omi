@@ -2058,6 +2058,15 @@ class AppLocalizationsVi extends AppLocalizations {
       'Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.';
 
   @override
+  String get memoryHistory => 'Lịch sử';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Hoàn tác';
 
   @override
@@ -9989,4 +9998,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
 }

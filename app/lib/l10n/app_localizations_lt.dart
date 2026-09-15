@@ -2054,6 +2054,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryHistoryPartial => 'Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.';
 
   @override
+  String get memoryHistory => 'Istorija';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Atšaukti';
 
   @override
@@ -10013,4 +10022,8 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes.';
 }

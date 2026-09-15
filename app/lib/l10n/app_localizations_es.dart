@@ -2039,6 +2039,15 @@ class AppLocalizationsEs extends AppLocalizations {
       'Parte del historial de recuerdos no está disponible. Se muestra el historial recibido hasta ahora.';
 
   @override
+  String get memoryHistory => 'Historial';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Deshacer';
 
   @override
@@ -10018,4 +10027,8 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Sigue trabajando: esto está tardando más de lo habitual.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Para que Omi sepa cuál es tu voz — habla de cualquier cosa durante unos 5 segundos.';
 }

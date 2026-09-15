@@ -2062,6 +2062,15 @@ class AppLocalizationsRu extends AppLocalizations {
       'Часть истории воспоминаний недоступна. Показана история, полученная на данный момент.';
 
   @override
+  String get memoryHistory => 'История';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Отменить';
 
   @override
@@ -10031,4 +10040,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ещё обрабатывается — это занимает больше обычного.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд.';
 }

@@ -37,6 +37,103 @@ const EXPECTED_TIMESTAMP = new Date(memory.created_at).toLocaleDateString('en-US
 });
 
 describe('MemoryCard layout', () => {
+  it('offers explicit use feedback without treating suppression as deletion', async () => {
+    const onSetUse = vi.fn().mockResolvedValue(true);
+    render(
+      <MemoryCard
+        memory={{
+          ...memory,
+          arguments: { memory_use: { useful: false } },
+        }}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+        onSetUse={onSetUse}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: "Don't use" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark memory useful' }));
+
+    expect(onSetUse).toHaveBeenNthCalledWith(1, 'memory-1', 'suppress');
+    expect(onSetUse).toHaveBeenNthCalledWith(2, 'memory-1', 'useful');
+  });
+
+  it('hides use feedback for inactive historical rows', () => {
+    const onSetUse = vi.fn().mockResolvedValue(true);
+    const { rerender } = render(
+      <MemoryCard
+        memory={{ ...memory, invalid_at: '2026-09-01T00:00:00.000Z' } as Memory}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+        onSetUse={onSetUse}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: "Don't use" })).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryCard
+        memory={{ ...memory, superseded_by: 'memory-2' } as Memory}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+        onSetUse={onSetUse}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: "Don't use" })).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryCard
+        memory={{ ...memory, ledger_status: 'hidden' } as Memory}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+        onSetUse={onSetUse}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: "Don't use" })).not.toBeInTheDocument();
+    expect(onSetUse).not.toHaveBeenCalled();
+  });
+
+  it('keeps use feedback for active dated and suppressed rows', () => {
+    const onSetUse = vi.fn().mockResolvedValue(true);
+    const { rerender } = render(
+      <MemoryCard
+        memory={
+          {
+            ...memory,
+            as_of: '2026-08-15T00:00:00.000Z',
+            ledger_status: 'active',
+          } as Memory
+        }
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+        onSetUse={onSetUse}
+      />,
+    );
+    expect(screen.getByRole('button', { name: "Don't use" })).toBeInTheDocument();
+
+    rerender(
+      <MemoryCard
+        memory={
+          {
+            ...memory,
+            as_of: '2026-08-15T00:00:00.000Z',
+            ledger_status: 'active',
+            arguments: { memory_use: { suppressed: true } },
+          } as Memory
+        }
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+        onSetUse={onSetUse}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Allow use' })).toBeInTheDocument();
+  });
+
   it('keeps hover actions out of metadata flow', () => {
     const { container } = renderCard();
     const card = container.querySelector('#memory-memory-1');

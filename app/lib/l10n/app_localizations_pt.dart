@@ -2031,6 +2031,15 @@ class AppLocalizationsPt extends AppLocalizations {
       'Parte do histórico de memórias não está disponível. Exibindo o histórico recebido até agora.';
 
   @override
+  String get memoryHistory => 'Histórico';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Desfazer';
 
   @override
@@ -10003,4 +10012,8 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ainda a trabalhar — isto está a demorar mais do que o habitual.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Para que o Omi saiba qual é a sua voz — fale sobre qualquer coisa por cerca de 5 segundos.';
 }
