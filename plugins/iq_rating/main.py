@@ -295,7 +295,7 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
                 choices = result.get("choices") if isinstance(result, dict) else None
                 if choices and isinstance(choices, list) and isinstance(choices[0], dict):
                     message = choices[0].get("message")
-                    answer = message.get("content", "").strip() if isinstance(message, dict) else ""
+                    answer = (message.get("content") or "").strip() if isinstance(message, dict) else "" if isinstance(message, dict) else ""
                 else:
                     answer = ""
                 
@@ -1088,7 +1088,7 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
                 choices = result.get("choices") if isinstance(result, dict) else None
                 if choices and isinstance(choices, list) and isinstance(choices[0], dict):
                     message = choices[0].get("message")
-                    answer = message.get("content", "").strip() if isinstance(message, dict) else ""
+                    answer = (message.get("content") or "").strip() if isinstance(message, dict) else "" if isinstance(message, dict) else ""
                 else:
                     answer = ""
                 
