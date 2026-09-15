@@ -273,6 +273,41 @@ def test_get_memories_forwards_include_archive():
     assert service.read_page.call_args.kwargs["include_archive"] is True
 
 
+def test_get_memories_offset_temporal_view_passes_view_into_service_read():
+    """Offset fallback must not post-filter one already-paged released window:
+    the temporal selector and anchor belong inside the service read so
+    history rows are admitted before offset/limit slicing."""
+    mem_mod = _load_memories_router()
+    service = MagicMock()
+    service.read.return_value = []
+    scope_request = types.SimpleNamespace(device_scope="all", client_device_id=None)
+    anchor = datetime(2026, 9, 13, tzinfo=timezone.utc)
+    with (
+        patch.object(mem_mod, "MemoryService", return_value=service),
+        patch.object(mem_mod, "belief_model_enabled", return_value=True),
+        patch.object(mem_mod, "normalize_temporal_read_view", side_effect=lambda value: value),
+        patch.object(mem_mod, "_resolve_get_memories_device_scope", return_value=scope_request),
+        patch.object(mem_mod, "_validate_device_scope_request"),
+        patch.object(mem_mod, "list_read_budget_for_request", return_value=MagicMock(truncated=False)),
+    ):
+        mem_mod.get_memories(
+            response=MagicMock(),
+            request=MagicMock(),
+            limit=50,
+            offset=50,
+            include_archive=False,
+            view="history",
+            as_of=anchor,
+            uid="uid-1",
+            device_scope="all",
+            client_device_id=None,
+            x_app_platform=None,
+            x_device_id_hash=None,
+        )
+    assert service.read.call_args.kwargs["view"] == "history"
+    assert service.read.call_args.kwargs["as_of"] == anchor
+
+
 def test_ledger_history_route_is_explicit_owner_scoped_and_bounded():
     mem_mod = _load_memories_router()
     service = MagicMock()

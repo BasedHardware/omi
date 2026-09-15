@@ -238,6 +238,65 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
     mock_service.replace_conversation_memories.assert_not_called()
 
 
+def test_canonical_capture_persists_candidate_predicate_and_arguments(monkeypatch):
+    """Object qualifiers and decision states carried by the extraction
+    candidate must reach the persisted Memory, not be silently dropped."""
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(
+        pc,
+        "extract_canonical_l1_memory_candidates",
+        MagicMock(
+            return_value=[
+                SimpleNamespace(
+                    content="I am moving to Boston.",
+                    evidence_quotes=["I am moving to Boston."],
+                    speaker_label="SPEAKER_00",
+                    speaker_scope="session-local",
+                    about="the user",
+                    risk_flags=[],
+                    archive_class="general",
+                    predicate="moving_to",
+                    arguments={"decision": "proposed", "object": "Boston"},
+                )
+            ]
+        ),
+    )
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-predicate-persist",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[
+            TranscriptSegment(
+                text="I am moving to Boston.",
+                speaker="SPEAKER_00",
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+    )
+
+    result = pc._extract_memories_canonical("uid-predicate-persist", conversation, db_client=MagicMock())
+
+    assert result.count == 1
+    written = mock_service.replace_conversation_memories.call_args.args[2]
+    assert len(written) == 1
+    assert written[0]["predicate"] == "moving_to"
+    assert written[0]["arguments"] == {"decision": "proposed", "object": "Boston"}
+
+
 def test_canonical_capture_preserves_prior_state_when_the_extractor_never_returns_a_batch(monkeypatch):
     """A provider failure is not a verdict on the source's existing memories.
 

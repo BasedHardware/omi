@@ -1579,6 +1579,12 @@ def _extract_memories_canonical(
                 subject_entity_id=subject_entity_id,
                 subject_attribution=subject_attribution,
             )
+            # Carry the candidate's proposition shape onto the persisted
+            # memory: object qualifiers and decision states must not be
+            # silently dropped by canonical conversation capture. Arguments
+            # are already scoped/bounded by the extractor.
+            memory.predicate = getattr(candidate, "predicate", None)
+            memory.arguments = dict(getattr(candidate, "arguments", None) or {})
             # The transcript is the original evidence family for this
             # candidate. Build capture context from the server-owned
             # conversation and the resolved speaker attribution; never trust

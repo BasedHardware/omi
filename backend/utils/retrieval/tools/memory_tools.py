@@ -238,6 +238,13 @@ def get_memories_tool(
                     as_of=as_of_dt,
                 )
                 batch = page.memories
+                if page.truncated:
+                    # A budget-truncated page can arrive without a continuation
+                    # cursor; that condition must still surface as an honest
+                    # partial scan instead of a silent complete result.
+                    scan_truncated = True
+                    cursor = None
+                    break
                 cursor = page.next_cursor
                 if not batch and not cursor:
                     break
@@ -253,7 +260,7 @@ def get_memories_tool(
                     visible.append(memory)
                 if not cursor:
                     break
-            scan_truncated = bool(cursor and pages_scanned >= max_pages and len(visible) < target_end)
+            scan_truncated = scan_truncated or bool(cursor and pages_scanned >= max_pages and len(visible) < target_end)
         else:
             while scan_offset < max_scan and len(visible) < target_end:
                 batch_limit = min(500, max_scan - scan_offset)

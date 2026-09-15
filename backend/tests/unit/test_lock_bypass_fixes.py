@@ -754,6 +754,25 @@ class TestMemoryToolFiltering:
         assert 'bounded scan reached its safety limit' in result
         assert memory_service.return_value.read_page.call_count == 10
 
+    def test_get_memories_temporal_truncated_page_without_cursor_is_disclosed(self):
+        """A budget-truncated page with no continuation cursor must surface an
+        honest partial-scan note instead of a silently complete result."""
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+        ):
+            memory_service.return_value.read_page.side_effect = lambda *args, **kwargs: SimpleNamespace(
+                memories=(), next_cursor=None, truncated=True
+            )
+            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'history'}, config=config)
+
+        assert 'bounded scan reached its safety limit' in result
+        memory_service.return_value.read_page.assert_called_once()
+
     def test_get_memories_temporal_ranges_use_evidence_date(self):
         """A delayed extraction is found by capture date, not processing date."""
         from models.memories import MemoryDB

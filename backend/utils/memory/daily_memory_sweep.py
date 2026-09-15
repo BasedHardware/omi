@@ -2982,6 +2982,7 @@ def _apply_candidate(
             subject_entity_id=candidate.subject_entity_id,
             slot=candidate.slot,
             trigger_condition=candidate.trigger_condition,
+            arguments=dict(candidate.arguments or {}),
             # A completed-day replay must derive identical mutation metadata.  The
             # ledger otherwise defaults ``valid_from`` to wall-clock ``now`` and a
             # crash after canonical apply would produce a different operation ID.

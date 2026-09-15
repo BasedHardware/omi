@@ -768,15 +768,22 @@ def get_memories(
                 next_cursor=page.next_cursor,
             )
 
-    memories = MemoryService(db_client=db_client).read(
-        uid,
-        limit=bounded_limit,
-        offset=bounded_offset,
-        device_scope_request=scope_request,
-        include_pending_processing=True,
-        include_archive=include_archive,
-        budget=budget,
-    )
+    read_kwargs: Dict[str, Any] = {
+        "limit": bounded_limit,
+        "offset": bounded_offset,
+        "device_scope_request": scope_request,
+        "include_pending_processing": True,
+        "include_archive": include_archive,
+        "budget": budget,
+    }
+    if temporal_view != 'released':
+        # Apply the temporal admission before offset/limit slicing inside the
+        # service read; post-filtering one already-paged released window would
+        # drop history rows and underfill every offset page.
+        read_kwargs["view"] = temporal_view
+        if as_of is not None:
+            read_kwargs["as_of"] = as_of
+    memories = MemoryService(db_client=db_client).read(uid, **read_kwargs)
     if temporal_view != 'released':
         from utils.memory.belief_model import temporal_view_allows_record
 

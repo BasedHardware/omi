@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from database._client import get_data_plane_firestore_client
+from database.memory_apply_store import CanonicalMemoryIntakePausedError, MemoryFirestoreApplyError
 from models.feedback import MemoryUseFeedback
 from models.product_memory import MemoryItem
 from utils.memory.belief_model import belief_model_enabled
@@ -148,6 +149,10 @@ def use_memory(
         if "revision" in message or "expected_" in message:
             raise HTTPException(status_code=409, detail="memory revision has changed") from exc
         raise HTTPException(status_code=409, detail=message) from exc
+    except CanonicalMemoryIntakePausedError as exc:
+        raise HTTPException(status_code=503, detail="memory feedback intake is temporarily paused") from exc
+    except MemoryFirestoreApplyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

@@ -2560,6 +2560,30 @@ def test_completed_day_typed_proposal_is_preserved_without_a_standing_slot(monke
     assert candidate.arguments == {'decision': 'proposed', 'object': 'moving to Boston'}
 
 
+def test_apply_candidate_add_path_persists_scoped_arguments(monkeypatch):
+    """A new (non-amendment) candidate must persist its scoped qualifiers and
+    decision state, exactly like the amend path."""
+    from utils.memory.daily_memory_sweep import _apply_candidate
+
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    db = _Db()
+    writes = []
+    monkeypatch.setattr('utils.memory.daily_memory_sweep._target_for_candidate', lambda *_a, **_k: None)
+    monkeypatch.setattr('utils.memory.daily_memory_sweep._find_active_slot_or_subject', lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep.save_ledger_write',
+        lambda _uid, write, **_kwargs: writes.append(write) or 'written',
+    )
+    candidate = _candidate(
+        content='David proposed moving to Boston',
+        slot=None,
+        arguments={'decision': 'proposed', 'object': 'moving to Boston'},
+    )
+
+    assert _apply_candidate('user-1', date(2026, 8, 23), candidate, db_client=db) == ('written', None)
+    assert writes[0].arguments == {'decision': 'proposed', 'object': 'moving to Boston'}
+
+
 @pytest.mark.parametrize(
     'owners,trust', [((True, True), 'multi_owner'), ((False, False), 'no_owner'), ((True, False), 'unique_owner')]
 )

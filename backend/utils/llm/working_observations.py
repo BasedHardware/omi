@@ -122,7 +122,12 @@ def normalize_scoped_claim_arguments(
         return {}
     arguments = {key: item for key, item in bounded.items() if key.casefold() not in _TASK_CONTROL_ARGUMENT_KEYS}
     decision = arguments.get("decision")
-    if isinstance(decision, str):
+    # Non-string decisions (list/object from the model) are unhashable and
+    # raise TypeError on set membership; drop them instead of losing the
+    # whole extraction batch.
+    if not isinstance(decision, str):
+        decision = None
+    else:
         decision = decision.strip().casefold()
     if decision not in DECISION_STATES or (basis or "").strip().casefold() == "observed":
         arguments.pop("decision", None)

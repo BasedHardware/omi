@@ -193,3 +193,54 @@ def test_memory_use_route_uses_the_configured_customer_data_plane_client(monkeyp
         )
     assert response.status_code == 200
     assert seen["db_client"] is sentinel
+
+
+@pytest.mark.parametrize(
+    ("error_factory", "expected_status", "expected_detail"),
+    [
+        (
+            lambda: _apply_store_error(
+                "CanonicalMemoryIntakePausedError", "canonical memory intake is globally paused"
+            ),
+            503,
+            "memory feedback intake is temporarily paused",
+        ),
+        (
+            lambda: _apply_store_error(
+                "MemoryFirestoreApplyError", "canonical apply blocked by account deletion fence"
+            ),
+            409,
+            "canonical apply blocked by account deletion fence",
+        ),
+    ],
+)
+def test_memory_use_maps_apply_store_pause_and_fence_errors(
+    monkeypatch, error_factory, expected_status, expected_detail
+):
+    """The canonical adapter raises MemoryFirestoreApplyError (not
+    RuntimeError) for intake pause and account-deletion fences; these must map
+    to retry/authorization responses, not leak unhandled 500s."""
+    app = FastAPI()
+    app.include_router(memory_use_router.router)
+    monkeypatch.setattr(memory_use_router, "belief_model_enabled", lambda: True)
+
+    def raise_apply(*_args, **_kwargs):
+        raise error_factory()
+
+    monkeypatch.setattr(memory_use_router, "_apply_canonical_user_mutation", raise_apply)
+    route = next(route for route in app.routes if route.path == "/v3/memories/{memory_id}/use")
+    app.dependency_overrides[route.dependant.dependencies[0].call] = lambda: "user_1"
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(
+            "/v3/memories/mem_1/use",
+            json={"action": "suppress", "feedback_id": "http-fence"},
+        )
+    assert response.status_code == expected_status
+    assert response.json()["detail"] == expected_detail
+
+
+def _apply_store_error(class_name: str, message: str) -> Exception:
+    from database import memory_apply_store
+
+    return getattr(memory_apply_store, class_name)(message)
