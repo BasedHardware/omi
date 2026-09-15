@@ -26,7 +26,7 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   if (row.deleted === true) {
     throw new AppError();
   }
-  const id = visibleDisplayText(typeof row.id === 'string' ? row.id : '');
+  const id = typeof row.id === 'string' ? row.id : '';
   if (typeof row.name !== 'string') {
     throw new AppError();
   }

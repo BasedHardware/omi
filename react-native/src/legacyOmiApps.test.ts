@@ -56,6 +56,33 @@ test('parses GET app name and description and omits empty or deleted apps', () =
   ).toThrow();
 });
 
+test('parseOmiApp names Flutter App.fromGenerated padded GET id instead of remapping to a catalog match', () => {
+  expect(
+    parseOmiApp(JSON.stringify({id: 'notes', name: 'Notes'}), 'notes'),
+  ).toEqual({name: 'Notes'});
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: '  notes  ', name: 'Notes'}),
+      'notes',
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiApp(JSON.stringify({id: 'notes ', name: 'Notes'}), 'notes'),
+  ).toThrow();
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: '\u0085notes', name: 'Notes'}),
+      'notes',
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiApp(JSON.stringify({id: ' \t', name: 'Notes'}), 'notes'),
+  ).toThrow();
+  expect(() =>
+    parseOmiApp(JSON.stringify({id: '', name: 'Notes'}), 'notes'),
+  ).toThrow();
+});
+
 test('parseOmiApp keeps GET http(s) images and omits relative or unsafe URLs', () => {
   expect(
     parseOmiApp(
@@ -237,6 +264,42 @@ test('loadOmiApps names resolved GET apps and omits failures', async () => {
     expectedApiContract: 'omi',
     path: '/v1/apps/notes',
   });
+});
+
+test('loadOmiApps names Flutter App.fromGenerated padded GET id instead of remapping to a catalog name', async () => {
+  const catalog = (id: string) =>
+    jest.fn(async () => ({
+      id: 'app',
+      status: 200,
+      body: JSON.stringify({id, name: 'Notes'}),
+    }));
+  const padded = catalog('  notes  ');
+  expect(
+    (
+      await loadOmiApps(
+        {request: padded} as unknown as OmiBackend,
+        ['notes'],
+      )
+    ).has('notes'),
+  ).toBe(false);
+  const trailing = catalog('notes ');
+  expect(
+    (
+      await loadOmiApps(
+        {request: trailing} as unknown as OmiBackend,
+        ['notes'],
+      )
+    ).has('notes'),
+  ).toBe(false);
+  const nextLine = catalog('\u0085notes');
+  expect(
+    (
+      await loadOmiApps(
+        {request: nextLine} as unknown as OmiBackend,
+        ['notes'],
+      )
+    ).has('notes'),
+  ).toBe(false);
 });
 
 test('attachOmiChatAppNames keeps unresolved app ids off the named chrome', async () => {
