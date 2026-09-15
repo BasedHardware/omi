@@ -1074,12 +1074,15 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// The single server-page read behind the browse surface (initial load,
+  /// refresh, load-more). Tests replace this; production uses the shared client.
   var memoriesPageFetch:
-    @MainActor (
-      _ limit: Int, _ offset: Int, _ cursor: String?, _ includeArchive: Bool,
-      _ deviceScope: String?, _ view: APIClient.MemoryTemporalView?,
-      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
-    ) async throws -> APIClient.MemoryListPage
+    (
+      @MainActor (
+        _ limit: Int, _ offset: Int, _ cursor: String?, _ includeArchive: Bool,
+        _ deviceScope: String?, _ view: APIClient.MemoryTemporalView?,
+        _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+      ) async throws -> APIClient.MemoryListPage
+    )? = nil
 
   /// Fetch memories from the API, honoring the device-scope filter only when
   /// the backend supports it for this user. Legacy (non-canonical) memory users
