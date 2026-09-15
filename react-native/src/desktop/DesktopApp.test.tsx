@@ -8136,6 +8136,94 @@ test('Settings names Flutter DevApiKey fromJson invalid created_at instead of un
   expect(tree).not.toContain('Revoke');
 });
 
+test('Settings names Flutter DevApiKey fromJson invalid GET last_used_at instead of empty success', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [],
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'key-used',
+            name: 'Legacy',
+            key_prefix: 'omi_sk_ef',
+            created_at: '2026-09-09T12:00:00.000Z',
+            last_used_at: 'not-a-date',
+          },
+          {
+            id: 'key-kept',
+            name: 'Cursor',
+            key_prefix: 'omi_sk_cd',
+            created_at: '2026-09-09T12:00:00.000Z',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Developer API');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi developer keys are malformed')),
+  );
+  expect(tree).not.toContain('Legacy');
+  expect(tree).not.toContain('Cursor');
+  expect(tree).not.toContain('omi_sk_ef');
+  expect(tree).not.toContain('No API keys yet');
+  expect(tree).not.toContain('Revoke');
+});
+
 test('Settings names Flutter noApiKeys for empty GET developer and MCP keys', async () => {
   const {omiBackend} = jest.requireMock('../omiNative') as {
     omiBackend: {request: jest.Mock};

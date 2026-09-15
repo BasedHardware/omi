@@ -2628,6 +2628,50 @@ test('Settings names Flutter DevApiKey fromJson invalid created_at instead of un
   expect(tree).not.toContain('Revoke');
 });
 
+test('Settings names Flutter DevApiKey fromJson invalid GET last_used_at instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'key-used',
+            name: 'Legacy',
+            key_prefix: 'omi_sk_ef',
+            created_at: '2026-09-09T12:00:00.000Z',
+            last_used_at: 'not-a-date',
+          },
+          {
+            id: 'key-kept',
+            name: 'Cursor',
+            key_prefix: 'omi_sk_cd',
+            created_at: '2026-09-09T12:00:00.000Z',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Developer API');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi developer keys are malformed')),
+  );
+  expect(tree).not.toContain('Legacy');
+  expect(tree).not.toContain('Cursor');
+  expect(tree).not.toContain('omi_sk_ef');
+  expect(tree).not.toContain('No API keys yet');
+  expect(tree).not.toContain('Revoke');
+});
+
 test('Settings names Flutter McpApiKeyListItem empty GET keyPrefix without omitting MCP', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

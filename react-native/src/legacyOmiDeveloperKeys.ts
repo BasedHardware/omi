@@ -45,6 +45,20 @@ function createdAtMs(value: unknown): number {
   return parsed;
 }
 
+function optionalDateTime(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  createdAtMs(value);
+}
+
+function optionalNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  text(value, 1_000_000);
+}
+
 function optionalScopes(value: unknown): string[] | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -77,6 +91,8 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
     const name = visibleDisplayText(text(row.name, 1_000_000));
     const keyPrefix = visibleDisplayText(text(row.key_prefix, 1_000_000));
     const created = createdAtMs(row.created_at);
+    optionalDateTime(row.last_used_at);
+    optionalNullableString(row.app_id);
     const scopes = optionalScopes(row.scopes);
     keys.push({
       id,

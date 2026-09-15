@@ -261,6 +261,124 @@ test('names Flutter DevApiKey fromJson invalid created_at instead of undated suc
   ).toThrow('Omi developer keys are malformed');
 });
 
+test('names Flutter DevApiKey fromJson invalid GET last_used_at instead of keeping neighbors', () => {
+  expect(() =>
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-used',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: createdAt,
+          last_used_at: 'not-a-date',
+        },
+        {id: 'key-kept', name: 'Cursor', key_prefix: 'omi_mcp_cd', created_at: createdAt},
+      ]),
+    ),
+  ).toThrow('Omi developer keys are malformed');
+  expect(() =>
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-empty-used',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: createdAt,
+          last_used_at: '',
+        },
+        {id: 'key-kept', name: 'Cursor', key_prefix: 'omi_mcp_cd', created_at: createdAt},
+      ]),
+    ),
+  ).toThrow('Omi developer keys are malformed');
+  expect(() =>
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-space-used',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: createdAt,
+          last_used_at: ' \t',
+        },
+        {id: 'key-kept', name: 'Cursor', key_prefix: 'omi_mcp_cd', created_at: createdAt},
+      ]),
+    ),
+  ).toThrow('Omi developer keys are malformed');
+  expect(() =>
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-app',
+          name: 'Cursor',
+          key_prefix: 'omi_mcp_cd',
+          created_at: createdAt,
+          app_id: 1,
+        },
+        {id: 'key-kept', name: 'Local', key_prefix: 'omi_sk_ab', created_at: createdAt},
+      ]),
+    ),
+  ).toThrow('Omi developer keys are malformed');
+});
+
+test('keeps GET developer keys when last_used_at or app_id are omitted or valid', () => {
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-used',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: createdAt,
+          last_used_at: createdAt,
+          app_id: 'app-1',
+        },
+        {
+          id: 'key-null',
+          name: 'Cursor',
+          key_prefix: 'omi_mcp_cd',
+          created_at: createdAt,
+          last_used_at: null,
+          app_id: null,
+        },
+        {
+          id: 'key-hour',
+          name: 'Hour',
+          key_prefix: 'omi_sk_ef',
+          created_at: createdAt,
+          last_used_at: '2026-09-09T12:00:00+00',
+          app_id: '',
+        },
+        {id: 'key-omitted', name: 'Omitted', key_prefix: 'omi_sk_gh', created_at: createdAt},
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'key-used',
+      name: 'Local',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: createdMs,
+    },
+    {
+      id: 'key-null',
+      name: 'Cursor',
+      keyPrefix: 'omi_mcp_cd',
+      createdAtMs: createdMs,
+    },
+    {
+      id: 'key-hour',
+      name: 'Hour',
+      keyPrefix: 'omi_sk_ef',
+      createdAtMs: createdMs,
+    },
+    {
+      id: 'key-omitted',
+      name: 'Omitted',
+      keyPrefix: 'omi_sk_gh',
+      createdAtMs: createdMs,
+    },
+  ]);
+});
+
 test('keeps GET developer keys when created_at exceeds 10000', () => {
   const longCreatedAt = `2026-04-01T12:00:00.${'0'.repeat(9980)}Z`;
   expect(longCreatedAt.length).toBe(10001);
