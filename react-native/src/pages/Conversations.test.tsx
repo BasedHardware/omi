@@ -3304,6 +3304,18 @@ test('conversation list names GET calendar capture gaps without a write sheet', 
             start_time: '2026-09-07T17:00:00.000Z',
             end_time: '2026-09-07T18:00:00.000Z',
           },
+          {
+            event_id: ' \t',
+            title: 'Whitespace id',
+            start_time: '2026-09-07T18:00:00.000Z',
+            end_time: '2026-09-07T19:00:00.000Z',
+          },
+          {
+            event_id: '',
+            title: 'Blank id',
+            start_time: '2026-09-07T19:00:00.000Z',
+            end_time: '2026-09-07T20:00:00.000Z',
+          },
         ]),
       };
     }
@@ -3335,8 +3347,10 @@ test('conversation list names GET calendar capture gaps without a write sheet', 
     await Promise.resolve();
   });
   const tree = textOf(renderer);
-  expect(tree).toContain('Not captured (2)');
+  expect(tree).toContain('Not captured (4)');
   expect(tree).toContain('Design review');
+  expect(tree).toContain('Whitespace id');
+  expect(tree).toContain('Blank id');
   expect(tree).toContain(
     captureGapTimeRangeCopy(
       Date.parse('2026-09-07T15:00:00.000Z'),
@@ -3375,7 +3389,7 @@ test('conversation list names GET calendar capture gaps without a write sheet', 
     search.props.onChangeText('Work');
   });
   expect(textOf(renderer)).toContain('Work chat');
-  expect(textOf(renderer)).not.toContain('Not captured (2)');
+  expect(textOf(renderer)).not.toContain('Not captured (4)');
   expect(textOf(renderer)).not.toContain('Design review');
   await act(async () => {
     search.props.onChangeText('');

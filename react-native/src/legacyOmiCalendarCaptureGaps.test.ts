@@ -111,6 +111,57 @@ test('names Flutter CaptureGapListItem empty GET titles instead of omitting them
   ]);
 });
 
+test('names Flutter CaptureGapListItem empty GET ids instead of omitting them', () => {
+  const rows = parseOmiCalendarCaptureGaps(
+    JSON.stringify([
+      {
+        event_id: 'event-standup',
+        title: 'Standup',
+        start_time: '2026-09-07T15:00:00.000Z',
+        end_time: '2026-09-07T15:30:00.000Z',
+      },
+      {
+        event_id: ' \t',
+        title: 'Whitespace id',
+        start_time: '2026-09-07T16:00:00.000Z',
+        end_time: '2026-09-07T17:00:00.000Z',
+      },
+      {
+        event_id: '\u0085',
+        title: 'Next line id',
+        start_time: '2026-09-07T16:30:00.000Z',
+        end_time: '2026-09-07T17:00:00.000Z',
+      },
+      {
+        event_id: '',
+        title: 'Blank id',
+        start_time: '2026-09-07T17:00:00.000Z',
+        end_time: '2026-09-07T18:00:00.000Z',
+      },
+      {
+        event_id: '  padded  ',
+        title: 'Padded id',
+        start_time: '2026-09-07T18:00:00.000Z',
+        end_time: '2026-09-07T19:00:00.000Z',
+      },
+    ]),
+  );
+  expect(rows.map(row => row.eventId)).toEqual([
+    'event-standup',
+    ' \t',
+    '\u0085',
+    '',
+    '  padded  ',
+  ]);
+  expect(rows.map(row => row.title)).toEqual([
+    'Standup',
+    'Whitespace id',
+    'Next line id',
+    'Blank id',
+    'Padded id',
+  ]);
+});
+
 test('keeps GET capture gaps when event_id exceeds 256', () => {
   const eventId = 'e'.repeat(257);
   expect(
