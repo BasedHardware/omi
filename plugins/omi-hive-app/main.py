@@ -473,18 +473,57 @@ def search_tasks(uid: str, query: str, limit: int = 10) -> List[HiveTask]:
         actions_data = [result] if result.get("_id") else []
     
     query_lower = query.lower()
-    tasks = []
-    count = 0
-    
+    matches = []
+
     for a in actions_data or []:
-        if count >= limit:
-            break
-            
         title = a.get("title") or a.get("name", "")
         desc = a.get("description", "")
-        
-        # Simple case-insensitive match
+
         if query_lower in title.lower() or (desc and query_lower in desc.lower()):
+            matches.append(a)
+
+    # Exact match first
+    exact = [a for a in matches if a.get("title", "").lower() == query_lower or a.get("name", "").lower() == query_lower]
+    if exact:
+        matches = exact
+    # Single partial match is fine
+    # Multiple matches: return only unambiguous ones (no substring ambiguity)
+    elif len(matches) > 1:
+        # Check if any match is a substring of another — if so, it's ambiguous
+        ambiguous = False
+        for i, a in enumerate(matches):
+            for j, b in enumerate(matches):
+                if i != j:
+                    a_title = a.get("title", "").lower()
+                    b_title = b.get("title", "").lower()
+                    if a_title in b_title or b_title in a_title:
+                        ambiguous = True
+                        break
+            if ambiguous:
+                break
+        if ambiguous:
+            # Return tasks with ids so caller can disambiguate
+            tasks = []
+            for a in matches[:limit]:
+                project = a.get("project")
+                project_name = ""
+                if isinstance(project, dict):
+                    project_name = project.get("name", "")
+                tasks.append(HiveTask(
+                    id=a.get("_id") or a.get("id", ""),
+                    name=a.get("title") or a.get("name", ""),
+                    description=a.get("description", ""),
+                    status=a.get("status", ""),
+                    project_name=project_name,
+                ))
+            return tasks
+
+    tasks = []
+    count = 0
+
+    for a in matches:
+        if count >= limit:
+            break
             project = a.get("project")
             project_id = ""
             project_name = ""
@@ -883,7 +922,9 @@ async def tool_hive_update_task_status(request: Request):
                     break
             
             if not best_match:
-                best_match = tasks[0] # Use first result as fallback
+                # Multiple matches — return candidates with ids so caller can disambiguate
+                candidates = "\n".join(f"  {i+1}. [{t.id}] {t.name}" for i, t in enumerate(tasks[:5]))
+                return ChatToolResponse(result=f"Ambiguous task '{task_name}'. Multiple matches found. Please specify task_id:\n{candidates}")
                 
             task_id = best_match.id
             task_name = best_match.name
