@@ -49,8 +49,8 @@ function optionalResetAtMs(value: unknown): number | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
-  const raw = requiredString(value).trim();
-  if (raw === '') {
+  const raw = requiredString(value);
+  if (visibleDisplayText(raw) !== raw || raw === '') {
     return undefined;
   }
   const parsed = Date.parse(raw.replace(/([+-]\d{2})$/, '$1:00'));

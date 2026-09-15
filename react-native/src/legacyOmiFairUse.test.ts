@@ -167,6 +167,37 @@ test('keeps GET fair use resets_at with hour-only offsets Dart DateTime.tryParse
   ).toBe(Date.parse('2026-09-11T00:00:00.000Z'));
 });
 
+test('names Flutter FairUsePage padded GET resets_at instead of remapping to a Resets chip', () => {
+  expect(
+    parseOmiFairUseStatus(
+      JSON.stringify({
+        ...status,
+        dg_budget: {
+          ...status.dg_budget,
+          resets_at: '2026-09-11T00:00:00Z',
+        },
+      }),
+    ).resetsAtMs,
+  ).toBe(Date.parse('2026-09-11T00:00:00Z'));
+  for (const resetsAt of [
+    '  2026-09-11T00:00:00Z  ',
+    '2026-09-11T00:00:00Z ',
+    '  2026-09-11T00:00:00Z',
+    '2026-09-11T00:00:00Z\n',
+    '\u00852026-09-11T00:00:00Z',
+    ' \t',
+  ]) {
+    expect(
+      parseOmiFairUseStatus(
+        JSON.stringify({
+          ...status,
+          dg_budget: {...status.dg_budget, resets_at: resetsAt},
+        }),
+      ).resetsAtMs,
+    ).toBeUndefined();
+  }
+});
+
 test('loadOmiFairUseStatus names resolved GET status and fails closed on HTTP failures', async () => {
   const request = jest.fn(async () => ({
     id: 'fair-use',

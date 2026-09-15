@@ -2107,6 +2107,48 @@ test('Settings names Flutter FairUsePage padded GET speech_hours_today instead o
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter FairUsePage padded GET resets_at instead of remapping to a Resets chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/fair-use/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          stage: 'restrict',
+          case_ref: 'FU-1',
+          message: 'Usage is restricted.',
+          speech_hours_today: 2.4,
+          speech_hours_3day: 8.1,
+          speech_hours_weekly: 11,
+          limits: {
+            daily_hours: 2,
+            three_day_hours: 8,
+            weekly_hours: 10,
+          },
+          usage_pct: {daily: 120, three_day: 101, weekly: 110},
+          dg_budget: {
+            daily_limit_ms: 1800000,
+            used_ms: 1800000,
+            remaining_ms: 0,
+            exhausted: true,
+            resets_at: '  2099-01-01T00:00:00Z  ',
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Fair Use');
+  expect(tree).toContain('Restricted');
+  expect(tree).toContain('2.4h / 2h');
+  expect(tree).toContain('Daily transcription limit reached');
+  expect(tree).not.toContain('Resets');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names Flutter FairUsePage whitespace GET message without omitting Fair Use', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
