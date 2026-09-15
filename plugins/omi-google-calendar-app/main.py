@@ -531,7 +531,7 @@ async def tool_list_events(request: Request):
             line = f"- **{summary}**\n  {time_str}"
             if location:
                 line += f"\n  Location: {location}"
-            line += f"\n  ID: `{event_id[:20]}...`"
+            line += f"\n  ID: `{event_id}`"
             result_parts.append(line)
 
         return ChatToolResponse(result="\n".join(result_parts))
@@ -640,6 +640,7 @@ async def tool_create_event(request: Request):
             result_parts.append(f"Attendees: {', '.join(attendees)}")
         if html_link:
             result_parts.append(f"Link: {html_link}")
+        result_parts.append(f"ID: `{event_id}`")
 
         return ChatToolResponse(result="\n".join(result_parts))
 
