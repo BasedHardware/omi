@@ -2055,6 +2055,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get memoryHistory => 'Istoric';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Anulează';
 
   @override

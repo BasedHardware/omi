@@ -2054,6 +2054,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get memoryHistory => 'Cronologia';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Annulla';
 
   @override

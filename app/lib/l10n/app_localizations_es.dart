@@ -2030,6 +2030,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get memoryHistory => 'Historial';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Deshacer';
 
   @override

@@ -2029,6 +2029,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryHistory => 'السجل';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'تراجع';
 
   @override

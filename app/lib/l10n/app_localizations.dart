@@ -3969,6 +3969,18 @@ abstract class AppLocalizations {
   /// **'History'**
   String get memoryHistory;
 
+  /// Button that clears suppression so this memory may be used
+  ///
+  /// In en, this message translates to:
+  /// **'Allow use'**
+  String get memoryAllowUse;
+
+  /// Button that suppresses this memory from future use
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t use'**
+  String get memoryDontUse;
+
   /// Undo button text
   ///
   /// In en, this message translates to:

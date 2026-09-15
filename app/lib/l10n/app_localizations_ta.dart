@@ -2058,6 +2058,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get memoryHistory => 'வரலாறு';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'மறுசெய்க';
 
   @override

@@ -2007,6 +2007,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryHistory => '기록';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => '실행 취소';
 
   @override

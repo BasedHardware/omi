@@ -2051,6 +2051,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryHistory => 'Riwayat';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Batalkan';
 
   @override

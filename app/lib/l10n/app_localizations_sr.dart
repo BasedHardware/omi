@@ -2044,6 +2044,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Врати';
 
   @override

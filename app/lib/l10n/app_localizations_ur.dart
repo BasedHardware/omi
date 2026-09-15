@@ -2045,6 +2045,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get memoryHistory => 'تاریخ';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'واپس لیں';
 
   @override

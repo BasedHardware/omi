@@ -2044,6 +2044,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryHistory => 'تاریخچه';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'بازگشت';
 
   @override

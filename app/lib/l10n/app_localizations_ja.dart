@@ -2007,6 +2007,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryHistory => '履歴';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => '元に戻す';
 
   @override

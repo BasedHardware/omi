@@ -2045,6 +2045,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get memoryHistory => 'Zgodovina';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Razveljavi';
 
   @override

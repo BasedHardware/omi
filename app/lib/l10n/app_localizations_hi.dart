@@ -2021,6 +2021,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'पूर्ववत करें';
 
   @override

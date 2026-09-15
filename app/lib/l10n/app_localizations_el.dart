@@ -2062,6 +2062,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryHistory => 'Ιστορικό';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Αναίρεση';
 
   @override

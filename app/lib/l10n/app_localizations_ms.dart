@@ -2053,6 +2053,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get memoryHistory => 'Sejarah';
 
   @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Buat Asal';
 
   @override

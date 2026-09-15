@@ -128,6 +128,7 @@ def test_memory_use_http_contract_runs_authenticated_suppress_allow_and_revision
         return previous, updated
 
     monkeypatch.setattr(memory_use_router, "_apply_canonical_user_mutation", fake_apply)
+    monkeypatch.setattr(memory_use_router, "get_data_plane_firestore_client", lambda: object())
     route = next(route for route in app.routes if route.path == "/v3/memories/{memory_id}/use")
     app.dependency_overrides[route.dependant.dependencies[0].call] = lambda: "user_1"
 
@@ -228,6 +229,7 @@ def test_memory_use_maps_apply_store_pause_and_fence_errors(
         raise error_factory()
 
     monkeypatch.setattr(memory_use_router, "_apply_canonical_user_mutation", raise_apply)
+    monkeypatch.setattr(memory_use_router, "get_data_plane_firestore_client", lambda: object())
     route = next(route for route in app.routes if route.path == "/v3/memories/{memory_id}/use")
     app.dependency_overrides[route.dependant.dependencies[0].call] = lambda: "user_1"
 
