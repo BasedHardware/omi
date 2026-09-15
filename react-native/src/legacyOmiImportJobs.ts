@@ -205,7 +205,7 @@ export function importJobRowCopy(
     parts.push(`${processed}/${job.totalFiles}`);
   }
   if (job.error != null) {
-    parts.push(visibleDisplayText(job.error));
+    parts.push(job.error);
   }
   return parts.join(' · ');
 }
@@ -252,7 +252,7 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
       row.error === null ||
       typeof row.error !== 'string'
         ? undefined
-        : visibleDisplayText(text(row.error, 1_000_000));
+        : text(row.error, 1_000_000);
     items.push({
       id,
       status,

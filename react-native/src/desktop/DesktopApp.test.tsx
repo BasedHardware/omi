@@ -8627,6 +8627,7 @@ test('Settings names Flutter ImportHistoryPage empty GET error without omitting 
         body: JSON.stringify([
           {job_id: 'job-empty-error', status: 'failed', error: ''},
           {job_id: 'job-whitespace-error', status: 'failed', error: ' \t'},
+          {job_id: 'job-padded-error', status: 'failed', error: '  padded  '},
           {job_id: 'job-omitted-error', status: 'failed'},
         ]),
       };
@@ -8649,6 +8650,8 @@ test('Settings names Flutter ImportHistoryPage empty GET error without omitting 
   const tree = renderedText(renderer);
   expect(tree).toContain('Import Data');
   expect(tree).toContain('Failed · ');
+  expect(tree).toContain('Failed ·  \t');
+  expect(tree).toContain('padded');
   expect(tree).toContain('Failed');
   expect(tree).not.toContain('job-empty-error');
   expect(tree).not.toContain('No imports yet');

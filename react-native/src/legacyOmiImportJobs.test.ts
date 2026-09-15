@@ -186,13 +186,17 @@ test('names Flutter ImportHistoryPage empty GET error instead of omitting the su
       JSON.stringify([
         {job_id: 'job-empty-error', status: 'failed', error: ''},
         {job_id: 'job-whitespace-error', status: 'failed', error: ' \t'},
+        {job_id: 'job-next-line-error', status: 'failed', error: '\u0085'},
+        {job_id: 'job-padded-error', status: 'failed', error: '  padded  '},
         {job_id: 'job-omitted-error', status: 'failed'},
         {job_id: 'job-null-error', status: 'failed', error: null},
       ]),
     ),
   ).toEqual([
     {id: 'job-empty-error', status: 'failed', error: ''},
-    {id: 'job-whitespace-error', status: 'failed', error: ''},
+    {id: 'job-whitespace-error', status: 'failed', error: ' \t'},
+    {id: 'job-next-line-error', status: 'failed', error: '\u0085'},
+    {id: 'job-padded-error', status: 'failed', error: '  padded  '},
     {id: 'job-omitted-error', status: 'failed'},
     {id: 'job-null-error', status: 'failed'},
   ]);
@@ -205,7 +209,21 @@ test('names Flutter ImportHistoryPage empty GET error instead of omitting the su
       status: 'failed',
       error: ' \t',
     }),
-  ).toBe('Failed · ');
+  ).toBe('Failed ·  \t');
+  expect(
+    importJobRowCopy({
+      id: 'job-next-line-error',
+      status: 'failed',
+      error: '\u0085',
+    }),
+  ).toBe('Failed · \u0085');
+  expect(
+    importJobRowCopy({
+      id: 'job-padded-error',
+      status: 'failed',
+      error: '  padded  ',
+    }),
+  ).toBe('Failed ·   padded  ');
   expect(importJobRowCopy({id: 'job-omitted-error', status: 'failed'})).toBe(
     'Failed',
   );
