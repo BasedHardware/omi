@@ -186,7 +186,7 @@ def requested_count(body: dict, default: int = 10) -> int:
     """How many posts the caller asked for, as a positive int bounded by the API ceiling."""
     try:
         count = int(body.get("max_results", default))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         count = default
     return max(1, min(count, MAX_RESULTS_CEILING))
 

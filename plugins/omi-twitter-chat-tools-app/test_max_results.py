@@ -170,7 +170,7 @@ class MaxResultsRespectsEndpointFloors(unittest.TestCase):
 
     def test_ceiling_and_non_integer_inputs_are_normalised(self):
         for name, floor, extra in TOOLS:
-            for requested, expected in ((250, 100), ("7", max(floor, 7)), ("many", 10), (None, 10), (0, floor), (-4, floor)):
+            for requested, expected in ((250, 100), ("7", max(floor, 7)), ("many", 10), (None, 10), (0, floor), (-4, floor), (float("inf"), 10), (float("nan"), 10), (1e309, 10)):
                 with self.subTest(tool=name, requested=requested):
                     self.api.calls.clear()
                     response = self.call(name, max_results=requested, **extra)
