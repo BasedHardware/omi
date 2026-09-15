@@ -980,6 +980,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
 
+  - id: notion-null-params-tests
+    command: ["python3", "plugins/omi-notion-app/test_main.py"]
+    triggers: ["plugins/omi-notion-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13944 the backend sends explicit JSON null for omitted optional params, so unguarded min(body.get(\"max_results\")) raised TypeError in all four Notion listing tools"
+
   - id: hey-omi-question-extraction-tests
     command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
