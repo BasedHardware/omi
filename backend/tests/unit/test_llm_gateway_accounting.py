@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from typing import Any
 
 from google.api_core.exceptions import AlreadyExists
+from google.cloud import firestore
 import pytest
 
-from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, record_llm_gateway_attempt
+from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, USER_DAYS_COLLECTION, record_llm_gateway_attempt
 from llm_gateway.gateway import accounting_sink
 from llm_gateway.gateway.accounting import (
     AccountingContext,
@@ -612,6 +615,181 @@ def test_firestore_ledger_marks_priced_omi_cost_complete_for_the_canonical_plan(
     assert stored['cost_attribution_status'] == 'complete'
 
 
+def test_user_day_rollup_hashes_uid_and_accumulates_one_document_per_user_day() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    first = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'desktop_chat',
+        'app_platform': 'desktop',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 2500,
+    }
+    second = {
+        'attempt_id': 'invocation-1:2',
+        'date': '2026-09-14',
+        'provider': 'gemini',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+        'payer': 'omi',
+        'cost_status': 'unpriced',
+    }
+
+    assert record_llm_gateway_attempt(first, firestore_client=client)
+    assert record_llm_gateway_attempt(second, firestore_client=client)
+
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    rollup = client.collections[USER_DAYS_COLLECTION][f'2026-09-14_{uid_hash}']
+    assert rollup['date'] == '2026-09-14'
+    assert rollup['uid_hash'] == uid_hash
+    assert rollup['attempts'] == 2
+    assert rollup['cost_micro_usd_sum'] == 2500
+    assert rollup['cost_openai'] == 2500
+    assert rollup.get('cost_gemini', 0) == 0
+    assert rollup.get('cost_other_provider', 0) == 0
+    assert rollup['attempts_unpriced'] == 1
+    assert rollup['fc_desktop'] == 2500
+    assert rollup.get('fc_chat', 0) == 0
+    # Last-seen attribution: the second attempt had no platform and no price.
+    assert rollup['app_platform'] == 'unattributed'
+    assert rollup['subscription_tier'] == 'pro'
+    assert rollup['plan_id'] == 'architect'
+    # The rollup never carries the raw Firebase uid, in values or field names.
+    assert 'user_uid' not in rollup
+    assert 'user-123' not in json.dumps(rollup)
+    assert len(client.collections[USER_DAYS_COLLECTION]) == 1
+
+
+def test_user_day_rollup_buckets_other_providers_and_separates_days_and_users() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-15',
+        'provider': 'anthropic',
+        'user_uid': 'user-456',
+        'feature': 'proactive_notification',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 700,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+
+    uid_hash = hashlib.sha256(b'user-456').hexdigest()[:16]
+    rollup = client.collections[USER_DAYS_COLLECTION][f'2026-09-15_{uid_hash}']
+    assert rollup['cost_other_provider'] == 700
+    assert rollup['cost_micro_usd_sum'] == 700
+    assert rollup['fc_proactive_notification'] == 700
+    assert 'attempts_unpriced' not in rollup
+    # A different user-day must land in its own document.
+    assert len(client.collections[USER_DAYS_COLLECTION]) == 1
+    other = dict(event, attempt_id='invocation-1:2', user_uid='user-789')
+    assert record_llm_gateway_attempt(other, firestore_client=client)
+    assert len(client.collections[USER_DAYS_COLLECTION]) == 2
+
+
+def test_user_day_rollup_does_not_double_count_duplicate_attempts() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 100,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert not record_llm_gateway_attempt(event, firestore_client=client)
+
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    rollup = client.collections[USER_DAYS_COLLECTION][f'2026-09-14_{uid_hash}']
+    assert rollup['attempts'] == 1
+    assert rollup['cost_micro_usd_sum'] == 100
+
+
+def test_user_day_rollup_failure_never_fails_the_attempt_write() -> None:
+    class _BrokenRollupClient(_FakeFirestoreClient):
+        def collection(self, name: str) -> _FakeCollection:
+            if name == USER_DAYS_COLLECTION:
+                raise RuntimeError('user-day datastore unavailable')
+            return super().collection(name)
+
+    client = _BrokenRollupClient(subscription_plan='pro')
+    event = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 100,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']['estimated_cost_micro_usd'] == 100
+
+
+def test_user_day_rollup_skips_events_without_a_date() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {'attempt_id': 'invocation-1:1', 'provider': 'openai', 'user_uid': 'user-123'}
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert USER_DAYS_COLLECTION not in client.collections
+
+
+def test_user_day_rollup_survives_an_unencodable_uid() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': '\ud800',  # lone surrogate: sha256(uid.encode()) raises
+        'feature': 'chat',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 100,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert ATTEMPTS_COLLECTION in client.collections
+    assert USER_DAYS_COLLECTION not in client.collections
+
+
+def test_user_day_rollup_pins_every_feature_bucket_the_ledger_puller_uses() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    features = ['chat', 'persona_gen', 'translation', 'memory_embeddings', 'screen_summary', '']
+
+    for ordinal, feature in enumerate(features, start=1):
+        event = {
+            'attempt_id': f'invocation-1:{ordinal}',
+            'date': '2026-09-14',
+            'provider': 'openai',
+            'user_uid': 'user-123',
+            'feature': feature,
+            'payer': 'omi',
+            'cost_status': 'estimated',
+            'estimated_cost_micro_usd': 10,
+        }
+        assert record_llm_gateway_attempt(event, firestore_client=client)
+
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    rollup = client.collections[USER_DAYS_COLLECTION][f'2026-09-14_{uid_hash}']
+    assert rollup['attempts'] == 6
+    assert rollup['fc_chat'] == 20  # chat + persona_gen
+    assert rollup['fc_translation'] == 10
+    assert rollup['fc_embeddings'] == 10
+    assert rollup['fc_extraction'] == 20  # screen_summary + featureless default
+    assert 'fc_desktop' not in rollup
+    assert 'fc_proactive_notification' not in rollup
+
+
 @pytest.mark.asyncio
 async def test_accounting_sink_records_delivery_failure_without_failing_the_request(monkeypatch) -> None:
     monkeypatch.setenv(accounting_sink.ACCOUNTING_ENABLED_ENV_VAR, 'true')
@@ -737,6 +915,16 @@ class _FakeDocument:
         if self._document_id in self._collection.documents:
             raise AlreadyExists('attempt already exists')
         self._collection.documents[self._document_id] = dict(data)
+
+    def set(self, data: dict[str, Any], merge: bool = False) -> None:
+        current = self._collection.documents.get(self._document_id, {})
+        stored = dict(current) if merge else {}
+        for key, value in data.items():
+            if isinstance(value, firestore.Increment):
+                stored[key] = current.get(key, 0) + value.value
+            else:
+                stored[key] = value
+        self._collection.documents[self._document_id] = stored
 
     def get(self, _fields: list[str]) -> _FakeSnapshot:
         return _FakeSnapshot(self._collection.documents.get(self._document_id))
