@@ -1269,7 +1269,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   @MainActor
-  func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
+  func testUsableByokEnvironmentIncludesEnrolledSelectedLLMAndDeepgram() {
     let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
@@ -1303,10 +1303,10 @@ final class AgentRuntimeProcessTests: XCTestCase {
           ($0.rawValue, APIKeyService.byokFingerprint("sk-agent-\($0.rawValue)"))
         }))
     UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
-    // usableBYOKEnvironment() gates on isByokActive, which requires the
-    // selected provider's key to be enrolled (#11454's fingerprint contract).
+    // Runtime forwarding requires each current key's fingerprint to be enrolled.
     APIKeyService.persistEnrolledFingerprints([
-      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter")
+      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter"),
+      BYOKProvider.deepgram.rawValue: APIKeyService.byokFingerprint("sk-agent-deepgram"),
     ])
 
     let result = AgentRuntimeProcess.usableBYOKEnvironment()

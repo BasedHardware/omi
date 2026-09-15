@@ -1,0 +1,3 @@
+{
+  "change": "Fixed custom API keys being cleared without explanation and stopped unvalidated or rotated keys from being used before enrollment"
+}
