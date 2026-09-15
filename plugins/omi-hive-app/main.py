@@ -680,7 +680,7 @@ async def tool_hive_get_tasks(request: Request):
         results = []
         for i, task in enumerate(tasks[:limit], 1):
             status = f" [{task.status}]" if task.status else ""
-            results.append(f"{i}. **{task.name}**{status}")
+            results.append(f"{i}. **{task.name}**{status} (`{task.id}`)")
         
         return ChatToolResponse(
             result=f"📝 Tasks in **{target_project.name}**:\n\n" + "\n".join(results)
@@ -825,7 +825,7 @@ async def tool_hive_search(request: Request):
         for i, task in enumerate(tasks, 1):
             project_info = f" (in {task.project_name})" if task.project_name else ""
             status = f" [{task.status}]" if task.status else ""
-            results.append(f"{i}. **{task.name}**{status}{project_info}")
+            results.append(f"{i}. **{task.name}**{status}{project_info} (`{task.id}`)")
         
         return ChatToolResponse(
             result=f"🔍 Found {len(tasks)} results for '{query}':\n\n" + "\n".join(results)
@@ -863,23 +863,25 @@ async def tool_hive_update_task_status(request: Request):
             
         # If no task_id, find task by name
         if not task_id and task_name:
-            tasks = search_tasks(uid, task_name, limit=5)
+            tasks = search_tasks(uid, task_name, limit=50)
             if not tasks:
                 return ChatToolResponse(error=f"Could not find task: {task_name}")
-            
-            # Find closest match
-            best_match = None
-            task_name_lower = task_name.lower()
-            for t in tasks:
-                if t.name.lower() == task_name_lower:
-                    best_match = t
-                    break
-            
-            if not best_match:
-                best_match = tasks[0] # Use first result as fallback
-                
-            task_id = best_match.id
-            task_name = best_match.name
+
+            # A status change is a mutation, so the name has to resolve to
+            # exactly one task: an exact (case insensitive) title match, or a
+            # single partial match. Anything else is ambiguous and is handed
+            # back with ids instead of guessing.
+            task_name_lower = task_name.strip().lower()
+            exact = [t for t in tasks if t.name.strip().lower() == task_name_lower]
+            candidates = exact if exact else tasks
+            if len(candidates) != 1:
+                listing = "\n".join(f"- {t.name} (`{t.id}`)" for t in candidates[:10])
+                return ChatToolResponse(
+                    error=f"More than one task matches '{task_name}'. Ask the user which one and call again with its task_id:\n{listing}"
+                )
+
+            task_id = candidates[0].id
+            task_name = candidates[0].name
 
         # Map status common terms to Hive status
         # Hive usually uses 'completed' or 'todo'

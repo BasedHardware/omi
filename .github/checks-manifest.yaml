@@ -1027,6 +1027,12 @@ checks:
     triggers: ["plugins/omi-coingecko-crypto-app/**", "scripts/run-plugin-coingecko-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the backend sends every optional tool parameter the model omitted as JSON null; the request models rejected null, so all four CoinGecko tools failed on the ordinary call"
+
+  - id: hive-task-status-match-tests
+    command: ["python3", "plugins/omi-hive-app/test_task_status_match.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hive_update_task_status fell back to the first substring search hit when no title matched exactly, so a status change by name could complete a different task than the user named"
   - id: github-app-client-tests
     command: ["python3", "plugins/omi-github-app/test_github_client.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
