@@ -287,6 +287,21 @@ def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None,
     ).inc(seconds)
 
 
+def record_live_stt_failover_accepted(*, provider: str | None, platform: str | None) -> None:
+    """Count a replacement provider that accepted a mid-session failover.
+
+    A session's ``LiveSTTAttempt`` is bound to the provider that accepted it at
+    start, so a provider that only ever serves as a failover hop would otherwise
+    read as accepted=0 while carrying real traffic (#13662).
+    """
+
+    OMI_LIVE_STT_ACCEPTED_TOTAL.labels(
+        provider=bounded_provider(provider),
+        client_platform=_bounded_platform(platform),
+        deployment_environment=_deployment_environment(),
+    ).inc()
+
+
 def record_listen_session_accepted(*, source: str | None, platform: str | None) -> None:
     """Count one accepted /v4/listen socket with bounded labels only."""
 
