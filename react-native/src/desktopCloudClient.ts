@@ -347,12 +347,7 @@ export function parseCloudLanguageNames(
     if (typeof entry.code !== 'string' || typeof entry.name !== 'string') {
       throw new Error(`${label} languages[${index}] is malformed`);
     }
-    const code = visibleDisplayText(entry.code);
-    const name = visibleDisplayText(entry.name);
-    if (code === '' || name === '') {
-      return;
-    }
-    names.push({code, name});
+    names.push({code: entry.code, name: entry.name});
   });
   return names.length === 0 ? null : names;
 }

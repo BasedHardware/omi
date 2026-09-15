@@ -1426,9 +1426,8 @@ export function primaryLanguageCopy(
     return null;
   }
   if (names !== undefined && names !== null && names.length > 0) {
-    const name = names.find(item => item.code === language)?.name;
-    const visibleName = visibleDisplayText(name ?? '');
-    return visibleName === '' ? primaryLanguageNotSetCopy() : visibleName;
+    const match = names.find(item => item.code === language);
+    return match === undefined ? primaryLanguageNotSetCopy() : match.name;
   }
   return language;
 }

@@ -1523,6 +1523,24 @@ test('primary language copy names Flutter notSet for empty or catalog-miss GET l
       {code: 'es', name: 'Spanish'},
     ]),
   ).toBe(primaryLanguageNotSetCopy());
+  expect(
+    primaryLanguageCopy('fr', [
+      {code: 'fr', name: ''},
+      {code: 'en', name: 'English'},
+    ]),
+  ).toBe('');
+  expect(
+    primaryLanguageCopy('fr', [
+      {code: 'fr', name: ' \t'},
+      {code: 'en', name: 'English'},
+    ]),
+  ).toBe(' \t');
+  expect(
+    primaryLanguageCopy('fr', [
+      {code: 'fr', name: '\u0085'},
+      {code: 'en', name: 'English'},
+    ]),
+  ).toBe('\u0085');
 });
 
 test('people name rows keep GET names without empty entries', () => {
@@ -6637,18 +6655,25 @@ test('loadAccountSettings names GET primary language without inventing Not set',
   );
 });
 
-test('names empty GET available-language name as omitted instead of hiding neighbors', () => {
+test('names Flutter LanguageSettingsPage empty GET available-language names instead of omitting them', () => {
   expect(
     parseCloudLanguageNames(
       {
         languages: [
           {code: 'fr', name: ''},
+          {code: 'de', name: ' \t'},
+          {code: 'it', name: '\u0085'},
           {code: 'en', name: 'English'},
         ],
       },
       'Languages',
     ),
-  ).toEqual([{code: 'en', name: 'English'}]);
+  ).toEqual([
+    {code: 'fr', name: ''},
+    {code: 'de', name: ' \t'},
+    {code: 'it', name: '\u0085'},
+    {code: 'en', name: 'English'},
+  ]);
   expect(() =>
     parseCloudLanguageNames(
       {languages: [{code: 'en', name: 1}]},

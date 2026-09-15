@@ -1688,6 +1688,70 @@ test('Settings names Flutter notSet for catalog-miss GET language', async () => 
   expect(tree).not.toContain('English');
 });
 
+test('Settings names Flutter LanguageSettingsPage empty GET language names', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/language') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({language: 'fr'}),
+      };
+    }
+    if (request.path === '/v1/users/available-languages') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          languages: [
+            {code: 'fr', name: ''},
+            {code: 'en', name: 'English'},
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Primary Language');
+  expect(tree).not.toContain('Not set');
+  expect(tree).not.toContain('English');
+  expect(tree).not.toContain('fr');
+});
+
+test('Settings names Flutter LanguageSettingsPage whitespace GET language names', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/language') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({language: 'de'}),
+      };
+    }
+    if (request.path === '/v1/users/available-languages') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          languages: [
+            {code: 'de', name: ' \t'},
+            {code: 'en', name: 'English'},
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Primary Language');
+  expect(tree).toContain(' \t');
+  expect(tree).not.toContain('Not set');
+  expect(tree).not.toContain('English');
+});
+
 test('Settings names GET people without a write sheet', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
