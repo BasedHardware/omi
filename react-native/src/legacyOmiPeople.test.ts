@@ -1,15 +1,17 @@
 import {loadOmiPeopleNames, parseOmiPeopleNames} from './legacyOmiPeople';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('parses GET people names and omits empty names', () => {
+test('names Flutter People.build empty GET names instead of omitting the person', () => {
   const names = parseOmiPeopleNames(
     JSON.stringify([
       {id: 'person-alex', name: 'Alex Chen'},
       {id: 'person-empty', name: ' \t'},
+      {id: 'person-blank', name: ''},
     ]),
   );
   expect(names.get('person-alex')).toBe('Alex Chen');
-  expect(names.has('person-empty')).toBe(false);
+  expect(names.get('person-empty')).toBe('');
+  expect(names.get('person-blank')).toBe('');
 });
 
 test('keeps GET people names when a person id exceeds 256', () => {
@@ -76,6 +78,12 @@ test('fails closed for malformed GET people', () => {
   ).toThrow();
   expect(() =>
     parseOmiPeopleNames(JSON.stringify([{id: 'person-alex', name: 1}])),
+  ).toThrow();
+  expect(() =>
+    parseOmiPeopleNames(JSON.stringify([{id: 'person-alex', name: null}])),
+  ).toThrow();
+  expect(() =>
+    parseOmiPeopleNames(JSON.stringify([{id: 'person-alex'}])),
   ).toThrow();
   expect(() =>
     parseOmiPeopleNames(
