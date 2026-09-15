@@ -9,10 +9,10 @@ settings_storage:
   region: flash_primary
   size: 0x8000
 external_flash:
-  address: 0x130000
+  address: 0x128000
   end_address: 0x200000
   region: external_flash
-  size: 0xd0000
+  size: 0xd8000
 mcuboot:
   address: 0x0
   end_address: 0x10000
@@ -68,9 +68,9 @@ mcuboot_secondary:
   - mcuboot_primary
   size: 0xe8000
 mcuboot_secondary_1:
-  address: 0xf0000
+  address: 0xe8000
   device: DT_CHOSEN(nordic_pm_ext_flash)
-  end_address: 0x130000
+  end_address: 0x128000
   region: external_flash
   size: 0x40000
 otp:
