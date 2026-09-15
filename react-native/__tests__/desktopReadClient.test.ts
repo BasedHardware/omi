@@ -1440,6 +1440,14 @@ test('account subscription copy is not a raw wire token', () => {
   expect(subscriptionStatusCopy('past_due')).toBe('Past due');
   expect(subscriptionPlanCopy('')).toBe('Free Plan');
   expect(subscriptionStatusCopy('')).toBe('Plan unavailable');
+  expect(subscriptionStatusCopy('inactive')).toBe('Inactive');
+  expect(subscriptionStatusCopy('  active  ')).toBe('Inactive');
+  expect(subscriptionStatusCopy('active ')).toBe('Inactive');
+  expect(subscriptionStatusCopy('\u0085active')).toBe('Inactive');
+  expect(subscriptionStatusCopy('ACTIVE')).toBe('Inactive');
+  expect(subscriptionStatusCopy('  inactive  ')).toBe('Inactive');
+  expect(subscriptionStatusCopy(' \t')).toBe('Inactive');
+  expect(subscriptionStatusCopy('\u0085')).toBe('Inactive');
   expect(subscriptionPlanCopy('\u0085')).toBe('Free Plan');
   expect(subscriptionPlanCopy('  plus  ')).toBe('Free Plan');
   expect(subscriptionPlanCopy('plus ')).toBe('Free Plan');

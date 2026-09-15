@@ -1599,6 +1599,33 @@ test('Settings names GET subscription transcription quota as minutes this month'
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter UsagePage padded GET status as Inactive', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          insights_gained_limit: 0,
+          insights_gained_used: 0,
+          transcription_seconds_used: 90,
+          transcription_seconds_limit: 3600,
+          words_transcribed_limit: 0,
+          words_transcribed_used: 0,
+          subscription: {plan: 'plus', status: '  active  '},
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Plus · Inactive · 2 of 60 min used this month');
+  expect(tree).not.toContain('Plus · Active');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names Flutter UsagePage padded GET plan as Free Plan', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -1999,7 +1999,16 @@ export function firmwareUpdateCopy(
 }
 
 export function subscriptionStatusCopy(status: string): string {
-  return accountWireCopy(status, 'Plan unavailable');
+  if (status === 'active') {
+    return 'Active';
+  }
+  if (status === 'past_due') {
+    return 'Past due';
+  }
+  if (status === '') {
+    return 'Plan unavailable';
+  }
+  return 'Inactive';
 }
 
 export function dataProtectionCopy(level: string): string {
