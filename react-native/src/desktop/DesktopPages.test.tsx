@@ -295,6 +295,16 @@ test.each(['completed', 'processing'])(
       StyleSheet.flatten(label(view, 'Back to conversations').props.style)
         .alignSelf,
     ).toBe('flex-start');
+    const copy = view.root
+      .findAllByType(Text)
+      .flatMap(node =>
+        Array.isArray(node.props.children)
+          ? node.props.children
+          : [node.props.children],
+      )
+      .join(' ');
+    expect(copy).not.toContain('Conversation summary unavailable');
+    expect(copy).not.toContain('Conversation summary is not ready yet.');
   },
 );
 

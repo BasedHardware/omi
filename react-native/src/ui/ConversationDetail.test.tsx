@@ -659,6 +659,40 @@ test('canonical listen rows do not invent a transcript producer', () => {
   );
 });
 
+test('listen details omit Flutter GetSummaryWidgets unused invented overview', () => {
+  const completed = text(
+    render({
+      conversation: {
+        ...conversation,
+        id: 'listen:empty-overview',
+        source: 'listen',
+        summary: '',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(completed).toContain('Planning');
+  expect(completed).not.toContain('Conversation summary unavailable');
+  expect(completed).not.toContain('Conversation summary is not ready yet.');
+  expect(completed).toContain(
+    'A full transcript is not available for this conversation yet.',
+  );
+  const processing = text(
+    render({
+      conversation: {
+        ...conversation,
+        id: 'listen:empty-overview-processing',
+        source: 'listen',
+        summary: ' \t\n',
+        status: 'processing',
+      },
+    }),
+  );
+  expect(processing).toContain('Planning');
+  expect(processing).not.toContain('Conversation summary is not ready yet.');
+  expect(processing).not.toContain('Conversation summary unavailable');
+});
+
 test('legacy details load the old-backend producer instead of claiming no transcript', () => {
   mockLegacy.mockReturnValue({
     result: {

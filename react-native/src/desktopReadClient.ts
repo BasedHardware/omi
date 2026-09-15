@@ -174,13 +174,7 @@ export function conversationDisplaySummary(item: {
   summary: string;
   status: string;
 }): string {
-  const summary = visibleDisplayText(item.summary);
-  if (summary !== '') {
-    return summary;
-  }
-  return item.status === 'processing'
-    ? 'Conversation summary is not ready yet.'
-    : 'Conversation summary unavailable';
+  return visibleDisplayText(item.summary);
 }
 
 export function conversationStatusCopy(status: string): string {

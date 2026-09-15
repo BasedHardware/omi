@@ -811,8 +811,7 @@ test('keeps processing conversations whose title and overview are not ready yet'
           title: '',
           summary: '',
           status: 'processing',
-          searchableText:
-            '\nConversation summary is not ready yet.',
+          searchableText: '\n',
         }),
       ],
     }),
@@ -3189,19 +3188,19 @@ test('task indent padding uses Flutter 28px steps instead of a flat list', () =>
   expect(taskIndentPadding(1.9)).toBe(28);
 });
 
-test('empty conversation summaries stay visible instead of a blank subtitle', () => {
+test('conversation display summary names Flutter empty GET overviews', () => {
   expect(
     conversationDisplaySummary({
       summary: '',
       status: 'processing',
     }),
-  ).toBe('Conversation summary is not ready yet.');
+  ).toBe('');
   expect(
     conversationDisplaySummary({
       summary: '',
       status: 'completed',
     }),
-  ).toBe('Conversation summary unavailable');
+  ).toBe('');
   expect(
     conversationDisplaySummary({
       summary: 'Walked to the market.',
@@ -3213,19 +3212,19 @@ test('empty conversation summaries stay visible instead of a blank subtitle', ()
       summary: ' \t\n',
       status: 'processing',
     }),
-  ).toBe('Conversation summary is not ready yet.');
+  ).toBe('');
   expect(
     conversationDisplaySummary({
       summary: ' \t\n',
       status: 'completed',
     }),
-  ).toBe('Conversation summary unavailable');
+  ).toBe('');
   expect(
     conversationDisplaySummary({
       summary: '\u0085',
       status: 'completed',
     }),
-  ).toBe('Conversation summary unavailable');
+  ).toBe('');
   expect(
     conversationDisplaySummary({
       summary: '  Walked to the market.  ',

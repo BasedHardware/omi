@@ -197,7 +197,8 @@ export function ConversationDetail({
           ? 'Discarded Conversation'
           : conversationDisplayTitle(conversation)}
       </Text>
-      {conversation.discarded ? null : (
+      {conversation.discarded ||
+      conversationDisplaySummary(conversation) === '' ? null : (
         <Text style={[styles.conversationDetailSummary, ink]}>
           {conversationDisplaySummary(conversation)}
         </Text>

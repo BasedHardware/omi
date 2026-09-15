@@ -324,6 +324,61 @@ test('untitled processing conversations stay visible instead of a blank row', ()
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });
 
+test('conversation search does not match invented empty-overview copy', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:empty-overview',
+    title: 'Morning standup',
+    summary: '',
+    searchableText: 'Morning standup\n',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('Morning standup');
+  act(() => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      )
+      .props.onChangeText('unavailable');
+  });
+  expect(textOf(renderer)).not.toContain('Conversation summary unavailable');
+  expect(textOf(renderer)).not.toContain(
+    'Conversation summary is not ready yet.',
+  );
+  expect(textOf(renderer)).toContain('No loaded conversations match.');
+});
+
 test('untitled conversations keep overview speech on the open control', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
