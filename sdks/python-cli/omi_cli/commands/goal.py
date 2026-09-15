@@ -129,13 +129,19 @@ def update_goal(
     target_value: Optional[float] = typer.Option(None, "--target"),
     current_value: Optional[float] = typer.Option(None, "--current"),
     min_value: Optional[float] = typer.Option(None, "--min"),
+    clear_min: bool = typer.Option(False, "--clear-min", help="Remove the existing minimum bound."),
     max_value: Optional[float] = typer.Option(None, "--max"),
+    clear_max: bool = typer.Option(False, "--clear-max", help="Remove the existing maximum bound."),
     unit: Optional[str] = typer.Option(None, "--unit"),
     clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
 ) -> None:
     ctx = _ctx(typer_ctx)
     if clear_unit and unit is not None:
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
+    if clear_min and min_value is not None:
+        raise UsageError(message="Conflicting options", detail="--min and --clear-min are mutually exclusive.")
+    if clear_max and max_value is not None:
+        raise UsageError(message="Conflicting options", detail="--max and --clear-max are mutually exclusive.")
     body: dict[str, object] = {}
     if title is not None:
         body["title"] = title
@@ -143,9 +149,13 @@ def update_goal(
         body["target_value"] = target_value
     if current_value is not None:
         body["current_value"] = current_value
-    if min_value is not None:
+    if clear_min:
+        body["min_value"] = None
+    elif min_value is not None:
         body["min_value"] = min_value
-    if max_value is not None:
+    if clear_max:
+        body["max_value"] = None
+    elif max_value is not None:
         body["max_value"] = max_value
     if clear_unit:
         body["unit"] = None
@@ -154,7 +164,7 @@ def update_goal(
     if not body:
         raise UsageError(
             message="No fields to update",
-            detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit.",
+            detail="Provide one of --title/--target/--current/--min/--clear-min/--max/--clear-max/--unit/--clear-unit.",
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
