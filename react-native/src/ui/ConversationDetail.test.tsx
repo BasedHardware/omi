@@ -3400,17 +3400,18 @@ test('legacy conversation details name Flutter GetSummaryWidgets empty GET folde
       folderId: 'folder-empty',
     },
   });
-  const emptyFolders = view.root.findAll(node => {
+  const whitespaceFolders = view.root.findAll(node => {
     if (node.type !== Text) {
       return false;
     }
     const children = node.props.children;
     return (
-      children === '' ||
-      (Array.isArray(children) && children.some(child => child === ''))
+      children === ' \t\n' ||
+      (Array.isArray(children) && children.some(child => child === ' \t\n'))
     );
   });
-  expect(emptyFolders.length).toBeGreaterThan(0);
+  expect(whitespaceFolders.length).toBeGreaterThan(0);
+  expect(text(view)).toContain(' \t\n');
   expect(text(view)).not.toContain(conversationNoFolderCopy());
   expect(text(view)).not.toContain('folder-empty');
 });

@@ -360,7 +360,7 @@ function LegacyConversationBody({
   const folderLabel =
     folderName === undefined || folderName === null
       ? conversationNoFolderCopy()
-      : visibleDisplayText(folderName);
+      : folderName;
   const folderColor = visibleDisplayText(detail.folderColor ?? '');
   const folderIcon = visibleDisplayText(detail.folderIcon ?? '');
   const externalText = visibleDisplayText(detail.externalText ?? '');
