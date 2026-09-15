@@ -521,6 +521,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get doubleTap => 'Dublă apăsare';
 
   @override
+  String get singleTap => 'Apăsare simplă';
+
+  @override
   String get ledBrightness => 'Luminozitate LED';
 
   @override
@@ -592,6 +595,15 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Acțiune dublă apăsare';
+
+  @override
+  String get tripleTap => 'Triplă apăsare';
+
+  @override
+  String get tripleTapAction => 'Acțiune triplă apăsare';
+
+  @override
+  String get singleTapAction => 'Acțiune apăsare simplă';
 
   @override
   String get endAndProcess => 'Încheie și procesează conversația';

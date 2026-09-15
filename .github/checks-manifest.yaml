@@ -44,6 +44,12 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: firmware-button-tap-sequence-tests
+    command: ["bash", "omi/firmware/omi/tests/tap_sequence/run.sh"]
+    triggers: ["omi/firmware/omi/src/lib/core/tap_sequence.h", "omi/firmware/omi/tests/tap_sequence/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "Issue 2825: the CV1 tap sequence recogniser reports every tap count and one sequence end, so the app can act without waiting when no longer gesture is mapped"
   - id: linear-list-issues-params-tests
     command: ["python3", "plugins/omi-linear-app/test_list_issues_params.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]

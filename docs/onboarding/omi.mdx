@@ -53,11 +53,11 @@ sidebarTitle: "Omi Setup"
 
 ## Button Controls
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Single Tap" icon="microphone">
-    **Ask a Question**
+    **Ask a Question (Configurable)**
 
-    Tap once to start recording a voice question. Tap again when you're done speaking (or wait 15 seconds). Your answer will appear in Omi chat.
+    Tap once to start recording a voice question. Tap again when you're done speaking (or wait 15 seconds). Your answer will appear in Omi chat. You can change what a single tap does in **Settings → Device Settings → Single Tap**.
   </Card>
   <Card title="Double Tap" icon="hand-peace">
     **Quick Action (Configurable)**
@@ -66,6 +66,12 @@ sidebarTitle: "Omi Setup"
     - End & save conversation (default)
     - Pause / resume recording
     - Star the current conversation
+    - Off (on firmware with triple tap)
+  </Card>
+  <Card title="Triple Tap" icon="hand-pointer">
+    **Second Quick Action (Configurable)**
+
+    On firmware with triple tap, choose what it does in **Settings → Device Settings → Triple Tap**. It ends and saves the conversation by default, and can also pause / resume, star, or be turned off. Turning off the taps you don't use makes the ones you do use respond right away.
   </Card>
   <Card title="Long Press (3s)" icon="power-off">
     **Power Off**

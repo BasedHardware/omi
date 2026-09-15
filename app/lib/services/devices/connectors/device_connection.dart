@@ -322,6 +322,18 @@ abstract class DeviceConnection {
     return stream.listen(onButtonReceived);
   }
 
+  Future<StreamSubscription?> getBleButtonTapsListener({required void Function(List<int>) onTapsReceived}) async {
+    if (await isConnected()) {
+      return await performGetBleButtonTapsListener(onTapsReceived: onTapsReceived);
+    }
+    return null;
+  }
+
+  Future<StreamSubscription?> performGetBleButtonTapsListener(
+      {required void Function(List<int>) onTapsReceived}) async {
+    return null;
+  }
+
   Future<BleAudioCodec> getAudioCodec() async {
     if (await isConnected()) {
       return await performGetAudioCodec();

@@ -521,6 +521,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get doubleTap => 'Doble toc';
 
   @override
+  String get singleTap => 'Toc simple';
+
+  @override
   String get ledBrightness => 'Brillantor LED';
 
   @override
@@ -592,6 +595,15 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Acció de doble toc';
+
+  @override
+  String get tripleTap => 'Triple toc';
+
+  @override
+  String get tripleTapAction => 'Acció de triple toc';
+
+  @override
+  String get singleTapAction => 'Acció de toc simple';
 
   @override
   String get endAndProcess => 'Finalitzar i processar conversa';
