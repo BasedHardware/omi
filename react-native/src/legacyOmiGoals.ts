@@ -1,5 +1,4 @@
 import type {OmiBackend} from './omiNativeTypes';
-import {visibleDisplayText} from './desktopReadClient';
 
 class GoalError extends Error {
   constructor() {
@@ -33,10 +32,10 @@ function goalId(value: unknown): string | null {
     return '';
   }
   if (typeof value === 'string') {
-    return visibleDisplayText(text(value, 1_000_000));
+    return text(value, 1_000_000);
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return visibleDisplayText(String(value));
+    return String(value);
   }
   return null;
 }

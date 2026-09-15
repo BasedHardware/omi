@@ -2642,6 +2642,10 @@ test('conversation list names GET goals without add or a write sheet', async () 
           },
           {id: 'goal-missing', title: 'Missing metrics', target_value: 10},
           {id: 'goal-empty', title: ' \t', current_value: 1, target_value: 2},
+          {id: ' \t', title: 'Whitespace id', current_value: 2, target_value: 2},
+          {id: '\u0085', title: 'Next line id', current_value: 2.5, target_value: 2.5},
+          {id: '  padded  ', title: 'Padded id', current_value: 1, target_value: 1},
+          {id: '', title: 'Empty id', current_value: 5, target_value: 8},
         ]),
       };
     }
@@ -2678,6 +2682,10 @@ test('conversation list names GET goals without add or a write sheet', async () 
   expect(tree).toContain('Missing metrics');
   expect(tree).toContain('0/10');
   expect(tree).toContain('1/2');
+  expect(tree).toContain('Whitespace id');
+  expect(tree).toContain('Next line id');
+  expect(tree).toContain('Padded id');
+  expect(tree).toContain('Empty id');
   expect(tree).toContain(conversationsEmptyCopy());
   expect(tree).not.toContain('No conversations yet.');
   expect(tree).not.toContain('goal-read');

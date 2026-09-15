@@ -137,6 +137,9 @@ test('names Flutter Goal.fromJson empty GET ids instead of omitting the row', ()
       },
       {id: '', title: 'Empty id', current_value: 1, target_value: 1},
       {id: ' \t', title: 'Whitespace id', current_value: 2, target_value: 2},
+      {id: '\u0085', title: 'Next line id', current_value: 2.5, target_value: 2.5},
+      {id: '  padded  ', title: 'Padded id', current_value: 2.75, target_value: 2.75},
+      {id: 'padded', title: 'Trimmed id', current_value: 2.8, target_value: 2.8},
       {id: null, title: 'Null id', current_value: 3, target_value: 3},
       {title: 'Omitted id', current_value: 4, target_value: 4},
       {
@@ -150,7 +153,10 @@ test('names Flutter Goal.fromJson empty GET ids instead of omitting the row', ()
   expect(rows).toEqual([
     {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
     {id: '', title: 'Empty id', current: 1, target: 1},
-    {id: '', title: 'Whitespace id', current: 2, target: 2},
+    {id: ' \t', title: 'Whitespace id', current: 2, target: 2},
+    {id: '\u0085', title: 'Next line id', current: 2.5, target: 2.5},
+    {id: '  padded  ', title: 'Padded id', current: 2.75, target: 2.75},
+    {id: 'padded', title: 'Trimmed id', current: 2.8, target: 2.8},
     {id: '', title: 'Null id', current: 3, target: 3},
     {id: '', title: 'Omitted id', current: 4, target: 4},
     {id: 'goal-run', title: 'Run weekly', current: 1.5, target: 4},
