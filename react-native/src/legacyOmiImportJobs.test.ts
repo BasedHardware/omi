@@ -211,6 +211,36 @@ test('names Flutter ImportHistoryPage empty GET error instead of omitting the su
   );
 });
 
+test('names Flutter ImportHistoryPage empty GET ids instead of omitting them', () => {
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-1', status: 'completed'},
+        {job_id: ' \t', status: 'failed', error: 'Zip could not be read.'},
+        {
+          job_id: '\u0085',
+          status: 'processing',
+          processed_files: 1,
+          total_files: 2,
+        },
+        {job_id: '', status: 'queued'},
+        {job_id: '  padded  ', status: 'completed', conversations_created: 1},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-1', status: 'completed'},
+    {id: ' \t', status: 'failed', error: 'Zip could not be read.'},
+    {
+      id: '\u0085',
+      status: 'processing',
+      processedFiles: 1,
+      totalFiles: 2,
+    },
+    {id: '', status: 'queued'},
+    {id: '  padded  ', status: 'completed', conversationsCreated: 1},
+  ]);
+});
+
 test('names GET empty import jobs as Flutter No imports yet', () => {
   expect(importJobsEmptyCopy()).toBe('No imports yet');
   expect(importJobsCopy([])).toEqual([

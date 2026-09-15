@@ -236,10 +236,7 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
   const seen = new Set<string>();
   for (const raw of rows) {
     const row = object(raw);
-    const id = visibleDisplayText(text(row.job_id, 1_000_000));
-    if (id === '') {
-      throw new ImportJobError();
-    }
+    const id = text(row.job_id, 1_000_000);
     if (seen.has(id)) {
       throw new ImportJobError();
     }

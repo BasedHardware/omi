@@ -3116,6 +3116,39 @@ test('Settings names Flutter ImportHistoryPage empty GET error without omitting 
   expect(tree).not.toContain('Start import');
 });
 
+test('Settings names Flutter ImportHistoryPage empty GET ids without noImportsYet', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/import/jobs?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {job_id: ' \t', status: 'failed', error: 'Zip could not be read.'},
+          {job_id: '', status: 'queued'},
+          {job_id: 'job-neighbor', status: 'completed', conversations_created: 1},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Import Data');
+  expect(tree).toContain('Failed · Zip could not be read.');
+  expect(tree).toContain('Pending');
+  expect(tree).toContain('Completed · 1 conversations');
+  expect(tree).not.toContain('job-neighbor');
+  expect(tree).not.toContain('No imports yet');
+  expect(tree).not.toContain('Limitless');
+  expect(tree).not.toContain('Start import');
+});
+
 test('Settings names Flutter noImportsYet for empty GET import jobs', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
