@@ -47,19 +47,44 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
+    server_page_size = 25 if include_transcript else 100
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/conversations",
-            params={
-                "limit": limit,
-                "offset": offset,
-                "start_date": start_date.isoformat() if start_date else None,
-                "end_date": end_date.isoformat() if end_date else None,
-                "categories": categories,
-                "include_transcript": include_transcript,
-            },
-        )
+        if limit <= server_page_size:
+            items = client.get(
+                "/v1/dev/user/conversations",
+                params={
+                    "limit": limit,
+                    "offset": offset,
+                    "start_date": start_date.isoformat() if start_date else None,
+                    "end_date": end_date.isoformat() if end_date else None,
+                    "categories": categories,
+                    "include_transcript": include_transcript,
+                },
+            )
+        else:
+            items = []
+            current_offset = offset
+            while len(items) < limit:
+                batch_limit = min(limit - len(items), server_page_size)
+                page = client.get(
+                    "/v1/dev/user/conversations",
+                    params={
+                        "limit": batch_limit,
+                        "offset": current_offset,
+                        "start_date": start_date.isoformat() if start_date else None,
+                        "end_date": end_date.isoformat() if end_date else None,
+                        "categories": categories,
+                        "include_transcript": include_transcript,
+                    },
+                )
+                if not page:
+                    break
+                items.extend(page)
+                current_offset += batch_limit
+            if len(items) > limit:
+                items = items[:limit]
+
     if ctx.renderer.json_mode:
         ctx.renderer.emit(items)
         return
