@@ -64,6 +64,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: open-library-tests
+    command: ["python3", "plugins/omi-open-library-app/test_main.py"]
+    triggers: ["plugins/omi-open-library-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13939: non-dict upstream payloads and null/non-list docs/works collections or elements must return clean chat-tool responses instead of raising AttributeError/TypeError"
   - id: linear-list-issues-params-tests
     command: ["python3", "plugins/omi-linear-app/test_list_issues_params.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]

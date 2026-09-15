@@ -101,6 +101,18 @@ def _description_text(description: Any) -> str:
     return text
 
 
+def _dict_list(value: Any) -> list[dict[str, Any]]:
+    """Keep only dict entries from an upstream JSON list.
+
+    Open Library occasionally returns strings, nulls, or error objects where an
+    array is expected; anything that is not a list of objects means no usable
+    rows (#13939).
+    """
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 def _work_id(value: Any) -> Optional[str]:
     candidate = _clean_text(value)
     if not candidate:
@@ -128,7 +140,9 @@ def _subject_slug(subject: Any) -> Optional[str]:
     return slug[:80] or None
 
 
-def _format_book(doc: dict[str, Any], index: int) -> str:
+def _format_book(doc: Any, index: int) -> str:
+    if not isinstance(doc, dict):
+        doc = {}
     title = _clean_text(doc.get("title")) or "Untitled"
     authors = _join_values(doc.get("author_name")) or "unknown author"
     year = doc.get("first_publish_year") or "unknown year"
@@ -146,21 +160,23 @@ def _format_book(doc: dict[str, Any], index: int) -> str:
     return "\n".join(lines)
 
 
-def _format_subject_work(work: dict[str, Any], index: int) -> str:
+def _format_subject_work(work: Any, index: int) -> str:
+    if not isinstance(work, dict):
+        work = {}
     title = _clean_text(work.get("title")) or "Untitled"
     authors = ", ".join(
         _clean_text(author.get("name"))
-        for author in work.get("authors", [])
-        if isinstance(author, dict) and _clean_text(author.get("name"))
+        for author in _dict_list(work.get("authors"))
+        if _clean_text(author.get("name"))
     )
     authors = authors or "unknown author"
     year = work.get("first_publish_year") or "unknown year"
-    key = _clean_text(work.get("key")).removeprefix("/works/")
+    key = _clean_text(work.get("key")).removeprefix("/works/") or "unknown"
     edition_count = work.get("edition_count") or 0
     return f"{index}. {title}\n   Author: {authors} | First published: {year} | Editions: {edition_count} | Work: {key}"
 
 
-async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> Any:
     client = await _get_open_library_client()
     response = await client.get(f"{OPEN_LIBRARY_BASE_URL}{path}", params=params)
     response.raise_for_status()
@@ -297,7 +313,9 @@ async def search_books(payload: dict[str, Any]):
 
     try:
         data = await _request_json("/search.json", params=params)
-        docs = data.get("docs", [])[:limit]
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Open Library search returned an invalid response.")
+        docs = _dict_list(data.get("docs"))[:limit]
         if not docs:
             return ChatToolResponse(result="No matching books found.")
 
@@ -325,32 +343,34 @@ async def get_book_details(payload: dict[str, Any]):
                 "/api/books",
                 params={"bibkeys": f"ISBN:{isbn}", "format": "json", "jscmd": "data"},
             )
+            if not isinstance(data, dict):
+                return ChatToolResponse(error="Open Library details request returned an invalid response.")
             book = data.get(f"ISBN:{isbn}")
-            if not book:
+            if not isinstance(book, dict) or not book:
                 return ChatToolResponse(result=f"No Open Library details found for ISBN {isbn}.")
 
             title = _clean_text(book.get("title")) or "Untitled"
             authors = ", ".join(
                 _clean_text(author.get("name"))
-                for author in book.get("authors", [])
-                if isinstance(author, dict) and _clean_text(author.get("name"))
+                for author in _dict_list(book.get("authors"))
+                if _clean_text(author.get("name"))
             ) or "unknown author"
             publishers = ", ".join(
                 _clean_text(publisher.get("name"))
-                for publisher in book.get("publishers", [])
-                if isinstance(publisher, dict) and _clean_text(publisher.get("name"))
+                for publisher in _dict_list(book.get("publishers"))
+                if _clean_text(publisher.get("name"))
             )
             publish_date = _clean_text(book.get("publish_date")) or "unknown date"
             subjects = ", ".join(
                 _clean_text(subject.get("name"))
-                for subject in book.get("subjects", [])[:6]
-                if isinstance(subject, dict) and _clean_text(subject.get("name"))
+                for subject in _dict_list(book.get("subjects"))[:6]
+                if _clean_text(subject.get("name"))
             )
             details = [
                 f"{title}",
                 f"Author: {authors}",
                 f"Published: {publish_date}",
-                f"Open Library: {book.get('url', '')}",
+                f"Open Library: {_clean_text(book.get('url'))}",
             ]
             if publishers:
                 details.append(f"Publisher: {publishers}")
@@ -362,6 +382,8 @@ async def get_book_details(payload: dict[str, Any]):
             return ChatToolResponse(error="Provide a valid Open Library work_id like OL45883W or an ISBN.")
 
         data = await _request_json(f"/works/{work_id}.json")
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Open Library details request returned an invalid response.")
         title = _clean_text(data.get("title")) or "Untitled"
         description = _description_text(data.get("description"))
         subjects = _join_values(data.get("subjects"), limit=8)
@@ -400,7 +422,9 @@ async def search_subject(payload: dict[str, Any]):
     try:
         encoded_slug = quote(slug)
         data = await _request_json(f"/subjects/{encoded_slug}.json", params={"limit": limit})
-        works = data.get("works", [])[:limit]
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Open Library subject search returned an invalid response.")
+        works = _dict_list(data.get("works"))[:limit]
         if not works:
             return ChatToolResponse(result=f"No books found for subject {subject}.")
 
