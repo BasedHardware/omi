@@ -3916,6 +3916,53 @@ test('Settings names Flutter ChangelogSheet empty GET app_version as What\'s New
   expect(tree).not.toContain('Dismiss');
 });
 
+test('Settings names Flutter ChangelogSheet empty GET ids without omitting What\'s New', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: ' \t',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.3.0',
+            content: {changes: [{title: 'Whitespace id', description: ''}]},
+          },
+          {
+            id: '',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.5.0',
+            content: {changes: [{title: 'Blank id', description: ''}]},
+          },
+          {
+            id: 'ann-neighbor',
+            type: 'changelog',
+            created_at: '2026-09-09T12:00:00.000Z',
+            app_version: '1.2.0',
+            content: {changes: [{title: 'Faster sync', description: ''}]},
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New in 1.3.0");
+  expect(tree).toContain('✨ · Whitespace id · ');
+  expect(tree).toContain("What's New in 1.5.0");
+  expect(tree).toContain('✨ · Blank id · ');
+  expect(tree).toContain("What's New in 1.2.0");
+  expect(tree).toContain('✨ · Faster sync · ');
+  expect(tree).not.toContain(appChangelogsLoadErrorCopy());
+  expect(tree).not.toContain('ann-neighbor');
+  expect(tree).not.toContain('Dismiss');
+});
+
 test('Settings names Flutter ChangelogSheet empty GET change titles without omitting What\'s New', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

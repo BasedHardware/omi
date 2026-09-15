@@ -182,10 +182,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
     if (type !== 'changelog') {
       throw new AppChangelogError();
     }
-    const id = visibleDisplayText(text(row.id, 1_000_000));
-    if (id === '') {
-      throw new AppChangelogError();
-    }
+    const id = text(row.id, 1_000_000);
     if (seen.has(id)) {
       throw new AppChangelogError();
     }

@@ -146,6 +146,76 @@ test('names Flutter ChangelogSheet empty GET app_version as What\'s New in ', ()
   ]);
 });
 
+test('names Flutter ChangelogSheet empty GET ids instead of omitting them', () => {
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-1',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Faster sync', description: ''}]},
+        },
+        {
+          id: ' \t',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.3.0',
+          content: {changes: [{title: 'Whitespace id', description: ''}]},
+        },
+        {
+          id: '\u0085',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.4.0',
+          content: {changes: [{title: 'Next line id', description: ''}]},
+        },
+        {
+          id: '',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.5.0',
+          content: {changes: [{title: 'Blank id', description: ''}]},
+        },
+        {
+          id: '  padded  ',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.6.0',
+          content: {changes: [{title: 'Padded id', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-1:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Faster sync · ',
+    },
+    {
+      key: ' \t:0',
+      title: "What's New in 1.3.0",
+      copy: '✨ · Whitespace id · ',
+    },
+    {
+      key: '\u0085:0',
+      title: "What's New in 1.4.0",
+      copy: '✨ · Next line id · ',
+    },
+    {
+      key: ':0',
+      title: "What's New in 1.5.0",
+      copy: '✨ · Blank id · ',
+    },
+    {
+      key: '  padded  :0',
+      title: "What's New in 1.6.0",
+      copy: '✨ · Padded id · ',
+    },
+  ]);
+});
+
 test('names Flutter ChangelogSheet empty GET change titles instead of omitting the announcement', () => {
   expect(
     parseOmiAppChangelogs(
