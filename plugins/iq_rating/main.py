@@ -291,12 +291,15 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
             )
             
             if response.status_code == 200:
-                result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
-                
-                if answer.upper() != "NONE":
-                    batch_valid = [n.strip() for n in answer.split(",") if n.strip()]
-                    valid_names.extend(batch_valid)
+                            result = response.json()
+                            choices = result.get("choices", [])
+                            if not choices:
+                                continue
+                            answer = choices[0].get("message", {}).get("content", "").strip()
+
+                            if answer.upper() != "NONE":
+                                batch_valid = [n.strip() for n in answer.split(",") if n.strip()]
+                                valid_names.extend(batch_valid)
             else:
                 logger.error(f"OpenAI API error: {response.status_code}")
                 # On error, skip this batch

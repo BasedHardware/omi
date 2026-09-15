@@ -295,6 +295,8 @@ async def search_books(payload: dict[str, Any]):
 
     try:
         data = await _request_json("/search.json", params=params)
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Open Library returned an unexpected response format.")
         docs = data.get("docs", [])[:limit]
         if not docs:
             return ChatToolResponse(result="No matching books found.")
