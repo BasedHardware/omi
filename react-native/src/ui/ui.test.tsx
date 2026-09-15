@@ -3369,6 +3369,34 @@ test('wide Home search task rows omit Flutter ActionItemsPage due dates', () => 
   expect(tree).not.toContain('No due date');
 });
 
+test('wide Home search task rows name Flutter empty GET descriptions', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'task',
+        id: 'task-empty-home-search',
+        title: '',
+        summary: '',
+        searchableText: 'Task title unavailable',
+        completed: false,
+        completedAt: null,
+        dueAt: null,
+        owner: null,
+        source: 'assistant',
+        provenance: [],
+        sortOrder: 1,
+        indentLevel: 0,
+        createdAt: 1785900000,
+        updatedAt: 1785900100,
+        revision: null,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).not.toContain('Task title unavailable');
+  expect(tree).toContain('task');
+});
+
 test('wide Home search task rows omit invented No due date', () => {
   const renderer = render(
     <ProjectionRow

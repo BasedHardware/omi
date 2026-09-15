@@ -2787,8 +2787,7 @@ export function taskDisplaySummary(_item: {
 }
 
 export function taskDisplayTitle(item: {title: string}): string {
-  const title = visibleDisplayText(item.title);
-  return title !== '' ? title : 'Task title unavailable';
+  return visibleDisplayText(item.title);
 }
 
 const TASK_EXPORT_PLATFORM_COPY: Record<string, string> = {

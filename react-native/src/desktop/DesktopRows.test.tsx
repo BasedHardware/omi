@@ -672,6 +672,24 @@ test('Home rows omit Flutter TodayTasksWidget export chrome', () => {
   expect(textOf(omitted)).not.toContain('Exported to');
 });
 
+test('Home and Tasks rows name Flutter empty GET descriptions', () => {
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let tasks!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(
+      <ReadRow item={{...taskItem(null), title: '', searchableText: ''}} />,
+    );
+    tasks = ReactTestRenderer.create(
+      <TaskRow item={{...taskItem(null), title: ' \t\n', searchableText: ''}} />,
+    );
+  });
+  expect(textOf(home)).not.toContain('Task title unavailable');
+  expect(textOf(tasks)).not.toContain('Task title unavailable');
+  expect(textOf(tasks)).not.toContain(' \t\n');
+  expect(home.root.findAllByType(Text).length).toBeGreaterThan(0);
+  expect(tasks.root.findAllByType(Text).length).toBeGreaterThan(0);
+});
+
 test('Tasks rows name GET exported platforms and omit missing exports', () => {
   let exported!: ReactTestRenderer.ReactTestRenderer;
   let omitted!: ReactTestRenderer.ReactTestRenderer;

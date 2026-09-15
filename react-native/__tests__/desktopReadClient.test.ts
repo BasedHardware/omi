@@ -3177,10 +3177,10 @@ test('task display summary omits Flutter ActionItemsPage row due dates', () => {
   expect(taskGroup(0, Date.now())).toBe('Later');
 });
 
-test('empty task titles stay visible instead of a blank row', () => {
-  expect(taskDisplayTitle({title: ''})).toBe('Task title unavailable');
-  expect(taskDisplayTitle({title: ' \t\n'})).toBe('Task title unavailable');
-  expect(taskDisplayTitle({title: '\u0085'})).toBe('Task title unavailable');
+test('task display title names Flutter empty GET titles', () => {
+  expect(taskDisplayTitle({title: ''})).toBe('');
+  expect(taskDisplayTitle({title: ' \t\n'})).toBe('');
+  expect(taskDisplayTitle({title: '\u0085'})).toBe('');
   expect(taskDisplayTitle({title: 'Prepare demo'})).toBe('Prepare demo');
   expect(taskDisplayTitle({title: '  Prepare demo  '})).toBe('Prepare demo');
 });
@@ -4421,12 +4421,12 @@ test('keeps ratified empty task descriptions instead of failing the page', async
     expect.objectContaining({
       id: 'task1_abc',
       title: '',
-      searchableText: 'Task title unavailable',
+      searchableText: '',
     }),
     expect.objectContaining({
       id: 'task2_abc',
       title: ' \t\n',
-      searchableText: 'Task title unavailable',
+      searchableText: '',
     }),
     expect.objectContaining({
       id: 'task3_abc',

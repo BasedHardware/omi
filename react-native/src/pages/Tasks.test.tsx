@@ -79,7 +79,7 @@ test('task page remains read-only without write authority', () => {
   expect(copy).toContain('Task editing is unavailable for this connection.');
 });
 
-test('a whitespace-only task title stays visible instead of a blank row', () => {
+test('task page names Flutter empty GET titles', () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     renderer = ReactTestRenderer.create(
@@ -100,12 +100,14 @@ test('a whitespace-only task title stays visible instead of a blank row', () => 
     .map(node => node.props.children)
     .flat()
     .join(' ');
-  expect(copy).toContain('Task title unavailable');
+  expect(copy).not.toContain('Task title unavailable');
   expect(copy).not.toContain(' \t\n');
+  expect(control(renderer, 'Task ')).toBeDefined();
+  expect(control(renderer, 'Task: ')).toBeDefined();
   act(() => renderer.unmount());
 });
 
-test('task search matches the visible title fallback for empty titles', () => {
+test('task search does not match invented empty-title copy', () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     renderer = ReactTestRenderer.create(
@@ -121,6 +123,7 @@ test('task search matches the visible title fallback for empty titles', () => {
       />,
     );
   });
+  expect(control(renderer, 'Task ')).toBeDefined();
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
@@ -131,9 +134,8 @@ test('task search matches the visible title fallback for empty titles', () => {
     .map(node => node.props.children)
     .flat()
     .join(' ');
-  expect(copy).toContain('Task title unavailable');
-  expect(copy).not.toContain('No loaded tasks match.');
-  expect(copy).not.toContain(tasksSearchEmptyCopy());
+  expect(copy).not.toContain('Task title unavailable');
+  expect(copy).toContain(tasksSearchEmptyCopy());
   act(() => renderer.unmount());
 });
 

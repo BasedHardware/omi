@@ -783,6 +783,37 @@ test('Home names Flutter TodayTasksWidget Today heading', () => {
   ).toBeDefined();
 });
 
+test('Home names Flutter TodayTasksWidget empty GET descriptions', () => {
+  const renderer = render({
+    writesAvailable: true,
+    tasks: [{id: 'task-1', title: '', completed: false}],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).not.toContain('Task title unavailable');
+  expect(tree).toContain(compactHomeTodayTasksTitleCopy());
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'View All Today',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Complete '),
+  ).toBeDefined();
+});
+
+test('compact Tasks tab names Flutter ActionItemsPage empty GET descriptions', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    writesAvailable: true,
+    tasks: [{id: 'task-1', title: ' \t\n', completed: false}],
+  });
+  expect(renderedText(renderer)).not.toContain('Task title unavailable');
+  expect(renderedText(renderer)).not.toContain(' \t\n');
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Complete '),
+  ).toBeDefined();
+});
+
 test('empty Tasks tab names Flutter ActionItemsPage unfiltered empty', () => {
   const renderer = render({activeRoute: 'tasks', tasks: []});
   expect(renderedText(renderer)).toContain(tasksEmptyCopy());

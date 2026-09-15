@@ -975,7 +975,7 @@ test('old empty task descriptions stay searchable instead of failing the page', 
     expect.objectContaining({
       id: 'blank',
       title: '',
-      searchableText: 'Task title unavailable',
+      searchableText: '',
     }),
     expect.objectContaining({
       id: 'named',

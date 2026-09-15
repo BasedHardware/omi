@@ -130,6 +130,31 @@ test('lost write eligibility closes an open editor and disables completion', () 
   ).toHaveLength(0);
 });
 
+test('untitled tasks name Flutter empty GET descriptions', () => {
+  const value = outcomes(false);
+  if (value.tasks.status !== 'success') {
+    throw new Error('Expected fixture');
+  }
+  value.tasks.value.items[0]!.title = '';
+  let view!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    view = ReactTestRenderer.create(
+      <TasksPage outcomes={value} writesAvailable={false} />,
+    );
+  });
+  mounted.push(view);
+  expect(label(view, 'Task: ')).toBeDefined();
+  const copy = view.root
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .join(' ');
+  expect(copy).not.toContain('Task title unavailable');
+});
+
 function libraryOutcome(): DesktopReadOutcomes {
   const base = outcomes(false);
   return {
