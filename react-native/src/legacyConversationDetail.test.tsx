@@ -2435,6 +2435,145 @@ test('names GET apps_results app when catalog resolves and Unknown App when it m
   expect(mockRequest).toHaveBeenCalledTimes(1);
 });
 
+test('names Flutter AppResultDetailWidget padded GET app_id instead of remapping to a catalog name', async () => {
+  const catalog = async (request: {path?: string}) => {
+    if (request.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 'notes'}],
+    });
+  };
+  mockRequest.mockImplementation(catalog);
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      appSummary: 'App wrote this recap',
+      appSummaryName: 'Notes',
+    }),
+  );
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (typeof request.path === 'string' && request.path.startsWith('/v1/apps/')) {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: '  notes  '}],
+    });
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      appSummary: 'App wrote this recap',
+      appSummaryName: conversationUnknownAppCopy(),
+    }),
+  );
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (typeof request.path === 'string' && request.path.startsWith('/v1/apps/')) {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 'notes '}],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).toBe(conversationUnknownAppCopy());
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (typeof request.path === 'string' && request.path.startsWith('/v1/apps/')) {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [
+        {content: 'App wrote this recap', app_id: '\u0085notes'},
+      ],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).toBe(conversationUnknownAppCopy());
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (typeof request.path === 'string' && request.path.startsWith('/v1/apps/')) {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', plugin_id: '  notes  '}],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).toBe(conversationUnknownAppCopy());
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        overview: 'Day recap notes',
+      },
+      apps_results: [{content: 'App wrote this recap', app_id: ' \t'}],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      appSummary: 'App wrote this recap',
+      appSummaryName: conversationUnknownAppCopy(),
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).not.toBe(conversationFirstPartySummaryCopy());
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        overview: 'Day recap notes',
+      },
+      apps_results: [{content: 'App wrote this recap', app_id: ''}],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).toBe(conversationUnknownAppCopy());
+});
+
 test('names Flutter AppResultDetailWidget padded GET image instead of remapping to a CDN chip', async () => {
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/apps/notes') {

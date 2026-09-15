@@ -140,8 +140,7 @@ function appResultId(row: Record<string, unknown>): {
   if (typeof raw !== 'string') {
     return {unusable: true};
   }
-  const id = visibleDisplayText(raw);
-  return id === '' ? {} : {appId: id};
+  return {appId: raw};
 }
 
 function firstPartySummaryChrome(
