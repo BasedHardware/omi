@@ -95,7 +95,7 @@ omi auth status    # vietinė patikra, neprisijungus
 omi auth whoami    # patikra serveryje
 ```
 
-Atnaujinkite baigiantis galiojimui raktą be pakartotinio prisijungimo:
+Atnaujinkite baigiančią galioti OAuth sesiją be pakartotinio prisijungimo — taikoma tik prisijungimui naršyklėje (OAuth). `omi_dev_*` raktams ši komanda nieko neatnaujina; raktą pakeiskite žiniatinklio programoje skiltyje `Developer → API Keys`:
 
 ```bash
 omi auth refresh
@@ -209,8 +209,8 @@ Kodai stabilūs, todėl pagal juos galima šakoti logiką scenarijuose ir CI.
 | Kodas | Reikšmė | Kada pasitaiko |
 | :---: | :--- | :--- |
 | `0` | Sėkmė | Komanda įvykdyta |
-| `1` | Iškvietimo klaida | Neteisinga vėliavėlė, trūksta argumento |
-| `2` | Prieigos klaida | Neprisijungta, raktas neteisingas arba nebegalioja |
+| `1` | Iškvietimo klaida | Paties omi-cli tikrinimas (pvz., `--browser` ir `--api-key` kartu, neteisingas pasirinkimas, tuščia įvestis) |
+| `2` | Prieigos arba argumentų klaida | Neprisijungta, raktas neteisingas arba nebegalioja — taip pat analizatoriaus klaidos (nežinoma vėliavėlė, trūkstamas argumentas) |
 | `3` | Serverio klaida | Atsakymas 5xx, timeout, nėra ryšio |
 | `4` | Per daug užklausų | 429 Too Many Requests |
 | `5` | Nerasta | 404, nurodytas identifikatorius neegzistuoja |
@@ -300,6 +300,8 @@ omi --profile work auth login
 # vykdyti komandą konkrečiame profile
 omi --profile work memory list
 ```
+
+Jei profilio nenurodote, CLI pirmiausia naudoja profilį iš aplinkos kintamojo `OMI_PROFILE`, tada aktyvų profilį iš konfigūracijos failo, galiausiai `default`. Prioritetų tvarka: `--profile` → `OMI_PROFILE` → aktyvus profilis `~/.omi/config.toml` → `default`.
 
 Peržiūrėti ir keisti pačią konfigūraciją:
 

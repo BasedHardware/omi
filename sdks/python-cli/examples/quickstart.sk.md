@@ -95,7 +95,7 @@ omi auth status    # lokálna kontrola, offline
 omi auth whoami    # overenie na serveri
 ```
 
-Obnoviť kľúč s blížiacim sa koncom platnosti bez opätovného prihlásenia:
+Obnoviť OAuth reláciu s blížiacim sa koncom platnosti bez opätovného prihlásenia — platí len pre prihlásenie cez prehliadač (OAuth). Pri kľúčoch `omi_dev_*` tento príkaz nič neobnoví; kľúč otočte vo webovej aplikácii v `Developer → API Keys`:
 
 ```bash
 omi auth refresh
@@ -209,8 +209,8 @@ Kódy sú stabilné, takže sa podľa nich dá vetviť logika v skriptoch aj v C
 | Kód | Význam | Kedy nastáva |
 | :---: | :--- | :--- |
 | `0` | Úspech | Príkaz dobehol |
-| `1` | Chyba volania | Neplatný príznak, chýba argument |
-| `2` | Chyba prístupu | Neprihlásený, kľúč je neplatný alebo prešlý |
+| `1` | Chyba volania | Vlastná validácia omi-cli (napr. `--browser` a `--api-key` súčasne, neplatná voľba, prázdny vstup) |
+| `2` | Chyba prístupu alebo argumentov | Neprihlásený, kľúč je neplatný alebo prešlý — vrátane chýb parsera (neznámy príznak, chýbajúci argument) |
 | `3` | Chyba servera | Odpoveď 5xx, timeout, žiadne spojenie |
 | `4` | Priveľa požiadaviek | 429 Too Many Requests |
 | `5` | Nenájdené | 404, zadaný identifikátor neexistuje |
@@ -300,6 +300,8 @@ omi --profile work auth login
 # spustiť príkaz v konkrétnom profile
 omi --profile work memory list
 ```
+
+Ak profil neuvediete, CLI použije najprv profil z premennej prostredia `OMI_PROFILE`, potom aktívny profil z konfiguračného súboru, napokon `default`. Poradie prednosti: `--profile` → `OMI_PROFILE` → aktívny profil v `~/.omi/config.toml` → `default`.
 
 Zobraziť a meniť samotnú konfiguráciu:
 

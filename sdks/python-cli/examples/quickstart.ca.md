@@ -95,7 +95,7 @@ omi auth status    # comprovació local, fora de línia
 omi auth whoami    # comprovació al servidor
 ```
 
-Renovar una clau a punt de caducar sense tornar a iniciar sessió:
+Renovar una sessió OAuth a punt de caducar sense tornar a iniciar sessió — només per a l'inici de sessió al navegador (OAuth). Per a claus `omi_dev_*` aquesta ordre no renova res; gira la clau a l'aplicació web a `Developer → API Keys`:
 
 ```bash
 omi auth refresh
@@ -209,8 +209,8 @@ Els codis són estables, així que els scripts i la CI hi poden ramificar la lò
 | Codi | Significat | Quan ocorre |
 | :---: | :--- | :--- |
 | `0` | Èxit | L'ordre ha acabat |
-| `1` | Error de crida | Flag incorrecte, falta un argument |
-| `2` | Error d'accés | Sessió no iniciada, clau incorrecta o caducada |
+| `1` | Error de crida | Validació pròpia d'omi-cli (p. ex. `--browser` i `--api-key` alhora, opció no vàlida, entrada buida) |
+| `2` | Error d'accés o d'arguments | Sessió no iniciada, clau incorrecta o caducada — també errors de l'analitzador (flag desconegut, argument que falta) |
 | `3` | Error de servidor | Resposta 5xx, timeout, sense connexió |
 | `4` | Massa peticions | 429 Too Many Requests |
 | `5` | No trobat | 404, l'identificador indicat no existeix |
@@ -300,6 +300,8 @@ omi --profile work auth login
 # executar una ordre en un perfil concret
 omi --profile work memory list
 ```
+
+Si no especifiques cap perfil, el CLI usa primer el valor de la variable d'entorn `OMI_PROFILE`, després el perfil actiu del fitxer de configuració, i finalment `default`. Precedència: `--profile` → `OMI_PROFILE` → perfil actiu a `~/.omi/config.toml` → `default`.
 
 Veure i modificar la pròpia configuració:
 
