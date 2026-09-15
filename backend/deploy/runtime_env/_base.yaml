@@ -59,7 +59,7 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -225,7 +225,7 @@ environment_shared:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
