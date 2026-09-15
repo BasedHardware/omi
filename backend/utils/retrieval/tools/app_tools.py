@@ -105,6 +105,11 @@ def _sync_noop(**kwargs: Any) -> None:
     return None
 
 
+def _drop_none(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop None-valued arguments so omitted params are omitted on the wire."""
+    return {k: v for k, v in kwargs.items() if v is not None}
+
+
 # Global mapping of tool names to status messages. Bounded so a long-lived worker that loads app
 # tools for many distinct apps over its process lifetime cannot grow this map without limit.
 _MAX_TOOL_STATUS_MESSAGES = 2048
@@ -214,6 +219,7 @@ def create_app_tool(
         async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
             kwargs.pop('config', None)
+            kwargs = _drop_none(kwargs)
             if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
                 return f"The {app_tool.name} tool is temporarily disabled due to sustained failures."
             cb = get_webhook_circuit_breaker(_mcp_url)
@@ -263,6 +269,7 @@ def create_app_tool(
     async def tool_function(**kwargs: Any) -> str:
         """Tool dynamically created from app definition."""
         config_param: Optional[RunnableConfig] = kwargs.pop('config', None)
+        kwargs = _drop_none(kwargs)
         return await _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
 
     # Create StructuredTool with the schema
