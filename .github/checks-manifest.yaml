@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: ms365-pagination-tests
+    command: ["python3", "plugins/omi-ms365-app/test_main.py"]
+    triggers: ["plugins/omi-ms365-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13913: list_upcoming read one calendarView page ($top is a page size, not a result cap) and silently dropped every event past the 50th; the suite walks @odata.nextLink chains through the real GraphClient.get_all, asserts the page cap and repeat-link guard, and covers explicit-null optional args"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
