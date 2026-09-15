@@ -223,6 +223,7 @@ omi
 ├── conversation
 │   ├── list [--limit N] [--start-date ...] [--end-date ...] [--include-transcript]
 │   ├── get <id> [--include-transcript]
+│   ├── export <id> --output transcript.srt [--force]
 │   ├── create [--text ...] [--text-source ...] [...]
 │   ├── from-segments <file.json> [--source ...]
 │   ├── update <id> [--title ...] [--discarded/--no-discarded]
