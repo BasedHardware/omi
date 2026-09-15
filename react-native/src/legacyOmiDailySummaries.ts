@@ -77,7 +77,7 @@ function summaryId(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
   }
-  return visibleDisplayText(text(value, 1_000_000));
+  return text(value, 1_000_000);
 }
 
 function headlineCopy(value: unknown): string | undefined {

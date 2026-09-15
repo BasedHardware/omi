@@ -1903,7 +1903,11 @@ test('compact Home names Flutter DailySummaryCard empty GET ids without hiding D
         id: request.id,
         status: 200,
         body: JSON.stringify({
-          summaries: [{id: '', date: '2020-01-14', headline: 'Empty id'}],
+          summaries: [
+            {id: '', date: '2020-01-14', headline: 'Empty id'},
+            {id: ' \t', date: '2020-01-13', headline: 'Whitespace id'},
+            {id: '  padded  ', date: '2020-01-12', headline: 'Padded id'},
+          ],
         }),
       };
     }
@@ -1924,6 +1928,8 @@ test('compact Home names Flutter DailySummaryCard empty GET ids without hiding D
   const tree = renderedText(renderer);
   expect(tree).toContain('Daily Recaps');
   expect(tree).toContain('Empty id');
+  expect(tree).toContain('Whitespace id');
+  expect(tree).toContain('Padded id');
   expect(tree).toContain('Tue, Jan 14');
   expect(tree).not.toContain('Your Day in Review');
   expect(tree).not.toContain('No daily recaps yet');

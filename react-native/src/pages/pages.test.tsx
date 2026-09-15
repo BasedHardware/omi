@@ -2138,7 +2138,11 @@ test('Settings names Flutter DailySummaryCard empty GET ids without omitting Dai
         id: request.id,
         status: 200,
         body: JSON.stringify({
-          summaries: [{id: '', date: '2026-09-08', headline: 'Empty id'}],
+          summaries: [
+            {id: '', date: '2026-09-08', headline: 'Empty id'},
+            {id: ' \t', date: '2026-09-07', headline: 'Whitespace id'},
+            {id: '  padded  ', date: '2026-09-06', headline: 'Padded id'},
+          ],
         }),
       };
     }
@@ -2148,6 +2152,8 @@ test('Settings names Flutter DailySummaryCard empty GET ids without omitting Dai
   const tree = textOf(renderer);
   expect(tree).toContain('Daily summary');
   expect(tree).toContain('Empty id');
+  expect(tree).toContain('Whitespace id');
+  expect(tree).toContain('Padded id');
   expect(tree).not.toContain('Your Day in Review');
   expect(tree).not.toContain('Regenerate');
 });

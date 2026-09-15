@@ -44,13 +44,30 @@ test('names Flutter DailySummary.fromGenerated empty GET ids instead of omitting
       summaries: [
         {id: '', date: '2026-09-09', headline: 'Empty id'},
         {id: ' \t', date: '2026-09-08', headline: 'Whitespace id'},
-        {headline: 'Omitted id', date: '2026-09-07'},
+        {id: '\u0085', date: '2026-09-07', headline: 'Next line id'},
       ],
     }),
   );
   expect(rows).toEqual([
     {id: '', date: '2026-09-09', headline: 'Empty id'},
-    {id: '', date: '2026-09-08', headline: 'Whitespace id'},
+    {id: ' \t', date: '2026-09-08', headline: 'Whitespace id'},
+    {id: '\u0085', date: '2026-09-07', headline: 'Next line id'},
+  ]);
+});
+
+test('names Flutter DailySummary.fromGenerated padded GET ids instead of colliding with trim', () => {
+  const rows = parseOmiDailySummaries(
+    JSON.stringify({
+      summaries: [
+        {id: '  padded  ', date: '2026-09-09', headline: 'Padded id'},
+        {id: 'padded', date: '2026-09-08', headline: 'Trimmed id'},
+        {headline: 'Omitted id', date: '2026-09-07'},
+      ],
+    }),
+  );
+  expect(rows).toEqual([
+    {id: '  padded  ', date: '2026-09-09', headline: 'Padded id'},
+    {id: 'padded', date: '2026-09-08', headline: 'Trimmed id'},
     {id: '', date: '2026-09-07', headline: 'Omitted id'},
   ]);
 });
