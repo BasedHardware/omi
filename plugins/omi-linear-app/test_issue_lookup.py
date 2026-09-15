@@ -144,6 +144,33 @@ class IssueLookupTests(unittest.TestCase):
         self.assertIn('ENG-1234', response.result)
         self.assertEqual(calls[0][1], {'term': 'keyword', 'first': 3})
 
+    def test_find_state_by_name_precedence(self):
+        module = load_app()
+        states = [
+            SimpleNamespace(id='not-done-id', name='Not Done', type='unstarted'),
+            SimpleNamespace(id='shipped-id', name='Shipped', type='completed'),
+            SimpleNamespace(id='incomplete-id', name='Incomplete', type='unstarted'),
+            SimpleNamespace(id='todo-later-id', name='Todo Later', type='unstarted'),
+            SimpleNamespace(id='not-in-prog-id', name='Not In Progress', type='unstarted'),
+            SimpleNamespace(id='active-id', name='Active', type='started'),
+        ]
+        module.get_team_states = Mock(return_value=states)
+
+        # Exact match takes precedence
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'Not Done').id, 'not-done-id')
+
+        # Type alias takes precedence over partial match
+        # 'done' -> type 'completed' ('Shipped'), NOT substring match in 'Not Done'
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'done').id, 'shipped-id')
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'complete').id, 'shipped-id')
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'in progress').id, 'active-id')
+
+        # Partial match works when no exact or type match
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'Later').id, 'todo-later-id')
+
+        # Unknown state returns None
+        self.assertIsNone(module.find_state_by_name('uid', 'team', 'Nonexistent Status'))
+
 
 if __name__ == '__main__':
     unittest.main()

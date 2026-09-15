@@ -280,18 +280,18 @@ def find_state_by_name(uid: str, team_id: str, state_name: str) -> Optional[Work
         if state.name.lower() == state_name_lower:
             return state
     
-    # Then try partial match
-    for state in states:
-        if state_name_lower in state.name.lower():
-            return state
-    
-    # Then try type match
+    # Then try workflow type alias match
     mapped_type = state_mapping.get(state_name_lower)
     if mapped_type:
         for state in states:
             if state.type == mapped_type:
                 return state
     
+    # Then try partial match
+    for state in states:
+        if state_name_lower in state.name.lower():
+            return state
+
     return None
 
 
