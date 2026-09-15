@@ -3,12 +3,12 @@ import 'dart:math';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/app_thumbnail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -147,33 +147,7 @@ class SectionAppItemCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                CachedNetworkImage(
-                  imageUrl: app.getImageUrl(),
-                  httpHeaders: const {
-                    "User-Agent":
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                  },
-                  imageBuilder: (context, imageProvider) => Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.rectangle,
-                      borderRadius: BorderRadius.circular(8),
-                      image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                    ),
-                  ),
-                  placeholder: (context, url) => Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.error_outline, color: Colors.white54, size: 24),
-                  ),
-                ),
+                AppThumbnail(imageUrl: app.getImageUrl()),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

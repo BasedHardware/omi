@@ -599,7 +599,7 @@ packages:
     source: hosted
     version: "5.1.2"
   flutter_cache_manager:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: flutter_cache_manager
       sha256: "400b6592f16a4409a7f2bb929a9a7e38c72cceb8ffb99ee57bbf2cb2cecf8386"
