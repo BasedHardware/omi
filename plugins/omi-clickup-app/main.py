@@ -837,8 +837,10 @@ async def process_segments(
     Collect up to 5 segments after trigger, or timeout after 5s gap.
     AI extracts task name, description, list, and priority.
     """
-    # Extract text from segments
-    segment_texts = [seg.get("text", "") for seg in segments]
+    # Extract text from segments; a wrong-typed JSON element (string, number,
+    # null) must not crash the handler — mirror the isinstance guard used when
+    # logging segments above.
+    segment_texts = [seg.get("text", "") if isinstance(seg, dict) else str(seg) for seg in segments]
     full_text = " ".join(segment_texts)
     
     session_id = session["session_id"]

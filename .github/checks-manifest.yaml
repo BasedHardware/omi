@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: clickup-coerce-tests
+    command: ["python3", "plugins/omi-clickup-app/test_main.py"]
+    triggers: ["plugins/omi-clickup-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13922: create_task aborted task creation on non-numeric assignee tokens, dropped millisecond due-date timestamps, and forwarded unvalidated priority; the suite drives the production handler and client to assert coercion, 1-4 bounds, and graceful continuation"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
