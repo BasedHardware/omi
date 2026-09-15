@@ -44,6 +44,71 @@ test('names Flutter DevApiKeyListItem empty GET names instead of omitting the ke
   ]);
 });
 
+test('names Flutter DevApiKeyListItem empty GET ids instead of omitting them', () => {
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-1',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: createdAt,
+        },
+        {
+          id: ' \t',
+          name: 'Whitespace id',
+          key_prefix: 'omi_sk_ws',
+          created_at: createdAt,
+        },
+        {
+          id: '\u0085',
+          name: 'Next line id',
+          key_prefix: 'omi_sk_nl',
+          created_at: createdAt,
+        },
+        {
+          id: '',
+          name: 'Blank id',
+          key_prefix: 'omi_sk_bl',
+          created_at: createdAt,
+        },
+        {
+          id: '  padded  ',
+          name: 'Padded id',
+          key_prefix: 'omi_sk_pd',
+          created_at: createdAt,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'key-1',
+      name: 'Local',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: createdMs,
+    },
+    {
+      id: ' \t',
+      name: 'Whitespace id',
+      keyPrefix: 'omi_sk_ws',
+      createdAtMs: createdMs,
+    },
+    {
+      id: '\u0085',
+      name: 'Next line id',
+      keyPrefix: 'omi_sk_nl',
+      createdAtMs: createdMs,
+    },
+    {id: '', name: 'Blank id', keyPrefix: 'omi_sk_bl', createdAtMs: createdMs},
+    {
+      id: '  padded  ',
+      name: 'Padded id',
+      keyPrefix: 'omi_sk_pd',
+      createdAtMs: createdMs,
+    },
+  ]);
+});
+
 test('names Flutter McpApiKeyListItem empty GET keyPrefix instead of omitting the key', () => {
   expect(
     parseOmiDeveloperKeys(

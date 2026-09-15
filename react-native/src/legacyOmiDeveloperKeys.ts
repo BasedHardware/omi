@@ -80,10 +80,7 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
   const seen = new Set<string>();
   for (const raw of rows) {
     const row = object(raw);
-    const id = visibleDisplayText(text(row.id, 1_000_000));
-    if (id === '') {
-      throw new DeveloperKeyError();
-    }
+    const id = text(row.id, 1_000_000);
     if (seen.has(id)) {
       throw new DeveloperKeyError();
     }

@@ -2879,6 +2879,69 @@ test('Settings names Flutter DevApiKeyListItem empty GET names without noApiKeys
   expect(tree).not.toContain('Create Key');
 });
 
+test('Settings names Flutter DevApiKeyListItem empty GET ids without noApiKeys', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: ' \t',
+            name: 'Whitespace id',
+            key_prefix: 'omi_sk_ws',
+            created_at: '2026-09-09T12:00:00.000Z',
+          },
+          {
+            id: '',
+            name: 'Blank id',
+            key_prefix: 'omi_sk_bl',
+            created_at: '2026-09-09T12:00:00.000Z',
+          },
+          {
+            id: 'key-neighbor',
+            name: 'Neighbor',
+            key_prefix: 'omi_sk_nb',
+            created_at: '2026-09-09T12:00:00.000Z',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/mcp/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: '\u0085',
+            name: 'Next line id',
+            key_prefix: 'omi_mcp_nl',
+            created_at: '2026-09-09T12:00:00.000Z',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Developer API');
+  expect(tree).toContain('Whitespace id \u00b7 omi_sk_ws***');
+  expect(tree).toContain('Blank id \u00b7 omi_sk_bl***');
+  expect(tree).toContain('Neighbor \u00b7 omi_sk_nb***');
+  expect(tree).toContain('MCP');
+  expect(tree).toContain('Next line id \u00b7 omi_mcp_nl');
+  expect(tree).not.toContain('No API keys yet');
+  expect(tree).not.toContain('Revoke');
+  expect(tree).not.toContain('Create Key');
+});
+
 test('Settings names Flutter noApiKeys for empty GET developer and MCP keys', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
