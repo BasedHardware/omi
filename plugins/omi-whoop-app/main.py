@@ -62,7 +62,9 @@ def _coerce_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     elif isinstance(value, str):
         try:
             coerced = int(value.strip())
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
+            # OverflowError covers a stringified JSON number such as "1e309",
+            # which is longer than any int and must fall back, not 500.
             return default
     else:
         return default
@@ -863,8 +865,20 @@ async def tool_get_body_measurements(request: Request):
 
         result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
-        if not result or "error" in result:
+        # WHOOP documents 404 for this user-scoped route as "Requested resource
+        # not found", which is the ordinary state for a user who has not entered
+        # body measurements yet. Reporting it as a failure made the friendly
+        # empty branch below unreachable for exactly the users who need it.
+        if result and result.get("status_code") == 404:
+            return ChatToolResponse(result="No body measurements available.")
+
+        if result and "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
+
+        if not result or not any(
+            result.get(field) for field in ("height_meter", "weight_kilogram", "max_heart_rate")
+        ):
+            return ChatToolResponse(result="No body measurements available.")
 
         height_m = result.get("height_meter")
         weight_kg = result.get("weight_kilogram")

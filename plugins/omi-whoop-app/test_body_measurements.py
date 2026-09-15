@@ -83,16 +83,41 @@ class BodyMeasurementEndpointTests(unittest.TestCase):
         self.assertEqual(requested[0], f"{WHOOP_V1}{MEASUREMENT_PATH}")
         self.assertEqual(self.calls[0]["headers"]["Authorization"], "Bearer test-token")
 
-    def test_empty_404_body_surfaces_the_status_code(self):
-        """Regression: the error text was the empty 404 body, so the reason was blank."""
+    def test_404_is_the_empty_state_not_a_failure(self):
+        """A user with no measurements yet gets the friendly empty result.
+
+        WHOOP documents 404 on this user-scoped route as "Requested resource not
+        found". Treating it as a failure left the `No body measurements
+        available.` branch below reachable only after a 200, i.e. never for the
+        users it exists for.
+        """
         self._patch_get({})
+
+        response = self.client.post("/tools/get_body_measurements", json={"uid": "u1"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNone(payload.get("error"), payload.get("error"))
+        self.assertEqual(payload["result"], "No body measurements available.")
+
+    def test_200_with_no_fields_is_also_the_empty_state(self):
+        self._patch_get({MEASUREMENT_PATH: FakeResponse(200, {})})
+
+        response = self.client.post("/tools/get_body_measurements", json={"uid": "u1"})
+
+        payload = response.json()
+        self.assertIsNone(payload.get("error"), payload.get("error"))
+        self.assertEqual(payload["result"], "No body measurements available.")
+    def test_non_404_failure_still_surfaces_a_status_bearing_reason(self):
+        """A real failure must never be reported with a blank reason."""
+        self._patch_get({MEASUREMENT_PATH: FakeResponse(500, None, text="")})
 
         response = self.client.post("/tools/get_body_measurements", json={"uid": "u1"})
 
         self.assertEqual(response.status_code, 200)
         error = response.json().get("error") or ""
         self.assertTrue(error.strip(), "error reason must never be blank")
-        self.assertIn("404", error)
+        self.assertIn("500", error)
         self.assertNotEqual(error.strip(), "Failed to get measurements:")
 
     def test_upstream_message_is_preserved_when_present(self):
