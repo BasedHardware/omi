@@ -1763,7 +1763,7 @@ test('names GET omitted folder color as Flutter #6B7280', async () => {
   mockRequest.mockReset().mockResolvedValue(response(fixture));
 });
 
-test('keeps GET external_data text and omits empty or missing integration copy', async () => {
+test('names Flutter ExpandableTextWidget empty GET external_data text instead of omitting it', async () => {
   mockRequest.mockResolvedValue(
     response({
       ...fixture,
@@ -1782,7 +1782,16 @@ test('keeps GET external_data text and omits empty or missing integration copy',
   );
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).externalText,
-  ).toBeUndefined();
+  ).toBe(' \t\n');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      external_data: {text: ''},
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).externalText,
+  ).toBe('');
   mockRequest.mockResolvedValue(response(fixture));
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).externalText,

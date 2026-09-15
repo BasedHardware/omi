@@ -3504,6 +3504,59 @@ test('legacy conversation details name GET external_data text when the transcrip
         locked: false,
         sections: [],
         actionItems: [],
+        externalText: ' \t\n',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const whitespace = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(text(whitespace)).toContain(' \t\n');
+  expect(text(whitespace)).not.toContain('The transcript is empty.');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        externalText: '',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const empty = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const emptyExternal = empty.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return children === '';
+  });
+  expect(emptyExternal.length).toBeGreaterThan(0);
+  expect(text(empty)).not.toContain('The transcript is empty.');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
         externalText: 'Imported Slack thread',
         photoCount: 2,
         transcript: {status: 'loaded', segments: []},

@@ -231,8 +231,7 @@ function externalText(value: unknown): string | undefined {
   if (data.text === undefined || data.text === null) {
     return undefined;
   }
-  const copy = visibleDisplayText(text(data.text));
-  return copy === '' ? undefined : copy;
+  return text(data.text);
 }
 function calendarEventTimeCopy(value: unknown): string {
   const parsed = Date.parse(text(value).replace(/([+-]\d{2})$/, '$1:00'));

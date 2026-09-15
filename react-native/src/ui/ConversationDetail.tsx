@@ -357,7 +357,7 @@ function LegacyConversationBody({
       : folderName;
   const folderColor = visibleDisplayText(detail.folderColor ?? '');
   const folderIcon = visibleDisplayText(detail.folderIcon ?? '');
-  const externalText = visibleDisplayText(detail.externalText ?? '');
+  const externalText = detail.externalText ?? '';
   const detailSummaryCopy = conversation.discarded
     ? null
     : conversationDetailSummaryForStatusCopy(
@@ -370,7 +370,7 @@ function LegacyConversationBody({
         },
       );
   const showExternalTranscript =
-    externalText !== '' &&
+    detail.externalText !== undefined &&
     (detail.photoCount === undefined || detail.photoCount <= 0) &&
     (detail.transcript.status === 'unavailable' ||
       transcriptSegments.length === 0);
