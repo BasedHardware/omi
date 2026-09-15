@@ -1822,12 +1822,17 @@ test('daily summary copy names GET headlines and omits Flutter DailySummaryCard 
   expect(dailySummaryDateCopy('2026-09-08', now)).toBe('Tue, Sep 8');
   expect(dailySummaryDateCopy('not-a-date', now)).toBe('not-a-date');
   expect(dailySummaryDateCopy('2026-02-31', now)).toBe('2026-02-31');
+  expect(dailySummaryDateCopy('', now)).toBe('');
+  expect(dailySummaryDateCopy(' \t', now)).toBe(' \t');
+  expect(dailySummaryDateCopy('\u0085', now)).toBe('\u0085');
+  expect(dailySummaryDateCopy('  padded  ', now)).toBe('  padded  ');
   expect(
     dailySummaryCopy(
       [
         {id: 'sum-1', date: '2026-09-10', headline: 'Met with the team'},
         {id: 'sum-2', date: '', headline: 'Shipped the recap'},
         {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
+        {id: 'sum-ws-date', date: ' \t', headline: 'Whitespace date'},
         {
           id: 'sum-default',
           date: '',
@@ -1851,6 +1856,7 @@ test('daily summary copy names GET headlines and omits Flutter DailySummaryCard 
     {title: 'Daily summary', copy: 'Today · Met with the team'},
     {title: 'Daily summary', copy: 'Shipped the recap'},
     {title: 'Daily summary', copy: 'Tue, Sep 8 ·  \t'},
+    {title: 'Daily summary', copy: ' \t · Whitespace date'},
     {
       title: 'Daily summary',
       copy: dailySummaryDefaultHeadlineCopy(),

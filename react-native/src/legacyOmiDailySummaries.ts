@@ -80,6 +80,13 @@ function summaryId(value: unknown): string | null {
   return text(value, 1_000_000);
 }
 
+function summaryDate(value: unknown): string {
+  if (value === undefined || value === null || typeof value !== 'string') {
+    return '';
+  }
+  return text(value, 1_000_000);
+}
+
 function headlineCopy(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return dailySummaryDefaultHeadlineCopy();
@@ -145,7 +152,7 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
       }
       seen.add(id);
     }
-    const date = optionalWireString(summary.date, 1_000_000);
+    const date = summaryDate(summary.date);
     const dayEmoji = optionalWireString(summary.day_emoji, 1_000_000);
     const overview = optionalWireString(summary.overview, 1_000_000);
     const stats = summaryStats(summary.stats);

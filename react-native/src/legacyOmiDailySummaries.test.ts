@@ -38,6 +38,40 @@ test('names Flutter DailySummaryCard empty GET headlines instead of omitting the
   ]);
 });
 
+test('names Flutter DailySummaryCard empty GET dates instead of omitting the date chip', () => {
+  const rows = parseOmiDailySummaries(
+    JSON.stringify({
+      summaries: [
+        {id: 'sum-empty-date', date: '', headline: 'Empty date'},
+        {id: 'sum-whitespace-date', date: ' \t', headline: 'Whitespace date'},
+        {id: 'sum-next-line-date', date: '\u0085', headline: 'Next line date'},
+      ],
+    }),
+  );
+  expect(rows).toEqual([
+    {id: 'sum-empty-date', date: '', headline: 'Empty date'},
+    {id: 'sum-whitespace-date', date: ' \t', headline: 'Whitespace date'},
+    {id: 'sum-next-line-date', date: '\u0085', headline: 'Next line date'},
+  ]);
+});
+
+test('names Flutter DailySummaryCard padded GET dates instead of colliding with trim', () => {
+  const rows = parseOmiDailySummaries(
+    JSON.stringify({
+      summaries: [
+        {id: 'sum-padded-date', date: '  padded  ', headline: 'Padded date'},
+        {id: 'sum-omitted-date', headline: 'Omitted date'},
+        {id: 'sum-null-date', date: null, headline: 'Null date'},
+      ],
+    }),
+  );
+  expect(rows).toEqual([
+    {id: 'sum-padded-date', date: '  padded  ', headline: 'Padded date'},
+    {id: 'sum-omitted-date', date: '', headline: 'Omitted date'},
+    {id: 'sum-null-date', date: '', headline: 'Null date'},
+  ]);
+});
+
 test('names Flutter DailySummary.fromGenerated empty GET ids instead of omitting the summary', () => {
   const rows = parseOmiDailySummaries(
     JSON.stringify({

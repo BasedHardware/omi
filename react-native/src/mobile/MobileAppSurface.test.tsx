@@ -2013,7 +2013,56 @@ test('compact Home names Flutter DailySummaryCard empty GET dates without omitti
       String(node.type) === 'Text' &&
       node.props.style?.alignSelf === 'flex-end',
   );
-  expect(dateChips.map(chip => chip.props.children)).toEqual(['', '', '']);
+  expect(dateChips.map(chip => chip.props.children)).toEqual(['', ' \t', '']);
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('No daily recaps yet');
+  expect(tree).not.toContain('View All Daily Recaps');
+  act(() => renderer.unmount());
+});
+
+test('compact Home names Flutter DailySummaryCard NEXT LINE and padded GET dates without omitting the date chip', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [
+            {id: 'sum-next-line-date', date: '\u0085', headline: 'Next line date'},
+            {id: 'sum-padded-date', date: '  padded  ', headline: 'Padded date'},
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          backend: {request} as never,
+          recaps: [],
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Daily Recaps');
+  expect(tree).toContain('Next line date');
+  expect(tree).toContain('Padded date');
+  expect(tree).not.toContain('Yesterday');
+  const dateChips = renderer.root.findAll(
+    node =>
+      String(node.type) === 'Text' &&
+      node.props.style?.alignSelf === 'flex-end',
+  );
+  expect(dateChips.map(chip => chip.props.children)).toEqual([
+    '\u0085',
+    '  padded  ',
+  ]);
   expect(tree).not.toContain('Your Day in Review');
   expect(tree).not.toContain('No daily recaps yet');
   expect(tree).not.toContain('View All Daily Recaps');

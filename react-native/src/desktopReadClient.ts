@@ -1485,13 +1485,12 @@ export function dailySummaryDateCopy(
   date: string,
   now: Date = new Date(),
 ): string {
-  const visible = visibleDisplayText(date);
-  if (visible === '') {
+  if (date === '') {
     return '';
   }
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(visible);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (match === null) {
-    return visible;
+    return date;
   }
   const year = Number(match[1]);
   const month = Number(match[2]);
@@ -1502,7 +1501,7 @@ export function dailySummaryDateCopy(
     parsed.getMonth() !== month - 1 ||
     parsed.getDate() !== day
   ) {
-    return visible;
+    return date;
   }
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diffDays = Math.round(
