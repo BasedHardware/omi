@@ -4393,6 +4393,12 @@ test('transcript STT copy names Flutter getDisplayName empty as Unknown', () => 
   expect(transcriptSttProviderCopy('Deepgram')).toBe(
     transcriptSttOmiFallbackCopy(),
   );
+  expect(transcriptSttProviderCopy('  deepgram  ')).toBe(
+    transcriptSttOmiFallbackCopy(),
+  );
+  expect(transcriptSttProviderCopy('deepgram ')).toBe(
+    transcriptSttOmiFallbackCopy(),
+  );
   expect(transcriptSttProviderCopy(' \t\u0085 ')).toBe(
     transcriptSttOmiFallbackCopy(),
   );

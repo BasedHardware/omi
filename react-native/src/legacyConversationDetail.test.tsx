@@ -827,6 +827,32 @@ test('names GET transcript stt_provider unknown as Flutter Omi', async () => {
       },
     ],
   });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          stt_provider: '  deepgram  ',
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+        sttProvider: transcriptSttOmiFallbackCopy(),
+      },
+    ],
+  });
 });
 
 test('keeps GET transcript when speaker or stt_provider exceeds 256', async () => {

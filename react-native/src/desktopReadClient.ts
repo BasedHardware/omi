@@ -246,8 +246,7 @@ export function transcriptSttProviderCopy(
   if (value === '') {
     return transcriptSttUnknownCopy();
   }
-  const token = visibleDisplayText(value);
-  return TRANSCRIPT_STT_PROVIDER_COPY[token] ?? transcriptSttOmiFallbackCopy();
+  return TRANSCRIPT_STT_PROVIDER_COPY[value] ?? transcriptSttOmiFallbackCopy();
 }
 
 export function recordingTranscriptSpeakerCopy(segment: {
