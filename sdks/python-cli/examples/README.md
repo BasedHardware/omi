@@ -15,3 +15,4 @@
   русском (Russian Quickstart).
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
+* [`quickstart.uz.md`](quickstart.uz.md) — omi-cli tezkor boshlash qo'llanmasi (Uzbek Quickstart).
