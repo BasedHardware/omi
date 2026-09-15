@@ -991,6 +991,16 @@ checks:
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
+  - id: shopify-create-order-product-match-tests
+    command: ["python3", "plugins/omi-shopify-app/test_create_order_product_match.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "create_order sold the first product sharing a word with the line item title and always variants[0], so a customer could be charged and receipted for a product they did not name"
+  - id: shopify-create-order-pagination-tests
+    command: ["python3", "plugins/omi-shopify-app/test_create_order_pagination.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "create_order read one /products.json page and silently missed later catalog items; the suite existed but no lane ran it"
   - id: github-app-client-tests
     command: ["python3", "plugins/omi-github-app/test_github_client.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
