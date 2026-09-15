@@ -1243,6 +1243,33 @@ def test_operator_override_pins_the_reservation_back(monkeypatch):
     assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
 
+def test_prohibited_operator_pin_fails_closed_before_dispatch(monkeypatch):
+    """SCA-481: an operator pin naming a Pro/image model must fail the request
+    closed with the routing envelope, never dispatch PayGo."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, "gemini-3-pro-preview")
+    with pytest.raises(desktop_proxy.RoutingFailure) as excinfo:
+        desktop_proxy._retarget_path(*desktop_proxy._path_parts("models/gemini-2.5-flash:generateContent"))
+    assert excinfo.value.code == "routing_invalid_operator_pin"
+    assert "SCA-481" in excinfo.value.message
+
+
+def test_prohibited_overflow_pin_yields_no_overflow_plan(monkeypatch):
+    """A prohibited overflow pin degrades to no overflow (the request keeps its
+    own error) instead of buying the work on a Pro/image model."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, "gemini-3.1-flash-image")
+    assert desktop_proxy._overflow_plan("gemini-2.5-flash") == []
+
+
+def test_byok_pro_requests_still_pass_with_a_prohibited_pin_set(monkeypatch):
+    """Containment never reaches BYOK: the user pays for the model they ask
+    for, operator pins are irrelevant to their lane."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    monkeypatch.setenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, "gemini-3-pro-preview")
+    assert _retarget("models/gemini-2.5-pro:generateContent") == "models/gemini-2.5-pro:generateContent"
+
+
 def test_overflow_never_targets_the_live_reservation(monkeypatch):
     """FC-degraded-fallback-consumes-protected-budget across the migration."""
     monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)

@@ -294,8 +294,8 @@ shipping code.
 
 | Env | Effect |
 | --- | --- |
-| `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. |
-| `OMI_GEMINI_OVERFLOW_MODEL` | Pins the overflow model. Rejected at resolution time if it equals the reservation. |
+| `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. Must name a declared company-paid anchor (`gemini-2.5-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`); anything else — in particular a Pro or image-output model — fails the request closed instead of serving it (SCA-481). |
+| `OMI_GEMINI_OVERFLOW_MODEL` | Pins the overflow model. Rejected at resolution time if it equals the reservation or names anything outside the declared company-paid anchors (SCA-481); the request then keeps its own error instead of overflowing. |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables overflow entirely; a full reservation then returns 429 to the client. |
 | `OMI_VERTEX_GLOBAL_LOCATION` | Multi-region for families with no regional endpoint. Default `us`. Setting `global` widens data residency worldwide — see above before flipping it. |
 

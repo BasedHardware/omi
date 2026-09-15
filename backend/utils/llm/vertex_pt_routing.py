@@ -183,15 +183,72 @@ def thinking_config_for(*, budget: int) -> dict[str, object]:
     return {'thinkingBudget': int(budget)}
 
 
+# --- Company-paid containment (SCA-481) -------------------------------------
+# The only models a company-paid Vertex text request may ever be served on.
+# Pro text and image-output SKUs are PayGo-only — no PT order, no reservation —
+# and the 2026-09-06..09-12 billing export shows exactly those SKUs ("Gemini
+# 3.0 / 3.1 Pro Text Input/Output", "Gemini 3.1 Flash Image Global Image
+# Output", "Pro Image Output") spiking to hundreds of dollars a day on the dev
+# project with no product-lane ledger rows behind them. An operator override is
+# the one code-free way such a model could become a served model, so pins are
+# validated against this declared set and fail closed. BYOK never passes
+# through these resolvers: the user pays for the model they ask for.
+COMPANY_PAID_VERTEX_TEXT_MODELS = frozenset(
+    {
+        PT_MODEL_CURRENT,  # gemini-2.5-flash — the us-central1 reservation
+        PT_MODEL_TARGET,  # gemini-3.1-flash-lite — the migration target
+        'gemini-2.5-flash-lite',  # cheap shared floor
+    }
+)
+_PROHIBITED_COMPANY_PAID_SHAPES = ('-pro', '-image', 'imagen')
+
+
+def is_prohibited_company_paid_model(model: str) -> bool:
+    """Whether a model is a Pro-text / image-output shape the company must not pay for.
+
+    Scoped to the Gemini/Imagen family so non-Google model ids that merely
+    contain the substrings (Perplexity `sonar-pro`) stay routable.
+    """
+    normalized = _normalize(model).lower()
+    if not normalized.startswith(('gemini', 'google/', 'imagen')):
+        return False
+    return any(shape in normalized for shape in _PROHIBITED_COMPANY_PAID_SHAPES)
+
+
+def company_paid_vertex_text_model(model: str, *, knob: str = '') -> str:
+    """Validate a company-paid Vertex text serving pin; ValueError otherwise.
+
+    Overrides exist to move traffic between declared anchors (pin the
+    reservation back during a bad auto-promotion), never to introduce a new
+    model — least of all a Pro/image-output PayGo SKU — without a code change.
+    """
+    normalized = _normalize(model)
+    if normalized in COMPANY_PAID_VERTEX_TEXT_MODELS:
+        return normalized
+    what = f'{knob} ' if knob else ''
+    if is_prohibited_company_paid_model(normalized):
+        raise ValueError(
+            f'{what}{normalized!r} is a Pro/image-output model; company-paid Vertex '
+            'text lanes cannot select it (SCA-481)'
+        )
+    raise ValueError(
+        f'{what}{normalized!r} is not a declared company-paid Vertex text model: '
+        f'{sorted(COMPANY_PAID_VERTEX_TEXT_MODELS)} (SCA-481)'
+    )
+
+
 def resolve_pt_model(*, target_dedicated_ready: bool, override: str = '') -> str:
     """Which model currently owns prepaid capacity.
 
     `override` is the operator escape hatch and wins unconditionally, so a bad
-    auto-detection can be pinned back without a code change.
+    auto-detection can be pinned back without a code change. It must name a
+    declared company-paid anchor: any other value — in particular a
+    Pro/image-output shape — fails closed instead of becoming the served
+    model (SCA-481).
     """
     pinned = _normalize(override)
     if pinned:
-        return pinned
+        return company_paid_vertex_text_model(pinned, knob='pt model override')
     return PT_MODEL_TARGET if target_dedicated_ready else PT_MODEL_CURRENT
 
 
@@ -210,7 +267,7 @@ def resolve_overflow_model(*, pt_model: str, override: str = '') -> str:
                 f'overflow override {pinned!r} equals the provisioned model; '
                 'overflow must never consume the protected reservation'
             )
-        return pinned
+        return company_paid_vertex_text_model(pinned, knob='overflow model override')
     for candidate in OVERFLOW_PREFERENCE:
         if candidate != protected:
             return candidate
@@ -232,7 +289,7 @@ def resolve_overflow_ladder(*, pt_model: str, override: str = '') -> tuple[str, 
                 f'overflow override {pinned!r} equals the provisioned model; '
                 'overflow must never consume the protected reservation'
             )
-        return (pinned,)
+        return (company_paid_vertex_text_model(pinned, knob='overflow model override'),)
     ladder = tuple(c for c in OVERFLOW_PREFERENCE if c != protected)
     if not ladder:
         raise ValueError(f'no overflow model available outside the provisioned model {protected!r}')
@@ -272,7 +329,7 @@ def resolve_fallback_chain(
                 f'fallback override {pinned!r} equals the provisioned model; '
                 'fallback must never consume the protected reservation'
             )
-        chain: tuple[str, ...] = (pinned,)
+        chain: tuple[str, ...] = (company_paid_vertex_text_model(pinned, knob='fallback model override'),)
     else:
         chain = MODEL_FALLBACKS.get(head, ())
     return tuple(rung for rung in chain if rung != protected and rung != head and rung not in dead)
