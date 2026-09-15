@@ -184,15 +184,16 @@ def delete_memory(
     ctx.renderer.success(f"Deleted memory [bold]{memory_id}[/bold].")
 
 
-@app.command("export", help="Export all memories to a JSON file.")
+@app.command("export", help="Export memories to a JSON file. Warning: uses offset pagination, so it's not a point-in-time snapshot; changes during export may cause duplicates or missing items.")
 def export_memories(
     typer_ctx: typer.Context,
     output: Path = typer.Option(Path("memories_export.json"), "--output", "-o", help="Output file path."),
+    categories: Optional[List[str]] = typer.Option(None, "--categories", "-c", help="Filter export by one or more categories."),
 ) -> None:
     """
-    Export all user memories to a JSON file.
-
-    Fetches all memories using pagination and streams them directly to the
+    Export user memories to a JSON file.
+    
+    Fetches memories using pagination and streams them directly to the
     output file to prevent memory exhaustion for large datasets.
     """
     ctx = _ctx(typer_ctx)
@@ -209,18 +210,26 @@ def export_memories(
             first_item = True
             
             while True:
-                page = client.get("/v1/dev/user/memories", params={"limit": limit, "offset": offset})
+                # Pass categories to API if provided (backend might ignore, but it's the correct interface)
+                params = {"limit": limit, "offset": offset}
+                if categories:
+                    params["categories"] = ",".join(categories)
+
+                page = client.get("/v1/dev/user/memories", params=params)
 
                 # Fail-fast: if API returns None but we expected a page, stop and fail.
                 if page is None:
                     if offset == 0:
-                        # No memories at all is a valid state.
                         break
                     raise RuntimeError(
                         f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write."
                     )
 
                 for item in page:
+                    # Client-side filter: ensure we only export requested categories
+                    if categories and item.get("category") not in categories:
+                        continue
+                        
                     if not first_item:
                         temp_file.write(",")
                     json.dump(item, temp_file, ensure_ascii=False)
@@ -239,4 +248,5 @@ def export_memories(
             os.remove(temp_file.name)
         raise
 
-    ctx.renderer.success(f"Exported all memories to [bold]{output}[/bold] via streaming.")
+    ctx.renderer.success(f"Exported memories to [bold]{output}[/bold] via streaming.")
+
