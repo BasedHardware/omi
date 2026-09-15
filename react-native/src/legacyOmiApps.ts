@@ -41,7 +41,7 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   const description = visibleDisplayText(row.description);
   return {
     name,
-    ...(description === '' ? {} : {description}),
+    description,
     ...(image === null ? {} : {image}),
   };
 }

@@ -612,7 +612,7 @@ export async function loadLegacyConversationDetail(
     ...(appSummaryName === undefined || appSummaryName === ''
       ? {}
       : {appSummaryName}),
-    ...(appSummaryDescription === undefined || appSummaryDescription === ''
+    ...(appSummaryDescription === undefined
       ? {}
       : {appSummaryDescription}),
     ...(appSummaryImageUri === undefined || appSummaryImageUri === ''

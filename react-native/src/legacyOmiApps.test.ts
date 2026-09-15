@@ -17,7 +17,13 @@ test('parses GET app name and description and omits empty or deleted apps', () =
       JSON.stringify({id: 'notes', name: 'Notes', description: ' \t'}),
       'notes',
     ),
-  ).toEqual({name: 'Notes'});
+  ).toEqual({name: 'Notes', description: ''});
+  expect(
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', description: ''}),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes', description: ''});
   expect(
     parseOmiApp(JSON.stringify({id: 'notes', name: 'Notes'}), 'notes'),
   ).toEqual({name: 'Notes'});

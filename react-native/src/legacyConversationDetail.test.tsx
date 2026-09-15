@@ -1981,6 +1981,33 @@ test('keeps GET conversation plugins_results when more than 1000', async () => {
   expect(loaded.appSummary).toBe('Legacy plugin recap');
 });
 
+test('names Flutter AppResultDetailWidget empty GET descriptions', async () => {
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          description: ' \t',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 'notes'}],
+    });
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      appSummary: 'App wrote this recap',
+      appSummaryName: 'Notes',
+      appSummaryDescription: '',
+    }),
+  );
+});
+
 test('names GET apps_results app when catalog resolves and Unknown App when it misses', async () => {
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/apps/notes') {
