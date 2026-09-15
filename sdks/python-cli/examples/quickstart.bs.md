@@ -2,7 +2,7 @@
 
 > Praktično vodilo za korištenje Omi direktno iz terminala — napisano za developere i autonomne AI agente.
 
-`omi-cli` je zvanični command line interface (CLI) za developer API [Omi](https://omi.me). On omogućava strukturiran pristup 4 osnovna resursa Omi: sjecioci (memories), razgovore (conversations), zadatke / akcije (action items) i ciljeve (goals).
+`omi-cli` je zvanični command line interface (CLI) za developer API [Omi](https://omi.me). On omogućava strukturiran pristup 4 osnovna resursa Omi: sjećanja (memories), razgovore (conversations), zadatke / akcije (action items) i ciljeve (goals).
 
 * **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
 * **Zvanična dokumentacija:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
@@ -23,10 +23,10 @@ pip install omi-cli
 ```
 
 > **Važno raščjavanje: Ime paketa naspram imena komande**
-> * Zvanicno ime paketa na PyPI je **`omi-cli`** (paket `omi` je odvojen i nepovezan projekat).
+> * Zvanično ime paketa na PyPI je **`omi-cli`** (paket `omi` je odvojen i nepovezan projekat).
 > * Komanda koja se izvršava u terminalu je direktno: **`omi`**.
 
-Provjerite je li instalacija uspjesna prikazivanjem verzije i pomocnog menija:
+Provjerite je li instalacija uspješna prikazivanjem verzije i pomoćnog menija:
 
 ```bash
 omi --version
@@ -71,7 +71,7 @@ omi auth login --api-key omi_dev_...
 
 # Ili preko exportovanja environment varijable (idealno za Docker kontejnere i CI/CD):
 # Napomena: Ako profil vec ima sačuvan ključ, prvo izvršite `omi auth logout`.
-export OMI_API_KEY="omi_dev_vas_ključ_ovdje"
+export OMI_API_KEY="omi_dev_vaš_ključ_ovdje"
 ```
 
 ### Provjera statusa autentifikacije
@@ -93,17 +93,17 @@ omi auth logout
 
 ## 3. Osnovne komande
 
-### Sjecioci (Memories)
-Kontekstualne biljeske i opservacije sačuvane od strane Omi:
+### Sjećanja (Memories)
+Kontekstualne bilješke i opservacije sačuvane od strane Omi:
 
 ```bash
-# Ispis liste sačuvanih sjececa
+# Ispis liste sačuvanih sjećanja
 omi memory list
 
-# Kreiranje novog sjececa
-omi memory create "Prefers short and technically solid answers with Python examples" --category work
+# Kreiranje novog sjećanja
+omi memory create "Preferira kratke i tehnički precizne odgovore s primjerima u Pythonu" --category work
 
-# Izdvajanje konkretnog sjececa po ID
+# Izdvajanje konkretnog sjećanja po ID
 omi memory get <MEMORY_ID>
 ```
 
@@ -147,7 +147,7 @@ omi goal create "Pij 2 litra vode dnevno" --type numeric --target 2 --unit liter
 `omi-cli` je optimiziran za skriptnu integraciju i napajanje AI agenata. Globalni flag `--json` vraća validan JSON format za obradu sa alatima poput `jq`:
 
 ```bash
-# Lista sjececa u JSON formatu i filtriranje s jq
+# Lista sjećanja u JSON formatu i filtriranje s jq
 omi --json memory list | jq '.[] | {id, content, category}'
 
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
@@ -169,30 +169,30 @@ omi --json memory list --limit 25 --offset 0 > sjecioci-stranica-1.json
 omi --json memory list --limit 25 --offset 25 > sjecioci-stranica-2.json
 ```
 
-Redirekcija u fajl preuzima ili kreira fajl lokalno. Uvijek provjerite exit kod komande prije obrade. Greške se ispisuju u standardni tok greške (stderr), to znači da prazan fajl ne garantuje odsustvo podataka. Exportovani fajlovi mogu sadrzavati lične podatke - čuvajte ih u skladu sa svojim sigurnosnim politikama.
+Redirekcija u fajl preuzima ili kreira fajl lokalno. Uvijek provjerite exit kod komande prije obrade. Greške se ispisuju u standardni tok greške (stderr), to znači da prazan fajl ne garantuje odsustvo podataka. Exportovani fajlovi mogu sadržavati lične podatke - čuvajte ih u skladu sa svojim sigurnosnim politikama.
 
 ---
 
 ## 5. Exit kodovi (Exit Codes)
 
-Pouzdana obrada gresaka u CLI skriptama i CI/CD cevovima:
+Pouzdana obrada grešaka u CLI skriptama i CI/CD cevovima:
 
-| Kod | Znaćaj | Opis |
+| Kod | Značaj | Opis |
 | :---: | :--- | :--- |
-| `0` | **Uspjeh (`EXIT_OK`)** | Komanda izvršena uspjesno bez gresaka. |
-| `1` | **Greska koristenja / sintakse (`EXIT_USAGE`)** | Nevalidne vrijednosti, nepoznati Click flagovi ili nedostajuci argumenti. |
-| `2` | **Greska autentifikacije (`EXIT_AUTH`)** | Nedostajući podaci o identitetu, istekli ključ ili nepostojeće dozvole. |
-| `3` | **Server ili mrežna greska (`EXIT_SERVER`)** | HTTP 5xx odgovor, prekid veze ili timeout zahtjeva. |
+| `0` | **Uspjeh (`EXIT_OK`)** | Komanda izvršena uspješno bez grešaka. |
+| `1` | **Greška korištenja / sintakse (`EXIT_USAGE`)** | Nevalidne vrijednosti, nepoznati Click flagovi ili nedostajući argumenti. |
+| `2` | **Greška autentifikacije (`EXIT_AUTH`)** | Nedostajući podaci o identitetu, istekli ključ ili nepostojeće dozvole. |
+| `3` | **Server ili mrežna greška (`EXIT_SERVER`)** | HTTP 5xx odgovor, prekid veze ili timeout zahtjeva. |
 | `4` | **Ograničenje zahtjeva (`EXIT_RATE_LIMITED`)** | HTTP 429 odgovor - preveliki broj zahtjeva u kratkom vremenskom periodu. |
-| `5` | **Resurs nije pronađen (`EXIT_NOT_FOUND`)** | HTTP 404 odgovor - tražćeni objekat ne postoji. |
+| `5` | **Resurs nije pronađen (`EXIT_NOT_FOUND`)** | HTTP 404 odgovor - traženi objekat ne postoji. |
 
 ---
 
-## 6. Primjeri za razlicita terminalna okruzenja
+## 6. Primjeri za različita terminalna okruženja
 
 ### Bash / Zsh (Linux / macOS)
 ```bash
-export OMI_API_KEY="omi_dev_vas_ključ_ovdje"
+export OMI_API_KEY="omi_dev_vaš_ključ_ovdje"
 
 # Izvršavanje komande i provjera exit koda
 omi --json memory list --limit 10
@@ -203,7 +203,7 @@ fi
 
 ### PowerShell (Windows)
 ```powershell
-$env:OMI_API_KEY = "omi_dev_vas_ključ_ovdje"
+$env:OMI_API_KEY = "omi_dev_vaš_ključ_ovdje"
 
 # Konverzija JSON izlaza direktno u PowerShell objekat
 $memories = omi --json memory list | ConvertFrom-Json
@@ -211,7 +211,7 @@ $memories | Select-Object id, content, category
 
 # Provjera greške preko $LASTEXITCODE
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Omi komanda je završila s greskom: $LASTEXITCODE."
+    Write-Error "Omi komanda je završila s greškom: $LASTEXITCODE."
 }
 ```
 
@@ -238,7 +238,7 @@ omi --json local search-screen "Kvartalni izvještaj" --days 7 --app Safari
 
 ## 8. Rad sa većim brojem profila (Profiles)
 
-Flag `--profile` omogućava razdvajanje poslovnih, ličnih naloga ili testirajućih okruzenja. Konfiguracije se čuvaju u `~/.omi/config.toml`:
+Flag `--profile` omogućava razdvajanje poslovnih, ličnih naloga ili testirajućih okruženja. Konfiguracije se čuvaju u `~/.omi/config.toml`:
 
 ```bash
 # Kreiranje i login u licni profil
@@ -250,7 +250,7 @@ omi --profile work auth login
 # Izvršavanje komande sa određenim profilom
 omi --profile work memory list
 
-# Koristenje staging okruzenja
+# Korištenje staging okruženja
 omi --profile staging --api-base https://api.staging.omi.me memory list
 ```
 
@@ -258,7 +258,7 @@ omi --profile staging --api-base https://api.staging.omi.me memory list
 
 ## 9. Sigurnost i dobre prakse
 
-* **Ne čuvajte ključeve u Git-u:** Nikada ne dodavajte API ključeve u javna repozitorija; koristite menadžera tajni ili fajlove okruzenja definisane u `.gitignore`.
+* **Ne čuvajte ključeve u Git-u:** Nikada ne dodavajte API ključeve u javna repozitorija; koristite menadžera tajni ili fajlove okruženja definisane u `.gitignore`.
 * **Zaštita terminalne historije:** Na dijeljenim mašinama izbjegavajte prosljeđivanje ključeva kao argumenata komandi; koristite interaktivni login ili varijablu `OMI_API_KEY`.
 * **Dozvole za fajlove:** U Unix okruženjima postavite restrikcijske dozvole na konfiguracioni direktorij `~/.omi/` (chmod 700 ~/.omi).
 
