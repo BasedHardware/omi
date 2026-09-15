@@ -1,6 +1,7 @@
 """
 Dropbox API client wrapper.
 """
+
 import json
 import re
 from typing import Optional, Tuple
@@ -112,12 +113,14 @@ class DropboxClient:
         """
         try:
             # Dropbox-API-Arg header requires JSON
-            api_arg = json.dumps({
-                "path": path,
-                "mode": mode,
-                "autorename": True,
-                "mute": False,
-            })
+            api_arg = json.dumps(
+                {
+                    "path": path,
+                    "mode": mode,
+                    "autorename": True,
+                    "mute": False,
+                }
+            )
 
             headers = {
                 "Authorization": f"Bearer {self.access_token}",
@@ -201,13 +204,15 @@ class DropboxClient:
                 results = []
                 for match in matches:
                     metadata = match.get("metadata", {}).get("metadata", {})
-                    results.append({
-                        "name": metadata.get("name", "Unknown"),
-                        "path": metadata.get("path_display", ""),
-                        "type": metadata.get(".tag", "file"),
-                        "size": metadata.get("size", 0),
-                        "modified": metadata.get("server_modified", ""),
-                    })
+                    results.append(
+                        {
+                            "name": metadata.get("name", "Unknown"),
+                            "path": metadata.get("path_display", ""),
+                            "type": metadata.get(".tag", "file"),
+                            "size": metadata.get("size", 0),
+                            "modified": metadata.get("server_modified", ""),
+                        }
+                    )
                 return results, None
             else:
                 return None, f"Search failed: {response.text}"
@@ -219,13 +224,15 @@ class DropboxClient:
     def _parse_folder_entries(entries: list) -> list:
         results = []
         for entry in entries:
-            results.append({
-                "name": entry.get("name", "Unknown"),
-                "path": entry.get("path_display", ""),
-                "type": entry.get(".tag", "file"),
-                "size": entry.get("size", 0),
-                "modified": entry.get("server_modified", ""),
-            })
+            results.append(
+                {
+                    "name": entry.get("name", "Unknown"),
+                    "path": entry.get("path_display", ""),
+                    "type": entry.get(".tag", "file"),
+                    "size": entry.get("size", 0),
+                    "modified": entry.get("server_modified", ""),
+                }
+            )
         return results
 
     def list_folder(
@@ -237,6 +244,9 @@ class DropboxClient:
         List files in a folder, following cursor pagination when has_more is true.
         Returns (files_list, error_message).
         """
+        if limit is not None and limit <= 0:
+            return [], None
+
         try:
             per_page = min(limit, 2000) if limit else 2000
             response = requests.post(
@@ -271,7 +281,7 @@ class DropboxClient:
                     cursor = continue_data.get("cursor")
                     has_more = continue_data.get("has_more", False)
                 else:
-                    break
+                    return None, f"List continuation failed: {continue_resp.text}"
 
             if limit is not None:
                 results = results[:limit]
@@ -303,7 +313,9 @@ class DropboxClient:
             timeout=timeout,
         )
 
-    def download_file(self, path: str, timeout: float = DEFAULT_DOWNLOAD_TIMEOUT) -> Tuple[Optional[bytes], Optional[str]]:
+    def download_file(
+        self, path: str, timeout: float = DEFAULT_DOWNLOAD_TIMEOUT
+    ) -> Tuple[Optional[bytes], Optional[str]]:
         """
         Download a file from Dropbox.
         Returns (file_bytes, error_message).
