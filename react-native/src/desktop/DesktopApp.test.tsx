@@ -4633,6 +4633,88 @@ test('Settings names GET task integrations without Connect or a write sheet', as
   ).toBe(false);
 });
 
+test('Settings names Flutter TaskIntegrationsPage padded GET integration keys', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/task-integrations') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          integrations: {
+            todoist: {connected: true},
+            '  todoist  ': {connected: true},
+          },
+          default_app: '  todoist  ',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Task Integrations');
+  expect(tree).toContain('Todoist');
+  expect(tree).not.toContain('Todoist · Default');
+  expect(tree).toContain('  todoist   · Default');
+  expect(tree).toContain(taskIntegrationsFooterCopy());
+  expect(tree).not.toContain('Coming Soon');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Connect',
+    ),
+  ).toHaveLength(0);
+});
+
 test('Settings names a failed task-integrations GET instead of empty success', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

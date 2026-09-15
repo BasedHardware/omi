@@ -52,11 +52,11 @@ export function parseOmiTaskIntegrations(body: string): OmiTaskIntegration[] {
   const defaultApp =
     record.default_app === undefined || record.default_app === null
       ? ''
-      : visibleDisplayText(text(record.default_app, 1_000_000));
+      : text(record.default_app, 1_000_000);
   const items: OmiTaskIntegration[] = [];
   for (const rawKey of keys) {
-    const key = visibleDisplayText(text(rawKey, 1_000_000));
-    if (key === '') {
+    const key = text(rawKey, 1_000_000);
+    if (visibleDisplayText(key) === '') {
       continue;
     }
     const rawDetails = integrations[rawKey];

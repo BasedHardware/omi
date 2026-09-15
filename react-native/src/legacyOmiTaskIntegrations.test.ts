@@ -15,6 +15,61 @@ test('names GET task integration keys like Flutter display names', () => {
   expect(taskIntegrationName('trello')).toBe('Trello');
   expect(taskIntegrationName('monday')).toBe('Monday');
   expect(taskIntegrationName('linear')).toBe('linear');
+  expect(taskIntegrationName('  todoist  ')).toBe('  todoist  ');
+  expect(taskIntegrationName('todoist ')).toBe('todoist ');
+  expect(taskIntegrationName('\u0085todoist')).toBe('\u0085todoist');
+});
+
+test('names Flutter TaskIntegrationsPage padded GET integration keys', () => {
+  expect(
+    parseOmiTaskIntegrations(
+      JSON.stringify({
+        integrations: {
+          '  todoist  ': {connected: true},
+          'todoist ': {connected: true},
+          '\u0085todoist': {connected: true},
+          todoist: {connected: true},
+          ' \t': {connected: true},
+        },
+        default_app: '  todoist  ',
+      }),
+    ),
+  ).toEqual([
+    {key: '  todoist  ', name: '  todoist  ', isDefault: true},
+    {key: 'todoist ', name: 'todoist ', isDefault: false},
+    {key: '\u0085todoist', name: '\u0085todoist', isDefault: false},
+    {key: 'todoist', name: 'Todoist', isDefault: false},
+  ]);
+  expect(
+    parseOmiTaskIntegrations(
+      JSON.stringify({
+        integrations: {todoist: {connected: true}},
+        default_app: '  todoist  ',
+      }),
+    ),
+  ).toEqual([{key: 'todoist', name: 'Todoist', isDefault: false}]);
+  expect(
+    parseOmiTaskIntegrations(
+      JSON.stringify({
+        integrations: {todoist: {connected: true}},
+        default_app: 'todoist',
+      }),
+    ),
+  ).toEqual([{key: 'todoist', name: 'Todoist', isDefault: true}]);
+  expect(
+    taskIntegrationRowCopy({
+      key: 'todoist',
+      name: 'Todoist',
+      isDefault: false,
+    }),
+  ).toBe('Todoist');
+  expect(
+    taskIntegrationRowCopy({
+      key: '  todoist  ',
+      name: '  todoist  ',
+      isDefault: true,
+    }),
+  ).toBe('  todoist   · Default');
 });
 
 test('formats GET task integration rows with Default only when selected', () => {

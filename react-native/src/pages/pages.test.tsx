@@ -4109,6 +4109,35 @@ test('Settings names GET task integrations without Connect or a write sheet', as
   ).toBe(false);
 });
 
+test('Settings names Flutter TaskIntegrationsPage padded GET integration keys', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/task-integrations') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          integrations: {
+            todoist: {connected: true},
+            '  todoist  ': {connected: true},
+          },
+          default_app: '  todoist  ',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Task Integrations');
+  expect(tree).toContain('Todoist');
+  expect(tree).not.toContain('Todoist · Default');
+  expect(tree).toContain('  todoist   · Default');
+  expect(tree).toContain(taskIntegrationsFooterCopy());
+  expect(tree).not.toContain('Coming Soon');
+  expect(labelsOf(renderer).includes('Connect')).toBe(false);
+});
+
 test('Settings names a failed task-integrations GET instead of empty success', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
