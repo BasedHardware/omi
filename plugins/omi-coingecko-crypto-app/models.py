@@ -127,7 +127,6 @@ class GetCryptoMarketOverviewRequest(_NullMeansDefault):
         description="Target currency code, e.g. 'usd'.",
     )
 
-<<<<<<< HEAD
     @field_validator("limit", mode="before")
     @classmethod
     def coerce_limit(cls, v: Optional[int]) -> int:
