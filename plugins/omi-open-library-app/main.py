@@ -128,7 +128,9 @@ def _subject_slug(subject: Any) -> Optional[str]:
     return slug[:80] or None
 
 
-def _format_book(doc: dict[str, Any], index: int) -> str:
+def _format_book(doc: Any, index: int) -> str:
+    if not isinstance(doc, dict):
+        return f"{index}. Untitled\n   Author: unknown author\n   First published: unknown year | Open Library work: unknown"
     title = _clean_text(doc.get("title")) or "Untitled"
     authors = _join_values(doc.get("author_name")) or "unknown author"
     year = doc.get("first_publish_year") or "unknown year"
@@ -146,21 +148,27 @@ def _format_book(doc: dict[str, Any], index: int) -> str:
     return "\n".join(lines)
 
 
-def _format_subject_work(work: dict[str, Any], index: int) -> str:
+def _format_subject_work(work: Any, index: int) -> str:
+    if not isinstance(work, dict):
+        return f"{index}. Untitled\n   Author: unknown author | First published: unknown year | Editions: 0 | Work: unknown"
     title = _clean_text(work.get("title")) or "Untitled"
-    authors = ", ".join(
-        _clean_text(author.get("name"))
-        for author in work.get("authors", [])
-        if isinstance(author, dict) and _clean_text(author.get("name"))
-    )
+    raw_authors = work.get("authors", [])
+    if isinstance(raw_authors, list):
+        authors = ", ".join(
+            _clean_text(author.get("name"))
+            for author in raw_authors
+            if isinstance(author, dict) and _clean_text(author.get("name"))
+        )
+    else:
+        authors = ""
     authors = authors or "unknown author"
     year = work.get("first_publish_year") or "unknown year"
-    key = _clean_text(work.get("key")).removeprefix("/works/")
+    key = _clean_text(work.get("key")).removeprefix("/works/") or "unknown"
     edition_count = work.get("edition_count") or 0
     return f"{index}. {title}\n   Author: {authors} | First published: {year} | Editions: {edition_count} | Work: {key}"
 
 
-async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> Any:
     client = await _get_open_library_client()
     response = await client.get(f"{OPEN_LIBRARY_BASE_URL}{path}", params=params)
     response.raise_for_status()
@@ -297,8 +305,12 @@ async def search_books(payload: dict[str, Any]):
 
     try:
         data = await _request_json("/search.json", params=params)
-        docs = data.get("docs", [])[:limit]
-        if not docs:
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Open Library search returned an invalid response.")
+        raw_docs = data.get("docs")
+        docs = [d for d in raw_docs if isinstance(d, dict)] if isinstance(raw_docs, list) else []
+        selected_docs = docs[:limit]
+        if not selected_docs:
             return ChatToolResponse(result="No matching books found.")
 
         heading_parts = []
@@ -309,7 +321,7 @@ async def search_books(payload: dict[str, Any]):
         if subject:
             heading_parts.append(f"subject {subject}")
         heading = "Books for " + ", ".join(heading_parts)
-        return ChatToolResponse(result=heading + ":\n\n" + "\n\n".join(_format_book(doc, i + 1) for i, doc in enumerate(docs)))
+        return ChatToolResponse(result=heading + ":\n\n" + "\n\n".join(_format_book(doc, i + 1) for i, doc in enumerate(selected_docs)))
     except (httpx.HTTPError, ValueError) as exc:
         return ChatToolResponse(error=f"Open Library search failed: {exc}")
 
@@ -325,27 +337,46 @@ async def get_book_details(payload: dict[str, Any]):
                 "/api/books",
                 params={"bibkeys": f"ISBN:{isbn}", "format": "json", "jscmd": "data"},
             )
+            if not isinstance(data, dict):
+                return ChatToolResponse(error=f"Open Library details request returned an invalid response for ISBN {isbn}.")
             book = data.get(f"ISBN:{isbn}")
-            if not book:
+            if not isinstance(book, dict) or not book:
                 return ChatToolResponse(result=f"No Open Library details found for ISBN {isbn}.")
 
             title = _clean_text(book.get("title")) or "Untitled"
-            authors = ", ".join(
-                _clean_text(author.get("name"))
-                for author in book.get("authors", [])
-                if isinstance(author, dict) and _clean_text(author.get("name"))
-            ) or "unknown author"
-            publishers = ", ".join(
-                _clean_text(publisher.get("name"))
-                for publisher in book.get("publishers", [])
-                if isinstance(publisher, dict) and _clean_text(publisher.get("name"))
-            )
+            raw_authors = book.get("authors")
+            if isinstance(raw_authors, list):
+                authors = ", ".join(
+                    _clean_text(author.get("name"))
+                    for author in raw_authors
+                    if isinstance(author, dict) and _clean_text(author.get("name"))
+                )
+            else:
+                authors = ""
+            authors = authors or "unknown author"
+
+            raw_publishers = book.get("publishers")
+            if isinstance(raw_publishers, list):
+                publishers = ", ".join(
+                    _clean_text(publisher.get("name"))
+                    for publisher in raw_publishers
+                    if isinstance(publisher, dict) and _clean_text(publisher.get("name"))
+                )
+            else:
+                publishers = ""
+
             publish_date = _clean_text(book.get("publish_date")) or "unknown date"
-            subjects = ", ".join(
-                _clean_text(subject.get("name"))
-                for subject in book.get("subjects", [])[:6]
-                if isinstance(subject, dict) and _clean_text(subject.get("name"))
-            )
+
+            raw_subjects = book.get("subjects")
+            if isinstance(raw_subjects, list):
+                subjects = ", ".join(
+                    _clean_text(sub.get("name"))
+                    for sub in raw_subjects[:6]
+                    if isinstance(sub, dict) and _clean_text(sub.get("name"))
+                )
+            else:
+                subjects = ""
+
             details = [
                 f"{title}",
                 f"Author: {authors}",
@@ -362,6 +393,8 @@ async def get_book_details(payload: dict[str, Any]):
             return ChatToolResponse(error="Provide a valid Open Library work_id like OL45883W or an ISBN.")
 
         data = await _request_json(f"/works/{work_id}.json")
+        if not isinstance(data, dict):
+            return ChatToolResponse(error=f"Open Library details request returned an invalid response for work {work_id}.")
         title = _clean_text(data.get("title")) or "Untitled"
         description = _description_text(data.get("description"))
         subjects = _join_values(data.get("subjects"), limit=8)
@@ -400,12 +433,16 @@ async def search_subject(payload: dict[str, Any]):
     try:
         encoded_slug = quote(slug)
         data = await _request_json(f"/subjects/{encoded_slug}.json", params={"limit": limit})
-        works = data.get("works", [])[:limit]
-        if not works:
+        if not isinstance(data, dict):
+            return ChatToolResponse(error=f"Open Library subject search returned an invalid response for {subject}.")
+        raw_works = data.get("works")
+        works = [w for w in raw_works if isinstance(w, dict)] if isinstance(raw_works, list) else []
+        selected_works = works[:limit]
+        if not selected_works:
             return ChatToolResponse(result=f"No books found for subject {subject}.")
 
         title = _clean_text(data.get("name")) or subject
-        lines = [_format_subject_work(work, i + 1) for i, work in enumerate(works)]
+        lines = [_format_subject_work(work, i + 1) for i, work in enumerate(selected_works)]
         return ChatToolResponse(result=f"Open Library books for subject {title}:\n\n" + "\n\n".join(lines))
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
