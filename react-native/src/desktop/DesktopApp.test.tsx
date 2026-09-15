@@ -6834,6 +6834,64 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
   ).toBe(false);
 });
 
+test('Settings names Flutter McpApiKeyListItem empty GET keyPrefix without omitting MCP', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [],
+    webhooksError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/mcp/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'mcp-empty', name: 'Cursor', key_prefix: ''},
+          {id: 'mcp-whitespace', name: 'Whitespace prefix', key_prefix: ' \t'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('MCP');
+  expect(tree).toContain('Cursor \u00b7 ');
+  expect(tree).toContain('Whitespace prefix \u00b7 ');
+  expect(tree).not.toContain('mcp-empty');
+  expect(tree).not.toContain('***');
+  expect(tree).not.toContain('No API keys yet');
+  expect(tree).not.toContain('Revoke');
+  expect(tree).not.toContain('Create Key');
+});
+
 test('Settings names GET developer-key empty scopes Read Only without inventing it on MCP keys', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
