@@ -3071,13 +3071,9 @@ test('chat memory citation copy names Flutter empty GET titles', () => {
   expect(chatMemoryCitationCopy({title: '', emoji: ' \t'})).toBe('');
 });
 
-test('empty memory text stays visible instead of a blank row', () => {
-  expect(memoryDisplayTitle({title: '', summary: ''})).toBe(
-    'Memory text unavailable',
-  );
-  expect(memoryDisplayBody({title: '', summary: ''})).toBe(
-    'Memory text unavailable',
-  );
+test('memory display text names Flutter empty GET content', () => {
+  expect(memoryDisplayTitle({title: '', summary: ''})).toBe('');
+  expect(memoryDisplayBody({title: '', summary: ''})).toBe('');
   expect(
     memoryDisplayTitle({
       title: 'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
@@ -3100,12 +3096,8 @@ test('empty memory text stays visible instead of a blank row', () => {
   expect(memoryDisplayTitle({title: 'A walk.', summary: 'A walk.'})).toBe(
     'A walk.',
   );
-  expect(memoryDisplayTitle({title: ' \t', summary: ''})).toBe(
-    'Memory text unavailable',
-  );
-  expect(memoryDisplayBody({title: '', summary: ' \t\n'})).toBe(
-    'Memory text unavailable',
-  );
+  expect(memoryDisplayTitle({title: ' \t', summary: ''})).toBe('');
+  expect(memoryDisplayBody({title: '', summary: ' \t\n'})).toBe('');
   expect(memoryDisplayTitle({title: ' \t', summary: 'A walk.'})).toBe(
     'A walk.',
   );

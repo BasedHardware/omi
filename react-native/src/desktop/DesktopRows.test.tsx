@@ -9,7 +9,7 @@ import {
   type MemoryProjection,
   type TaskProjection,
 } from '../desktopReadClient';
-import {ConversationRow, ReadRow, TaskRow} from './DesktopRows';
+import {ConversationRow, MemoryRow, ReadRow, TaskRow} from './DesktopRows';
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -81,6 +81,34 @@ test('Home currents omit Flutter MemoryItem unused timestamp and citation count'
   expect(citedCopy).not.toContain('input');
   expect(citedCopy).not.toContain('output');
   expect(citedCopy).not.toMatch(/(^| )Memory( |$)/);
+});
+
+test('Home currents name Flutter MemoryItem empty GET content', () => {
+  const item: MemoryProjection = {
+    kind: 'memory',
+    id: 'memory-blank',
+    title: '',
+    summary: '',
+    searchableText: '',
+    citations: [],
+    timestamp: null,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let card!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    card = ReactTestRenderer.create(<MemoryRow item={item} />);
+  });
+  expect(textOf(home)).not.toContain('Memory text unavailable');
+  expect(textOf(card)).not.toContain('Memory text unavailable');
+  expect(home.root.findAllByType(Text).length).toBeGreaterThan(0);
+  expect(card.root.findAllByType(Text).length).toBeGreaterThan(0);
 });
 
 test('Home currents name GET locked memories and omit unlocked rows', () => {

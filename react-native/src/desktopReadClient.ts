@@ -2824,8 +2824,7 @@ export function taskIndentPadding(indentLevel: number): number {
 
 function visibleMemoryText(text: string): string {
   const parsed = parseMemoryText(text);
-  const body = visibleDisplayText(parsed.body);
-  return body !== '' ? body : 'Memory text unavailable';
+  return visibleDisplayText(parsed.body);
 }
 
 export function conversationGroupLabel(

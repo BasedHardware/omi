@@ -571,7 +571,7 @@ test('Memories rows omit Flutter MemoryItem unused synthesized-memory chrome', (
   }
 });
 
-test('empty memory bodies stay visible instead of a blank card', async () => {
+test('Memories names Flutter MemoryItem empty GET content', async () => {
   let view!: Renderer.ReactTestRenderer;
   await act(async () => {
     view = Renderer.create(
@@ -595,11 +595,11 @@ test('empty memory bodies stay visible instead of a blank card', async () => {
     );
   });
   try {
-    expect(textOf(view)).toContain('Memory text unavailable');
+    expect(textOf(view)).not.toContain('Memory text unavailable');
+    expect(ids(view)).toEqual(['blank']);
     expect(
       view.root.find(
-        node =>
-          node.props.accessibilityLabel === 'Memory: Memory text unavailable',
+        node => node.props.accessibilityLabel === 'Memory: ',
       ),
     ).toBeDefined();
     act(() => {
@@ -609,9 +609,8 @@ test('empty memory bodies stay visible instead of a blank card', async () => {
         )
         .props.onChangeText('unavailable');
     });
-    expect(textOf(view)).toContain('Memory text unavailable');
-    expect(textOf(view)).not.toContain('No loaded memories match.');
-    expect(textOf(view)).not.toContain(memoriesSearchEmptyCopy());
+    expect(textOf(view)).not.toContain('Memory text unavailable');
+    expect(textOf(view)).toContain(memoriesSearchEmptyCopy());
   } finally {
     await act(async () => view.unmount());
   }

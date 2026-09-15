@@ -3213,7 +3213,8 @@ test('wide Home search rows keep empty memory text visible', () => {
     />,
   );
   const tree = JSON.stringify(renderer.toJSON());
-  expect(tree).toContain('Memory text unavailable');
+  expect(tree).not.toContain('Memory text unavailable');
+  expect(tree).toContain('memory');
   expect(tree).not.toContain('0 citations');
   expect(tree).not.toContain('Synthesized memory with source citations');
 });

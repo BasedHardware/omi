@@ -745,7 +745,7 @@ test('old empty memory content stays searchable instead of a blank row', async (
   expect(result.items[0]).toMatchObject({
     title: '',
     summary: '',
-    searchableText: 'Memory text unavailable',
+    searchableText: '',
   });
 });
 
