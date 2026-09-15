@@ -296,7 +296,7 @@ export function conversationDetailSpeakerCopy(
     return 'omi';
   }
   if (segment.personName !== undefined) {
-    return visibleDisplayText(segment.personName);
+    return segment.personName;
   }
   if (labeled === null && trimmed !== '') {
     return trimmed;

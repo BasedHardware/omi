@@ -3581,6 +3581,22 @@ test('legacy conversation details name Flutter TranscriptWidget empty GET people
               end: 1,
               personName: '',
             },
+            {
+              text: 'Whitespace name',
+              speaker: 'SPEAKER_01',
+              isUser: false,
+              start: 1,
+              end: 2,
+              personName: ' \t',
+            },
+            {
+              text: 'Next line name',
+              speaker: 'SPEAKER_02',
+              isUser: false,
+              start: 2,
+              end: 3,
+              personName: '\u0085',
+            },
           ],
         },
       },
@@ -3604,7 +3620,13 @@ test('legacy conversation details name Flutter TranscriptWidget empty GET people
   });
   expect(emptyNames.length).toBeGreaterThan(0);
   expect(copy).toContain('Hello there');
+  expect(copy).toContain('Whitespace name');
+  expect(copy).toContain('Next line name');
+  expect(copy).toContain(' \t');
+  expect(copy).toContain('\u0085');
   expect(copy).not.toContain('Speaker 1');
+  expect(copy).not.toContain('Speaker 2');
+  expect(copy).not.toContain('Speaker 3');
   expect(copy).not.toContain('person-empty');
 });
 

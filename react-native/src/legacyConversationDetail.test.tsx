@@ -1980,8 +1980,8 @@ test('names Flutter TranscriptWidget empty GET people names', async () => {
     status: 'loaded',
     segments: [
       {personName: ''},
-      {personName: ''},
-      {personName: ''},
+      {personName: ' \t'},
+      {personName: '\u0085'},
     ],
   });
 });
