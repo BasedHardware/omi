@@ -75,8 +75,8 @@ and the dev app crashes before opening.
 
 Everything below is blank in `.env.example` and safe to leave unset:
 
-- `VITE_OMI_API_KEY` — cloud-sync recorded conversations (generate in Omi → Settings →
-  Developer). Blank = recordings save locally only.
+- `VITE_OMI_API_KEY` — diagnostics only (`scripts/diag-listen-probe.mjs`'s developer-key
+  probe). The app doesn't use it; cloud sync of recorded conversations uses your sign-in.
 - `MAIN_VITE_GOOGLE_CLIENT_ID` / `MAIN_VITE_GOOGLE_CLIENT_SECRET` /
   `VITE_ENABLE_GOOGLE_INTEGRATION` — the Google integration above.
 
