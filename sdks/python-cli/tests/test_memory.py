@@ -99,6 +99,50 @@ def test_memory_update_patches_body(authed_profile, respx_mock, cli_runner) -> N
     assert body == {"content": "new"}
 
 
+def test_memory_update_clear_tags_sends_empty_tag_list(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/memories/m1").respond(
+        json={
+            "id": "m1",
+            "content": "new",
+            "category": "core",
+            "visibility": "private",
+            "tags": [],
+        }
+    )
+
+    result = cli_runner.invoke(app, ["--json", "memory", "update", "m1", "--clear-tags"])
+
+    assert result.exit_code == 0
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"tags": []}
+
+
+def test_memory_update_omit_tags_preserves_existing_tags(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/memories/m1").respond(
+        json={
+            "id": "m1",
+            "content": "new",
+            "category": "core",
+            "visibility": "private",
+            "tags": ["keep"],
+        }
+    )
+
+    result = cli_runner.invoke(app, ["--json", "memory", "update", "m1", "--content", "new"])
+
+    assert result.exit_code == 0
+    body = json.loads(route.calls.last.request.content)
+    assert "tags" not in body
+
+
+def test_memory_update_clear_tags_rejects_tag_values(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["memory", "update", "m1", "--tag", "keep", "--clear-tags"])
+
+    assert result.exit_code == 1
+    assert "choose one tag operation" in result.stderr.lower()
+    assert not respx_mock.calls
+
+
 def test_memory_unauthenticated_is_clear(config_path, cli_runner) -> None:
     result = cli_runner.invoke(app, ["memory", "list"])
     assert result.exit_code == 2  # EXIT_AUTH
