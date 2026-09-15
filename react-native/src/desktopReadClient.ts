@@ -550,11 +550,10 @@ export function processingConversationDetailTitleCopy(): string {
 export function processingConversationDetailContentTabCopy(
   source: string,
 ): string {
-  const token = visibleDisplayText(source);
-  if (token === 'openglass') {
+  if (source === 'openglass') {
     return 'Photos';
   }
-  if (token === 'screenpipe') {
+  if (source === 'screenpipe') {
     return 'Raw Data';
   }
   return 'Content';

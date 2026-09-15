@@ -837,6 +837,18 @@ test('conversation display title names Flutter empty GET titles', () => {
   );
   expect(processingConversationDetailContentTabCopy('')).toBe('Content');
   expect(processingConversationDetailContentTabCopy('  ')).toBe('Content');
+  expect(processingConversationDetailContentTabCopy('  screenpipe  ')).toBe(
+    'Content',
+  );
+  expect(processingConversationDetailContentTabCopy('screenpipe ')).toBe(
+    'Content',
+  );
+  expect(processingConversationDetailContentTabCopy('\u0085screenpipe')).toBe(
+    'Content',
+  );
+  expect(processingConversationDetailContentTabCopy('  openglass  ')).toBe(
+    'Content',
+  );
   expect(conversationDisplayTitle({title: '', status: 'processing'})).toBe(
     '',
   );

@@ -2900,6 +2900,38 @@ test('legacy processing details name Flutter Content tab instead of Transcript',
     processingConversationDetailContentTabCopy('screenpipe'),
   );
   expect(rawData).not.toContain('Transcript');
+  const paddedScreenpipe = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        status: 'processing',
+        source: '  screenpipe  ',
+      },
+    }),
+  );
+  expect(paddedScreenpipe).toContain(
+    processingConversationDetailContentTabCopy('  screenpipe  '),
+  );
+  expect(paddedScreenpipe).not.toContain('Raw Data');
+  expect(paddedScreenpipe).not.toContain('Transcript');
+  const paddedOpenglass = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        status: 'processing',
+        source: '  openglass  ',
+      },
+    }),
+  );
+  expect(paddedOpenglass).toContain(
+    processingConversationDetailContentTabCopy('  openglass  '),
+  );
+  expect(paddedOpenglass).not.toContain('Photos');
+  expect(paddedOpenglass).not.toContain('Transcript');
   const merging = text(
     render({
       apiContract: 'omi',
