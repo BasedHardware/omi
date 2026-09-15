@@ -2752,7 +2752,18 @@ test('app category copy is not a raw wire token', () => {
   expect(appCategoryCopy('productivity')).toBe('Productivity');
   expect(appCategoryCopy('health-fitness')).toBe('Health Fitness');
   expect(appCategoryCopy('')).toBe('');
-  expect(appCategoryCopy(' \t')).toBe('');
+  expect(appCategoryCopy(' \t')).toBe(' \t');
+  expect(appCategoryCopy('\u0085')).toBe('\u0085');
+  expect(appCategoryCopy('  health-and-wellness  ')).toBe(
+    '  health And Wellness  ',
+  );
+  expect(appCategoryCopy('health-and-wellness ')).toBe(
+    'Health And Wellness ',
+  );
+  expect(appCategoryCopy('\u0085health-and-wellness')).toBe(
+    '\u0085health And Wellness',
+  );
+  expect(appCategoryCopy('  productivity  ')).toBe('  productivity  ');
 });
 
 test('app section category copy names Flutter CategorySection GET category and omits AppListItem', () => {
@@ -2765,7 +2776,17 @@ test('app section category copy names Flutter CategorySection GET category and o
     appSectionCategoryCopy('productivity-and-organization', false),
   ).toBeNull();
   expect(appSectionCategoryCopy('', true)).toBeNull();
-  expect(appSectionCategoryCopy(' \t', true)).toBeNull();
+  expect(appSectionCategoryCopy(' \t', true)).toBe(' \t');
+  expect(appSectionCategoryCopy('  health-and-wellness  ', true)).toBe(
+    '  health And Wellness  ',
+  );
+  expect(appSectionCategoryCopy('health-and-wellness ', true)).toBe(
+    'Health And Wellness ',
+  );
+  expect(appSectionCategoryCopy('\u0085health-and-wellness', true)).toBe(
+    '\u0085health And Wellness',
+  );
+  expect(appSectionCategoryCopy('  health-and-wellness  ', false)).toBeNull();
 });
 
 test('app display source names Flutter empty GET details', () => {
@@ -2774,14 +2795,14 @@ test('app display source names Flutter empty GET details', () => {
   );
   expect(
     appDisplaySource({author: ' \t\n', category: ' \t', description: '\u00A0'}),
-  ).toBe('');
+  ).toBe(' \t');
   expect(
     appDisplaySource({
       author: '\u0085',
       category: '\u0085',
       description: '\u0085',
     }),
-  ).toBe('');
+  ).toBe('\u0085');
   expect(
     appDisplaySource({
       author: '  Omi  ',
@@ -2829,7 +2850,13 @@ test('app attribution keeps category when an author is present', () => {
       author: ' \t\n',
       category: ' \t',
     }),
-  ).toBe('');
+  ).toBe(' \t');
+  expect(
+    appDisplayAttribution({
+      author: 'Omi',
+      category: '  health-and-wellness  ',
+    }),
+  ).toBe('  health And Wellness   · Omi');
 });
 
 test('app display name names Flutter empty GET names', () => {

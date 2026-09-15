@@ -2525,6 +2525,94 @@ test('Apps gallery category labels are not raw wire tokens', async () => {
   expect(tree).not.toContain('Productivity and organization');
 });
 
+test('Apps gallery names Flutter CategorySection padded GET category', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-exact',
+        name: 'Exact category app',
+        description: '',
+        category: 'health-and-wellness',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+      {
+        id: 'catalog-app-padded',
+        name: 'Padded category app',
+        description: '',
+        category: '  health-and-wellness  ',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+      {
+        id: 'catalog-app-trailing',
+        name: 'Trailing category app',
+        description: '',
+        category: 'health-and-wellness ',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+      {
+        id: 'catalog-app-next-line',
+        name: 'Next-line category app',
+        description: '',
+        category: '\u0085health-and-wellness',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Exact category app');
+  expect(tree).toContain('Padded category app');
+  expect(tree).toContain('Trailing category app');
+  expect(tree).toContain('Next-line category app');
+  expect(tree).toContain('Health');
+  expect(tree).toContain('  health And Wellness  ');
+  expect(tree).toContain('Health And Wellness ');
+  expect(tree).toContain('\u0085health And Wellness');
+  expect(tree).not.toContain('health-and-wellness');
+});
+
 test('Apps gallery keeps GET description when an author is present', async () => {
   const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
     loadConnectors: jest.Mock;

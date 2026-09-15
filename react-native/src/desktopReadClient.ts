@@ -2205,15 +2205,11 @@ const APP_CATEGORY_COPY: Readonly<Record<string, string>> = {
 };
 
 export function appCategoryCopy(category: string): string {
-  const trimmed = visibleDisplayText(category);
-  if (trimmed === '') {
-    return '';
-  }
-  const mapped = APP_CATEGORY_COPY[trimmed];
+  const mapped = APP_CATEGORY_COPY[category];
   if (mapped !== undefined) {
     return mapped;
   }
-  return trimmed
+  return category
     .split('-')
     .map(part => (part === '' ? '' : `${part[0].toUpperCase()}${part.slice(1)}`))
     .join(' ');

@@ -3733,7 +3733,7 @@ test('Connectors Explore names Flutter CategorySection empty GET category and In
         node => node.type === Text && node.props.numberOfLines === 1,
       )
       .map(node => node.props.children),
-  ).toEqual(['', '', 'Health']);
+  ).toEqual(['', ' \t', 'Health']);
   const installedHeading = renderer.root.find(
     node =>
       node.type === Text &&
@@ -3745,6 +3745,99 @@ test('Connectors Explore names Flutter CategorySection empty GET category and In
       node => node.type === Text && node.props.numberOfLines === 1,
     ),
   ).toHaveLength(0);
+  expect(textOf(renderer)).not.toContain('Not installed');
+});
+
+test('Connectors Explore names Flutter CategorySection padded GET category', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-exact',
+            name: 'Exact category app',
+            category: 'health-and-wellness',
+          },
+          {
+            id: 'catalog-app-padded',
+            name: 'Padded category app',
+            category: '  health-and-wellness  ',
+          },
+          {
+            id: 'catalog-app-trailing',
+            name: 'Trailing category app',
+            category: 'health-and-wellness ',
+          },
+          {
+            id: 'catalog-app-next-line',
+            name: 'Next-line category app',
+            category: '\u0085health-and-wellness',
+          },
+          {
+            id: 'catalog-app-installed',
+            name: 'Owned app',
+            category: '  health-and-wellness  ',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(['catalog-app-installed']),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Exact category app');
+  expect(tree).toContain('Padded category app');
+  expect(tree).toContain('Trailing category app');
+  expect(tree).toContain('Next-line category app');
+  expect(tree).toContain('Owned app');
+  expect(sectionText(renderer, 'Explore')).toContain('Health');
+  expect(sectionText(renderer, 'Explore')).toContain('  health And Wellness  ');
+  expect(sectionText(renderer, 'Explore')).toContain('Health And Wellness ');
+  expect(sectionText(renderer, 'Explore')).toContain(
+    '\u0085health And Wellness',
+  );
+  expect(sectionText(renderer, 'Installed')).toContain('Owned app');
+  expect(sectionText(renderer, 'Installed')).not.toContain('Health');
+  expect(sectionText(renderer, 'Installed')).not.toContain(
+    '  health And Wellness  ',
+  );
+  const exploreHeading = renderer.root.find(
+    node =>
+      node.type === Text &&
+      node.props.children === 'Explore' &&
+      node.props.style === styles.destinationSectionTitle,
+  );
+  expect(
+    exploreHeading.parent
+      .findAll(
+        node => node.type === Text && node.props.numberOfLines === 1,
+      )
+      .map(node => node.props.children),
+  ).toEqual([
+    'Health',
+    '  health And Wellness  ',
+    'Health And Wellness ',
+    '\u0085health And Wellness',
+    '  health And Wellness  ',
+  ]);
+  expect(tree).not.toContain('health-and-wellness');
   expect(textOf(renderer)).not.toContain('Not installed');
 });
 
