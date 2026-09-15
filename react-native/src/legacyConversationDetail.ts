@@ -266,10 +266,7 @@ function calendarEvent(
   }
   const attendees = (
     Array.isArray(event.attendees) ? event.attendees : []
-  ).flatMap(raw => {
-    const name = visibleDisplayText(text(raw));
-    return name === '' ? [] : [name];
-  });
+  ).map(raw => visibleDisplayText(text(raw)));
   if (
     event.attendee_emails !== undefined &&
     event.attendee_emails !== null &&

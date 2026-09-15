@@ -721,9 +721,7 @@ export function calendarEventDisplayTitle(
 export function conversationCalendarAttendeesChipCopy(
   attendees: readonly string[] | null | undefined,
 ): string | null {
-  const names = (attendees ?? [])
-    .map(conversationCalendarAttendeeChipName)
-    .filter(name => name !== '');
+  const names = (attendees ?? []).map(conversationCalendarAttendeeChipName);
   if (names.length === 0) {
     return null;
   }

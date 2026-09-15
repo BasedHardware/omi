@@ -205,7 +205,7 @@ test('keeps GET calendar event title and attendees and omits missing events', as
   const linked = await loadLegacyConversationDetail(backend, fixture.id);
   expect(linked.calendarEvent).toMatchObject({
     title: 'Standup',
-    attendees: ['Alex Chen', 'sam@example.com'],
+    attendees: ['Alex Chen', '', 'sam@example.com'],
   });
   expect(linked.calendarEvent?.startCopy).toEqual(expect.any(String));
   expect(linked.calendarEvent?.startCopy).not.toBe('');

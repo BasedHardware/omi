@@ -95,11 +95,11 @@ function ConversationClockFields({
       {duration !== null ? (
         <Text style={[styles.conversationDetailField, ink]}>{duration}</Text>
       ) : null}
-      {attendeesCopy ? (
+      {attendeesCopy == null ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {attendeesCopy}
         </Text>
-      ) : null}
+      )}
       <Text
         style={[
           styles.conversationDetailField,
@@ -339,9 +339,9 @@ function LegacyConversationBody({
     : visibleDisplayText(detail.appsError ?? '');
   const peopleError = visibleDisplayText(detail.peopleError ?? '');
   const calendarTitle = calendarEventDisplayTitle(detail.calendarEvent?.title);
-  const calendarAttendees = (detail.calendarEvent?.attendees ?? [])
+  const calendarAttendeesList = detail.calendarEvent?.attendees ?? [];
+  const calendarAttendees = calendarAttendeesList
     .map(name => visibleDisplayText(name))
-    .filter(name => name !== '')
     .join(', ');
   const calendarStart = visibleDisplayText(
     detail.calendarEvent?.startCopy ?? '',
@@ -475,7 +475,7 @@ function LegacyConversationBody({
           {calendarTimes}
         </Text>
       )}
-      {calendarAttendees === '' ? null : (
+      {calendarAttendeesList.length === 0 ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {calendarAttendees}
         </Text>

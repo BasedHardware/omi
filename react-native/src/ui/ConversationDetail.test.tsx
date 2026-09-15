@@ -2483,6 +2483,49 @@ test('legacy conversation details name Flutter CalendarEventDetailsSheet empty G
   expect(text(view)).not.toContain('Event title unavailable');
 });
 
+test('legacy conversation details name Flutter GetSummaryWidgets empty GET attendees', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        calendarEvent: {
+          title: 'Standup',
+          attendees: [' \t\n'],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+        },
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const emptyAttendees = view.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyAttendees.length).toBeGreaterThan(0);
+  expect(text(view)).toContain('Standup');
+  expect(text(view)).toContain('3:00 PM – 4:00 PM');
+  expect(text(view)).not.toContain('Attendees unavailable');
+});
+
 test('legacy conversation details name GET calendar event title and attendees', () => {
   mockLegacy.mockReturnValue({
     result: {
