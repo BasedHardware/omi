@@ -729,6 +729,187 @@ test('names Flutter ChangelogSheet fromJson missing GET content instead of keepi
   ]);
 });
 
+test('names Flutter ChangelogSheet fromGenerated unknown GET trigger instead of keeping neighbors', () => {
+  const createdAt = '2026-09-09T12:00:00.000Z';
+  const neighbor = {
+    id: 'ann-good',
+    type: 'changelog',
+    created_at: createdAt,
+    app_version: '1.2.0',
+    content: {changes: [{title: 'Offline replay', description: ''}]},
+  };
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-trigger',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {trigger: 'bogus'},
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-empty-trigger',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {trigger: ''},
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-space-trigger',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {trigger: ' \t'},
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-null-trigger',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {trigger: null},
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-feature',
+          type: 'feature',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {trigger: 'bogus'},
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-targeting',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: 'nope',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-expires',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          display: {expires_at: 'not-a-date'},
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+});
+
+test('keeps GET app changelogs when targeting trigger is omitted or a Flutter enum value', () => {
+  const createdAt = '2026-09-09T12:00:00.000Z';
+  const content = {changes: [{title: 'Faster sync', description: ''}]};
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-default',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {},
+          content,
+        },
+        {
+          id: 'ann-upgrade',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {trigger: 'version_upgrade'},
+          content,
+        },
+        {
+          id: 'ann-immediate',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {trigger: 'immediate'},
+          content,
+        },
+        {
+          id: 'ann-firmware',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          targeting: {trigger: 'firmware_upgrade'},
+          display: {expires_at: null, start_at: createdAt, priority: 0},
+          content,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-default:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Faster sync · ',
+    },
+    {
+      key: 'ann-upgrade:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Faster sync · ',
+    },
+    {
+      key: 'ann-immediate:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Faster sync · ',
+    },
+    {
+      key: 'ann-firmware:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Faster sync · ',
+    },
+  ]);
+});
+
 test('keeps GET app changelogs when created_at exceeds 10000', () => {
   const longCreatedAt = `2026-04-01T12:00:00.${'0'.repeat(9980)}Z`;
   expect(longCreatedAt.length).toBe(10001);

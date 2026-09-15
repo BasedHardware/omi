@@ -39,6 +39,93 @@ function createdAtMs(value: unknown): number {
   return parsed;
 }
 
+const ANNOUNCEMENT_TRIGGERS = new Set([
+  'immediate',
+  'version_upgrade',
+  'firmware_upgrade',
+]);
+
+function optionalNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  text(value, 1_000_000);
+}
+
+function optionalNullableStringList(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new AppChangelogError();
+  }
+  for (const item of value) {
+    text(item, 1_000_000);
+  }
+}
+
+function optionalBool(value: unknown): void {
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value !== 'boolean') {
+    throw new AppChangelogError();
+  }
+}
+
+function optionalInt(value: unknown): void {
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return;
+  }
+  if (typeof value === 'string' && /^-?\d+$/.test(value)) {
+    return;
+  }
+  throw new AppChangelogError();
+}
+
+function optionalDateTime(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  createdAtMs(value);
+}
+
+function optionalTargeting(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  const targeting = object(value);
+  optionalNullableString(targeting.app_version_max);
+  optionalNullableString(targeting.app_version_min);
+  optionalNullableStringList(targeting.device_models);
+  optionalNullableString(targeting.firmware_version_max);
+  optionalNullableString(targeting.firmware_version_min);
+  optionalNullableStringList(targeting.platforms);
+  optionalNullableStringList(targeting.test_uids);
+  if (targeting.trigger === undefined) {
+    return;
+  }
+  const trigger = text(targeting.trigger, 1_000_000);
+  if (!ANNOUNCEMENT_TRIGGERS.has(trigger)) {
+    throw new AppChangelogError();
+  }
+}
+
+function optionalDisplay(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  const display = object(value);
+  optionalBool(display.dismissible);
+  optionalDateTime(display.expires_at);
+  optionalInt(display.priority);
+  optionalBool(display.show_once);
+  optionalDateTime(display.start_at);
+}
+
 export type OmiAppChangelogRow = {
   key: string;
   title: string;
@@ -82,6 +169,8 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
     createdAtMs(row.created_at);
     text(row.id, 1_000_000);
     object(row.content);
+    optionalTargeting(row.targeting);
+    optionalDisplay(row.display);
     if (type === 'feature' || type === 'announcement') {
       continue;
     }
