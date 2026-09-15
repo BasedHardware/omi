@@ -901,13 +901,6 @@ extension APIClient {
     }
   }
 
-  struct MemoryHistoryPage {
-    let memories: [ServerMemory]
-    let nextCursor: String?
-    let truncated: Bool
-    let beliefEnabled: Bool?
-  }
-
   /// Fetches memories from the API with optional filtering
   func getMemories(
     limit: Int = 100,
@@ -1026,52 +1019,6 @@ extension APIClient {
       truncated: truncated,
       beliefEnabled: beliefEnabled
     )
-  }
-
-  /// Fetch the durable history projection. Explicit history reads always go
-  /// to the authorized server route; callers must not satisfy this from cache.
-  func getMemoryHistoryPage(
-    limit: Int = 100,
-    offset: Int = 0,
-    cursor: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws -> MemoryHistoryPage {
-    var endpoint = "v3/memories/ledger-history?limit=\(limit)"
-    if let cursor, !cursor.isEmpty {
-      var allowed = CharacterSet.urlQueryAllowed
-      allowed.remove(charactersIn: ":/?#[]@!$&'()*+,;=")
-      endpoint += "&cursor=\(cursor.addingPercentEncoding(withAllowedCharacters: allowed) ?? cursor)"
-    } else {
-      endpoint += "&offset=\(offset)"
-    }
-    guard let url = URL(string: baseURL + endpoint) else { throw APIError.invalidResponse }
-    let authPolicy = try resolvedRequestAuthPolicy(expectedOwnerId: nil, authorizationSnapshot: authorizationSnapshot)
-    try validateExpectedOwner(authPolicy)
-    var request = URLRequest(url: url)
-    request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(
-      requireAuth: true, expectedAuthOwnerId: authPolicy.expectedAuthOwnerId)
-    try validateExpectedOwner(authPolicy)
-    let (data, response) = try await performAuthenticatedData(for: request, authPolicy: authPolicy)
-    guard (200...299).contains(response.statusCode) else {
-      throw APIError.httpError(statusCode: response.statusCode, detail: OmiHTTPTransport.extractErrorDetail(from: data))
-    }
-    let memories = try decoder.decode([ServerMemory].self, from: data)
-    try validateExpectedOwner(authPolicy)
-    let beliefHeader = response.value(forHTTPHeaderField: Self.beliefEnabledHeader)
-    let beliefEnabled = beliefHeader.flatMap { value in
-      switch value.lowercased() {
-      case "true": return true
-      case "false": return false
-      default: return nil
-      }
-    }
-    let nextCursor = response.value(forHTTPHeaderField: Self.nextCursorHeader)
-    return MemoryHistoryPage(
-      memories: memories,
-      nextCursor: nextCursor?.isEmpty == false ? nextCursor : nil,
-      truncated: response.value(forHTTPHeaderField: Self.listTruncatedHeader) == "true",
-      beliefEnabled: beliefEnabled)
   }
 
   /// Read the dedicated server-owned snapshot decision. The backend returns

@@ -293,7 +293,7 @@ final class MemoryLayerFilterTests: XCTestCase {
       0,
       "Device-scope fallback metadata should be returned to commitMemoryPageCapabilities(), not assigned in fetch retry code."
     )
-    XCTAssertTrue(source.contains("guard commitMemoryPageCapabilities(page, for: token) else"))
+    XCTAssertTrue(source.contains("guard\n        commitMemoryPageCapabilities("))
     XCTAssertTrue(source.contains("let fetchResult = try await fetchMemoriesPageDeviceScopeAware("))
     XCTAssertTrue(source.contains("let page = fetchResult.page"))
     XCTAssertTrue(source.contains("deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride"))

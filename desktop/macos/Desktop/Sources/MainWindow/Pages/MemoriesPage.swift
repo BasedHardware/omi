@@ -356,6 +356,11 @@ class MemoriesViewModel: ObservableObject {
   private var backendCursor: String?
   private let pageSize = 100  // Reduced from 500 for better performance
 
+  /// Test-only read of the pagination cursor committed by the latest
+  /// authoritative page. Refresh-consistency tests prove which server
+  /// response `loadMore()` would resume from; the UI never reads this.
+  var backendCursorForTesting: String? { backendCursor }
+
   // Bulk operations state
   @Published var showingDeleteAllConfirmation = false
   @Published var isBulkOperationInProgress = false
@@ -764,12 +769,27 @@ class MemoriesViewModel: ObservableObject {
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     do {
       let reloadLimit = max(pageSize, memories.count)
-      let page = try await APIClient.shared.getMemoriesPage(
+      // Route through the same device-scope-aware funnel as the initial load.
+      // It fetches the selected temporal view once the capability is
+      // established (refresh only runs after `hasLoadedInitially`), so the
+      // committed cursor stays valid for the view being paginated — a bare
+      // released-view page here would donate a cursor that loadMore() then
+      // pages as the temporal view. The funnel also restores device-scope
+      // and its 400-retry, which the direct call bypassed.
+      let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: reloadLimit,
         offset: 0,
+        includeArchive: token.layerFilter.layerScope.includesArchive,
         authorizationSnapshot: authorizationSnapshot)
+      let page = fetchResult.page
       let apiMemories = page.memories
-      guard commitMemoryPageCapabilities(page, for: token) else { return }
+      guard
+        commitMemoryPageCapabilities(
+          page,
+          for: token,
+          deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
+        )
+      else { return }
       hasAuthoritativeServerProjection = true
       authoritativeProjectionGeneration += 1
 
@@ -1053,6 +1073,14 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
+  /// The single server-page read behind the browse surface (initial load,
+  var memoriesPageFetch:
+    @MainActor (
+      _ limit: Int, _ offset: Int, _ cursor: String?, _ includeArchive: Bool,
+      _ deviceScope: String?, _ view: APIClient.MemoryTemporalView?,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+    ) async throws -> APIClient.MemoryListPage
+
   /// Fetch memories from the API, honoring the device-scope filter only when
   /// the backend supports it for this user. Legacy (non-canonical) memory users
   /// get a 400 from device_scope=current; on that we retry without the scope
@@ -1072,14 +1100,14 @@ class MemoriesViewModel: ObservableObject {
       viewOverride
       ?? (beliefCapabilityEnabled == true ? selectedMemoryTemporalView : nil)
     do {
-      let page = try await APIClient.shared.getMemoriesPage(
+      let page = try await performMemoriesPageFetch(
         limit: limit,
         offset: offset,
         cursor: cursor,
         includeArchive: includeArchive,
         deviceScope: scope,
-        authorizationSnapshot: authorizationSnapshot,
-        view: requestedView)
+        view: requestedView,
+        authorizationSnapshot: authorizationSnapshot)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: nil)
     } catch APIError.httpError(let statusCode, _) where statusCode == 400 && scope != nil {
       // Backend rejected device_scope for a non-canonical user — retry unscoped.
@@ -1092,16 +1120,41 @@ class MemoriesViewModel: ObservableObject {
         outcome: .degraded,
         extra: ["user_visible": false]
       )
-      let page = try await APIClient.shared.getMemoriesPage(
+      let page = try await performMemoriesPageFetch(
         limit: limit,
         offset: offset,
         cursor: cursor,
         includeArchive: includeArchive,
         deviceScope: nil,
-        authorizationSnapshot: authorizationSnapshot,
-        view: requestedView)
+        view: requestedView,
+        authorizationSnapshot: authorizationSnapshot)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: false)
     }
+  }
+
+  /// The transport under `fetchMemoriesPageDeviceScopeAware`. Falls back to
+  /// the shared client unless a test installed `memoriesPageFetch`.
+  private func performMemoriesPageFetch(
+    limit: Int,
+    offset: Int,
+    cursor: String?,
+    includeArchive: Bool,
+    deviceScope: String?,
+    view: APIClient.MemoryTemporalView?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> APIClient.MemoryListPage {
+    if let memoriesPageFetch {
+      return try await memoriesPageFetch(
+        limit, offset, cursor, includeArchive, deviceScope, view, authorizationSnapshot)
+    }
+    return try await APIClient.shared.getMemoriesPage(
+      limit: limit,
+      offset: offset,
+      cursor: cursor,
+      includeArchive: includeArchive,
+      deviceScope: deviceScope,
+      authorizationSnapshot: authorizationSnapshot,
+      view: view)
   }
 
   /// Load memories using local-first pattern:
