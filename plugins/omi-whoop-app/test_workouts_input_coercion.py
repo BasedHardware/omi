@@ -178,6 +178,20 @@ class CoerceIntUnitTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(main._coerce_int(value, 10, 1, 50), 10)
 
+    def test_overflowing_floats_fall_back_instead_of_raising(self):
+        """A JSON number that overflows int() must not turn into a 500.
+
+        `json.loads("1e309")` produces `inf`, and `int(inf)` raises
+        `OverflowError`; the same value can arrive as the string "1e309".
+        """
+        for value in ("1e309", "1E999", "-1e309", float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                self.assertEqual(main._coerce_int(value, 10, 1, 50), 10)
+
+    def test_digit_strings_longer_than_any_float_are_clamped(self):
+        """Python ints are unbounded, so a huge digit string is clamped, not dropped."""
+        self.assertEqual(main._coerce_int("9" * 4000, 10, 1, 50), 50)
+
 
 if __name__ == "__main__":
     unittest.main()
