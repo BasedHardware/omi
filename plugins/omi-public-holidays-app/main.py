@@ -48,7 +48,7 @@ class HolidayRequest(BaseModel):
     year: int = Field(..., ge=1970, le=2100)
     limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
@@ -58,7 +58,7 @@ class NextHolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
     limit: int = Field(default=8, ge=1, le=MAX_ITEMS)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
@@ -69,30 +69,34 @@ class LongWeekendRequest(BaseModel):
     year: int = Field(..., ge=1970, le=2100)
     limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
 
 
-def _normalize_country_code(value: str) -> str:
-    code = value.strip().upper()
+def _normalize_country_code(value: Any) -> str:
+    code = str(value).strip().upper()
     if len(code) != 2 or not code.isalpha():
         raise ValueError("country_code must be a 2-letter code, such as US or DE")
     return code
 
 
-def _format_list(values: list[str] | None) -> str:
-    if not values:
+def _format_list(values: Any) -> str:
+    if not isinstance(values, list) or not values:
         return "all regions"
-    visible = values[:5]
+    visible = [str(value) for value in values[:5]]
     suffix = "" if len(values) <= 5 else f" +{len(values) - 5} more"
     return ", ".join(visible) + suffix
 
 
-def _format_holiday(holiday: dict[str, Any]) -> str:
+def _format_holiday(holiday: Any) -> str:
+    if not isinstance(holiday, dict):
+        return f"- {holiday}"
     regional = "global" if holiday.get("global") else _format_list(holiday.get("counties"))
-    types = ", ".join(holiday.get("types") or [])
+    raw_types = holiday.get("types")
+    type_items = raw_types if isinstance(raw_types, list) else []
+    types = ", ".join(str(item) for item in type_items)
     type_text = f"; {types}" if types else ""
     local_name = holiday.get("localName")
     name = holiday.get("name")
@@ -100,9 +104,11 @@ def _format_holiday(holiday: dict[str, Any]) -> str:
     return f"- {holiday.get('date')}: {display_name} ({regional}{type_text})"
 
 
-def _format_long_weekend(item: dict[str, Any]) -> str:
+def _format_long_weekend(item: Any) -> str:
+    if not isinstance(item, dict):
+        return f"- {item}"
     raw_bridge_days = item.get("bridgeDays")
-    bridge_days = raw_bridge_days if isinstance(raw_bridge_days, list) else []
+    bridge_days = [str(day) for day in raw_bridge_days] if isinstance(raw_bridge_days, list) else []
     if bridge_days:
         bridge_text = f"; bridge day: {', '.join(bridge_days)}"
     elif item.get("needBridgeDay"):
@@ -113,7 +119,10 @@ def _format_long_weekend(item: dict[str, Any]) -> str:
 
 
 async def _request_json(path: str) -> Any:
-    client: httpx.AsyncClient = app.state.http_client
+    client = getattr(app.state, "http_client", None)
+    if client is None or getattr(client, "is_closed", False):
+        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+        app.state.http_client = client
     response = await client.get(f"{NAGER_BASE_URL}{path}")
     response.raise_for_status()
     if response.status_code == 204 or not response.content:
@@ -214,7 +223,7 @@ async def omi_tools() -> dict[str, Any]:
 async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
     try:
         holidays = await _request_json(f"/PublicHolidays/{request.year}/{request.country_code}")
-        if not holidays:
+        if not isinstance(holidays, list) or not holidays:
             return ChatToolResponse(error=f"no holidays returned for {request.country_code} in {request.year}")
         lines = [f"Public holidays for {request.country_code} in {request.year}:"]
         lines.extend(_format_holiday(item) for item in holidays[: request.limit])
@@ -229,7 +238,7 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
 async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolResponse:
     try:
         holidays = await _request_json(f"/NextPublicHolidays/{request.country_code}")
-        if not holidays:
+        if not isinstance(holidays, list) or not holidays:
             return ChatToolResponse(error=f"no upcoming holidays returned for {request.country_code}")
         lines = [f"Upcoming public holidays for {request.country_code}:"]
         lines.extend(_format_holiday(item) for item in holidays[: request.limit])
@@ -244,7 +253,7 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
 async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
     try:
         weekends = await _request_json(f"/LongWeekend/{request.year}/{request.country_code}")
-        if not weekends:
+        if not isinstance(weekends, list) or not weekends:
             return ChatToolResponse(error=f"no long weekends returned for {request.country_code} in {request.year}")
         lines = [f"Long weekends for {request.country_code} in {request.year}:"]
         lines.extend(_format_long_weekend(item) for item in weekends[: request.limit])
@@ -263,7 +272,10 @@ async def list_supported_countries() -> ChatToolResponse:
             return ChatToolResponse(error="country list request returned no countries")
         lines = ["Supported countries:"]
         for item in countries:
-            lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
+            if isinstance(item, dict):
+                lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
+            else:
+                lines.append(f"- {item}")
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"country list request failed: {exc}")
