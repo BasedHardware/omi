@@ -21,13 +21,13 @@ omi --help
 ## Konekti vian konton
 
 ```sh
-omi auth login --email viaretadreso@ekzemplo.com
+omi auth login --api-key <via-ŝlosilo>
 ```
 
-Aux per OMI_ACCESS_TOKEN:
+Aux per OMI_API_KEY:
 
 ```sh
-export OMI_ACCESS_TOKEN="via-alirkodo"
+export OMI_API_KEY="via-alirkodo"
 omi auth status
 ```
 
@@ -42,7 +42,7 @@ omi action-item list
 ## Akiri JSON kaj navigi tra la pagxoj
 
 ```sh
-omi memory list --json
+omi --json memory list
 omi memory list --limit 10 --offset 0
 ```
 
