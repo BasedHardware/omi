@@ -494,6 +494,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceName => 'שם המכשיר';
 
   @override
+  String get deviceNameStoredOnPhone => 'נשמר רק בטלפון הזה.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'נשמר ב-Omi שלך, כך שהוא מוצג בכל טלפון שמתחבר אליו.';
+
+  @override
   String get deviceId => 'מזהה המכשיר';
 
   @override

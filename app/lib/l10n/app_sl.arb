@@ -633,6 +633,8 @@
         "description": "Empty state for app access"
     },
     "deviceName": "Ime naprave",
+    "deviceNameStoredOnPhone": "Shranjeno samo v tem telefonu.",
+    "deviceNameStoredOnDevice": "Shranjeno na vašem Omi, zato se prikaže na vsakem povezanem telefonu.",
     "@deviceName": {
         "description": "Device name label"
     },

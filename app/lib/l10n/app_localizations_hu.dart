@@ -500,6 +500,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceName => 'Eszköz neve';
 
   @override
+  String get deviceNameStoredOnPhone => 'Csak ezen a telefonon tárolva.';
+
+  @override
+  String get deviceNameStoredOnDevice =>
+      'Az Omi eszközödön tárolva, így minden csatlakozó telefonon ez a név jelenik meg.';
+
+  @override
   String get deviceId => 'Eszköz azonosító';
 
   @override

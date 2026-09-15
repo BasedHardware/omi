@@ -498,6 +498,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceName => 'نام دستگاه';
 
   @override
+  String get deviceNameStoredOnPhone => 'فقط در این تلفن ذخیره می‌شود.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'در Omi شما ذخیره می‌شود، بنابراین در هر تلفنی که متصل شود نمایش داده می‌شود.';
+
+  @override
   String get deviceId => 'شناسه دستگاه';
 
   @override

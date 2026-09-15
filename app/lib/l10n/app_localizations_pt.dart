@@ -496,6 +496,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deviceName => 'Nome do dispositivo';
 
   @override
+  String get deviceNameStoredOnPhone => 'Guardado apenas neste telefone.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Salvo no seu Omi, então aparece em qualquer telefone que se conectar.';
+
+  @override
   String get deviceId => 'ID do Dispositivo';
 
   @override

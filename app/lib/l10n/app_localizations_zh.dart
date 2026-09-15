@@ -488,6 +488,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceName => '设备名称';
 
   @override
+  String get deviceNameStoredOnPhone => '仅保存在此手机上。';
+
+  @override
+  String get deviceNameStoredOnDevice => '保存在您的 Omi 上，任何连接的手机都会显示此名称。';
+
+  @override
   String get deviceId => '设备ID';
 
   @override

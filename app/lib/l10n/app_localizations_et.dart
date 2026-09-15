@@ -499,6 +499,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceName => 'Seadme nimi';
 
   @override
+  String get deviceNameStoredOnPhone => 'Salvestatud ainult selles telefonis.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Salvestatud teie Omis, nii et see kuvatakse igas ühendatud telefonis.';
+
+  @override
   String get deviceId => 'Seadme ID';
 
   @override

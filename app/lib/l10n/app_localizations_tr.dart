@@ -499,6 +499,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceName => 'Cihaz Adı';
 
   @override
+  String get deviceNameStoredOnPhone => 'Yalnızca bu telefonda saklanır.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Omi\'nizde saklanır, bu yüzden bağlanan her telefonda bu ad görünür.';
+
+  @override
   String get deviceId => 'Cihaz Kimliği';
 
   @override

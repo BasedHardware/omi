@@ -500,6 +500,13 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deviceName => 'சாதன பெயர்';
 
   @override
+  String get deviceNameStoredOnPhone => 'இந்த தொலைபேசியில் மட்டுமே சேமிக்கப்படுகிறது.';
+
+  @override
+  String get deviceNameStoredOnDevice =>
+      'உங்கள் Omi இல் சேமிக்கப்பட்டது, எனவே இணைக்கும் எந்த ஃபோனிலும் இந்தப் பெயர் தெரியும்.';
+
+  @override
   String get deviceId => 'சாதன ID';
 
   @override

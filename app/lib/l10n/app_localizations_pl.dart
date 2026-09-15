@@ -497,6 +497,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceName => 'Nazwa urządzenia';
 
   @override
+  String get deviceNameStoredOnPhone => 'Zapisano tylko na tym telefonie.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Zapisano w Twoim Omi, więc wyświetla się na każdym połączonym telefonie.';
+
+  @override
   String get deviceId => 'ID urządzenia';
 
   @override

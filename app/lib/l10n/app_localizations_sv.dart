@@ -498,6 +498,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceName => 'Enhetsnamn';
 
   @override
+  String get deviceNameStoredOnPhone => 'Sparas endast på den här telefonen.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Sparas på din Omi, så den visas på alla telefoner som ansluter.';
+
+  @override
   String get deviceId => 'Enhets-ID';
 
   @override

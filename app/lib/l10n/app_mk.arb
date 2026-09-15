@@ -633,6 +633,8 @@
         "description": "Empty state for app access"
     },
     "deviceName": "Име на уред",
+    "deviceNameStoredOnPhone": "Зачувано само на овој телефон.",
+    "deviceNameStoredOnDevice": "Зачувано на вашиот Omi, па се прикажува на секој поврзан телефон.",
     "@deviceName": {
         "description": "Device name label"
     },
