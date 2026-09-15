@@ -61,6 +61,23 @@ app = FastAPI(
 # Helper Functions
 # ============================================
 
+def _coerce_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    """Coerce an optional JSON integer parameter into [minimum, maximum].
+
+    The Omi backend forwards an explicit JSON null for omitted optional
+    parameters, so ``body.get("max_results", 10)`` can still return None.
+    Map nulls, booleans, and unparseable or overflowing values to
+    ``default``; clamp ints and numeric strings into range.
+    """
+    if isinstance(value, bool):
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(minimum, min(number, maximum))
+
+
 def get_valid_access_token(uid: str) -> Optional[str]:
     """
     Get a valid access token for Notion.
@@ -433,7 +450,7 @@ async def tool_search(request: Request):
         uid = body.get("uid")
         query = body.get("query", "")
         filter_type = body.get("filter")
-        max_results = min(body.get("max_results", 10), 20)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=20)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -491,7 +508,7 @@ async def tool_list_pages(request: Request):
         log(f"=== LIST_PAGES ===")
 
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 20)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=20)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -791,7 +808,7 @@ async def tool_list_databases(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 20)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=20)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -833,7 +850,7 @@ async def tool_query_database(request: Request):
         body = await request.json()
         uid = body.get("uid")
         database_id = body.get("database_id")
-        max_results = min(body.get("max_results", 10), 50)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
