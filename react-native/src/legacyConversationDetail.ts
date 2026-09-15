@@ -542,9 +542,7 @@ export async function loadLegacyConversationDetail(
                 personId === undefined ? undefined : names.get(personId);
               return {
                 ...rest,
-                ...(personName === undefined || personName === ''
-                  ? {}
-                  : {personName}),
+                ...(personName === undefined ? {} : {personName}),
               };
             });
           })(),

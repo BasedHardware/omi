@@ -3318,6 +3318,56 @@ test('legacy conversation details name GET people names on transcript speakers',
   expect(copy).not.toContain('person-alex');
 });
 
+test('legacy conversation details name Flutter TranscriptWidget empty GET people names', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Hello there',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+              personName: '',
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  const emptyNames = view.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyNames.length).toBeGreaterThan(0);
+  expect(copy).toContain('Hello there');
+  expect(copy).not.toContain('Speaker 1');
+  expect(copy).not.toContain('person-empty');
+});
+
 test('legacy conversation details name GET speakers from the minimum speaker id', () => {
   mockLegacy.mockReturnValue({
     result: {

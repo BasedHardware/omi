@@ -1150,6 +1150,18 @@ test('discarded conversation titles use Flutter transcript excerpt and people na
   ).toBe('Alex Chen');
   expect(
     conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_00', isUser: false, personName: ''},
+      [{speaker: 'SPEAKER_00', isUser: false}],
+    ),
+  ).toBe('');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_00', isUser: false, personName: ' \t\n'},
+      [{speaker: 'SPEAKER_00', isUser: false}],
+    ),
+  ).toBe('');
+  expect(
+    conversationDetailSpeakerCopy(
       {speaker: 'SPEAKER_99', isUser: false},
       [{speaker: 'SPEAKER_99', isUser: false}],
     ),

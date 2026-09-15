@@ -294,9 +294,8 @@ export function conversationDetailSpeakerCopy(
   if (labeled !== null && Number(labeled[1]) === OMI_SPEAKER_ID) {
     return 'omi';
   }
-  const namedPerson = visibleDisplayText(segment.personName ?? '');
-  if (namedPerson !== '') {
-    return namedPerson;
+  if (segment.personName !== undefined) {
+    return visibleDisplayText(segment.personName);
   }
   if (labeled === null && trimmed !== '') {
     return trimmed;

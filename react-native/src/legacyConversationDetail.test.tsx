@@ -1897,6 +1897,59 @@ test('names GET people names on transcript segments and omits unresolved ids', a
   expect(mockRequest).toHaveBeenCalledTimes(1);
 });
 
+test('names Flutter TranscriptWidget empty GET people names', async () => {
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: 'people',
+        status: 200,
+        body: JSON.stringify([
+          {id: 'person-empty', name: ''},
+          {id: 'person-space', name: ' \t'},
+          {id: 'person-nel', name: '\u0085'},
+        ]),
+      };
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          speaker: 'SPEAKER_00',
+          person_id: 'person-empty',
+        },
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          speaker: 'SPEAKER_01',
+          person_id: 'person-space',
+          start: 4.5,
+          end: 5,
+        },
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          speaker: 'SPEAKER_02',
+          person_id: 'person-nel',
+          start: 5,
+          end: 6,
+        },
+      ],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toMatchObject({
+    status: 'loaded',
+    segments: [
+      {personName: ''},
+      {personName: ''},
+      {personName: ''},
+    ],
+  });
+});
+
 test('keeps GET geolocation address and omits empty or missing locations', async () => {
   mockRequest.mockResolvedValue(
     response({
