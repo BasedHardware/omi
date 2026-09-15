@@ -165,8 +165,15 @@ function MemoryCardImpl({
           </span>
         )}
 
+        {/* Both events on the feedback group are fenced: a click is already
+            stopped, but Enter/Space on these buttons would otherwise bubble to
+            the li's onKeyDown and open the card on top of the feedback. */}
         {onUseAction && useFeedbackAllowed && (
-          <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <span
+            className="flex items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
               disabled={useActionBusy}

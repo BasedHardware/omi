@@ -98,7 +98,10 @@ export function hydrateFromDisk(view: MemoryReadView = 'useful_now'): void {
   if (hydratedSurface === surface) return
   hydratedSurface = surface
   if (cache.list !== null && cache.view === view) return
-  if (cache.list !== null && cache.view !== view) {
+  // The list!==null guard is deliberately dropped: hydrating view B with
+  // loaded=true left over from view A (list already null) would make the hook's
+  // revalidation effect skip its fetch, so view B would never load at all.
+  if (cache.view !== view) {
     cache.list = null
     cache.loaded = false
   }

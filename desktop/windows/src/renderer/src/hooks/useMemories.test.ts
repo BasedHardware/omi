@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act, cleanup } from '@testing-library/react'
+import { renderHook, act, cleanup, waitFor } from '@testing-library/react'
 
 // C9: the backend binds PATCH /v3/memories/{id} and /v3/memories/{id}/visibility
 // `value` as a QUERY param (a plain `value: str` function arg — see edit_memory /
@@ -22,7 +22,7 @@ vi.mock('../lib/apiClient', () => ({
   }
 }))
 
-import { useMemories, type Memory } from './useMemories'
+import { useMemories, type Memory, type MemoryReadView } from './useMemories'
 import { cache as memoriesCache, resetMemoriesCache } from '../lib/memoriesCache'
 
 const memory = (id: string, content: string, visibility?: string): unknown => ({
@@ -371,6 +371,76 @@ describe('useMemories — pagination, capability header, delete', () => {
     expect(memoriesCache.view).toBe('useful_now')
     expect(omiApiGet.mock.calls[0]).toEqual(['/v3/memories', { params: { limit: 500, offset: 0 } }])
     localStorage.clear()
+    resetMemoriesCache()
+  })
+})
+
+describe('useMemories — view switching', () => {
+  it('clears the previous view rows when the requested view changes', async () => {
+    resetMemoriesCache()
+    localStorage.clear()
+    memoriesCache.beliefEnabled = true
+    omiApiGet.mockResolvedValue({
+      data: [memory('u1', 'useful row')],
+      headers: { 'x-omi-memory-belief-enabled': 'true' }
+    })
+    const { result, rerender } = renderHook(({ view }) => useMemories(view), {
+      initialProps: { view: 'useful_now' as MemoryReadView }
+    })
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.memories.map((m) => m.content)).toEqual(['useful row'])
+
+    // Hold the history fetch open so the cleared intermediate state is observable.
+    const { promise: historyPending, resolve: resolveHistory } = Promise.withResolvers<{
+      data: unknown[]
+      headers?: Record<string, string>
+    }>()
+    omiApiGet.mockImplementationOnce(() => historyPending)
+    rerender({ view: 'history' })
+
+    // Before the fix the previous view's rows stayed on screen (and, with a
+    // null cache.list, no publish ever replaced them).
+    await waitFor(() => expect(result.current.memories).toEqual([]))
+    expect(result.current.loading).toBe(true)
+
+    await act(async () => {
+      resolveHistory({
+        data: [memory('h1', 'history row')],
+        headers: { 'x-omi-memory-belief-enabled': 'true' }
+      })
+    })
+    await waitFor(() =>
+      expect(result.current.memories.map((m) => m.content)).toEqual(['history row'])
+    )
+    resetMemoriesCache()
+  })
+
+  it('keeps the new view empty when its revalidation fetch fails', async () => {
+    resetMemoriesCache()
+    localStorage.clear()
+    memoriesCache.beliefEnabled = true
+    omiApiGet.mockResolvedValue({
+      data: [memory('u1', 'useful row')],
+      headers: { 'x-omi-memory-belief-enabled': 'true' }
+    })
+    const { result, rerender } = renderHook(({ view }) => useMemories(view), {
+      initialProps: { view: 'useful_now' as MemoryReadView }
+    })
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.memories).toHaveLength(1)
+
+    omiApiGet.mockRejectedValueOnce(new Error('history view down'))
+    rerender({ view: 'history' })
+
+    await waitFor(() => expect(result.current.error).toBe('history view down'))
+    // The failed fetch leaves the new view empty — the stale useful-now rows
+    // must not come back.
+    expect(result.current.memories).toEqual([])
+    expect(result.current.loading).toBe(false)
     resetMemoriesCache()
   })
 })

@@ -134,6 +134,17 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     }
   }, [])
 
+  // hydrateFromDisk (in the render above) clears the module cache when the
+  // requested view changes, but this component's snapshot still holds the
+  // previous view's rows — and with cache.list null no publish is coming to
+  // replace them. Sync local state to the cleared cache on every view change
+  // so the old rows drop immediately and loading reflects "nothing to show
+  // yet"; the revalidation effect below then fetches the new view.
+  useEffect(() => {
+    setMemories(cache.list ?? [])
+    setLoading(!cache.loaded && (cache.list?.length ?? 0) === 0)
+  }, [effectiveRequestedView])
+
   useEffect(() => {
     if (cache.loaded) return
 

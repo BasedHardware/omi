@@ -111,6 +111,46 @@ describe('fetchAllMemories', () => {
     })
   })
 
+  it('throws when the server truncates a cursor page without a continuation', async () => {
+    omiApiGet
+      .mockResolvedValueOnce({
+        ...page(['history-1']),
+        headers: { 'x-omi-memory-next-cursor': 'cursor-1' }
+      })
+      // Budget-truncated mid-walk: rows arrive but no continuation cursor is
+      // returned, so the pager re-requests the SAME cursor…
+      .mockResolvedValueOnce({
+        ...page(['history-2']),
+        headers: { 'x-omi-list-truncated': 'true' }
+      })
+      // …and gets the identical page back (zero new ids). That natural break
+      // must surface as an error, not a silently partial export/purge.
+      .mockResolvedValueOnce({
+        ...page(['history-2']),
+        headers: { 'x-omi-list-truncated': 'true' }
+      })
+
+    await expect(fetchAllMemoriesPaged(undefined, { view: 'history' })).rejects.toThrow(
+      'Memory list was truncated by the server read budget; result may be incomplete'
+    )
+  })
+
+  it('still resolves when an offset-mode truncation is followed by a complete page', async () => {
+    omiApiGet
+      .mockResolvedValueOnce({
+        ...page(['m0']),
+        headers: { 'x-omi-list-truncated': 'true' }
+      })
+      .mockResolvedValueOnce(page(['m1']))
+      .mockResolvedValueOnce({ data: [] })
+
+    const all = await fetchAllMemories()
+
+    // Offset mode recovers from a budget-truncated page by advancing by the
+    // rows it did receive; only a truncated FINAL response is fatal.
+    expect(all.map((m) => m.id)).toEqual(['m0', 'm1'])
+  })
+
   it('parses capability headers case-insensitively and leaves absent headers unknown', () => {
     expect(
       beliefCapabilityFromResponse({ headers: { 'X-Omi-Memory-Belief-Enabled': 'TRUE' }, data: [] })

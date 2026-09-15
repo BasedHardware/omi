@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Search, Maximize2 } from 'lucide-react'
 import { useMemories, type Memory, type MemoryUseAction } from '../hooks/useMemories'
@@ -258,6 +258,23 @@ export function Memories(): React.JSX.Element {
     setUseActionId(id)
     try {
       await setMemoryUse(id, action)
+      // Reflect the decision in the open sheet without a refetch — the sheet
+      // renders detailMemory, not the refreshed list row, so its suppression
+      // label/action would stay stale until reopened. Mirrors onEdit above.
+      setDetailMemory((cur) =>
+        cur && cur.id === id
+          ? {
+              ...cur,
+              arguments: {
+                ...(cur.arguments ?? {}),
+                memory_use: {
+                  ...((cur.arguments?.memory_use as Record<string, unknown> | undefined) ?? {}),
+                  suppressed: action === 'suppress'
+                }
+              }
+            }
+          : cur
+      )
       toast(action === 'suppress' ? 'Memory excluded from future use' : 'Memory use updated', {
         tone: 'info'
       })
@@ -267,6 +284,17 @@ export function Memories(): React.JSX.Element {
       setUseActionId(null)
     }
   }
+
+  // onUseAction is rebuilt every render, and an inline arrow at the call sites
+  // would hand every MemoryCard a fresh prop and break memo() on each parent
+  // re-render — the exact nav-stall the card's memo exists to prevent (see
+  // MemoryCard.memo.test.tsx). Keep a latest-ref and pass a stable adapter.
+  const onUseActionRef = useRef(onUseAction)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the memo-stable card/sheet callback
+  onUseActionRef.current = onUseAction
+  const handleUseAction = useCallback((id: string, action: MemoryUseAction): void => {
+    void onUseActionRef.current(id, action)
+  }, [])
 
   // Commit a held delete to the server. Idempotent per id (see
   // committedDeleteIds). Clears the pending slot if it still points at this
@@ -688,9 +716,7 @@ export function Memories(): React.JSX.Element {
                 key={m.id}
                 memory={m}
                 onOpen={setDetailMemory}
-                onUseAction={
-                  beliefEnabled === true ? (id, action) => void onUseAction(id, action) : undefined
-                }
+                onUseAction={beliefEnabled === true ? handleUseAction : undefined}
                 useActionBusy={useActionId === m.id}
               />
             ))}
@@ -762,9 +788,7 @@ export function Memories(): React.JSX.Element {
             navigate(`/conversations/${id}`)
           }}
           togglingVisibility={togglingVis}
-          onUseAction={
-            beliefEnabled === true ? (id, action) => void onUseAction(id, action) : undefined
-          }
+          onUseAction={beliefEnabled === true ? handleUseAction : undefined}
           useActionBusy={useActionId === detailMemory.id}
         />
       )}

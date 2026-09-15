@@ -30,6 +30,9 @@ export type FetchMemoriesOptions = {
 
 export const MEMORY_BELIEF_ENABLED_HEADER = 'x-omi-memory-belief-enabled'
 export const MEMORY_NEXT_CURSOR_HEADER = 'x-omi-memory-next-cursor'
+export const MEMORY_LIST_TRUNCATED_HEADER = 'x-omi-list-truncated'
+export const MEMORY_TRUNCATED_MESSAGE =
+  'Memory list was truncated by the server read budget; result may be incomplete'
 
 function headerValue(
   headers: Record<string, unknown> | undefined,
@@ -52,10 +55,15 @@ export function nextMemoryCursor(response: MemoriesResponse): string | undefined
   return headerValue(response.headers, MEMORY_NEXT_CURSOR_HEADER)
 }
 
+export function listTruncatedFromResponse(response: MemoriesResponse): boolean {
+  return headerValue(response.headers, MEMORY_LIST_TRUNCATED_HEADER)?.toLowerCase() === 'true'
+}
+
 // Page through every memory. GET /v3/memories clamps `limit` to at most 500
 // (no first-page 5000 expansion — that caused prod GET 504s). Request the
 // server max page on every call and advance `offset` by items actually received.
-// Dedupes by id; stops on empty page or zero new ids.
+// Dedupes by id; stops on empty page or zero new ids; throws when the final
+// response was cut short by the server's read budget (X-Omi-List-Truncated).
 const MEMORIES_PAGE_LIMIT = 500
 const MAX_MEMORY_PAGES = 10_000
 //
@@ -82,6 +90,7 @@ export async function fetchAllMemoriesPaged(
     const r = await omiApi.get(path, { params })
     onResponse?.(r)
     const nextCursor = nextMemoryCursor(r)
+    const lastTruncated = listTruncatedFromResponse(r)
     const page = (Array.isArray(r.data) ? r.data : (r.data?.memories ?? [])) as Memory[]
     pageCount++
     let added = 0
@@ -95,11 +104,22 @@ export async function fetchAllMemoriesPaged(
     // still advances in that case, so do not stop on an empty page while a
     // continuation cursor is present.
     if (nextCursor) {
-      if (nextCursor === cursor) break
+      if (nextCursor === cursor) {
+        // An unchanged cursor means the server cannot continue (budget spent);
+        // with the truncated flag set that must not masquerade as a complete list.
+        if (lastTruncated) throw new Error(MEMORY_TRUNCATED_MESSAGE)
+        break
+      }
       cursor = nextCursor
       continue
     }
-    if (page.length === 0 || added === 0) break
+    if (page.length === 0 || added === 0) {
+      // Only the LAST response's flag matters: in offset mode a truncated page
+      // still advances by rows received, so a later complete page recovers and
+      // the final empty page ends the walk cleanly.
+      if (lastTruncated) throw new Error(MEMORY_TRUNCATED_MESSAGE)
+      break
+    }
     offset += page.length
   }
   if (pageCount >= MAX_MEMORY_PAGES) {
