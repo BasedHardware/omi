@@ -1142,10 +1142,10 @@ test('library conversation rows name GET emoji including Flutter ConversationLis
       node =>
         node.type === 'Text' &&
         node.props.numberOfLines === undefined &&
-        (node.props.children === '' || node.props.children == null),
+        node.props.children === ' \u0085 ',
     ).length,
   ).toBeGreaterThan(0);
-  expect(textOf(empty)).not.toContain('\u0085');
+  expect(textOf(empty)).toContain('\u0085');
 });
 
 test('library conversation rows name Flutter New chrome for a just-created row', () => {

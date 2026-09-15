@@ -517,7 +517,7 @@ test('old conversations keep wire-non-empty category and empty GET category', as
   ]);
   const result = await loadConversations(api);
   expect(result.items[0]).toMatchObject({category: 'work'});
-  expect(result.items[1]).toMatchObject({category: ''});
+  expect(result.items[1]).toMatchObject({category: ' \u0085 '});
 });
 
 test('old conversations name Flutter omitted GET category as other', async () => {
@@ -642,7 +642,7 @@ test('old conversations keep wire-non-empty emoji and empty GET emoji', async ()
   ]);
   const result = await loadConversations(api);
   expect(result.items[0]).toMatchObject({emoji: '🚀'});
-  expect(result.items[1]).toMatchObject({emoji: ''});
+  expect(result.items[1]).toMatchObject({emoji: ' \u0085 '});
 });
 
 test('old conversations name omitted or JSON-null GET structured.emoji as Flutter 🧠', async () => {

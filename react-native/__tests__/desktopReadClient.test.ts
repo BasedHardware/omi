@@ -4147,8 +4147,11 @@ test('conversation list category names GET wire values and Flutter ConversationL
     'Other',
   );
   expect(conversationListCategory({discarded: false, category: ' \t\n'})).toBe(
-    '',
+    ' \t\n',
   );
+  expect(
+    conversationListCategory({discarded: false, category: '  work'}),
+  ).toBe('  work');
   expect(conversationListCategory({discarded: false, category: ''})).toBeNull();
   expect(conversationListCategory({discarded: false})).toBeNull();
   expect(
@@ -4213,7 +4216,7 @@ test('conversation list source tags name only Flutter GET remaps', () => {
       category: ' \t',
       source: 'omi',
     }),
-  ).toBe('');
+  ).toBe(' \t');
   expect(
     conversationListTag({
       discarded: true,
@@ -4341,14 +4344,18 @@ test('conversation structured emoji copy names Flutter omitted GET emoji as 🧠
   );
   expect(conversationStructuredEmojiCopy('🚀')).toBe('🚀');
   expect(conversationStructuredEmojiCopy('')).toBe('');
-  expect(conversationStructuredEmojiCopy(' \t\u0085 ')).toBe('');
+  expect(conversationStructuredEmojiCopy(' \t\u0085 ')).toBe(' \t\u0085 ');
+  expect(conversationStructuredEmojiCopy('  🚀  ')).toBe('  🚀  ');
 });
 
 test('conversation list emoji names Flutter ConversationListItem empty GET emoji', () => {
   expect(conversationListEmoji({discarded: false, emoji: '🚀'})).toBe('🚀');
   expect(conversationListEmoji({discarded: false, emoji: ''})).toBe('');
   expect(conversationListEmoji({discarded: false, emoji: ' \t\u0085 '})).toBe(
-    '',
+    ' \t\u0085 ',
+  );
+  expect(conversationListEmoji({discarded: false, emoji: '  🚀  '})).toBe(
+    '  🚀  ',
   );
   expect(conversationListEmoji({discarded: false})).toBeNull();
   expect(
@@ -4366,7 +4373,8 @@ test('conversation structured category copy names Flutter omitted GET category a
   );
   expect(conversationStructuredCategoryCopy('work')).toBe('work');
   expect(conversationStructuredCategoryCopy('')).toBeUndefined();
-  expect(conversationStructuredCategoryCopy(' \t\u0085 ')).toBe('');
+  expect(conversationStructuredCategoryCopy(' \t\u0085 ')).toBe(' \t\u0085 ');
+  expect(conversationStructuredCategoryCopy('  work  ')).toBe('  work  ');
 });
 
 test('conversation first-party summary copy names Flutter appId-null attribution', () => {

@@ -379,7 +379,7 @@ export function conversationListEmoji(item: {
   if (item.emoji === undefined || item.emoji === null) {
     return null;
   }
-  return visibleDisplayText(item.emoji);
+  return item.emoji;
 }
 
 export function conversationListCategory(item: {
@@ -396,11 +396,7 @@ export function conversationListCategory(item: {
   ) {
     return null;
   }
-  const category = visibleDisplayText(item.category);
-  if (category === '') {
-    return '';
-  }
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  return item.category.charAt(0).toUpperCase() + item.category.slice(1);
 }
 
 export function conversationListSourceTag(item: {
@@ -466,7 +462,7 @@ export function conversationStructuredEmojiCopy(
   if (value === undefined || value === null) {
     return conversationStructuredEmojiDefaultCopy();
   }
-  return visibleDisplayText(value);
+  return value;
 }
 
 export function conversationStructuredCategoryDefaultCopy(): string {
@@ -479,11 +475,10 @@ export function conversationStructuredCategoryCopy(
   if (value === undefined || value === null) {
     return conversationStructuredCategoryDefaultCopy();
   }
-  const token = visibleDisplayText(value);
-  if (token !== '') {
-    return token;
+  if (value === '') {
+    return undefined;
   }
-  return value === '' ? undefined : '';
+  return value;
 }
 
 export function conversationUnknownAppCopy(): string {

@@ -4104,10 +4104,10 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
     emptyEmoji.root.findAll(
       node =>
         node.props.accessibilityLabel === 'Conversation emoji' &&
-        (node.props.children === '' || node.props.children == null),
+        node.props.children === ' \u0085 ',
     ).length,
   ).toBeGreaterThan(0);
-  expect(JSON.stringify(emptyEmoji.toJSON())).not.toContain('\u0085');
+  expect(JSON.stringify(emptyEmoji.toJSON())).toContain('\u0085');
   const screenpipe = render(
     <ProjectionRow item={{...item, source: 'screenpipe', category: 'work'}} />,
   );
@@ -4119,9 +4119,7 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
   );
   expect(
     whitespaceTag.root.findAll(
-      node =>
-        node.type === 'Text' &&
-        (node.props.children === '' || node.props.children == null),
+      node => node.type === 'Text' && node.props.children === ' \t',
     ).length,
   ).toBeGreaterThan(0);
 });

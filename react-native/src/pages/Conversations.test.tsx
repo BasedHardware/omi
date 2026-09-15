@@ -1968,11 +1968,11 @@ test('conversation list names GET emoji including Flutter ConversationListItem e
     renderer.root.findAll(
       node =>
         node.props.accessibilityLabel === 'Conversation emoji' &&
-        (node.props.children === '' || node.props.children == null),
+        node.props.children === ' \u0085 ',
     ).length,
   ).toBeGreaterThan(0);
   expect(textOf(renderer)).not.toContain('🧠');
-  expect(textOf(renderer)).not.toContain('\u0085');
+  expect(textOf(renderer)).toContain('\u0085');
 });
 
 test('conversation list names Flutter omitted GET emoji 🧠 when not discarded', () => {
@@ -2163,12 +2163,10 @@ test('conversation list names GET category including Flutter ConversationListIte
   );
   expect(
     emptyRow.findAll(
-      node =>
-        node.type === 'Text' &&
-        (node.props.children === '' || node.props.children == null),
+      node => node.type === 'Text' && node.props.children === ' \u0085 ',
     ).length,
   ).toBeGreaterThan(0);
-  expect(textOf(renderer)).not.toContain('\u0085');
+  expect(textOf(renderer)).toContain('\u0085');
 });
 
 test('conversation list names GET source remaps and omits ordinary sources', () => {
