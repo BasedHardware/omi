@@ -3065,12 +3065,14 @@ class MemoryService:
                 provider_kwargs['start_after'] = start_after
             for item in iter_authoritative_product_memory_items_newest_first(uid, **provider_kwargs):
                 scanned_count += 1
-                last_scanned = (item.updated_at, item.memory_id)
                 # The final provider row is a sentinel proving that another
-                # bounded page exists; do not emit it in this page or the next
-                # keyset would skip an otherwise eligible history row.
+                # bounded page exists; it is not emitted in this page. The
+                # continuation key must stay BEFORE the sentinel so the next
+                # keyset page rescans it — a cursor after the sentinel would
+                # silently skip that row forever.
                 if scanned_count >= scan_limit:
-                    continue
+                    break
+                last_scanned = (item.updated_at, item.memory_id)
                 row = memory_item_to_memorydb(item)
                 if self._is_ledger_history_item(item, row):
                     projected_items.append((item, row))

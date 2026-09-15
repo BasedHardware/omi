@@ -363,6 +363,39 @@ def test_ledger_history_page_reports_partial_provider_window_and_filters_privacy
     assert complete.truncated is False
 
 
+def test_ledger_history_page_sentinel_row_is_not_skipped_by_continuation(service_mod, monkeypatch):
+    """A full 501-row provider window must sign the continuation BEFORE the
+    sentinel row. A cursor after the sentinel would skip that row forever:
+    the next keyset page starts strictly after it."""
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    rows = [_ledger_item(service_mod, f"row-{index:03d}", updated_at=now, user_review=False) for index in range(502)]
+    calls = {}
+
+    def provider(uid, *, limit, **kwargs):
+        calls["start_after"] = kwargs.get("start_after")
+        start = 0
+        if calls["start_after"] is not None:
+            start = int(calls["start_after"][1].split("-")[1]) + 1
+        return iter(rows[start : start + limit])
+
+    monkeypatch.setattr(service_mod, "iter_authoritative_product_memory_items_newest_first", provider)
+
+    first = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page("uid-test", limit=500)
+
+    assert first.truncated is True
+    assert first.scanned_count == 501
+    assert len(first.memories) == 500
+    assert first.next_start_after == (now, "row-499")
+
+    second = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page(
+        "uid-test", limit=500, start_after=first.next_start_after
+    )
+
+    assert calls["start_after"] == (now, "row-499")
+    assert [memory.id for memory in second.memories] == ["row-500", "row-501"]
+    assert second.truncated is False
+
+
 def test_ledger_history_excludes_locked_rows(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     locked = _ledger_item(service_mod, "locked", updated_at=now, user_review=False)
