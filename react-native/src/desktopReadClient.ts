@@ -2091,7 +2091,7 @@ export function developerKeyPrefixCopy(
   keyPrefix: string,
   options?: {mask?: boolean},
 ): string {
-  const prefix = visibleDisplayText(keyPrefix);
+  const prefix = keyPrefix;
   if (options?.mask !== true) {
     return prefix;
   }

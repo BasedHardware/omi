@@ -89,7 +89,7 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
     }
     seen.add(id);
     const name = text(row.name, 1_000_000);
-    const keyPrefix = visibleDisplayText(text(row.key_prefix, 1_000_000));
+    const keyPrefix = text(row.key_prefix, 1_000_000);
     const created = createdAtMs(row.created_at);
     optionalDateTime(row.last_used_at);
     optionalNullableString(row.app_id);

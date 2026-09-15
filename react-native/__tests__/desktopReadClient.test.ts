@@ -2280,7 +2280,7 @@ test('developer key copy names GET name and prefix without a full secret', () =>
     'Cursor \u00b7 ',
   );
   expect(developerKeyRowCopy({name: 'Cursor', keyPrefix: ' \t'})).toBe(
-    'Cursor \u00b7 ',
+    'Cursor \u00b7  \t',
   );
   expect(
     developerKeysCopy([{name: 'Cursor', keyPrefix: ''}], mcpTitleCopy()),
@@ -2393,6 +2393,9 @@ test('developer key copy names GET prefix Flutter *** mask without inventing it 
   expect(developerKeyPrefixCopy('omi_sk_ab')).toBe('omi_sk_ab');
   expect(developerKeyPrefixCopy('', {mask: true})).toBe('***');
   expect(developerKeyPrefixCopy('')).toBe('');
+  expect(developerKeyPrefixCopy(' \t')).toBe(' \t');
+  expect(developerKeyPrefixCopy(' \t', {mask: true})).toBe(' \t***');
+  expect(developerKeyPrefixCopy('  pref  ', {mask: true})).toBe('  pref  ***');
   expect(
     developerKeysCopy(
       [

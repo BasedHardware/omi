@@ -44,6 +44,42 @@ test('names Flutter DevApiKeyListItem empty GET names instead of omitting the ke
   ]);
 });
 
+test('names Flutter McpApiKeyListItem empty GET keyPrefix instead of omitting the key', () => {
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-1',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: createdAt,
+        },
+        {
+          id: 'key-empty',
+          name: 'Cursor',
+          key_prefix: ' \t',
+          created_at: createdAt,
+        },
+        {
+          id: 'key-blank',
+          name: 'Blank',
+          key_prefix: '',
+          created_at: createdAt,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'key-1',
+      name: 'Local',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: createdMs,
+    },
+    {id: 'key-empty', name: 'Cursor', keyPrefix: ' \t', createdAtMs: createdMs},
+    {id: 'key-blank', name: 'Blank', keyPrefix: '', createdAtMs: createdMs},
+  ]);
+});
+
 test('parses GET developer keys and omits full secrets', () => {
   expect(
     parseOmiDeveloperKeys(

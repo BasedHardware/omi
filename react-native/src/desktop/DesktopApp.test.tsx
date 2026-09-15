@@ -7893,7 +7893,7 @@ test('Settings names Flutter McpApiKeyListItem empty GET keyPrefix without omitt
   const tree = renderedText(renderer);
   expect(tree).toContain('MCP');
   expect(tree).toContain('Cursor \u00b7 ');
-  expect(tree).toContain('Whitespace prefix \u00b7 ');
+  expect(tree).toContain('Whitespace prefix \u00b7  \t');
   expect(tree).not.toContain('mcp-empty');
   expect(tree).not.toContain('***');
   expect(tree).not.toContain('No API keys yet');
