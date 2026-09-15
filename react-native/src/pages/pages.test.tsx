@@ -2995,6 +2995,82 @@ test('Connectors Installed names Flutter AppListItem truncated GET descriptions 
   expect(tree).not.toContain(installedDescription);
 });
 
+test('Connectors Installed names Flutter AppListItem empty GET descriptions and Explore omits them', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-explore',
+            name: 'Explore fixture app',
+            description: ' \t',
+          },
+          {
+            id: 'catalog-app-installed',
+            name: 'Owned app',
+            description: '',
+          },
+          {
+            id: 'catalog-app-whitespace',
+            name: 'Whitespace app',
+            description: ' \t',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          'catalog-app-installed',
+          'catalog-app-whitespace',
+        ]),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(sectionText(renderer, 'Explore')).toContain('Explore fixture app');
+  expect(sectionText(renderer, 'Installed')).toContain('Owned app');
+  expect(sectionText(renderer, 'Installed')).toContain('Whitespace app');
+  const installedHeading = renderer.root.find(
+    node =>
+      node.type === Text &&
+      node.props.children === 'Installed' &&
+      node.props.style === styles.destinationSectionTitle,
+  );
+  const installedDescriptions = installedHeading.parent.findAll(
+    node => node.type === Text && node.props.numberOfLines === 2,
+  );
+  expect(installedDescriptions.map(node => node.props.children)).toEqual([
+    '',
+    '',
+  ]);
+  const exploreHeading = renderer.root.find(
+    node =>
+      node.type === Text &&
+      node.props.children === 'Explore' &&
+      node.props.style === styles.destinationSectionTitle,
+  );
+  expect(
+    exploreHeading.parent.findAll(
+      node => node.type === Text && node.props.numberOfLines === 2,
+    ),
+  ).toHaveLength(0);
+  expect(textOf(renderer)).not.toContain('Not installed');
+});
+
 test('Connectors Explore names Flutter CategorySection ratings and Installed keeps list (N)', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

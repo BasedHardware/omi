@@ -292,7 +292,7 @@ export function ConnectorsPage({
                       ) : null}
                       <View style={styles.cloudRowBody}>
                         <Text style={styles.cloudRowTitle}>{title}</Text>
-                        {description !== '' && (
+                        {explore ? null : (
                           <Text numberOfLines={2} style={styles.cloudRowMeta}>
                             {description}
                           </Text>

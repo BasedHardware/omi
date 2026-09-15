@@ -2031,6 +2031,65 @@ test('nested non-retryable Apps enabled failures keep catalogue tiles without cl
   ).toHaveLength(0);
 });
 
+test('Apps gallery names Flutter AppListItem empty GET descriptions', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Owned app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+      {
+        id: 'catalog-app-2',
+        name: 'Whitespace app',
+        description: ' \t',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Owned app');
+  expect(tree).toContain('Whitespace app');
+  expect(tree).not.toContain('App details unavailable');
+  const descriptions = renderer.root.findAll(
+    node =>
+      String(node.type) === 'Text' && node.props.numberOfLines === 2,
+  );
+  expect(descriptions.map(node => node.props.children)).toEqual(['', '']);
+});
+
 test('successful empty Apps enabled reads still report catalogue tiles as not connected', async () => {
   const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
     loadConnectors: jest.Mock;

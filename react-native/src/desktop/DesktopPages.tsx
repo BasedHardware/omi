@@ -406,11 +406,9 @@ function AppTile({
         <CatalogAppIcon Icon={Icon} imageUrl={item.imageUrl} />
         <Text style={styles.rowTitle}>{item.name}</Text>
         {item.private ? <Text style={styles.rowMeta}>Private</Text> : null}
-        {item.description !== '' ? (
-          <Text numberOfLines={2} style={styles.rowMeta}>
-            {item.description}
-          </Text>
-        ) : null}
+        <Text numberOfLines={2} style={styles.rowMeta}>
+          {item.description}
+        </Text>
         {item.source !== '' && item.source !== item.description ? (
           <Text style={styles.rowMeta}>{item.source}</Text>
         ) : null}
