@@ -61,9 +61,6 @@ function optionalScopes(value: unknown): string[] | undefined {
   const scopes: string[] = [];
   for (const raw of value) {
     const scope = visibleDisplayText(text(raw, 1_000_000));
-    if (scope === '') {
-      continue;
-    }
     scopes.push(scope);
   }
   return scopes.length === 0 ? undefined : scopes;

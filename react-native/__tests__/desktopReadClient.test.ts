@@ -2158,6 +2158,27 @@ test('developer key copy names GET empty scopes Read Only without inventing it o
   expect(
     developerKeyScopeCopy(['conversations:write'], {emptyCopy: 'Read Only'}),
   ).toBe('Write');
+  expect(developerKeyScopeCopy([''], {emptyCopy: 'Read Only'})).toBe('');
+  expect(developerKeyScopeCopy([' \t\n'], {emptyCopy: 'Read Only'})).toBe('');
+  expect(
+    developerKeysCopy(
+      [
+        {
+          name: 'Local',
+          keyPrefix: 'omi_sk_ab',
+          createdAtMs,
+          scopes: [''],
+        },
+      ],
+      developerApiTitleCopy(),
+      {emptyScopesCopy: 'Read Only'},
+    ),
+  ).toEqual([
+    {
+      title: developerApiTitleCopy(),
+      copy: `Local · omi_sk_ab · ${created}`,
+    },
+  ]);
 });
 
 test('developer key copy names GET prefix Flutter *** mask without inventing it on MCP keys', () => {

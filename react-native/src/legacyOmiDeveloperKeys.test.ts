@@ -84,6 +84,32 @@ test('parses GET developer keys and omits full secrets', () => {
   ]);
 });
 
+test('names Flutter DevApiKeyListItem empty GET scopes instead of inventing Read Only', () => {
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-empty-scope',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: '2026-09-09T12:00:00.000Z',
+          scopes: [' \t', ''],
+        },
+        {id: 'key-neighbor', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'key-empty-scope',
+      name: 'Local',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: Date.parse('2026-09-09T12:00:00.000Z'),
+      scopes: ['', ''],
+    },
+    {id: 'key-neighbor', name: 'Cursor', keyPrefix: 'omi_mcp_cd'},
+  ]);
+});
+
 test('fails closed for malformed GET developer keys', () => {
   expect(() => parseOmiDeveloperKeys(JSON.stringify({}))).toThrow();
   expect(() =>
