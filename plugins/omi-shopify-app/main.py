@@ -87,6 +87,33 @@ def get_auth_header(access_token: str) -> Dict[str, str]:
     }
 
 
+def _coerce_int(value, default, minimum, maximum) -> int:
+    """Return a bounded integer for optional values supplied by chat tools.
+
+    The retrieval layer includes optional manifest fields in the JSON body with
+    a ``null`` value when the caller omits them.  Treat null, booleans,
+    non-integral types, malformed strings, and non-finite values as the
+    documented default before applying the API-safe bounds.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return default
+        try:
+            number = int(value, 10)
+        except (TypeError, ValueError, OverflowError):
+            return default
+    else:
+        return default
+
+    return max(minimum, min(number, maximum))
+
+
 def shopify_api_request(
     uid: str,
     method: str,
@@ -747,7 +774,7 @@ async def tool_get_orders(request: Request):
         uid = body.get("uid")
         status = body.get("status", "any")
         financial_status = body.get("financial_status")
-        limit = min(body.get("limit", 10), 50)
+        limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -1614,7 +1641,7 @@ async def tool_get_customers(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query = body.get("query", "")
-        limit = min(body.get("limit", 10), 50)
+        limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
