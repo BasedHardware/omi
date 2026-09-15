@@ -769,22 +769,45 @@ Future<bool> setMentorNotificationSettings(int frequency) async {
 /// Streams the /v1/users/export endpoint directly to a file, avoiding loading
 /// the entire JSON into memory. Returns the file path on success, null on failure.
 Future<String?> exportUserDataToFile(String filePath) async {
+  final file = File(filePath);
+  IOSink? sink;
   try {
     final response = await makeRawApiCall(url: '${Env.apiBaseUrl}v1/users/export', method: 'GET');
     if (response.statusCode != 200) {
       Logger.debug('exportUserDataToFile failed: ${response.statusCode}');
       return null;
     }
-    final file = File(filePath);
-    final sink = file.openWrite();
+    final downloadSink = file.openWrite();
+    sink = downloadSink;
+    var bytesWritten = 0;
     await for (final chunk in response.stream) {
-      sink.add(chunk);
+      downloadSink.add(chunk);
+      bytesWritten += chunk.length;
     }
-    await sink.flush();
-    await sink.close();
+    await downloadSink.flush();
+    await downloadSink.close();
+    sink = null;
+    if (bytesWritten == 0) {
+      Logger.debug('exportUserDataToFile failed: empty response body');
+      if (await file.exists()) {
+        await file.delete();
+      }
+      return null;
+    }
     return filePath;
   } catch (e) {
     Logger.debug('exportUserDataToFile error: $e');
+    final openSink = sink;
+    if (openSink != null) {
+      try {
+        await openSink.close();
+      } catch (_) {}
+    }
+    if (await file.exists()) {
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
     return null;
   }
 }
