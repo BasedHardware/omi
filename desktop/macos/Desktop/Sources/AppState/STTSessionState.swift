@@ -40,13 +40,33 @@ struct STTSessionState: Equatable {
   /// Pendant BLE used to force cloud for named speaker-ID. Identified basic
   /// (non-BYOK) on Apple Silicon now matches mic: local, unnamed. Paid,
   /// unknown, and cache-miss stay on the previous BLE→cloud path.
+  ///
+  /// `wakeWordNeedsRecognizableName` is the opt-in the wake word needs to work. Ambient
+  /// transcription is on-device by default, and the manager that path runs on takes a
+  /// language hint and nothing else — `AsrManager.transcribe(_:decoderState:language:)` has
+  /// no keyword or vocabulary parameter, so it cannot be told that "Omi" is a word.
+  /// FluidAudio does ship term biasing, but only on `SlidingWindowAsrManager`
+  /// (`configureVocabularyBoosting(vocabulary:ctcModels:config:)`), which is a different
+  /// streaming architecture and pulls a second set of CTC models. That is the upgrade path
+  /// out of this flag; it is not a parameter we can pass today. Measured
+  /// on one machine, same script and voices, only the lane changed: the phrase was usable
+  /// in 12 of 20 utterances on-device against 19 of 20 on the cloud lane, which reaches
+  /// `/v4/listen` — and that path prepends "Omi" to the STT keyword vocabulary server-side
+  /// (`backend/utils/listen_session_bootstrap.py`), so the recognizer is told the name.
+  /// Seven of the eight on-device misses came back as "Only", which cannot be accepted as
+  /// a rendering — it opens ordinary sentences.
+  ///
+  /// Off by default. It trades on-device transcription for cloud transcription while the
+  /// wake word is enabled, which is a privacy and cost decision, not a technical one.
   func resolveMode(
     audioSource: AudioSource,
     isAppleSilicon: Bool,
     debugForceCloud: Bool,
+    wakeWordNeedsRecognizableName: Bool = false,
     preferLocalOnBasic: Bool = false
   ) -> ResolvedMode {
-    let forceCloud = !sessionForceLocal && (debugForceCloud || appRunForceCloud)
+    let forceCloud =
+      !sessionForceLocal && (debugForceCloud || appRunForceCloud || wakeWordNeedsRecognizableName)
     if !isAppleSilicon || forceCloud {
       return .cloud
     }
@@ -60,12 +80,14 @@ struct STTSessionState: Equatable {
     audioSource: AudioSource,
     isAppleSilicon: Bool,
     debugForceCloud: Bool,
+    wakeWordNeedsRecognizableName: Bool = false,
     preferLocalOnBasic: Bool = false
   ) {
     activeMode = resolveMode(
       audioSource: audioSource,
       isAppleSilicon: isAppleSilicon,
       debugForceCloud: debugForceCloud,
+      wakeWordNeedsRecognizableName: wakeWordNeedsRecognizableName,
       preferLocalOnBasic: preferLocalOnBasic
     )
   }

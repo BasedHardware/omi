@@ -1,0 +1,235 @@
+import Foundation
+
+enum VoicePlaybackEchoDecision: Equatable {
+  /// Nothing to do with playback — ordinary speech.
+  case keep
+  /// Entirely the assistant's own voice.
+  case drop
+  /// Playback with the user talking over the end of it. Carries the user's words alone.
+  case keepResidue(String)
+}
+
+/// Pure policy separating the assistant's own spoken output — heard back through the
+/// microphone — from what a person actually said.
+///
+/// Omi speaks into a room Omi is also recording. Ambient capture returns the playback as a
+/// transcript segment attributed to the primary speaker; observed live,
+/// `Transcript [ADD] Speaker 0: It's 8 57 p.m. on Sunday...` was Omi, not a person. Four
+/// consumers then act on it as if the user had spoken: barge-in halts the very playback
+/// that produced it (three times in one six-turn session, which is why a long answer stops
+/// partway), the wake word can be commanded by an answer carrying the wake phrase, and the
+/// conversation record and memory extraction gain speech nobody said.
+///
+/// Dropping the whole segment is not enough. While Omi is talking there is no pause to
+/// close the transcription window on, so a barge-in lands *inside* the same window as the
+/// playback — measured: `1. Ganges Ganga, India's most sacred river, and a vital water
+/// source. Omi, stop that and tell me the time is.` One 9-second window, two speakers.
+/// Discarding it would eat the interruption, which is the one utterance that must never be
+/// lost. So the match is consumed as a prefix and whatever the user said after it survives.
+///
+/// A prefix rather than a scattered match because that is the physical situation: the user
+/// starts talking after Omi has already been talking. It is also far safer — deleting
+/// matched words wherever they occur would shred an interruption against the common words
+/// ("the", "and", "a") in several sentences of playback history.
+///
+/// Errs toward *not* echo throughout. A missed echo costs what the app already does today;
+/// a false echo deletes something the user said.
+enum VoicePlaybackEchoPolicy {
+  /// Below this, an utterance is too generic to attribute. "Yes", "okay" and "sure" all
+  /// appear in the assistant's own speech and in ordinary conversation. Applied to the
+  /// matched run and to the surviving residue alike.
+  static let minimumWordCount = 4
+
+  /// Share of an utterance the matched run must cover before the whole thing is discarded.
+  /// Measured on captured echoes: 0.80–1.00.
+  static let minimumCoverageToDrop = 0.8
+
+  /// How far ahead in the playback history a word may be found and still continue the run.
+  /// Absorbs words speech-to-text drops or splits — "8:57 PM" came back as "8 57 p.m."
+  static let alignmentLookahead = 5
+
+  /// Consecutive unmatched words that end the run.
+  ///
+  /// Four, not fewer, because speech-to-text produces mismatch runs *inside* an echo as
+  /// well as at its edge: "9:29 PM" came back as "929 p.m.", three unmatched tokens two
+  /// words into the answer. At three the walk stopped there and the rest of Omi's own
+  /// sentence read as a barge-in and reached the transcript. Raising it is close to free —
+  /// unmatched words never advance the split point, so the user's words are kept whether
+  /// the walk stops at them or scans past them.
+  static let mismatchesEndingEcho = 4
+
+  static func classify(transcript: String, spokenWords: [String]) -> VoicePlaybackEchoDecision {
+    let tokens = self.tokens(transcript)
+    guard !tokens.isEmpty, !spokenWords.isEmpty else { return .keep }
+    let incoming = tokens.map(\.word)
+
+    // Only the forward walk commits a final lone match. The reversed walk measures the
+    // playback that *follows* a barge-in, and there the "final" token is the first word the
+    // user said — committing it on one match would eat the start of the interruption.
+    let leading = matchedPrefixLength(
+      incoming, against: spokenWords, commitsFinalSingleMatch: true)
+    guard leading >= minimumWordCount else { return .keep }
+    guard tokens.count - leading >= minimumWordCount else {
+      // Discarding the whole segment needs the match to actually account for the whole
+      // segment. Several sentences of playback history contain enough ordinary words that
+      // a short utterance can align with four of them by chance — live, "Sorry, my mistake
+      // it's taking" was deleted that way, which is the failure this policy must never
+      // have. A real echo covers essentially all of itself: measured 0.80–1.00.
+      return Double(leading) / Double(tokens.count) >= minimumCoverageToDrop ? .drop : .keep
+    }
+
+    // Playback continues past the interruption, so it bookends the user's words as often
+    // as it precedes them — measured, the same sentence appeared on both sides of a
+    // barge-in in one window. Strip the far end the same way.
+    let remaining = Array(incoming[leading...])
+    let trailing = matchedPrefixLength(remaining.reversed(), against: spokenWords.reversed())
+    let end = tokens.count - trailing
+    guard end - leading >= minimumWordCount else { return .drop }
+
+    // What survives has to *start* an utterance. Speech-to-text also mangles the tail of a
+    // long answer — live, Omi's own "Based on today's recording active for roughly about
+    // one hour" diverged from what was synthesised and was kept as if the user had said
+    // it. A garbled continuation runs straight on from the matched words; a person
+    // interrupting starts a new sentence, and the recognizer marks that.
+    guard sentenceBreakPrecedes(tokens[leading], in: transcript, after: tokens[leading - 1]) else {
+      return Double(leading) / Double(tokens.count) >= minimumCoverageToDrop ? .drop : .keep
+    }
+
+    // Nothing stripped from the far end means the utterance ends where the segment does,
+    // so keep its closing punctuation — the wake-word parser reads punctuation.
+    let upperBound = trailing == 0 ? transcript.endIndex : tokens[end - 1].end
+    return .keepResidue(String(transcript[tokens[leading].start..<upperBound]))
+  }
+
+  private static func sentenceBreakPrecedes(
+    _ token: (word: String, start: String.Index, end: String.Index),
+    in transcript: String,
+    after previous: (word: String, start: String.Index, end: String.Index)
+  ) -> Bool {
+    transcript[previous.end..<token.start].contains { $0 == "." || $0 == "?" || $0 == "!" }
+  }
+
+  static func words(_ text: String) -> [String] {
+    tokens(text).map(\.word)
+  }
+
+  /// Normalized words paired with their bounds in the original string, so a residue can be
+  /// sliced out with its original casing and punctuation intact. The wake-word parser reads
+  /// punctuation, so rebuilding from normalized words would change whether a command fires.
+  private static func tokens(_ text: String) -> [(word: String, start: String.Index, end: String.Index)] {
+    var result: [(String, String.Index, String.Index)] = []
+    var index = text.startIndex
+    var wordStart: String.Index?
+    while index < text.endIndex {
+      let character = text[index]
+      if character.isLetter || character.isNumber {
+        if wordStart == nil { wordStart = index }
+      } else if let start = wordStart {
+        result.append((normalize(text[start..<index]), start, index))
+        wordStart = nil
+      }
+      index = text.index(after: index)
+    }
+    if let start = wordStart {
+      result.append((normalize(text[start..<text.endIndex]), start, text.endIndex))
+    }
+    return result
+  }
+
+  /// The synthesiser reads digits aloud and speech-to-text writes them back as words, so
+  /// the same numbered list is "1." going out and "One." coming back. Unifying them keeps
+  /// a numbered answer — the common shape for anything Omi lists — matchable.
+  private static let spokenNumbers: [String: String] = {
+    let names = [
+      "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+      "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
+      "nineteen", "twenty",
+    ]
+    var map: [String: String] = [:]
+    for (value, name) in names.enumerated() { map[name] = String(value) }
+    return map
+  }()
+
+  private static func normalize(_ word: Substring) -> String {
+    let lowered = word.lowercased()
+    return spokenNumbers[lowered] ?? lowered
+  }
+
+  /// How many leading words of `incoming` are accounted for by `spoken`, scanning forward
+  /// only. Returns the length up to — not including — the run of mismatches that ended it.
+  /// Called with both sequences reversed to measure a trailing run instead.
+  private static func matchedPrefixLength<S: Sequence<String>>(
+    _ incoming: S,
+    against spoken: S,
+    commitsFinalSingleMatch: Bool = false
+  ) -> Int {
+    matchedPrefixLength(
+      Array(incoming), against: Array(spoken),
+      commitsFinalSingleMatch: commitsFinalSingleMatch)
+  }
+
+  /// Anchors tried before giving up on finding where in the history this utterance begins.
+  /// A walk pinned to index 0 only sees an echo of the *first* thing said in the window.
+  /// Omi keeps talking, and speech-to-text repeats itself — live, Parakeet returned "Your
+  /// current save task appears to be testing the protocol product." twice in one segment,
+  /// and the second copy survived as if the user had said it because the backward walk
+  /// started at the end of the history rather than at the sentence.
+  static let maximumAnchorsTried = 24
+
+  private static func matchedPrefixLength(
+    _ incoming: [String],
+    against spoken: [String],
+    commitsFinalSingleMatch: Bool
+  ) -> Int {
+    guard let first = incoming.first else { return 0 }
+    var anchors = spoken.indices.filter { spoken[$0] == first }.prefix(maximumAnchorsTried).map { $0 }
+    if anchors.isEmpty { anchors = [0] }
+    return anchors.map {
+      walk(incoming, against: spoken, from: $0, commitsFinalSingleMatch: commitsFinalSingleMatch)
+    }.max() ?? 0
+  }
+
+  private static func walk(
+    _ incoming: [String],
+    against spoken: [String],
+    from anchor: Int,
+    commitsFinalSingleMatch: Bool
+  ) -> Int {
+    var spokenIndex = anchor
+    var mismatches = 0
+    var run = 0
+    var lastMatched = 0
+    for (offset, word) in incoming.enumerated() {
+      let limit = min(spokenIndex + alignmentLookahead, spoken.count)
+      if spokenIndex < limit, let hit = (spokenIndex..<limit).first(where: { spoken[$0] == word }) {
+        spokenIndex = hit + 1
+        mismatches = 0
+        run += 1
+        // A single word matching on its own is coincidence, not the echo continuing —
+        // "the" and "and" occur in every answer. Committing on one match let the backward
+        // walk eat "the time" off the end of a user's command. Two in a row is a run.
+        if run >= 2 { lastMatched = offset + 1 }
+        // The exception is the utterance's own last word, once a run has already proved
+        // this is an echo. It can never reach two-in-a-row when the word before it was
+        // garbled, so the closing word of a short answer was permanently uncountable —
+        // measured live: Omi said "I don't know the details of Wake Word yet.", the
+        // microphone returned "WakeMore" for the product name, and the trailing "yet"
+        // could not commit. Coverage came out 6 of 8 = 0.75, under the 0.80 floor, so
+        // Omi's own sentence was written into the transcript as a second speaker.
+        //
+        // Only the final token, and only after `minimumWordCount` words already matched
+        // in a run, so a lone coincidental word still cannot start or extend an echo.
+        if run == 1, commitsFinalSingleMatch, offset == incoming.count - 1,
+          lastMatched >= minimumWordCount
+        {
+          lastMatched = offset + 1
+        }
+        continue
+      }
+      run = 0
+      mismatches += 1
+      if mismatches >= mismatchesEndingEcho { break }
+    }
+    return lastMatched
+  }
+}

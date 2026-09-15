@@ -43,7 +43,10 @@ class TranscriptionService: @unchecked Sendable {
   /// Matches `models.transcript_segment.TranscriptSegment` on the backend
   struct BackendSegment: Decodable {
     let id: String?
-    let text: String
+    /// Mutable so ingest can strip the assistant's own playback off the front of a segment
+    /// the user talked over (`VoicePlaybackEchoPolicy`) before it reaches the transcript,
+    /// the wake word, or persistence.
+    var text: String
     let speaker: String?  // e.g. "SPEAKER_00"
     let speaker_id: Int?
     let is_user: Bool
