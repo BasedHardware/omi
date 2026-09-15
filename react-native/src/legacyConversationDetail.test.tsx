@@ -2435,6 +2435,73 @@ test('names GET apps_results app when catalog resolves and Unknown App when it m
   expect(mockRequest).toHaveBeenCalledTimes(1);
 });
 
+test('names Flutter AppResultDetailWidget padded GET image instead of remapping to a CDN chip', async () => {
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          image: 'https://cdn.example.test/notes.png ',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 'notes'}],
+    });
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      appSummaryImageUri: 'https://cdn.example.test/notes.png ',
+    }),
+  );
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          image: '  https://cdn.example.test/notes.png  ',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 'notes'}],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id))
+      .appSummaryImageUri,
+  ).toBeUndefined();
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          image: 'HTTPS://cdn.example.test/notes.png',
+        }),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 'notes'}],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id))
+      .appSummaryImageUri,
+  ).toBeUndefined();
+});
+
 test('names Flutter first-party Summary when GET apps_results omits plugin_id', async () => {
   mockRequest.mockResolvedValue(
     response({

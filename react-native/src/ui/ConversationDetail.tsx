@@ -23,6 +23,7 @@ import {
   calendarEventDisplayTitle,
   legacyTranscriptCanDisplaySeconds,
   legacyTranscriptTimestampCopy,
+  appImageUrl,
   visibleDisplayText,
   type ConversationProjection,
   type TaskCardLookup,
@@ -327,7 +328,7 @@ function LegacyConversationBody({
       : detail.appSummaryDescription;
   const appSummaryImageUri = conversation.discarded
     ? ''
-    : visibleDisplayText(detail.appSummaryImageUri ?? '');
+    : appImageUrl(detail.appSummaryImageUri) ?? '';
   const appsError = conversation.discarded
     ? ''
     : visibleDisplayText(detail.appsError ?? '');

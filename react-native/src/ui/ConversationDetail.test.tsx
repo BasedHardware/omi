@@ -2467,6 +2467,99 @@ test('legacy conversation details name GET app result content', () => {
   ).toHaveLength(0);
 });
 
+test('legacy conversation details name Flutter AppResultDetailWidget padded GET image instead of remapping to a CDN chip', () => {
+  const exactUri = 'https://cdn.example.test/notes.png';
+  const trailingUri = 'https://cdn.example.test/notes.png ';
+  const paddedUri = '  https://cdn.example.test/notes.png  ';
+  const httpsUri = 'HTTPS://cdn.example.test/notes.png';
+  const detail = {
+    id: 'old-1',
+    title: 'A real conversation',
+    summary: 'Summary',
+    locked: false,
+    sections: [],
+    actionItems: [],
+    appSummary: 'App wrote this recap',
+    appSummaryName: 'Notes',
+    appSummaryDescription: 'Saves notes from calls',
+    transcript: {status: 'loaded', segments: []},
+  };
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {...detail, appSummaryImageUri: trailingUri},
+    },
+    reload: jest.fn(),
+  });
+  const trailing = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    trailing.root.findAll(node => node.props.source?.uri === trailingUri)
+      .length,
+  ).toBeGreaterThan(0);
+  expect(
+    trailing.root.findAll(node => node.props.source?.uri === exactUri),
+  ).toHaveLength(0);
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {...detail, appSummaryImageUri: paddedUri},
+    },
+    reload: jest.fn(),
+  });
+  const padded = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    padded.root.findAll(
+      node =>
+        typeof node.props.source?.uri === 'string' &&
+        node.props.source.uri.includes('cdn.example.test/notes.png'),
+    ),
+  ).toHaveLength(0);
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {...detail, appSummaryImageUri: httpsUri},
+    },
+    reload: jest.fn(),
+  });
+  const https = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    https.root.findAll(
+      node =>
+        typeof node.props.source?.uri === 'string' &&
+        node.props.source.uri
+          .toLowerCase()
+          .includes('cdn.example.test/notes.png'),
+    ),
+  ).toHaveLength(0);
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {...detail, appSummaryImageUri: exactUri},
+    },
+    reload: jest.fn(),
+  });
+  const exact = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    exact.root.findAll(node => node.props.source?.uri === exactUri).length,
+  ).toBeGreaterThan(0);
+});
+
 test('legacy conversation details name Flutter Unknown App when the catalog misses', () => {
   mockLegacy.mockReturnValue({
     result: {
