@@ -2392,10 +2392,10 @@ test('app attribution keeps category when an author is present', () => {
   ).toBe('');
 });
 
-test('empty app names stay visible instead of a blank title', () => {
-  expect(appDisplayName('')).toBe('App name unavailable');
-  expect(appDisplayName(' \t\n')).toBe('App name unavailable');
-  expect(appDisplayName('\u00A0')).toBe('App name unavailable');
+test('app display name names Flutter empty GET names', () => {
+  expect(appDisplayName('')).toBe('');
+  expect(appDisplayName(' \t\n')).toBe('');
+  expect(appDisplayName('\u00A0')).toBe('');
   expect(appDisplayName('  Owned app  ')).toBe('Owned app');
 });
 
@@ -2428,12 +2428,8 @@ test('app list private name copy names Flutter AppListItem lock and omits Catego
   expect(appListPrivateNameCopy('  Owned app  ', true, false)).toBe(
     'Owned app 🔒',
   );
-  expect(appListPrivateNameCopy('', true, false)).toBe(
-    'App name unavailable 🔒',
-  );
-  expect(appListPrivateNameCopy(' \t', true, true)).toBe(
-    'App name unavailable',
-  );
+  expect(appListPrivateNameCopy('', true, false)).toBe(' 🔒');
+  expect(appListPrivateNameCopy(' \t', true, true)).toBe('');
 });
 
 test('app list description copy names Flutter AppListItem truncated GET description', () => {

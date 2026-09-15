@@ -844,7 +844,7 @@ test('NEXT LINE-only Apps description does not leave a blank catalogue subtitle'
   expect(textOf(renderer)).not.toContain('\u0085');
 });
 
-test('whitespace-only Apps name stays visible instead of a blank catalogue title', async () => {
+test('Connectors names Flutter empty GET app names', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/apps') {
@@ -873,9 +873,9 @@ test('whitespace-only Apps name stays visible instead of a blank catalogue title
     return {id: request.id, status: 404, body: null};
   });
   const renderer = await renderPage(ConnectorsPage);
-  expect(textOf(renderer)).toContain('App name unavailable');
+  expect(textOf(renderer)).not.toContain('App name unavailable');
   expect(textOf(renderer)).not.toContain('Not installed');
-  expect(labelsOf(renderer)).toContain('Install App name unavailable');
+  expect(labelsOf(renderer)).toContain('Install ');
 });
 
 test('nested non-retryable Apps enable writes latch Install', async () => {

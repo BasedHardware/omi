@@ -2167,7 +2167,7 @@ test('nested non-retryable Apps enable writes omit Install', async () => {
   ).toHaveLength(0);
 });
 
-test('Apps gallery empty names stay visible instead of a blank title', async () => {
+test('Apps gallery names Flutter empty GET app names', async () => {
   const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
     loadConnectors: jest.Mock;
   };
@@ -2202,7 +2202,7 @@ test('Apps gallery empty names stay visible instead of a blank title', async () 
     await Promise.resolve();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('App name unavailable');
+  expect(tree).not.toContain('App name unavailable');
   expect(tree).toContain('App details unavailable');
   expect(tree).toContain('Not connected');
   expect(tree).not.toContain(desktopAppsUnavailableCopy);

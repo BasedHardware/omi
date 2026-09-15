@@ -2200,7 +2200,7 @@ export function appSectionCategoryCopy(
 }
 
 export function appDisplayName(name: string): string {
-  return accountFieldCopy(name, 'App name unavailable');
+  return visibleDisplayText(name);
 }
 
 export function deviceDisplayName(name: string): string {
