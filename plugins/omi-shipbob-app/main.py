@@ -220,31 +220,39 @@ def get_products(uid: str, page: int = 1, limit: int = 50) -> List[Dict]:
     return []
 
 
+def match_by_name(items: List[Dict], name: str) -> List[Dict]:
+    """Items whose name resolves the requested name: the exact (case
+    insensitive) title if any item has it, otherwise every item whose name
+    contains the request or is contained by it. A single element means the
+    name is unambiguous; several mean the caller must not guess."""
+    wanted = name.strip().lower()
+    if not wanted:
+        return []
+    exact = [item for item in items if str(item.get("name", "")).strip().lower() == wanted]
+    if exact:
+        return exact
+    partial = []
+    for item in items:
+        item_name = str(item.get("name", "")).strip().lower()
+        if item_name and (wanted in item_name or item_name in wanted):
+            partial.append(item)
+    return partial
+
+
+def describe_candidates(items: List[Dict]) -> str:
+    return "\n".join(f"- {item.get('name', 'Unknown')} (SKU: {item.get('sku', 'N/A')}, ID: {item.get('id', '?')})" for item in items[:10])
+
+
 def search_product_by_name(uid: str, name: str) -> Optional[Dict]:
-    """Search for a product by name."""
-    # Try products endpoint first
-    products = get_products(uid, limit=100)
-    name_lower = name.lower()
-
-    for product in products:
-        product_name = product.get("name", "").lower()
-        if name_lower in product_name or product_name in name_lower:
-            return product
-
-    return None
+    """The one product that unambiguously matches name, or None."""
+    matches = match_by_name(get_products(uid, limit=100), name)
+    return matches[0] if len(matches) == 1 else None
 
 
 def search_inventory_by_name(uid: str, name: str) -> Optional[Dict]:
-    """Search for an inventory item by name."""
-    inventory = get_inventory(uid, limit=100)
-    name_lower = name.lower()
-
-    for item in inventory:
-        item_name = item.get("name", "").lower()
-        if name_lower in item_name or item_name in name_lower:
-            return item
-
-    return None
+    """The one inventory item that unambiguously matches name, or None."""
+    matches = match_by_name(get_inventory(uid, limit=100), name)
+    return matches[0] if len(matches) == 1 else None
 
 
 def get_inventory_by_product(uid: str, product_name: str) -> Optional[Dict]:
@@ -506,9 +514,15 @@ async def tool_get_inventory(request: Request):
 
         if product_name:
             # Search inventory directly by name
-            inv = search_inventory_by_name(uid, product_name)
-            if not inv:
+            matches = match_by_name(get_inventory(uid, limit=100), product_name)
+            if not matches:
                 return ChatToolResponse(error=f"Could not find inventory item '{product_name}'")
+            if len(matches) > 1:
+                return ChatToolResponse(
+                    error=f"More than one inventory item matches '{product_name}'. Ask the user which one and call again with its exact name:\n"
+                    + describe_candidates(matches)
+                )
+            inv = matches[0]
 
             result_parts = [
                 f"**Inventory for: {inv.get('name', 'Unknown')}**",
@@ -617,10 +631,17 @@ async def tool_create_wro(request: Request):
         if not headers:
             return ChatToolResponse(error="Please connect your ShipBob account first in the app settings.")
 
-        # Find the product and get inventory_id
-        product = search_product_by_name(uid, product_name)
-        if not product:
+        # Find the product and get inventory_id. A receiving order is a real
+        # warehouse mutation, so the name has to resolve to exactly one product.
+        matches = match_by_name(get_products(uid, limit=100), product_name)
+        if not matches:
             return ChatToolResponse(error=f"Could not find product '{product_name}'. Please check the product name.")
+        if len(matches) > 1:
+            return ChatToolResponse(
+                error=f"More than one product matches '{product_name}'. Ask the user which one and call again with its exact name:\n"
+                + describe_candidates(matches)
+            )
+        product = matches[0]
 
         # Get inventory_id from product
         inventory_id = None
