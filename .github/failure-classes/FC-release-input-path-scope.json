@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-release-input-path-scope",
+  "violated_contract": "A default release must be cut only when the selected history contains an artifact-bearing input; release-neutral documentation changes must not mint a new version, tag, or installer.",
+  "canonical_prevention": "Keep release-bearing and release-neutral path classes explicit in an executable classifier invoked by the release planner, preserve force_release as the explicit override, and test the planner wiring and classifier behavior against real Git histories.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_windows_release_paths.py"
+  ],
+  "evidence_prs": [10622],
+  "scope_hints": [
+    ".github/workflows/desktop_windows_release.yml",
+    ".github/scripts/windows_release_paths.py",
+    "desktop/windows/docs/"
+  ],
+  "status": "open"
+}
