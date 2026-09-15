@@ -559,7 +559,7 @@ test('connected device details treat empty information fields as Flutter Unknown
   await act(async () => renderer.unmount());
 });
 
-test('connected device details name Flutter Product Name Unknown without renaming the scan identity', async () => {
+test('connected device details name Flutter empty Product Name without renaming the scan identity', async () => {
   const snapshot = {
     bluetooth: 'poweredOn',
     devices: [
@@ -588,10 +588,12 @@ test('connected device details name Flutter Product Name Unknown without renamin
     );
   });
   const output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain(
+  expect(output).toContain(`"${deviceProductNameCopy()}",": "`);
+  expect(output).not.toContain(
     `"${deviceProductNameCopy()}",": ","${deviceUnknownCopy()}"`,
   );
-  expect(output).toContain('Device name unavailable');
+  expect(output).not.toContain('Device name unavailable');
+  expect(output).toContain('Omi Dev Kit');
   expect(output).not.toContain('Current Version');
   await act(async () => renderer.unmount());
 });
@@ -975,7 +977,7 @@ test.each(['affordance', 'compact', 'overview'] as const)(
 );
 
 test.each(['affordance', 'compact', 'overview'] as const)(
-  '%s keeps a whitespace-only remembered device name visible',
+  '%s names Flutter empty remembered device names',
   async variant => {
     const onForget = jest.fn();
     let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -995,24 +997,20 @@ test.each(['affordance', 'compact', 'overview'] as const)(
     });
     try {
       const output = JSON.stringify(renderer.toJSON());
-      expect(output).toContain('Device name unavailable');
+      expect(output).not.toContain('Device name unavailable');
       expect(
         renderer.root.findAll(
-          node =>
-            node.props.accessibilityLabel ===
-            'Reconnect Device name unavailable',
+          node => node.props.accessibilityLabel === 'Reconnect ',
         ),
       ).not.toHaveLength(0);
       expect(
         renderer.root.findAll(
-          node =>
-            node.props.accessibilityLabel === 'Forget Device name unavailable',
+          node => node.props.accessibilityLabel === 'Forget ',
         ),
       ).not.toHaveLength(0);
       expect(
         renderer.root.find(
-          node =>
-            node.props.accessibilityLabel === 'Forget Device name unavailable',
+          node => node.props.accessibilityLabel === 'Forget ',
         ).props.disabled,
       ).toBe(false);
     } finally {
@@ -1022,7 +1020,7 @@ test.each(['affordance', 'compact', 'overview'] as const)(
 );
 
 test.each(['compact', 'overview'] as const)(
-  '%s keeps a whitespace-only discovered device name visible',
+  '%s names Flutter empty discovered device names',
   async variant => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -1048,11 +1046,10 @@ test.each(['compact', 'overview'] as const)(
     });
     try {
       const output = JSON.stringify(renderer.toJSON());
-      expect(output).toContain('Device name unavailable');
+      expect(output).not.toContain('Device name unavailable');
       expect(
         renderer.root.findAll(
-          node =>
-            node.props.accessibilityLabel === 'Connect Device name unavailable',
+          node => node.props.accessibilityLabel === 'Connect ',
         ),
       ).not.toHaveLength(0);
       expect(

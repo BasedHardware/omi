@@ -2204,7 +2204,7 @@ export function appDisplayName(name: string): string {
 }
 
 export function deviceDisplayName(name: string): string {
-  return accountFieldCopy(name, 'Device name unavailable');
+  return visibleDisplayText(name);
 }
 
 export function deviceFoundShortIdCopy(id: string): string {

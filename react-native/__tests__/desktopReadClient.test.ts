@@ -1828,6 +1828,15 @@ test('firmware update copy names GET latest without Available on current or draf
       {name: 'Pendant'},
     ]),
   ).toBe('Pendant');
+  expect(
+    deviceFoundNameCopy('', 'AA:BB:CC:DD:EE:FF', [{name: ''}]),
+  ).toBe('');
+  expect(
+    deviceFoundNameCopy(' \t', 'AA:BB:CC:DD:EE:FF', [
+      {name: ' \t'},
+      {name: ' \t'},
+    ]),
+  ).toBe(' (AABBCC)');
   expect(deviceFoundSavedCopy()).toBe('Saved');
   expect(deviceFoundSavedChipCopy('saved-id', 'saved-id')).toBe('Saved');
   expect(deviceFoundSavedChipCopy('scan-id', 'saved-id')).toBeNull();
@@ -2465,10 +2474,10 @@ test('app image URLs keep GET http(s) images instead of inventing a GitHub host'
   expect(appImageUrl(undefined)).toBe(null);
 });
 
-test('empty device names stay visible instead of a blank row', () => {
-  expect(deviceDisplayName('')).toBe('Device name unavailable');
-  expect(deviceDisplayName(' \t\n')).toBe('Device name unavailable');
-  expect(deviceDisplayName('\u00A0')).toBe('Device name unavailable');
+test('device display name names Flutter empty GET names', () => {
+  expect(deviceDisplayName('')).toBe('');
+  expect(deviceDisplayName(' \t\n')).toBe('');
+  expect(deviceDisplayName('\u00A0')).toBe('');
   expect(deviceDisplayName('  Omi  ')).toBe('Omi');
 });
 

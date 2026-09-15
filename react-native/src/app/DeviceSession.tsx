@@ -444,7 +444,7 @@ export function DeviceSession({
       <Text selectable style={styles.deviceMeta}>
         {deviceProductNameCopy()}
         {': '}
-        {accountFieldCopy(connected.name, deviceUnknownCopy())}
+        {deviceDisplayName(connected.name)}
       </Text>
       <Text selectable style={styles.deviceMeta}>
         Device ID
