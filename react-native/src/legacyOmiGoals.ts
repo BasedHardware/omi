@@ -15,6 +15,9 @@ function text(value: unknown, limit: number): string {
 }
 
 function goalMetric(value: unknown): number | null {
+  if (value === undefined || value === null) {
+    return 0;
+  }
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
   }

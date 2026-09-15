@@ -20,6 +20,9 @@ test('formats Tasks GET goal progress like Flutter _buildGoalItem toInt', () => 
   expect(goalTasksTitleCopy('Read 20 books', 3, 10)).toBe(
     'Read 20 books (3/10)',
   );
+  expect(goalTasksTitleCopy('Missing metrics', 0, 10)).toBe(
+    'Missing metrics (0/10)',
+  );
 });
 
 test('parses GET goals titles and omits empty titles', () => {
@@ -60,7 +63,7 @@ test('does not omit a neighboring titled goal when GET lists more than four', ()
   expect(rows.map(row => row.id)).toEqual(['g1', 'g2', 'g3', 'g4', 'g5']);
 });
 
-test('does not omit a neighboring titled goal when stored metrics cannot project', () => {
+test('names Flutter Goal.fromJson defaulted GET metrics instead of omitting the titled row', () => {
   const rows = parseOmiGoals(
     JSON.stringify([
       {
@@ -77,9 +80,21 @@ test('does not omit a neighboring titled goal when stored metrics cannot project
       },
       {id: 'goal-missing', title: 'Missing metrics', target_value: 10},
       {
+        id: 'goal-null',
+        title: 'Null metrics',
+        current_value: null,
+        target_value: null,
+      },
+      {
         id: 'goal-object',
         title: 'Object metrics',
         current_value: {value: 1},
+        target_value: 2,
+      },
+      {
+        id: 'goal-invalid',
+        title: 'Invalid metrics',
+        current_value: 'nope',
         target_value: 2,
       },
     ]),
@@ -87,6 +102,8 @@ test('does not omit a neighboring titled goal when stored metrics cannot project
   expect(rows).toEqual([
     {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
     {id: 'goal-string', title: 'Walk daily', current: 1.5, target: 4},
+    {id: 'goal-missing', title: 'Missing metrics', current: 0, target: 10},
+    {id: 'goal-null', title: 'Null metrics', current: 0, target: 0},
   ]);
 });
 
@@ -305,6 +322,12 @@ test('loadOmiGoals names resolved GET goals and omits failures', async () => {
       },
       {id: 'goal-missing', title: 'Missing metrics', target_value: 10},
       {
+        id: 'goal-null',
+        title: 'Null metrics',
+        current_value: null,
+        target_value: 4,
+      },
+      {
         id: 7,
         title: 'Numeric id',
         current_value: 2,
@@ -322,6 +345,8 @@ test('loadOmiGoals names resolved GET goals and omits failures', async () => {
   expect(await loadOmiGoals(backend)).toEqual([
     {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
     {id: 'goal-string', title: 'Walk daily', current: 1.5, target: 4},
+    {id: 'goal-missing', title: 'Missing metrics', current: 0, target: 10},
+    {id: 'goal-null', title: 'Null metrics', current: 0, target: 4},
     {id: '7', title: 'Numeric id', current: 2, target: 5},
   ]);
   expect(request).toHaveBeenCalledWith({
