@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: shopify-null-params-tests
+    command: ["python3", "plugins/omi-shopify-app/test_main.py"]
+    triggers: ["plugins/omi-shopify-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13946: the Omi backend sends JSON null for every omitted optional tool param, so body.get(key, default) returned None and min(None, 50) crashed get_orders/get_customers; optional params must coerce and clamp"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
