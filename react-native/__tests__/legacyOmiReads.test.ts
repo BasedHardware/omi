@@ -1160,6 +1160,128 @@ test('old memories name GET knowledge-ledger History chrome Flutter paints on no
   expect(result.items[3]).not.toHaveProperty('history');
 });
 
+test('old memories name Flutter MemoryItem padded GET ledger schema and kind instead of remapping to playbook or History chrome', async () => {
+  const {api} = backend(
+    [
+      {
+        id: 'exact-playbook',
+        content: 'Prefers concise recaps.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        body: 'Open with the weekly recap.',
+        kind: 'document',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        intent_backed: true,
+      },
+      {
+        id: 'padded-schema',
+        content: 'Prefers padded schema.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        body: 'Open with the weekly recap.',
+        kind: 'document',
+        ledger_schema_version: '  knowledge_ledger.v1  ',
+        intent_backed: true,
+        user_review: false,
+      },
+      {
+        id: 'trailing-schema',
+        content: 'Prefers trailing schema.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        body: 'Open with the weekly recap.',
+        kind: 'document',
+        ledger_schema_version: 'knowledge_ledger.v1 ',
+        intent_backed: true,
+        user_review: false,
+      },
+      {
+        id: 'next-line-schema',
+        content: 'Prefers next-line schema.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        body: 'Open with the weekly recap.',
+        kind: 'document',
+        ledger_schema_version: '\u0085knowledge_ledger.v1',
+        intent_backed: true,
+        user_review: false,
+      },
+      {
+        id: 'padded-kind',
+        content: 'Prefers padded kind.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        body: 'Open with the weekly recap.',
+        kind: '  document  ',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        intent_backed: true,
+        user_review: false,
+      },
+      {
+        id: 'trailing-kind',
+        content: 'Prefers trailing kind.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        body: 'Open with the weekly recap.',
+        kind: 'document ',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        intent_backed: true,
+        user_review: false,
+      },
+      {
+        id: 'next-line-kind',
+        content: 'Prefers next-line kind.',
+        created_at: '2026-09-07T00:00:00Z',
+        conversation_id: null,
+        body: 'Open with the weekly recap.',
+        kind: '\u0085document',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        intent_backed: true,
+        user_review: false,
+      },
+      {
+        id: 'padded-fact',
+        content: 'Previous name was Sam.',
+        created_at: '2026-09-06T00:00:00Z',
+        conversation_id: null,
+        kind: '  fact  ',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        intent_backed: true,
+        user_review: false,
+      },
+      {
+        id: 'padded-trigger',
+        content: 'Used to live in Berlin.',
+        created_at: '2026-09-05T00:00:00Z',
+        conversation_id: null,
+        kind: '  trigger  ',
+        ledger_schema_version: 'knowledge_ledger.v1',
+      },
+      {
+        id: 'exact-history',
+        content: 'Previous name was Sam.',
+        created_at: '2026-09-06T00:00:00Z',
+        conversation_id: null,
+        kind: 'fact',
+        ledger_schema_version: 'knowledge_ledger.v1',
+        intent_backed: true,
+        user_review: false,
+      },
+    ].map(omiMemory),
+  );
+  const result = await loadMemories(api);
+  expect(result.items[0]).toMatchObject({
+    ledgerBody: 'Open with the weekly recap.',
+  });
+  expect(result.items[0]).not.toHaveProperty('history');
+  for (const item of result.items.slice(1, 9)) {
+    expect(item).not.toHaveProperty('ledgerBody');
+    expect(item).not.toHaveProperty('history');
+  }
+  expect(result.items[9]).toMatchObject({history: true});
+  expect(result.items[9]).not.toHaveProperty('ledgerBody');
+});
+
 test('old memories name GET locked and omit unlocked rows', async () => {
   const {api} = backend(
     [

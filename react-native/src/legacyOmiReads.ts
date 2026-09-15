@@ -429,8 +429,8 @@ function memoryItem(row: Record<string, unknown>): MemoryProjection {
       ? null
       : parsedConversationId;
   const ledgerSlot = text(row.slot, '');
-  const ledgerKind = visibleDisplayText(text(row.kind, ''));
-  const ledgerSchema = visibleDisplayText(text(row.ledger_schema_version, ''));
+  const ledgerKind = text(row.kind, '');
+  const ledgerSchema = text(row.ledger_schema_version, '');
   const ledgerBody = visibleDisplayText(text(row.body, ''));
   const playbook =
     ledgerSchema === 'knowledge_ledger.v1' && ledgerKind === 'document'
