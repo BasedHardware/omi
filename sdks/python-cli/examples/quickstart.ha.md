@@ -88,13 +88,13 @@ omi auth status
 omi auth whoami
 ```
 
-Sabunta token na OAuth ba tare da sake shiga ba:
+`omi auth refresh` na nufin sabunta token na OAuth ba tare da sake shiga ba, amma babu wata hanyar shiga a yau — har da ta browser — da take samar da profile irin na OAuth: shiga ta browser (`--browser`) tana ajiye maɓallin API mai dorewa, kamar dai shiga ta maɓallin API kai tsaye.
 
 ```bash
 omi auth refresh
 ```
 
-> `omi auth refresh` yana aiki ne kawai ga profile da suka shiga ta browser (OAuth). Ga profile masu amfani da maɓallin API, babu abin da za a sabunta, kuma umarnin yana ƙarewa da saƙon «Nothing to refresh» da exit code `1`.
+> Saboda haka, a yanzu, gudanar da `omi auth refresh` a kan kowane profile yana ƙarewa da saƙon «Nothing to refresh» da exit code `1` — umarnin yana nan don profile irin na OAuth na gaba.
 
 Fita:
 ```bash
@@ -179,7 +179,7 @@ omi --json action-item list --open | jq '.'
 > * Kuskure: `omi memory list --json`
 
 ### Raba shafuka (Pagination)
-Umarnin `list` suna goyon bayan `--limit` da `--offset`:
+Yawancin umarnin `list` (misali `memory`, `conversation`, `action-item`) suna goyon bayan `--limit` da `--offset`; `goal list` yana goyon bayan `--limit` kawai (da kuma `--include-inactive`), ba `--offset` ba:
 
 ```bash
 omi --json memory list --limit 50 --offset 50
@@ -264,7 +264,7 @@ Maimakon environment variable za ka iya ajiye saitunan a profile: `omi local con
 
 ## 8. Sarrafa profile da yawa (Profiles)
 
-Yi amfani da `--profile` don sauya tsakanin asusun kai, profile na aiki ko muhallin gwaji cikin sauƙi. Ana ajiye saitunan a `~/.omi/config.toml`. Tsarin fifiko: flag na `--profile`, sannan environment variable `OMI_PROFILE`, sannan a ƙarshe profile na `default`.
+Yi amfani da `--profile` don sauya tsakanin asusun kai, profile na aiki ko muhallin gwaji cikin sauƙi. Ana ajiye saitunan a `~/.omi/config.toml`. Tsarin fifiko: flag na `--profile`, sannan environment variable `OMI_PROFILE`, sannan a ƙarshe profile mai aiki da aka ajiye (darajarsa ta farko ita ce `default`, amma kowace `auth login` tana sabunta wanda profile ke aiki).
 
 ```bash
 # Ƙirƙiri kuma shiga profile na kai
