@@ -22,6 +22,64 @@ test('firmware latest query omits until model firmware hardware and manufacturer
   });
 });
 
+test('names Flutter FirmwareUpdate padded BLE firmwareLatestQuery instead of remapping to latest', () => {
+  expect(
+    firmwareLatestQuery({
+      model: '  Omi Dev Kit  ',
+      firmware: '  1.2.3  ',
+      hardware: '1 ',
+      manufacturer: '\u0085Based Hardware',
+    }),
+  ).toEqual({
+    model: '  Omi Dev Kit  ',
+    firmware: '  1.2.3  ',
+    hardware: '1 ',
+    manufacturer: '\u0085Based Hardware',
+  });
+  expect(
+    firmwareLatestQuery({
+      model: 'Omi Dev Kit',
+      firmware: '1.2.3 ',
+      hardware: '1',
+      manufacturer: 'Based Hardware',
+    }),
+  ).toEqual({
+    model: 'Omi Dev Kit',
+    firmware: '1.2.3 ',
+    hardware: '1',
+    manufacturer: 'Based Hardware',
+  });
+  expect(
+    firmwareLatestQuery({
+      model: 'Omi Dev Kit',
+      firmware: ' \t',
+      hardware: '1',
+      manufacturer: 'Based Hardware',
+    }),
+  ).toBeNull();
+  expect(
+    firmwareLatestQuery({
+      model: 'Omi Dev Kit',
+      firmware: '',
+      hardware: '1',
+      manufacturer: 'Based Hardware',
+    }),
+  ).toBeNull();
+  expect(
+    firmwareLatestQuery({
+      model: 'Omi Dev Kit',
+      firmware: '1.2.3',
+      hardware: '1',
+      manufacturer: 'Based Hardware',
+    }),
+  ).toEqual({
+    model: 'Omi Dev Kit',
+    firmware: '1.2.3',
+    hardware: '1',
+    manufacturer: 'Based Hardware',
+  });
+});
+
 test('parses GET latest firmware and omits empty or draft versions', () => {
   expect(parseOmiLatestFirmware(JSON.stringify({version: '1.3.0'}))).toEqual({
     version: '1.3.0',
@@ -249,6 +307,33 @@ test('loadOmiLatestFirmware names resolved GET version and omits failures', asyn
     method: 'GET',
     expectedApiContract: 'omi',
     path: '/v2/firmware/latest?device_model=Omi%20Dev%20Kit&firmware_revision=1.2.3&hardware_revision=1&manufacturer_name=Based%20Hardware',
+  });
+  request.mockResolvedValueOnce({
+    id: 'firmware',
+    status: 200,
+    body: JSON.stringify({version: '1.3.0', min_version: '1.0.0'}),
+  });
+  expect(
+    await loadOmiLatestFirmware(backend, {
+      model: '  Omi Dev Kit  ',
+      firmware: '  1.2.3  ',
+      hardware: '1 ',
+      manufacturer: '\u0085Based Hardware',
+    }),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: '1.0.0',
+  });
+  expect(request).toHaveBeenLastCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path:
+      `/v2/firmware/latest?device_model=${encodeURIComponent('  Omi Dev Kit  ')}` +
+      `&firmware_revision=${encodeURIComponent('  1.2.3  ')}` +
+      `&hardware_revision=${encodeURIComponent('1 ')}` +
+      `&manufacturer_name=${encodeURIComponent('\u0085Based Hardware')}`,
   });
   request.mockResolvedValueOnce({id: 'firmware', status: 500, body: '{}'});
   expect(

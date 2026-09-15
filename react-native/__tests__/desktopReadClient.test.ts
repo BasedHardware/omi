@@ -2379,6 +2379,37 @@ test('firmware update copy names Flutter FirmwareUpdate padded GET version as up
   ).toEqual({latest: '1.3.0', available: true});
 });
 
+test('firmware update copy names Flutter FirmwareUpdate padded BLE firmware as up to date instead of Latest Version', () => {
+  expect(
+    firmwareUpdateCopy('  1.2.3  ', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3 ', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('\u00851.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '1.3.0', available: true});
+});
+
 test('firmware update copy names Flutter FirmwareUpdate min_version-blocked GET as up to date instead of Latest Version', () => {
   expect(
     firmwareUpdateCopy('0.9.0', {

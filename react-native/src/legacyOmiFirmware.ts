@@ -51,15 +51,15 @@ export function firmwareLatestQuery(information?: {
   hardware?: string;
   manufacturer?: string;
 }): FirmwareLatestQuery | null {
-  const model = visibleDisplayText(information?.model ?? '');
-  const firmware = visibleDisplayText(information?.firmware ?? '');
-  const hardware = visibleDisplayText(information?.hardware ?? '');
-  const manufacturer = visibleDisplayText(information?.manufacturer ?? '');
+  const model = information?.model ?? '';
+  const firmware = information?.firmware ?? '';
+  const hardware = information?.hardware ?? '';
+  const manufacturer = information?.manufacturer ?? '';
   if (
-    model === '' ||
-    firmware === '' ||
-    hardware === '' ||
-    manufacturer === ''
+    visibleDisplayText(model) === '' ||
+    visibleDisplayText(firmware) === '' ||
+    visibleDisplayText(hardware) === '' ||
+    visibleDisplayText(manufacturer) === ''
   ) {
     return null;
   }

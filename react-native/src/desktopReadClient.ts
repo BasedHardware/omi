@@ -1988,7 +1988,7 @@ export function firmwareUpdateCopy(
     minimum !== null &&
     compareDottedVersion(current, minimum) >= 0 &&
     compareDottedVersion(newest, current) > 0;
-  const upToDate = current !== null && !available;
+  const upToDate = !available;
   const changelog = [...(details.changelog ?? [])];
   return {
     latest,
