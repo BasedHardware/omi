@@ -88,7 +88,7 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
       throw new DeveloperKeyError();
     }
     seen.add(id);
-    const name = visibleDisplayText(text(row.name, 1_000_000));
+    const name = text(row.name, 1_000_000);
     const keyPrefix = visibleDisplayText(text(row.key_prefix, 1_000_000));
     const created = createdAtMs(row.created_at);
     optionalDateTime(row.last_used_at);

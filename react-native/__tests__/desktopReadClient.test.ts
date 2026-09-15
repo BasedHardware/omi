@@ -2259,7 +2259,7 @@ test('developer key copy names GET name and prefix without a full secret', () =>
     ),
   ).toEqual([
     {title: developerApiTitleCopy(), copy: `Local · omi_sk_ab · ${created}`},
-    {title: developerApiTitleCopy(), copy: ` \u00b7 omi_sk_cd · ${created}`},
+    {title: developerApiTitleCopy(), copy: ` \t \u00b7 omi_sk_cd · ${created}`},
     {title: developerApiTitleCopy(), copy: 'Cursor \u00b7 '},
     {
       title: developerApiTitleCopy(),
@@ -2270,7 +2270,10 @@ test('developer key copy names GET name and prefix without a full secret', () =>
     ' \u00b7 omi_sk_ab',
   );
   expect(developerKeyRowCopy({name: ' \t', keyPrefix: 'omi_sk_ab'})).toBe(
-    ' \u00b7 omi_sk_ab',
+    ' \t \u00b7 omi_sk_ab',
+  );
+  expect(developerKeyRowCopy({name: '  Named  ', keyPrefix: 'omi_sk_ab'})).toBe(
+    '  Named   \u00b7 omi_sk_ab',
   );
   expect(developerKeyRowCopy({name: '', keyPrefix: ''})).toBe(' \u00b7 ');
   expect(developerKeyRowCopy({name: 'Cursor', keyPrefix: ''})).toBe(

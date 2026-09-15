@@ -39,7 +39,7 @@ test('names Flutter DevApiKeyListItem empty GET names instead of omitting the ke
       keyPrefix: 'omi_sk_ab',
       createdAtMs: Date.parse('2026-09-09T12:00:00.000Z'),
     },
-    {id: 'key-empty', name: '', keyPrefix: 'omi_sk_cd', createdAtMs: createdMs},
+    {id: 'key-empty', name: ' \t', keyPrefix: 'omi_sk_cd', createdAtMs: createdMs},
     {id: 'key-blank', name: '', keyPrefix: 'omi_sk_ef', createdAtMs: createdMs},
   ]);
 });
@@ -90,7 +90,7 @@ test('parses GET developer keys and omits full secrets', () => {
         'goals:write',
       ],
     },
-    {id: 'key-empty', name: '', keyPrefix: 'omi_sk_cd', createdAtMs: createdMs},
+    {id: 'key-empty', name: ' \t', keyPrefix: 'omi_sk_cd', createdAtMs: createdMs},
   ]);
 });
 

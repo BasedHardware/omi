@@ -2124,7 +2124,7 @@ export function developerKeyRowCopy(
   },
   options?: {emptyScopesCopy?: string; maskPrefix?: boolean},
 ): string {
-  const name = visibleDisplayText(key.name);
+  const name = key.name;
   const prefix = developerKeyPrefixCopy(
     key.keyPrefix,
     options?.maskPrefix === true ? {mask: true} : undefined,
