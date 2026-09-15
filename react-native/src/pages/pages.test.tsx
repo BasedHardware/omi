@@ -1359,6 +1359,35 @@ test('Settings names GET usage today without Upgrade', async () => {
   expect(tree).not.toContain('99');
 });
 
+test('Settings names Flutter UsagePage fromJson invalid GET today speech_seconds instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=today') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          today: {
+            transcription_seconds: 90,
+            words_transcribed: 12,
+            insights_gained: 3,
+            memories_created: 1,
+            speech_seconds: 'bad',
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Listening');
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain('Today · Listening');
+  expect(tree).not.toContain('2 minutes');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names a failed usage today GET instead of empty success', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

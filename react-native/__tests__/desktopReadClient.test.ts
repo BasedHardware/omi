@@ -6515,6 +6515,56 @@ test('loadAccountSettings names GET usage today without inventing zeros', async 
       'Usage',
     ),
   ).toThrow('Usage transcription_seconds is malformed');
+  expect(() =>
+    parseCloudUsage(
+      {
+        today: {
+          transcription_seconds: 90,
+          speech_seconds: 'bad',
+        },
+      },
+      'Usage',
+    ),
+  ).toThrow('Usage speech_seconds is malformed');
+  expect(() =>
+    parseCloudUsage(
+      {
+        today: {transcription_seconds: 90},
+        monthly: {transcription_seconds: '12.5'},
+      },
+      'Usage',
+    ),
+  ).toThrow('Usage monthly transcription_seconds is malformed');
+  expect(() =>
+    parseCloudUsage(
+      {
+        today: {transcription_seconds: 90},
+        history: [{date: 1}],
+      },
+      'Usage',
+    ),
+  ).toThrow('Usage history[0] date is malformed');
+  expect(
+    parseCloudUsage(
+      {
+        today: {
+          transcription_seconds: 90,
+          speech_seconds: 99,
+        },
+        monthly: {
+          transcription_seconds: 180,
+          speech_seconds: 0,
+        },
+        history: [{date: '', speech_seconds: '0'}],
+      },
+      'Usage',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 90,
+    wordsTranscribed: 0,
+    insightsGained: 0,
+    memoriesCreated: 0,
+  });
 });
 
 test('loadAccountSettings names GET primary language without inventing Not set', async () => {

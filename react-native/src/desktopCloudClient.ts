@@ -357,33 +357,82 @@ export function parseCloudLanguageNames(
   return names.length === 0 ? null : names;
 }
 
+const USAGE_PERIODS = ['today', 'monthly', 'yearly', 'all_time'] as const;
+
+function parseUsageStats(
+  value: unknown,
+  label: string,
+): CloudUsageStats {
+  const stats = object(value, label);
+  requiredUsageInteger(stats.speech_seconds, `${label} speech_seconds`);
+  return {
+    transcriptionSeconds: requiredUsageInteger(
+      stats.transcription_seconds,
+      `${label} transcription_seconds`,
+    ),
+    wordsTranscribed: requiredUsageInteger(
+      stats.words_transcribed,
+      `${label} words_transcribed`,
+    ),
+    insightsGained: requiredUsageInteger(
+      stats.insights_gained,
+      `${label} insights_gained`,
+    ),
+    memoriesCreated: requiredUsageInteger(
+      stats.memories_created,
+      `${label} memories_created`,
+    ),
+  };
+}
+
 export function parseCloudUsage(
   value: unknown,
   label: string,
 ): CloudUsageStats | null {
   const record = object(value, label);
+  for (const key of USAGE_PERIODS) {
+    const raw = record[key];
+    if (raw === undefined || raw === null) {
+      continue;
+    }
+    const prefix = key === 'today' ? label : `${label} ${key}`;
+    parseUsageStats(raw, prefix);
+  }
+  if (record.history !== undefined && record.history !== null) {
+    if (!Array.isArray(record.history)) {
+      throw new Error(`${label} history is malformed`);
+    }
+    record.history.forEach((item, index) => {
+      const point = object(item, `${label} history[${index}]`);
+      if (typeof point.date !== 'string') {
+        throw new Error(`${label} history[${index}] date is malformed`);
+      }
+      requiredUsageInteger(
+        point.transcription_seconds,
+        `${label} history[${index}] transcription_seconds`,
+      );
+      requiredUsageInteger(
+        point.words_transcribed,
+        `${label} history[${index}] words_transcribed`,
+      );
+      requiredUsageInteger(
+        point.insights_gained,
+        `${label} history[${index}] insights_gained`,
+      );
+      requiredUsageInteger(
+        point.memories_created,
+        `${label} history[${index}] memories_created`,
+      );
+      requiredUsageInteger(
+        point.speech_seconds,
+        `${label} history[${index}] speech_seconds`,
+      );
+    });
+  }
   if (record.today === undefined || record.today === null) {
     return null;
   }
-  const today = object(record.today, `${label} today`);
-  return {
-    transcriptionSeconds: requiredUsageInteger(
-      today.transcription_seconds,
-      `${label} transcription_seconds`,
-    ),
-    wordsTranscribed: requiredUsageInteger(
-      today.words_transcribed,
-      `${label} words_transcribed`,
-    ),
-    insightsGained: requiredUsageInteger(
-      today.insights_gained,
-      `${label} insights_gained`,
-    ),
-    memoriesCreated: requiredUsageInteger(
-      today.memories_created,
-      `${label} memories_created`,
-    ),
-  };
+  return parseUsageStats(record.today, label);
 }
 
 function malformed(label: string): never {
