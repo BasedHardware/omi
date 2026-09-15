@@ -4,6 +4,7 @@
   the CLI.
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
+* [`action_items_markdown.md`](action_items_markdown.md) — export Omi action items to Markdown checklists for Obsidian & Notion.
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
@@ -15,5 +16,3 @@
   русском (Russian Quickstart).
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
-* [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
-
