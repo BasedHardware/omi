@@ -576,15 +576,21 @@ export async function loadLegacyConversationDetail(
             },
           )
         ).get(appRecap.appId);
-  const resolvedAppName = visibleDisplayText(appChrome?.name ?? '');
-  const appSummaryName = appSummaryAttribution({
-    resolvedName: resolvedAppName,
-    appId: appRecap?.appId,
-    appsError,
-    unusable: appRecap?.unusable,
-    hasRecap: appRecap !== undefined,
-    hasFirstPartyChrome: firstPartySummaryChrome(overview, sections),
-  });
+  const resolvedAppName =
+    appChrome === undefined
+      ? undefined
+      : visibleDisplayText(appChrome.name);
+  const appSummaryName =
+    resolvedAppName === undefined
+      ? appSummaryAttribution({
+          resolvedName: '',
+          appId: appRecap?.appId,
+          appsError,
+          unusable: appRecap?.unusable,
+          hasRecap: appRecap !== undefined,
+          hasFirstPartyChrome: firstPartySummaryChrome(overview, sections),
+        })
+      : resolvedAppName;
   const appSummaryDescription = appChrome?.description;
   const appSummaryImageUri = appChrome?.image;
   const folderId =
@@ -609,9 +615,7 @@ export async function loadLegacyConversationDetail(
       ? {}
       : {locationMapsUrl: location.locationMapsUrl}),
     ...(appSummary === undefined ? {} : {appSummary}),
-    ...(appSummaryName === undefined || appSummaryName === ''
-      ? {}
-      : {appSummaryName}),
+    ...(appSummaryName === undefined ? {} : {appSummaryName}),
     ...(appSummaryDescription === undefined
       ? {}
       : {appSummaryDescription}),

@@ -27,8 +27,11 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
     throw new AppError();
   }
   const id = visibleDisplayText(typeof row.id === 'string' ? row.id : '');
-  const name = visibleDisplayText(typeof row.name === 'string' ? row.name : '');
-  if (id !== appId || name === '') {
+  if (typeof row.name !== 'string') {
+    throw new AppError();
+  }
+  const name = visibleDisplayText(row.name);
+  if (id !== appId) {
     throw new AppError();
   }
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');

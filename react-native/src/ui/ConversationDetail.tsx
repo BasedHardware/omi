@@ -325,9 +325,10 @@ function LegacyConversationBody({
   const appSummary = conversation.discarded
     ? ''
     : visibleDisplayText(detail.appSummary ?? '');
-  const appSummaryName = conversation.discarded
-    ? ''
-    : visibleDisplayText(detail.appSummaryName ?? '');
+  const appSummaryName =
+    conversation.discarded || detail.appSummaryName === undefined
+      ? undefined
+      : visibleDisplayText(detail.appSummaryName);
   const appSummaryDescription =
     conversation.discarded || detail.appSummaryDescription === undefined
       ? undefined
@@ -418,12 +419,14 @@ function LegacyConversationBody({
       {appSummaryImageUri === '' ? null : (
         <CatalogAppImage
           accessibilityLabel={
-            appSummaryName === '' ? 'App image' : appSummaryName
+            appSummaryName === undefined || appSummaryName === ''
+              ? 'App image'
+              : appSummaryName
           }
           uri={appSummaryImageUri}
         />
       )}
-      {appSummaryName === '' ? null : (
+      {appSummaryName === undefined ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {appSummaryName}
         </Text>
