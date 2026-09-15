@@ -15,3 +15,11 @@
   русском (Russian Quickstart).
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
+* [`quickstart.ar.md`](quickstart.ar.md) — دليل البدء السريع لـ omi-cli بالعربية (Arabic Quickstart).
+* [`quickstart.vi.md`](quickstart.vi.md) — hướng dẫn nhanh omi-cli bằng tiếng Việt (Vietnamese Quickstart).
+* [`quickstart.cs.md`](quickstart.cs.md) — český rychlý start pro omi-cli (Czech Quickstart).
+* [`quickstart.he.md`](quickstart.he.md) — מדריך התחלה מהירה של omi-cli בעברית (Hebrew Quickstart).
+* [`quickstart.ca.md`](quickstart.ca.md) — guia ràpida d'omi-cli en català (Catalan Quickstart).
+* [`quickstart.hr.md`](quickstart.hr.md) — brzi vodič za omi-cli na hrvatskom (Croatian Quickstart).
+* [`quickstart.lt.md`](quickstart.lt.md) — omi-cli sparti pradžia lietuvių kalba (Lithuanian Quickstart).
+* [`quickstart.sk.md`](quickstart.sk.md) — rýchly štart s omi-cli v slovenčine (Slovak Quickstart).

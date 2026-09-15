@@ -75,6 +75,10 @@ Tables without predefined columns include fields from every row, in first-seen o
 
 > Looking for localized guides? See the [कोंकणींत सुरवात (Konkani Quickstart)](examples/quickstart.kok.md).
 
+> Looking for localized guides? See the [🇸🇦 دليل البدء السريع (Arabic Quickstart)](examples/quickstart.ar.md), the [🇻🇳 Hướng dẫn nhanh (Vietnamese Quickstart)](examples/quickstart.vi.md), the [🇨🇿 Rychlý start (Czech Quickstart)](examples/quickstart.cs.md), or the [🇮🇱 מדריך מהיר (Hebrew Quickstart)](examples/quickstart.he.md).
+
+> Looking for localized guides? See the [Guia ràpida (Catalan Quickstart)](examples/quickstart.ca.md), the [🇭🇷 Brzi vodič (Croatian Quickstart)](examples/quickstart.hr.md), the [🇱🇹 Sparti pradžia (Lithuanian Quickstart)](examples/quickstart.lt.md), or the [🇸🇰 Rýchly štart (Slovak Quickstart)](examples/quickstart.sk.md).
+
 ## Auth
 
 Two auth methods, both fully wired:
