@@ -389,6 +389,12 @@ test('task rows name Flutter ActionItemsPage empty GET export_platform', () => {
                 title: 'Ship notes',
                 exportCopy: 'Exported to ',
               },
+              {
+                ...task,
+                id: 'task-padded-export',
+                title: 'Padded notes',
+                exportCopy: 'Exported to   todoist  ',
+              },
               {...task, id: 'task-plain', title: 'Write recap'},
             ],
           },
@@ -401,7 +407,9 @@ test('task rows name Flutter ActionItemsPage empty GET export_platform', () => {
     .flatMap(node => node.props.children);
   expect(labels).toContain('Exported to Todoist');
   expect(labels).toContain('Exported to ');
+  expect(labels).toContain('Exported to   todoist  ');
   expect(labels).toContain('Ship notes');
+  expect(labels).toContain('Padded notes');
   expect(labels).toContain('Call Sam');
   expect(labels).toContain('Write recap');
   act(() => renderer.unmount());

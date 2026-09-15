@@ -2880,8 +2880,7 @@ export function taskExportCopy(
   if (exportPlatform === undefined || exportPlatform === null) {
     return null;
   }
-  const platform = visibleDisplayText(exportPlatform);
-  return `Exported to ${TASK_EXPORT_PLATFORM_COPY[platform] ?? platform}`;
+  return `Exported to ${TASK_EXPORT_PLATFORM_COPY[exportPlatform] ?? exportPlatform}`;
 }
 
 export const TASK_INDENT_STEP = 28;

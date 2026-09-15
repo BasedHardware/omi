@@ -1472,6 +1472,13 @@ test('old tasks name Flutter ActionItemsPage empty GET export_platform', async (
         export_platform: ' \u0085 ',
       },
       {
+        id: 'padded-platform',
+        description: 'Padded platform',
+        completed: false,
+        exported: true,
+        export_platform: '  todoist  ',
+      },
+      {
         id: 'empty-platform',
         description: 'Empty platform',
         completed: false,
@@ -1493,12 +1500,15 @@ test('old tasks name Flutter ActionItemsPage empty GET export_platform', async (
   });
   expect(result.items[1]).not.toHaveProperty('exportCopy');
   expect(result.items[2]).toMatchObject({
-    exportCopy: 'Exported to ',
+    exportCopy: 'Exported to  \u0085 ',
   });
   expect(result.items[3]).toMatchObject({
+    exportCopy: 'Exported to   todoist  ',
+  });
+  expect(result.items[4]).toMatchObject({
     exportCopy: 'Exported to ',
   });
-  expect(result.items[4]).not.toHaveProperty('exportCopy');
+  expect(result.items[5]).not.toHaveProperty('exportCopy');
 });
 
 test('fails closed for malformed GET task export fields', async () => {
