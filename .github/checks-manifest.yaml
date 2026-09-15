@@ -64,6 +64,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: crossref-pooling-tests
+    command: ["python3", "plugins/omi-crossref-app/test_main.py"]
+    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13978: crossref_get must reuse the lifespan-pooled AsyncClient, and null or non-dict message/items payloads must return clean responses instead of crashing with AttributeError"
   - id: linear-list-issues-params-tests
     command: ["python3", "plugins/omi-linear-app/test_list_issues_params.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
