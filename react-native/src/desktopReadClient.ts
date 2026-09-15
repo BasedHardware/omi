@@ -1964,15 +1964,18 @@ export function firmwareUpdateCopy(
   const current = dottedVersionParts(currentFirmware);
   const newest = dottedVersionParts(latest);
   const minimum =
-    details.minVersion === null ? null : dottedVersionParts(details.minVersion);
+    details.minVersion === null || details.minVersion === ''
+      ? null
+      : dottedVersionParts(details.minVersion);
   const upToDate =
     current !== null &&
     newest !== null &&
-    compareDottedVersion(newest, current) === 0;
+    (minimum === null || compareDottedVersion(newest, current) === 0);
   const available =
     current !== null &&
     newest !== null &&
-    (minimum === null || compareDottedVersion(current, minimum) >= 0) &&
+    minimum !== null &&
+    compareDottedVersion(current, minimum) >= 0 &&
     compareDottedVersion(newest, current) > 0;
   const changelog = (details.changelog ?? []).map(item =>
     visibleDisplayText(item),

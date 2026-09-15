@@ -1962,7 +1962,7 @@ test('firmware update copy names GET latest without Available on current or draf
     firmwareUpdateCopy('1.2.3', {
       version: '1.3.0',
       draft: false,
-      minVersion: null,
+      minVersion: '1.0.0',
     }),
   ).toEqual({latest: '1.3.0', available: true});
   expect(
@@ -2016,7 +2016,8 @@ test('firmware update copy names GET latest without Available on current or draf
     }),
   ).toEqual({
     latest: '1.3.0',
-    available: true,
+    available: false,
+    upToDate: true,
     changelog: ['Fixed BLE reconnect', '', 'Battery improvements'],
   });
   expect(
@@ -2028,7 +2029,8 @@ test('firmware update copy names GET latest without Available on current or draf
     }),
   ).toEqual({
     latest: '1.3.0',
-    available: true,
+    available: false,
+    upToDate: true,
     changelog: [''],
   });
   expect(
@@ -2039,6 +2041,44 @@ test('firmware update copy names GET latest without Available on current or draf
       changelog: ['Fixed BLE reconnect'],
     }),
   ).toBeNull();
+});
+
+test('firmware update copy names Flutter FirmwareUpdate empty GET min_version as up to date instead of available', () => {
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: null,
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '',
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: ' \t',
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: 'not-a-version',
+    }),
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '1.3.0', available: true});
 });
 
 test('developer webhook titles are not raw API keys', () => {
