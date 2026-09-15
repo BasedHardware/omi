@@ -518,6 +518,10 @@ export function conversationNoSummaryCopy(): string {
   return 'No summary available\nfor this conversation.';
 }
 
+export function conversationNoSummaryForAppCopy(): string {
+  return 'No summary available for this app. Try another app for better results.';
+}
+
 export function processingConversationNoContentCopy(): string {
   return 'No content to display';
 }
@@ -560,7 +564,10 @@ export function conversationDetailSummaryForStatusCopy(
   if (status !== 'processing' && status !== 'merging') {
     return completed;
   }
-  if (completed !== conversationNoSummaryCopy()) {
+  if (
+    completed !== conversationNoSummaryCopy() &&
+    completed !== conversationNoSummaryForAppCopy()
+  ) {
     return completed;
   }
   return transcriptEmpty
@@ -656,6 +663,9 @@ export function conversationDetailSummaryCopy(detail: {
     )
   ) {
     return null;
+  }
+  if (detail.summary !== '' || detail.sections.length > 0) {
+    return conversationNoSummaryForAppCopy();
   }
   return conversationNoSummaryCopy();
 }

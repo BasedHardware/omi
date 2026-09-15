@@ -12,6 +12,7 @@ import {
   desktopBackendServiceCopy,
   conversationFirstPartySummaryCopy,
   conversationNoSummaryCopy,
+  conversationNoSummaryForAppCopy,
   processingConversationNoContentCopy,
   processingConversationNoSummaryCopy,
   processingConversationStatusCopy,
@@ -2347,6 +2348,7 @@ test('legacy details name Flutter noSummaryForConversation when GET has no summa
     }),
   );
   expect(copy).toContain(conversationNoSummaryCopy());
+  expect(copy).not.toContain(conversationNoSummaryForAppCopy());
   expect(copy).not.toContain('Conversation summary unavailable');
   expect(copy).not.toContain('Conversation summary is not ready yet.');
   expect(copy).not.toContain('Generate Summary');
@@ -2358,6 +2360,7 @@ test('legacy details name Flutter noSummaryForConversation when GET has no summa
   );
   expect(processing).toContain(processingConversationNoSummaryCopy());
   expect(processing).not.toContain(conversationNoSummaryCopy());
+  expect(processing).not.toContain(conversationNoSummaryForAppCopy());
   expect(processing).not.toContain('Conversation summary is not ready yet.');
   expect(processing).not.toContain('Generate Summary');
   mockLegacy.mockReturnValue({
@@ -2424,6 +2427,7 @@ test('legacy details name Flutter noSummaryForConversation when GET has no summa
   expect(withSections).toContain('Notes');
   expect(withSections).toContain('Full notes');
   expect(withSections).not.toContain(conversationNoSummaryCopy());
+  expect(withSections).not.toContain(conversationNoSummaryForAppCopy());
   expect(withSections).not.toContain('Conversation summary unavailable');
   mockLegacy.mockReturnValue({
     result: {
@@ -2450,7 +2454,72 @@ test('legacy details name Flutter noSummaryForConversation when GET has no summa
   );
   expect(withApp).toContain('App wrote this recap');
   expect(withApp).not.toContain(conversationNoSummaryCopy());
+  expect(withApp).not.toContain(conversationNoSummaryForAppCopy());
   expect(withApp).not.toContain('Conversation summary unavailable');
+});
+
+test('legacy details name Flutter AppResultDetailWidget whitespace GET overview as noSummaryForApp', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: ' \t\n',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain(conversationNoSummaryForAppCopy());
+  expect(copy).not.toContain(conversationNoSummaryCopy());
+  expect(copy).not.toContain(conversationFirstPartySummaryCopy());
+  expect(copy).not.toContain('Conversation summary unavailable');
+  expect(copy).not.toContain('Generate Summary');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: '',
+        locked: false,
+        sections: [{heading: ' \t\n', bodyMarkdown: ' \t'}],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const whitespaceSections = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(whitespaceSections).toContain(conversationNoSummaryForAppCopy());
+  expect(whitespaceSections).not.toContain(conversationNoSummaryCopy());
+  const processing = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', status: 'processing'},
+    }),
+  );
+  expect(processing).toContain(processingConversationNoSummaryCopy());
+  expect(processing).not.toContain(conversationNoSummaryForAppCopy());
+  expect(processing).not.toContain(conversationNoSummaryCopy());
+  expect(processing).not.toContain('Generate Summary');
 });
 
 test('legacy processing details name Flutter inProgress instead of GET title', () => {

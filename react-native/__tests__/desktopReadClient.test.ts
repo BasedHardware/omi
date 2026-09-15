@@ -4,6 +4,7 @@ import {
   conversationDisplaySummary,
   conversationDetailSummaryCopy,
   conversationNoSummaryCopy,
+  conversationNoSummaryForAppCopy,
   processingConversationNoContentCopy,
   processingConversationNoSummaryCopy,
   processingConversationStatusCopy,
@@ -3634,13 +3635,40 @@ test('conversation detail names Flutter noSummaryForConversation when GET has no
       sections: [],
     }),
   ).toBe(conversationNoSummaryCopy());
+  expect(conversationNoSummaryForAppCopy()).toBe(
+    'No summary available for this app. Try another app for better results.',
+  );
   expect(
     conversationDetailSummaryCopy({
       summary: ' \t\n',
       sections: [],
       appSummary: '',
     }),
-  ).toBe(conversationNoSummaryCopy());
+  ).toBe(conversationNoSummaryForAppCopy());
+  expect(
+    conversationDetailSummaryCopy({
+      summary: '\u0085',
+      sections: [],
+    }),
+  ).toBe(conversationNoSummaryForAppCopy());
+  expect(
+    conversationDetailSummaryCopy({
+      summary: '',
+      sections: [{heading: ' \t\n', bodyMarkdown: ' \t'}],
+    }),
+  ).toBe(conversationNoSummaryForAppCopy());
+  expect(
+    conversationDetailSummaryForStatusCopy('processing', true, {
+      summary: ' \t\n',
+      sections: [],
+    }),
+  ).toBe(processingConversationNoSummaryCopy());
+  expect(
+    conversationDetailSummaryForStatusCopy('completed', true, {
+      summary: ' \t\n',
+      sections: [],
+    }),
+  ).toBe(conversationNoSummaryForAppCopy());
   expect(
     conversationDetailSummaryCopy({
       summary: 'Day recap notes',
