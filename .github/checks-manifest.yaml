@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit"
+  - id: github-app-coerce-tests
+    command: ["python3", "plugins/omi-github-app/test_main.py"]
+    triggers: ["plugins/omi-github-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13911: issue numbers/limits arriving as JSON null or '#42'-style strings must be coerced, and GitHub API errors must reach ChatToolResponse(error=...) instead of being masked as empty results"
   - id: plugin-db-transcript-segments-tests
     command: ["python3", "plugins/test_db_transcript_segments.py"]
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
