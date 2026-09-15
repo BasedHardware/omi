@@ -126,6 +126,7 @@ import {
   memoryHistoryPartialCopy,
   memoryCaptureDeviceCopy,
   conversationListCategory,
+  conversationListEmoji,
   conversationListSourceTag,
   conversationListTag,
   conversationVisibilityCopy,
@@ -3708,8 +3709,20 @@ test('conversation structured emoji copy names Flutter omitted GET emoji as 🧠
     conversationStructuredEmojiDefaultCopy(),
   );
   expect(conversationStructuredEmojiCopy('🚀')).toBe('🚀');
-  expect(conversationStructuredEmojiCopy('')).toBeUndefined();
-  expect(conversationStructuredEmojiCopy(' \t\u0085 ')).toBeUndefined();
+  expect(conversationStructuredEmojiCopy('')).toBe('');
+  expect(conversationStructuredEmojiCopy(' \t\u0085 ')).toBe('');
+});
+
+test('conversation list emoji names Flutter ConversationListItem empty GET emoji', () => {
+  expect(conversationListEmoji({discarded: false, emoji: '🚀'})).toBe('🚀');
+  expect(conversationListEmoji({discarded: false, emoji: ''})).toBe('');
+  expect(conversationListEmoji({discarded: false, emoji: ' \t\u0085 '})).toBe(
+    '',
+  );
+  expect(conversationListEmoji({discarded: false})).toBeNull();
+  expect(
+    conversationListEmoji({discarded: true, emoji: '🧠'}),
+  ).toBeNull();
 });
 
 test('conversation structured category copy names Flutter omitted GET category as other', () => {

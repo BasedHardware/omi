@@ -568,7 +568,7 @@ test('old conversations keep GET source wire values', async () => {
   expect(result.items[1]).toMatchObject({source: 'omi'});
 });
 
-test('old conversations keep wire-non-empty emoji and omit whitespace', async () => {
+test('old conversations keep wire-non-empty emoji and empty GET emoji', async () => {
   const {api} = backend([
     {
       ...conversation,
@@ -591,7 +591,7 @@ test('old conversations keep wire-non-empty emoji and omit whitespace', async ()
   ]);
   const result = await loadConversations(api);
   expect(result.items[0]).toMatchObject({emoji: '🚀'});
-  expect(result.items[1]).not.toHaveProperty('emoji');
+  expect(result.items[1]).toMatchObject({emoji: ''});
 });
 
 test('old conversations name omitted or JSON-null GET structured.emoji as Flutter 🧠', async () => {
@@ -636,7 +636,7 @@ test('old conversations name omitted or JSON-null GET structured.emoji as Flutte
       },
     ]).api,
   );
-  expect(empty.items[0]).not.toHaveProperty('emoji');
+  expect(empty.items[0]).toMatchObject({emoji: ''});
   await expect(
     loadConversations(
       backend([

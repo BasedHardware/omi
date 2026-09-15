@@ -3691,6 +3691,17 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
   expect(discardedTree).not.toContain('🚀');
   expect(discardedTree).not.toContain('🧠');
   expect(discardedTree).not.toContain('Work');
+  const emptyEmoji = render(
+    <ProjectionRow item={{...item, emoji: ' \u0085 '}} />,
+  );
+  expect(
+    emptyEmoji.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Conversation emoji' &&
+        (node.props.children === '' || node.props.children == null),
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(JSON.stringify(emptyEmoji.toJSON())).not.toContain('\u0085');
   const screenpipe = render(
     <ProjectionRow item={{...item, source: 'screenpipe', category: 'work'}} />,
   );

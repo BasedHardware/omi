@@ -997,7 +997,7 @@ test('Home and Library rows omit Flutter ConversationListItem unused overview', 
   expect(textOf(library)).not.toContain('Notes from the standup');
 });
 
-test('library conversation rows name GET emoji and omit discarded or empty values', () => {
+test('library conversation rows name GET emoji including Flutter ConversationListItem empty GET emoji', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'omi-emoji',
@@ -1019,15 +1019,28 @@ test('library conversation rows name GET emoji and omit discarded or empty value
   };
   let shown!: ReactTestRenderer.ReactTestRenderer;
   let hidden!: ReactTestRenderer.ReactTestRenderer;
+  let empty!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     shown = ReactTestRenderer.create(<ConversationRow item={item} />);
     hidden = ReactTestRenderer.create(
       <ConversationRow item={{...item, discarded: true, emoji: '🧠'}} />,
     );
+    empty = ReactTestRenderer.create(
+      <ConversationRow item={{...item, emoji: ' \u0085 '}} />,
+    );
   });
   expect(textOf(shown)).toContain('🚀');
   expect(textOf(hidden)).not.toContain('🚀');
   expect(textOf(hidden)).not.toContain('🧠');
+  expect(
+    empty.root.findAll(
+      node =>
+        node.type === 'Text' &&
+        node.props.numberOfLines === undefined &&
+        (node.props.children === '' || node.props.children == null),
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(textOf(empty)).not.toContain('\u0085');
 });
 
 test('library conversation rows name Flutter New chrome for a just-created row', () => {

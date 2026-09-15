@@ -1766,7 +1766,7 @@ test('conversation list omits Flutter ConversationListItem unused overview', () 
   expect(copy).not.toContain('Conversation summary unavailable');
 });
 
-test('conversation list names GET emoji and omits it when discarded or empty', () => {
+test('conversation list names GET emoji including Flutter ConversationListItem empty GET emoji', () => {
   const base = {
     kind: 'conversation' as const,
     title: 'Morning standup',
@@ -1818,7 +1818,16 @@ test('conversation list names GET emoji and omits it when discarded or empty', (
   expect(textOf(renderer)).toContain('🚀');
   expect(
     renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Conversation emoji',
+      node =>
+        node.props.accessibilityLabel === 'Conversation emoji' &&
+        node.props.children === '🚀',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Conversation emoji' &&
+        (node.props.children === '' || node.props.children == null),
     ).length,
   ).toBeGreaterThan(0);
   expect(textOf(renderer)).not.toContain('🧠');

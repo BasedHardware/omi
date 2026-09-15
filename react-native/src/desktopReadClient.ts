@@ -371,8 +371,10 @@ export function conversationListEmoji(item: {
   if (item.discarded) {
     return null;
   }
-  const emoji = visibleDisplayText(item.emoji ?? '');
-  return emoji === '' ? null : emoji;
+  if (item.emoji === undefined || item.emoji === null) {
+    return null;
+  }
+  return visibleDisplayText(item.emoji);
 }
 
 export function conversationListCategory(item: {
@@ -448,8 +450,7 @@ export function conversationStructuredEmojiCopy(
   if (value === undefined || value === null) {
     return conversationStructuredEmojiDefaultCopy();
   }
-  const token = visibleDisplayText(value);
-  return token === '' ? undefined : token;
+  return visibleDisplayText(value);
 }
 
 export function conversationStructuredCategoryDefaultCopy(): string {

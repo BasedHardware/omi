@@ -1161,6 +1161,22 @@ test('compact Home conversations omit Flutter ConversationListItem mobile tags',
   expect(renderedText(plain)).not.toContain('🚀');
   expect(renderedText(plain)).not.toContain('Productivity');
   expect(renderedText(plain)).not.toContain('✨');
+
+  const empty = render({
+    recaps: [
+      {
+        id: 'recap-empty-emoji',
+        title: 'No emoji',
+        dateLabel: 'Yesterday',
+        emoji: '',
+      },
+    ],
+  });
+  expect(
+    empty.root.findAll(
+      node => node.props.accessibilityLabel === 'Conversation emoji',
+    ),
+  ).toHaveLength(0);
 });
 
 test('Daily Recaps name GET duration instead of title-only', () => {
