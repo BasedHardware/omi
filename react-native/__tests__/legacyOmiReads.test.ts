@@ -290,6 +290,38 @@ test('old discarded conversations name GET people names on transcript_segments',
     },
     {
       ...conversation,
+      id: 'discarded-whitespace-id',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Whitespace id speech',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 1,
+          person_id: ' \t',
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'discarded-blank-id',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Blank id speech',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 1,
+          person_id: '',
+        },
+      ],
+    },
+    {
+      ...conversation,
       id: 'neighbor',
     },
   ];
@@ -301,6 +333,8 @@ test('old discarded conversations name GET people names on transcript_segments',
         body: JSON.stringify([
           {id: 'person-alex', name: 'Alex Chen'},
           {id: 'person-empty', name: ' \t'},
+          {id: ' \t', name: 'Whitespace id'},
+          {id: '', name: 'Blank id'},
         ]),
       };
     }
@@ -320,6 +354,8 @@ test('old discarded conversations name GET people names on transcript_segments',
     'discarded-unresolved',
     'discarded-empty-name',
     'discarded-empty-person',
+    'discarded-whitespace-id',
+    'discarded-blank-id',
     'neighbor',
   ]);
   expect(result.items[0].title).toBe(
@@ -334,7 +370,13 @@ test('old discarded conversations name GET people names on transcript_segments',
   expect(result.items[3].title).toBe(
     '[00:00:00 - 00:00:01] Speaker 1: Anonymous',
   );
-  expect(result.items[4].title).toBe('Real title');
+  expect(result.items[4].title).toBe(
+    '[00:00:00 - 00:00:01] Whitespace id: Whitespace id speech',
+  );
+  expect(result.items[5].title).toBe(
+    '[00:00:00 - 00:00:01] Blank id: Blank id speech',
+  );
+  expect(result.items[6].title).toBe('Real title');
 });
 
 test('old discarded conversations keep neighboring titles when people names are unavailable', async () => {

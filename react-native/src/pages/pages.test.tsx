@@ -1763,6 +1763,8 @@ test('Settings names GET people without a write sheet', async () => {
         body: JSON.stringify([
           {id: 'person-alex', name: 'Alex Chen'},
           {id: 'person-empty', name: ' \t'},
+          {id: ' \t', name: 'Whitespace id'},
+          {id: '', name: 'Blank id'},
         ]),
       };
     }
@@ -1772,6 +1774,8 @@ test('Settings names GET people without a write sheet', async () => {
   const tree = textOf(renderer);
   expect(tree).toContain('People');
   expect(tree).toContain('Alex Chen');
+  expect(tree).toContain('Whitespace id');
+  expect(tree).toContain('Blank id');
   expect(tree).not.toContain('person-alex');
   expect(tree).not.toContain('person-empty');
   expect(tree).not.toContain(

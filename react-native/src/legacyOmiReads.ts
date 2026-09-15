@@ -291,14 +291,14 @@ function discardedTranscriptSegments(value: unknown): {
     const personId =
       segment.person_id === undefined || segment.person_id === null
         ? undefined
-        : visibleDisplayText(text(segment.person_id));
+        : text(segment.person_id);
     return {
       text: text(segment.text, ''),
       speaker: segment.speaker == null ? 'SPEAKER_00' : text(segment.speaker),
       isUser: bool(segment.is_user),
       start: finiteClock(segment.start),
       end: finiteClock(segment.end),
-      ...(personId === undefined || personId === '' ? {} : {personId}),
+      ...(personId === undefined ? {} : {personId}),
     };
   });
 }

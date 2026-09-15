@@ -499,7 +499,7 @@ export async function loadLegacyConversationDetail(
                 const personId =
                   segment.person_id === undefined || segment.person_id === null
                     ? undefined
-                    : visibleDisplayText(text(segment.person_id, 1_000_000));
+                    : text(segment.person_id, 1_000_000);
                 const translations = segmentTranslations(segment.translations);
                 const sttProvider =
                   segment.stt_provider === undefined ||
@@ -515,9 +515,7 @@ export async function loadLegacyConversationDetail(
                   isUser: boolean(segment.is_user),
                   start: finite(segment.start),
                   end: finite(segment.end),
-                  ...(personId === undefined || personId === ''
-                    ? {}
-                    : {personId}),
+                  ...(personId === undefined ? {} : {personId}),
                   ...(translations === undefined ? {} : {translations}),
                   ...(sttProvider === undefined ? {} : {sttProvider}),
                 };

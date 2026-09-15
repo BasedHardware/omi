@@ -16,6 +16,23 @@ test('names Flutter People.build empty GET names instead of omitting them', () =
   expect(names.get('person-blank')).toBe('');
 });
 
+test('names Flutter People.build empty GET ids instead of omitting them', () => {
+  const names = parseOmiPeopleNames(
+    JSON.stringify([
+      {id: 'person-alex', name: 'Alex Chen'},
+      {id: ' \t', name: 'Whitespace id'},
+      {id: '\u0085', name: 'Next line id'},
+      {id: '', name: 'Blank id'},
+      {id: '  padded  ', name: 'Padded id'},
+    ]),
+  );
+  expect(names.get('person-alex')).toBe('Alex Chen');
+  expect(names.get(' \t')).toBe('Whitespace id');
+  expect(names.get('\u0085')).toBe('Next line id');
+  expect(names.get('')).toBe('Blank id');
+  expect(names.get('  padded  ')).toBe('Padded id');
+});
+
 test('keeps GET people names when a person id exceeds 256', () => {
   const id = 'p'.repeat(257);
   const names = parseOmiPeopleNames(

@@ -1896,6 +1896,61 @@ test('names GET people names on transcript segments and omits unresolved ids', a
       return {
         id: 'people',
         status: 200,
+        body: JSON.stringify([
+          {id: ' \t', name: 'Whitespace id'},
+          {id: '', name: 'Blank id'},
+        ]),
+      };
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          speaker: 'SPEAKER_00',
+          person_id: ' \t',
+        },
+      ],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toMatchObject({
+    status: 'loaded',
+    segments: [{personName: 'Whitespace id'}],
+  });
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: 'people',
+        status: 200,
+        body: JSON.stringify([{id: '', name: 'Blank id'}]),
+      };
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          speaker: 'SPEAKER_00',
+          person_id: '',
+        },
+      ],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toMatchObject({
+    status: 'loaded',
+    segments: [{personName: 'Blank id'}],
+  });
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: 'people',
+        status: 200,
         body: JSON.stringify([{id: 'person-other', name: 'Sam'}]),
       };
     }
