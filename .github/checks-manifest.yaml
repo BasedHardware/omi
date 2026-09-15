@@ -24,6 +24,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: iq-rating-openai-guard-tests
+    command: ["python3", "plugins/iq_rating/test_main.py"]
+    triggers: ["plugins/iq_rating/**"]
+    lanes: ["local", "ci"]
+    reason: "#13966: OpenAI 200 responses with empty/non-dict choices and non-list context_snippets must degrade to the fallback paths, not raise IndexError/TypeError"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]
