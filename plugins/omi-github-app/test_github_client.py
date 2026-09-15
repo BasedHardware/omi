@@ -186,6 +186,110 @@ class GitHubClientTests(unittest.TestCase):
         ), patch.object(github_client, "print"):
             self.assertEqual(client.get_repo_labels_with_details("token", "owner/repo"), [])
 
+    def test_list_issues_filters_prs_and_bounds_limit(self):
+        client = github_client.GitHubClient()
+        mixed_items = [
+            {"number": 101, "title": "PR 1", "state": "open", "pull_request": {"url": "pr-url"}},
+            {
+                "number": 102,
+                "title": "Issue 1",
+                "state": "open",
+                "labels": [{"name": "bug"}],
+                "html_url": "url1",
+                "created_at": "t1",
+            },
+            {"number": 103, "title": "PR 2", "state": "open", "pull_request": {"url": "pr-url"}},
+            {
+                "number": 104,
+                "title": "Issue 2",
+                "state": "open",
+                "labels": [],
+                "html_url": "url2",
+                "created_at": "t2",
+            },
+            {
+                "number": 105,
+                "title": "Issue 3",
+                "state": "open",
+                "labels": [],
+                "html_url": "url3",
+                "created_at": "t3",
+            },
+        ]
+
+        with patch.object(github_client.requests, "get", return_value=FakeResponse(mixed_items)) as get:
+            result = client.list_issues("token", "owner/repo", state="open", per_page=2)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(result["issues"]), 2)
+        self.assertEqual([i["number"] for i in result["issues"]], [102, 104])
+        self.assertEqual(get.call_args.kwargs["params"]["per_page"], 30)
+
+    def test_list_issues_paginates_when_prs_dominate_first_page(self):
+        client = github_client.GitHubClient()
+        page1 = [
+            {"number": 201, "title": "PR 1", "state": "open", "pull_request": {"url": "pr1"}},
+            {"number": 202, "title": "PR 2", "state": "open", "pull_request": {"url": "pr2"}},
+        ]
+        page2 = [
+            {"number": 203, "title": "Issue 1", "state": "open", "labels": [], "html_url": "url1", "created_at": "t1"},
+            {"number": 204, "title": "Issue 2", "state": "open", "labels": [], "html_url": "url2", "created_at": "t2"},
+        ]
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse(page1, links={"next": {"url": "page-2"}}),
+                FakeResponse(page2),
+            ],
+        ) as get:
+            result = client.list_issues("token", "owner/repo", per_page=2)
+
+        self.assertTrue(result["success"])
+        self.assertEqual([i["number"] for i in result["issues"]], [203, 204])
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(get.call_args_list[0].kwargs["params"]["page"], 1)
+        self.assertEqual(get.call_args_list[1].kwargs["params"]["page"], 2)
+
+    def test_list_issues_returns_error_dict_on_failure(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            return_value=FakeResponse({"message": "Bad credentials"}, status_code=401),
+        ), patch.object(github_client, "print"):
+            result = client.list_issues("token", "owner/repo")
+
+        self.assertFalse(result["success"])
+        self.assertIn("401", result["error"])
+        self.assertIn("Bad credentials", result["error"])
+
+    def test_get_issue_returns_none_on_404(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            return_value=FakeResponse({"message": "Not Found"}, status_code=404),
+        ):
+            self.assertIsNone(client.get_issue("token", "owner/repo", 999))
+
+    def test_get_issue_returns_error_dict_on_api_error(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            return_value=FakeResponse({"message": "API rate limit exceeded"}, status_code=403),
+        ), patch.object(github_client, "print"):
+            result = client.get_issue("token", "owner/repo", 42)
+
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("403", result["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

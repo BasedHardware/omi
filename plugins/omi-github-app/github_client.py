@@ -6,6 +6,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _extract_error_message(response) -> str:
+    """Extract a user-readable error message from a requests Response or double."""
+    try:
+        data = response.json()
+        if isinstance(data, dict) and "message" in data:
+            return str(data["message"])
+    except Exception:
+        pass
+    text = getattr(response, "text", "")
+    if text:
+        return str(text)
+    return str(getattr(response, "status_code", "Unknown error"))
+
+
 class GitHubClient:
     """Handles GitHub API interactions."""
     
@@ -218,49 +232,78 @@ class GitHubClient:
         repo_full_name: str,
         state: str = "open",
         per_page: int = 10
-    ) -> List[Dict]:
+    ) -> Dict[str, Any]:
         """
         List issues in a repository.
-        Returns list of issue dicts.
+        Paginates until per_page non-PR issues are collected or all items are exhausted.
+        Returns dict with success status and list of issue dicts or error message.
         """
         try:
-            response = requests.get(
-                f"{self.api_base}/repos/{repo_full_name}/issues",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                },
-                params={
-                    "state": state,
-                    "per_page": per_page,
-                    "sort": "created",
-                    "direction": "desc"
-                }
-            )
+            valid_state = state if state in ("open", "closed", "all") else "open"
+            items = []
+            page = 1
+            fetch_size = min(max(per_page * 2, 30), 100)
 
-            if response.status_code == 200:
-                issues = response.json()
-                return [
-                    {
-                        "number": issue["number"],
-                        "title": issue["title"],
-                        "state": issue["state"],
-                        "body": issue.get("body", ""),
-                        "labels": [label["name"] for label in issue.get("labels", [])],
-                        "url": issue["html_url"],
-                        "created_at": issue["created_at"],
-                        "user": issue["user"]["login"] if issue.get("user") else None
+            while len(items) < per_page:
+                response = requests.get(
+                    f"{self.api_base}/repos/{repo_full_name}/issues",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Accept": "application/vnd.github.v3+json"
+                    },
+                    params={
+                        "state": valid_state,
+                        "per_page": fetch_size,
+                        "sort": "created",
+                        "direction": "desc",
+                        "page": page
                     }
-                    for issue in issues
-                    if "pull_request" not in issue  # Filter out PRs
-                ]
-            else:
-                print(f"❌ Error listing issues: {response.status_code}")
-                return []
+                )
+
+                if response.status_code != 200:
+                    error_msg = _extract_error_message(response)
+                    print(f"❌ Error listing issues: {response.status_code} - {error_msg}")
+                    return {
+                        "success": False,
+                        "error": f"GitHub API error: {response.status_code} - {error_msg}"
+                    }
+
+                page_issues = response.json()
+                if not page_issues:
+                    break
+
+                for issue in page_issues:
+                    if "pull_request" not in issue:
+                        items.append({
+                            "number": issue["number"],
+                            "title": issue["title"],
+                            "state": issue["state"],
+                            "body": issue.get("body", ""),
+                            "labels": [label["name"] for label in issue.get("labels", [])],
+                            "url": issue["html_url"],
+                            "created_at": issue["created_at"],
+                            "user": issue["user"]["login"] if issue.get("user") else None
+                        })
+                        if len(items) >= per_page:
+                            break
+
+                links = getattr(response, "links", {}) or {}
+                if "next" not in links:
+                    break
+
+                page += 1
+
+            return {
+                "success": True,
+                "issues": items[:per_page]
+            }
 
         except Exception as e:
             print(f"❌ Error listing issues: {e}")
-            return []
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     def get_issue(
         self,
@@ -270,7 +313,7 @@ class GitHubClient:
     ) -> Optional[Dict]:
         """
         Get details of a specific issue.
-        Returns issue dict if successful.
+        Returns issue dict if successful, None if not found (404), or error dict on API failure.
         """
         try:
             response = requests.get(
@@ -299,12 +342,17 @@ class GitHubClient:
             elif response.status_code == 404:
                 return None
             else:
-                print(f"❌ Error getting issue: {response.status_code}")
-                return None
+                error_msg = _extract_error_message(response)
+                print(f"❌ Error getting issue: {response.status_code} - {error_msg}")
+                return {
+                    "error": f"GitHub API error: {response.status_code} - {error_msg}"
+                }
 
         except Exception as e:
             print(f"❌ Error getting issue: {e}")
-            return None
+            return {
+                "error": str(e)
+            }
 
     def add_issue_comment(
         self,
