@@ -1669,7 +1669,7 @@ export function customVocabularyCopy(
   }
   return words.map(word => ({
     title: customVocabularyTitleCopy(),
-    copy: visibleDisplayText(word),
+    copy: word,
   }));
 }
 

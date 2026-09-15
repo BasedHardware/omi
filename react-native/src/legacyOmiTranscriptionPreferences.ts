@@ -1,5 +1,4 @@
 import type {OmiBackend} from './omiNativeTypes';
-import {visibleDisplayText} from './desktopReadClient';
 
 class TranscriptionPreferencesError extends Error {
   constructor() {
@@ -23,8 +22,7 @@ function vocabulary(value: unknown): string[] {
     if (typeof raw !== 'string') {
       throw new TranscriptionPreferencesError();
     }
-    const word = visibleDisplayText(raw);
-    words.push(word);
+    words.push(raw);
   }
   return words;
 }
