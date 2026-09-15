@@ -2065,6 +2065,10 @@
     "@memoryHistoryPartial": {
         "description": "Notice shown when the memory history response is truncated"
     },
+    "memoryHistory": "History",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
