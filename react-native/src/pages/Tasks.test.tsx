@@ -895,7 +895,7 @@ test('tasks page names GET goals without add or a write sheet', async () => {
   expect(tree).toContain('Goals');
   expect(tree).toContain('Read 20 books (3/10)');
   expect(tree).toContain('Missing metrics (0/10)');
-  expect(tree).toContain(' (1/2)');
+  expect(tree).toContain(' \t (1/2)');
   expect(tree).toContain('Empty id (5/8)');
   expect(tree).toContain('Prepare demo');
   expect(tree).not.toContain('goal-read');

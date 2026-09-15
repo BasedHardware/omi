@@ -61,8 +61,7 @@ export function goalTasksTitleCopy(
   current: number,
   target: number,
 ): string {
-  const name = visibleDisplayText(title);
-  return `${name} ${goalTasksProgressCopy(current, target)}`;
+  return `${title} ${goalTasksProgressCopy(current, target)}`;
 }
 
 function goalRawNum(value: number): string {
@@ -92,8 +91,9 @@ export function parseOmiGoals(body: string): OmiGoal[] {
     ) {
       continue;
     }
-    const title = visibleDisplayText(
-      text(typeof row.title === 'string' ? row.title : '', 1_000_000),
+    const title = text(
+      typeof row.title === 'string' ? row.title : '',
+      1_000_000,
     );
     const current = goalMetric(row.current_value);
     const target = goalMetric(row.target_value);
