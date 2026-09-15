@@ -672,6 +672,63 @@ test('names Flutter ChangelogSheet fromJson invalid created_at instead of undate
   ).toThrow('Omi app changelogs are malformed');
 });
 
+test('names Flutter ChangelogSheet fromJson missing GET content instead of keeping neighbors', () => {
+  const createdAt = '2026-09-09T12:00:00.000Z';
+  const neighbor = {
+    id: 'ann-good',
+    type: 'changelog',
+    created_at: createdAt,
+    app_version: '1.2.0',
+    content: {changes: [{title: 'Offline replay', description: ''}]},
+  };
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-feature',
+          type: 'feature',
+          created_at: createdAt,
+          app_version: '1.2.0',
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          type: 'feature',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: '',
+          type: 'feature',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Offline replay · ',
+    },
+  ]);
+});
+
 test('keeps GET app changelogs when created_at exceeds 10000', () => {
   const longCreatedAt = `2026-04-01T12:00:00.${'0'.repeat(9980)}Z`;
   expect(longCreatedAt.length).toBe(10001);

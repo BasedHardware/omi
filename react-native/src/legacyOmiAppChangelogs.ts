@@ -80,6 +80,8 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
     const row = object(raw);
     const type = text(row.type, 1_000_000);
     createdAtMs(row.created_at);
+    text(row.id, 1_000_000);
+    object(row.content);
     if (type === 'feature' || type === 'announcement') {
       continue;
     }
