@@ -393,11 +393,19 @@ describe('useMemories — view switching', () => {
     expect(result.current.memories.map((m) => m.content)).toEqual(['useful row'])
 
     // Hold the history fetch open so the cleared intermediate state is observable.
+    // Key the mock on `view` so the pager's follow-up empty/offset request cannot
+    // pick up the previous useful-now mockResolvedValue and merge those rows.
     const { promise: historyPending, resolve: resolveHistory } = Promise.withResolvers<{
       data: unknown[]
       headers?: Record<string, string>
     }>()
-    omiApiGet.mockImplementationOnce(() => historyPending)
+    omiApiGet.mockImplementation((_path: string, init?: { params?: { view?: string } }) => {
+      if (init?.params?.view === 'history') return historyPending
+      return Promise.resolve({
+        data: [memory('u1', 'useful row')],
+        headers: { 'x-omi-memory-belief-enabled': 'true' }
+      })
+    })
     rerender({ view: 'history' })
 
     // Before the fix the previous view's rows stayed on screen (and, with a
