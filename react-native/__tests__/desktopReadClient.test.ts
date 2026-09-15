@@ -5395,6 +5395,33 @@ test('parses catalogue, enabled, owned, and service app records without inventin
   );
 });
 
+test('names Flutter AppListItem empty GET ids instead of failing the Apps page', () => {
+  expect(
+    parseCloudApps(
+      [
+        {id: '', name: 'Blank id'},
+        {id: ' \t', name: 'Whitespace id'},
+        {id: '\u0085', name: 'Next line id'},
+        {id: '  padded  ', name: 'Padded id'},
+        {id: 'catalog-app-1', name: 'Owned app'},
+      ],
+      'Apps response',
+    ),
+  ).toEqual([
+    expect.objectContaining({id: '', name: 'Blank id'}),
+    expect.objectContaining({id: ' \t', name: 'Whitespace id'}),
+    expect.objectContaining({id: '\u0085', name: 'Next line id'}),
+    expect.objectContaining({id: '  padded  ', name: 'Padded id'}),
+    expect.objectContaining({id: 'catalog-app-1', name: 'Owned app'}),
+  ]);
+  expect(() => parseCloudApp({name: 'Omitted id'}, 'App 0')).toThrow(
+    'App 0 is malformed',
+  );
+  expect(() => parseCloudApp({id: null, name: 'Null id'}, 'App 0')).toThrow(
+    'App 0 is malformed',
+  );
+});
+
 test('keeps empty catalogue names instead of failing the Apps page', () => {
   expect(
     parseCloudApps(

@@ -211,7 +211,7 @@ async function cloudRequest(
 
 export function parseCloudApp(value: unknown, label: string): CloudApp {
   const record = object(value, label);
-  const id = optionalString(record.id);
+  const id = typeof record.id === 'string' ? record.id : null;
   const name =
     record.name === undefined
       ? ''

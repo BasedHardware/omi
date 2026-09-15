@@ -3578,6 +3578,50 @@ test('Connectors Installed names Flutter AppListItem truncated GET descriptions 
   expect(tree).not.toContain(installedDescription);
 });
 
+test('Connectors names Flutter AppListItem empty GET ids without hiding neighbors', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: '', name: 'Blank id'},
+          {id: ' \t', name: 'Whitespace id'},
+          {id: '\u0085', name: 'Next line id'},
+          {id: '  padded  ', name: 'Padded id'},
+          {id: 'catalog-app-1', name: 'Owned app'},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(['catalog-app-1']),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Blank id');
+  expect(tree).toContain('Whitespace id');
+  expect(tree).toContain('Next line id');
+  expect(tree).toContain('Padded id');
+  expect(tree).toContain('Owned app');
+  expect(tree).not.toContain(appsEmptyCopy());
+  expect(tree).not.toContain('Apps response item');
+  expect(tree).not.toContain('malformed');
+});
+
 test('Connectors Installed names Flutter AppListItem empty GET descriptions and Explore omits them', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
