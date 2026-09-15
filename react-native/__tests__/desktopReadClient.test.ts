@@ -885,7 +885,14 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
       summary: 'Assistant words',
       status: 'in_progress',
     }),
-  ).toBe('Assistant words');
+  ).toBe('\u0085');
+  expect(
+    conversationRecapTitle({
+      title: ' \t\n',
+      summary: 'Assistant words',
+      status: 'in_progress',
+    }),
+  ).toBe(' \t\n');
   expect(
     conversationRecapTitle({
       title: '',
@@ -1005,6 +1012,37 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
       summary: 'Short title with later speech',
     }),
   ).toBe(false);
+});
+
+test('names Flutter ConversationListItem padded GET title instead of remapping to overview', () => {
+  expect(
+    conversationRecapTitle({
+      title: '\u0085',
+      summary: 'Assistant words',
+      status: 'in_progress',
+    }),
+  ).toBe('\u0085');
+  expect(
+    conversationRecapTitle({
+      title: ' \t\n',
+      summary: 'Assistant words',
+      status: 'in_progress',
+    }),
+  ).toBe(' \t\n');
+  expect(
+    conversationRecapTitle({
+      title: '  Morning walk  ',
+      summary: 'Discussed the launch.',
+      status: 'completed',
+    }),
+  ).toBe('  Morning walk  ');
+  expect(
+    conversationRecapTitle({
+      title: '',
+      summary: 'Assistant words',
+      status: 'in_progress',
+    }),
+  ).toBe('Assistant words');
 });
 
 test('conversation list duration prefers GET transcript span over wall clocks', () => {

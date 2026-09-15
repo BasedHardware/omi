@@ -79,12 +79,11 @@ export function conversationRecapTitle(item: {
   status: string;
   discarded?: boolean;
 }): string {
-  const title = visibleDisplayText(item.title);
   const summary = visibleDisplayText(item.summary);
   if (conversationListUsesListenOverview(item)) {
     return summary;
   }
-  if (title !== '') {
+  if (item.title !== '') {
     return conversationDisplayTitle(item);
   }
   if (item.discarded === true) {

@@ -429,6 +429,61 @@ test('untitled conversations keep overview speech on the open control', () => {
   ).toBeGreaterThan(0);
 });
 
+test('conversation list names Flutter ConversationListItem padded GET title instead of remapping to overview', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'chat:title-ai',
+    title: '\u0085',
+    summary: 'Assistant words',
+    searchableText: '\u0085\nAssistant words',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'in_progress',
+    source: 'chat',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('\u0085');
+  expect(textOf(renderer)).not.toContain('Assistant words');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open conversation \u0085',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Open conversation Assistant words',
+    ).length,
+  ).toBe(0);
+});
+
 test('listen conversations keep list overview speech on the open control', () => {
   const title = 'a'.repeat(80);
   const summary = `${title} later speech`;
