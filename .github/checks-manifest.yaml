@@ -3,7 +3,12 @@
 # Add new checks here with both local and ci lanes; never hardcode them in workflow YAML.
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
-checks:
+checks:  
+  - id: iq-rating-regression-tests
+    command: ["python3", "plugins/iq_rating/test_main.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13980: OpenAI choices[0] and content: null must degrade gracefully, and context_snippets must be safely coerced without IndexError or AttributeError"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
