@@ -1999,9 +1999,7 @@ export function firmwareUpdateCopy(
     minimum !== null &&
     compareDottedVersion(current, minimum) >= 0 &&
     compareDottedVersion(newest, current) > 0;
-  const changelog = (details.changelog ?? []).map(item =>
-    visibleDisplayText(item),
-  );
+  const changelog = [...(details.changelog ?? [])];
   return {
     latest,
     available,

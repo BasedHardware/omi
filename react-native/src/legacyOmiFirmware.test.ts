@@ -41,7 +41,7 @@ test('parses GET latest firmware and omits empty or draft versions', () => {
   expect(parseOmiLatestFirmware(JSON.stringify({}))).toBeNull();
 });
 
-test('names Flutter FirmwareUpdate empty GET changelog lines instead of omitting What\'s New', () => {
+test('names Flutter FirmwareUpdate empty GET changelog lines instead of omitting them', () => {
   expect(
     parseOmiLatestFirmware(
       JSON.stringify({
@@ -53,7 +53,7 @@ test('names Flutter FirmwareUpdate empty GET changelog lines instead of omitting
     version: '1.3.0',
     draft: false,
     minVersion: null,
-    changelog: ['Fixed BLE reconnect', '', 'Battery improvements'],
+    changelog: ['Fixed BLE reconnect', '  ', 'Battery improvements'],
   });
   expect(
     parseOmiLatestFirmware(
@@ -63,7 +63,17 @@ test('names Flutter FirmwareUpdate empty GET changelog lines instead of omitting
     version: '1.3.0',
     draft: false,
     minVersion: null,
-    changelog: [''],
+    changelog: [' \t'],
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '1.3.0', changelog: ['\u0085']}),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+    changelog: ['\u0085'],
   });
 });
 
@@ -79,7 +89,7 @@ test('parses GET latest firmware changelog and omits production empty-string def
     version: '1.3.0',
     draft: false,
     minVersion: null,
-    changelog: ['Fixed BLE reconnect', '', 'Battery improvements'],
+    changelog: ['Fixed BLE reconnect', '  ', 'Battery improvements'],
   });
   expect(
     parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', changelog: ''})),

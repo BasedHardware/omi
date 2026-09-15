@@ -2153,7 +2153,7 @@ test('firmware update copy names GET latest without Available on current or draf
     latest: '1.3.0',
     available: false,
     upToDate: true,
-    changelog: ['Fixed BLE reconnect', '', 'Battery improvements'],
+    changelog: ['Fixed BLE reconnect', '  ', 'Battery improvements'],
   });
   expect(
     firmwareUpdateCopy('1.2.3', {
@@ -2166,7 +2166,7 @@ test('firmware update copy names GET latest without Available on current or draf
     latest: '1.3.0',
     available: false,
     upToDate: true,
-    changelog: [''],
+    changelog: [' \t'],
   });
   expect(
     firmwareUpdateCopy('1.2.3', {

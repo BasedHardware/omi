@@ -26,8 +26,7 @@ function firmwareChangelog(value: unknown): string[] | undefined {
     if (typeof raw !== 'string') {
       continue;
     }
-    const copy = visibleDisplayText(raw);
-    changelog.push(copy);
+    changelog.push(raw);
   }
   return changelog.length === 0 ? undefined : changelog;
 }
