@@ -731,15 +731,14 @@ export function conversationVisibilityCopy(
 }
 
 export function conversationCalendarAttendeeChipName(attendee: string): string {
-  const value = visibleDisplayText(attendee);
-  if (value.includes('@')) {
-    const localPart = value.split('@')[0];
+  if (attendee.includes('@')) {
+    const localPart = attendee.split('@')[0];
     if (localPart.length === 0) {
       return localPart;
     }
     return localPart[0].toUpperCase() + localPart.slice(1);
   }
-  const firstName = value.split(' ')[0];
+  const firstName = attendee.split(' ')[0];
   return firstName === undefined ? '' : firstName;
 }
 

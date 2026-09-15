@@ -3431,6 +3431,111 @@ test('legacy conversation details name Flutter GetSummaryWidgets attendee chip',
   expect(text(recording)).not.toContain('Alex, Sam +1');
 });
 
+test('legacy conversation details name Flutter GetSummaryWidgets padded GET attendee', () => {
+  const detail = {
+    id: 'old-1',
+    title: 'A real conversation',
+    summary: 'Summary',
+    locked: false,
+    sections: [],
+    actionItems: [],
+    transcript: {status: 'loaded', segments: []},
+  };
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        ...detail,
+        calendarEvent: {
+          title: 'Standup',
+          attendees: ['  Alex Chen  '],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const padded = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    padded.root.findAll(
+      node => node.type === Text && node.props.children === 'Alex',
+    ),
+  ).toHaveLength(0);
+  expect(
+    padded.root.findAll(
+      node => node.type === Text && node.props.children === '',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(text(padded)).toContain('  Alex Chen  ');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        ...detail,
+        calendarEvent: {
+          title: 'Standup',
+          attendees: ['\u0085Alex Chen'],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const nextLine = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    nextLine.root.findAll(
+      node => node.type === Text && node.props.children === 'Alex',
+    ),
+  ).toHaveLength(0);
+  expect(
+    nextLine.root.findAll(
+      node => node.type === Text && node.props.children === '\u0085Alex',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(text(nextLine)).toContain('\u0085Alex Chen');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        ...detail,
+        calendarEvent: {
+          title: 'Standup',
+          attendees: ['  sam@example.com'],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const paddedEmail = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(
+    paddedEmail.root.findAll(
+      node => node.type === Text && node.props.children === 'Sam',
+    ),
+  ).toHaveLength(0);
+  expect(
+    paddedEmail.root.findAll(
+      node => node.type === Text && node.props.children === '  sam',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(text(paddedEmail)).toContain('  sam@example.com');
+});
+
 test('legacy conversation details name Flutter CalendarEventDetailsSheet empty GET html_link whitespace', () => {
   mockLegacy.mockReturnValue({
     result: {

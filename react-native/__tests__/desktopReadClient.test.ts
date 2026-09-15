@@ -4608,6 +4608,20 @@ test('conversation calendar attendee chip names Flutter GetSummaryWidgets first 
       'sam@example.com',
     ]),
   ).toBe('Alex,  +1');
+  expect(conversationCalendarAttendeesChipCopy(['  Alex Chen  '])).toBe('');
+  expect(conversationCalendarAttendeesChipCopy(['Alex Chen '])).toBe('Alex');
+  expect(conversationCalendarAttendeesChipCopy(['\u0085Alex Chen'])).toBe(
+    '\u0085Alex',
+  );
+  expect(conversationCalendarAttendeesChipCopy(['  sam@example.com'])).toBe(
+    '  sam',
+  );
+  expect(conversationCalendarAttendeesChipCopy(['sam@example.com '])).toBe(
+    'Sam',
+  );
+  expect(conversationCalendarAttendeesChipCopy(['\u0085sam@example.com'])).toBe(
+    '\u0085sam',
+  );
 });
 
 test('calendar event display title names Flutter empty GET titles', () => {
