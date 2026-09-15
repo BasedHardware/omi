@@ -640,8 +640,8 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         scopeGenerationRef.current === requestGeneration;
       const isQueryCurrent = () => latestQueryRef.current === requestQuery;
 
-      let inFlight: Promise<boolean>;
-      inFlight = (async () => {
+      const holder: { promise: Promise<boolean> | null } = { promise: null };
+      holder.promise = (async () => {
         try {
           const page = await doFetch(activeCategories, 0);
           if (!isCurrentRequest() || !isQueryCurrent()) return false;
@@ -677,11 +677,12 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
             fetchingRef.current = false;
             setFetchIdleTick((tick) => tick + 1);
           }
-          if (refreshInFlightRef.current === inFlight) refreshInFlightRef.current = null;
+          if (refreshInFlightRef.current === holder.promise)
+            refreshInFlightRef.current = null;
         }
       })();
-      refreshInFlightRef.current = inFlight;
-      return inFlight;
+      refreshInFlightRef.current = holder.promise;
+      return holder.promise;
     },
     [activeCategories, applyCapability, doFetch, limit, memoryView],
   );
