@@ -2153,6 +2153,11 @@ test('conversation list names GET category including Flutter ConversationListIte
     );
   });
   expect(textOf(renderer)).toContain('Work');
+  expect(
+    renderer.root.findAll(
+      node => node.type === 'Text' && node.props.children === 'Discarded',
+    ).length,
+  ).toBeGreaterThan(0);
   expect(textOf(renderer)).toContain('Other');
   expect(textOf(renderer)).toContain('Screenpipe');
   expect(textOf(renderer)).not.toContain('work');

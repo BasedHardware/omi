@@ -4111,6 +4111,7 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
   expect(discardedTree).not.toContain('🚀');
   expect(discardedTree).not.toContain('🧠');
   expect(discardedTree).not.toContain('Work');
+  expect(discardedTree).toContain('Discarded');
   const emptyEmoji = render(
     <ProjectionRow item={{...item, emoji: ' \u0085 '}} />,
   );

@@ -5,6 +5,7 @@ import {
   formatTaskDue,
   clockLabel,
   conversationListTimeCopy,
+  conversationListDiscardedCopy,
   type ConversationProjection,
   type MemoryProjection,
   type TaskProjection,
@@ -1205,7 +1206,7 @@ test('library conversation rows name Flutter New chrome for a just-created row',
   expect(textOf(hidden)).toContain('1m');
 });
 
-test('library conversation rows name GET category and omit discarded or empty values', () => {
+test('library conversation rows name GET category and Flutter discarded getTag', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'omi-work',
@@ -1234,6 +1235,7 @@ test('library conversation rows name GET category and omit discarded or empty va
     );
   });
   expect(textOf(shown)).toContain('Work');
+  expect(textOf(hidden)).toContain(conversationListDiscardedCopy());
   expect(textOf(hidden)).not.toContain('Work');
 });
 

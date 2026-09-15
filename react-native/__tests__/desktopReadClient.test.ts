@@ -134,6 +134,7 @@ import {
   conversationListEmoji,
   conversationListSourceTag,
   conversationListTag,
+  conversationListDiscardedCopy,
   conversationVisibilityCopy,
   conversationCalendarAttendeesChipCopy,
   calendarEventDisplayTitle,
@@ -4218,6 +4219,36 @@ test('conversation list source tags name only Flutter GET remaps', () => {
       source: 'screenpipe',
     }),
   ).toBe('Screenpipe');
+  expect(
+    conversationListTag({
+      discarded: true,
+      category: 'work',
+    }),
+  ).toBe(conversationListDiscardedCopy());
+  expect(
+    conversationListTag({
+      discarded: true,
+      category: 'other',
+    }),
+  ).toBe(conversationListDiscardedCopy());
+  expect(
+    conversationListTag({
+      discarded: true,
+      category: ' \t\n',
+    }),
+  ).toBe(conversationListDiscardedCopy());
+  expect(
+    conversationListTag({
+      discarded: true,
+      category: '\u0085',
+    }),
+  ).toBe(conversationListDiscardedCopy());
+  expect(
+    conversationListTag({
+      discarded: true,
+      category: '',
+    }),
+  ).toBeNull();
   expect(
     conversationListTag({
       discarded: false,

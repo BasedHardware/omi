@@ -418,6 +418,10 @@ export function conversationListSourceTag(item: {
   return null;
 }
 
+export function conversationListDiscardedCopy(): string {
+  return 'Discarded';
+}
+
 export function conversationListTag(item: {
   discarded: boolean;
   category?: string | null;
@@ -430,7 +434,14 @@ export function conversationListTag(item: {
   ) {
     return null;
   }
-  return conversationListSourceTag(item) ?? conversationListCategory(item);
+  const source = conversationListSourceTag(item);
+  if (source !== null) {
+    return source;
+  }
+  if (item.discarded) {
+    return conversationListDiscardedCopy();
+  }
+  return conversationListCategory(item);
 }
 
 export function conversationListNewCopy(
