@@ -180,6 +180,37 @@ test('names GET import job rows Flutter estimated remaining without inventing wr
   ).toBe('Completed');
 });
 
+test('names Flutter ImportHistoryPage empty GET error instead of omitting the subtitle', () => {
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-empty-error', status: 'failed', error: ''},
+        {job_id: 'job-whitespace-error', status: 'failed', error: ' \t'},
+        {job_id: 'job-omitted-error', status: 'failed'},
+        {job_id: 'job-null-error', status: 'failed', error: null},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-empty-error', status: 'failed', error: ''},
+    {id: 'job-whitespace-error', status: 'failed', error: ''},
+    {id: 'job-omitted-error', status: 'failed'},
+    {id: 'job-null-error', status: 'failed'},
+  ]);
+  expect(
+    importJobRowCopy({id: 'job-empty-error', status: 'failed', error: ''}),
+  ).toBe('Failed · ');
+  expect(
+    importJobRowCopy({
+      id: 'job-whitespace-error',
+      status: 'failed',
+      error: ' \t',
+    }),
+  ).toBe('Failed · ');
+  expect(importJobRowCopy({id: 'job-omitted-error', status: 'failed'})).toBe(
+    'Failed',
+  );
+});
+
 test('names GET empty import jobs as Flutter No imports yet', () => {
   expect(importJobsEmptyCopy()).toBe('No imports yet');
   expect(importJobsCopy([])).toEqual([

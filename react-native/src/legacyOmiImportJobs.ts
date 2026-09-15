@@ -204,9 +204,8 @@ export function importJobRowCopy(
     parts.push(importJobEstimatedRemainingCopy(processed, job.totalFiles));
     parts.push(`${processed}/${job.totalFiles}`);
   }
-  const error = visibleDisplayText(job.error ?? '');
-  if (error !== '') {
-    parts.push(error);
+  if (job.error != null) {
+    parts.push(visibleDisplayText(job.error));
   }
   return parts.join(' · ');
 }
@@ -255,7 +254,7 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
       row.error === undefined ||
       row.error === null ||
       typeof row.error !== 'string'
-        ? ''
+        ? undefined
         : visibleDisplayText(text(row.error, 1_000_000));
     items.push({
       id,
@@ -265,7 +264,7 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
       ...(conversationsSkipped === undefined ? {} : {conversationsSkipped}),
       ...(processedFiles === undefined ? {} : {processedFiles}),
       ...(totalFiles === undefined ? {} : {totalFiles}),
-      ...(error === '' ? {} : {error}),
+      ...(error === undefined ? {} : {error}),
     });
   }
   return items;

@@ -2679,6 +2679,38 @@ test('Settings names a failed import jobs GET instead of empty success', async (
   expect(tree).not.toContain('Limitless');
 });
 
+test('Settings names Flutter ImportHistoryPage empty GET error without omitting Import Data', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/import/jobs?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {job_id: 'job-empty-error', status: 'failed', error: ''},
+          {job_id: 'job-whitespace-error', status: 'failed', error: ' \t'},
+          {job_id: 'job-omitted-error', status: 'failed'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Import Data');
+  expect(tree).toContain('Failed · ');
+  expect(tree).toContain('Failed');
+  expect(tree).not.toContain('job-empty-error');
+  expect(tree).not.toContain('No imports yet');
+  expect(tree).not.toContain('Limitless');
+  expect(tree).not.toContain('Start import');
+});
+
 test('Settings names Flutter noImportsYet for empty GET import jobs', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
