@@ -100,17 +100,15 @@ function ConversationClockFields({
           {attendeesCopy}
         </Text>
       ) : null}
-      {folder === '' ? null : (
-        <Text
-          style={[
-            styles.conversationDetailField,
-            ink,
-            folderColor ? {color: folderColor} : null,
-          ]}>
-          {folderIcon ? `${folderIcon} ` : null}
-          {folder}
-        </Text>
-      )}
+      <Text
+        style={[
+          styles.conversationDetailField,
+          ink,
+          folderColor ? {color: folderColor} : null,
+        ]}>
+        {folderIcon ? `${folderIcon} ` : null}
+        {folder}
+      </Text>
       {visibilityCopy === null ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {visibilityCopy}

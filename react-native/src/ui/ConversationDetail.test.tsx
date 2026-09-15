@@ -2918,24 +2918,33 @@ test('legacy conversation details name Flutter GetSummaryWidgets empty GET folde
         locked: false,
         sections: [],
         actionItems: [],
-        folderName: '',
+        folderName: ' \t\n',
         transcript: {status: 'loaded', segments: []},
       },
     },
     reload: jest.fn(),
   });
-  const copy = text(
-    render({
-      apiContract: 'omi',
-      conversation: {
-        ...conversation,
-        id: 'old-1',
-        folderId: 'folder-empty',
-      },
-    }),
-  );
-  expect(copy).not.toContain(conversationNoFolderCopy());
-  expect(copy).not.toContain('folder-empty');
+  const view = render({
+    apiContract: 'omi',
+    conversation: {
+      ...conversation,
+      id: 'old-1',
+      folderId: 'folder-empty',
+    },
+  });
+  const emptyFolders = view.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyFolders.length).toBeGreaterThan(0);
+  expect(text(view)).not.toContain(conversationNoFolderCopy());
+  expect(text(view)).not.toContain('folder-empty');
 });
 
 test('legacy conversation details name GET folder color without hex copy', () => {
