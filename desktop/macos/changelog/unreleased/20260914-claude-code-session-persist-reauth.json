@@ -1,0 +1,3 @@
+{
+  "change": "Claude Code chat sessions now persist across reboot and sign-in again after your session expires, instead of clearing the session list."
+}
