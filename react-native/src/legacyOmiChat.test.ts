@@ -118,8 +118,38 @@ test('old chat history keeps GET memory citations including empty titles', () =>
   );
   expect(page.messages[0].memories).toEqual([
     {title: 'Morning standup', emoji: '🚀'},
-    {title: 'Notes'},
+    {title: 'Notes', emoji: ''},
     {title: '\u0085', emoji: '🧠'},
+  ]);
+});
+
+test('names Flutter MemoriesMessageWidget empty GET emoji instead of omitting the citation', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'cited-empty-emoji',
+        sender: 'ai',
+        text: 'I found that meeting.',
+        created_at: '2026-09-07T01:02:03Z',
+        memories: [
+          {
+            id: 'conv-empty-emoji',
+            created_at: '2026-09-06T00:00:00Z',
+            structured: {title: 'Notes', emoji: ''},
+          },
+          {
+            id: 'conv-whitespace-emoji',
+            created_at: '2026-09-06T00:00:00Z',
+            structured: {title: 'Whitespace emoji', emoji: ' \t'},
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages[0].memories).toEqual([
+    {title: 'Notes', emoji: ''},
+    {title: 'Whitespace emoji', emoji: ' \t'},
   ]);
 });
 

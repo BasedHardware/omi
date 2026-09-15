@@ -1597,9 +1597,9 @@ test('a chat message names GET memory citations with empty titles', () => {
       }
       return [];
     });
-  expect(copies).toContain('🧠');
-  expect(copies).toContain('🚀');
-  expect(copies.filter(copy => copy === '')).toEqual(['']);
+  expect(copies).toContain('🧠 ');
+  expect(copies).toContain('🚀 ');
+  expect(copies).toContain(' ');
   expect(copies).not.toContain('\u0085');
   act(() => {
     renderer.unmount();
@@ -1641,8 +1641,8 @@ test('a chat message names GET memory citations without inventing a conversation
       return [];
     });
   expect(copies).toContain('🚀 Morning standup');
-  expect(copies).toContain('Notes');
-  expect(copies).toContain('🧠');
+  expect(copies).toContain(' Notes');
+  expect(copies).toContain('🧠 ');
   expect(copies).not.toContain('\u0085');
   act(() => {
     renderer.unmount();

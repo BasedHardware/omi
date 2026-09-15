@@ -252,8 +252,8 @@ test('conversation-detail history names GET memory citations with empty titles',
   });
   const tree = text(view);
   expect(tree).toContain('I found that meeting.');
-  expect(tree).toContain('🧠');
-  expect(tree).toContain('🚀');
+  expect(tree).toContain('🧠 ');
+  expect(tree).toContain('🚀 ');
   expect(tree).not.toContain('\u0085');
 });
 

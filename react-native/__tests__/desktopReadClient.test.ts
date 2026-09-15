@@ -3227,14 +3227,18 @@ test('chat memory citation copy names Flutter empty GET titles', () => {
   expect(
     chatMemoryCitationCopy({title: 'Morning standup', emoji: '🚀'}),
   ).toBe('🚀 Morning standup');
-  expect(chatMemoryCitationCopy({title: 'Notes'})).toBe('Notes');
-  expect(chatMemoryCitationCopy({title: 'Notes', emoji: ''})).toBe('Notes');
-  expect(chatMemoryCitationCopy({title: '', emoji: '🧠'})).toBe('🧠');
-  expect(chatMemoryCitationCopy({title: '  ', emoji: '✨'})).toBe('✨');
-  expect(chatMemoryCitationCopy({title: '\u0085', emoji: '🧠'})).toBe('🧠');
-  expect(chatMemoryCitationCopy({title: ''})).toBe('');
-  expect(chatMemoryCitationCopy({title: ' \t'})).toBe('');
-  expect(chatMemoryCitationCopy({title: '', emoji: ' \t'})).toBe('');
+  expect(chatMemoryCitationCopy({title: '', emoji: '🧠'})).toBe('🧠 ');
+  expect(chatMemoryCitationCopy({title: '  ', emoji: '✨'})).toBe('✨ ');
+  expect(chatMemoryCitationCopy({title: '\u0085', emoji: '🧠'})).toBe('🧠 ');
+  expect(chatMemoryCitationCopy({title: ''})).toBe(' ');
+  expect(chatMemoryCitationCopy({title: ' \t'})).toBe(' ');
+});
+
+test('names Flutter MemoriesMessageWidget empty GET emoji instead of omitting the prefix', () => {
+  expect(chatMemoryCitationCopy({title: 'Notes'})).toBe(' Notes');
+  expect(chatMemoryCitationCopy({title: 'Notes', emoji: ''})).toBe(' Notes');
+  expect(chatMemoryCitationCopy({title: 'Notes', emoji: ' \t'})).toBe(' Notes');
+  expect(chatMemoryCitationCopy({title: '', emoji: ' \t'})).toBe(' ');
 });
 
 test('memory display text names Flutter empty GET content', () => {

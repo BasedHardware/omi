@@ -100,7 +100,7 @@ function parseOmiChatMemories(
     }
     return {
       title: structured.title,
-      ...(structured.emoji === '' ? {} : {emoji: structured.emoji}),
+      emoji: structured.emoji,
     };
   });
 }

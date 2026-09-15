@@ -773,8 +773,8 @@ test('desktop chat names GET memory citations with empty titles', () => {
   });
   const copy = renderedText(renderer);
   expect(copy).toContain('I found that meeting.');
-  expect(copy).toContain('🧠');
-  expect(copy).toContain('🚀');
+  expect(copy).toContain('🧠 ');
+  expect(copy).toContain('🚀 ');
   expect(copy).not.toContain('\u0085');
 });
 
