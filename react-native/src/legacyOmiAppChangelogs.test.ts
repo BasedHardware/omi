@@ -14,6 +14,7 @@ test('parses GET app changelogs with Flutter omitted-icon ✨', () => {
         {
           id: 'ann-1',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {
             title: 'Release notes',
@@ -33,6 +34,7 @@ test('parses GET app changelogs with Flutter omitted-icon ✨', () => {
         {
           id: 'ann-feature',
           type: 'feature',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {
             title: 'Feature',
@@ -80,6 +82,7 @@ test('names Flutter ChangelogSheet empty GET icons instead of omitting the prefi
         {
           id: 'ann-empty-icon',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {
             changes: [
@@ -117,12 +120,14 @@ test('names Flutter ChangelogSheet empty GET app_version as What\'s New in ', ()
         {
           id: 'ann-empty-version',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: ' \t',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
         {
           id: 'ann-omitted-version',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           content: {changes: [{title: 'Faster sync', description: ''}]},
         },
       ]),
@@ -148,6 +153,7 @@ test('names Flutter ChangelogSheet empty GET change titles instead of omitting t
         {
           id: 'ann-empty',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {
             changes: [
@@ -179,6 +185,7 @@ test('names Flutter ChangelogSheet empty GET descriptions instead of omitting th
         {
           id: 'ann-empty-desc',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {
             changes: [
@@ -214,18 +221,21 @@ test('names neighboring GET changelogs when one announcement change cannot proje
         {
           id: 'ann-bad-title',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.0.0',
           content: {changes: [{title: 1, description: 'nope'}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
         {
           id: 'ann-bad-changes',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.3.0',
           content: {changes: 'fast'},
         },
@@ -244,6 +254,7 @@ test('names neighboring GET changelogs when one announcement change cannot proje
         {
           id: 'ann-1',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           content: {changes: [{title: 1, description: 'nope'}]},
         },
       ]),
@@ -255,6 +266,7 @@ test('names neighboring GET changelogs when one announcement change cannot proje
         {
           id: 'ann-1',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           content: {changes: 'fast'},
         },
       ]),
@@ -266,6 +278,7 @@ test('keeps GET app changelogs when the announcement list exceeds 10', () => {
   const rows = Array.from({length: 11}, (_, index) => ({
     id: `ann-${index}`,
     type: 'changelog',
+    created_at: '2026-09-09T12:00:00.000Z',
     app_version: '1.2.0',
     content: {changes: [{title: `Change ${index}`, description: ''}]},
   }));
@@ -289,12 +302,14 @@ test('keeps GET app changelog changes when more than 32', () => {
         {
           id: 'ann-long',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.4.0',
           content: {changes},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -322,6 +337,7 @@ test('keeps GET app changelog icon longer than 32', () => {
         {
           id: 'ann-icon',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.5.0',
           content: {
             changes: [{title: 'Faster sync', description: '', icon}],
@@ -330,6 +346,7 @@ test('keeps GET app changelog icon longer than 32', () => {
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -359,6 +376,7 @@ test('keeps GET app changelog title, description, or icon longer than 10000', ()
         {
           id: 'ann-long-copy',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.6.0',
           content: {
             changes: [{title, description, icon}],
@@ -367,6 +385,7 @@ test('keeps GET app changelog title, description, or icon longer than 10000', ()
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -394,12 +413,14 @@ test('keeps GET app changelog app_version longer than 64', () => {
         {
           id: 'ann-version',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version,
           content: {changes: [{title: 'Faster sync', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -427,12 +448,14 @@ test('keeps GET app changelog app_version longer than 10000', () => {
         {
           id: 'ann-version',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version,
           content: {changes: [{title: 'Faster sync', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -460,12 +483,14 @@ test('names Flutter ChangelogSheet unknown GET type instead of keeping neighbors
         {
           id: 'ann-unknown',
           type: unknown,
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Skip me', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -478,12 +503,14 @@ test('names Flutter ChangelogSheet unknown GET type instead of keeping neighbors
         {
           id: 'ann-long',
           type: 'f'.repeat(10001),
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Skip me', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -496,12 +523,14 @@ test('names Flutter ChangelogSheet unknown GET type instead of keeping neighbors
         {
           id: 'ann-empty',
           type: '',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Skip me', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -514,12 +543,14 @@ test('names Flutter ChangelogSheet unknown GET type instead of keeping neighbors
         {
           id: 'ann-whitespace',
           type: ' \t',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Skip me', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -532,18 +563,183 @@ test('names Flutter ChangelogSheet unknown GET type instead of keeping neighbors
         {
           id: 'ann-padded',
           type: ' changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Skip me', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
       ]),
     ),
   ).toThrow('Omi app changelogs are malformed');
+});
+
+test('names Flutter ChangelogSheet fromJson invalid created_at instead of undated success', () => {
+  const createdAt = '2026-09-09T12:00:00.000Z';
+  const neighbor = {
+    id: 'ann-good',
+    type: 'changelog',
+    created_at: createdAt,
+    app_version: '1.2.0',
+    content: {changes: [{title: 'Offline replay', description: ''}]},
+  };
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-null',
+          type: 'changelog',
+          created_at: null,
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-omitted',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-undated',
+          type: 'changelog',
+          created_at: 'not-a-date',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-empty',
+          type: 'changelog',
+          created_at: '',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-space',
+          type: 'changelog',
+          created_at: ' \t',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-feature',
+          type: 'feature',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+});
+
+test('keeps GET app changelogs when created_at exceeds 10000', () => {
+  const longCreatedAt = `2026-04-01T12:00:00.${'0'.repeat(9980)}Z`;
+  expect(longCreatedAt.length).toBe(10001);
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-long',
+          type: 'changelog',
+          created_at: longCreatedAt,
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Faster sync', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-long:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Faster sync · ',
+    },
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Offline replay · ',
+    },
+  ]);
+});
+
+test('keeps GET app changelogs when created_at uses hour-only offsets Dart DateTime.tryParse accepts', () => {
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-hour',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00+00',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Faster sync', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-hour:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Faster sync · ',
+    },
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Offline replay · ',
+    },
+  ]);
 });
 
 test('keeps GET app changelogs when an announcement id exceeds 256', () => {
@@ -554,12 +750,14 @@ test('keeps GET app changelogs when an announcement id exceeds 256', () => {
         {
           id,
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.0.0',
           content: {changes: [{title: 'Faster sync', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -587,12 +785,14 @@ test('keeps GET app changelogs when an announcement id exceeds 10000', () => {
         {
           id,
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.0.0',
           content: {changes: [{title: 'Faster sync', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -619,12 +819,14 @@ test('fails closed when an announcement id exceeds 1000000', () => {
         {
           id: 'a'.repeat(1_000_001),
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.0.0',
           content: {changes: [{title: 'Faster sync', description: ''}]},
         },
         {
           id: 'ann-good',
           type: 'changelog',
+          created_at: '2026-09-09T12:00:00.000Z',
           app_version: '1.2.0',
           content: {changes: [{title: 'Offline replay', description: ''}]},
         },
@@ -641,6 +843,7 @@ test('loadOmiAppChangelogs names GET rows and omits failures', async () => {
       {
         id: 'ann-1',
         type: 'changelog',
+        created_at: '2026-09-09T12:00:00.000Z',
         app_version: '2.0.0',
         content: {
           changes: [{title: 'New Home', description: 'A calmer capture card.'}],

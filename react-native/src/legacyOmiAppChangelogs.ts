@@ -30,6 +30,15 @@ function array(value: unknown): unknown[] {
   return value;
 }
 
+function createdAtMs(value: unknown): number {
+  const raw = text(value, 1_000_000);
+  const parsed = Date.parse(raw.replace(/([+-]\d{2})$/, '$1:00'));
+  if (!Number.isFinite(parsed)) {
+    throw new AppChangelogError();
+  }
+  return parsed;
+}
+
 export type OmiAppChangelogRow = {
   key: string;
   title: string;
@@ -70,6 +79,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
     }
     const row = object(raw);
     const type = text(row.type, 1_000_000);
+    createdAtMs(row.created_at);
     if (type === 'feature' || type === 'announcement') {
       continue;
     }
