@@ -1581,6 +1581,9 @@ test('people settings copy names Flutter createPersonHint for empty GET people',
   expect(peopleSettingsCopy(new Map([['person-empty', '']]))).toEqual([
     {key: 'person-empty', title: peopleTitleCopy(), copy: ''},
   ]);
+  expect(peopleSettingsCopy(new Map([['person-empty', ' \t']]))).toEqual([
+    {key: 'person-empty', title: peopleTitleCopy(), copy: ' \t'},
+  ]);
 });
 
 test('fair use copy names GET stage hours and restrict budget without Upgrade', () => {

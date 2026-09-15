@@ -1,16 +1,18 @@
 import {loadOmiPeopleNames, parseOmiPeopleNames} from './legacyOmiPeople';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('names Flutter People.build empty GET names instead of omitting the person', () => {
+test('names Flutter People.build empty GET names instead of omitting them', () => {
   const names = parseOmiPeopleNames(
     JSON.stringify([
       {id: 'person-alex', name: 'Alex Chen'},
       {id: 'person-empty', name: ' \t'},
+      {id: 'person-next', name: '\u0085'},
       {id: 'person-blank', name: ''},
     ]),
   );
   expect(names.get('person-alex')).toBe('Alex Chen');
-  expect(names.get('person-empty')).toBe('');
+  expect(names.get('person-empty')).toBe(' \t');
+  expect(names.get('person-next')).toBe('\u0085');
   expect(names.get('person-blank')).toBe('');
 });
 
