@@ -828,6 +828,44 @@ test('legacy NEXT LINE-only segments stay empty instead of blank speaker lines',
   expect(copy).not.toContain('Speaker');
 });
 
+test('legacy conversation details name Flutter empty GET speakers', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Recorded words',
+              speaker: ' \t\n',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Speaker 1');
+  expect(copy).toContain('Recorded words');
+  expect(copy).not.toContain('Speaker ·');
+});
+
 test('legacy NEXT LINE-prefixed segments keep later speech', () => {
   mockLegacy.mockReturnValue({
     result: {

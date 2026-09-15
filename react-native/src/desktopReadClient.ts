@@ -298,8 +298,8 @@ export function conversationDetailSpeakerCopy(
   if (namedPerson !== '') {
     return namedPerson;
   }
-  if (labeled === null) {
-    return trimmed === '' ? 'Speaker' : trimmed;
+  if (labeled === null && trimmed !== '') {
+    return trimmed;
   }
   let minSpeakerId: number | null = null;
   for (const row of segments) {
@@ -311,7 +311,8 @@ export function conversationDetailSpeakerCopy(
       minSpeakerId = speakerId;
     }
   }
-  return `Speaker ${Number(labeled[1]) - (minSpeakerId ?? 0) + 1}`;
+  const speakerId = labeled === null ? 0 : Number(labeled[1]);
+  return `Speaker ${speakerId - (minSpeakerId ?? 0) + 1}`;
 }
 
 export function recordingTranscriptCanDisplaySeconds(
