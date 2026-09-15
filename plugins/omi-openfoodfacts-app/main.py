@@ -5,15 +5,27 @@ This app gives Omi users a small set of read-only food lookup tools backed by
 the public Open Food Facts API.
 """
 
+from contextlib import asynccontextmanager
 import os
 import re
 from typing import Any, Dict, List, Optional
 
-import requests
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+import httpx
+import requests
 from starlette.concurrency import run_in_threadpool
 
+from models import (
+    ChatToolResponse,
+    CheckAllergensRequest,
+    CompareFoodsRequest,
+    LookupBarcodeRequest,
+    SearchFoodsRequest,
+    clamp_page_size,
+    clean_barcode,
+)
 
 OPENFOODFACTS_BASE_URL = os.getenv(
     "OPENFOODFACTS_BASE_URL", "https://world.openfoodfacts.org"
@@ -44,18 +56,7 @@ PRODUCT_FIELDS = ",".join(
     ]
 )
 
-
-class ChatToolResponse(BaseModel):
-    success: bool
-    message: str
-    data: Optional[Dict[str, Any]] = None
-
-
-app = FastAPI(
-    title="Open Food Facts Omi Integration",
-    description="Food, nutrition, Nutri-Score, allergen, and barcode lookup tools for Omi.",
-    version="1.0.0",
-)
+_http_client: Optional[httpx.AsyncClient] = None
 
 
 def _headers() -> Dict[str, str]:
@@ -65,15 +66,81 @@ def _headers() -> Dict[str, str]:
     }
 
 
-def _safe_int(value: Any, default: int, minimum: int = 1, maximum: int = 10) -> int:
+def _new_http_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        headers=_headers(),
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+
+
+async def _get_client(app_instance: Optional[FastAPI] = None) -> httpx.AsyncClient:
+    global _http_client
+    if (
+        app_instance is not None
+        and hasattr(app_instance, "state")
+        and getattr(app_instance.state, "http_client", None) is not None
+    ):
+        client = app_instance.state.http_client
+        if not getattr(client, "is_closed", False):
+            return client
+    if _http_client is None or getattr(_http_client, "is_closed", False):
+        _http_client = _new_http_client()
+    return _http_client
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    global _http_client
+    client = _new_http_client()
+    app_instance.state.http_client = client
+    _http_client = client
     try:
-        number = int(value)
-    except (TypeError, ValueError):
-        return default
-    return max(minimum, min(maximum, number))
+        yield
+    finally:
+        if hasattr(client, "aclose"):
+            await client.aclose()
 
 
-def _normalize_tag(tag: str) -> str:
+app = FastAPI(
+    title="Open Food Facts Omi Integration",
+    description="Food, nutrition, Nutri-Score, allergen, and barcode lookup tools for Omi.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Map FastAPI validation errors to standard 200 ChatToolResponse envelope."""
+    errors = exc.errors()
+    if errors:
+        first = errors[0]
+        loc = " -> ".join(str(p) for p in first.get("loc", []) if p != "body")
+        msg = first.get("msg", "invalid request")
+        err_msg = f"{loc}: {msg}" if loc else msg
+    else:
+        err_msg = "invalid tool request"
+
+    resp = ChatToolResponse(
+        success=False,
+        message=f"invalid tool request: {err_msg}",
+        data={"error": f"invalid tool request: {err_msg}"},
+    )
+    content = resp.model_dump() if hasattr(resp, "model_dump") else resp.dict()
+    return JSONResponse(status_code=200, content=content)
+
+
+def _safe_int(value: Any, default: int, minimum: int = 1, maximum: int = 10) -> int:
+    return clamp_page_size(value, default=default, minimum=minimum, maximum=maximum)
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _normalize_tag(tag: Any) -> str:
     if not isinstance(tag, str):
         return ""
     return tag.split(":", 1)[-1].replace("-", " ").strip()
@@ -83,18 +150,6 @@ def _normalize_tags(tags: Any) -> List[str]:
     if not isinstance(tags, list):
         return []
     return [item for item in (_normalize_tag(tag) for tag in tags) if item]
-
-
-async def _json_body(request: Request) -> tuple[Dict[str, Any], Optional[str]]:
-    try:
-        body = await request.json()
-    except ValueError:
-        return {}, "request body must be valid JSON"
-
-    if not isinstance(body, dict):
-        return {}, "request body must be a JSON object"
-
-    return body, None
 
 
 def _invalid_body_response(message: str) -> ChatToolResponse:
@@ -111,7 +166,11 @@ def _nutrient(product: Dict[str, Any], key: str) -> Optional[Any]:
     Unsuffixed nutriment keys depend on nutrition_data_per (often serving).
     Falling back to them and labeling the result per_100g is wrong.
     """
-    nutriments = product.get("nutriments") or {}
+    if not isinstance(product, dict):
+        return None
+    nutriments = product.get("nutriments")
+    if not isinstance(nutriments, dict):
+        return None
     per_100g_key = f"{key}_100g"
     if per_100g_key in nutriments:
         return nutriments[per_100g_key]
@@ -119,19 +178,72 @@ def _nutrient(product: Dict[str, Any], key: str) -> Optional[Any]:
 
 
 def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
+    """Summarize product fields defensively against non-dict or non-string inputs."""
+    if not isinstance(product, dict):
+        return {
+            "barcode": "",
+            "name": "Unknown product",
+            "brands": "",
+            "quantity": "",
+            "nutri_score": None,
+            "nova_group": None,
+            "eco_score": None,
+            "allergens": [],
+            "traces": [],
+            "labels": [],
+            "categories": [],
+            "ingredients": "",
+            "nutrition_per_100g": {
+                "energy_kcal": None,
+                "fat_g": None,
+                "saturated_fat_g": None,
+                "carbohydrates_g": None,
+                "sugars_g": None,
+                "fiber_g": None,
+                "proteins_g": None,
+                "salt_g": None,
+            },
+            "image_url": "",
+            "data_note": "Open Food Facts data is community contributed and can be incomplete.",
+        }
+
+    raw_nutri = product.get("nutriscore_grade")
+    nutri_score = (
+        str(raw_nutri).upper().strip()
+        if raw_nutri is not None
+        and isinstance(raw_nutri, (str, int, float))
+        and not isinstance(raw_nutri, bool)
+        else None
+    )
+
+    raw_eco = product.get("ecoscore_grade")
+    eco_score = (
+        str(raw_eco).upper().strip()
+        if raw_eco is not None
+        and isinstance(raw_eco, (str, int, float))
+        and not isinstance(raw_eco, bool)
+        else None
+    )
+
+    nova_group = product.get("nova_group")
+    if not isinstance(nova_group, (int, float)) or isinstance(nova_group, bool):
+        nova_group = None
+
     return {
-        "barcode": product.get("code") or "",
-        "name": product.get("product_name") or product.get("generic_name") or "Unknown product",
-        "brands": product.get("brands") or "",
-        "quantity": product.get("quantity") or "",
-        "nutri_score": (product.get("nutriscore_grade") or "").upper() or None,
-        "nova_group": product.get("nova_group"),
-        "eco_score": (product.get("ecoscore_grade") or "").upper() or None,
+        "barcode": _safe_str(product.get("code")),
+        "name": _safe_str(product.get("product_name"))
+        or _safe_str(product.get("generic_name"))
+        or "Unknown product",
+        "brands": _safe_str(product.get("brands")),
+        "quantity": _safe_str(product.get("quantity")),
+        "nutri_score": nutri_score,
+        "nova_group": nova_group,
+        "eco_score": eco_score,
         "allergens": _normalize_tags(product.get("allergens_tags")),
         "traces": _normalize_tags(product.get("traces_tags")),
         "labels": _normalize_tags(product.get("labels_tags"))[:12],
         "categories": _normalize_tags(product.get("categories_tags"))[:12],
-        "ingredients": product.get("ingredients_text") or "",
+        "ingredients": _safe_str(product.get("ingredients_text")),
         "nutrition_per_100g": {
             "energy_kcal": _nutrient(product, "energy-kcal"),
             "fat_g": _nutrient(product, "fat"),
@@ -142,7 +254,7 @@ def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
             "proteins_g": _nutrient(product, "proteins"),
             "salt_g": _nutrient(product, "salt"),
         },
-        "image_url": product.get("image_front_small_url") or "",
+        "image_url": _safe_str(product.get("image_front_small_url")),
         "data_note": "Open Food Facts data is community contributed and can be incomplete.",
     }
 
@@ -156,7 +268,10 @@ def _openfoodfacts_get(path: str, params: Optional[Dict[str, Any]] = None) -> Di
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        if not isinstance(data, dict):
+            return {"error": "Open Food Facts returned a non-dictionary JSON response"}
+        return data
     except requests.RequestException as exc:
         return {"error": f"Open Food Facts request failed: {exc}"}
     except ValueError:
@@ -166,11 +281,29 @@ def _openfoodfacts_get(path: str, params: Optional[Dict[str, Any]] = None) -> Di
 async def _openfoodfacts_get_async(
     path: str, params: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    return await run_in_threadpool(_openfoodfacts_get, path, params)
+    try:
+        client = await _get_client(app)
+        response = await client.get(
+            f"{OPENFOODFACTS_BASE_URL}{path}",
+            params=params or {},
+            headers=_headers(),
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            return {"error": "Open Food Facts returned a non-dictionary JSON response"}
+        return data
+    except (httpx.HTTPError, httpx.RequestError) as exc:
+        return {"error": f"Open Food Facts request failed: {exc}"}
+    except ValueError:
+        return {"error": "Open Food Facts returned a non-JSON response"}
+    except Exception:
+        # Graceful fallback to threadpool requests call
+        return await run_in_threadpool(_openfoodfacts_get, path, params)
 
 
 async def _lookup_barcode(barcode: str) -> Dict[str, Any]:
-    cleaned = "".join(char for char in str(barcode or "") if char.isdigit())
+    cleaned = clean_barcode(barcode)
     if not cleaned:
         return {"error": "barcode is required"}
 
@@ -178,9 +311,11 @@ async def _lookup_barcode(barcode: str) -> Dict[str, Any]:
         f"/api/v2/product/{cleaned}.json",
         {"fields": PRODUCT_FIELDS},
     )
+    if not isinstance(payload, dict):
+        return {"error": "Open Food Facts returned invalid response structure"}
     if "error" in payload:
         return payload
-    if payload.get("status") == 0 or not payload.get("product"):
+    if payload.get("status") == 0 or not isinstance(payload.get("product"), dict):
         return {"error": f"no product found for barcode {cleaned}"}
     return {"product": _summarize_product(payload["product"])}
 
@@ -202,10 +337,15 @@ async def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
             "fields": PRODUCT_FIELDS,
         },
     )
+    if not isinstance(payload, dict):
+        return {"error": "Open Food Facts returned invalid response structure"}
     if "error" in payload:
         return payload
 
-    products = [_summarize_product(item) for item in payload.get("products", [])]
+    raw_products = payload.get("products", [])
+    if not isinstance(raw_products, list):
+        raw_products = []
+    products = [_summarize_product(item) for item in raw_products if isinstance(item, dict)]
     return {
         "query": query,
         "count": payload.get("count", 0),
@@ -215,14 +355,18 @@ async def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
 
 
 async def _collect_foods_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
-    barcodes = body.get("barcodes") or []
-    if not isinstance(barcodes, list):
+    raw_barcodes = body.get("barcodes") or []
+    if not isinstance(raw_barcodes, list):
         return {"error": "barcodes must be a list"}
+
+    barcodes = [clean_barcode(b) for b in raw_barcodes if clean_barcode(b)]
+    if not barcodes:
+        return {"error": "no valid barcodes provided", "errors": []}
 
     products = []
     errors = []
     for barcode in barcodes[:5]:
-        result = await _lookup_barcode(str(barcode))
+        result = await _lookup_barcode(barcode)
         if "product" in result:
             products.append(result["product"])
         else:
@@ -352,13 +496,8 @@ async def get_manifest_alias():
 
 
 @app.post("/tools/search_foods", response_model=ChatToolResponse)
-async def tool_search_foods(request: Request):
-    body, error = await _json_body(request)
-    if error:
-        return _invalid_body_response(error)
-
-    page_size = _safe_int(body.get("page_size"), default=5)
-    result = await _search_foods(body.get("query", ""), page_size)
+async def tool_search_foods(payload: SearchFoodsRequest):
+    result = await _search_foods(payload.query, payload.page_size)
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
 
@@ -377,12 +516,8 @@ async def tool_search_foods(request: Request):
 
 
 @app.post("/tools/lookup_barcode", response_model=ChatToolResponse)
-async def tool_lookup_barcode(request: Request):
-    body, error = await _json_body(request)
-    if error:
-        return _invalid_body_response(error)
-
-    result = await _lookup_barcode(body.get("barcode", ""))
+async def tool_lookup_barcode(payload: LookupBarcodeRequest):
+    result = await _lookup_barcode(payload.barcode)
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
 
@@ -395,12 +530,8 @@ async def tool_lookup_barcode(request: Request):
 
 
 @app.post("/tools/compare_foods", response_model=ChatToolResponse)
-async def tool_compare_foods(request: Request):
-    body, error = await _json_body(request)
-    if error:
-        return _invalid_body_response(error)
-
-    result = await _collect_foods_from_body(body)
+async def tool_compare_foods(payload: CompareFoodsRequest):
+    result = await _collect_foods_from_body({"barcodes": payload.barcodes})
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
 
@@ -413,26 +544,14 @@ async def tool_compare_foods(request: Request):
 
 
 @app.post("/tools/check_allergens", response_model=ChatToolResponse)
-async def tool_check_allergens(request: Request):
-    body, error = await _json_body(request)
-    if error:
-        return _invalid_body_response(error)
-
-    avoid = body.get("avoid") or []
-    if not isinstance(avoid, list) or not avoid:
-        return ChatToolResponse(
-            success=False,
-            message="avoid must be a non-empty list",
-            data={"error": "avoid must be a non-empty list"},
-        )
-
-    if body.get("barcode"):
-        lookup = await _lookup_barcode(body.get("barcode"))
+async def tool_check_allergens(payload: CheckAllergensRequest):
+    if payload.barcode:
+        lookup = await _lookup_barcode(payload.barcode)
         if "error" in lookup:
             return ChatToolResponse(success=False, message=lookup["error"], data=lookup)
         product = lookup["product"]
     else:
-        search = await _search_foods(body.get("query", ""), 1)
+        search = await _search_foods(payload.query or "", 1)
         if "error" in search:
             return ChatToolResponse(success=False, message=search["error"], data=search)
         products = search.get("products", [])
@@ -444,7 +563,7 @@ async def tool_check_allergens(request: Request):
             )
         product = products[0]
 
-    avoid_terms = {str(item).lower().strip() for item in avoid if str(item).strip()}
+    avoid_terms = {str(item).lower().strip() for item in payload.avoid if str(item).strip()}
     known_allergens = {item.lower() for item in product.get("allergens", [])}
     traces = {item.lower() for item in product.get("traces", [])}
     ingredients = (product.get("ingredients") or "").lower()
