@@ -124,7 +124,7 @@ final class MemoriesViewModelObserverTests: XCTestCase {
     // Let the didSet-spawned initial load reach the fetch seam, so the
     // refresh below suspends at the lifecycle barrier until it settles.
     for _ in 0..<200 where requestedViews.isEmpty {
-      try await Task.sleep(nanoseconds: 1_000_000)
+      await Task.yield()
     }
     XCTAssertFalse(requestedViews.isEmpty, "Initial load must reach the fetch seam")
 
