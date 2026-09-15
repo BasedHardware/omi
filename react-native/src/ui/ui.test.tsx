@@ -110,6 +110,7 @@ import {
   omiMarkGeometry,
 } from './OmiAvatar';
 import {ChatMessageRow} from './ChatTranscript';
+import {parseOmiHistory} from '../legacyOmiChat';
 
 function render(element: React.ReactElement) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -1844,6 +1845,62 @@ test('a chat message names Flutter ChartMessageWidget empty GET title without om
     });
   expect(copies).toContain('Here is the trend.\n\nMon · 12\n \t · 1');
   expect(copies).not.toContain('Here is the trend.\nMon · 12');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a chat message names Flutter ChartMessageWidget padded GET value instead of remapping to a chart', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'chat-padded-chart-value',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T01:02:03Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: 'Talk time',
+          datasets: [
+            {
+              label: 'Minutes',
+              data_points: [{label: 'Mon', value: '  12  '}],
+            },
+          ],
+        },
+      },
+    ]),
+    0,
+  );
+  const message = page.messages[0];
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        ...message,
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Here is the trend.');
+  expect(copies.join('\n')).not.toContain('Talk time');
+  expect(copies.join('\n')).not.toContain('Mon · 12');
   act(() => {
     renderer.unmount();
   });

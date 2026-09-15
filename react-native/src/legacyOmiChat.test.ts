@@ -664,6 +664,68 @@ test('old chat history names GET chart_data numeric-string values', () => {
   ).toBeUndefined();
 });
 
+test('old chat history names Flutter ChartMessageWidget padded GET value instead of remapping to a chart', () => {
+  const chart = (id: string, value: unknown) => ({
+    id,
+    sender: 'ai',
+    text: 'Here is the trend.',
+    created_at: '2026-09-07T01:02:03Z',
+    chart_data: {
+      chart_type: 'bar',
+      title: 'Talk time',
+      datasets: [
+        {
+          label: 'Minutes',
+          data_points: [{label: 'Mon', value}],
+        },
+      ],
+    },
+  });
+  expect(
+    parseOmiHistory(JSON.stringify([chart('chart-exact', '12')]), 0).messages[0]
+      .chart,
+  ).toEqual({
+    title: 'Talk time',
+    points: [{label: 'Mon', value: 12}],
+  });
+  expect(
+    parseOmiHistory(JSON.stringify([chart('chart-number', 12)]), 0).messages[0]
+      .chart,
+  ).toEqual({
+    title: 'Talk time',
+    points: [{label: 'Mon', value: 12}],
+  });
+  for (const [id, value] of [
+    ['chart-padded', '  12  '],
+    ['chart-trailing', '12 '],
+    ['chart-leading', '  12'],
+    ['chart-newline', '12\n'],
+    ['chart-decimal', '  15.5  '],
+    ['chart-next-line', '\u008512'],
+    ['chart-whitespace', ' \t'],
+  ] as const) {
+    const page = parseOmiHistory(
+      JSON.stringify([
+        chart(id, value),
+        {
+          id: 'neighbor',
+          sender: 'ai',
+          text: 'Neighbor stays.',
+          created_at: '2026-09-07T01:02:04Z',
+        },
+      ]),
+      0,
+    );
+    expect(page.messages.find(row => row.id === id)?.chart).toBeUndefined();
+    expect(page.messages.find(row => row.id === id)?.text).toBe(
+      'Here is the trend.',
+    );
+    expect(page.messages.find(row => row.id === 'neighbor')?.text).toBe(
+      'Neighbor stays.',
+    );
+  }
+});
+
 test('keeps GET chart_data points when more than 200', () => {
   const data_points = Array.from({length: 201}, (_, index) => ({
     label: `d${index}`,

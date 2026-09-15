@@ -30,6 +30,7 @@ import {
   integrationsFooterCopy,
 } from '../desktopReadClient';
 import {appChangelogsLoadErrorCopy} from '../legacyOmiAppChangelogs';
+import {parseOmiHistory} from '../legacyOmiChat';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -777,6 +778,42 @@ test('desktop chat names Flutter ChartMessageWidget empty GET title without omit
   expect(copy).toContain('Here is the trend.');
   expect(copy).toContain('\nMon · 12\n \t · 1');
   expect(copy).not.toContain('Here is the trend.\nMon · 12');
+});
+
+test('desktop chat names Flutter ChartMessageWidget padded GET value instead of remapping to a chart', () => {
+  const parsed = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'padded-chart-value',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T12:00:00.000Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: 'Talk time',
+          datasets: [
+            {
+              label: 'Minutes',
+              data_points: [{label: 'Mon', value: '  12  '}],
+            },
+          ],
+        },
+      },
+    ]),
+    0,
+  ).messages[0];
+  const renderer = renderDesktop({
+    messages: [
+      {
+        ...parsed,
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Here is the trend.');
+  expect(copy).not.toContain('Talk time');
+  expect(copy).not.toContain('Mon · 12');
 });
 
 test('desktop chat names GET memory citations with empty titles', () => {

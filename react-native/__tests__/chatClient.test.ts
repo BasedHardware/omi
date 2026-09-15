@@ -1301,6 +1301,95 @@ test('old chat history names Flutter AIMessage padded GET plugin_id instead of r
   expect(page.appsError).toBeUndefined();
 });
 
+test('old chat history names Flutter ChartMessageWidget padded GET value instead of remapping to a chart', async () => {
+  const request = jest.fn(async (input: {path: string}) => {
+    if (input.path.startsWith('/v2/messages')) {
+      return {
+        id: 'history',
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'old-chart',
+            text: 'Here is the trend.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:01Z',
+            chart_data: {
+              chart_type: 'bar',
+              title: 'Talk time',
+              datasets: [
+                {
+                  label: 'Minutes',
+                  data_points: [{label: 'Mon', value: '12'}],
+                },
+              ],
+            },
+          },
+          {
+            id: 'old-padded',
+            text: 'Here is the trend.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:02Z',
+            chart_data: {
+              chart_type: 'bar',
+              title: 'Talk time',
+              datasets: [
+                {
+                  label: 'Minutes',
+                  data_points: [{label: 'Mon', value: '  12  '}],
+                },
+              ],
+            },
+          },
+          {
+            id: 'old-trailing',
+            text: 'Here is the trend.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:03Z',
+            chart_data: {
+              chart_type: 'bar',
+              title: 'Talk time',
+              datasets: [
+                {
+                  label: 'Minutes',
+                  data_points: [{label: 'Mon', value: '12 '}],
+                },
+              ],
+            },
+          },
+          {
+            id: 'neighbor',
+            text: 'Neighbor stays.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:04Z',
+          },
+        ]),
+      };
+    }
+    return {id: 'app', status: 404, body: '{}'};
+  });
+  const backend = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const page = await loadNewestChatHistory(backend);
+  expect(page.messages.find(item => item.id === 'old-chart')?.chart).toEqual({
+    title: 'Talk time',
+    points: [{label: 'Mon', value: 12}],
+  });
+  expect(
+    page.messages.find(item => item.id === 'old-padded')?.chart,
+  ).toBeUndefined();
+  expect(page.messages.find(item => item.id === 'old-padded')?.text).toBe(
+    'Here is the trend.',
+  );
+  expect(
+    page.messages.find(item => item.id === 'old-trailing')?.chart,
+  ).toBeUndefined();
+  expect(page.messages.find(item => item.id === 'neighbor')?.text).toBe(
+    'Neighbor stays.',
+  );
+});
+
 test('old chat history names a failed GET apps catalog instead of empty success', async () => {
   const request = jest.fn(async (input: {path: string}) => {
     if (input.path.startsWith('/v2/messages')) {

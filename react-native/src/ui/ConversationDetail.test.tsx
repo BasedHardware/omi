@@ -31,6 +31,7 @@ import {
   transcriptSttUnknownCopy,
   transcriptSttOmiFallbackCopy,
 } from '../desktopReadClient';
+import {parseOmiHistory} from '../legacyOmiChat';
 
 const mockRecording = jest.fn(() => ({
   result: {
@@ -300,6 +301,61 @@ test('conversation-detail history names Flutter ChartMessageWidget empty GET tit
   expect(tree).toContain('Here is the trend.');
   expect(tree).toContain('\nMon · 12\n \t · 1');
   expect(tree).not.toContain('Here is the trend.\nMon · 12');
+});
+
+test('conversation-detail history names Flutter ChartMessageWidget padded GET value instead of remapping to a chart', () => {
+  const parsed = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'ai-padded-chart-value',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T12:00:00.000Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: 'Talk time',
+          datasets: [
+            {
+              label: 'Minutes',
+              data_points: [{label: 'Mon', value: '  12  '}],
+            },
+          ],
+        },
+      },
+    ]),
+    0,
+  ).messages[0];
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          ...parsed,
+          generationOutcome: 'completed',
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loading: false,
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const tree = text(view);
+  expect(tree).toContain('Here is the trend.');
+  expect(tree).not.toContain('Talk time');
+  expect(tree).not.toContain('Mon · 12');
 });
 
 test('conversation-detail history names GET content_blocks without inventing write actions', () => {

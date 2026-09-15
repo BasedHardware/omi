@@ -139,8 +139,11 @@ function parseOmiChatChart(
     const point = raw as Record<string, unknown>;
     let value: number;
     if (typeof point.value === 'string') {
+      if (visibleDisplayText(point.value) !== point.value) {
+        return undefined;
+      }
       const parsed = Number(point.value);
-      if (point.value.trim() === '' || !Number.isFinite(parsed)) {
+      if (point.value === '' || !Number.isFinite(parsed)) {
         return undefined;
       }
       value = parsed;
