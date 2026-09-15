@@ -208,9 +208,22 @@ test('Home currents name GET memory ledger chrome and omit empty fields', () => 
     captureDeviceLabel: 'Mac',
   };
   let named!: ReactTestRenderer.ReactTestRenderer;
+  let padded!: ReactTestRenderer.ReactTestRenderer;
   let omitted!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     named = ReactTestRenderer.create(<ReadRow item={item} />);
+    padded = ReactTestRenderer.create(
+      <ReadRow
+        item={{
+          ...item,
+          id: 'memory-ledger-padded',
+          ledgerSlot: '  identity.full_name  ',
+          ledgerBody: undefined,
+          isBaseline: false,
+          captureDeviceLabel: undefined,
+        }}
+      />,
+    );
     omitted = ReactTestRenderer.create(
       <ReadRow
         item={{
@@ -226,6 +239,7 @@ test('Home currents name GET memory ledger chrome and omit empty fields', () => 
   });
   const copy = textOf(named);
   expect(copy).toContain('identity.full_name');
+  expect(textOf(padded)).toContain('  identity.full_name  ');
   expect(copy).toContain('Open with the weekly recap.');
   expect(copy).toContain('⚑');
   expect(copy).not.toContain('Baseline Memory');

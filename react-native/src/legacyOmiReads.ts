@@ -428,7 +428,7 @@ function memoryItem(row: Record<string, unknown>): MemoryProjection {
     visibleDisplayText(parsedConversationId) === ''
       ? null
       : parsedConversationId;
-  const ledgerSlot = visibleDisplayText(text(row.slot, ''));
+  const ledgerSlot = text(row.slot, '');
   const ledgerKind = visibleDisplayText(text(row.kind, ''));
   const ledgerSchema = visibleDisplayText(text(row.ledger_schema_version, ''));
   const ledgerBody = visibleDisplayText(text(row.body, ''));
@@ -473,7 +473,7 @@ function memoryItem(row: Record<string, unknown>): MemoryProjection {
       inputDigest: null,
       outputDigest: null,
     },
-    ...(ledgerSlot === '' ? {} : {ledgerSlot}),
+    ...(visibleDisplayText(ledgerSlot) === '' ? {} : {ledgerSlot}),
     ...(playbook === '' ? {} : {ledgerBody: playbook}),
     ...(bool(row.is_baseline) ? {isBaseline: true} : {}),
     ...(captureDeviceLabel === null ? {} : {captureDeviceLabel}),

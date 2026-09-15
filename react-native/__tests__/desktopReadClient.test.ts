@@ -3831,8 +3831,13 @@ test('memory citation copy matches the citation count', () => {
 test('Omi memory ledger chrome names GET slot, playbook body, baseline, and known devices', () => {
   expect(memoryLedgerSlotCopy({})).toBeNull();
   expect(memoryLedgerSlotCopy({ledgerSlot: ' \t\n'})).toBeNull();
+  expect(memoryLedgerSlotCopy({ledgerSlot: '\u0085'})).toBeNull();
+  expect(memoryLedgerSlotCopy({ledgerSlot: ''})).toBeNull();
   expect(memoryLedgerSlotCopy({ledgerSlot: 'identity.full_name'})).toBe(
     'identity.full_name',
+  );
+  expect(memoryLedgerSlotCopy({ledgerSlot: '  identity.full_name  '})).toBe(
+    '  identity.full_name  ',
   );
   expect(memoryLedgerPlaybookCopy({})).toBeNull();
   expect(memoryLedgerPlaybookCopy({ledgerBody: '\u0085'})).toBeNull();

@@ -763,6 +763,19 @@ test('Memories rows name GET ledger slot, playbook body, baseline, and known dev
                 captureDeviceLabel: 'Mac',
               },
               {
+                ...memory('padded-slot'),
+                title: 'Prefers padded slots.',
+                summary: 'Prefers padded slots.',
+                searchableText: 'Prefers padded slots.',
+                provenance: {
+                  label: null,
+                  synthesisVersion: null,
+                  inputDigest: null,
+                  outputDigest: null,
+                },
+                ledgerSlot: '  identity.full_name  ',
+              },
+              {
                 ...memory('omitted'),
                 title: 'Likes walking.',
                 summary: 'Likes walking.',
@@ -785,6 +798,7 @@ test('Memories rows name GET ledger slot, playbook body, baseline, and known dev
   try {
     const copy = textOf(view);
     expect(copy).toContain('identity.full_name');
+    expect(copy).toContain('  identity.full_name  ');
     expect(copy).toContain('Open with the weekly recap.');
     expect(copy).toContain('⚑');
     expect(copy).not.toContain('Baseline Memory');

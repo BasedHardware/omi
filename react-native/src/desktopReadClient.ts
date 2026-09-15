@@ -2771,8 +2771,8 @@ export function memorySynthesisCopy(item: {
 export function memoryLedgerSlotCopy(item: {
   ledgerSlot?: string | null;
 }): string | null {
-  const slot = visibleDisplayText(item.ledgerSlot ?? '');
-  return slot === '' ? null : slot;
+  const slot = item.ledgerSlot ?? '';
+  return visibleDisplayText(slot) === '' ? null : slot;
 }
 
 export function memoryLedgerPlaybookCopy(item: {

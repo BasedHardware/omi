@@ -3561,6 +3561,20 @@ test('wide Home search and compact Home current memory rows name GET ledger chro
   expect(currentTree).toContain('⚑');
   expect(currentTree).not.toContain('Baseline Memory');
   expect(currentTree).toContain('Mac');
+  const padded = render(
+    <ProjectionRow
+      home
+      item={{
+        ...item,
+        id: 'memory-ledger-home-padded',
+        ledgerSlot: '  identity.full_name  ',
+        ledgerBody: undefined,
+        isBaseline: false,
+        captureDeviceLabel: undefined,
+      }}
+    />,
+  );
+  expect(JSON.stringify(padded.toJSON())).toContain('  identity.full_name  ');
   const omitted = render(
     <ProjectionRow
       home
