@@ -69,9 +69,12 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
       break;
     }
     const row = object(raw);
-    const type = visibleDisplayText(text(row.type, 1_000_000));
-    if (type !== 'changelog') {
+    const type = text(row.type, 1_000_000);
+    if (type === 'feature' || type === 'announcement') {
       continue;
+    }
+    if (type !== 'changelog') {
+      throw new AppChangelogError();
     }
     const id = visibleDisplayText(text(row.id, 1_000_000));
     if (id === '') {

@@ -452,14 +452,14 @@ test('keeps GET app changelog app_version longer than 10000', () => {
   ]);
 });
 
-test('keeps GET app changelogs when a non-changelog type exceeds 64', () => {
-  const type = 'f'.repeat(65);
-  expect(
+test('names Flutter ChangelogSheet unknown GET type instead of keeping neighbors', () => {
+  const unknown = 'f'.repeat(65);
+  expect(() =>
     parseOmiAppChangelogs(
       JSON.stringify([
         {
-          id: 'ann-feature',
-          type,
+          id: 'ann-unknown',
+          type: unknown,
           app_version: '1.2.0',
           content: {changes: [{title: 'Skip me', description: ''}]},
         },
@@ -471,23 +471,13 @@ test('keeps GET app changelogs when a non-changelog type exceeds 64', () => {
         },
       ]),
     ),
-  ).toEqual([
-    {
-      key: 'ann-good:0',
-      title: "What's New in 1.2.0",
-      copy: '✨ · Offline replay · ',
-    },
-  ]);
-});
-
-test('keeps GET app changelogs when a non-changelog type exceeds 10000', () => {
-  const type = 'f'.repeat(10001);
-  expect(
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
     parseOmiAppChangelogs(
       JSON.stringify([
         {
-          id: 'ann-feature',
-          type,
+          id: 'ann-long',
+          type: 'f'.repeat(10001),
           app_version: '1.2.0',
           content: {changes: [{title: 'Skip me', description: ''}]},
         },
@@ -499,13 +489,61 @@ test('keeps GET app changelogs when a non-changelog type exceeds 10000', () => {
         },
       ]),
     ),
-  ).toEqual([
-    {
-      key: 'ann-good:0',
-      title: "What's New in 1.2.0",
-      copy: '✨ · Offline replay · ',
-    },
-  ]);
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-empty',
+          type: '',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-whitespace',
+          type: ' \t',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-padded',
+          type: ' changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toThrow('Omi app changelogs are malformed');
 });
 
 test('keeps GET app changelogs when an announcement id exceeds 256', () => {
