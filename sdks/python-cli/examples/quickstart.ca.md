@@ -1,80 +1,119 @@
-# Guia d'inici ràpid d'omi-cli
+# Primers passos amb omi-cli
 
-## Instal·lació
+Aquesta guia explica les primeres ordres en català. Els noms de les ordres i
+els missatges del programa es mantenen en anglès. Els exemples de consulta que
+apareixen aquí no modifiquen els vostres records, converses, tasques ni objectius.
 
-```bash
-pip install omi-cli
+## Instal·lar el programa
+
+Requisits: Python 3.10 o una versió posterior i un compte d'Omi.
+
+Si teniu `pipx` instal·lat:
+
+```sh
+pipx install omi-cli
+omi --help
 ```
 
-## Inici de sessió
+Com a alternativa, podeu instal·lar-lo dins d'un entorn virtual de Python
+activat:
 
-```bash
+```sh
+python -m pip install omi-cli
+omi --help
+```
+
+Si el terminal no troba `omi`, comproveu que l'entorn virtual estigui activat o
+que el directori on `pipx` instal·la els seus executables estigui al vostre `PATH`.
+
+## Connectar el vostre compte
+
+Inicieu l'assistent interactiu:
+
+```sh
 omi auth login
 ```
 
-S'obrirà el navegador per iniciar sessió amb el vostre compte.
+Trieu iniciar sessió al navegador o l'opció d'enganxar una clau API de
+desenvolupador d'Omi. L'entrada interactiva oculta la clau; eviteu escriure-la
+en una ordre que quedi a l'historial del terminal.
 
-## Ordres bàsiques
+Per anar directament al navegador:
 
-### Llistar converses
-
-```bash
-omi conversation list
+```sh
+omi auth login --browser
 ```
 
-### Veure una conversa concreta
+Inicieu sessió al mateix ordinador que el terminal: la resposta d'autenticació
+utilitza una adreça local (localhost). Seguiu les instruccions que apareixen en
+pantalla.
 
-```bash
-omi conversation get <id_conversa>
+Després, verifiqueu la configuració i l'accés a l'API:
+
+```sh
+omi auth status
+omi auth whoami
 ```
 
-### Cercar converses
+`status` mostra l'estat local i oculta el secret, però no comprova la seva
+validesa al servidor. `whoami` realitza una sol·licitud autenticada; si té
+èxit, confirma que les credencials funcionen, sense mostrar necessàriament el
+vostre nom.
 
-```bash
-omi conversation search "consulta de cerca"
+La configuració es desa a `~/.omi/config.toml` per defecte. No compartiu aquest
+fitxer: pot contenir les vostres credencials.
+
+## Consultar les vostres dades
+
+```sh
+omi memory list --limit 5
+omi conversation list --limit 5
+omi action-item list --open
+omi goal list
 ```
 
-## Opcions avançades
+Una llista buida pot significar simplement que no hi ha elements que coincideixin
+amb la consulta. Utilitzeu l'ajuda per descobrir els filtres de cada ordre:
 
-### Filtrar per límit
-
-```bash
-omi conversation list --limit 10
+```sh
+omi memory list --help
+omi conversation list --help
+omi action-item list --help
 ```
 
-### Incloure transcripcions
+## Obtenir JSON i navegar per les pàgines
 
-```bash
-omi conversation list --include-transcript
+Col·loqueu l'opció global `--json` **abans** del grup d'ordres:
+
+```sh
+omi --json memory list --limit 25 --offset 0
+omi --json memory list --limit 25 --offset 25
 ```
 
-### Exportar en format JSON
+La primera ordre demana els primers 25 records; la segona, els 25 següents. Una
+sola pàgina no és, per tant, una còpia de seguretat completa. La sortida JSON
+conserva els identificadors complets, mentre que les taules poden escurçar-los
+per mostrar-los.
 
-```bash
-omi conversation list --json
+Per desar una pàgina en un fitxer:
+
+```sh
+omi --json memory list --limit 25 --offset 0 > records-pagina-1.json
 ```
 
-### Paginació
+Aquesta redirecció crea o reemplaça el fitxer local. Comproveu que l'ordre ha
+finalitzat correctament abans d'utilitzar el seu contingut. Els errors s'escriuen
+a la sortida d'error estàndard (stderr); un fitxer buit no garanteix que no hi
+hagi dades. El fitxer exportat pot contenir informació personal: manteniu-lo privat.
 
-```bash
-omi conversation list --limit 50 --offset 100
-```
+## Tancar la sessió
 
-## Tancament de sessió
-
-```bash
+```sh
 omi auth logout
 ```
 
-## Ajuda
+Aquesta ordre elimina les credencials desades localment. Per revocar una clau al
+servidor, utilitzeu la gestió de claus de desenvolupador del vostre compte.
 
-```bash
-omi --help
-omi conversation --help
-```
-
-## Recursos
-
-- [Documentació](https://docs.omi.me)
-- [GitHub](https://github.com/BasedHardware/omi)
-- [Discord](https://discord.gg/omi)
+Per a la resta d'ordres i opcions avançades, consulteu la
+[guia principal en anglès](../README.md), `omi --help` i la comunitat a [discord.omi.me](https://discord.omi.me).
