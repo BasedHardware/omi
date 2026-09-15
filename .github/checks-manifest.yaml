@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: pubmed-tests
+    command: ["python3", "plugins/omi-pubmed-app/test_main.py"]
+    triggers: ["plugins/omi-pubmed-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13958: untyped PubMed tool requests and unguarded nested traversal (linksets/authors/idlist/summary rows) raised AttributeError/IndexError on corrupted NCBI payloads, and per-request httpx.AsyncClient churned sockets instead of reusing the lifespan client"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
