@@ -3298,7 +3298,7 @@
     "speechProfileTopicGoal": "Apa tujuan jangka panjang Anda?",
     "speechToTextUnavailableDesc": "Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.",
     "memoryHistoryPartial": "Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.",
-    "memoryHistory": "History",
+    "memoryHistory": "Riwayat",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

@@ -2044,7 +2044,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get memoryHistoryPartial => 'Частка гісторыі ўспамінаў недаступная. Паказана гісторыя, атрыманая дагэтуль.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Гісторыя';
 
   @override
   String get undo => 'Адмяніць';

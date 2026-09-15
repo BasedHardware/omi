@@ -2042,7 +2042,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get memoryHistoryPartial => 'Dio historije sjećanja nije dostupan. Prikazuje se dosad primljena historija.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Historija';
 
   @override
   String get undo => 'Opozovi';

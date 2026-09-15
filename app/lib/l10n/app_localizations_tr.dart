@@ -2048,7 +2048,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Geçmiş';
 
   @override
   String get undo => 'Geri Al';

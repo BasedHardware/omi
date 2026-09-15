@@ -2050,7 +2050,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Sejarah';
 
   @override
   String get undo => 'Buat Asal';

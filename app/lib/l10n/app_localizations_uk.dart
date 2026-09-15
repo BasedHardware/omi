@@ -2046,7 +2046,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistoryPartial => 'Частина історії спогадів недоступна. Показано історію, отриману на цей момент.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Історія';
 
   @override
   String get undo => 'Скасувати';

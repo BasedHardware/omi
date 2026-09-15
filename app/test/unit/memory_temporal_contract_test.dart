@@ -85,6 +85,18 @@ void main() {
     expect(memory.isUsefulNow, isTrue);
   });
 
+  test('a deleted row without an assessment is never useful now', () {
+    final memory = Memory.fromJson({
+      ..._memoryJson(beliefComputedAt: null, currency: null, currencyBand: null),
+      'deleted': true,
+    });
+
+    expect(memory.deleted, isTrue);
+    expect(memory.hasCurrencyAssessment, isFalse);
+    expect(memory.isCurrentForUse, isFalse);
+    expect(memory.isUsefulNow, isFalse);
+  });
+
   test(
     'historical ledger rows stay out of current use even with a current band',
     () {

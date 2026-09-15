@@ -2048,7 +2048,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryHistoryPartial => 'Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Riwayat';
 
   @override
   String get undo => 'Batalkan';

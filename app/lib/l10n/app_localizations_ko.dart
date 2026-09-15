@@ -2004,7 +2004,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryHistoryPartial => '기억 기록의 일부를 불러올 수 없습니다. 지금까지 받은 기록을 표시합니다.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => '기록';
 
   @override
   String get undo => '실행 취소';

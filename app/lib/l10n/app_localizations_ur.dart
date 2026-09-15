@@ -2042,7 +2042,7 @@ class AppLocalizationsUr extends AppLocalizations {
       'یادوں کی تاریخ کا کچھ حصہ دستیاب نہیں ہے۔ اب تک موصول ہونے والی تاریخ دکھائی جا رہی ہے۔';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'تاریخ';
 
   @override
   String get undo => 'واپس لیں';

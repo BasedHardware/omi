@@ -2051,7 +2051,7 @@ class AppLocalizationsIt extends AppLocalizations {
       'Parte della cronologia dei ricordi non è disponibile. Viene mostrata la cronologia ricevuta finora.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Cronologia';
 
   @override
   String get undo => 'Annulla';

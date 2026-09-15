@@ -2041,7 +2041,7 @@ class AppLocalizationsNo extends AppLocalizations {
       'Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Historikk';
 
   @override
   String get undo => 'Angre';

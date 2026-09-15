@@ -14,7 +14,7 @@ class MemoryHistoryStatusBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       container: true,
-      excludeSemantics: true,
+      excludeSemantics: onLoadMore == null,
       liveRegion: true,
       label: context.l10n.memoryHistoryPartial,
       child: Container(

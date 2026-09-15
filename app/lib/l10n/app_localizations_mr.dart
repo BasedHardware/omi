@@ -2043,7 +2043,7 @@ class AppLocalizationsMr extends AppLocalizations {
       'आठवणींच्या इतिहासाचा काही भाग उपलब्ध नाही. आतापर्यंत मिळालेला इतिहास दाखवला जात आहे.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'इतिहास';
 
   @override
   String get undo => 'पूर्ववत् करा';

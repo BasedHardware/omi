@@ -133,6 +133,45 @@ void main() {
     },
   );
 
+  test('concurrent load-more history calls are single-flight', () async {
+    final offsets = <int>[];
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({
+        int limit = 100,
+        int offset = 0,
+        bool thisDeviceOnly = false,
+      }) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async {
+        offsets.add(offset);
+        return GetLedgerHistoryResult(
+          [_memory(id: 'old-$offset', historical: true)],
+          supported: true,
+          truncated: true,
+        );
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+    expect(provider.ledgerHistoryHasMore, isTrue);
+    expect(offsets, [0]);
+
+    final first = provider.loadMoreHistory();
+    final second = provider.loadMoreHistory();
+    await Future.wait([first, second]);
+    // The second call must not refetch the in-flight offset: each page is
+    // requested exactly once and the continuation stays sequential.
+    expect(offsets, [0, 1]);
+
+    await provider.loadMoreHistory();
+    expect(offsets, [0, 1, 2]);
+    expect(
+      provider.memories.map((memory) => memory.id),
+      containsAllInOrder(<String>['old-0', 'old-1', 'old-2']),
+    );
+  });
+
   test('history follows a short server cursor page instead of claiming completion', () async {
     final calls = <({int offset, String? cursor})>[];
     final old = _memory(id: 'history-cursor-old', historical: true);

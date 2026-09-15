@@ -3256,7 +3256,7 @@
     "speechProfileTopicGoal": "Koks jūsų ilgalaikis tikslas?",
     "speechToTextUnavailableDesc": "Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.",
     "memoryHistoryPartial": "Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.",
-    "memoryHistory": "History",
+    "memoryHistory": "Istorija",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

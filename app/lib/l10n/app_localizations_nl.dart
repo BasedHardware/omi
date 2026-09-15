@@ -2048,7 +2048,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Geschiedenis';
 
   @override
   String get undo => 'Ongedaan maken';

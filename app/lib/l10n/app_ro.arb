@@ -3256,7 +3256,7 @@
     "speechProfileTopicGoal": "Care este obiectivul tău pe termen lung?",
     "speechToTextUnavailableDesc": "Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.",
     "memoryHistoryPartial": "O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.",
-    "memoryHistory": "History",
+    "memoryHistory": "Istoric",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

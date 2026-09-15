@@ -2000,7 +2000,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistoryPartial => '部分记忆历史暂不可用。正在显示目前已获取的历史记录。';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => '历史';
 
   @override
   String get undo => '撤销';

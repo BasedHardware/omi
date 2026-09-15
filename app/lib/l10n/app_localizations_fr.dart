@@ -2061,7 +2061,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'Une partie de l’historique des souvenirs est indisponible. L’historique reçu jusqu’à présent est affiché.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Historique';
 
   @override
   String get undo => 'Annuler';

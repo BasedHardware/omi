@@ -3256,7 +3256,7 @@
     "speechProfileTopicGoal": "Hva er ditt langsiktige mål?",
     "speechToTextUnavailableDesc": "Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.",
     "memoryHistoryPartial": "Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.",
-    "memoryHistory": "History",
+    "memoryHistory": "Historikk",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

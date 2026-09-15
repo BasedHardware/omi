@@ -190,9 +190,11 @@ class Memory {
   /// Rows without a server assessment stay visible in the useful-now list so
   /// an older response cannot make memories disappear. They are rendered as
   /// unassessed and are not eligible for current claims or proactive use.
+  /// A deleted row never re-enters the list, even when a legacy or cached row
+  /// predates assessments entirely.
   bool get isUsefulNow {
     if (isHistoricalKnowledgeLedgerRow) return false;
-    return !hasCurrencyAssessment || isCurrentForUse;
+    return !deleted && (!hasCurrencyAssessment || isCurrentForUse);
   }
 
   /// Whether the owner has explicitly suppressed this memory from agent use.

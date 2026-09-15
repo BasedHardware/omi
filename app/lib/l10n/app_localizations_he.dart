@@ -2025,7 +2025,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get memoryHistoryPartial => 'חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'היסטוריה';
 
   @override
   String get undo => 'בטל';

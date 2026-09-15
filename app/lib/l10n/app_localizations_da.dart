@@ -2026,7 +2026,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'Noget af mindehistorikken er ikke tilgængeligt. Viser den historik, der er modtaget indtil nu.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Historik';
 
   @override
   String get undo => 'Fortryd';

@@ -3256,7 +3256,7 @@
     "speechProfileTopicGoal": "Mis on sinu pikaajaline eesmärk?",
     "speechToTextUnavailableDesc": "Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.",
     "memoryHistoryPartial": "Osa mälestuste ajaloost pole saadaval. Kuvatakse seni saadud ajalugu.",
-    "memoryHistory": "History",
+    "memoryHistory": "Ajalugu",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

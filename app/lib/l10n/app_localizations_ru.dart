@@ -2050,7 +2050,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Часть истории воспоминаний недоступна. Показана история, полученная на данный момент.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'История';
 
   @override
   String get undo => 'Отменить';

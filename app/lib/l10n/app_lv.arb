@@ -3256,7 +3256,7 @@
     "speechProfileTopicGoal": "Kāds ir jūsu ilgtermiņa mērķis?",
     "speechToTextUnavailableDesc": "Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.",
     "memoryHistoryPartial": "Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.",
-    "memoryHistory": "History",
+    "memoryHistory": "Vēsture",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

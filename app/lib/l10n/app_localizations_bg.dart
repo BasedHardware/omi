@@ -2046,7 +2046,7 @@ class AppLocalizationsBg extends AppLocalizations {
       'Част от историята на спомените не е налична. Показва се получената досега история.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'История';
 
   @override
   String get undo => 'Отмени';

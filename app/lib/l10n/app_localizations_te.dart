@@ -2052,7 +2052,7 @@ class AppLocalizationsTe extends AppLocalizations {
       'జ్ఞాపకాల చరిత్రలో కొంత భాగం అందుబాటులో లేదు. ఇప్పటివరకు అందిన చరిత్ర చూపబడుతోంది.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'చరిత్ర';
 
   @override
   String get undo => 'మరలుచేయండి';

@@ -2031,7 +2031,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryHistoryPartial => 'ประวัติความทรงจำบางส่วนไม่พร้อมใช้งาน กำลังแสดงประวัติที่ได้รับจนถึงตอนนี้';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'ประวัติ';
 
   @override
   String get undo => 'เลิกทำ';

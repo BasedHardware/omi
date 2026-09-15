@@ -3256,7 +3256,7 @@
     "speechProfileTopicGoal": "Wat is je langetermijndoel?",
     "speechToTextUnavailableDesc": "Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.",
     "memoryHistoryPartial": "Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.",
-    "memoryHistory": "History",
+    "memoryHistory": "Geschiedenis",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

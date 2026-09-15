@@ -2042,7 +2042,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryHistoryPartial => 'Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Istorija';
 
   @override
   String get undo => 'Atšaukti';

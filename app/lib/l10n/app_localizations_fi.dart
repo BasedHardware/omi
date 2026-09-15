@@ -2041,7 +2041,7 @@ class AppLocalizationsFi extends AppLocalizations {
       'Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Historia';
 
   @override
   String get undo => 'Kumoa';

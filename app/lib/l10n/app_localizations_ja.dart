@@ -2004,7 +2004,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryHistoryPartial => '記憶の履歴の一部を取得できません。これまでに取得した履歴を表示しています。';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => '履歴';
 
   @override
   String get undo => '元に戻す';

@@ -199,6 +199,50 @@ void main() {
     expect(find.byType(TextButton), findsNothing);
   });
 
+  testWidgets('history load-more stays reachable by semantics when actionable', (tester) async {
+    final handle = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: MemoryHistoryStatusBanner()),
+      ),
+    );
+    expect(find.byKey(const Key('memory_history_load_more')), findsNothing);
+    expect(find.bySemanticsLabel('show more ↓'), findsNothing);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: MemoryHistoryStatusBanner(onLoadMore: () {})),
+      ),
+    );
+    expect(find.byKey(const Key('memory_history_load_more')), findsOneWidget);
+    expect(find.bySemanticsLabel('show more ↓'), findsOneWidget);
+    // Descendant semantics are preserved (not replaced) when actionable, so
+    // the banner text merges with the button into one readable node.
+    expect(
+      find.bySemanticsLabel(
+        RegExp('Some memory history is unavailable. Showing the history received so far.*'),
+      ),
+      findsWidgets,
+    );
+
+    handle.dispose();
+  });
+
   testWidgets('Allow use clears suppression even when the row was reviewed', (tester) async {
     final provider = _MemoryUseProvider();
     addTearDown(provider.dispose);

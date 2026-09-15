@@ -3291,7 +3291,7 @@
     "speechProfileTopicGoal": "Uzun vadeli hedefiniz nedir?",
     "speechToTextUnavailableDesc": "Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.",
     "memoryHistoryPartial": "Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.",
-    "memoryHistory": "History",
+    "memoryHistory": "Geçmiş",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

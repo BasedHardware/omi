@@ -3352,7 +3352,7 @@
     "speechProfileTopicGoal": "Mi a hosszú távú célod?",
     "speechToTextUnavailableDesc": "A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.",
     "memoryHistoryPartial": "Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.",
-    "memoryHistory": "History",
+    "memoryHistory": "Előzmények",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

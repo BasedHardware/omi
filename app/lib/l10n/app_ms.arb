@@ -3256,7 +3256,7 @@
     "speechProfileTopicGoal": "Apakah matlamat jangka panjang anda?",
     "speechToTextUnavailableDesc": "Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.",
     "memoryHistoryPartial": "Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.",
-    "memoryHistory": "History",
+    "memoryHistory": "Sejarah",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

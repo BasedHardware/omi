@@ -3291,7 +3291,7 @@
     "speechProfileTopicGoal": "Какова ваша долгосрочная цель?",
     "speechToTextUnavailableDesc": "Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.",
     "memoryHistoryPartial": "Часть истории воспоминаний недоступна. Показана история, полученная на данный момент.",
-    "memoryHistory": "History",
+    "memoryHistory": "История",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

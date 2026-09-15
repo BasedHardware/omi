@@ -2059,7 +2059,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Ένα μέρος του ιστορικού αναμνήσεων δεν είναι διαθέσιμο. Εμφανίζεται το ιστορικό που έχει ληφθεί μέχρι τώρα.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Ιστορικό';
 
   @override
   String get undo => 'Αναίρεση';

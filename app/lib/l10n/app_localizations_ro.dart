@@ -2052,7 +2052,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'Istoric';
 
   @override
   String get undo => 'Anulează';

@@ -2026,7 +2026,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryHistoryPartial => 'بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'السجل';
 
   @override
   String get undo => 'تراجع';

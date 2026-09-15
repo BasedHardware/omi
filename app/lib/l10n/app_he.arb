@@ -10822,7 +10822,7 @@
     "speechProfileTopicGoal": "מה המטרה שלכם לטווח הארוך?",
     "speechToTextUnavailableDesc": "המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.",
     "memoryHistoryPartial": "חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.",
-    "memoryHistory": "History",
+    "memoryHistory": "היסטוריה",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

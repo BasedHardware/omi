@@ -3256,7 +3256,7 @@
     "speechProfileTopicGoal": "Mikä on pitkän aikavälin tavoitteesi?",
     "speechToTextUnavailableDesc": "Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.",
     "memoryHistoryPartial": "Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.",
-    "memoryHistory": "History",
+    "memoryHistory": "Historia",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },

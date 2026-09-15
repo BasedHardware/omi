@@ -2041,7 +2041,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'بخشی از تاریخچهٔ خاطرات در دسترس نیست. تاریخچهٔ دریافت‌شده تا این لحظه نمایش داده می‌شود.';
 
   @override
-  String get memoryHistory => 'History';
+  String get memoryHistory => 'تاریخچه';
 
   @override
   String get undo => 'بازگشت';

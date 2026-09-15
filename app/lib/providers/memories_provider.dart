@@ -141,6 +141,11 @@ class MemoriesProvider extends ChangeNotifier {
   bool _inFlightLoadDeviceScoped = false;
   MemoryCollectionView _inFlightLoadView = MemoryCollectionView.usefulNow;
 
+  /// True while a history continuation is in flight. A second concurrent
+  /// load-more must not read the same offset page and advance the offset
+  /// again; it returns and the next tap continues from the completed page.
+  bool _loadingMoreHistory = false;
+
   MemoriesProvider({
     FetchMemoriesRequest? fetchMemoriesRequest,
     FetchMemoriesCursorRequest? fetchMemoriesCursorRequest,
@@ -837,35 +842,39 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
-  /// Continue the bounded offset history projection from its last page.
-  /// Truncated pages remain explicitly partial until a later page completes.
   Future<void> loadMoreHistory({int limit = 500}) async {
     if (_filterThisDeviceOnly || !_ledgerHistorySupported || !_ledgerHistoryHasMore) {
       return;
     }
-    final generation = _sessionGeneration;
-    final cursor = _ledgerHistoryNextCursor;
-    final result = await _fetchHistoryPage(
-      limit: limit,
-      offset: _ledgerHistoryOffset,
-      cursor: cursor,
-    );
-    // Continuation pages carry the same capability contract as the initial
-    // page; do not let a stale true value survive a missing/false header.
-    if (generation != _sessionGeneration) return;
-    _beliefEnabled = result.beliefEnabled;
-    if (!result.supported) return;
+    if (_loadingMoreHistory) return;
+    _loadingMoreHistory = true;
+    try {
+      final generation = _sessionGeneration;
+      final cursor = _ledgerHistoryNextCursor;
+      final result = await _fetchHistoryPage(
+        limit: limit,
+        offset: _ledgerHistoryOffset,
+        cursor: cursor,
+      );
+      // Continuation pages carry the same capability contract as the initial
+      // page; do not let a stale true value survive a missing/false header.
+      if (generation != _sessionGeneration) return;
+      _beliefEnabled = result.beliefEnabled;
+      if (!result.supported) return;
 
-    final existing = _memories.map((memory) => memory.id).toSet();
-    _memories.addAll(
-      result.memories.where((memory) => existing.add(memory.id)),
-    );
-    _ledgerHistoryOffset += result.memories.length;
-    _ledgerHistoryNextCursor = result.nextCursor;
-    _ledgerHistoryHasMore =
-        result.nextCursor != null || result.truncated || (cursor == null && result.memories.length >= limit);
-    _ledgerHistoryTruncated = result.truncated || _ledgerHistoryHasMore;
-    _setCategories();
+      final existing = _memories.map((memory) => memory.id).toSet();
+      _memories.addAll(
+        result.memories.where((memory) => existing.add(memory.id)),
+      );
+      _ledgerHistoryOffset += result.memories.length;
+      _ledgerHistoryNextCursor = result.nextCursor;
+      _ledgerHistoryHasMore =
+          result.nextCursor != null || result.truncated || (cursor == null && result.memories.length >= limit);
+      _ledgerHistoryTruncated = result.truncated || _ledgerHistoryHasMore;
+      _setCategories();
+    } finally {
+      _loadingMoreHistory = false;
+    }
   }
 
   /// Sync pending memories to server when online
