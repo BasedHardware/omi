@@ -2278,6 +2278,32 @@ test('fails closed for malformed GET geolocation', async () => {
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('names Flutter ActionItemsTab empty GET descriptions', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {description: '', completed: false},
+          {description: ' \t', completed: true},
+          {description: '\u0085', completed: false},
+          '',
+          'Plain reminder',
+        ],
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).actionItems,
+  ).toEqual([
+    {description: '', completed: false},
+    {description: ' \t', completed: true},
+    {description: '\u0085', completed: false},
+    {description: 'Plain reminder', completed: false},
+  ]);
+});
+
 test('keeps GET action items and drops deleted rows', async () => {
   mockRequest.mockResolvedValue(
     response({

@@ -1622,7 +1622,7 @@ test('legacy conversation details name GET action items without a write toggle',
   expect(copy).not.toContain('in_progress');
 });
 
-test('legacy conversation details name Flutter ActionItemsTab empty chrome for whitespace-only GET action items', () => {
+test('legacy conversation details name Flutter ActionItemsTab empty GET descriptions', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -1639,17 +1639,28 @@ test('legacy conversation details name Flutter ActionItemsTab empty chrome for w
     },
     reload: jest.fn(),
   });
-  const copy = text(
-    render({
-      apiContract: 'omi',
-      conversation: {...conversation, id: 'old-1'},
-    }),
-  );
-  expect(copy).not.toContain(conversationActionItemsTodoCopy());
-  expect(copy).toContain(conversationActionItemsEmptyCopy());
-  expect(copy).toContain(conversationActionItemsEmptyDescriptionCopy());
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  const emptyDescriptions = view.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyDescriptions.length).toBeGreaterThan(0);
+  expect(copy).toContain(conversationActionItemsTodoCopy());
+  expect(copy).toContain(conversationActionItemsCompletedCopy());
+  expect(copy).toContain(conversationActionItemsNoCompletedCopy());
+  expect(copy).not.toContain(conversationActionItemsEmptyCopy());
+  expect(copy).not.toContain(conversationActionItemsEmptyDescriptionCopy());
   expect(copy).not.toContain(conversationActionItemsNoPendingCopy());
-  expect(copy).not.toContain(conversationActionItemsNoCompletedCopy());
   expect(copy).not.toContain('\u0085');
   expect(copy).not.toContain('Create Action Item');
 });

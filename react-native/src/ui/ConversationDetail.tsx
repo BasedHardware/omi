@@ -290,13 +290,10 @@ function LegacyConversationBody({
     );
   }
   const detail = result.value;
-  const actionItems = (detail.actionItems ?? []).flatMap(item => {
-    const description = visibleDisplayText(item.description);
-    if (description === '') {
-      return [];
-    }
-    return [{...item, description}];
-  });
+  const actionItems = (detail.actionItems ?? []).map(item => ({
+    ...item,
+    description: visibleDisplayText(item.description),
+  }));
   const pendingActionItems = actionItems.filter(item => !item.completed);
   const completedActionItems = actionItems.filter(item => item.completed);
   const showLegacyClocks =
