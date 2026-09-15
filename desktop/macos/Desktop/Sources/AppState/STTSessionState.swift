@@ -53,8 +53,9 @@ struct STTSessionState: Equatable {
   /// in 12 of 20 utterances on-device against 19 of 20 on the cloud lane, which reaches
   /// `/v4/listen` — and that path prepends "Omi" to the STT keyword vocabulary server-side
   /// (`backend/utils/listen_session_bootstrap.py`), so the recognizer is told the name.
-  /// Seven of the eight on-device misses came back as "Only", which cannot be accepted as
-  /// a rendering — it opens ordinary sentences.
+  /// Seven of the eight on-device misses came back as "Only". Because "Only" also opens
+  /// ordinary sentences, the parser recovers it only when a command follows
+  /// (`WakeWordSegmentParser.commandShapedRenderings`); the 12 of 20 predates that recovery.
   ///
   /// Off by default. It trades on-device transcription for cloud transcription while the
   /// wake word is enabled, which is a privacy and cost decision, not a technical one.

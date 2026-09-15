@@ -249,7 +249,8 @@ final class STTSessionStateTests: XCTestCase {
   /// (`backend/utils/listen_session_bootstrap.py`). Measured on one machine, same script
   /// and voices, only the lane changed: usable in 12 of 20 utterances on-device against
   /// 19 of 20 on the cloud lane. Seven of the eight on-device misses came back as "Only",
-  /// which cannot be accepted as a rendering because it opens ordinary sentences.
+  /// which the parser recovers only when a command follows, since "Only" also opens
+  /// ordinary sentences. The 12 of 20 predates that recovery.
   func testWakeWordOptInResolvesToCloudOnAppleSilicon() {
     let state = STTSessionState()
     XCTAssertEqual(
