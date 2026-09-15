@@ -948,7 +948,6 @@ test('conversation-detail history names Flutter FilesHandlerWidget empty GET nam
   );
   expect(textOf(renderer)).toContain('You');
   expect(textOf(renderer)).not.toContain('Attachment name unavailable');
-  expect(textOf(renderer)).not.toContain('You ·');
   expect(textOf(renderer)).not.toContain('Size unavailable');
 });
 

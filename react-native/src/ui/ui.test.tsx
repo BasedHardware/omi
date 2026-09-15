@@ -1323,6 +1323,66 @@ test('chat history names GET image file thumbnails', () => {
   });
 });
 
+test('chat history names Flutter FilesHandlerWidget padded GET image thumbnails instead of remapping to a CDN chip', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-padded-photo',
+        text: 'Here is the photo.',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+        attachments: [
+          {
+            id: 'att-photo',
+            displayName: 'photo.png',
+            mediaType: 'image/png',
+            thumbnail: 'https://cdn.example/photo.png',
+          },
+          {
+            id: 'att-padded',
+            displayName: 'padded.png',
+            mediaType: 'image/png',
+            thumbnail: '  https://cdn.example/photo.png  ',
+          },
+          {
+            id: 'att-lead',
+            displayName: 'lead.png',
+            mediaType: 'image/png',
+            thumbnail: ' http://cdn.example/photo.jpg ',
+          },
+          {
+            id: 'att-trail',
+            displayName: 'trail.png',
+            mediaType: 'image/png',
+            thumbnail: 'https://cdn.example/photo.png ',
+          },
+          {
+            id: 'att-https',
+            displayName: 'https.png',
+            mediaType: 'image/png',
+            thumbnail: 'HTTPS://cdn.example/photo.png',
+          },
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const uris = renderer.root
+    .findAll(node => String(node.type) === 'Image')
+    .map(node => node.props.source?.uri);
+  expect(uris).toEqual([
+    'https://cdn.example/photo.png',
+    'https://cdn.example/photo.png ',
+    'HTTPS://cdn.example/photo.png',
+  ]);
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('an empty-named chat attachment names Flutter FilesHandlerWidget empty GET names', () => {
   const renderer = render(
     <ChatMessageRow

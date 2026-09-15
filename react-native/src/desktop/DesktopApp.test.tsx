@@ -1231,6 +1231,64 @@ test('desktop chat names Flutter empty GET chat text', () => {
   expect(emptyBodies.length).toBeGreaterThan(0);
 });
 
+test('desktop chat names Flutter FilesHandlerWidget padded GET image thumbnails instead of remapping to a CDN chip', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'human-padded-photo',
+        text: 'Here is the photo.',
+        sender: 'human',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: null,
+        attachments: [
+          {
+            id: 'att-photo',
+            displayName: 'photo.png',
+            mediaType: 'image/png',
+            thumbnail: 'https://cdn.example/photo.png',
+          },
+          {
+            id: 'att-padded',
+            displayName: 'padded.png',
+            mediaType: 'image/png',
+            thumbnail: '  https://cdn.example/photo.png  ',
+          },
+          {
+            id: 'att-lead',
+            displayName: 'lead.png',
+            mediaType: 'image/png',
+            thumbnail: ' http://cdn.example/photo.jpg ',
+          },
+          {
+            id: 'att-trail',
+            displayName: 'trail.png',
+            mediaType: 'image/png',
+            thumbnail: 'https://cdn.example/photo.png ',
+          },
+          {
+            id: 'att-https',
+            displayName: 'https.png',
+            mediaType: 'image/png',
+            thumbnail: 'HTTPS://cdn.example/photo.png',
+          },
+        ],
+      },
+    ],
+  });
+  const uris = renderer.root
+    .findAll(node => String(node.type) === 'Image')
+    .map(node => node.props.source?.uri)
+    .filter(
+      (uri): uri is string =>
+        typeof uri === 'string' && uri.includes('cdn.example/photo'),
+    );
+  expect(uris).toEqual([
+    'https://cdn.example/photo.png',
+    'https://cdn.example/photo.png ',
+    'HTTPS://cdn.example/photo.png',
+  ]);
+});
+
 test('desktop chat names Flutter FilesHandlerWidget empty GET names', () => {
   const renderer = renderDesktop({
     messages: [

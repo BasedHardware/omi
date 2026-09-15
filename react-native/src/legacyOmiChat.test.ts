@@ -448,6 +448,41 @@ test('old chat history keeps GET files thumbnail and omits empty paths', () => {
   ]);
 });
 
+test('old chat history keeps Flutter FilesHandlerWidget padded GET files thumbnail', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'file-padded-thumb',
+        sender: 'human',
+        text: 'Here is the photo.',
+        created_at: '2026-09-07T01:02:03Z',
+        files_id: ['att-padded'],
+        files: [
+          {
+            id: 'att-padded',
+            name: '  notes.txt  ',
+            mime_type: 'image/png',
+            openai_file_id: 'file-padded',
+            created_at: '2026-09-07T01:00:00Z',
+            thumbnail: '  https://cdn.example/photo.png  ',
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'file-padded-thumb')?.attachments,
+  ).toEqual([
+    {
+      id: 'att-padded',
+      displayName: '  notes.txt  ',
+      mediaType: 'image/png',
+      thumbnail: '  https://cdn.example/photo.png  ',
+    },
+  ]);
+});
+
 test('old chat history rejects malformed GET files thumbnail', () => {
   expect(() =>
     parseOmiHistory(

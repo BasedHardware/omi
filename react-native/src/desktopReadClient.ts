@@ -2375,7 +2375,7 @@ export function appListPrivateNameCopy(
 }
 
 export function chatAttachmentDisplayName(name: string): string {
-  return visibleDisplayText(name);
+  return name;
 }
 
 export function chatAttachmentThumbnailUrl(attachment: {
@@ -2386,7 +2386,7 @@ export function chatAttachmentThumbnailUrl(attachment: {
   if (typeof mediaType !== 'string' || !mediaType.includes('image')) {
     return null;
   }
-  const thumbnail = visibleDisplayText(attachment.thumbnail ?? '');
+  const thumbnail = attachment.thumbnail ?? '';
   if (thumbnail === '' || !/^https?:\/\//i.test(thumbnail)) {
     return null;
   }

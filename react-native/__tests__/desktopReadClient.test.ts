@@ -3688,7 +3688,7 @@ test('names Flutter ChatBlockLinkCard padded GET summaries instead of colliding 
   ).toEqual({eyebrow: 'Completed', title: 'padded', detail: 'padded'});
 });
 
-test('chat attachment thumbnails keep http image GET urls and omit local or non-image paths', () => {
+test('chat attachment thumbnails name Flutter FilesHandlerWidget padded GET http instead of remapping to a CDN chip', () => {
   expect(
     chatAttachmentThumbnailUrl({
       mediaType: 'image/png',
@@ -3698,9 +3698,51 @@ test('chat attachment thumbnails keep http image GET urls and omit local or non-
   expect(
     chatAttachmentThumbnailUrl({
       mediaType: 'image/jpeg',
-      thumbnail: ' http://cdn.example/photo.jpg ',
+      thumbnail: 'http://cdn.example/photo.jpg',
     }),
   ).toBe('http://cdn.example/photo.jpg');
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: 'https://cdn.example/photo.png ',
+    }),
+  ).toBe('https://cdn.example/photo.png ');
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/jpeg',
+      thumbnail: 'http://cdn.example/photo.jpg ',
+    }),
+  ).toBe('http://cdn.example/photo.jpg ');
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/jpeg',
+      thumbnail: ' http://cdn.example/photo.jpg ',
+    }),
+  ).toBeNull();
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: '  https://cdn.example/photo.png  ',
+    }),
+  ).toBeNull();
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: '\u0085https://cdn.example/photo.png',
+    }),
+  ).toBeNull();
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: 'HTTPS://cdn.example/photo.png',
+    }),
+  ).toBe('HTTPS://cdn.example/photo.png');
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/jpeg',
+      thumbnail: 'HTTP://cdn.example/photo.jpg',
+    }),
+  ).toBe('HTTP://cdn.example/photo.jpg');
   expect(
     chatAttachmentThumbnailUrl({
       mediaType: 'image/png',
@@ -3725,14 +3767,21 @@ test('chat attachment thumbnails keep http image GET urls and omit local or non-
       thumbnail: ' \t\n',
     }),
   ).toBeNull();
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: '',
+    }),
+  ).toBeNull();
 });
 
-test('chat attachment display name names Flutter empty GET names', () => {
+test('chat attachment display name names Flutter FilesHandlerWidget padded GET names', () => {
   expect(chatAttachmentDisplayName('')).toBe('');
-  expect(chatAttachmentDisplayName(' \t\n')).toBe('');
-  expect(chatAttachmentDisplayName('\u00A0')).toBe('');
-  expect(chatAttachmentDisplayName('\u0085')).toBe('');
-  expect(chatAttachmentDisplayName('  notes.txt  ')).toBe('notes.txt');
+  expect(chatAttachmentDisplayName(' \t\n')).toBe(' \t\n');
+  expect(chatAttachmentDisplayName('\u00A0')).toBe('\u00A0');
+  expect(chatAttachmentDisplayName('\u0085')).toBe('\u0085');
+  expect(chatAttachmentDisplayName('  notes.txt  ')).toBe('  notes.txt  ');
+  expect(chatAttachmentDisplayName('notes.txt')).toBe('notes.txt');
 });
 
 test('empty chat bodies still show attachment names from history', () => {
@@ -3757,7 +3806,18 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('');
+  ).toBe(' \t\n');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'completed',
+      attachments: [
+        {
+          displayName: '  notes.txt  ',
+        },
+      ],
+    }),
+  ).toBe('  notes.txt  ');
   expect(
     chatMessageDisplayText({
       text: '  Hello  ',
@@ -3858,7 +3918,7 @@ test('empty chat bodies still show attachment names from history', () => {
         },
       ],
     }),
-  ).toBe('');
+  ).toBe(' \t\n');
   expect(
     chatMessageDisplayText({
       text: '',
