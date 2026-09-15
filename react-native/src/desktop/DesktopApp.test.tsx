@@ -4481,7 +4481,7 @@ test('Settings names GET app changelogs without dismiss', async () => {
   const tree = renderedText(renderer);
   expect(tree).toContain("What's New in 1.2.0");
   expect(tree).toContain('🚀 · Faster sync · Uploads finish sooner.');
-  expect(tree).toContain('✨ · Offline replay');
+  expect(tree).toContain('✨ · Offline replay · ');
   expect(tree).not.toContain('Release notes');
   expect(tree).not.toContain('ann-1');
   expect(tree).not.toContain('Dismiss');

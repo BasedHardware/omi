@@ -3439,7 +3439,7 @@ test('Settings names Flutter ChangelogSheet empty GET app_version as What\'s New
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain("What's New in ");
-  expect(tree).toContain('✨ · Offline replay');
+  expect(tree).toContain('✨ · Offline replay · ');
   expect(tree).not.toContain('ann-empty-version');
   expect(tree).not.toContain("What's New in 1.2.0");
   expect(tree).not.toContain('Dismiss');
@@ -3471,6 +3471,39 @@ test('Settings names Flutter ChangelogSheet empty GET change titles without omit
   expect(tree).toContain("What's New in 1.2.0");
   expect(tree).toContain('✨ · Hidden empty title.');
   expect(tree).not.toContain('ann-empty');
+  expect(tree).not.toContain('Dismiss');
+});
+
+test('Settings names Flutter ChangelogSheet empty GET descriptions without omitting What\'s New', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'ann-empty-desc',
+            type: 'changelog',
+            app_version: '1.2.0',
+            content: {
+              changes: [
+                {title: 'Offline replay', description: ''},
+                {title: 'Whitespace description', description: ' \t'},
+              ],
+            },
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New in 1.2.0");
+  expect(tree).toContain('✨ · Offline replay · ');
+  expect(tree).toContain('✨ · Whitespace description · ');
+  expect(tree).not.toContain('ann-empty-desc');
   expect(tree).not.toContain('Dismiss');
 });
 
@@ -3507,7 +3540,7 @@ test('Settings names GET app changelogs without dismiss', async () => {
   const tree = textOf(renderer);
   expect(tree).toContain("What's New in 1.2.0");
   expect(tree).toContain('🚀 · Faster sync · Uploads finish sooner.');
-  expect(tree).toContain('✨ · Offline replay');
+  expect(tree).toContain('✨ · Offline replay · ');
   expect(tree).not.toContain('Release notes');
   expect(tree).not.toContain('ann-1');
   expect(tree).not.toContain('Dismiss');

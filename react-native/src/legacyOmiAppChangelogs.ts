@@ -55,7 +55,7 @@ export function appChangelogRowCopy(
   icon = '',
 ): string {
   const prefix = visibleDisplayText(icon);
-  const body = [title, description].filter(copy => copy !== '').join(' · ');
+  const body = title === '' ? description : `${title} · ${description}`;
   return prefix === '' ? body : body === '' ? prefix : `${prefix} · ${body}`;
 }
 
