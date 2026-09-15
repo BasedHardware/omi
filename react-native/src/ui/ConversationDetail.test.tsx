@@ -2814,10 +2814,11 @@ test('legacy conversation details name Flutter CalendarEventDetailsSheet empty G
     apiContract: 'omi',
     conversation: {...conversation, id: 'old-1'},
   });
-  const emptyTitles = view.root.findAll(
-    node => node.type === Text && node.props.children === '',
+  const whitespaceTitles = view.root.findAll(
+    node => node.type === Text && node.props.children === ' \t\n',
   );
-  expect(emptyTitles.length).toBeGreaterThan(0);
+  expect(whitespaceTitles.length).toBeGreaterThan(0);
+  expect(text(view)).toContain(' \t\n');
   expect(text(view)).toContain('3:00 PM – 4:00 PM');
   expect(text(view)).not.toContain('Calendar event unavailable');
   expect(text(view)).not.toContain('Event title unavailable');

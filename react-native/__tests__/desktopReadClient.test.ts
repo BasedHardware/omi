@@ -4050,11 +4050,11 @@ test('conversation calendar attendee chip names Flutter GetSummaryWidgets first 
 
 test('calendar event display title names Flutter empty GET titles', () => {
   expect(calendarEventDisplayTitle('')).toBe('');
-  expect(calendarEventDisplayTitle(' \t\n')).toBe('');
-  expect(calendarEventDisplayTitle('\u00A0')).toBe('');
-  expect(calendarEventDisplayTitle('\u0085')).toBe('');
+  expect(calendarEventDisplayTitle(' \t\n')).toBe(' \t\n');
+  expect(calendarEventDisplayTitle('\u00A0')).toBe('\u00A0');
+  expect(calendarEventDisplayTitle('\u0085')).toBe('\u0085');
   expect(calendarEventDisplayTitle(undefined)).toBe('');
-  expect(calendarEventDisplayTitle('  Standup  ')).toBe('Standup');
+  expect(calendarEventDisplayTitle('  Standup  ')).toBe('  Standup  ');
 });
 
 test('conversation unknown-app copy names Flutter catalog-miss attribution', () => {

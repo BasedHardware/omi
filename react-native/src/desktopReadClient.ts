@@ -743,7 +743,7 @@ export function conversationCalendarAttendeeChipName(attendee: string): string {
 export function calendarEventDisplayTitle(
   title: string | null | undefined,
 ): string {
-  return visibleDisplayText(title ?? '');
+  return title ?? '';
 }
 
 export function conversationCalendarAttendeesChipCopy(
