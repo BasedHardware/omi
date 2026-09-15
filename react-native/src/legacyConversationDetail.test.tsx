@@ -498,7 +498,7 @@ test('keeps GET calendar event when start_time or end_time uses hour-only offset
   });
 });
 
-test('names GET transcript translations and omits empty or missing lists', async () => {
+test('names Flutter TranscriptWidget empty GET translations', async () => {
   mockRequest.mockResolvedValue(
     response({
       ...fixture,
@@ -508,6 +508,8 @@ test('names GET transcript translations and omits empty or missing lists', async
           translations: [
             {lang: 'es', text: 'Hola alli'},
             {lang: 'fr', text: ' \t'},
+            {lang: 'de', text: ''},
+            {lang: 'it', text: '\u0085'},
           ],
         },
       ],
@@ -524,7 +526,33 @@ test('names GET transcript translations and omits empty or missing lists', async
         isUser: true,
         start: 0.25,
         end: 4.5,
-        translations: ['Hola alli'],
+        translations: ['Hola alli', '', '', ''],
+      },
+    ],
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          translations: [{lang: 'es', text: ''}],
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+        translations: [''],
       },
     ],
   });

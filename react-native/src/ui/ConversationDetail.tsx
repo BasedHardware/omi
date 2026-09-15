@@ -688,21 +688,14 @@ function LegacyConversationBody({
                   {segment.sttProvider}
                 </Text>
               ) : null}
-              {(segment.translations ?? []).flatMap((translation, tIndex) => {
-                const copy = visibleDisplayText(translation);
-                return copy === ''
-                  ? []
-                  : [
-                      <Text
-                        key={`translation-${index}-${tIndex}`}
-                        style={[styles.conversationDetailField, ink]}>
-                        {copy}
-                      </Text>,
-                    ];
-              })}
-              {(segment.translations ?? []).some(
-                translation => visibleDisplayText(translation) !== '',
-              ) ? (
+              {(segment.translations ?? []).map((translation, tIndex) => (
+                <Text
+                  key={`translation-${index}-${tIndex}`}
+                  style={[styles.conversationDetailField, ink]}>
+                  {visibleDisplayText(translation)}
+                </Text>
+              ))}
+              {(segment.translations ?? []).length > 0 ? (
                 <Text style={[styles.conversationDetailField, ink]}>
                   translated by omi
                 </Text>

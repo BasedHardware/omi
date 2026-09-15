@@ -3472,6 +3472,56 @@ test('legacy conversation details name a failed GET people instead of empty succ
   expect(copy).not.toContain('person-alex');
 });
 
+test('legacy conversation details name Flutter TranscriptWidget empty GET translations', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Hello there',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+              translations: ['\u0085'],
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  const emptyTranslations = view.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyTranslations.length).toBeGreaterThan(0);
+  expect(copy).toContain('Hello there');
+  expect(copy).toContain('translated by omi');
+  expect(copy).not.toContain('\u0085');
+});
+
 test('legacy conversation details name GET transcript translations without a notice dialog', () => {
   mockLegacy.mockReturnValue({
     result: {

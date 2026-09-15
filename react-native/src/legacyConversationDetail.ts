@@ -318,10 +318,7 @@ function segmentTranslations(value: unknown): string[] | undefined {
   for (const raw of value) {
     const row = object(raw);
     text(row.lang);
-    const copy = visibleDisplayText(text(row.text));
-    if (copy !== '') {
-      translations.push(copy);
-    }
+    translations.push(visibleDisplayText(text(row.text)));
   }
   return translations.length === 0 ? undefined : translations;
 }
