@@ -3377,6 +3377,101 @@ test('conversation list names GET omitted folder color as Flutter #6B7280 on the
   expect(textOf(renderer)).not.toContain('#6B7280');
 });
 
+test('conversation list names Flutter FolderTabs padded GET color as gray on the selected chip', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'folder-work',
+            name: 'Work',
+            color: '  #3b82f6  ',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                kind: 'conversation',
+                id: 'chat:work',
+                title: 'Work standup',
+                summary: 'Notes',
+                searchableText: 'Work standup\nNotes',
+                createdAt: '2026-09-07T00:00:00.000Z',
+                updatedAt: '2026-09-07T00:01:00.000Z',
+                startedAt: '2026-09-07T00:00:00.000Z',
+                finishedAt: null,
+                starred: false,
+                status: 'in_progress',
+                source: 'chat',
+                visibility: 'private',
+                locked: false,
+                discarded: false,
+                folderId: 'folder-work',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain('Work');
+  expect(textOf(renderer)).not.toContain('#3B82F6');
+  expect(textOf(renderer)).not.toContain('#6B7280');
+  const chip = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Show Work conversations',
+  );
+  await act(async () => {
+    chip.props.onPress();
+  });
+  const selectedChip = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Show Work conversations',
+  );
+  const selected = Object.assign(
+    {},
+    ...(typeof selectedChip.props.style === 'function'
+      ? selectedChip.props.style({pressed: false})
+      : [selectedChip.props.style]
+    )
+      .flat(Infinity)
+      .filter(entry => entry && typeof entry === 'object'),
+  );
+  expect(selected.backgroundColor).toBe('rgba(107, 114, 128, 0.15)');
+  expect(selected.backgroundColor).not.toBe('rgba(59, 130, 246, 0.15)');
+  expect(selected.borderColor).toBe('#6B7280');
+  const label = Object.assign(
+    {},
+    ...[selectedChip.findAllByType(Text)[0]?.props.style]
+      .flat(Infinity)
+      .filter(entry => entry && typeof entry === 'object'),
+  );
+  expect(label.color).toBe('#6B7280');
+  expect(textOf(renderer)).not.toContain('#3B82F6');
+  expect(textOf(renderer)).not.toContain('#6B7280');
+});
+
 test('conversation list names a failed GET folders instead of empty success', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/folders') {

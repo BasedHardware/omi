@@ -35,11 +35,10 @@ export function omiFolderHexColor(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  const color = value.trim();
-  if (!FOLDER_HEX_COLOR.test(color)) {
+  if (!FOLDER_HEX_COLOR.test(value)) {
     return undefined;
   }
-  return (color.startsWith('#') ? color : `#${color}`).toUpperCase();
+  return (value.startsWith('#') ? value : `#${value}`).toUpperCase();
 }
 
 export function omiFolderColorCopy(value: unknown): string | undefined {

@@ -2,6 +2,7 @@ import {
   loadOmiFolder,
   loadOmiFolderName,
   loadOmiFolderNames,
+  omiFolderHexColor,
   parseOmiFolderNames,
   parseOmiFolders,
 } from './legacyOmiFolders';
@@ -40,6 +41,35 @@ test('names Flutter FolderTabs empty GET names instead of omitting them', () => 
   expect(names.get('folder-empty')).toBe(' \t');
   expect(names.get('folder-next')).toBe('\u0085');
   expect(names.get('folder-blank')).toBe('');
+});
+
+test('names Flutter FolderTabs padded GET color as gray', () => {
+  expect(omiFolderHexColor('#3b82f6')).toBe('#3B82F6');
+  expect(omiFolderHexColor('00AA11')).toBe('#00AA11');
+  expect(omiFolderHexColor('  #3b82f6  ')).toBeUndefined();
+  expect(omiFolderHexColor('#3b82f6 ')).toBeUndefined();
+  expect(omiFolderHexColor('\u0085#3b82f6')).toBeUndefined();
+  expect(omiFolderHexColor('  00AA11  ')).toBeUndefined();
+  expect(omiFolderHexColor(' \t')).toBeUndefined();
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-exact', name: 'Exact', color: '#3b82f6'},
+        {id: 'folder-padded', name: 'Padded', color: '  #3b82f6  '},
+        {id: 'folder-trailing', name: 'Trailing', color: '#3b82f6 '},
+        {id: 'folder-next-line', name: 'Next line', color: '\u0085#3b82f6'},
+        {id: 'folder-hashless-padded', name: 'Hashless padded', color: '  00AA11  '},
+        {id: 'folder-hashless', name: 'Hashless', color: '00AA11'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'folder-exact', name: 'Exact', color: '#3B82F6'},
+    {id: 'folder-padded', name: 'Padded', color: '#6B7280'},
+    {id: 'folder-trailing', name: 'Trailing', color: '#6B7280'},
+    {id: 'folder-next-line', name: 'Next line', color: '#6B7280'},
+    {id: 'folder-hashless-padded', name: 'Hashless padded', color: '#6B7280'},
+    {id: 'folder-hashless', name: 'Hashless', color: '#00AA11'},
+  ]);
 });
 
 test('parses GET omitted folder color as Flutter #6B7280', () => {
