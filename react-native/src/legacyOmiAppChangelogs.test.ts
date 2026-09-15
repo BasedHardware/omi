@@ -52,12 +52,12 @@ test('parses GET app changelogs with Flutter omitted-icon ✨', () => {
     {
       key: 'ann-1:1',
       title: "What's New in 1.2.0",
-      copy: '✨ · Hidden empty title.',
+      copy: '✨ ·    · Hidden empty title.',
     },
     {
       key: 'ann-1:2',
       title: "What's New in 1.2.0",
-      copy: '✨ · Offline replay · ',
+      copy: '✨ · Offline replay ·  \t',
     },
     {
       key: 'ann-1:3',
@@ -106,7 +106,7 @@ test('names Flutter ChangelogSheet empty GET icons instead of omitting the prefi
     {
       key: 'ann-empty-icon:1',
       title: "What's New in 1.2.0",
-      copy: ' · Whitespace icon · Kept description.',
+      copy: ' \t · Whitespace icon · Kept description.',
     },
   ]);
 });
@@ -229,6 +229,8 @@ test('names Flutter ChangelogSheet empty GET change titles instead of omitting t
             changes: [
               {title: '  ', description: 'Hidden empty title.'},
               {title: '', description: ''},
+              {title: '\u0085', description: 'Next line title.'},
+              {title: '  padded  ', description: ''},
             ],
           },
         },
@@ -238,12 +240,22 @@ test('names Flutter ChangelogSheet empty GET change titles instead of omitting t
     {
       key: 'ann-empty:0',
       title: "What's New in 1.2.0",
-      copy: '✨ · Hidden empty title.',
+      copy: '✨ ·    · Hidden empty title.',
     },
     {
       key: 'ann-empty:1',
       title: "What's New in 1.2.0",
       copy: '✨',
+    },
+    {
+      key: 'ann-empty:2',
+      title: "What's New in 1.2.0",
+      copy: '✨ · \u0085 · Next line title.',
+    },
+    {
+      key: 'ann-empty:3',
+      title: "What's New in 1.2.0",
+      copy: '✨ ·   padded   · ',
     },
   ]);
 });
@@ -261,6 +273,7 @@ test('names Flutter ChangelogSheet empty GET descriptions instead of omitting th
             changes: [
               {title: 'Offline replay', description: ''},
               {title: 'Whitespace description', description: ' \t'},
+              {title: 'Next line description', description: '\u0085'},
             ],
           },
         },
@@ -275,7 +288,12 @@ test('names Flutter ChangelogSheet empty GET descriptions instead of omitting th
     {
       key: 'ann-empty-desc:1',
       title: "What's New in 1.2.0",
-      copy: '✨ · Whitespace description · ',
+      copy: '✨ · Whitespace description ·  \t',
+    },
+    {
+      key: 'ann-empty-desc:2',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Next line description · \u0085',
     },
   ]);
 });

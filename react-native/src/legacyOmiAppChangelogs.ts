@@ -150,7 +150,7 @@ export function appChangelogRowCopy(
   description: string,
   icon = '',
 ): string {
-  const prefix = visibleDisplayText(icon);
+  const prefix = icon;
   const body = title === '' ? description : `${title} · ${description}`;
   return body === '' ? prefix : `${prefix} · ${body}`;
 }
@@ -237,15 +237,15 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
         projectable = false;
         break;
       }
-      const title = visibleDisplayText(text(change.title, 1_000_000));
+      const title = text(change.title, 1_000_000);
       const description =
         change.description === undefined || change.description === null
           ? ''
-          : visibleDisplayText(text(change.description, 1_000_000));
+          : text(change.description, 1_000_000);
       const icon =
         change.icon === undefined || change.icon === null
           ? '✨'
-          : visibleDisplayText(text(change.icon, 1_000_000));
+          : text(change.icon, 1_000_000);
       pending.push({
         key: `${id}:${changeIndex}`,
         title: heading,

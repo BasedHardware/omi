@@ -3994,7 +3994,7 @@ test('Settings names Flutter ChangelogSheet empty GET change titles without omit
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain("What's New in 1.2.0");
-  expect(tree).toContain('✨ · Hidden empty title.');
+  expect(tree).toContain('✨ ·    · Hidden empty title.');
   expect(tree).not.toContain('ann-empty');
   expect(tree).not.toContain('Dismiss');
 });
@@ -4028,7 +4028,7 @@ test('Settings names Flutter ChangelogSheet empty GET descriptions without omitt
   const tree = textOf(renderer);
   expect(tree).toContain("What's New in 1.2.0");
   expect(tree).toContain('✨ · Offline replay · ');
-  expect(tree).toContain('✨ · Whitespace description · ');
+  expect(tree).toContain('✨ · Whitespace description ·  \t');
   expect(tree).not.toContain('ann-empty-desc');
   expect(tree).not.toContain('Dismiss');
 });
@@ -4066,7 +4066,7 @@ test('Settings names Flutter ChangelogSheet empty GET icons without omitting Wha
   const tree = textOf(renderer);
   expect(tree).toContain("What's New in 1.2.0");
   expect(tree).toContain(' · Empty icon · Kept description.');
-  expect(tree).toContain(' · Whitespace icon · Kept description.');
+  expect(tree).toContain(' \t · Whitespace icon · Kept description.');
   expect(tree).not.toContain('✨ · Empty icon');
   expect(tree).not.toContain('ann-empty-icon');
   expect(tree).not.toContain('Dismiss');
