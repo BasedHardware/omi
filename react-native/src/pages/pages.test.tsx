@@ -3234,6 +3234,34 @@ test('Settings names a failed integrations GET instead of empty success', async 
   expect(labelsOf(renderer).includes('Connect')).toBe(false);
 });
 
+test('Settings names Flutter ChangelogSheet empty GET app_version as What\'s New in ', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'ann-empty-version',
+            type: 'changelog',
+            app_version: '',
+            content: {changes: [{title: 'Offline replay', description: ''}]},
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New in ");
+  expect(tree).toContain('✨ · Offline replay');
+  expect(tree).not.toContain('ann-empty-version');
+  expect(tree).not.toContain("What's New in 1.2.0");
+  expect(tree).not.toContain('Dismiss');
+});
+
 test('Settings names Flutter ChangelogSheet empty GET change titles without omitting What\'s New', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

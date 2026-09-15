@@ -41,6 +41,10 @@ export function appChangelogHeading(version: string): string {
   return copy === '' ? "What's New" : `What's New in ${copy}`;
 }
 
+export function appChangelogLoadedHeading(version: string): string {
+  return `What's New in ${visibleDisplayText(version)}`;
+}
+
 export function appChangelogsLoadErrorCopy(): string {
   return 'Failed to load changelogs';
 }
@@ -93,7 +97,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
       content.changes === undefined || content.changes === null
         ? []
         : (content.changes as unknown[]);
-    const heading = appChangelogHeading(version);
+    const heading = appChangelogLoadedHeading(version);
     const pending: OmiAppChangelogRow[] = [];
     let changeIndex = 0;
     let projectable = true;

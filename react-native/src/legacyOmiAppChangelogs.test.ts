@@ -1,5 +1,6 @@
 import {
   appChangelogHeading,
+  appChangelogLoadedHeading,
   appChangelogsLoadErrorCopy,
   loadOmiAppChangelogs,
   parseOmiAppChangelogs,
@@ -70,6 +71,39 @@ test('parses GET app changelogs with Flutter omitted-icon ✨', () => {
   expect(appChangelogHeading('')).toBe("What's New");
   expect(appChangelogHeading('  ')).toBe("What's New");
   expect(appChangelogsLoadErrorCopy()).toBe('Failed to load changelogs');
+});
+
+test('names Flutter ChangelogSheet empty GET app_version as What\'s New in ', () => {
+  expect(appChangelogLoadedHeading('')).toBe("What's New in ");
+  expect(appChangelogLoadedHeading('  ')).toBe("What's New in ");
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-empty-version',
+          type: 'changelog',
+          app_version: ' \t',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+        {
+          id: 'ann-omitted-version',
+          type: 'changelog',
+          content: {changes: [{title: 'Faster sync', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-empty-version:0',
+      title: "What's New in ",
+      copy: '✨ · Offline replay',
+    },
+    {
+      key: 'ann-omitted-version:0',
+      title: "What's New in ",
+      copy: '✨ · Faster sync',
+    },
+  ]);
 });
 
 test('names Flutter ChangelogSheet empty GET change titles instead of omitting the announcement', () => {
