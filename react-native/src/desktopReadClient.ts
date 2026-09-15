@@ -788,7 +788,10 @@ export function conversationPhotoChrome(photo: {
     return conversationPhotoAnalyzingCopy();
   }
   const caption = visibleDisplayText(photo.description);
-  return caption === '' ? undefined : caption;
+  if (caption !== '') {
+    return caption;
+  }
+  return photo.description === '' ? undefined : '';
 }
 
 export function conversationPhotoDataUri(

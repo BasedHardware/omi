@@ -1377,7 +1377,11 @@ test('keeps GET photo counts and captions and omits empty lists', async () => {
   expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
     {
       photoCount: 3,
-      photoCaptions: ['Whiteboard notes', conversationPhotoAnalyzingCopy()],
+      photoCaptions: [
+        'Whiteboard notes',
+        '',
+        conversationPhotoAnalyzingCopy(),
+      ],
     },
   );
   mockRequest.mockResolvedValue(
@@ -1515,9 +1519,39 @@ test('names GET discarded photos and photos still analyzing', async () => {
         'Whiteboard notes',
         conversationPhotoDiscardedCopy(),
         conversationPhotoAnalyzingCopy(),
+        '',
       ],
     },
   );
+});
+
+test('names Flutter MediaViewerPage whitespace GET photo descriptions instead of omitting the caption', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [
+        {description: 'Whiteboard notes', base64: ''},
+        {description: ' \t', base64: ''},
+        {description: '', base64: ''},
+        {id: 'pending', base64: ''},
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      photoCount: 4,
+      photoCaptions: [
+        'Whiteboard notes',
+        '',
+        conversationPhotoAnalyzingCopy(),
+      ],
+    },
+  );
+  const whitespace = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(whitespace.photoRows?.[1]).toEqual(
+    expect.objectContaining({caption: ''}),
+  );
+  expect(whitespace.photoRows?.[2]).not.toHaveProperty('caption');
 });
 
 test('names GET invalid inline photo File unavailable and omits storage-only photos', async () => {

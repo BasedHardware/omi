@@ -3179,6 +3179,46 @@ test('legacy conversation details name GET empty inline photo File unavailable',
   expect(copy).toContain('Stored empty');
 });
 
+test('legacy conversation details name Flutter MediaViewerPage whitespace GET photo descriptions', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        photoCount: 2,
+        photoCaptions: ['Whiteboard notes', ''],
+        photoRows: [{caption: 'Whiteboard notes'}, {caption: ''}],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  expect(copy).toContain('Whiteboard notes');
+  expect(copy).not.toContain('2 photos');
+  const emptyCaptions = view.root.findAll(node => {
+    if (node.type !== Text) {
+      return false;
+    }
+    const children = node.props.children;
+    return (
+      children === '' ||
+      (Array.isArray(children) && children.some(child => child === ''))
+    );
+  });
+  expect(emptyCaptions.length).toBeGreaterThan(0);
+});
+
 test('legacy conversation details name GET folder name and Flutter No Folder otherwise', () => {
   mockLegacy.mockReturnValue({
     result: {

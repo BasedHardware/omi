@@ -41,6 +41,9 @@ import {
   conversationGroupLabel,
   conversationCaptureCopy,
   conversationPhotoCountCopy,
+  conversationPhotoChrome,
+  conversationPhotoAnalyzingCopy,
+  conversationPhotoDiscardedCopy,
   conversationDiscardedPhotoCopy,
   conversationStatusCopy,
   conversationListStatusCopy,
@@ -3652,6 +3655,27 @@ test('conversation photo count copy names GET photos without requiring discarded
   expect(conversationPhotoCountCopy({photoCount: 1})).toBe('1 photos');
   expect(conversationPhotoCountCopy({photoCount: 0})).toBeNull();
   expect(conversationPhotoCountCopy({})).toBeNull();
+});
+
+test('names Flutter MediaViewerPage whitespace GET photo descriptions instead of omitting the caption', () => {
+  expect(
+    conversationPhotoChrome({discarded: false, description: ' \t'}),
+  ).toBe('');
+  expect(
+    conversationPhotoChrome({discarded: false, description: '\u0085'}),
+  ).toBe('');
+  expect(
+    conversationPhotoChrome({discarded: false, description: ''}),
+  ).toBeUndefined();
+  expect(
+    conversationPhotoChrome({discarded: false, description: 'Whiteboard notes'}),
+  ).toBe('Whiteboard notes');
+  expect(conversationPhotoChrome({discarded: false})).toBe(
+    conversationPhotoAnalyzingCopy(),
+  );
+  expect(
+    conversationPhotoChrome({discarded: true, description: ' \t'}),
+  ).toBe(conversationPhotoDiscardedCopy());
 });
 
 test('conversation discarded photo copy names Flutter ConversationListItem discarded photos only', () => {

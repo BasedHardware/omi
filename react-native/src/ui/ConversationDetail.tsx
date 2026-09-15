@@ -511,14 +511,19 @@ function LegacyConversationBody({
         detail.photoRows ??
         (detail.photoCaptions ?? []).map(caption => ({caption}))
       ).flatMap((photo, index) => {
-        const caption = visibleDisplayText(photo.caption ?? '');
+        const caption =
+          photo.caption === undefined
+            ? undefined
+            : visibleDisplayText(photo.caption);
         const imageUri = photo.imageUri;
         const nodes: React.JSX.Element[] = [];
         if (imageUri !== undefined && imageUri !== '') {
           nodes.push(
             <Image
               key={`photo-image-${index}`}
-              accessibilityLabel={caption === '' ? 'Photo' : caption}
+              accessibilityLabel={
+                caption === undefined || caption === '' ? 'Photo' : caption
+              }
               source={{uri: imageUri}}
               style={styles.chatAttachmentImage}
             />,
@@ -537,7 +542,7 @@ function LegacyConversationBody({
             </Text>,
           );
         }
-        if (caption !== '') {
+        if (caption !== undefined) {
           nodes.push(
             <Text
               key={`photo-caption-${index}`}
