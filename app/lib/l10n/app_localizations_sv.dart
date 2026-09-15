@@ -519,6 +519,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get doubleTap => 'Dubbeltryck';
 
   @override
+  String get deviceButtonActions => 'Åtgärder för enhetsknappen';
+
+  @override
+  String get deviceButtonActionsDescription => 'Tillåt att knapptryck styr inspelning och röstkommandon';
+
+  @override
   String get ledBrightness => 'LED-ljusstyrka';
 
   @override

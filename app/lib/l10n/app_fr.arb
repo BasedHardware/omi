@@ -164,6 +164,8 @@
     "modelNumber": "Numéro de modèle",
     "manufacturer": "Fabricant",
     "doubleTap": "Double appui",
+    "deviceButtonActions": "Actions du bouton de l’appareil",
+    "deviceButtonActionsDescription": "Autoriser le bouton à contrôler l’enregistrement et les commandes vocales",
     "ledBrightness": "Luminosité LED",
     "micGain": "Gain du micro",
     "disconnect": "Déconnecter",

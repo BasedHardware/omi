@@ -518,6 +518,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get doubleTap => 'দ্বিগুণ ট্যাপ';
 
   @override
+  String get deviceButtonActions => 'ডিভাইস বোতামের কার্যক্রম';
+
+  @override
+  String get deviceButtonActionsDescription => 'বোতাম চাপ দিয়ে রেকর্ডিং ও ভয়েস কমান্ড নিয়ন্ত্রণের অনুমতি দিন';
+
+  @override
   String get ledBrightness => 'LED উজ্জ্বলতা';
 
   @override

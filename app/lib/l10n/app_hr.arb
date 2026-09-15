@@ -661,6 +661,8 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Dvostruki dodir",
+    "deviceButtonActions": "Radnje gumba uređaja",
+    "deviceButtonActionsDescription": "Dopusti da pritisci gumba upravljaju snimanjem i glasovnim naredbama",
     "@doubleTap": {
         "description": "Double tap action label"
     },

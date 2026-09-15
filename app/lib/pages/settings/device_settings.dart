@@ -734,6 +734,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Widget _buildCustomizationSection(BtDevice? device, DeviceProvider provider) {
     final doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+    final deviceButtonEnabled = SharedPreferencesUtil().deviceButtonEnabled;
     final supportsFind = device?.type == DeviceType.omi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
 
     return Container(
@@ -757,6 +758,21 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
           ],
+          _buildProfileStyleItem(
+            key: const Key('device_button_enabled_switch'),
+            icon: FontAwesomeIcons.circleDot,
+            title: context.l10n.deviceButtonActions,
+            subtitle: context.l10n.deviceButtonActionsDescription,
+            showChevron: false,
+            trailing: Switch.adaptive(
+              value: deviceButtonEnabled,
+              onChanged: (value) {
+                SharedPreferencesUtil().deviceButtonEnabled = value;
+                setState(() {});
+              },
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
           // Double Tap
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.handPointer,

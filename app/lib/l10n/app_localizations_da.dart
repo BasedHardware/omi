@@ -519,6 +519,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get doubleTap => 'Dobbelttryk';
 
   @override
+  String get deviceButtonActions => 'Handlinger for enhedsknap';
+
+  @override
+  String get deviceButtonActionsDescription => 'Tillad, at knaptryk styrer optagelse og stemmekommandoer';
+
+  @override
   String get ledBrightness => 'LED-lysstyrke';
 
   @override

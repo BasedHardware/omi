@@ -518,6 +518,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get doubleTap => 'Двайны дотык';
 
   @override
+  String get deviceButtonActions => 'Дзеянні кнопкі прылады';
+
+  @override
+  String get deviceButtonActionsDescription => 'Дазволіць націсканням кнопкі кіраваць запісам і галасавымі камандамі';
+
+  @override
   String get ledBrightness => 'Яркасць LED';
 
   @override
