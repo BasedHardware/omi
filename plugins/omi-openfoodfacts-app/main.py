@@ -210,19 +210,23 @@ def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
     raw_nutri = product.get("nutriscore_grade")
     nutri_score = (
         str(raw_nutri).upper().strip()
-        if raw_nutri is not None and isinstance(raw_nutri, (str, int, float))
+        if raw_nutri is not None
+        and isinstance(raw_nutri, (str, int, float))
+        and not isinstance(raw_nutri, bool)
         else None
     )
 
     raw_eco = product.get("ecoscore_grade")
     eco_score = (
         str(raw_eco).upper().strip()
-        if raw_eco is not None and isinstance(raw_eco, (str, int, float))
+        if raw_eco is not None
+        and isinstance(raw_eco, (str, int, float))
+        and not isinstance(raw_eco, bool)
         else None
     )
 
     nova_group = product.get("nova_group")
-    if not isinstance(nova_group, (int, float)):
+    if not isinstance(nova_group, (int, float)) or isinstance(nova_group, bool):
         nova_group = None
 
     return {

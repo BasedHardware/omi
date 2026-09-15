@@ -479,7 +479,7 @@ class TestOpenFoodFactsApp(unittest.TestCase):
         res = self.main._summarize_product(weird_prod)
         self.assertEqual(res["name"], "Test Item")
         self.assertEqual(res["nutri_score"], "123")
-        self.assertEqual(res["eco_score"], "FALSE")
+        self.assertIsNone(res["eco_score"])
         self.assertIsNone(res["nova_group"])
         self.assertEqual(res["allergens"], [])
 
@@ -557,6 +557,14 @@ class TestOpenFoodFactsApp(unittest.TestCase):
             self.assertEqual(ca.barcode, "123")
         except ImportError:
             pass
+
+    def test_requirements_declares_httpx(self):
+        """Verify httpx is declared in requirements.txt."""
+        req_path = os.path.join(PLUGIN_DIR, "requirements.txt")
+        self.assertTrue(os.path.exists(req_path))
+        with open(req_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("httpx", content)
 
 
 if __name__ == "__main__":
