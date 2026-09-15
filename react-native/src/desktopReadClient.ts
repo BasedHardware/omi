@@ -2237,7 +2237,7 @@ export function appDisplayName(name: string): string {
 }
 
 export function deviceDisplayName(name: string): string {
-  return visibleDisplayText(name);
+  return name;
 }
 
 export function deviceFoundShortIdCopy(id: string): string {

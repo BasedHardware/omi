@@ -1125,17 +1125,17 @@ test.each(['affordance', 'compact', 'overview'] as const)(
       expect(output).not.toContain('Device name unavailable');
       expect(
         renderer.root.findAll(
-          node => node.props.accessibilityLabel === 'Reconnect ',
+          node => node.props.accessibilityLabel === 'Reconnect  \t\n',
         ),
       ).not.toHaveLength(0);
       expect(
         renderer.root.findAll(
-          node => node.props.accessibilityLabel === 'Forget ',
+          node => node.props.accessibilityLabel === 'Forget  \t\n',
         ),
       ).not.toHaveLength(0);
       expect(
         renderer.root.find(
-          node => node.props.accessibilityLabel === 'Forget ',
+          node => node.props.accessibilityLabel === 'Forget  \t\n',
         ).props.disabled,
       ).toBe(false);
     } finally {
@@ -1174,7 +1174,7 @@ test.each(['compact', 'overview'] as const)(
       expect(output).not.toContain('Device name unavailable');
       expect(
         renderer.root.findAll(
-          node => node.props.accessibilityLabel === 'Connect ',
+          node => node.props.accessibilityLabel === 'Connect  \t\n',
         ),
       ).not.toHaveLength(0);
       expect(

@@ -2037,7 +2037,7 @@ test('firmware update copy names GET latest without Available on current or draf
       {name: ' \t'},
       {name: ' \t'},
     ]),
-  ).toBe(' (AABBCC)');
+  ).toBe(' \t (AABBCC)');
   expect(deviceFoundSavedCopy()).toBe('Saved');
   expect(deviceFoundSavedChipCopy('saved-id', 'saved-id')).toBe('Saved');
   expect(deviceFoundSavedChipCopy('scan-id', 'saved-id')).toBeNull();
@@ -2767,9 +2767,9 @@ test('app image URLs keep GET http(s) images instead of inventing a GitHub host'
 
 test('device display name names Flutter empty GET names', () => {
   expect(deviceDisplayName('')).toBe('');
-  expect(deviceDisplayName(' \t\n')).toBe('');
-  expect(deviceDisplayName('\u00A0')).toBe('');
-  expect(deviceDisplayName('  Omi  ')).toBe('Omi');
+  expect(deviceDisplayName(' \t\n')).toBe(' \t\n');
+  expect(deviceDisplayName('\u00A0')).toBe('\u00A0');
+  expect(deviceDisplayName('  Omi  ')).toBe('  Omi  ');
 });
 
 test('device information copy names Flutter empty GET chips', () => {
