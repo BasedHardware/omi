@@ -11,6 +11,10 @@
 * [`quickstart.da.md`](quickstart.da.md) — dansk hurtigstartguide til omi-cli (Danish Quickstart).
 * [`quickstart.es.md`](quickstart.es.md) — primeros pasos con omi-cli en
   español.
+* [`quickstart.fr.md`](quickstart.fr.md) — guide de démarrage rapide omi-cli en français (French Quickstart).
+* [`quickstart.de.md`](quickstart.de.md) — deutsche Schnellstartanleitung für omi-cli (German Quickstart).
+* [`quickstart.pt.md`](quickstart.pt.md) — guia de início rápido do omi-cli em português (Portuguese Quickstart).
+* [`quickstart.it.md`](quickstart.it.md) — guida rapida a omi-cli in italiano (Italian Quickstart).
 * [`quickstart.tr.md`](quickstart.tr.md) — Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart).
 * [`quickstart.ru.md`](quickstart.ru.md) — быстрый старт с omi-cli на
   русском (Russian Quickstart).
