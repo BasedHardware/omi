@@ -254,6 +254,11 @@ function presentNullableMap(value: unknown): void {
   if (value === undefined || value === null) return;
   object(value);
 }
+function presentCaptureContext(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (typeof value !== 'object' || Array.isArray(value)) return;
+  presentNullableDate((value as Record<string, unknown>).captured_at);
+}
 function presentEvidence(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) throw new Error('Omi list is malformed');
@@ -263,6 +268,7 @@ function presentEvidence(value: unknown): void {
     text(evidence.independence_group);
     presentNullableMap(evidence.artifact_ref);
     presentDefaultDouble(evidence.capture_confidence);
+    presentNullableDate(evidence.captured_at);
     presentNullableString(evidence.client_device_id);
     presentNullableDate(evidence.created_at);
     presentDefaultString(evidence.extractor_id);
@@ -285,6 +291,8 @@ function validateGeneratedMemory(row: Record<string, unknown>): void {
   presentNullableMap(row.arguments);
   presentNullableDate(row.as_of);
   presentNullableString(row.belief_class);
+  presentNullableDate(row.belief_computed_at);
+  presentCaptureContext(row.capture_context);
   presentNullableString(row.canonical_memory_id);
   presentNullableDouble(row.capture_confidence);
   presentNullableStringList(row.capture_device_ids);

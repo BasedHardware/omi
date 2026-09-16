@@ -2164,6 +2164,109 @@ test('old memories name Flutter MemoriesPage fromJson padded GET capture_confide
   ).rejects.toThrow('Omi order is malformed');
 });
 
+test('old memories name Flutter MemoriesPage fromJson padded GET belief_computed_at instead of remapping to a memory chip', async () => {
+  const neighbor = omiMemory({
+    id: 'named',
+    content: 'Likes walking.',
+    conversation_id: null,
+  });
+  const row = omiMemory({
+    id: 'fact',
+    content: 'Prefers concise recaps.',
+    conversation_id: null,
+  });
+  const keptExact = await loadMemories(
+    backend([
+      {...row, belief_computed_at: '2026-09-07T00:00:00.000Z'},
+      neighbor,
+    ]).api,
+  );
+  expect(keptExact.items.map(item => item.id)).toEqual(['fact', 'named']);
+  const keptOmitted = await loadMemories(backend([row, neighbor]).api);
+  expect(keptOmitted.items.map(item => item.id)).toEqual(['fact', 'named']);
+  const keptNull = await loadMemories(
+    backend([{...row, belief_computed_at: null}, neighbor]).api,
+  );
+  expect(keptNull.items.map(item => item.id)).toEqual(['fact', 'named']);
+  for (const belief_computed_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    await expect(
+      loadMemories(backend([{...row, belief_computed_at}, neighbor]).api),
+    ).rejects.toThrow('Omi timestamp is malformed');
+  }
+  await expect(
+    loadMemories(
+      backend([
+        {
+          ...row,
+          evidence: [
+            {
+              evidence_id: 'ev-1',
+              independence_group: 'g1',
+              captured_at: '  2026-09-07T00:00:00.000Z  ',
+            },
+          ],
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadMemories(
+      backend([
+        {
+          ...row,
+          capture_context: {
+            source_type: 'conversation',
+            captured_at: '  2026-09-07T00:00:00.000Z  ',
+          },
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  const keptEvidenceExact = await loadMemories(
+    backend([
+      {
+        ...row,
+        evidence: [
+          {
+            evidence_id: 'ev-1',
+            independence_group: 'g1',
+            captured_at: '2026-09-07T00:00:00.000Z',
+          },
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptEvidenceExact.items.map(item => item.id)).toEqual([
+    'fact',
+    'named',
+  ]);
+  const keptContextExact = await loadMemories(
+    backend([
+      {
+        ...row,
+        capture_context: {
+          source_type: 'conversation',
+          captured_at: '2026-09-07T00:00:00.000Z',
+        },
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptContextExact.items.map(item => item.id)).toEqual([
+    'fact',
+    'named',
+  ]);
+});
+
 test('names Flutter ActionItemsPage empty GET ids instead of omitting neighboring tasks', async () => {
   const {api} = backend({
     action_items: [
