@@ -2,6 +2,8 @@
 
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
+* [`agent_quickstart.zh-CN.md`](agent_quickstart.zh-CN.md) — 面向 Agent 的
+  omi-cli 指南 (Simplified Chinese agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
