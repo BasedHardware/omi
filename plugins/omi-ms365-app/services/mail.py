@@ -38,7 +38,10 @@ def _extract_recipients(recipients: Any) -> list[dict[str, Any]]:
 
 
 async def list_recent(user_id: str, limit: int = 10, unread_only: bool = False) -> list[dict[str, Any]]:
-    safe_limit = max(1, min(int(limit), 50))
+    try:
+        safe_limit = max(1, min(int(limit), 50))
+    except (ValueError, TypeError):
+        safe_limit = 10
     async with GraphClient(user_id) as g:
         params: dict[str, Any] = {
             "$top": safe_limit,
@@ -53,8 +56,11 @@ async def list_recent(user_id: str, limit: int = 10, unread_only: bool = False) 
 
 
 async def search(user_id: str, query: str, limit: int = 10) -> list[dict[str, Any]]:
-    safe_limit = max(1, min(int(limit), 50))
-    safe_query = str(query or "").replace('"', '\\"')
+    try:
+        safe_limit = max(1, min(int(limit), 50))
+    except (ValueError, TypeError):
+        safe_limit = 10
+    safe_query = str(query or "").replace('"', "")
     async with GraphClient(user_id) as g:
         data = await g.get(
             "/me/messages",

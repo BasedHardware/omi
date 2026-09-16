@@ -22,7 +22,10 @@ def _slim_item(it: dict[str, Any]) -> dict[str, Any]:
 
 
 async def list_recent_files(user_id: str, limit: int = 15) -> list[dict[str, Any]]:
-    safe_limit = max(1, min(int(limit), 50))
+    try:
+        safe_limit = max(1, min(int(limit), 50))
+    except (ValueError, TypeError):
+        safe_limit = 15
     async with GraphClient(user_id) as g:
         data = await g.get("/me/drive/recent", params={"$top": safe_limit})
         raw_items = (data.get("value") or []) if isinstance(data, dict) else []
@@ -30,7 +33,10 @@ async def list_recent_files(user_id: str, limit: int = 15) -> list[dict[str, Any
 
 
 async def search_files(user_id: str, query: str, limit: int = 15) -> list[dict[str, Any]]:
-    safe_limit = max(1, min(int(limit), 50))
+    try:
+        safe_limit = max(1, min(int(limit), 50))
+    except (ValueError, TypeError):
+        safe_limit = 15
     # OData string literals must have single quotes escaped by doubling them.
     safe_query = str(query or "").replace("'", "''")
     async with GraphClient(user_id) as g:

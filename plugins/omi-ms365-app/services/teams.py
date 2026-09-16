@@ -7,7 +7,10 @@ from services.graph_client import GraphClient
 
 
 async def list_recent_chats(user_id: str, limit: int = 15) -> list[dict[str, Any]]:
-    safe_limit = max(1, min(int(limit), 50))
+    try:
+        safe_limit = max(1, min(int(limit), 50))
+    except (ValueError, TypeError):
+        safe_limit = 15
     async with GraphClient(user_id) as g:
         data = await g.get("/me/chats", params={"$top": safe_limit, "$orderby": "lastMessagePreview/createdDateTime desc"})
         raw_items = (data.get("value") or []) if isinstance(data, dict) else []

@@ -158,13 +158,13 @@ class MailHardeningTests(unittest.TestCase):
         finally:
             mail.GraphClient = original_client
 
-    def test_search_escapes_quotes(self):
+    def test_search_strips_quotes(self):
         mock_client = MockGraphClient(get_response={"value": []})
         original_client = mail.GraphClient
         mail.GraphClient = lambda user_id: mock_client
         try:
             asyncio.run(mail.search("user1", query='urgent "project"', limit=10))
-            self.assertIn('\\"', mock_client.last_get_params["$search"])
+            self.assertEqual(mock_client.last_get_params["$search"], '"urgent project"')
         finally:
             mail.GraphClient = original_client
 
@@ -317,6 +317,84 @@ class GraphClientRetryAfterTests(unittest.TestCase):
 
     def test_parse_retry_after_invalid_string(self):
         self.assertEqual(_parse_retry_after("not-a-number-or-date"), 2)
+
+
+class LimitCoercionAndKqlTests(unittest.TestCase):
+    def test_non_numeric_limit_falls_back_to_default(self):
+        captured_params = {}
+
+        class MockGraph:
+            def __init__(self, user_id):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def get(self, endpoint, params=None):
+                captured_params[endpoint] = params
+                return {"value": []}
+
+            async def get_all(self, endpoint, params=None, max_items=None):
+                captured_params[endpoint] = {"params": params, "max_items": max_items}
+                return []
+
+        orig_mail_g = mail.GraphClient
+        orig_cal_g = calendar.GraphClient
+        orig_sp_g = sharepoint.GraphClient
+        orig_teams_g = teams.GraphClient
+
+        mail.GraphClient = MockGraph
+        calendar.GraphClient = MockGraph
+        sharepoint.GraphClient = MockGraph
+        teams.GraphClient = MockGraph
+        try:
+            asyncio.run(mail.list_recent("u1", limit="ten"))
+            self.assertEqual(captured_params["/me/messages"]["$top"], 10)
+
+            asyncio.run(mail.search("u1", "test", limit="invalid"))
+            self.assertEqual(captured_params["/me/messages"]["$top"], 10)
+
+            asyncio.run(calendar.list_upcoming("u1", days=1, limit="many"))
+            self.assertEqual(captured_params["/me/calendarView"]["max_items"], calendar.MAX_EVENTS)
+
+            asyncio.run(sharepoint.list_recent_files("u1", limit="bad"))
+            self.assertEqual(captured_params["/me/drive/recent"]["$top"], 15)
+
+            asyncio.run(teams.list_recent_chats("u1", limit="none"))
+            self.assertEqual(captured_params["/me/chats"]["$top"], 15)
+        finally:
+            mail.GraphClient = orig_mail_g
+            calendar.GraphClient = orig_cal_g
+            sharepoint.GraphClient = orig_sp_g
+            teams.GraphClient = orig_teams_g
+
+    def test_mail_search_strips_double_quotes_from_kql_query(self):
+        captured_params = {}
+
+        class MockGraph:
+            def __init__(self, user_id):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def get(self, endpoint, params=None):
+                captured_params.update(params or {})
+                return {"value": []}
+
+        orig_mail_g = mail.GraphClient
+        mail.GraphClient = MockGraph
+        try:
+            asyncio.run(mail.search("u1", 'quarterly "Q3" report'))
+            self.assertEqual(captured_params["$search"], '"quarterly Q3 report"')
+        finally:
+            mail.GraphClient = orig_mail_g
 
 
 if __name__ == "__main__":
