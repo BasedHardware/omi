@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: ms365-app-tests
+    command: ["python3", "plugins/omi-ms365-app/test_main.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manifest schema object parameters, tool dispatch routing, and user auth validation flows"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
