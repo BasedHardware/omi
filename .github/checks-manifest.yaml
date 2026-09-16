@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: gcal-null-params-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
+    triggers: ["plugins/omi-google-calendar-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13937: the Omi backend sends JSON null for omitted optional tool params and body.get(key, default) only applies defaults to absent keys, so min(None, 30) crashed list_events and sibling handlers trusted untyped optionals; the suite executes the production tool handlers through the calendar_api_request seam"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
