@@ -163,6 +163,138 @@ test('parses GET daily summary headlines and omits unused stats', () => {
   ]);
 });
 
+test('old daily summaries name Flutter DailySummary.fromGenerated padded GET total_conversations instead of remapping to a headline chip', () => {
+  const neighbor = {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'};
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {total_conversations: '3'},
+          },
+          {
+            id: 'sum-json',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {total_conversations: 3},
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {
+      id: 'sum-1',
+      date: '2026-09-09',
+      headline: 'Met with the team',
+      conversations: 3,
+    },
+    {
+      id: 'sum-json',
+      date: '2026-09-09',
+      headline: 'Met with the team',
+      conversations: 3,
+    },
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: null,
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  for (const total_conversations of ['  3  ', '3 ', '  3', '3\n', '\u00853']) {
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+              stats: {total_conversations},
+            },
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+  }
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {action_items_count: '  2  '},
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toThrow('Omi daily summaries are malformed');
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            created_at: '  2026-09-07T00:00:00.000Z  ',
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toThrow('Omi daily summaries are malformed');
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            locations: [{latitude: '  37.7749  ', longitude: -122.4194}],
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toThrow('Omi daily summaries are malformed');
+});
+
 test('names Flutter DailySummaryCard omitted or JSON-null GET headlines as Your Day in Review', () => {
   expect(
     parseOmiDailySummaries(

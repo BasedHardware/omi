@@ -46,11 +46,34 @@ export type OmiDailySummary = {
   proactiveMoments?: number;
 };
 
+function presentPaddedKnown(value: unknown): void {
+  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+    throw new DailySummaryError();
+  }
+}
+
+function presentLocations(value: unknown): void {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const raw of value) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      continue;
+    }
+    const pin = raw as Record<string, unknown>;
+    presentPaddedKnown(pin.latitude);
+    presentPaddedKnown(pin.longitude);
+  }
+}
+
 function optionalCount(value: unknown): number | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
   if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new DailySummaryError();
+    }
     if (!/^[0-9]+$/.test(value)) {
       return undefined;
     }
@@ -155,6 +178,8 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
     const date = summaryDate(summary.date);
     const dayEmoji = optionalWireString(summary.day_emoji, 1_000_000);
     const overview = optionalWireString(summary.overview, 1_000_000);
+    presentPaddedKnown(summary.created_at);
+    presentLocations(summary.locations);
     const stats = summaryStats(summary.stats);
     items.push({
       id,
