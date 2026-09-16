@@ -23,9 +23,13 @@ MAX_TARGET_CURRENCIES = 10
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
+    fallback = getattr(app_instance.state, "http_client", None)
+    if fallback is not None:
+        await fallback.aclose()
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
         app_instance.state.http_client = client
         yield
+    app_instance.state.http_client = None
 
 
 app = FastAPI(
@@ -109,16 +113,38 @@ def _parse_amount(value: str | float | int) -> Decimal:
     return amount
 
 
-def _format_decimal(value: Decimal | float | int) -> str:
-    number = Decimal(str(value)).quantize(Decimal("0.0001")).normalize()
+def _format_decimal(value: Decimal | float | int | str) -> str:
+    try:
+        number = Decimal(str(value)).quantize(Decimal("0.0001")).normalize()
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError("rate value is not a valid number") from exc
+    if not number.is_finite():
+        raise ValueError("rate value is not a finite number")
     return format(number, "f")
 
 
+async def _get_http_client() -> httpx.AsyncClient:
+    """Return the lifespan-managed client, allocating a fallback when absent.
+
+    Tool handlers can run in contexts where the lifespan never executed
+    (tests, workers), where ``app.state.http_client`` was never set or was
+    cleared on shutdown. Allocate one lazily instead of crashing.
+    """
+    client = getattr(app.state, "http_client", None)
+    if client is None:
+        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+        app.state.http_client = client
+    return client
+
+
 async def _request_json(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    client: httpx.AsyncClient = app.state.http_client
+    client = await _get_http_client()
     response = await client.get(f"{FRANKFURTER_BASE_URL}{path}", params=params)
     response.raise_for_status()
-    return response.json()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("unexpected non-object response from Frankfurter API")
+    return payload
 
 
 @app.exception_handler(RequestValidationError)
@@ -218,8 +244,8 @@ async def convert_currency(request: ConvertCurrencyRequest) -> ChatToolResponse:
                 "to": ",".join(request.to_currencies),
             },
         )
-        rates = payload.get("rates") or {}
-        if not rates:
+        rates = payload.get("rates")
+        if not isinstance(rates, dict) or not rates:
             return ChatToolResponse(error="no rates returned for the requested currencies")
 
         lines = [
@@ -241,8 +267,8 @@ async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
             params["to"] = ",".join(request.to_currencies)
 
         payload = await _request_json("/latest", params)
-        rates = payload.get("rates") or {}
-        if not rates:
+        rates = payload.get("rates")
+        if not isinstance(rates, dict) or not rates:
             return ChatToolResponse(error="no rates returned")
 
         codes = request.to_currencies or sorted(rates.keys())
@@ -259,9 +285,11 @@ async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
 async def list_supported_currencies() -> ChatToolResponse:
     try:
         currencies = await _request_json("/currencies")
+        if not currencies:
+            return ChatToolResponse(error="no currencies returned")
         lines = ["Frankfurter supported currencies:"]
         for code, name in sorted(currencies.items()):
             lines.append(f"- {code}: {name}")
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError) as exc:
         return ChatToolResponse(error=f"currency list request failed: {exc}")
