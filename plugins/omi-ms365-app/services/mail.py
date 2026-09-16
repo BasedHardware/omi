@@ -6,11 +6,15 @@ from typing import Any
 from services.graph_client import GraphClient
 
 
-def _slim_message(m: dict[str, Any]) -> dict[str, Any]:
+def _slim_message(m: Any) -> dict[str, Any]:
+    if not isinstance(m, dict):
+        return {}
+    from_dict = m.get("from")
+    from_addr = from_dict.get("emailAddress", {}) if isinstance(from_dict, dict) else {}
     return {
         "id": m.get("id"),
         "subject": m.get("subject"),
-        "from": (m.get("from") or {}).get("emailAddress", {}),
+        "from": from_addr if isinstance(from_addr, dict) else {},
         "received": m.get("receivedDateTime"),
         "preview": m.get("bodyPreview"),
         "is_read": m.get("isRead"),
@@ -19,41 +23,60 @@ def _slim_message(m: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _extract_recipients(recipients: Any) -> list[dict[str, Any]]:
+    if not isinstance(recipients, list):
+        return []
+    result: list[dict[str, Any]] = []
+    for r in recipients:
+        if isinstance(r, dict):
+            addr = r.get("emailAddress")
+            if isinstance(addr, dict):
+                result.append(addr)
+    return result
+
+
 async def list_recent(user_id: str, limit: int = 10, unread_only: bool = False) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(limit, 50))
     async with GraphClient(user_id) as g:
         params: dict[str, Any] = {
-            "$top": limit,
+            "$top": safe_limit,
             "$orderby": "receivedDateTime desc",
             "$select": "id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments,webLink",
         }
         if unread_only:
             params["$filter"] = "isRead eq false"
         data = await g.get("/me/messages", params=params)
-        return [_slim_message(m) for m in data.get("value", [])]
+        raw_items = data.get("value") if isinstance(data, dict) and isinstance(data.get("value"), list) else []
+        return [_slim_message(m) for m in raw_items if isinstance(m, dict)]
 
 
 async def search(user_id: str, query: str, limit: int = 10) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(limit, 50))
     async with GraphClient(user_id) as g:
         data = await g.get(
             "/me/messages",
             params={
                 "$search": f'"{query}"',
-                "$top": limit,
+                "$top": safe_limit,
                 "$select": "id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments,webLink",
             },
         )
-        return [_slim_message(m) for m in data.get("value", [])]
+        raw_items = data.get("value") if isinstance(data, dict) and isinstance(data.get("value"), list) else []
+        return [_slim_message(m) for m in raw_items if isinstance(m, dict)]
 
 
 async def read(user_id: str, message_id: str) -> dict[str, Any]:
     async with GraphClient(user_id) as g:
         m = await g.get(f"/me/messages/{message_id}")
+        if not isinstance(m, dict):
+            m = {}
+        body_dict = m.get("body") if isinstance(m.get("body"), dict) else {}
         return {
             **_slim_message(m),
-            "body": (m.get("body") or {}).get("content"),
-            "body_type": (m.get("body") or {}).get("contentType"),
-            "to": [r["emailAddress"] for r in m.get("toRecipients", [])],
-            "cc": [r["emailAddress"] for r in m.get("ccRecipients", [])],
+            "body": body_dict.get("content"),
+            "body_type": body_dict.get("contentType"),
+            "to": _extract_recipients(m.get("toRecipients")),
+            "cc": _extract_recipients(m.get("ccRecipients")),
         }
 
 

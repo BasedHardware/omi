@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open-Meteo app must safely handle partial daily arrays, null unit metrics, and empty forecasts without IndexError or TypeError"
+  - id: ms365-services-hardening-tests
+    command: ["python3", "plugins/omi-ms365-app/test_services_hardening.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14247: harden error handling, null guards, and type validation in omi-ms365-app services"
   - id: linear-exact-issue-lookup-tests
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]

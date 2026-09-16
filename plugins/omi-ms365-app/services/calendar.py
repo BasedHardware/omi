@@ -7,17 +7,25 @@ from typing import Any
 from services.graph_client import GraphClient
 
 
-def _slim_event(e: dict[str, Any]) -> dict[str, Any]:
+def _slim_event(e: Any) -> dict[str, Any]:
+    if not isinstance(e, dict):
+        return {}
+    start_obj = e.get("start") if isinstance(e.get("start"), dict) else {}
+    end_obj = e.get("end") if isinstance(e.get("end"), dict) else {}
+    loc_obj = e.get("location") if isinstance(e.get("location"), dict) else {}
+    org_obj = e.get("organizer") if isinstance(e.get("organizer"), dict) else {}
+    org_addr = org_obj.get("emailAddress") if isinstance(org_obj.get("emailAddress"), dict) else {}
+    online_obj = e.get("onlineMeeting") if isinstance(e.get("onlineMeeting"), dict) else {}
     return {
         "id": e.get("id"),
         "subject": e.get("subject"),
-        "start": (e.get("start") or {}).get("dateTime"),
-        "end": (e.get("end") or {}).get("dateTime"),
-        "tz": (e.get("start") or {}).get("timeZone"),
-        "location": (e.get("location") or {}).get("displayName"),
-        "organizer": (e.get("organizer") or {}).get("emailAddress", {}).get("address"),
+        "start": start_obj.get("dateTime"),
+        "end": end_obj.get("dateTime"),
+        "tz": start_obj.get("timeZone"),
+        "location": loc_obj.get("displayName"),
+        "organizer": org_addr.get("address"),
         "is_online": e.get("isOnlineMeeting"),
-        "join_url": e.get("onlineMeeting", {}).get("joinUrl") if e.get("onlineMeeting") else None,
+        "join_url": online_obj.get("joinUrl"),
         "web_link": e.get("webLink"),
     }
 
@@ -45,7 +53,8 @@ async def list_upcoming(user_id: str, days: int = 1, limit: int = MAX_EVENTS) ->
             },
             max_items=limit,
         )
-        return [_slim_event(e) for e in events]
+        raw_items = events if isinstance(events, list) else []
+        return [_slim_event(e) for e in raw_items if isinstance(e, dict)]
 
 
 async def create_event(
@@ -103,11 +112,23 @@ async def find_free_slots(
     }
     async with GraphClient(user_id) as g:
         data = await g.post("/me/findMeetingTimes", json=payload)
-        return [
-            {
-                "start": s["meetingTimeSlot"]["start"]["dateTime"],
-                "end": s["meetingTimeSlot"]["end"]["dateTime"],
+        raw_suggestions = data.get("meetingTimeSuggestions") if isinstance(data, dict) and isinstance(data.get("meetingTimeSuggestions"), list) else []
+        slots: list[dict[str, Any]] = []
+        for s in raw_suggestions:
+            if not isinstance(s, dict):
+                continue
+            slot = s.get("meetingTimeSlot")
+            if not isinstance(slot, dict):
+                continue
+            start_d = slot.get("start") if isinstance(slot.get("start"), dict) else {}
+            end_d = slot.get("end") if isinstance(slot.get("end"), dict) else {}
+            start_dt = start_d.get("dateTime")
+            end_dt = end_d.get("dateTime")
+            if not start_dt or not end_dt:
+                continue
+            slots.append({
+                "start": start_dt,
+                "end": end_dt,
                 "confidence": s.get("confidence"),
-            }
-            for s in data.get("meetingTimeSuggestions", [])
-        ]
+            })
+        return slots

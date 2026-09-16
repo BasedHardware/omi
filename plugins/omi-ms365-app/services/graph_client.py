@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
+import email.utils
 from typing import Any
 
 import httpx
@@ -18,6 +20,26 @@ MAX_RETRIES = 3
 # for "everything" must follow @odata.nextLink; this keeps a malformed or
 # self-referencing nextLink from turning that into an infinite loop.
 MAX_PAGES = 20
+
+
+def _parse_retry_after(header_val: str | None, default: int = 2) -> int:
+    """Parse HTTP Retry-After header as integer seconds or RFC 7231/9110 HTTP-date."""
+    if not header_val:
+        return default
+    header_val = header_val.strip()
+    try:
+        return max(0, int(header_val))
+    except ValueError:
+        pass
+    try:
+        dt = email.utils.parsedate_to_datetime(header_val)
+        if dt:
+            now = datetime.now(timezone.utc)
+            delta = (dt - now).total_seconds()
+            return max(0, int(delta))
+    except Exception:
+        pass
+    return default
 
 
 class GraphError(Exception):
@@ -63,7 +85,7 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"), default=2)
                 # Honour the server cooldown; do not shorten a long Retry-After.
                 backoff = max(retry_after, min(2 ** attempt + 1, 30))
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)

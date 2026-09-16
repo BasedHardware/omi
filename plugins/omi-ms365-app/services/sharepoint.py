@@ -6,7 +6,11 @@ from typing import Any
 from services.graph_client import GraphClient
 
 
-def _slim_item(it: dict[str, Any]) -> dict[str, Any]:
+def _slim_item(it: Any) -> dict[str, Any]:
+    if not isinstance(it, dict):
+        return {}
+    file_obj = it.get("file")
+    mime = file_obj.get("mimeType") if isinstance(file_obj, dict) else None
     return {
         "id": it.get("id"),
         "name": it.get("name"),
@@ -14,25 +18,29 @@ def _slim_item(it: dict[str, Any]) -> dict[str, Any]:
         "modified": it.get("lastModifiedDateTime"),
         "web_url": it.get("webUrl"),
         "folder": "folder" in it,
-        "mime": (it.get("file") or {}).get("mimeType"),
+        "mime": mime,
     }
 
 
 async def list_recent_files(user_id: str, limit: int = 15) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(limit, 50))
     async with GraphClient(user_id) as g:
-        data = await g.get("/me/drive/recent", params={"$top": limit})
-        return [_slim_item(i) for i in data.get("value", [])]
+        data = await g.get("/me/drive/recent", params={"$top": safe_limit})
+        raw_items = data.get("value") if isinstance(data, dict) and isinstance(data.get("value"), list) else []
+        return [_slim_item(i) for i in raw_items if isinstance(i, dict)]
 
 
 async def search_files(user_id: str, query: str, limit: int = 15) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(limit, 50))
     # OData string literals must have single quotes escaped by doubling them.
     safe_query = query.replace("'", "''")
     async with GraphClient(user_id) as g:
         data = await g.get(
             f"/me/drive/root/search(q='{safe_query}')",
-            params={"$top": limit},
+            params={"$top": safe_limit},
         )
-        return [_slim_item(i) for i in data.get("value", [])]
+        raw_items = data.get("value") if isinstance(data, dict) and isinstance(data.get("value"), list) else []
+        return [_slim_item(i) for i in raw_items if isinstance(i, dict)]
 
 
 async def upload_text_file(
