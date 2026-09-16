@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: open-food-facts-tests
+    command: ["python3", "plugins/omi-openfoodfacts-app/test_main.py"]
+    triggers: ["plugins/omi-openfoodfacts-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13987: non-string nutrient grades, non-dict nutriments, and malformed search items crashed product summarization, and untyped bodies bypassed the ChatToolResponse error envelope; exercise the real handlers through the stubbed provider seam"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
