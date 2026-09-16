@@ -61,49 +61,49 @@ omi auth logout
 ### यादां (Memories)
 
 ```bash
-# हालिया यादां दी सूची दिक्खो (डिफ़ॉल्ट १०)
-omi memories list
+# हालिया यादां दी सूची दिक्खो (डिफ़ॉल्ट २५)
+omi memory list
 
 # मती सीमा तय करो
-omi memories list --limit 20
+omi memory list --limit 20
 
 # खास स्मृति गी आईडी कन्नै दिक्खो
-omi memories get <memory-id>
+omi memory get <memory-id>
 
 # नवीं स्मृति बनाओ
-omi memories create "मीटिंग दे दौरान प्रोजेक्ट दी समय-सीमा तय कीती गेई"
+omi memory create "मीटिंग दे दौरान प्रोजेक्ट दी समय-सीमा तय कीती गेई"
 
 # कोई स्मृति मिटाओ
-omi memories delete <memory-id>
+omi memory delete <memory-id>
 ```
 
 ### गल्लबातां (Conversations)
 
 ```bash
 # हालिया गल्लबातां दी सूची दिक्खो
-omi conversations list
+omi conversation list
 
 # पूरी गल्लबात दा ब्यौरा लैओ
-omi conversations get <conversation-id>
+omi conversation get <conversation-id>
 
 # गल्लबात दा पूरा ट्रांसक्रिप्ट दिक्खो
-omi conversations transcript <conversation-id>
+omi conversation get <conversation-id> --include-transcript
 ```
 
 ### कम्म-काज सूची (Action Items)
 
 ```bash
 # बाकी बचे दे कम्म दिक्खो
-omi action-items list
+omi action-item list --open
 
 # सिर्फ पूरे होई चुके कम्म दिक्खो
-omi action-items list --completed
+omi action-item list --completed
 
 # नवां कम्म जोड़ो
-omi action-items create "प्रोजेक्ट रिपोर्ट सोमवार तकर जमा करानी ऐ"
+omi action-item create "प्रोजेक्ट रिपोर्ट सोमवार तकर जमा करानी ऐ"
 
 # कम्म गी पूरा मार्क करो
-omi action-items complete <item-id>
+omi action-item complete <item-id>
 ```
 
 ---
@@ -111,24 +111,35 @@ omi action-items complete <item-id>
 ## ४. उन्नत विकल्प (Advanced Options)
 
 ### JSON आउटपुट:
-स्क्रिप्टिंग ते ऑटोमेशन लेई `--json` फ्लैग दा इस्तेमाल करो:
+स्क्रिप्टिंग ते ऑटोमेशन लेई `--json` फ्लैग दा इस्तेमाल करो (सब-कमांड थमां पैह्ले):
 ```bash
-omi memories list --json
-omi conversations list --json
+omi --json memory list
+omi --json conversation list --limit 5
+omi --json action-item list --open
 ```
 
-### शांत मोड (Quiet Mode):
-सिर्फ आईडी जां न्यूनतम जानकारी लेई `-q` जां `--quiet` दा इस्तेमाल करो:
+> **महत्वपूर्ण नियम:** `--json` फ्लैग मुख्य `omi` कमांड दे बाद ते सब-कमांड थमां **पैह्ले** रक्खो:
+> * सही: `omi --json memory list`
+> * गलत: `omi memory list --json`
+
+### वर्बोस ते रंग-हीन मोड (Verbose & No-Color):
+HTTP ट्रैफ़िक दिक्खने लेई `-v` जां `--verbose` ते बिना रंगें दे आउटपुट लेई `--no-color` दा इस्तेमाल करो:
 ```bash
-omi memories list -q
+omi --verbose memory list
+omi --no-color memory list
 ```
 
 ### प्रोफाइल प्रबंधन (Profiles):
-अलग-अलग खातें जां वातावरणें (Dev/Prod) लेई प्रोफाइल बनाओ:
+अलग-अलग खातें जां वातावरणें (Dev/Prod) लेई प्रोफाइल बनाओ ते इस्तेमाल करो:
 ```bash
-omi config profile create work
+# नवीं प्रोफाइल बनाओ ते स्विच करो:
 omi config profile use work
+
+# नवीं प्रोफाइल कन्ने लॉगिन करो:
 omi auth login --api-key omi_dev_work_key...
+
+# खास प्रोफाइल कन्ने कमांड चलाओ:
+omi --profile work memory list
 ```
 
 ---
@@ -143,5 +154,5 @@ omi auth login --api-key omi_dev_work_key...
   किसे बी कमांड दी विस्तृत जानकारी लेई `--help` जोड़ो:
   ```bash
   omi --help
-  omi memories --help
+  omi memory --help
   ```
