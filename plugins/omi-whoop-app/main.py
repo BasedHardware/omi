@@ -657,8 +657,17 @@ async def tool_get_workouts(request: Request):
         log(f"=== GET_WORKOUTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        raw_days = body.get("days")
+        try:
+            days = min(max(1, int(raw_days)), 30) if raw_days is not None else 7
+        except (ValueError, TypeError):
+            days = 7
+
+        raw_max_results = body.get("max_results")
+        try:
+            max_results = min(max(1, int(raw_max_results)), 50) if raw_max_results is not None else 10
+        except (ValueError, TypeError):
+            max_results = 10
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
