@@ -161,6 +161,8 @@ env:
     value: "true"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
+    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -298,7 +300,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,dg-nova-3,parakeet"
+    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
     value: "price_1RrxXL1F8wnoWYvwIddzR902"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID

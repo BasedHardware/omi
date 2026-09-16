@@ -90,8 +90,12 @@ async def monitor_session_timeouts():
                                 channels
                             )
                             
-                            # If no channel, use default
-                            if not channel_id:
+                            # If no channel was named, use default; a named
+                            # channel that did not resolve must not fall
+                            # through to the default and post there.
+                            if not channel_id and channel_name:
+                                print(f"⏰ Not sending: channel '{channel_name}' not found or ambiguous", flush=True)
+                            elif not channel_id:
                                 channel_id = user.get("selected_channel")
                                 if channel_id:
                                     for ch in channels:
@@ -113,7 +117,7 @@ async def monitor_session_timeouts():
                                 else:
                                     print(f"⏰ FAILED: {result.get('error') if result else 'Unknown'}", flush=True)
                             else:
-                                print(f"⏰ Insufficient content to send (message: '{message[:50] if message else 'None'}...')", flush=True)
+                                print("⏰ Insufficient content to send", flush=True)
                             
                             # Reset session
                             SimpleSessionStorage.reset_session(session_id)
@@ -555,7 +559,7 @@ async def auth_callback(
                     <div class="container">
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
-                            <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
+                            <p style="margin-bottom: 16px;">Failed to complete authentication.</p>
                             <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
@@ -686,10 +690,6 @@ async def webhook(
     
     # Log received data
     print(f"📥 Received {len(segments) if segments else 0} segment(s) from OMI", flush=True)
-    if segments:
-        for i, seg in enumerate(segments[:3]):
-            text = seg.get('text', 'NO TEXT') if isinstance(seg, dict) else str(seg)
-            print(f"   Segment {i}: {text[:100]}", flush=True)
     
     if not segments or not isinstance(segments, list):
         return {"status": "ok"}
@@ -709,7 +709,7 @@ async def webhook(
     
     # Only send notifications for final message post
     if response_message and ("✅ Message sent" in response_message or "❌" in response_message):
-        print(f"✉️  USER NOTIFICATION: {response_message}", flush=True)
+        print("✉️  USER NOTIFICATION sent (message result)", flush=True)
         return {
             "message": response_message,
             "session_id": session_id,
@@ -717,7 +717,8 @@ async def webhook(
         }
     
     # Silent response during collection
-    print(f"🔇 Silent response: {response_message}", flush=True)
+    response_len = len(response_message or "")
+    print(f"🔇 Silent response (len={response_len})", flush=True)
     return {"status": "ok"}
 
 
@@ -743,7 +744,6 @@ async def process_segments(
     session_id = session["session_id"]
     is_test_session = session_id.startswith("test_session")
     
-    print(f"🔍 Received: '{full_text}'", flush=True)
     print(f"📊 Session mode: {session['message_mode']}, Count: {session.get('segments_count', 0)}/5", flush=True)
     
     # Check for trigger phrase (but only if not already recording)
@@ -751,7 +751,7 @@ async def process_segments(
         message_content = message_detector.extract_message_content(full_text)
         
         print(f"🎤 TRIGGER! {'[TEST MODE] Processing immediately...' if is_test_session else 'Starting segment collection...'}", flush=True)
-        print(f"   Content: '{message_content}'", flush=True)
+        print(f"   Content extracted: {'yes' if message_content else 'no'}", flush=True)
         
         # TEST MODE: Process entire text immediately
         if is_test_session and len(message_content) > 10:
@@ -779,7 +779,11 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
+            # If no channel was named, use default; a named channel that
+            # did not resolve (unknown or ambiguous) must not post to it.
+            if not channel_id and channel_name:
+                SimpleSessionStorage.reset_session(session_id)
+                return f"❌ No single channel matches '#{channel_name}'; say the full channel name"
             if not channel_id:
                 channel_id = user.get("selected_channel")
                 if channel_id:
@@ -834,8 +838,7 @@ async def process_segments(
         accumulated += " " + full_text
         segments_count += 1
         
-        print(f"📝 Segment {segments_count}/5: '{full_text}'", flush=True)
-        print(f"📚 Full accumulated: '{accumulated[:150]}...'", flush=True)
+        print(f"📝 Segment {segments_count}/5 received", flush=True)
         
         # Update session with new segment
         SimpleSessionStorage.update_session(
@@ -876,7 +879,11 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
+            # If no channel was named, use default; a named channel that
+            # did not resolve (unknown or ambiguous) must not post to it.
+            if not channel_id and channel_name:
+                SimpleSessionStorage.reset_session(session_id)
+                return f"❌ No single channel matches '#{channel_name}'; say the full channel name"
             if not channel_id:
                 channel_id = user.get("selected_channel")
                 if channel_id:

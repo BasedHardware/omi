@@ -32,6 +32,10 @@ TYPESENSE_SERVICE = "typesense-jit-qa"
 TYPESENSE_API_SECRET = "jit-qa-typesense-api-key"
 TYPESENSE_COLLECTION = "jit_qa_canonical_memory_atoms"
 BACKEND_MEMORY = "4Gi"
+# The isolated QA plane binds no Soniox credential, and #13965 restored soniox
+# to the default streaming chain, so the backend's fail-closed startup
+# validation requires an explicitly keyless-compatible serving chain.
+STT_SERVICE_MODELS = "modulate-velma-2,dg-nova-3,parakeet"
 TYPESENSE_READINESS_COLLECTION = "jit_qa_typesense_readiness"
 TYPESENSE_ENTRYPOINT = "/usr/local/bin/jit-qa-typesense-entrypoint"
 TYPESENSE_CPU = "1"
@@ -626,6 +630,7 @@ def resource_environment(
                 "OMI_LLM_GATEWAY_URL": gateway_url,
                 "REDIS_DB_HOST": redis_host,
                 "REDIS_DB_PORT": "6379",
+                "STT_SERVICE_MODELS": STT_SERVICE_MODELS,
                 **typesense_environment,
             },
             dict(_DESKTOP_SECRET_BINDINGS if profile == "desktop" else _ALLOWED_SECRET_BINDINGS),

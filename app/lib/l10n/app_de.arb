@@ -3233,6 +3233,11 @@
     "speechProfileTopicGoal": "Was ist dein langfristiges Ziel?",
     "speechToTextUnavailableDesc": "Die Spracherkennung ist derzeit nicht verfügbar. Prüfe deine Internetverbindung und die Einstellungen zur Spracherkennung auf deinem Gerät und versuche es erneut.",
     "memoryHistoryPartial": "Ein Teil des Erinnerungsverlaufs ist nicht verfügbar. Der bisher empfangene Verlauf wird angezeigt.",
+    "memoryHistory": "Verlauf",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten",
-    "processingTakingLonger": "Arbeitet noch — das dauert länger als üblich."
+    "processingTakingLonger": "Arbeitet noch — das dauert länger als üblich.",
+    "speechProfileEnrollmentPrompt": "Damit Omi weiß, welche Stimme deine ist — sprich etwa 5 Sekunden über irgendetwas."
 }

@@ -78,6 +78,71 @@ final class MemoriesViewModelObserverTests: XCTestCase {
     XCTAssertEqual(viewModel.refreshInvocations, 1)
   }
 
+  /// Auto-refresh must fetch the selected temporal view, not the legacy
+  /// released view. The pre-fix refresh called `getMemoriesPage` without a
+  /// view, then committed that released-view cursor — so with History
+  /// selected, `loadMore()` resumed a released-issued cursor as the history
+  /// view and pages skipped/mixed projections. Refresh must also commit the
+  /// cursor from its own response.
+  func testAutoRefreshFetchesTheSelectedTemporalViewAndCommitsItsCursor() async throws {
+    let viewModel = MemoriesViewModel()
+    viewModel.isActive = true
+    // Keep loadMemories' one-time background tails off the network: latch the
+    // default-scope full sync for this throwaway user (key mirrors
+    // performFullSyncIfNeeded) and serve the cache reconcile an empty
+    // terminal page through its own seam.
+    let userId = try XCTUnwrap(testUserId)
+    let defaultScopeSyncKey = "memoriesDefaultScopeSyncCompleted_v3_\(userId)"
+    UserDefaults.standard.set(true, forKey: defaultScopeSyncKey)
+    viewModel.reconcilePageFetch = { _, _, _ in
+      APIClient.MemoryListPage(
+        memories: [],
+        nextCursor: nil,
+        canonicalLifecycleExposed: false,
+        deviceScopeSupported: nil,
+        defaultMemoryDeleteSupported: false,
+        truncated: false,
+        beliefEnabled: nil)
+    }
+
+    var requestedViews: [APIClient.MemoryTemporalView?] = []
+    viewModel.memoriesPageFetch = { _, _, _, _, _, view, _ in
+      requestedViews.append(view)
+      // Distinct cursor per request proves which response the refresh
+      // committed. Every page advertises the belief capability so the
+      // History selection stays mounted.
+      return APIClient.MemoryListPage(
+        memories: [],
+        nextCursor: "history-stage-\(requestedViews.count)",
+        canonicalLifecycleExposed: true,
+        deviceScopeSupported: nil,
+        defaultMemoryDeleteSupported: false,
+        truncated: false,
+        beliefEnabled: true)
+    }
+
+    viewModel.selectedTemporalFilter = .history
+    // Let the didSet-spawned initial load reach the fetch seam, so the
+    // refresh below suspends at the lifecycle barrier until it settles.
+    for _ in 0..<200 where requestedViews.isEmpty {
+      await Task.yield()
+    }
+    XCTAssertFalse(requestedViews.isEmpty, "Initial load must reach the fetch seam")
+
+    await viewModel.refreshMemoriesIfNeeded()
+
+    // Handshake: page one discovers the capability without a view, then the
+    // explicit-view restart fetches history before retaining its cursor.
+    XCTAssertEqual(requestedViews.count, 3)
+    XCTAssertNil(requestedViews[0])
+    XCTAssertEqual(requestedViews[1], .history)
+    // Auto-refresh must fetch the selected temporal view too — a released-view
+    // response would donate a cursor that loadMore() pages as the history
+    // view — and the committed cursor must come from that same response.
+    XCTAssertEqual(requestedViews[2], .history)
+    XCTAssertEqual(viewModel.backendCursorForTesting, "history-stage-3")
+  }
+
   func testConversationDeletedNotificationTriggersCascadeHandler() async throws {
     let conversationId = "conv-cascade-test"
     let linkedMemory = makeMemory(id: "mem-linked", conversationId: conversationId)

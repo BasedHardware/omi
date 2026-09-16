@@ -3274,6 +3274,11 @@
     "speechProfileTopicGoal": "Hvad er dit langsigtede mål?",
     "speechToTextUnavailableDesc": "Tale til tekst er ikke tilgængelig lige nu. Kontrollér din internetforbindelse og enhedens indstillinger for talegenkendelse, og prøv igen.",
     "memoryHistoryPartial": "Noget af mindehistorikken er ikke tilgængeligt. Viser den historik, der er modtaget indtil nu.",
+    "memoryHistory": "Historik",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Tryk på + for at starte optagelsen",
-    "processingTakingLonger": "Arbejder stadig — det tager længere end normalt."
+    "processingTakingLonger": "Arbejder stadig — det tager længere end normalt.",
+    "speechProfileEnrollmentPrompt": "Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder."
 }

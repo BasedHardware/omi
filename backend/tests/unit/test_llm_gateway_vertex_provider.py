@@ -612,6 +612,69 @@ async def test_vertex_provider_overflows_to_on_demand_when_dedicated_is_exhauste
 
 
 @pytest.mark.asyncio
+async def test_vertex_provider_fails_closed_on_a_prohibited_pt_pin(monkeypatch):
+    """SCA-481: a Pro/image operator pin must fail the request closed at
+    resolution time — no provider dispatch, typed invalid-config failure."""
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
+    monkeypatch.setenv('OMI_VERTEX_PT_MODEL', 'gemini-3-pro-preview')
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=_ok_vertex_response())
+
+    provider = _pt_provider(handler)
+    with pytest.raises(ProviderFailure) as excinfo:
+        await provider.create_chat_completion(
+            {'model': 'gemini-2.5-flash', 'messages': [{'role': 'user', 'content': 'hi'}]},
+            provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash'),
+            credentials=_omi_credentials(),
+            timeout_ms=30_000,
+        )
+
+    assert excinfo.value.failure_class == FailureClass.INVALID_CONFIG
+    assert 'SCA-481' in excinfo.value.safe_message
+    assert seen == []
+
+
+@pytest.mark.asyncio
+async def test_vertex_provider_never_overflows_onto_a_prohibited_model(monkeypatch):
+    """A prohibited overflow pin yields no overflow plan: the reservation 429
+    is surfaced instead of buying the work on an image-output model."""
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
+    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_GEMINI_OVERFLOW_MODEL', 'gemini-3.1-flash-image')
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            429,
+            json={
+                'error': {
+                    'message': 'Resource has been exhausted. provisioned throughput dedicated capacity is exhausted'
+                }
+            },
+        )
+
+    provider = _pt_provider(handler)
+    with pytest.raises(ProviderFailure):
+        await provider.create_chat_completion(
+            {'model': 'gemini-2.5-flash', 'messages': [{'role': 'user', 'content': 'hi'}]},
+            provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash'),
+            credentials=_omi_credentials(),
+            timeout_ms=30_000,
+        )
+
+    dispatched = [str(r.url.path).split('/models/')[-1] for r in seen]
+    assert dispatched == ['gemini-2.5-flash:generateContent']
+    assert all('image' not in model for model in dispatched)
+
+
+@pytest.mark.asyncio
 async def test_vertex_provider_walks_fallback_chain_when_model_is_unavailable(monkeypatch):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
     monkeypatch.setenv('GCP_LOCATION', 'us-central1')

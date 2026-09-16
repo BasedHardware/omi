@@ -111,6 +111,13 @@ async def _search_ids(client: httpx.AsyncClient, query: str, retmax: int = 5) ->
     return data.get("esearchresult", {}).get("idlist", [])
 
 
+def _select_related_pmids(links: list, source_pmid: str, max_results: int) -> list[str]:
+    """NCBI's pubmed_pubmed linkset includes the source PMID among the results;
+    exclude it before applying the limit so max_results counts only articles
+    actually related to it."""
+    return [str(x) for x in links if str(x) != str(source_pmid)][:max_results]
+
+
 async def _fetch_summaries(client: httpx.AsyncClient, ids: list[str]) -> dict:
     if not ids:
         return {}
@@ -293,7 +300,7 @@ async def get_related_pubmed(request: Request):
             if linksets:
                 dbs = linksets[0].get("linksetdbs", [])
                 if dbs:
-                    related = [str(x) for x in dbs[0].get("links", [])[:max_results]]
+                    related = _select_related_pmids(dbs[0].get("links", []), pmid, max_results)
 
             if not related:
                 return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
