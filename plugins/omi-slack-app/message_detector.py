@@ -1,5 +1,5 @@
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union, List
 from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
@@ -53,7 +53,7 @@ class MessageDetector:
         return content if content else None
     
     @classmethod
-    async def ai_extract_message_and_channel(cls, all_segments_text: str, available_channels: list) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    async def ai_extract_message_and_channel(cls, all_segments_text: str, available_channels: list) -> Tuple[Optional[str], Optional[Union[str, List[str]]], Optional[str]]:
         """
         Extract message content and target channel from voice segments.
         Uses AI to intelligently parse "send X message to/in Y channel"
@@ -163,13 +163,14 @@ MESSAGE: Hello everyone, this is a test message"""
                         candidates.append((id, name))
 
                 if len(candidates) == 1:
-                    channel_id, channel_name = candidates[0]
-                    print(f"🔍 Fuzzy matched '{channel_name}' to '{candidates[0][1]}'", flush=True)
+                    matched_id, matched_name = candidates[0]
+                    print(f"🔍 Fuzzy matched '{channel_name}' to '{matched_name}'", flush=True)
+                    channel_id, channel_name = matched_id, matched_name
                 elif len(candidates) > 1:
                     matched_names = [c[1] for c in candidates]
                     print(f"⚠️  Ambiguous channel '{channel_name}' matched multiple channels: {matched_names}; refusing fuzzy send", flush=True)
-                    return None, None, message
-            
+                    return None, matched_names, message
+
             if not channel_id:
                 print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
                 return None, channel_name, message
