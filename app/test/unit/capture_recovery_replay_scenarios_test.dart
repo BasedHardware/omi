@@ -576,7 +576,9 @@ void main() {
     await world.startLiveCapture();
     final first = world.hostApi.lastStartSessionId!;
     final firstRecordingId = world.controller.activeRecordingId;
+    final firstCaptureSessionId = world.controller.activeCaptureSessionId;
     expect(firstRecordingId, isNotNull);
+    expect(firstCaptureSessionId, isNotNull);
     world.emitNativeState(PhoneMicCaptureState.running);
     await captureSeconds(1, sessionId: first, frameCursor: 0);
     world.setConnected(false);
@@ -591,6 +593,7 @@ void main() {
     await world.startLiveCapture();
     final second = world.hostApi.lastStartSessionId!;
     final secondRecordingId = world.controller.activeRecordingId;
+    final secondCaptureSessionId = world.controller.activeCaptureSessionId;
     expect(secondRecordingId, isNotNull);
     world.emitNativeState(PhoneMicCaptureState.running);
     await captureSeconds(1, sessionId: second, frameCursor: 1400);
@@ -604,6 +607,9 @@ void main() {
     expect(world.hostApi.startSessionIds, [first, second],
         reason: 'exactly one authoritative native session at a time');
     expect(secondRecordingId, isNot(firstRecordingId), reason: 'each capture session mints a fresh recording identity');
+    expect(secondCaptureSessionId, firstCaptureSessionId,
+        reason: 'activeCaptureSessionId is the conversation/WAL window and is not '
+            'reset on phone-mic stop/next-start; C2 must consume activeRecordingId');
   });
 
   // ---------------------------------------------------------------------------

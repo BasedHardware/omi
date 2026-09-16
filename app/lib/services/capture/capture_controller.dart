@@ -384,9 +384,19 @@ class CaptureController extends ChangeNotifier
   /// Used to scope WAL queries to only this session's audio.
   int _sessionStartSeconds = 0;
 
-  /// Stable identity for the active live-capture session. Unlike a transcript
-  /// segment ID, this does not change when the backend revises or deletes
-  /// segments during the capture.
+  /// Conversation/WAL-window identity for the active live capture.
+  ///
+  /// Unlike a transcript segment ID, this does not change when the backend
+  /// revises or deletes segments during the capture. It is derived from
+  /// [_sessionStartSeconds], which [_resetStateVariables] clears on
+  /// conversation-created / force-process paths and at device-recording start.
+  /// Phone-mic stop/next-start keeps the previous value so a late
+  /// ConversationEvent can still stamp that session's WALs. Sequential
+  /// phone-mic live captures can therefore report the same id.
+  ///
+  /// Per-recording identity is [activeRecordingId] (and the native mic session
+  /// id). Downstream semantic controls must use that fresh identity, not this
+  /// getter, as the authoritative live capture session.
   String? get activeCaptureSessionId => _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds';
 
   /// Client-minted UUID shared by capture, `/v4/listen`, and the resulting

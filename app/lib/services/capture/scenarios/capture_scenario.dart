@@ -4,6 +4,11 @@
 // Consumers:
 // - C2 (semantic controls) drives replay scenarios and reads
 //   [CaptureScenarioResult]s through this adapter — never capture internals.
+//   Live capture identity for UI/state is CaptureController.activeRecordingId
+//   (and the native mic session id). Do not treat
+//   CaptureController.activeCaptureSessionId as a per-recording id; it is
+//   the conversation/WAL window and can stay stale across sequential phone-mic
+//   live sessions until conversation-created reset.
 // - C4 (verification integration) discovers runnable scenario ids from
 //   [CaptureScenarioCatalog] and maps them to runner selections.
 // - The concrete replay engine lives with the capture tests; this file owns
