@@ -21,6 +21,31 @@ function presentPaddedKnown(value: unknown): void {
   }
 }
 
+function presentReview(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return;
+  }
+  const review = value as Record<string, unknown>;
+  presentPaddedKnown(review.rated_at);
+  presentPaddedKnown(review.responded_at);
+  presentPaddedKnown(review.score);
+}
+
+function presentReviews(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const raw of value) {
+    presentReview(raw);
+  }
+}
+
 export type OmiAppChrome = {
   name: string;
   description?: string;
@@ -48,6 +73,8 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   presentPaddedKnown(row.score);
   presentPaddedKnown(row.money_made);
   presentPaddedKnown(row.usage_count);
+  presentReviews(row.reviews);
+  presentReview(row.user_review);
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
   if (row.description === undefined || row.description === null) {
     return image === null ? {name} : {name, image};

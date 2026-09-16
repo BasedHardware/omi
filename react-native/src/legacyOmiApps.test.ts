@@ -181,6 +181,95 @@ test('old apps name Flutter App.fromGenerated padded GET created_at instead of r
   ).toThrow('Omi app is malformed');
 });
 
+test('old apps name Flutter App.fromGenerated padded GET reviews rated_at instead of remapping to a catalog name', () => {
+  const review = {
+    rated_at: '2026-09-07T00:00:00.000Z',
+    review: 'Great',
+    score: '5',
+    uid: 'user-1',
+  };
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        reviews: [review],
+        user_review: {...review, score: 5},
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', reviews: null, user_review: null}),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(parseOmiApp(JSON.stringify({id: 'notes', name: 'Notes'}), 'notes')).toEqual({
+    name: 'Notes',
+  });
+  for (const rated_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    expect(() =>
+      parseOmiApp(
+        JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          reviews: [{...review, rated_at}],
+        }),
+        'notes',
+      ),
+    ).toThrow('Omi app is malformed');
+  }
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        reviews: [{...review, score: '  5  '}],
+      }),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        reviews: [
+          {...review, responded_at: '  2026-09-07T00:00:00.000Z  '},
+        ],
+      }),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        user_review: {...review, rated_at: '  2026-09-07T00:00:00.000Z  '},
+      }),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        user_review: {...review, score: '  5  '},
+      }),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+});
+
 test('parseOmiApp keeps GET http(s) images and omits relative or unsafe URLs', () => {
   expect(
     parseOmiApp(
