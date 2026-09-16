@@ -8,7 +8,7 @@ import os
 import base64
 import urllib.parse
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import requests
 from dotenv import load_dotenv
@@ -252,11 +252,18 @@ def get_team_states(uid: str, team_id: str) -> List[WorkflowState]:
     return sorted(states, key=lambda s: s.position)
 
 
-def find_state_by_name(uid: str, team_id: str, state_name: str) -> Optional[WorkflowState]:
-    """Find a workflow state by name (case-insensitive partial match)."""
+def find_state_by_name(uid: str, team_id: str, state_name: str) -> Tuple[Optional[WorkflowState], List[WorkflowState]]:
+    """Find a workflow state by name.
+
+    Returns (state, candidates): a single match at any tier resolves to
+    (state, [state]); several matches at a tier stop the search there and
+    return (None, candidates) so the caller can ask which one was meant
+    instead of silently moving the issue to the first listed state. A tier
+    with several matches never falls through to a weaker tier.
+    """
     states = get_team_states(uid, team_id)
     state_name_lower = state_name.lower()
-    
+
     # Map common names to Linear state types
     state_mapping = {
         "backlog": "backlog",
@@ -274,25 +281,31 @@ def find_state_by_name(uid: str, team_id: str, state_name: str) -> Optional[Work
         "cancelled": "canceled",
         "canceled": "canceled",
     }
-    
+
     # First try exact match
-    for state in states:
-        if state.name.lower() == state_name_lower:
-            return state
-    
+    exact = [state for state in states if state.name.lower() == state_name_lower]
+    if exact:
+        if len(exact) == 1:
+            return exact[0], exact
+        return None, exact
+
     # Then try workflow type alias match
     mapped_type = state_mapping.get(state_name_lower)
     if mapped_type:
-        for state in states:
-            if state.type == mapped_type:
-                return state
-    
+        typed = [state for state in states if state.type == mapped_type]
+        if typed:
+            if len(typed) == 1:
+                return typed[0], typed
+            return None, typed
+
     # Then try partial match
-    for state in states:
-        if state_name_lower in state.name.lower():
-            return state
-    
-    return None
+    partial = [state for state in states if state_name_lower in state.name.lower()]
+    if partial:
+        if len(partial) == 1:
+            return partial[0], partial
+        return None, partial
+
+    return None, []
 
 
 def get_user_profile(uid: str) -> Optional[LinearUser]:
@@ -802,8 +815,13 @@ async def tool_update_issue_status(request: Request):
         issue_id = issue["id"]
         
         # Find the target state
-        target_state = find_state_by_name(uid, team_id, new_status)
+        target_state, state_candidates = find_state_by_name(uid, team_id, new_status)
         if not target_state:
+            if state_candidates:
+                names = ", ".join(f"**{s.name}**" for s in state_candidates)
+                return ChatToolResponse(
+                    error=f"Multiple statuses match '{new_status}': {names}. Please specify the exact status name."
+                )
             states = get_team_states(uid, team_id)
             state_names = [s.name for s in states]
             return ChatToolResponse(

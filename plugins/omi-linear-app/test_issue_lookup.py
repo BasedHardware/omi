@@ -86,7 +86,7 @@ class IssueLookupTests(unittest.TestCase):
 
         module.linear_graphql_request = graphql
         module.get_linear_tokens = lambda uid: authenticated
-        module.find_state_by_name = Mock(return_value=SimpleNamespace(id='done-id', name='Done'))
+        module.find_state_by_name = Mock(return_value=(SimpleNamespace(id='done-id', name='Done'), []))
         payload = dict(uid='fixture-user', issue_identifier='eng-123', new_status='Done', comment='Test note')
         if body:
             payload.update(body)
@@ -156,20 +156,83 @@ class IssueLookupTests(unittest.TestCase):
         ]
         module.get_team_states = Mock(return_value=states)
 
+        def resolved(name):
+            state, candidates = module.find_state_by_name('uid', 'team', name)
+            self.assertIsNotNone(state, f"'{name}' should resolve uniquely; candidates={[c.name for c in candidates]}")
+            self.assertEqual([c.id for c in candidates], [state.id])
+            return state
+
         # Exact match takes precedence
-        self.assertEqual(module.find_state_by_name('uid', 'team', 'Not Done').id, 'not-done-id')
+        self.assertEqual(resolved('Not Done').id, 'not-done-id')
 
         # Type alias takes precedence over partial match
         # 'done' -> type 'completed' ('Shipped'), NOT substring match in 'Not Done'
-        self.assertEqual(module.find_state_by_name('uid', 'team', 'done').id, 'shipped-id')
-        self.assertEqual(module.find_state_by_name('uid', 'team', 'complete').id, 'shipped-id')
-        self.assertEqual(module.find_state_by_name('uid', 'team', 'in progress').id, 'active-id')
+        self.assertEqual(resolved('done').id, 'shipped-id')
+        self.assertEqual(resolved('complete').id, 'shipped-id')
+        self.assertEqual(resolved('in progress').id, 'active-id')
 
         # Partial match works when no exact or type match
-        self.assertEqual(module.find_state_by_name('uid', 'team', 'Later').id, 'todo-later-id')
+        self.assertEqual(resolved('Later').id, 'todo-later-id')
 
-        # Unknown state returns None
-        self.assertIsNone(module.find_state_by_name('uid', 'team', 'Nonexistent Status'))
+        # Unknown state returns no candidates
+        state, candidates = module.find_state_by_name('uid', 'team', 'Nonexistent Status')
+        self.assertIsNone(state)
+        self.assertEqual(candidates, [])
+
+    def test_ambiguous_partial_match_refuses(self):
+        # 'review' matches both 'In Review' and 'Peer Review' at the partial
+        # tier: must refuse with both candidates, never pick the first listed.
+        module = load_app()
+        module.get_team_states = Mock(return_value=[
+            SimpleNamespace(id='in-review-id', name='In Review', type='started'),
+            SimpleNamespace(id='peer-review-id', name='Peer Review', type='started'),
+        ])
+        state, candidates = module.find_state_by_name('uid', 'team', 'review')
+        self.assertIsNone(state)
+        self.assertEqual([c.id for c in candidates], ['in-review-id', 'peer-review-id'])
+
+        # The handler surfaces the candidates and never mutates.
+        module.get_linear_tokens = lambda uid: True
+        module.get_issue_by_identifier = lambda uid, identifier: {
+            'issue': dict(id='exact-id', identifier='ENG-123', title='T',
+                          team=dict(id='team-id', name='Eng'), state=dict(name='Todo'))}
+        module.linear_graphql_request = Mock(side_effect=AssertionError('Unexpected mutation'))
+
+        async def json():
+            return dict(uid='fixture-user', issue_identifier='ENG-123', new_status='review')
+
+        response = asyncio.run(module.tool_update_issue_status(SimpleNamespace(json=json)))
+        self.assertIsNone(response.result)
+        self.assertIn('In Review', response.error)
+        self.assertIn('Peer Review', response.error)
+        module.linear_graphql_request.assert_not_called()
+
+    def test_ambiguous_type_alias_refuses(self):
+        # Two 'started' states: the 'in progress' alias must stop at the type
+        # tier and refuse, never fall through to a weaker or arbitrary pick.
+        module = load_app()
+        module.get_team_states = Mock(return_value=[
+            SimpleNamespace(id='dev-id', name='In Development', type='started'),
+            SimpleNamespace(id='qa-id', name='In QA', type='started'),
+        ])
+        state, candidates = module.find_state_by_name('uid', 'team', 'in progress')
+        self.assertIsNone(state)
+        self.assertEqual([c.id for c in candidates], ['dev-id', 'qa-id'])
+
+        module.get_linear_tokens = lambda uid: True
+        module.get_issue_by_identifier = lambda uid, identifier: {
+            'issue': dict(id='exact-id', identifier='ENG-123', title='T',
+                          team=dict(id='team-id', name='Eng'), state=dict(name='Todo'))}
+        module.linear_graphql_request = Mock(side_effect=AssertionError('Unexpected mutation'))
+
+        async def json():
+            return dict(uid='fixture-user', issue_identifier='ENG-123', new_status='in progress')
+
+        response = asyncio.run(module.tool_update_issue_status(SimpleNamespace(json=json)))
+        self.assertIsNone(response.result)
+        self.assertIn('In Development', response.error)
+        self.assertIn('In QA', response.error)
+        module.linear_graphql_request.assert_not_called()
 
 
 if __name__ == '__main__':
