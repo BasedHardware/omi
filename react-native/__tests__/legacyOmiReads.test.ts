@@ -312,6 +312,158 @@ test('old conversations name Flutter ConversationListItem fromJson padded GET ca
   ).rejects.toThrow('Omi timestamp is malformed');
 });
 
+test('old conversations name Flutter ConversationListItem fromJson padded GET action_items capture_confidence instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+  };
+  const item = {
+    description: 'Send the agenda',
+    capture_confidence: '0.9',
+  };
+  const event = {
+    title: 'Standup',
+    start: '2026-09-07T15:00:00.000Z',
+    duration: '30',
+  };
+  const keptExact = await loadConversations(
+    backend([
+      {
+        ...row,
+        structured: {
+          ...row.structured,
+          action_items: [item],
+        },
+      },
+      {
+        ...row,
+        id: 'json',
+        structured: {
+          ...row.structured,
+          action_items: [{...item, capture_confidence: 0.9}],
+        },
+      },
+      {
+        ...row,
+        id: 'event',
+        structured: {
+          ...row.structured,
+          events: [event],
+        },
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptExact.items.map(item => item.id)).toEqual([
+    'located',
+    'json',
+    'event',
+    'named',
+  ]);
+  const keptOmitted = await loadConversations(backend([row, neighbor]).api);
+  expect(keptOmitted.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptNull = await loadConversations(
+    backend([
+      {
+        ...row,
+        structured: {
+          ...row.structured,
+          action_items: null,
+          events: null,
+        },
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptNull.items.map(item => item.id)).toEqual(['located', 'named']);
+  for (const capture_confidence of [
+    '  0.9  ',
+    '0.9 ',
+    '  0.9',
+    '0.9\n',
+    '\u00850.9',
+  ]) {
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            structured: {
+              ...row.structured,
+              action_items: [{...item, capture_confidence}],
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi order is malformed');
+  }
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          structured: {
+            ...row.structured,
+            action_items: [{...item, ownership_confidence: '  0.4  '}],
+          },
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          structured: {
+            ...row.structured,
+            action_items: [
+              {...item, due_at: '  2026-09-07T15:00:00.000Z  '},
+            ],
+          },
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          structured: {
+            ...row.structured,
+            events: [{...event, start: '  2026-09-07T15:00:00.000Z  '}],
+          },
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          structured: {
+            ...row.structured,
+            events: [{...event, duration: '  30  '}],
+          },
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+});
+
 test('old discarded conversations name GET transcript_segments as the list title', async () => {
   const {api} = backend([
     {

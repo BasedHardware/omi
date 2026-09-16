@@ -188,6 +188,30 @@ function presentPhotos(value: unknown): void {
     presentNullableDate(photo.created_at);
   }
 }
+function presentActionItems(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) throw new Error('Omi list is malformed');
+  for (const item of value) {
+    const action = object(item);
+    text(action.description);
+    presentNullableDouble(action.capture_confidence);
+    presentNullableDouble(action.ownership_confidence);
+    presentNullableDate(action.completed_at);
+    presentNullableDate(action.created_at);
+    presentNullableDate(action.due_at);
+    presentNullableDate(action.updated_at);
+  }
+}
+function presentStructuredEvents(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) throw new Error('Omi list is malformed');
+  for (const item of value) {
+    const event = object(item);
+    text(event.title);
+    presentRequiredDate(event.start);
+    presentDefaultInt(event.duration);
+  }
+}
 function presentNullableStringList(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) throw new Error('Omi list is malformed');
@@ -416,6 +440,8 @@ export async function loadOmiConversations(
     presentAudioFiles(row.audio_files);
     presentConversationAudio(row.conversation_audio);
     presentPhotos(row.photos);
+    presentActionItems(structured.action_items);
+    presentStructuredEvents(structured.events);
     const emoji = conversationStructuredEmojiCopy(
       structured.emoji === undefined || structured.emoji === null
         ? structured.emoji
