@@ -7,6 +7,9 @@ import pytest
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = BACKEND_ROOT / "scripts" / "jit_qa_sweep_repair.py"
 UID = "user-1"
+# Hermetic anchor: repair queries gateway attempts by UTC calendar day(s) in the claim window.
+_FIXED_NOW = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+_ATTEMPT_DATE = _FIXED_NOW.date().isoformat()
 
 
 def _load_operator():
@@ -118,8 +121,9 @@ class _Db:
         raise AssertionError(f"unexpected collection {path}")
 
 
-def _tombstoned_invocation(store, *, state="payload_expired", claimed_minutes_ago=60):
-    claimed_at = datetime.now(timezone.utc) - timedelta(minutes=claimed_minutes_ago)
+def _tombstoned_invocation(store, *, state="payload_expired", claimed_minutes_ago=60, now=None):
+    anchor = now or _FIXED_NOW
+    claimed_at = anchor - timedelta(minutes=claimed_minutes_ago)
     store[f"users/{UID}/daily_memory_sweep_model_invocations/inv-1"] = {
         "uid": UID,
         "invocation_id": "inv-1",
@@ -168,33 +172,35 @@ def test_repair_joins_gateway_accounting_and_writes_single_receipt():
     db = _Db(
         attempts=[
             {
-                "date": TODAY,
+                "date": _ATTEMPT_DATE,
                 "user_uid": UID,
                 "feature": "memories",
                 "request_id": "req-1",
                 "outcome": "success",
                 "total_tokens": 2730,
                 "estimated_cost_micro_usd": 926,
-                "occurred_at": datetime.now(timezone.utc) - timedelta(minutes=59),
+                "occurred_at": _FIXED_NOW - timedelta(minutes=59),
                 "jit_run_id": "qa-sweep-34933918999-1",
             },
             {
-                "date": TODAY,
+                "date": _ATTEMPT_DATE,
                 "user_uid": UID,
                 "feature": "desktop_proactivity",
                 "request_id": "req-2",
                 "outcome": "success",
                 "total_tokens": 10,
-                "occurred_at": datetime.now(timezone.utc) - timedelta(minutes=59),
+                "occurred_at": _FIXED_NOW - timedelta(minutes=59),
             },
-        ]
+        ],
+        attempt_date=_ATTEMPT_DATE,
     )
-    _tombstoned_invocation(db.store)
+    _tombstoned_invocation(db.store, now=_FIXED_NOW)
     receipt = OPERATOR.repair_tombstone(
         db,
         invocation_id="inv-1",
         repair_authority="operator:qa-run-1",
         uid=UID,
+        now=_FIXED_NOW,
     )
     assert receipt["provider_outcome_summary"] == "success_usage_recorded"
     stored = db.store[f"users/{UID}/daily_memory_sweep_model_invocation_repairs/inv-1"]
@@ -208,16 +214,23 @@ def test_repair_without_a_joinable_sweep_run_fails_closed():
     db = _Db(
         attempts=[
             {
-                "date": TODAY,
+                "date": _ATTEMPT_DATE,
                 "user_uid": UID,
                 "feature": "memories",
                 "request_id": "req-1",
                 "outcome": "error",
                 "total_tokens": 0,
-                "occurred_at": datetime.now(timezone.utc) - timedelta(minutes=59),
+                "occurred_at": _FIXED_NOW - timedelta(minutes=59),
             },
-        ]
+        ],
+        attempt_date=_ATTEMPT_DATE,
     )
-    _tombstoned_invocation(db.store)
+    _tombstoned_invocation(db.store, now=_FIXED_NOW)
     with pytest.raises(OPERATOR.JITQASweepRepairError, match="sweep run id"):
-        OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:qa-run-1", uid=UID)
+        OPERATOR.repair_tombstone(
+            db,
+            invocation_id="inv-1",
+            repair_authority="operator:qa-run-1",
+            uid=UID,
+            now=_FIXED_NOW,
+        )
