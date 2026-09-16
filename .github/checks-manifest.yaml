@@ -13,7 +13,7 @@ checks:
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit"
+    reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit; find_state_by_name must refuse an ambiguous status name (partial match or a shared workflow type) instead of silently moving the issue to whichever state a team happens to list first"
   - id: github-app-coerce-tests
     command: ["python3", "plugins/omi-github-app/test_main.py"]
     triggers: ["plugins/omi-github-app/**"]
