@@ -74,6 +74,7 @@
 * [`quickstart.crh.md`](quickstart.crh.md) — omi-cli ile ilk adımlar (Crimean Tatar Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
 * [`quickstart.ca.md`](quickstart.ca.md) — guia d'inici ràpid per a omi-cli en català (Catalan Quickstart).
+
 * [`quickstart.ha.md`](quickstart.ha.md) — Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart).
 * [`quickstart.am.md`](quickstart.am.md) — የ omi-cli ፈጣን መጀመሪያ መመሪያ (Amharic Quickstart).
 * [`quickstart.ig.md`](quickstart.ig.md) — Ntuziaka mmalite ngwa ngwa nke omi-cli (Igbo Quickstart).
@@ -190,3 +191,5 @@
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
 * [`quickstart.bn.md`](quickstart.bn.md) — omi-cli দিয়ে শুরু করা (Bengali Quickstart).
+
+* [`quickstart.sw.md`](quickstart.sw.md) — mwongozo wa kuanza haraka wa omi-cli kwa Kiswahili (Swahili Quickstart).
