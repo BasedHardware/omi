@@ -647,7 +647,6 @@ class LocalWalSyncImpl implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
-    int filesUploaded = 0;
     final totalFilesToUpload = wals.length;
 
     final attemptedWalIds = <String>{};
@@ -753,13 +752,17 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      // Report file-count progress
-      progress?.onWalSyncedProgress(
-        filesUploaded / totalFilesToUpload,
-        phase: SyncPhase.uploadingToCloud,
-        currentFile: filesUploaded,
-        totalFiles: totalFilesToUpload,
-      );
+      void reportUploadProgress() {
+        final done = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
+        progress?.onWalSyncedProgress(
+          totalFilesToUpload > 0 ? done / totalFilesToUpload : 0.0,
+          phase: SyncPhase.uploadingToCloud,
+          currentFile: done,
+          totalFiles: totalFilesToUpload,
+        );
+      }
+
+      reportUploadProgress();
 
       listener.onWalUpdated();
       try {
@@ -808,8 +811,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
 
         batchesCompleted++;
-        // Count WALs no longer needing upload (uploaded or already synced).
-        filesUploaded = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
+        reportUploadProgress();
       } on SyncRateLimitedException {
         // The cooldown is account-global, so every remaining batch would hit it too.
         DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});

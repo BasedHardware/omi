@@ -10822,6 +10822,11 @@
     "speechProfileTopicGoal": "Која е вашата долгорочна цел?",
     "speechToTextUnavailableDesc": "Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.",
     "memoryHistoryPartial": "Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.",
+    "memoryHistory": "Историја",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Допрете + за да започнете со снимање",
-    "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното."
+    "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
+    "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди."
 }

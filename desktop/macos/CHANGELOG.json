@@ -2,6 +2,66 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.356",
+      "date": "2026-09-16",
+      "changes": [
+        "Explicit remember/save requests typed in chat now save the memory reliably; a runtime timestamp prefix on the request could previously make them be rejected as unauthorized."
+      ]
+    },
+    {
+      "version": "0.12.355",
+      "date": "2026-09-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.354",
+      "date": "2026-09-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.353",
+      "date": "2026-09-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.352",
+      "date": "2026-09-15",
+      "changes": [
+        "Claude Code chat sessions now persist across reboot and sign-in again after your session expires, instead of clearing the session list.",
+        "Offline voice dictation no longer waits indefinitely when its on-device speech model cannot finish loading — the turn now stops after a bounded wait instead of leaving Omi stuck",
+        "Fixed custom API keys being cleared without explanation and stopped unvalidated or rotated keys from being used before enrollment",
+        "On-device transcription now closes on a pause in a noisy room instead of waiting out its 10-second window, so spoken commands reach Omi sooner"
+      ]
+    },
+    {
+      "version": "0.12.351",
+      "date": "2026-09-15",
+      "changes": [
+        "Memory lists now use server-owned currency assessments, keep unknown classifications visible, expose Useful now and discoverable History views behind the Beta capability header, and let you tell Omi which memories to use without deleting them"
+      ]
+    },
+    {
+      "version": "0.12.350",
+      "date": "2026-09-14",
+      "changes": [
+        "Always-on listening no longer switches itself off when your microphone is briefly taken by another audio app — Omi now keeps trying to reconnect for several minutes instead of giving up after six seconds",
+        "Fixed chat-only apps not opening their own conversation and improved delegated agent provider and file-path reliability"
+      ]
+    },
+    {
+      "version": "0.12.349",
+      "date": "2026-09-14",
+      "changes": [
+        "Dropping several files onto the chat composer at once now stages all of them up to the attachment limit, and composers without attachment support now decline file drags instead of pasting the dropped file's path into the message"
+      ]
+    },
+    {
       "version": "0.12.348",
       "date": "2026-09-14",
       "changes": [

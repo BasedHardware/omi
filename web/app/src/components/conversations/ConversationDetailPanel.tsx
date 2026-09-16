@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from '@tschk/moonshine-next/navigation';
 import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -14,7 +13,6 @@ import {
   FileText,
   MapPin,
   Sparkles,
-  Volume2,
   ChevronDown,
   ChevronUp,
   RefreshCw,
@@ -58,7 +56,7 @@ import type {
   StructuredActionItem,
 } from '@/types/conversation';
 
-// Dynamic import for Leaflet map (SSR not supported)
+// Code-split the location preview out of the conversation panel bundle
 const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
   ssr: false,
   loading: () => (
@@ -458,7 +456,6 @@ export function ConversationDetailPanel({
     savingId: string | null;
     failed: number;
   }>({ total: 0, done: 0, savingId: null, failed: 0 });
-  const router = useRouter();
   const { people } = usePeople();
 
   // Meeting-note screenshots: banner + carousel + lightbox state.
@@ -834,7 +831,6 @@ export function ConversationDetailPanel({
   const actionItems = structured.action_items || [];
   const hasActionItems = actionItems.length > 0;
   const hasTranscript = transcript_segments && transcript_segments.length > 0;
-  const hasLocation = geolocation && geolocation.latitude && geolocation.longitude;
 
   // Build tabs array based on available content
   const tabs: Tab[] = [

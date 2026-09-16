@@ -460,6 +460,29 @@ describe("external realtime surface authority", () => {
     }
   });
 
+  it("authorizes create_memory when the runtime clock preamble precedes the typed command", () => {
+    const preamble = "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\n";
+    const reproPrompt = `${preamble}remember that my favorite color is red`;
+
+    expect(hasExplicitMemorySaveIntent("remember that my favorite color is red")).toBe(true);
+    expect(hasExplicitMemorySaveIntent(reproPrompt)).toBe(true);
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+      originatingPrompt: reproPrompt,
+    })).toMatchObject({
+      action: "execute",
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+    });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+      originatingPrompt: `${preamble}my favorite color is red`,
+    })).toMatchObject({ action: "reject", code: "memory_save_not_authorized" });
+    expect(hasExplicitMemorySaveIntent(preamble)).toBe(false);
+  });
+
   it("lets create_memory persist a clean standalone fact when save intent is present", () => {
     expect(routeExternalSurfaceTool({
       toolName: "create_memory",

@@ -955,6 +955,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(message?.requestKey)
   }
 
+  func testQueryResultPreservesResponseObservedProviderTargets() async throws {
+    let message = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"result","protocolVersion":2,"requestId":"req-provider","clientId":"main-chat","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done","modelsUsed":["gpt-5.6-luna"],"providerTargets":["openai-codex"]}"#
+      )
+    )
+
+    let bridgeResult = await AgentRuntimeProcess.shared.queryResult(from: message)
+    let clientResult = AgentClient.QueryResult(bridgeResult)
+
+    XCTAssertEqual(bridgeResult.modelsUsed, ["gpt-5.6-luna"])
+    XCTAssertEqual(bridgeResult.providerTargets, ["openai-codex"])
+    XCTAssertEqual(clientResult.providerTargets, ["openai-codex"])
+  }
+
   func testHarnessModeMapsNamedAdapters() {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "piMono"), "pi-mono")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "pi-mono"), "pi-mono")
@@ -1254,7 +1269,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   @MainActor
-  func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
+  func testUsableByokEnvironmentIncludesEnrolledSelectedLLMAndDeepgram() {
     let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
@@ -1288,10 +1303,10 @@ final class AgentRuntimeProcessTests: XCTestCase {
           ($0.rawValue, APIKeyService.byokFingerprint("sk-agent-\($0.rawValue)"))
         }))
     UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
-    // usableBYOKEnvironment() gates on isByokActive, which requires the
-    // selected provider's key to be enrolled (#11454's fingerprint contract).
+    // Runtime forwarding requires each current key's fingerprint to be enrolled.
     APIKeyService.persistEnrolledFingerprints([
-      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter")
+      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter"),
+      BYOKProvider.deepgram.rawValue: APIKeyService.byokFingerprint("sk-agent-deepgram"),
     ])
 
     let result = AgentRuntimeProcess.usableBYOKEnvironment()

@@ -5,11 +5,14 @@ This app provides GitHub integration through OAuth2 authentication
 and chat tools for creating and managing GitHub issues.
 """
 import sys
-from fastapi import FastAPI, Request, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
-from dotenv import load_dotenv
+import re
+import time
 import secrets
+from urllib.parse import urlparse
+from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi.responses import HTMLResponse, RedirectResponse
+from dotenv import load_dotenv
 
 from simple_storage import SimpleUserStorage
 from github_client import GitHubClient
@@ -49,16 +52,212 @@ oauth_states = {}
 # Helper Functions
 # ============================================
 
+GITHUB_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
+
+
+def _validate_owner_repo(repo: str) -> tuple[str, str]:
+    """
+    Validate and canonicalize a repository string in 'owner/repo' format.
+    Returns (canonical_owner_repo, error_message).
+    """
+    if not isinstance(repo, str):
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    if any(c in repo for c in ("\n", "\r", "\t", "\0")):
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    cleaned = repo.strip()
+    if "/" not in cleaned:
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    parts = cleaned.split("/")
+    if len(parts) != 2:
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    owner, name = parts[0].strip(), parts[1].strip()
+    if (
+        not owner
+        or not name
+        or not GITHUB_SEGMENT_RE.match(owner)
+        or not GITHUB_SEGMENT_RE.match(name)
+        or owner in (".", "..")
+        or name in (".", "..")
+    ):
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    return f"{owner}/{name}", None
+
+
+def _fallback_to_default_repo(user: dict) -> tuple[str, str]:
+    """Fallback to user's configured default repository with validation."""
+    default_repo = user.get("selected_repo")
+    if not default_repo or not isinstance(default_repo, str) or not default_repo.strip():
+        return None, "No repository specified. Please set a default repository in settings or provide the 'repo' parameter (format: 'owner/repo')."
+    canonical_default, err = _validate_owner_repo(default_repo)
+    if err:
+        return None, f"Configured default repository is invalid ({default_repo!r}): {err}"
+    return canonical_default, None
+
+
 def get_repo_for_request(user: dict, repo_param: str = None) -> tuple[str, str]:
     """
-    Get repository for a request.
+    Get and resolve the target repository for a request.
+    Handles full names ('owner/repo'), URLs, and short names ('repo') against
+    the user's accessible repositories with strict disambiguation and whitelist validation.
     Returns (repo_full_name, error_message).
     If error_message is not None, repo_full_name will be None.
     """
-    repo_full_name = repo_param or user.get("selected_repo")
-    if not repo_full_name:
-        return None, "No repository specified. Please set a default repository in settings or provide the 'repo' parameter (format: 'owner/repo')."
-    return repo_full_name, None
+    if not isinstance(user, dict):
+        user = {}
+
+    raw_repo = repo_param
+    if raw_repo is not None:
+        if not isinstance(raw_repo, str):
+            return None, f"Invalid repository parameter: {raw_repo!r}. Expected 'owner/repo' string."
+        raw_repo = raw_repo.strip()
+
+    # Fall back to selected_repo if parameter is missing or blank
+    if not raw_repo:
+        return _fallback_to_default_repo(user)
+
+    cleaned = raw_repo
+
+    # Robust URL parsing using urlparse
+    if cleaned.lower().startswith(("http://", "https://")):
+        try:
+            parsed = urlparse(cleaned)
+            host = (parsed.hostname or "").lower()
+            if host != "github.com" and not host.endswith(".github.com"):
+                return None, f"Invalid repository URL: {repo_param!r}. Only GitHub URLs are supported."
+            path = parsed.path.strip("/")
+            path_parts = [p for p in path.split("/") if p]
+            if len(path_parts) >= 2:
+                cleaned = f"{path_parts[0]}/{path_parts[1]}"
+            else:
+                return None, f"Invalid GitHub URL: {repo_param!r}. Expected 'https://github.com/owner/repo'."
+        except Exception:
+            return None, f"Invalid repository URL: {repo_param!r}."
+
+    # Strip SSH, common prefixes and extensions
+    if cleaned.lower().startswith("git@github.com:"):
+        cleaned = cleaned[len("git@github.com:"):].strip()
+    for prefix in ("https://github.com/", "http://github.com/", "github.com/"):
+        if cleaned.lower().startswith(prefix):
+            cleaned = cleaned[len(prefix):].strip()
+    if cleaned.lower().endswith(".git"):
+        cleaned = cleaned[:-4].strip()
+    cleaned = cleaned.strip("/")
+
+    if not cleaned:
+        return _fallback_to_default_repo(user)
+
+    # Full name validation ('owner/repo')
+    if "/" in cleaned:
+        return _validate_owner_repo(cleaned)
+
+    # Ensure short name does not contain illegal characters / control chars
+    if not GITHUB_SEGMENT_RE.match(cleaned) or cleaned in (".", ".."):
+        return None, f"Invalid repository name: {repo_param!r}. Expected 'owner/repo' or valid short name."
+
+    # Build known accessible repos: prioritize selected_repo first
+    known_repos = []
+    seen = set()
+
+    selected = user.get("selected_repo")
+    if selected and isinstance(selected, str):
+        c_sel, _ = _validate_owner_repo(selected)
+        if c_sel:
+            known_repos.append(c_sel)
+            seen.add(c_sel)
+
+    raw_avail = user.get("available_repos")
+    if isinstance(raw_avail, list):
+        for item in raw_avail:
+            fn = None
+            if isinstance(item, dict):
+                val = item.get("full_name")
+                if isinstance(val, str):
+                    fn = val.strip()
+            elif isinstance(item, str):
+                fn = item.strip()
+            if fn:
+                c_fn, _ = _validate_owner_repo(fn)
+                if c_fn and c_fn not in seen:
+                    known_repos.append(c_fn)
+                    seen.add(c_fn)
+
+    target = cleaned.lower()
+
+    # 1. Exact match against short repository name
+    exact_matches = [r for r in known_repos if r.split("/")[-1].lower() == target]
+    if len(exact_matches) == 1:
+        return exact_matches[0], None
+    if len(exact_matches) > 1:
+        candidates_str = ", ".join(f"'{m}'" for m in exact_matches)
+        return None, f"Multiple repositories match '{cleaned}': {candidates_str}. Please specify the full 'owner/repo'."
+
+    # 2. Substring match against repository name (only when target length >= 3 to prevent flooding)
+    if len(target) >= 3:
+        partial_matches = [r for r in known_repos if target in r.split("/")[-1].lower()]
+        if len(partial_matches) == 1:
+            return partial_matches[0], None
+        if len(partial_matches) > 1:
+            candidates_str = ", ".join(f"'{m}'" for m in partial_matches[:5])
+            return None, f"Multiple repositories match '{cleaned}': {candidates_str}. Please specify the full 'owner/repo'."
+
+    # 3. No match found
+    return None, f"Repository '{cleaned}' not found in your accessible GitHub repositories. Please specify the full 'owner/repo'."
+
+
+def coerce_issue_number(value) -> tuple[int, str]:
+    """
+    Normalize an issue number from tool input.
+    Accepts ints and strings like "#42" or " 42 ".
+    Returns (issue_number, error_message); error_message is not None on failure.
+    """
+    if value is None:
+        return None, "Issue number is required"
+    if isinstance(value, bool):
+        return None, f"Invalid issue number: {value!r}. Provide a positive integer like 42."
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            return None, f"Invalid issue number: {value!r}. Provide a positive integer like 42."
+        number = int(value)
+    elif isinstance(value, str):
+        text = value.strip().lstrip("#").strip()
+        if not text.isdigit():
+            return None, f"Invalid issue number: {value!r}. Provide a positive integer like 42."
+        number = int(text)
+    else:
+        return None, f"Invalid issue number: {value!r}. Provide a positive integer like 42."
+    if number <= 0:
+        return None, f"Invalid issue number: {value!r}. Issue numbers start at 1."
+    return number, None
+
+
+def coerce_limit(value, default: int = 10, max_value: int = 50) -> tuple[int, str]:
+    """
+    Normalize a result limit from tool input. Optional params arrive as
+    JSON null; strings and floats are coerced when unambiguous.
+    Returns (limit, error_message); error_message is not None on failure.
+    """
+    if value is None:
+        return default, None
+    if isinstance(value, bool):
+        return None, f"Invalid limit: {value!r}. Provide a positive integer."
+    if isinstance(value, int):
+        limit = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            return None, f"Invalid limit: {value!r}. Provide a positive integer."
+        limit = int(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text.isdigit():
+            return None, f"Invalid limit: {value!r}. Provide a positive integer."
+        limit = int(text)
+    else:
+        return None, f"Invalid limit: {value!r}. Provide a positive integer."
+    if limit <= 0:
+        return None, "Invalid limit: must be a positive integer."
+    return min(limit, max_value), None
 
 
 # ============================================
@@ -258,14 +457,20 @@ async def tool_create_issue(request: Request):
     try:
         body = await request.json()
         log(f"=== CREATE_ISSUE START ===")
-        log(f"Request: {body}")
-
         uid = body.get("uid")
         title = body.get("title")
         issue_body = body.get("body", "")
-        labels = body.get("labels", [])
-        auto_labels = body.get("auto_labels", True)
         repo = body.get("repo")
+        log(f"Request create_issue: uid={uid}, repo={repo}, title={title}")
+
+        raw_labels = body.get("labels")
+        if isinstance(raw_labels, str):
+            labels = [l.strip() for l in raw_labels.split(",") if l.strip()]
+        elif isinstance(raw_labels, list):
+            labels = [str(l).strip() for l in raw_labels if l is not None and str(l).strip()]
+        else:
+            labels = []
+        auto_labels = body.get("auto_labels", True)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -390,11 +595,19 @@ async def tool_list_issues(request: Request):
         body = await request.json()
         uid = body.get("uid")
         repo = body.get("repo")
-        state = body.get("state", "open")
-        limit = min(body.get("limit", 10), 50)
+        state = body.get("state") or "open"
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
+
+        if state not in ("open", "closed", "all"):
+            return ChatToolResponse(
+                error=f"Invalid state: {state!r}. Use 'open', 'closed', or 'all'."
+            )
+
+        limit, error = coerce_limit(body.get("limit"), default=10, max_value=50)
+        if error:
+            return ChatToolResponse(error=error)
 
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -406,13 +619,17 @@ async def tool_list_issues(request: Request):
         if error:
             return ChatToolResponse(error=error)
 
-        issues = github_client.list_issues(
+        result = github_client.list_issues(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
             state=state,
             per_page=limit
         )
 
+        if result.get("error"):
+            return ChatToolResponse(error=result["error"])
+
+        issues = result["issues"]
         if not issues:
             return ChatToolResponse(result=f"No {state} issues found in {repo_full_name}.")
 
@@ -436,14 +653,15 @@ async def tool_get_issue(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        issue_number = body.get("issue_number")
+        raw_issue_number = body.get("issue_number")
         repo = body.get("repo")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not issue_number:
-            return ChatToolResponse(error="Issue number is required")
+        issue_number, error = coerce_issue_number(raw_issue_number)
+        if error:
+            return ChatToolResponse(error=error)
 
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -455,14 +673,18 @@ async def tool_get_issue(request: Request):
         if error:
             return ChatToolResponse(error=error)
 
-        issue = github_client.get_issue(
+        result = github_client.get_issue(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
-            issue_number=int(issue_number)
+            issue_number=issue_number
         )
 
-        if not issue:
-            return ChatToolResponse(error=f"Issue #{issue_number} not found in {repo_full_name}")
+        if result.get("error"):
+            if result.get("status") == 404:
+                return ChatToolResponse(error=f"Issue #{issue_number} not found in {repo_full_name}")
+            return ChatToolResponse(error=f"Failed to get issue: {result['error']}")
+
+        issue = result["issue"]
 
         result_parts = [
             f"**Issue #{issue['number']}** - {issue['state'].upper()}",
@@ -537,6 +759,7 @@ async def tool_list_labels(request: Request):
         return ChatToolResponse(error=f"Failed to list labels: {str(e)}")
 
 
+@app.post("/tools/add_issue_comment", tags=["chat_tools"], response_model=ChatToolResponse)
 @app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_add_comment(request: Request):
     """
@@ -545,15 +768,16 @@ async def tool_add_comment(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        issue_number = body.get("issue_number")
+        raw_issue_number = body.get("issue_number")
         comment_body = body.get("body")
         repo = body.get("repo")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not issue_number:
-            return ChatToolResponse(error="Issue number is required")
+        issue_number, error = coerce_issue_number(raw_issue_number)
+        if error:
+            return ChatToolResponse(error=error)
 
         if not comment_body:
             return ChatToolResponse(error="Comment body is required")
@@ -571,7 +795,7 @@ async def tool_add_comment(request: Request):
         result = github_client.add_issue_comment(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
-            issue_number=int(issue_number),
+            issue_number=issue_number,
             body=comment_body
         )
 
@@ -1232,11 +1456,20 @@ async def update_repo(
 ):
     """Update user's selected repository."""
     try:
-        success = SimpleUserStorage.update_repo_selection(uid, repo)
-        if success:
-            return {"success": True, "message": f"Repository updated to {repo}"}
-        else:
+        user = SimpleUserStorage.get_user(uid)
+        if not user:
             return {"success": False, "error": "User not found"}
+
+        # Resolve and validate repository format (supports full name, URL, or accessible short name)
+        resolved_repo, error = get_repo_for_request(user, repo)
+        if error:
+            return {"success": False, "error": error}
+
+        success = SimpleUserStorage.update_repo_selection(uid, resolved_repo)
+        if success:
+            return {"success": True, "message": f"Repository updated to {resolved_repo}"}
+        else:
+            return {"success": False, "error": "Failed to update repository selection"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -1398,13 +1631,19 @@ async def test_agent(request: Request):
             return {"success": False, "error": error}
 
         permissions = github_client.get_repo_permissions(user["access_token"], repo_full_name)
-        if not permissions or not (permissions.get("push") or permissions.get("admin")):
+        if not permissions:
+            return {"success": False, "error": "Could not fetch repo permissions"}
+        if permissions.get("_error"):
+            return {
+                "success": False,
+                "error": f"GitHub permissions check failed ({permissions.get('_status')}): {permissions.get('_error')}"
+            }
+        if not (permissions.get("push") or permissions.get("admin")):
             return {
                 "success": False,
                 "error": "GitHub token does not have write access to this repo."
             }
 
-        import time
         logs = []
 
         providers_to_run = list(PROVIDERS.keys()) if send_all else [provider_override or SimpleUserStorage.get_agent_provider(uid) or os.getenv("DEFAULT_AGENT_PROVIDER", "cursor")]
@@ -1517,11 +1756,9 @@ async def tool_code_feature(request: Request):
             )
 
         # Determine target repository
-        repo_full_name = repo or user.get("selected_repo")
-        if not repo_full_name:
-            return ChatToolResponse(
-                error="No repository specified. Please set a default repository in settings."
-            )
+        repo_full_name, error = get_repo_for_request(user, repo)
+        if error:
+            return ChatToolResponse(error=error)
 
         permissions = github_client.get_repo_permissions(user["access_token"], repo_full_name)
         if not permissions:
@@ -1546,7 +1783,6 @@ async def tool_code_feature(request: Request):
             merge_pr_with_github_api,
             get_default_branch
         )
-        import time
 
         owner, repo_name = repo_full_name.split('/')
         branch_name = f"{agent_provider}-agent-{int(time.time())}"

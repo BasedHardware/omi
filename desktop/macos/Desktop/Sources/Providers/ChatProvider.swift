@@ -1231,6 +1231,7 @@ class ChatProvider: ObservableObject {
   @Published var selectedAppId: String? {
     didSet { restoreDraftForCurrentContextIfNeeded() }
   }
+  private(set) var selectedChatAppContext: ChatAppContext?
   @Published var hasMoreMessages = false
   @Published var isLoadingMoreMessages = false
   @Published var showStarredOnly = false
@@ -1280,6 +1281,8 @@ class ChatProvider: ObservableObject {
     if let agentClient { return agentClient }
     let harness = resolvedHarnessMode()
     activeBridgeHarness = harness
+    activeBridgeMode =
+      UserDefaults.standard.string(forKey: .chatBridgeMode) ?? BridgeMode.piMono.rawValue
     let session = AgentClient.makeSession(harnessMode: harness)
     agentClient = session
     return session
@@ -1311,7 +1314,7 @@ class ChatProvider: ObservableObject {
   var messageRatingWriteChain: [String: Task<Void, Never>] = [:]
   var persistMessageRatingHandler: ((String, Int?) async throws -> Void)?
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
-  private var agentBridgeStarted = false
+  var agentBridgeStarted = false
   /// The root shell supplies one server-authoritative sample before this
   /// provider resolves Main Chat. This is process-local only: a different
   /// owner, a failed sample, and every non-main surface receive no extension.
@@ -1322,6 +1325,8 @@ class ChatProvider: ObservableObject {
   /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
   /// so comparing against it in switchBridgeMode() would always match → no-op.
   private var activeBridgeHarness: String = "piMono"
+  /// Persisted bridge mode the runtime last configured (not only harness).
+  private var activeBridgeMode: String = BridgeMode.piMono.rawValue
   /// Orders rapid preference changes without treating them as runtime lifecycle.
   /// The kernel applies each preference only when creating future sessions.
   private var profilePreferenceChangeGeneration: UInt64 = 0
@@ -1330,6 +1335,8 @@ class ChatProvider: ObservableObject {
     case omiAI = "agentSDK"  // Legacy, auto-migrated to piMono
     case userClaude = "claudeCode"
     case piMono = "piMono"
+    /// Local LM server via pi-mono; adapter owns the configured model id.
+    case local = "local"
     case hermes = "hermes"
     case openClaw = "openclaw"
   }
@@ -1407,6 +1414,7 @@ class ChatProvider: ObservableObject {
   private var runtimeOwnerObserver: AnyCancellable?
   private var signOutObserver: AnyCancellable?
   private var sessionInvalidateObserver: AnyCancellable?
+  var authSessionNotificationChain: Task<Void, Never>?
 
   private var refreshAllObserver: AnyCancellable?
   private var userSkillsObserver: AnyCancellable?
@@ -1476,8 +1484,10 @@ class ChatProvider: ObservableObject {
         do {
           _ = try await self.resolvedAgentClient().configureDefaultExecutionProfile(
             adapterId: adapterId,
-            modelProfile: self.activeBridgeHarness == "hermes" || self.activeBridgeHarness == "openclaw"
-              ? nil : ModelQoS.Claude.chat,
+            modelProfile: AgentRuntimeRouting.defaultModelProfile(
+              harnessMode: self.activeBridgeHarness,
+              chatBridgeMode: self.bridgeMode
+            ),
             workingDirectory: directory
           )
         } catch {
@@ -1565,28 +1575,14 @@ class ChatProvider: ObservableObject {
         Task { @MainActor in
           guard let self = self else { return }
           log("ChatProvider: userDidSignOut — clearing chat state so the next user gets fresh context")
-          if self.agentBridgeStarted {
-            await self.resolvedAgentClient().stop()
-            self.agentBridgeStarted = false
-          }
+          await self.stopAgentBridgeIfStarted()
           self.resetSessionStateForAuthChange()
           self.resetDraftAfterSignOut()
           AgentRuntimeStatusStore.shared.reset()
         }
       }
 
-    // Light session invalidation (expired creds) — stop bridge only; preserve chat draft/state.
-    sessionInvalidateObserver = NotificationCenter.default.publisher(for: .sessionDidInvalidate)
-      .sink { [weak self] _ in
-        Task { @MainActor in
-          guard let self else { return }
-          log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
-          if self.agentBridgeStarted {
-            await self.resolvedAgentClient().stop()
-            self.agentBridgeStarted = false
-          }
-        }
-      }
+    sessionInvalidateObserver = makeAuthSessionNotificationObserver()
 
     // Cmd+R: refresh messages on demand
     refreshAllObserver = NotificationCenter.default.publisher(for: .refreshAllData)
@@ -1824,13 +1820,15 @@ class ChatProvider: ObservableObject {
     // Preferences are kernel-owned defaults for future sessions. Existing
     // sessions keep their immutable execution profile and the shared
     // daemon stays alive when this preference changes.
-    let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
     guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: activeBridgeHarness) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(activeBridgeHarness)")
     }
     _ = try await resolvedAgentClient().configureDefaultExecutionProfile(
       adapterId: adapterId,
-      modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+      modelProfile: AgentRuntimeRouting.defaultModelProfile(
+        harnessMode: activeBridgeHarness,
+        chatBridgeMode: bridgeMode
+      ),
       workingDirectory: effectiveAgentWorkingDirectory()
     )
     // Onboarding can start the shared runtime before the root shell has
@@ -1897,6 +1895,8 @@ class ChatProvider: ObservableObject {
     pendingComposerReferences.removeAll()
     sessions.removeAll()
     currentSession = nil
+    selectedAppId = nil
+    selectedChatAppContext = nil
     cachedMemories = []
     cachedLedgerPromptProjection = nil
     memoriesLoaded = false
@@ -1976,13 +1976,15 @@ class ChatProvider: ObservableObject {
     guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: requestedHarness) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(requestedHarness)")
     }
-    let usesNativeModelChoice = requestedHarness == "hermes" || requestedHarness == "openclaw"
     return try await resolveAgentSurfaceSession(
       surface,
       creationProfile: AgentSessionCreationProfile(
         adapterId: requestedAdapter,
         modelProfile: requestedModelProfile ?? modelOverride
-          ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+          ?? AgentRuntimeRouting.defaultModelProfile(
+            harnessMode: requestedHarness,
+            chatBridgeMode: bridgeMode
+          ),
         workingDirectory: effectiveAgentWorkingDirectory()
       )
     )
@@ -2064,8 +2066,13 @@ class ChatProvider: ObservableObject {
       "presentation": systemPromptStyle == .floating ? "floating" : "main",
       "onboarding": isOnboarding,
     ]
-    if let systemPromptPrefix, !systemPromptPrefix.isEmpty {
-      surfacePayload["experienceContext"] = systemPromptPrefix
+    let scopedExperienceContext = ChatAppContext.scopedExperienceContext(
+      selectedApp: selectedChatAppContext,
+      surfaceKind: surface.surfaceKind,
+      baseContext: systemPromptPrefix
+    )
+    if let scopedExperienceContext, !scopedExperienceContext.isEmpty {
+      surfacePayload["experienceContext"] = scopedExperienceContext
     }
     let responseContext = [
       systemPromptSuffix?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -2314,11 +2321,13 @@ class ChatProvider: ObservableObject {
     let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
     let newHarness = Self.harnessMode(for: resolvedMode)
     let previousHarness = activeBridgeHarness
-    guard newHarness != previousHarness else { return }
+    let previousBridgeMode = activeBridgeMode
+    guard newHarness != previousHarness || resolvedMode.rawValue != previousBridgeMode else { return }
     log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
     profilePreferenceChangeGeneration &+= 1
     let preferenceChange = profilePreferenceChangeGeneration
     activeBridgeHarness = newHarness
+    activeBridgeMode = resolvedMode.rawValue
     bridgeMode = resolvedMode.rawValue
     AnalyticsManager.shared.chatBridgeModeChanged(from: previousHarness, to: resolvedMode.rawValue)
 
@@ -2330,10 +2339,12 @@ class ChatProvider: ObservableObject {
       guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
       }
-      let usesNativeModelChoice = newHarness == "hermes" || newHarness == "openclaw"
       let configured = try await resolvedAgentClient().configureDefaultExecutionProfile(
         adapterId: adapterId,
-        modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+        modelProfile: AgentRuntimeRouting.defaultModelProfile(
+          harnessMode: newHarness,
+          chatBridgeMode: bridgeMode
+        ),
         workingDirectory: effectiveAgentWorkingDirectory()
       )
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
@@ -3631,9 +3642,20 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Kernel Journal Refresh
 
+  func stopAgentBridgeIfStarted() async {
+    guard agentBridgeStarted else { return }
+    await resolvedAgentClient().stop()
+    agentBridgeStarted = false
+  }
+
+  func stopAgentBridgeAfterSessionInvalidation() async {
+    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
+    await stopAgentBridgeIfStarted()
+  }
+
   /// Activation/notification is only a wakeup. Ordered range replay in
   /// KernelTurnProjection is the sole source of new or updated messages.
-  private func refreshJournalProjection() async {
+  func refreshJournalProjection() async {
     guard await ensureBridgeStartedForKernel() else { return }
     await kernelTurnProjection.refresh(surface: mainChatSurfaceReference())
   }
@@ -5617,7 +5639,8 @@ class ChatProvider: ObservableObject {
             toolNames: toolTiming.toolNames,
             sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
             sqlQueryCount: metricsSnapshot.sqlQueryCount,
-            modelsUsed: queryResult.modelsUsed
+            modelsUsed: queryResult.modelsUsed,
+            providerTargets: queryResult.providerTargets
           )
           completeRemainingToolCalls(
             messageId: aiMessageId,
@@ -7092,9 +7115,17 @@ class ChatProvider: ObservableObject {
 
   /// Select a chat app and load its sessions
   func selectApp(_ appId: String?) async {
-    guard selectedAppId != appId else { return }
+    await selectApp(appId, name: nil, chatPrompt: nil)
+  }
+
+  /// Opens an app-owned Main Chat and binds the app's decoded `chat_prompt`
+  /// to that conversation's local kernel context.
+  func selectApp(_ appId: String?, name: String?, chatPrompt: String?) async {
+    let appContext = appId.map { ChatAppContext(appId: $0, appName: name, chatPrompt: chatPrompt) }
+    guard selectedAppId != appId || selectedChatAppContext != appContext else { return }
     revokeActiveTurn(reason: .superseded)
     selectedAppId = appId
+    selectedChatAppContext = appContext
     currentSession = nil
     messages = []
     resetMessagesPagination()

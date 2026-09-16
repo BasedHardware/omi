@@ -13,6 +13,7 @@ import pytest
 from database.read_boundary import MalformedDocError
 from testing.import_isolation import load_module_fresh, stub_modules
 
+from models.feedback import FeedbackEvent, MemoryUseFeedback
 from models.memory_evidence import (
     ArtifactPreservationState,
     MemoryEvidence,
@@ -49,6 +50,8 @@ from models.product_memory import (
     ProcessingState,
     is_default_access_eligible,
 )
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
+from utils.memory.memory_use import build_memory_use_patch
 
 backend = Path(__file__).resolve().parents[2]
 
@@ -270,6 +273,53 @@ class _FakeDb:
 
     def collection(self, path):
         return _FakeReceiptQuery(self, path)
+
+
+class _RollbackStrictTransaction(StrictFirestoreTransaction):
+    """Strict transaction double that buffers writes until commit."""
+
+    def __init__(self, database, *, allow_reads_after_writes=False, fail_prefix=None):
+        super().__init__(database, allow_reads_after_writes=allow_reads_after_writes)
+        self.fail_prefix = fail_prefix
+
+    def set(self, ref, data):
+        self._assert_reference_belongs(ref)
+        if self.fail_prefix and "/".join(ref.path).startswith(self.fail_prefix):
+            raise RuntimeError("injected feedback receipt write failure")
+        self.has_written = True
+        self.sets.append((ref.path, copy.deepcopy(data)))
+
+    def delete(self, ref, *args, **kwargs):
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        self.updates.append((ref.path, {"__delete__": True}))
+
+    def _commit(self):
+        for path, data in self.sets:
+            self._database.rows[path] = copy.deepcopy(data)
+        for path, update in self.updates:
+            if update == {"__delete__": True}:
+                self._database.rows.pop(path, None)
+
+    def _rollback(self):
+        self.sets.clear()
+        self.updates.clear()
+        self.has_written = False
+
+
+class _RollbackStrictFirestore(StrictFirestore):
+    def __init__(self, rows=None, *, fail_prefix=None):
+        super().__init__(rows)
+        self.fail_prefix = fail_prefix
+
+    def transaction(self):
+        transaction = _RollbackStrictTransaction(
+            self,
+            allow_reads_after_writes=self._allow_reads_after_writes,
+            fail_prefix=self.fail_prefix,
+        )
+        self.transactions.append(transaction)
+        return transaction
 
 
 def _evidence(**overrides):
@@ -2605,3 +2655,321 @@ def test_explicit_trigger_feedback_receipt_commits_and_replays_with_the_canonica
             trigger_feedback_receipt=receipt.model_copy(update={"request_hash": "b" * 64}),
             db_client=db,
         )
+
+
+def test_memory_use_replay_reads_receipt_and_current_item_without_writes(store, monkeypatch):
+    item = _target_item()
+    feedback = MemoryUseFeedback(
+        uid="u1",
+        feedback_id="use-replay-1",
+        target_memory_id=item.memory_id,
+        action="suppress",
+        created_at=datetime.now(timezone.utc),
+    )
+    event = store._memory_use_feedback_event(feedback)
+    current = item.model_copy(
+        update={
+            "item_revision": item.item_revision + 1,
+            "arguments": {"memory_use": {"state": "allowed", "suppressed": False}},
+        }
+    )
+    strict = StrictFirestore(
+        {
+            ("users", "u1", "memory_state", "apply_control"): _stored_model(
+                MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+            ),
+            ("feedback_events", event.id): event.model_dump(mode="json"),
+            ("users", "u1", "memory_items", item.memory_id): current.model_dump(mode="json"),
+        }
+    )
+    monkeypatch.setattr(store, "assert_no_destructive_operation_transaction", lambda *args, **kwargs: None)
+
+    replay = store.read_memory_use_feedback_replay("u1", feedback, db_client=strict)
+
+    assert replay is not None
+    assert replay.item_revision == item.item_revision + 1
+    assert strict.transactions[0].has_written is False
+
+
+def test_memory_use_replay_rejects_receipt_id_payload_conflict(store, monkeypatch):
+    item = _target_item()
+    feedback = MemoryUseFeedback(
+        uid="u1",
+        feedback_id="use-conflict-1",
+        target_memory_id=item.memory_id,
+        action="suppress",
+        created_at=datetime.now(timezone.utc),
+    )
+    event = store._memory_use_feedback_event(feedback).model_copy(update={"target_id": "other-memory"})
+    strict = StrictFirestore(
+        {
+            ("users", "u1", "memory_state", "apply_control"): _stored_model(
+                MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+            ),
+            ("feedback_events", event.id): event.model_dump(mode="json"),
+        }
+    )
+    monkeypatch.setattr(store, "assert_no_destructive_operation_transaction", lambda *args, **kwargs: None)
+
+    with pytest.raises(store.MemoryFirestoreApplyError, match="different payload"):
+        store.read_memory_use_feedback_replay("u1", feedback, db_client=strict)
+
+    assert strict.transactions[0].has_written is False
+
+
+def test_belief_backfill_transaction_rejects_stale_validity_without_writes(store, monkeypatch):
+    source = _target_item(item_revision=4, valid_to=None, belief_class=None, half_life_days=None)
+    current = source.model_copy(update={"valid_to": datetime.now(timezone.utc) + timedelta(days=3)})
+    patch = {
+        "patch_id": "backfill-patch",
+        "packet_id": "user_mutation:belief_backfill:mem1",
+        "run_id": "belief-backfill",
+        "observed_head_commit_id": "head0",
+        "idempotency_key": "backfill-idempotency",
+        "decision": DurablePatchDecision.update.value,
+        "target_memory_id": source.memory_id,
+        "result_status": LifecycleState.active.value,
+        "evidence_ids": ["ev1"],
+        "expected_item_revision": source.item_revision,
+        "expected_content_hash": source.content_hash,
+        "belief_class": "preference",
+        "half_life_days": 30.0,
+    }
+    mutation_identity = build_patch_mutation_identity(patch)
+    patch["mutation_metadata"] = mutation_identity
+    operation = MemoryOperation.new(
+        uid="u1",
+        operation_type=MemoryOperationType.user_mutation,
+        source_packet_id=f"user_mutation:belief_backfill:{source.memory_id}:r{source.item_revision}:receipt",
+        target_memory_id=source.memory_id,
+        evidence_ids=["ev1"],
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "target_memory_id": source.memory_id,
+            "result_status": LifecycleState.active.value,
+            "mutation_metadata": mutation_identity,
+        },
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+    strict = StrictFirestore(
+        {
+            ("users", "u1", "memory_state", "apply_control"): _stored_model(
+                MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+            ),
+            ("users", "u1", "memory_operations", operation.operation_id): _stored_model(operation),
+            ("users", "u1", "memory_evidence", "ev1"): _stored_model(_evidence()),
+            ("users", "u1", "memory_items", source.memory_id): _stored_model(current),
+        }
+    )
+    monkeypatch.setattr(store, "assert_no_destructive_operation_transaction", lambda *args, **kwargs: None)
+
+    with pytest.raises(store.MemoryFirestoreApplyError, match="source fence"):
+        store.apply_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=patch,
+            proposed_operation=operation,
+            required_source_item=source,
+            db_client=strict,
+        )
+
+    assert strict.transactions[0].has_written is False
+
+
+def test_unrelated_direct_user_mutation_cannot_claim_belief_review_extras(store, monkeypatch):
+    item = _target_item()
+    patch = {
+        "patch_id": "patch-unrelated-review",
+        "packet_id": "user_mutation:other:mem1",
+        "run_id": "unrelated-review",
+        "observed_head_commit_id": item.ledger_commit_id,
+        "idempotency_key": "unrelated-review-idempotency",
+        "decision": DurablePatchDecision.update.value,
+        "target_memory_id": item.memory_id,
+        "result_status": LifecycleState.active.value,
+        "evidence_ids": [evidence.evidence_id for evidence in item.evidence],
+        "expected_item_revision": item.item_revision,
+        "expected_content_hash": item.content_hash,
+        "promotion_audit": {"reviewed": True, "user_review": True},
+        "rationale": "unrelated callers cannot mint review confidence",
+        "confidence": 1.0,
+    }
+    mutation_identity = build_patch_mutation_identity(patch)
+    patch["mutation_metadata"] = mutation_identity
+    operation = MemoryOperation.new(
+        uid=item.uid,
+        operation_type=MemoryOperationType.user_mutation,
+        source_packet_id="user_mutation:other:mem1:r1",
+        target_memory_id=item.memory_id,
+        evidence_ids=[evidence.evidence_id for evidence in item.evidence],
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "target_memory_id": item.memory_id,
+            "result_status": LifecycleState.active.value,
+            "mutation_metadata": mutation_identity,
+        },
+        account_generation=item.account_generation,
+        source_generation=2,
+        observed_head_commit_id=item.ledger_commit_id,
+    )
+    db = _db_with(operation=operation, target_items=[item])
+    monkeypatch.setattr(store, "assert_no_destructive_operation_transaction", lambda *args, **kwargs: None)
+
+    with pytest.raises(store.MemoryFirestoreApplyError, match="exact review source packet"):
+        store.apply_direct_user_long_term_patch_firestore(
+            uid=item.uid,
+            operation_id=operation.operation_id,
+            patch_payload=patch,
+            proposed_operation=operation,
+            db_client=db,
+        )
+
+
+def _memory_use_operation_and_patch(item, feedback):
+    built = build_memory_use_patch(
+        item,
+        action=feedback.action,
+        feedback_id=feedback.feedback_id,
+        expected_item_revision=item.item_revision,
+    )
+    patch = {
+        "patch_id": f"patch-{feedback.feedback_id}",
+        "packet_id": f"user_mutation:memory_use:{feedback.feedback_id}",
+        "run_id": f"memory-use:{feedback.feedback_id}",
+        "observed_head_commit_id": item.ledger_commit_id,
+        "idempotency_key": f"idem-{feedback.feedback_id}",
+        "decision": DurablePatchDecision.update.value,
+        "target_memory_id": item.memory_id,
+        "result_status": LifecycleState.active.value,
+        "evidence_ids": [evidence.evidence_id for evidence in item.evidence],
+        "expected_item_revision": item.item_revision,
+        "expected_content_hash": item.content_hash,
+        "arguments": built.arguments,
+        "curation_weight": built.curation_weight,
+    }
+    mutation_identity = build_patch_mutation_identity(patch)
+    patch["mutation_metadata"] = mutation_identity
+    operation = MemoryOperation.new(
+        uid=item.uid,
+        operation_type=MemoryOperationType.user_mutation,
+        source_packet_id=f"user_mutation:memory_use:{feedback.feedback_id}:{item.memory_id}:r{item.item_revision}",
+        target_memory_id=item.memory_id,
+        evidence_ids=[evidence.evidence_id for evidence in item.evidence],
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "target_memory_id": item.memory_id,
+            "result_status": LifecycleState.active.value,
+            "arguments": built.arguments,
+            "mutation_metadata": mutation_identity,
+        },
+        account_generation=item.account_generation,
+        source_generation=2,
+        observed_head_commit_id=item.ledger_commit_id,
+    )
+    return operation, patch
+
+
+def test_memory_use_commit_replay_conflict_and_receipt_failure_are_atomic(store, monkeypatch):
+    monkeypatch.setattr(store, "assert_no_destructive_operation_transaction", lambda *args, **kwargs: None)
+    item = _target_item(graph_ready=False)
+    suppress = MemoryUseFeedback(
+        uid="u1",
+        feedback_id="use-atomic-suppress",
+        target_memory_id=item.memory_id,
+        action="suppress",
+        created_at=datetime.now(timezone.utc),
+    )
+    suppress_operation, suppress_patch = _memory_use_operation_and_patch(item, suppress)
+    strict = _RollbackStrictFirestore(
+        {
+            ("users", "u1", "memory_state", "apply_control"): _stored_model(
+                MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+            ),
+            ("users", "u1", "memory_evidence", "ev1"): _stored_model(_evidence()),
+            ("users", "u1", "memory_items", item.memory_id): _stored_model(item),
+        }
+    )
+
+    first = store.apply_direct_user_long_term_patch_firestore(
+        uid="u1",
+        operation_id=suppress_operation.operation_id,
+        patch_payload=suppress_patch,
+        proposed_operation=suppress_operation,
+        memory_use_feedback=suppress,
+        db_client=strict,
+    )
+
+    assert first.status == ApplyStatus.committed, first.reason
+    persisted_item = MemoryItem(**strict.rows[("users", "u1", "memory_items", item.memory_id)])
+    assert persisted_item.arguments["memory_use"]["state"] == "suppressed"
+    suppress_event_id = store.memory_use_feedback_event_id("u1", suppress.feedback_id)
+    assert ("feedback_events", suppress_event_id) in strict.rows
+
+    allow = MemoryUseFeedback(
+        uid="u1",
+        feedback_id="use-atomic-allow",
+        target_memory_id=item.memory_id,
+        action="allow",
+        created_at=datetime.now(timezone.utc),
+    )
+    allow_operation, allow_patch = _memory_use_operation_and_patch(persisted_item, allow)
+    second = store.apply_direct_user_long_term_patch_firestore(
+        uid="u1",
+        operation_id=allow_operation.operation_id,
+        patch_payload=allow_patch,
+        proposed_operation=allow_operation,
+        memory_use_feedback=allow,
+        db_client=strict,
+    )
+    assert second.status == ApplyStatus.committed, second.reason
+    allowed_item = MemoryItem(**strict.rows[("users", "u1", "memory_items", item.memory_id)])
+    assert allowed_item.arguments["memory_use"]["state"] == "allowed"
+
+    before_replay = copy.deepcopy(strict.rows)
+    replay = store.apply_direct_user_long_term_patch_firestore(
+        uid="u1",
+        operation_id=suppress_operation.operation_id,
+        patch_payload=suppress_patch,
+        proposed_operation=suppress_operation,
+        memory_use_feedback=suppress,
+        db_client=strict,
+    )
+    assert replay.status == ApplyStatus.idempotent_skip
+    assert strict.rows == before_replay
+
+    for conflicting in (
+        suppress.model_copy(update={"action": "allow"}),
+        suppress.model_copy(update={"target_memory_id": "other-memory"}),
+    ):
+        with pytest.raises(store.MemoryFirestoreApplyError, match="different payload"):
+            store.apply_direct_user_long_term_patch_firestore(
+                uid="u1",
+                operation_id=suppress_operation.operation_id,
+                patch_payload=suppress_patch,
+                proposed_operation=suppress_operation,
+                memory_use_feedback=conflicting,
+                db_client=strict,
+            )
+
+    useful = MemoryUseFeedback(
+        uid="u1",
+        feedback_id="use-atomic-useful",
+        target_memory_id=item.memory_id,
+        action="useful",
+        created_at=datetime.now(timezone.utc),
+    )
+    useful_operation, useful_patch = _memory_use_operation_and_patch(allowed_item, useful)
+    before_failed_commit = copy.deepcopy(strict.rows)
+    strict.fail_prefix = "feedback_events/"
+    with pytest.raises(RuntimeError, match="feedback receipt write failure"):
+        store.apply_direct_user_long_term_patch_firestore(
+            uid="u1",
+            operation_id=useful_operation.operation_id,
+            patch_payload=useful_patch,
+            proposed_operation=useful_operation,
+            memory_use_feedback=useful,
+            db_client=strict,
+        )
+    assert strict.rows == before_failed_commit

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+import html
 import os
 import sys
 from dotenv import load_dotenv
@@ -249,8 +250,14 @@ async def root(uid: str = Query(None)):
     for lst in lists:
         selected_attr = 'selected' if lst['id'] == selected_list else ''
         space_name = lst.get('space_name', '')
-        display_name = f"{lst['name']}" + (f" ({space_name})" if space_name else "")
-        list_options += f'<option value="{lst["id"]}" {selected_attr}>{display_name}</option>'
+        folder_name = lst.get('folder_name', '')
+        # Folder lists show as "Folder / List" — two folders commonly hold a
+        # list with the same name (every sprint has a "Bugs"), and the bare
+        # name alone cannot tell them apart in the picker.
+        display_name = f"{folder_name} / {lst['name']}" if folder_name else f"{lst['name']}"
+        display_name += f" ({space_name})" if space_name else ""
+        # Names come straight from ClickUp; escape at the HTML boundary.
+        list_options += f'<option value="{html.escape(str(lst["id"]))}" {selected_attr}>{html.escape(display_name)}</option>'
     
     return HTMLResponse(content=f"""
     <html>
@@ -478,9 +485,8 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
         
         return RedirectResponse(url=auth_url)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"OAuth initialization failed: {str(e)}")
+        print(f"❌ OAuth initialization error: {type(e).__name__}", flush=True)
+        raise HTTPException(status_code=500, detail=f"OAuth initialization failed: {type(e).__name__}")
 
 
 @app.get("/auth/callback")
@@ -617,8 +623,7 @@ async def auth_callback(
         )
     
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Auth callback error: {type(e).__name__}", flush=True)
         return HTMLResponse(
             content=f"""
             <html>
@@ -630,7 +635,7 @@ async def auth_callback(
                     <div class="container">
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
-                            <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
+                            <p style="margin-bottom: 16px;">Failed to complete authentication: {type(e).__name__}</p>
                             <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
@@ -786,10 +791,6 @@ async def webhook(
     
     # Log received data
     print(f"📥 Received {len(segments) if segments else 0} segment(s) from OMI", flush=True)
-    if segments:
-        for i, seg in enumerate(segments[:3]):
-            text = seg.get('text', 'NO TEXT') if isinstance(seg, dict) else str(seg)
-            print(f"   Segment {i}: {text[:100]}", flush=True)
     
     if not segments or not isinstance(segments, list):
         return {"status": "ok"}
@@ -809,7 +810,7 @@ async def webhook(
     
     # Only send notifications for final task creation
     if response_message and ("✅ Task created" in response_message or "❌" in response_message):
-        print(f"✉️  USER NOTIFICATION: {response_message}", flush=True)
+        print("✉️  USER NOTIFICATION sent (task result)", flush=True)
         return {
             "message": response_message,
             "session_id": session_id,
@@ -817,7 +818,8 @@ async def webhook(
         }
     
     # Silent response during collection
-    print(f"🔇 Silent response: {response_message}", flush=True)
+    response_len = len(response_message or "")
+    print(f"🔇 Silent response (len={response_len})", flush=True)
     return {"status": "ok"}
 
 
@@ -837,7 +839,6 @@ async def process_segments(
     session_id = session["session_id"]
     is_test_session = session_id.startswith("test_session")
     
-    print(f"🔍 Received: '{full_text}'", flush=True)
     print(f"📊 Session mode: {session['task_mode']}, Count: {session.get('segments_count', 0)}/5", flush=True)
     
     # Check for trigger phrase (but only if not already recording)
@@ -845,7 +846,7 @@ async def process_segments(
         task_content = task_detector.extract_task_content(full_text)
         
         print(f"🎤 TRIGGER! {'[TEST MODE] Processing immediately...' if is_test_session else 'Starting segment collection...'}", flush=True)
-        print(f"   Content: '{task_content}'", flush=True)
+        print(f"   Content extracted: {'yes' if task_content else 'no'}", flush=True)
         
         # TEST MODE: Process entire text immediately
         if is_test_session and len(task_content) > 5:
@@ -932,8 +933,7 @@ async def process_segments(
         accumulated += " " + full_text
         segments_count += 1
         
-        print(f"📝 Segment {segments_count}/5: '{full_text}'", flush=True)
-        print(f"📚 Full accumulated: '{accumulated[:150]}...'", flush=True)
+        print(f"📝 Segment {segments_count}/5 received", flush=True)
         
         # Update session with new segment
         SimpleSessionStorage.update_session(

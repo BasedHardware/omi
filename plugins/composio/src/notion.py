@@ -206,7 +206,7 @@ async def extract_all_pages(access_token: str, uid: str):
                     logger.info(f"✓ Successfully stored {facts_stored} facts from page: {title}")
 
                 except Exception as e:
-                    logger.error(f"Error processing page {page_id}: {str(e)}")
+                    logger.error(f"Error processing page {page_id}: {type(e).__name__}")
                     continue  # Continue with next page even if one fails
 
             # Small delay between batches to prevent overload
@@ -216,7 +216,7 @@ async def extract_all_pages(access_token: str, uid: str):
         return total_facts_stored
 
     except Exception as e:
-        logger.error(f"Error in extract_all_pages: {str(e)}")
+        logger.error(f"Error in extract_all_pages: {type(e).__name__}")
         raise
 
 
@@ -248,7 +248,7 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         return templates.TemplateResponse("notion_success.html", {"request": request})
 
     except Exception as e:
-        logger.error(f"Error in notion_callback: {str(e)}")
+        logger.error(f"Error in notion_callback: {type(e).__name__}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
