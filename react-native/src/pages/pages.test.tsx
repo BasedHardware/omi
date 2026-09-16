@@ -1348,6 +1348,35 @@ test('Settings names Flutter Profile padded GET name instead of remapping to a c
   expect(tree).not.toContain('Email not set on this account.');
 });
 
+test('Settings names Flutter UserProfile fromJson padded GET created_at instead of remapping to a Name chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          created_at: '  2026-09-07T00:00:00.000Z  ',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = sectionText(renderer, 'Account');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Profile response is malformed')),
+  );
+  expect(tree).not.toContain('Ada');
+  expect(tree).not.toContain('ada@example.test');
+  expect(tree).not.toContain('Name');
+  expect(tree).not.toContain('Email');
+  expect(tree).not.toContain('User ID');
+});
+
 test('Settings names GET usage today without Upgrade', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -112,6 +112,12 @@ function optionalString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function presentPaddedKnown(value: unknown, label: string): void {
+  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+    throw new Error(`${label} is malformed`);
+  }
+}
+
 function optionalBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
 }
@@ -292,6 +298,7 @@ export function parseCloudProfile(value: unknown, label: string): CloudProfile {
   if (uid === null) {
     throw new Error(`${label} is malformed`);
   }
+  presentPaddedKnown(record.created_at, label);
   return {
     uid,
     name: optionalString(record.name),

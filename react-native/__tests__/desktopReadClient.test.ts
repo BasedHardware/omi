@@ -7331,6 +7331,75 @@ test('loadAccountSettings keeps failed slices independent', async () => {
   expect(snapshot.usageError).toBe(usageLoadErrorCopy());
 });
 
+test('parseCloudProfile names Flutter UserProfile fromJson padded GET created_at instead of remapping to a Name chip', () => {
+  const ada = {
+    uid: 'user-1',
+    name: 'Ada',
+    email: 'ada@example.test',
+    company: null,
+    job: null,
+    dataProtectionLevel: null,
+  };
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        created_at: '2026-09-07T00:00:00.000Z',
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {uid: 'user-1', name: 'Ada', email: 'ada@example.test'},
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        created_at: null,
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        created_at: '',
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  for (const created_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          created_at,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+  }
+});
+
 test('loadAccountSettings names malformed GET subscription Flutter load-error', async () => {
   const backend = backendFor(request => {
     if (request.path === '/v1/users/profile') {
