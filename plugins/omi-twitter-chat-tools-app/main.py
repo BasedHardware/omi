@@ -175,22 +175,38 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
         return {"error": str(e)}
 
 
+def _safe_max_results(value: Any, default: int = 10, minimum: int = 1, maximum: int = 100) -> int:
+    """Safely parse and clamp max_results parameter."""
+    if value is None or value == "":
+        return default
+    try:
+        val = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, val))
+
+
 def format_tweet(tweet: dict, includes: dict = None) -> str:
     """Format a tweet for display."""
-    text = tweet.get("text", "")
-    tweet_id = tweet.get("id", "")
-    created_at = tweet.get("created_at", "")
-    metrics = tweet.get("public_metrics", {})
+    if not isinstance(tweet, dict):
+        return ""
+
+    text = tweet.get("text", "") or ""
+    tweet_id = tweet.get("id", "") or ""
+    created_at = tweet.get("created_at", "") or ""
+    metrics = tweet.get("public_metrics")
+    if not isinstance(metrics, dict):
+        metrics = {}
 
     # Get author info if available
     author_name = "Unknown"
     author_username = ""
-    if includes and "users" in includes:
+    if isinstance(includes, dict) and "users" in includes and isinstance(includes["users"], list):
         author_id = tweet.get("author_id")
         for user in includes["users"]:
-            if user.get("id") == author_id:
-                author_name = user.get("name", "Unknown")
-                author_username = user.get("username", "")
+            if isinstance(user, dict) and user.get("id") == author_id:
+                author_name = user.get("name", "Unknown") or "Unknown"
+                author_username = user.get("username", "") or ""
                 break
 
     # Format timestamp
@@ -200,7 +216,7 @@ def format_tweet(tweet: dict, includes: dict = None) -> str:
             dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
             time_str = dt.strftime("%b %d, %Y %I:%M %p")
         except:
-            time_str = created_at[:10]
+            time_str = str(created_at)[:10]
 
     # Build output
     parts = []
@@ -212,9 +228,9 @@ def format_tweet(tweet: dict, includes: dict = None) -> str:
         parts.append(f"*{time_str}*")
 
     # Add engagement metrics
-    likes = metrics.get("like_count", 0)
-    retweets = metrics.get("retweet_count", 0)
-    replies = metrics.get("reply_count", 0)
+    likes = metrics.get("like_count", 0) or 0
+    retweets = metrics.get("retweet_count", 0) or 0
+    replies = metrics.get("reply_count", 0) or 0
     if likes or retweets or replies:
         parts.append(f"Likes: {likes} | Retweets: {retweets} | Replies: {replies}")
 
@@ -267,6 +283,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/post_tweet",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "text": {
                             "type": "string",
@@ -288,6 +305,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_timeline",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "max_results": {
                             "type": "integer",
@@ -305,6 +323,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_my_tweets",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "max_results": {
                             "type": "integer",
@@ -322,6 +341,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_mentions",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "max_results": {
                             "type": "integer",
@@ -339,6 +359,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/search_tweets",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
@@ -360,6 +381,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/like_tweet",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "tweet_id": {
                             "type": "string",
@@ -377,6 +399,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/unlike_tweet",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "tweet_id": {
                             "type": "string",
@@ -394,6 +417,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/retweet",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "tweet_id": {
                             "type": "string",
@@ -411,6 +435,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/delete_tweet",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "tweet_id": {
                             "type": "string",
@@ -428,6 +453,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_user_profile",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "username": {
                             "type": "string",
@@ -511,7 +537,7 @@ async def tool_get_timeline(request: Request):
         log(f"=== GET_TIMELINE ===")
 
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        max_results = _safe_max_results(body.get("max_results"), default=10, minimum=1, maximum=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -563,7 +589,7 @@ async def tool_get_my_tweets(request: Request):
         log(f"=== GET_MY_TWEETS ===")
 
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        max_results = _safe_max_results(body.get("max_results"), default=10, minimum=1, maximum=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -627,7 +653,7 @@ async def tool_get_mentions(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        max_results = _safe_max_results(body.get("max_results"), default=10, minimum=1, maximum=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -678,7 +704,7 @@ async def tool_search_tweets(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query = body.get("query")
-        max_results = min(body.get("max_results", 10), 100)
+        max_results = _safe_max_results(body.get("max_results"), default=10, minimum=1, maximum=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -887,17 +913,21 @@ async def tool_get_user_profile(request: Request):
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get profile: {result.get('error', 'Unknown error')}")
 
-        user = result.get("data", {})
-        name = user.get("name", "Unknown")
-        handle = user.get("username", "")
-        bio = user.get("description", "")
+        user = result.get("data") if isinstance(result, dict) else {}
+        if not isinstance(user, dict):
+            user = {}
+        name = user.get("name", "Unknown") or "Unknown"
+        handle = user.get("username", "") or ""
+        bio = user.get("description", "") or ""
         verified = user.get("verified", False)
-        metrics = user.get("public_metrics", {})
-        created = user.get("created_at", "")[:10]
+        metrics = user.get("public_metrics")
+        if not isinstance(metrics, dict):
+            metrics = {}
+        created = str(user.get("created_at", "") or "")[:10]
 
-        followers = metrics.get("followers_count", 0)
-        following = metrics.get("following_count", 0)
-        tweets = metrics.get("tweet_count", 0)
+        followers = metrics.get("followers_count", 0) or 0
+        following = metrics.get("following_count", 0) or 0
+        tweets = metrics.get("tweet_count", 0) or 0
 
         result_parts = [
             f"**{name}** {'(Verified)' if verified else ''}",
