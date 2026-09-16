@@ -18,3 +18,8 @@ def test_serving_only_nutrient_is_not_reported_as_per_100g():
     product2 = {"code": "2", "product_name": "X", "nutriments": {"fat": 1.5}}
     summary = _summarize_product(product2)
     assert summary["nutrition_per_100g"]["fat_g"] is None
+
+
+if __name__ == "__main__":
+    test_serving_only_nutrient_is_not_reported_as_per_100g()
+    print("test_nutrient_basis PASSED")
