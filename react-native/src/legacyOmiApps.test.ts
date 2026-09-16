@@ -83,6 +83,104 @@ test('parseOmiApp names Flutter App.fromGenerated padded GET id instead of remap
   ).toThrow();
 });
 
+test('old apps name Flutter App.fromGenerated padded GET created_at instead of remapping to a catalog name', () => {
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        created_at: '2026-09-07T00:00:00.000Z',
+        installs: '12',
+        rating_avg: '4.5',
+        rating_count: '12',
+        price: '9.99',
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        created_at: '2026-09-07T00:00:00.000Z',
+        installs: 12,
+        rating_avg: 4.5,
+        rating_count: 12,
+        price: 9.99,
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(parseOmiApp(JSON.stringify({id: 'notes', name: 'Notes'}), 'notes')).toEqual({
+    name: 'Notes',
+  });
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        created_at: null,
+        installs: null,
+        rating_avg: null,
+        rating_count: null,
+        price: null,
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  for (const created_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    expect(() =>
+      parseOmiApp(
+        JSON.stringify({id: 'notes', name: 'Notes', created_at}),
+        'notes',
+      ),
+    ).toThrow('Omi app is malformed');
+  }
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', installs: '  12  '}),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', rating_avg: '  4.5  '}),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', price: '  9.99  '}),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', score: '  1.5  '}),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', money_made: '  2.5  '}),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', usage_count: '  7  '}),
+      'notes',
+    ),
+  ).toThrow('Omi app is malformed');
+});
+
 test('parseOmiApp keeps GET http(s) images and omits relative or unsafe URLs', () => {
   expect(
     parseOmiApp(

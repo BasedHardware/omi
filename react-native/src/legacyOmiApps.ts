@@ -15,6 +15,12 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function presentPaddedKnown(value: unknown): void {
+  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+    throw new AppError();
+  }
+}
+
 export type OmiAppChrome = {
   name: string;
   description?: string;
@@ -34,6 +40,14 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   if (id !== appId) {
     throw new AppError();
   }
+  presentPaddedKnown(row.created_at);
+  presentPaddedKnown(row.installs);
+  presentPaddedKnown(row.rating_avg);
+  presentPaddedKnown(row.rating_count);
+  presentPaddedKnown(row.price);
+  presentPaddedKnown(row.score);
+  presentPaddedKnown(row.money_made);
+  presentPaddedKnown(row.usage_count);
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
   if (row.description === undefined || row.description === null) {
     return image === null ? {name} : {name, image};
