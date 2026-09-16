@@ -302,6 +302,27 @@ const browserBackend: OmiBackend = {
   request(request) {
     return browserRequest(request, 'application/json');
   },
+  async uploadAudioFile(wav, filename) {
+    const form = new FormData() as FormData & {
+      append(name: string, value: unknown, filename?: string): void;
+    };
+    form.append('file', wav, filename);
+    const response = await fetch(
+      proxyPath('/v3/upload-audio'),
+      localProxyRequestInit({
+        body: form,
+        credentials: 'omit',
+        method: 'POST',
+      }),
+    );
+    const body = await response.text();
+    return {
+      body: body === '' ? null : body,
+      id: 'onboarding-voice-print',
+      retryAfterSeconds: retryAfterSeconds(response),
+      status: response.status,
+    };
+  },
 };
 
 const browserNative = createWebNativeAdapter();

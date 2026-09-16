@@ -42,6 +42,10 @@ export type RecordingJournal = {
 };
 
 export type OmiBackend = {
+  uploadAudioFile?(
+    wav: ArrayBuffer,
+    filename: string,
+  ): Promise<NativeHttpResponse>;
   getApiContract?(): Promise<'omi' | 'canonical'>;
   getSoftwarePlane?(): Promise<'old' | 'new'>;
   setSoftwarePlane?(plane: 'old' | 'new'): Promise<'old' | 'new'>;
