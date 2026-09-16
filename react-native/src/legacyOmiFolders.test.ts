@@ -106,6 +106,104 @@ test('names Flutter FolderTabs padded GET icon as default folder', () => {
   ]);
 });
 
+test('old folders name Flutter FolderTabs fromJson padded GET created_at instead of remapping to a folder chip', () => {
+  const neighbor = {id: 'folder-kept', name: 'Neighbor', color: '#6B7280'};
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {
+          id: 'folder-work',
+          name: 'Work',
+          created_at: '2026-09-07T00:00:00.000Z',
+          updated_at: '2026-09-07T00:00:00.000Z',
+          conversation_count: '99',
+          order: '1',
+        },
+        {
+          id: 'folder-json',
+          name: 'Work',
+          created_at: '2026-09-07T00:00:00.000Z',
+          updated_at: '2026-09-07T00:00:00.000Z',
+          conversation_count: 99,
+          order: 1,
+        },
+        neighbor,
+      ]),
+    ),
+  ).toEqual([
+    {id: 'folder-work', name: 'Work', color: '#6B7280'},
+    {id: 'folder-json', name: 'Work', color: '#6B7280'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work'},
+        neighbor,
+      ]),
+    ),
+  ).toEqual([{id: 'folder-work', name: 'Work', color: '#6B7280'}, neighbor]);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {
+          id: 'folder-work',
+          name: 'Work',
+          created_at: null,
+          updated_at: null,
+          conversation_count: null,
+          order: null,
+        },
+        neighbor,
+      ]),
+    ),
+  ).toEqual([{id: 'folder-work', name: 'Work', color: '#6B7280'}, neighbor]);
+  for (const created_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    expect(() =>
+      parseOmiFolders(
+        JSON.stringify([
+          {id: 'folder-work', name: 'Work', created_at},
+          neighbor,
+        ]),
+      ),
+    ).toThrow('Omi folders are malformed');
+  }
+  expect(() =>
+    parseOmiFolders(
+      JSON.stringify([
+        {
+          id: 'folder-work',
+          name: 'Work',
+          updated_at: '  2026-09-07T00:00:00.000Z  ',
+        },
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi folders are malformed');
+  expect(() =>
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work', conversation_count: '  99  '},
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi folders are malformed');
+  expect(() =>
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work', order: '  1  '},
+        neighbor,
+      ]),
+    ),
+  ).toThrow('Omi folders are malformed');
+});
+
 test('parses GET omitted folder color as Flutter #6B7280', () => {
   expect(
     parseOmiFolders(

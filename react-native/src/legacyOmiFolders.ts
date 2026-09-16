@@ -1,4 +1,5 @@
 import type {OmiBackend} from './omiNativeTypes';
+import {visibleDisplayText} from './desktopReadClient';
 
 class FoldersError extends Error {
   constructor() {
@@ -22,6 +23,12 @@ function array(value: unknown): unknown[] {
     throw new FoldersError();
   }
   return value;
+}
+
+function presentPaddedKnown(value: unknown): void {
+  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+    throw new FoldersError();
+  }
 }
 
 const FOLDER_HEX_COLOR = /^#?[0-9A-Fa-f]{6}$/;
@@ -111,6 +118,10 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     names.set(id, name);
     const color = omiFolderColorCopy(folder.color);
     const icon = omiFolderIconCopy(folder.icon);
+    presentPaddedKnown(folder.created_at);
+    presentPaddedKnown(folder.updated_at);
+    presentPaddedKnown(folder.conversation_count);
+    presentPaddedKnown(folder.order);
     folders.push({
       id,
       name,
