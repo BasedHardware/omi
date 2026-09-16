@@ -90,8 +90,12 @@ async def monitor_session_timeouts():
                                 channels
                             )
                             
-                            # If no channel, use default
-                            if not channel_id:
+                            # If channel is ambiguous, refuse send and skip default fallback
+                            if not channel_id and isinstance(channel_name, list):
+                                candidates_str = ", ".join(f"#{name}" for name in channel_name)
+                                print(f"⏰ Ambiguous channel mention matching {candidates_str}; skipping default channel fallback", flush=True)
+                            elif not channel_id:
+                                # If no channel, use default
                                 channel_id = user.get("selected_channel")
                                 if channel_id:
                                     for ch in channels:
@@ -775,8 +779,14 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
-            if not channel_id:
+            # If channel is ambiguous, refuse send and ask user for clarification
+            if not channel_id and isinstance(channel_name, list):
+                SimpleSessionStorage.reset_session(session_id)
+                candidates_str = " or ".join(f"#{name}" for name in channel_name)
+                print(f"⚠️ Ambiguous channel matching {candidates_str}; refusing fallback", flush=True)
+                return f"❌ Ambiguous channel: which did you mean: {candidates_str}?"
+            elif not channel_id:
+                # If no channel identified, use default
                 channel_id = user.get("selected_channel")
                 if channel_id:
                     # Find channel name
@@ -871,8 +881,14 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
-            if not channel_id:
+            # If channel is ambiguous, refuse send and ask user for clarification
+            if not channel_id and isinstance(channel_name, list):
+                SimpleSessionStorage.reset_session(session_id)
+                candidates_str = " or ".join(f"#{name}" for name in channel_name)
+                print(f"⚠️ Ambiguous channel matching {candidates_str}; refusing fallback", flush=True)
+                return f"❌ Ambiguous channel: which did you mean: {candidates_str}?"
+            elif not channel_id:
+                # If no channel identified, use default
                 channel_id = user.get("selected_channel")
                 if channel_id:
                     # Find channel name
