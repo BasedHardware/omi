@@ -7,17 +7,27 @@ from typing import Any
 from services.graph_client import GraphClient
 
 
-def _slim_event(e: dict[str, Any]) -> dict[str, Any]:
+def _d(value: Any) -> dict[str, Any]:
+    """Return ``value`` if it's a dict, else an empty dict (null/type guard)."""
+    return value if isinstance(value, dict) else {}
+
+
+def _slim_event(e: Any) -> dict[str, Any]:
+    if not isinstance(e, dict):
+        return {}
+    start = _d(e.get("start"))
+    organizer_addr = _d(_d(e.get("organizer")).get("emailAddress"))
+    online = _d(e.get("onlineMeeting"))
     return {
         "id": e.get("id"),
         "subject": e.get("subject"),
-        "start": (e.get("start") or {}).get("dateTime"),
-        "end": (e.get("end") or {}).get("dateTime"),
-        "tz": (e.get("start") or {}).get("timeZone"),
-        "location": (e.get("location") or {}).get("displayName"),
-        "organizer": (e.get("organizer") or {}).get("emailAddress", {}).get("address"),
+        "start": start.get("dateTime"),
+        "end": _d(e.get("end")).get("dateTime"),
+        "tz": start.get("timeZone"),
+        "location": _d(e.get("location")).get("displayName"),
+        "organizer": organizer_addr.get("address"),
         "is_online": e.get("isOnlineMeeting"),
-        "join_url": e.get("onlineMeeting", {}).get("joinUrl") if e.get("onlineMeeting") else None,
+        "join_url": online.get("joinUrl") or None,
         "web_link": e.get("webLink"),
     }
 
@@ -103,11 +113,19 @@ async def find_free_slots(
     }
     async with GraphClient(user_id) as g:
         data = await g.post("/me/findMeetingTimes", json=payload)
-        return [
-            {
-                "start": s["meetingTimeSlot"]["start"]["dateTime"],
-                "end": s["meetingTimeSlot"]["end"]["dateTime"],
-                "confidence": s.get("confidence"),
-            }
-            for s in data.get("meetingTimeSuggestions", [])
-        ]
+        suggestions = data.get("meetingTimeSuggestions") if isinstance(data, dict) else None
+        if not isinstance(suggestions, list):
+            return []
+        slots: list[dict[str, Any]] = []
+        for s in suggestions:
+            if not isinstance(s, dict):
+                continue
+            slot = _d(s.get("meetingTimeSlot"))
+            slots.append(
+                {
+                    "start": _d(slot.get("start")).get("dateTime"),
+                    "end": _d(slot.get("end")).get("dateTime"),
+                    "confidence": s.get("confidence"),
+                }
+            )
+        return slots

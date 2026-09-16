@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -10,6 +12,37 @@ import httpx
 from services.auth import get_access_token
 
 log = logging.getLogger(__name__)
+
+
+def _parse_retry_after(value: str | None, default: int = 2) -> int:
+    """Parse an HTTP ``Retry-After`` header into a non-negative seconds delay.
+
+    Per RFC 7231 the value is EITHER delta-seconds (an integer) OR an
+    HTTP-date. The previous ``int(header)`` crashed with ``ValueError`` on the
+    date form (and on any malformed value). This accepts both and always
+    returns a sane, non-negative integer.
+    """
+    if value is None:
+        return default
+    value = value.strip()
+    if not value:
+        return default
+    # delta-seconds form
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        pass
+    # HTTP-date form
+    try:
+        when = parsedate_to_datetime(value)
+        if when is not None:
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            delta = (when - datetime.now(timezone.utc)).total_seconds()
+            return max(0, int(delta))
+    except (TypeError, ValueError):
+        pass
+    return default
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MAX_RETRIES = 3
@@ -63,7 +96,7 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
                 # Honour the server cooldown; do not shorten a long Retry-After.
                 backoff = max(retry_after, min(2 ** attempt + 1, 30))
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
@@ -112,10 +145,10 @@ class GraphClient:
         for _ in range(MAX_PAGES):
             data = await self.get(url, params=params if first else None)
             first = False
-            items.extend(data.get("value") or [])
+            items.extend((data.get("value") if isinstance(data, dict) else None) or [])
             if max_items is not None and len(items) >= max_items:
                 return items[:max_items]
-            url = data.get("@odata.nextLink")
+            url = data.get("@odata.nextLink") if isinstance(data, dict) else None
             if not url:
                 return items
             if url in seen:
@@ -160,7 +193,7 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
                 # Honour the server cooldown; do not shorten a long Retry-After.
                 backoff = max(retry_after, min(2 ** attempt + 1, 30))
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
