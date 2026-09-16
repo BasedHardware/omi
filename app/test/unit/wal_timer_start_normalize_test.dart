@@ -20,13 +20,12 @@ void main() {
     });
 
     test('replaces far-future garbage with now minus duration', () {
-      const proposed = now + walMaxFutureSkewSeconds + 60;
-      expect(normalizeWalTimerStart(proposed, durationSeconds: 120, nowSeconds: now), now - 120);
+      const proposed = now + 3600;
+      expect(normalizeWalTimerStart(proposed, durationSeconds: 45, nowSeconds: now), now - 45);
     });
 
-    test('treats negative duration as zero-length window', () {
-      const proposed = now + 30;
-      expect(normalizeWalTimerStart(proposed, durationSeconds: -5, nowSeconds: now), proposed);
+    test('zero-duration future start clamps to now', () {
+      expect(normalizeWalTimerStart(now + 30, durationSeconds: 0, nowSeconds: now), now);
     });
   });
 }
