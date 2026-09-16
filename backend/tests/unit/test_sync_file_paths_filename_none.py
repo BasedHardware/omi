@@ -8,6 +8,7 @@ returns a clean 400 (consistent with the endpoint's other 400s) instead.
 import importlib.abc
 import importlib.machinery
 import importlib.util
+import io
 import os
 import sys
 import types
@@ -106,7 +107,7 @@ class _StubUploadFile:
 
     def __init__(self, filename):
         self.filename = filename
-        self.file = MagicMock()
+        self.file = io.BytesIO(b'\x00')
 
 
 def test_retrieve_file_paths_v2_none_filename_raises_400(tmp_path, monkeypatch):
