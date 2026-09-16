@@ -212,6 +212,33 @@ function presentStructuredEvents(value: unknown): void {
     presentDefaultInt(event.duration);
   }
 }
+function presentRequiredInt(value: unknown): void {
+  if (value === undefined || value === null) {
+    throw new Error('Omi order is malformed');
+  }
+  integer(value);
+}
+function presentClientProcessing(value: unknown): void {
+  if (value === undefined || value === null) return;
+  const processing = object(value);
+  text(processing.transcript_sha256);
+  presentRequiredInt(processing.schema_version);
+  const provenance = object(processing.provenance);
+  text(provenance.device_class);
+  text(provenance.model_id);
+  text(provenance.runtime);
+  presentRequiredDate(provenance.generated_at);
+  const structure = object(processing.structure);
+  text(structure.title);
+  if (structure.events === undefined || structure.events === null) return;
+  if (!Array.isArray(structure.events)) throw new Error('Omi list is malformed');
+  for (const item of structure.events) {
+    const event = object(item);
+    text(event.title);
+    presentRequiredDate(event.start);
+    presentRequiredInt(event.duration);
+  }
+}
 function presentNullableStringList(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) throw new Error('Omi list is malformed');
@@ -442,6 +469,7 @@ export async function loadOmiConversations(
     presentPhotos(row.photos);
     presentActionItems(structured.action_items);
     presentStructuredEvents(structured.events);
+    presentClientProcessing(row.client_processing);
     const emoji = conversationStructuredEmojiCopy(
       structured.emoji === undefined || structured.emoji === null
         ? structured.emoji
