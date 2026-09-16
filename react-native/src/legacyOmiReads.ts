@@ -116,6 +116,21 @@ function presentNullableDouble(value: unknown): void {
     throw new Error('Omi order is malformed');
   }
 }
+function presentRequiredDouble(value: unknown): void {
+  if (value === undefined || value === null) {
+    throw new Error('Omi order is malformed');
+  }
+  presentNullableDouble(value);
+}
+function presentGeolocation(value: unknown): void {
+  if (value === undefined || value === null) return;
+  const geolocation = object(value);
+  presentRequiredDouble(geolocation.latitude);
+  presentRequiredDouble(geolocation.longitude);
+  presentNullableDouble(geolocation.accuracy);
+  presentNullableDouble(geolocation.altitude);
+  presentNullableDate(geolocation.captured_at);
+}
 function presentNullableStringList(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) throw new Error('Omi list is malformed');
@@ -337,6 +352,9 @@ export async function loadOmiConversations(
     if (!isOptionalCaptureTimestamp(row.captured_at_ms)) {
       throw new Error('Omi captured_at_ms is malformed');
     }
+    presentGeolocation(row.geolocation);
+    presentNullableDouble(row.meeting_duration_s);
+    presentNullableDouble(row.meeting_dedup_speech_s);
     const emoji = conversationStructuredEmojiCopy(
       structured.emoji === undefined || structured.emoji === null
         ? structured.emoji

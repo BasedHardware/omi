@@ -61,6 +61,110 @@ test('old conversations keep GET photo counts and omit empty lists', async () =>
   expect(result.items[1]).not.toHaveProperty('photoCount');
 });
 
+test('old conversations name Flutter ConversationListItem fromJson padded GET latitude instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+  };
+  const keptExact = await loadConversations(
+    backend([
+      {
+        ...row,
+        geolocation: {latitude: '37.7749', longitude: -122.4194},
+      },
+      {
+        ...row,
+        id: 'json',
+        geolocation: {latitude: 37.7749, longitude: -122.4194},
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptExact.items.map(item => item.id)).toEqual([
+    'located',
+    'json',
+    'named',
+  ]);
+  const keptOmitted = await loadConversations(backend([row, neighbor]).api);
+  expect(keptOmitted.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptNull = await loadConversations(
+    backend([{...row, geolocation: null}, neighbor]).api,
+  );
+  expect(keptNull.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptMeetingExact = await loadConversations(
+    backend([
+      {...row, meeting_duration_s: '12.5', meeting_dedup_speech_s: 8},
+      neighbor,
+    ]).api,
+  );
+  expect(keptMeetingExact.items.map(item => item.id)).toEqual([
+    'located',
+    'named',
+  ]);
+  for (const latitude of [
+    '  37.7749  ',
+    '37.7749 ',
+    '  37.7749',
+    '37.7749\n',
+    '\u008537.7749',
+    ' \t',
+  ]) {
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            geolocation: {latitude, longitude: -122.4194},
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi order is malformed');
+  }
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          geolocation: {latitude: 37.7749, longitude: '  -122.4194  '},
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          geolocation: {
+            latitude: 37.7749,
+            longitude: -122.4194,
+            accuracy: '  5.5  ',
+          },
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadConversations(
+      backend([{...row, meeting_duration_s: '  12.5  '}, neighbor]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadConversations(
+      backend([{...row, meeting_dedup_speech_s: '  8  '}, neighbor]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+});
+
 test('old discarded conversations name GET transcript_segments as the list title', async () => {
   const {api} = backend([
     {
