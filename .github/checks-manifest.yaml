@@ -34,6 +34,11 @@ checks:
     triggers: ["plugins/omi-google-calendar-app/**"]
     lanes: ["local", "ci"]
     reason: "#13937: the Omi backend sends JSON null for omitted optional tool params and body.get(key, default) only applies defaults to absent keys, so min(None, 30) crashed list_events and sibling handlers trusted untyped optionals; the suite executes the production tool handlers through the calendar_api_request seam"
+  - id: whoop-workouts-tests
+    command: ["python3", "plugins/omi-whoop-app/test_workouts_input_coercion.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13931: the backend forwards omitted optional manifest params as explicit JSON nulls, so min(None, 30) crashed get_workouts; the hermetic suite drives the production handler through requests.get to prove null/unparseable values hit defaults and non-positive values clamp to 1"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
@@ -1148,12 +1153,6 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
-  - id: whoop-workouts-tests
-    command: ["python3", "plugins/omi-whoop-app/test_workouts_input_coercion.py"]
-    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#13931: the backend forwards omitted optional manifest params as explicit JSON nulls, so min(None, 30) crashed get_workouts; the hermetic suite drives the production handler through requests.get to prove null/unparseable values hit defaults and non-positive values clamp to 1"
-
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
