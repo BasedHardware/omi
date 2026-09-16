@@ -29,7 +29,9 @@ import pytest
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret-for-import-purity')
 
+from langchain_core.messages import HumanMessage  # noqa: E402
 from utils.llm import gateway_client  # noqa: E402
+from utils.llm.clients import get_llm  # noqa: E402
 from utils.llm.managed_spend_ledger import (  # noqa: E402
     ACCOUNTING_ENABLED_ENV_VAR,
     ManagedAttempt,
@@ -53,9 +55,6 @@ def test_conversation_lane_gateway_client_is_attributed() -> None:
     fails — the row would still be written by the gateway but with no feature
     (or uid) to attribute it to.
     """
-    from langchain_core.messages import HumanMessage
-    from utils.llm.clients import get_llm
-
     llm = get_llm('conv_structure')
     assert isinstance(llm, gateway_client.GatewayContextChatOpenAI)
     assert llm.model == 'omi:auto:conv-structure'
