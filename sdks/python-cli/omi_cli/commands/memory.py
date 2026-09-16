@@ -187,7 +187,7 @@ def delete_memory(
 def export_memories(
     typer_ctx: typer.Context,
     output: Path = typer.Option(Path("memories_export.json"), "--output", "-o", help="Output file path."),
-    categories: Optional[List[str]] = typer.Option(None, "--categories", "-c", help="Filter export by one or more categories."),
+    categories: Optional[str] = typer.Option(None, "--categories", "-c", help="Filter export by one or more categories (comma-separated)."),
 ) -> None:
     """
     Export user memories to a JSON file.
@@ -212,7 +212,7 @@ def export_memories(
                 # Pass categories to API if provided (backend might ignore, but it's the correct interface)
                 params = {"limit": limit, "offset": offset}
                 if categories:
-                    params["categories"] = ",".join(categories)
+                    params["categories"] = categories
 
                 page = client.get("/v1/dev/user/memories", params=params)
 
@@ -220,13 +220,16 @@ def export_memories(
                 if page is None:
                     if offset == 0:
                         break
-                    raise RuntimeError(
+                    raise CliError(
                         f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write."
                     )
 
+                # Normalize categories to a list for client-side filtering
+                cat_list = [c.strip() for c in categories.split(",")] if categories else None
+
                 for item in page:
                     # Client-side filter: ensure we only export requested categories
-                    if categories and item.get("category") not in categories:
+                    if cat_list and item.get("category") not in cat_list:
                         continue
                         
                     if not first_item:
