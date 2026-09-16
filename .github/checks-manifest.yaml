@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: open-library-tests
+    command: ["python3", "plugins/omi-open-library-app/test_main.py"]
+    triggers: ["plugins/omi-open-library-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13939: non-dict upstream payloads and null/non-list docs/works collections or elements must return clean chat-tool responses instead of raising AttributeError/TypeError"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
