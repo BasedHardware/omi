@@ -238,8 +238,8 @@ def issue_payload(number, pull_request=False):
     return issue
 
 
-def authed():
-    return patch.object(main.SimpleUserStorage, "get_user", return_value=USER)
+def authed(user=None):
+    return patch.object(main.SimpleUserStorage, "get_user", return_value=user or USER)
 
 
 # ---- Coercion helpers ----------------------------------------------------
@@ -507,5 +507,438 @@ class ClientContractTests(unittest.TestCase):
         self.assertEqual(result["issue"]["number"], 5)
 
 
+
+# ---- repository resolution & disambiguation -------------------------------
+
+
+class RepoResolutionTests(unittest.TestCase):
+    def test_default_repo_fallback_when_param_none(self):
+        user = {"selected_repo": "owner/default-repo"}
+        repo, err = main.get_repo_for_request(user, None)
+        self.assertIsNone(err)
+        self.assertEqual(repo, "owner/default-repo")
+
+    def test_default_repo_fallback_when_param_empty(self):
+        user = {"selected_repo": "owner/default-repo"}
+        repo, err = main.get_repo_for_request(user, "   ")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "owner/default-repo")
+
+    def test_error_when_no_repo_and_no_default(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, None)
+        self.assertIsNone(repo)
+        self.assertIn("No repository specified", err)
+
+    def test_full_repo_name_accepted(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "BasedHardware/omi")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_url_sanitization(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "https://github.com/BasedHardware/omi.git")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_whitespace_and_slashes_trimmed(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "  /BasedHardware/omi/  ")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_invalid_format_multiple_slashes(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "a/b/c")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+    def test_invalid_format_forbidden_chars(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "owner/repo<test>")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+    def test_invalid_param_type_rejected(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, 12345)
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository parameter", err)
+
+    def test_short_name_single_exact_match_resolves(self):
+        user = {
+            "available_repos": [
+                {"full_name": "BasedHardware/omi"},
+                {"full_name": "other-org/some-tool"},
+            ]
+        }
+        repo, err = main.get_repo_for_request(user, "omi")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_short_name_multiple_exact_matches_refuses(self):
+        user = {
+            "available_repos": [
+                {"full_name": "BasedHardware/omi"},
+                {"full_name": "fork-user/omi"},
+            ]
+        }
+        repo, err = main.get_repo_for_request(user, "omi")
+        self.assertIsNone(repo)
+        self.assertIn("Multiple repositories match 'omi'", err)
+        self.assertIn("BasedHardware/omi", err)
+        self.assertIn("fork-user/omi", err)
+
+    def test_short_name_single_partial_match_resolves(self):
+        user = {
+            "available_repos": [
+                {"full_name": "BasedHardware/omi-mobile"},
+                {"full_name": "other-org/some-tool"},
+            ]
+        }
+        repo, err = main.get_repo_for_request(user, "mobile")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi-mobile")
+
+    def test_short_name_multiple_partial_matches_refuses(self):
+        user = {
+            "available_repos": [
+                {"full_name": "org/frontend-web"},
+                {"full_name": "org/frontend-mobile"},
+            ]
+        }
+        repo, err = main.get_repo_for_request(user, "frontend")
+        self.assertIsNone(repo)
+        self.assertIn("Multiple repositories match 'frontend'", err)
+
+    def test_short_name_zero_match_refuses(self):
+        user = {
+            "available_repos": [
+                {"full_name": "org/backend"},
+            ]
+        }
+        repo, err = main.get_repo_for_request(user, "nonexistent")
+        self.assertIsNone(repo)
+        self.assertIn("not found in your accessible GitHub repositories", err)
+
+    def test_newline_injection_rejected(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "owner/repo\ninjected")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+    def test_fragment_injection_rejected(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "owner/repo#frag")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+    def test_path_traversal_rejected(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "owner/..")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+    def test_non_github_url_rejected(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "https://gitlab.com/owner/repo")
+        self.assertIsNone(repo)
+        self.assertIn("Only GitHub URLs are supported", err)
+
+    def test_github_url_with_subpath_resolves(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "https://github.com/BasedHardware/omi/issues/42")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_available_repos_as_none_handled_gracefully(self):
+        user = {"available_repos": None}
+        repo, err = main.get_repo_for_request(user, "omi")
+        self.assertIsNone(repo)
+        self.assertIn("not found in your accessible GitHub repositories", err)
+
+    def test_available_repos_dirty_types_handled_gracefully(self):
+        user = {
+            "available_repos": [
+                {"full_name": 12345},
+                None,
+                "string_without_slash",
+                {"full_name": "BasedHardware/omi"},
+            ]
+        }
+        repo, err = main.get_repo_for_request(user, "omi")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_short_target_under_3_chars_does_not_flood_partial(self):
+        user = {
+            "available_repos": [
+                {"full_name": "org/alpha"},
+                {"full_name": "org/beta"},
+            ]
+        }
+        # "a" is length 1, should not trigger partial matching against alpha or beta
+        repo, err = main.get_repo_for_request(user, "a")
+        self.assertIsNone(repo)
+        self.assertIn("not found in your accessible GitHub repositories", err)
+
+    def test_tool_code_feature_resolves_short_name(self):
+        user_data = {
+            "access_token": "valid_token",
+            "available_repos": [{"full_name": "BasedHardware/omi"}],
+        }
+        # Fake provider key in env
+        with authed(user_data), patch.dict(main.os.environ, {"CURSOR_AGENT_API_KEY": "fake_key", "ANTHROPIC_API_KEY": "fake_key"}), patch.object(
+            main.github_client, "get_repo_permissions", return_value={"push": False}
+        ):
+            resp = call_tool("/tools/code_feature", {
+                "uid": "u1",
+                "repo": "omi",
+                "feature": "add dark mode"
+            })
+        # Should cleanly reach permissions check on resolved BasedHardware/omi without unpack crash
+        self.assertIsNotNone(resp.error)
+        self.assertIn("write access", resp.error)
+
+    def test_tool_list_issues_resolves_short_name(self):
+        user_data = {
+            "access_token": "valid_token",
+            "available_repos": [{"full_name": "BasedHardware/omi"}],
+        }
+        with authed(user_data), patch.object(
+            github_client.requests, "get", return_value=FakeResponse([])
+        ) as mock_get:
+            resp = call_tool("/tools/list_issues", {"uid": "u1", "repo": "omi"})
+
+        self.assertIsNone(resp.error)
+        self.assertIn("BasedHardware/omi", resp.result)
+        called_url = mock_get.call_args[0][0]
+        self.assertIn("/repos/BasedHardware/omi/issues", called_url)
+
+    def test_default_repo_invalid_format_refuses(self):
+        user = {"selected_repo": "invalid..format//bad"}
+        repo, err = main.get_repo_for_request(user, None)
+        self.assertIsNone(repo)
+        self.assertIn("Configured default repository is invalid", err)
+
+    def test_single_segment_github_url_refuses(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "https://github.com/lonelyrepo")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid GitHub URL", err)
+
+
+class OwnerRepoValidationTests(unittest.TestCase):
+    def test_valid_owner_repo(self):
+        repo, err = main._validate_owner_repo("  BasedHardware/omi  ")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_valid_with_dots_dashes_underscores(self):
+        repo, err = main._validate_owner_repo("my-org_01/project.v2_final")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "my-org_01/project.v2_final")
+
+    def test_non_string_type_refuses(self):
+        repo, err = main._validate_owner_repo(None)
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+    def test_missing_slash_refuses(self):
+        repo, err = main._validate_owner_repo("noslash")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+    def test_extra_slashes_refuses(self):
+        repo, err = main._validate_owner_repo("a/b/c")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+    def test_dot_and_dotdot_refuses(self):
+        repo, err = main._validate_owner_repo("owner/..")
+        self.assertIsNone(repo)
+        self.assertIn("Invalid repository format", err)
+
+        repo2, err2 = main._validate_owner_repo("./repo")
+        self.assertIsNone(repo2)
+        self.assertIn("Invalid repository format", err2)
+
+    def test_illegal_characters_refuses(self):
+        for bad in ["owner/repo<script>", "owner/repo\n", "owner/repo#hash", "owner/repo?query"]:
+            repo, err = main._validate_owner_repo(bad)
+            self.assertIsNone(repo)
+            self.assertIn("Invalid repository format", err)
+
+
+class UpdateRepoEndpointTests(unittest.TestCase):
+    def test_update_repo_user_not_found(self):
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=None):
+            resp = asyncio.run(main.update_repo(uid="nonexistent", repo="owner/repo"))
+            self.assertFalse(resp["success"])
+            self.assertEqual(resp["error"], "User not found")
+
+    def test_update_repo_invalid_format(self):
+        user = {"uid": "u1", "available_repos": []}
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user):
+            resp = asyncio.run(main.update_repo(uid="u1", repo="invalid..format//bad"))
+            self.assertFalse(resp["success"])
+            self.assertIn("Invalid repository", resp["error"])
+
+    def test_update_repo_resolves_short_name(self):
+        user = {
+            "uid": "u1",
+            "available_repos": [{"full_name": "BasedHardware/omi"}],
+        }
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user), \
+             patch.object(main.SimpleUserStorage, "update_repo_selection", return_value=True) as mock_update:
+            resp = asyncio.run(main.update_repo(uid="u1", repo="omi"))
+            self.assertTrue(resp["success"])
+            self.assertIn("BasedHardware/omi", resp["message"])
+            mock_update.assert_called_once_with("u1", "BasedHardware/omi")
+
+    def test_update_repo_valid_full_name(self):
+        user = {"uid": "u1", "available_repos": []}
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user), \
+             patch.object(main.SimpleUserStorage, "update_repo_selection", return_value=True) as mock_update:
+            resp = asyncio.run(main.update_repo(uid="u1", repo="org/my-project"))
+            self.assertTrue(resp["success"])
+            mock_update.assert_called_once_with("u1", "org/my-project")
+
+
+class CreateIssueToolTests(unittest.TestCase):
+    def test_missing_uid_fails(self):
+        resp = call_tool("/tools/create_issue", {"title": "Test"})
+        self.assertEqual(resp.error, "User ID is required")
+
+    def test_missing_title_fails(self):
+        resp = call_tool("/tools/create_issue", {"uid": "u1"})
+        self.assertEqual(resp.error, "Issue title is required")
+
+    def test_unauthenticated_fails(self):
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=None):
+            resp = call_tool("/tools/create_issue", {"uid": "u1", "title": "Test"})
+            self.assertIn("connect your GitHub account", resp.error)
+
+    def test_successful_creation_with_string_labels(self):
+        user = {"access_token": "tok", "selected_repo": "BasedHardware/omi"}
+        with authed(user), patch.object(
+            main.github_client, "create_issue",
+            return_value={"success": True, "issue_number": 99, "issue_url": "https://github.com/BasedHardware/omi/issues/99"}
+        ) as mock_create:
+            resp = call_tool("/tools/create_issue", {
+                "uid": "u1",
+                "title": "Fix crash",
+                "body": "Crash details",
+                "labels": "bug, critical"
+            })
+            self.assertIsNone(resp.error)
+            self.assertIn("**#99** - Fix crash", resp.result)
+            mock_create.assert_called_once()
+            call_kwargs = mock_create.call_args[1]
+            self.assertEqual(call_kwargs["labels"], ["bug", "critical"])
+
+    def test_successful_creation_with_null_labels(self):
+        user = {"access_token": "tok", "selected_repo": "BasedHardware/omi"}
+        with authed(user), patch.object(
+            main.github_client, "create_issue",
+            return_value={"success": True, "issue_number": 100, "issue_url": "https://github.com/BasedHardware/omi/issues/100"}
+        ) as mock_create, patch.object(
+            main.github_client, "get_repo_labels", return_value=[]
+        ):
+            resp = call_tool("/tools/create_issue", {
+                "uid": "u1",
+                "title": "Feature request",
+                "labels": None
+            })
+            self.assertIsNone(resp.error)
+            self.assertIn("**#100**", resp.result)
+            call_kwargs = mock_create.call_args[1]
+            self.assertEqual(call_kwargs["labels"], [])
+
+
+class NullDataResilienceTests(unittest.TestCase):
+    def test_get_issue_with_explicit_null_labels_and_assignees(self):
+        raw_issue = {
+            "number": 42,
+            "title": "Null field issue",
+            "state": "open",
+            "body": None,
+            "labels": None,
+            "assignees": None,
+            "user": None,
+            "html_url": "https://github.com/BasedHardware/omi/issues/42",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "comments": 0
+        }
+        with patch.object(github_client.requests, "get", return_value=FakeResponse(raw_issue)):
+            res = main.github_client.get_issue("tok", "BasedHardware/omi", 42)
+            self.assertNotIn("error", res)
+            issue = res["issue"]
+            self.assertEqual(issue["labels"], [])
+            self.assertEqual(issue["assignees"], [])
+            self.assertIsNone(issue["user"])
+
+    def test_list_issues_with_explicit_null_labels_and_user(self):
+        raw_issues = [{
+            "number": 1,
+            "title": "Item",
+            "state": "open",
+            "body": None,
+            "labels": None,
+            "user": None,
+            "html_url": "https://github.com/BasedHardware/omi/issues/1",
+            "created_at": "2026-01-01T00:00:00Z"
+        }]
+        with patch.object(github_client.requests, "get", return_value=FakeResponse(raw_issues)):
+            res = main.github_client.list_issues("tok", "BasedHardware/omi")
+            self.assertNotIn("error", res)
+            self.assertEqual(len(res["issues"]), 1)
+            self.assertEqual(res["issues"][0]["labels"], [])
+            self.assertIsNone(res["issues"][0]["user"])
+
+
+class AddIssueCommentAliasTests(unittest.TestCase):
+    def test_add_issue_comment_route_alias_works(self):
+        with authed(), patch.object(
+            github_client.requests, "post", return_value=FakeResponse({"id": 123, "html_url": "http://ok"}, 201)
+        ):
+            resp = call_tool("/tools/add_issue_comment", {
+                "uid": "u1",
+                "issue_number": 42,
+                "body": "Alias comment"
+            })
+            self.assertIsNone(resp.error)
+            self.assertIn("Comment Added", resp.result)
+
+
+class UrlAndSshParsingTests(unittest.TestCase):
+    def test_ssh_url_format_resolves(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "git@github.com:BasedHardware/omi.git")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_url_with_auth_credentials_resolves(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "https://user:secret@github.com/BasedHardware/omi")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_url_with_custom_port_resolves(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "https://github.com:443/BasedHardware/omi")
+        self.assertIsNone(err)
+        self.assertEqual(repo, "BasedHardware/omi")
+
+    def test_spoofed_host_in_userinfo_rejected(self):
+        user = {}
+        repo, err = main.get_repo_for_request(user, "https://github.com:bypass@evil.com/BasedHardware/omi")
+        self.assertIsNone(repo)
+        self.assertIn("Only GitHub URLs are supported", err)
+
+
 if __name__ == "__main__":
     unittest.main()
+
