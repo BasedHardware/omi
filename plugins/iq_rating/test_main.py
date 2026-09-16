@@ -51,6 +51,7 @@ def _install_module_stubs():
 
     sys.modules["fastapi"] = fastapi
     sys.modules["fastapi.responses"] = responses
+    sys.modules["requests"] = types.ModuleType("requests")
 
 
 _install_module_stubs()
@@ -77,6 +78,13 @@ def _person(name="Alice", snippets=None):
 
 
 class FilterNamesTests(unittest.TestCase):
+    def setUp(self):
+        self._key = main.OPENAI_API_KEY
+        main.OPENAI_API_KEY = "test-key"
+
+    def tearDown(self):
+        main.OPENAI_API_KEY = self._key
+
     def test_empty_choices_does_not_crash(self):
         with mock.patch.object(main, "requests") as req:
             req.post.return_value = _FakeResponse(200, {"choices": []})
