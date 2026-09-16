@@ -80,6 +80,10 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var finalizationReason: TranscriptionFinalizationReason?
   var finalizationStartedAt: Date?
   var finalizationCompletedAt: Date?
+  /// Opaque id of the armed capture attempt this session belongs to (see
+  /// `CaptureAttemptOutcomeState`). Nullable: pre-instrumentation rows and the
+  /// hermetic automation session have no attempt identity.
+  var captureAttemptId: String?
 
   // MARK: - Structured Data (from ServerConversation.Structured)
   var title: String?
@@ -131,6 +135,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     finalizationReason: TranscriptionFinalizationReason? = nil,
     finalizationStartedAt: Date? = nil,
     finalizationCompletedAt: Date? = nil,
+    captureAttemptId: String? = nil,
     // Structured data
     title: String? = nil,
     overview: String? = nil,
@@ -173,6 +178,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.finalizationReason = finalizationReason
     self.finalizationStartedAt = finalizationStartedAt
     self.finalizationCompletedAt = finalizationCompletedAt
+    self.captureAttemptId = captureAttemptId
     // Structured data
     self.title = title
     self.overview = overview
