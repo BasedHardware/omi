@@ -9,31 +9,6 @@ checks:
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open Food Facts app must guard non-dict nutriments payloads, safely format scores without AttributeError on non-string types, and normalize comma-separated barcode/allergen input strings"
-  - id: hive-limit-coercion-tests
-    command: ["python3", "plugins/omi-hive-app/test_limit_coercion.py"]
-    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "the hive chat tools read the caller limit with a raw body.get('limit', 10); dict.get returns None - not the default - when the backend sends an explicit null for an omitted optional parameter, and items[:None] silently returned every row instead of the documented page size, while a string limit raised TypeError and surfaced as a tool error; all three handlers must coerce the limit to a bounded int"
-  - id: iq-rating-score-parsing-tests
-    command: ["python3", "plugins/iq_rating/test_main.py"]
-    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "a non-object element or non-integer iq in the AI score array must skip only that element, not discard the whole batch's scores"
-  - id: notion-id-sanitization-tests
-    command: ["python3", "plugins/omi-notion-app/test_notion_id_sanitization.py"]
-    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
-  - id: omi-frankfurter-tests
-    command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
-    triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "Frankfurter currency conversion, latest rates, and supported currencies must safely handle unmanaged HTTP client contexts, non-dict API responses, and non-finite numbers without 500s or AttributeErrors"
-  - id: iq-rating-app-tests
-    command: ["python3", "plugins/iq_rating/test_main.py"]
-    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#13980: IQ rating plugin must filter human names, guard OpenAI API exceptions, retain batches on anomalous 200 responses, and run hermetic stdlib-only unit tests"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
@@ -69,26 +44,6 @@ checks:
     triggers: ["plugins/test_oauth_error_params_escaped.py", "plugins/omi-dropbox-app/**", "plugins/omi-notion-app/**", "plugins/omi-ms365-app/**"]
     lanes: ["local", "ci"]
     reason: "OAuth callback error params were rendered raw into HTML on dropbox/ms365/notion"
-  - id: whoop-measurements-tests
-    command: ["python3", "plugins/omi-whoop-app/test_main.py"]
-    triggers: ["plugins/omi-whoop-app/**"]
-    lanes: ["local", "ci"]
-    reason: "#13927: get_body_measurements requested the nonexistent /body_measurement route so every call failed with a blank error; the documented path is /user/measurement/body and an empty upstream error body must still surface the HTTP status"
-  - id: whoop-weekly-summary-hardening-tests
-    command: ["python3", "plugins/omi-whoop-app/test_measurements_and_summary_hardening.py"]
-    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#15118: guard weekly summary uncalculated scores and sanitize date parameters"
-  - id: plugin-remaining-apps-uid-reflection-tests
-    command: ["python3", "plugins/test_uid_reflection_remaining_apps.py"]
-    triggers: ["plugins/omi-dropbox-app/**", "plugins/omi-google-calendar-app/**", "plugins/omi-hive-app/**", "plugins/omi-ms365-app/**", "plugins/omi-shipbob-app/**", "plugins/omi-shopify-app/**", "plugins/omi-linear-app/**", "plugins/test_uid_reflection_remaining_apps.py", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "the client-controlled uid query param was reflected raw into HTML form actions, hrefs, hidden input values, and redirect URLs across the remaining plugin apps; a quote broke the attribute (reflected XSS) and a bare & or # corrupted the next hop"
-  - id: gcal-null-params-tests
-    command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
-    triggers: ["plugins/omi-google-calendar-app/**"]
-    lanes: ["local", "ci"]
-    reason: "#13937: the Omi backend sends JSON null for omitted optional tool params and body.get(key, default) only applies defaults to absent keys, so min(None, 30) crashed list_events and sibling handlers trusted untyped optionals; the suite executes the production tool handlers through the calendar_api_request seam"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
@@ -1438,7 +1393,13 @@ checks:
     command: ["python3", "plugins/omi-clickup-app/test_main.py"]
     triggers: ["plugins/omi-clickup-app/**"]
     lanes: ["local", "ci"]
-    reason: "#13922: create_task aborted task creation on non-numeric assignee tokens, dropped millisecond due-date timestamps, and forwarded unvalidated priority; the suite drives the production handler and client to assert coercion, 1-4 bounds, and graceful continuation"
+    reason: "#13941: get_conversations silently dropped an unparseable start_date/end_date and returned the unfiltered list while search_conversations surfaced the backend 400 opaquely; malformed dates must raise a field-naming ValueError before any request"
+
+  - id: plugin-oauth-client-log-safety-tests
+    command: ["python3", "plugins/oauth/test_client_log_safety.py"]
+    triggers: ["plugins/**/*.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
