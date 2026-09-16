@@ -14,6 +14,8 @@ from unittest.mock import patch, MagicMock
 # loaded module, so patching clickup_client.requests still intercepts.
 _requests = types.ModuleType("requests")
 _requests.get = _requests.post = None
+_requests.Response = object
+_requests.RequestException = Exception
 _dotenv = types.ModuleType("dotenv")
 _dotenv.load_dotenv = lambda *args, **kwargs: None
 

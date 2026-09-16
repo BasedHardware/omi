@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _safe_json(response: requests.Response) -> dict:
+def _safe_json(response) -> dict:
     """Safely extract JSON as dict from response or return empty dict on error/non-JSON."""
     try:
         data = response.json()
