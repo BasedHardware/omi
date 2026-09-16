@@ -20,6 +20,13 @@ jest.mock('../src/omiNative', () => ({
     signOut: () => mockAuth.signOut(),
     cancelSignIn: () => mockAuth.cancelSignIn(),
   },
+  omiBackend: {
+    request: async () => ({
+      id: 'onboarding-complete-write',
+      status: 200,
+      body: JSON.stringify({status: 'ok'}),
+    }),
+  },
   subscribeOmiBackendSessionInvalidated: (listener: () => void) => {
     mockBackendSessionInvalidatedListener = listener;
     return () => {

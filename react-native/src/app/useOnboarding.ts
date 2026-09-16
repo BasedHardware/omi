@@ -1,5 +1,10 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {omiAuth, subscribeOmiBackendSessionInvalidated} from '../omiNative';
+import {
+  omiAuth,
+  omiBackend,
+  subscribeOmiBackendSessionInvalidated,
+} from '../omiNative';
+import {saveOnboardingCompleted} from './onboardingClient';
 import {SESSION_UNREACHABLE_COPY} from './onboardingCopy';
 
 export {SESSION_UNREACHABLE_COPY} from './onboardingCopy';
@@ -120,6 +125,10 @@ export function useOnboarding(
         }
         return false;
       }
+      if (operation !== authOperationRef.current) {
+        return false;
+      }
+      await saveOnboardingCompleted(omiBackend);
       if (operation !== authOperationRef.current) {
         return false;
       }
