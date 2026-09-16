@@ -38,10 +38,10 @@ class ChannelDisambiguationTests(unittest.TestCase):
         self.mock_completions = AsyncMock()
         self.mock_openai_client = Mock()
         self.mock_openai_client.chat.completions.create = self.mock_completions
-        
+
         dotenv_mod = types.ModuleType("dotenv")
         dotenv_mod.load_dotenv = Mock()
-        
+
         openai_mod = types.ModuleType("openai")
         openai_mod.AsyncOpenAI = Mock(return_value=self.mock_openai_client)
 
@@ -191,7 +191,7 @@ class ChannelDisambiguationTests(unittest.TestCase):
     def test_caller_skips_default_channel_and_prompts_on_ambiguity(self):
         """Regression test for Blocker 1: ambiguous channel must NOT fall back to selected_channel."""
         self._mock_ai("marketing", "Review Q3 numbers please")
-        
+
         session = {
             "session_id": "test_session_123",
             "message_mode": "idle"
@@ -201,12 +201,12 @@ class ChannelDisambiguationTests(unittest.TestCase):
             "access_token": "xoxp-test",
             "selected_channel": "C_DEF"  # Default is default-alerts
         }
-        
+
         # Test mode path in process_segments
         result = asyncio.run(
             self.handler.process_segments(session, [{"text": "send slack message in marketing review Q3 numbers please"}], user)
         )
-        
+
         # Must not have sent message to default channel
         self.mock_slack_client.send_message.assert_not_called()
         self.assertIn("Ambiguous channel", result)
@@ -216,7 +216,7 @@ class ChannelDisambiguationTests(unittest.TestCase):
     def test_caller_uses_default_channel_when_no_channel_mentioned(self):
         """When no channel is mentioned, default selected_channel is used (existing UX)."""
         self._mock_ai("UNKNOWN", "Hello everyone this is general update")
-        
+
         session = {
             "session_id": "test_session_456",
             "message_mode": "idle"
@@ -226,11 +226,11 @@ class ChannelDisambiguationTests(unittest.TestCase):
             "access_token": "xoxp-test",
             "selected_channel": "C_DEF"
         }
-        
+
         result = asyncio.run(
             self.handler.process_segments(session, [{"text": "send slack message hello everyone this is general update"}], user)
         )
-        
+
         # Message was sent to default channel
         self.mock_slack_client.send_message.assert_called_once_with(
             access_token="xoxp-test",
