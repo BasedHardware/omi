@@ -54,7 +54,8 @@ pendant → focused field.
   - every exit path (done / cancel / error / frame timeout / typing budget /
     disconnect / pendant-button panic stop) releases all keys and forgets the
     session — nothing replays after reconnect;
-  - bounded: ≤256 chars per session, ≤244 bytes per frame, 3 s inter-frame
+  - bounded: ≤256 chars per session, ≤244 firmware-side frame bytes (the app
+    sends conservative 17-byte payloads that fit any negotiated MTU), 3 s inter-frame
     timeout, 30 s typing budget;
   - duplicate session ids are rejected explicitly (each retry uses a new id);
   - HID characteristics require an encrypted link (standard for HID hosts).
@@ -63,9 +64,18 @@ pendant → focused field.
 
 - Developer settings → Experimental → **Pendant HID Dictation** (off by
   default).
-- With the toggle on and a supporting pendant connected: pendant button
-  press/release delimits the utterance; the transcript is typed into whatever
-  text field has focus on the phone.
+- With the toggle on and a supporting pendant connected: tap the pendant
+  button once to start an utterance, tap again to finish; the transcript is
+  typed into whatever text field has focus on the phone. In HID mode the app
+  consumes ALL pendant button events (double tap, long press, raw
+  press/release) so no assistant voice command fires from a dictation click.
+- Status and every rejection are user-visible in Developer settings under the
+  toggle (capturing/transcribing/typing/done/error) and via pendant haptics
+  (one pulse on capture start, two on typed, three on failure).
+- Lifecycle safety: cancelling, disabling, starting a new capture, or a link
+  drop voids any in-flight transcription/send (generation-checked after every
+  await, scoped on-device session cancel when frames already went out), and
+  the controller never reconnects a dropped link to deliver old text.
 - Transcription uses the existing one-shot `/v2/voice-message/transcribe`
   path (network required).
 
@@ -110,9 +120,8 @@ Outputs in `omi/firmware/v2.9.0/build-hid/`:
    reconnect the pendant's GATT table includes the standard HID service and
    its advertisement carries the HID UUID. If iOS shows a pairing prompt,
    accept it (the HID half needs an encrypted link).
-3. Focus a text field (e.g. a new iOS Note), press-and-hold the pendant
-   button, speak, release. The transcript should appear keystroke by
-   keystroke.
+3. Focus a text field (e.g. a new iOS Note), tap the pendant button once,
+   speak, tap again. The transcript should appear keystroke by keystroke.
 
 ### Test matrix (run on device)
 
@@ -124,7 +133,8 @@ Outputs in `omi/firmware/v2.9.0/build-hid/`:
 | Cancel mid-typing (press pendant button) | typing stops, keys released |
 | Non-ASCII speech (accents/emoji in transcript) | app refuses to send (explicit rejection, nothing typed) |
 | Reconnect mid-typing | typing stops, nothing retyped after reconnect |
-| Repeated dictations back-to-back | each press/release is a fresh session |
+| Repeated dictations back-to-back | each tap-pair is a fresh session |
+| Double tap / long press while enabled | consumed by dictation; no assistant action |
 | Prototype disabled (default) | pendant behaves exactly like stock firmware |
 | macOS / iPad host (cross-check) | keyboard works on any HID host |
 

@@ -28,6 +28,8 @@ import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/pendant_dictation_controller.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -1513,12 +1515,25 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         // Pendant HID dictation prototype
                         _buildExperimentalItem(
                           title: 'Pendant HID Dictation',
-                          description: 'Hold pendant button to dictate into the focused text field '
-                              '(prototype firmware required; enable in Devices after reconnect)',
+                          description: 'Tap pendant button to start an utterance, tap again to type it '
+                              'into the focused text field (prototype firmware required; takes effect '
+                              'after the pendant reconnects)',
                           icon: FontAwesomeIcons.keyboard,
                           value: provider.hidDictationEnabled,
                           onChanged: provider.onHidDictationEnabledChanged,
                         ),
+                        if (provider.hidDictationEnabled)
+                          ValueListenableBuilder<PendantDictationUiState>(
+                            valueListenable: context.read<CaptureProvider>().dictationState,
+                            builder: (context, dictation, _) => Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'Dictation: ${dictation.phase.name}'
+                                '${dictation.message.isEmpty ? '' : ' — ${dictation.message}'}',
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),

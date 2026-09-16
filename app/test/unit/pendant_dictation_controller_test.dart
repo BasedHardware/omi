@@ -5,15 +5,39 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/capture/pendant_dictation_controller.dart';
+import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/hid_dictation_protocol.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 
+/// Status bytes the fake serves for the control characteristic.
+Uint8List statusBytes({
+  required int session,
+  bool hidActive = true,
+  int state = HidDictationProtocol.stateDone,
+  int lastError = HidDictationProtocol.errNone,
+}) {
+  final s = Uint8List(10);
+  s[0] = 1;
+  s[1] = state;
+  s[2] = hidActive ? 1 : 0;
+  s[4] = lastError;
+  s[6] = HidDictationProtocol.sessionNone;
+  s[7] = session;
+  return s;
+}
+
 class _FakeTransport implements DeviceTransport {
   final List<(String service, String characteristic, List<int> data)> writes = [];
-  final StreamController<List<int>> statusController = StreamController.broadcast();
   List<int> featuresBytes = [0, 0, 0, 0];
-  bool emitErrorStatus = false;
+
+  /// Session whose final frame was written last; poll reads answer with a
+  /// terminal status for it once set (mirrors the firmware DONE transition).
+  int? lastFinishedSession;
+  bool hidActiveInStatus = true;
+  bool connected = true;
+  bool neverTerminal = false;
+  int? errorForSession;
 
   @override
   String get deviceId => 'pendant';
@@ -25,7 +49,7 @@ class _FakeTransport implements DeviceTransport {
   Future<void> disconnect() async {}
 
   @override
-  Future<bool> isConnected() async => true;
+  Future<bool> isConnected() async => connected;
 
   @override
   Future<bool> ping() async => true;
@@ -35,12 +59,37 @@ class _FakeTransport implements DeviceTransport {
 
   @override
   Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) {
-    return statusController.stream;
+    return const Stream.empty();
   }
 
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
-    return featuresBytes;
+    if (characteristicUuid == OmiDeviceConnection.featuresCharacteristicUuid) {
+      return featuresBytes;
+    }
+    if (characteristicUuid == OmiDeviceConnection.dictationControlCharacteristicUuid) {
+      if (neverTerminal) {
+        // Still mid-session: active session set, nothing finished yet.
+        final pending = Uint8List(10);
+        pending[0] = 1;
+        pending[1] = HidDictationProtocol.stateTyping;
+        pending[2] = hidActiveInStatus ? 1 : 0;
+        pending[6] = lastFinishedSession ?? 1;
+        pending[7] = HidDictationProtocol.sessionNone;
+        return pending;
+      }
+      final session = lastFinishedSession;
+      if (session == null) {
+        return statusBytes(session: 0, hidActive: hidActiveInStatus, state: HidDictationProtocol.stateIdle);
+      }
+      return statusBytes(
+        session: session,
+        hidActive: hidActiveInStatus,
+        state: errorForSession != null ? HidDictationProtocol.stateError : HidDictationProtocol.stateDone,
+        lastError: errorForSession ?? HidDictationProtocol.errNone,
+      );
+    }
+    return [0];
   }
 
   @override
@@ -49,14 +98,7 @@ class _FakeTransport implements DeviceTransport {
     if (characteristicUuid == OmiDeviceConnection.dictationTextCharacteristicUuid &&
         data.length >= 3 &&
         (data[1] & HidDictationProtocol.flagFinal) != 0) {
-      // Mimic the firmware's terminal transition: active -> 0,
-      // lastFinished -> session. Errors come back as stateError.
-      final status = Uint8List(10);
-      status[1] = emitErrorStatus ? HidDictationProtocol.stateError : HidDictationProtocol.stateDone;
-      status[4] = emitErrorStatus ? HidDictationProtocol.errNotSubscribed : HidDictationProtocol.errNone;
-      status[6] = HidDictationProtocol.sessionNone;
-      status[7] = data[0];
-      scheduleMicrotask(() => statusController.add(status));
+      lastFinishedSession = data[0];
     }
   }
 
@@ -77,126 +119,181 @@ void main() {
   late OmiDeviceConnection connection;
   late List<String> transcribedPayloads;
   late List<(String, int)> haptics;
+  Completer<String>? transcribeGate;
   String? transcriptToReturn;
 
-  PendantDictationController buildController() {
+  PendantDictationController buildController({bool gateAllows = true}) {
     return PendantDictationController(
-      resolveConnection: (deviceId) async => connection,
+      resolveConnection: (deviceId) async => transport.connected ? connection : null,
+      getCodec: (deviceId) async => BleAudioCodec.opus,
       transcriber: (payloads, codec) async {
         transcribedPayloads.add('call:${payloads.length}');
-        return transcriptToReturn;
+        if (transcribeGate != null) {
+          final gated = await transcribeGate!.future;
+          return gated;
+        }
+        return transcriptToReturn ?? '';
       },
       hapticSender: (deviceId, level) async {
         haptics.add((deviceId, level));
       },
+      captureGate: () => gateAllows,
+      typingTimeout: const Duration(milliseconds: 400),
+      statusPollInterval: const Duration(milliseconds: 20),
     );
   }
+
+  Iterable<List<int>> textWrites() =>
+      transport.writes.where((w) => w.$2 == OmiDeviceConnection.dictationTextCharacteristicUuid).map((w) => w.$3);
 
   setUp(() {
     transport = _FakeTransport();
     connection = _connection(transport);
+    transport.featuresBytes = Uint8List(4)..buffer.asByteData().setUint32(0, OmiFeatures.hidDictation, Endian.little);
     transcribedPayloads = [];
     haptics = [];
+    transcribeGate = null;
     transcriptToReturn = null;
   });
 
-  test('press collects payloads, release transcribes and sends frames', () async {
+  test('tap starts a capture, second tap transcribes and completes', () async {
     transcriptToReturn = 'Hello world';
     final controller = buildController();
 
-    controller.startCapture(BleAudioCodec.opus);
+    expect(await controller.onButtonEvent('pendant', 1), isTrue);
     expect(controller.isCapturing, isTrue);
     controller.onAudioPayload([1, 2, 3]);
     controller.onAudioPayload([4, 5]);
-    await controller.finishCapture('pendant');
+    await controller.onButtonEvent('pendant', 1);
 
     expect(controller.isCapturing, isFalse);
     expect(transcribedPayloads, ['call:2']);
+    final frames = textWrites().toList();
 
-    final textWrites =
-        transport.writes.where((w) => w.$2 == OmiDeviceConnection.dictationTextCharacteristicUuid).toList();
-    expect(textWrites, hasLength(1));
-    final frame = textWrites.single.$3;
-    expect(frame[0], 1); // first session id
-    expect(frame[1], HidDictationProtocol.flagFinal);
-    expect(String.fromCharCodes(frame.sublist(3)), 'Hello world');
-    expect(haptics, [('pendant', 2)]); // success haptic
+    expect(frames, hasLength(1));
+    expect(frames[0][0], 1); // first session id
+    expect(frames[0][1], HidDictationProtocol.flagFinal);
+    expect(String.fromCharCodes(frames[0].sublist(3)), 'Hello world');
+    expect(haptics, contains(('pendant', 1))); // capture-start haptic
+    expect(haptics, contains(('pendant', 2))); // typed haptic
+    expect(controller.state.value.phase, PendantDictationPhase.done);
   });
 
-  test('transcript with unsupported characters is rejected before any write', () async {
+  test('all other button events are consumed without side effects', () async {
+    final controller = buildController();
+    for (final event in [2, 3, 4, 5]) {
+      expect(await controller.onButtonEvent('pendant', event), isTrue);
+    }
+    expect(controller.isCapturing, isFalse);
+    expect(transcribedPayloads, isEmpty);
+    expect(textWrites(), isEmpty);
+  });
+
+  test('non-ASCII transcript is rejected whole before any frame', () async {
     transcriptToReturn = 'hi\nthere';
     final controller = buildController();
 
-    controller.startCapture(BleAudioCodec.opus);
+    await controller.onButtonEvent('pendant', 1);
     controller.onAudioPayload([1]);
-    await controller.finishCapture('pendant');
+    await controller.onButtonEvent('pendant', 1);
 
-    expect(transport.writes.where((w) => w.$2 == OmiDeviceConnection.dictationTextCharacteristicUuid), isEmpty);
-    expect(haptics, isEmpty);
+    expect(textWrites(), isEmpty);
+    expect(haptics, contains(('pendant', 3)));
+    expect(controller.state.value.phase, PendantDictationPhase.error);
   });
 
-  test('empty transcript never writes', () async {
-    transcriptToReturn = '   ';
+  test('missing firmware feature bit refuses before transcribing', () async {
+    transport.featuresBytes = [0, 0, 0, 0];
     final controller = buildController();
 
-    controller.startCapture(BleAudioCodec.opus);
+    await controller.onButtonEvent('pendant', 1);
     controller.onAudioPayload([1]);
-    await controller.finishCapture('pendant');
+    await controller.onButtonEvent('pendant', 1);
 
-    expect(transport.writes.where((w) => w.$2 == OmiDeviceConnection.dictationTextCharacteristicUuid), isEmpty);
-  });
-
-  test('overlong transcript is refused instead of truncated', () async {
-    transcriptToReturn = 'a' * (HidDictationProtocol.maxTextLength + 1);
-    final controller = buildController();
-
-    controller.startCapture(BleAudioCodec.opus);
-    controller.onAudioPayload([1]);
-    await controller.finishCapture('pendant');
-
-    expect(transport.writes.where((w) => w.$2 == OmiDeviceConnection.dictationTextCharacteristicUuid), isEmpty);
-  });
-
-  test('cancelCapture drops the utterance without transcribing', () async {
-    final controller = buildController();
-
-    controller.startCapture(BleAudioCodec.opus);
-    controller.onAudioPayload([1]);
-    controller.cancelCapture();
-    expect(controller.isCapturing, isFalse);
-
-    await controller.finishCapture('pendant');
     expect(transcribedPayloads, isEmpty);
+    expect(textWrites(), isEmpty);
+    expect(controller.state.value.phase, PendantDictationPhase.error);
   });
-  test('long transcript is chunked into ordered frames', () async {
-    transcriptToReturn = 'b' * 250; // 200 + 50, under the 256-char firmware cap
+
+  test('inactive HID on the pendant refuses before transcribing', () async {
+    transport.hidActiveInStatus = false;
     final controller = buildController();
 
-    controller.startCapture(BleAudioCodec.opus);
+    await controller.onButtonEvent('pendant', 1);
     controller.onAudioPayload([1]);
-    await controller.finishCapture('pendant');
+    await controller.onButtonEvent('pendant', 1);
 
-    final frames = transport.writes
-        .where((w) => w.$2 == OmiDeviceConnection.dictationTextCharacteristicUuid)
-        .map((w) => w.$3)
-        .toList();
-    expect(frames, hasLength(2));
-    expect(frames[0][1], 0x00);
-    expect(frames[0][2], 200);
-    expect(frames.last[1], HidDictationProtocol.flagFinal);
-    expect(frames.last[2], 50);
-    expect(frames.map((f) => String.fromCharCodes(f.sublist(3))).join(), 'b' * 250);
+    expect(transcribedPayloads, isEmpty);
+    expect(textWrites(), isEmpty);
+    expect(controller.state.value.phase, PendantDictationPhase.error);
   });
 
-  test('failure haptic fires when the pendant reports an error status', () async {
+  test('capture gate (e.g. batch mode) blocks capture start', () async {
+    final controller = buildController(gateAllows: false);
+
+    await controller.onButtonEvent('pendant', 1);
+    expect(controller.isCapturing, isFalse);
+    expect(controller.state.value.phase, PendantDictationPhase.error);
+  });
+
+  test('cancel while transcribing drops the utterance and writes nothing', () async {
+    final controller = buildController();
+    transcribeGate = Completer<String>();
+
+    await controller.onButtonEvent('pendant', 1);
+    controller.onAudioPayload([1]);
+    final finishing = controller.onButtonEvent('pendant', 1);
+    await Future.delayed(const Duration(milliseconds: 10));
+    await controller.cancelCapture('pendant');
+    transcribeGate!.complete('stale text that must never be typed');
+    await finishing;
+
+    expect(textWrites(), isEmpty);
+    expect(haptics, isNot(contains(('pendant', 2))));
+  });
+
+  test('link drop while transcribing drops the utterance', () async {
+    final controller = buildController();
+    transcribeGate = Completer<String>();
+
+    await controller.onButtonEvent('pendant', 1);
+    controller.onAudioPayload([1]);
+    final finishing = controller.onButtonEvent('pendant', 1);
+    await Future.delayed(const Duration(milliseconds: 10));
+    transport.connected = false; // same-link epoch check fails afterwards
+    transcribeGate!.complete('orphaned text');
+    await finishing;
+
+    expect(textWrites(), isEmpty);
+  });
+
+  test('device error status surfaces as error haptic and message', () async {
     transcriptToReturn = 'nope';
-    transport.emitErrorStatus = true;
     final controller = buildController();
 
-    controller.startCapture(BleAudioCodec.opus);
+    await controller.onButtonEvent('pendant', 1);
     controller.onAudioPayload([1]);
-    await controller.finishCapture('pendant');
+    transport.errorForSession = HidDictationProtocol.errNotSubscribed;
+    await controller.onButtonEvent('pendant', 1);
 
-    expect(haptics, [('pendant', 3)]); // error haptic
+    expect(haptics, contains(('pendant', 3)));
+    expect(controller.state.value.phase, PendantDictationPhase.error);
+  });
+
+  test('typing timeout cancels the session on device', () async {
+    transcriptToReturn = 'slow';
+    transport.neverTerminal = true; // polled status never reaches terminal
+    final controller = buildController();
+
+    await controller.onButtonEvent('pendant', 1);
+    controller.onAudioPayload([1]);
+    await controller.onButtonEvent('pendant', 1);
+
+    expect(controller.state.value.phase, PendantDictationPhase.error);
+    expect(
+      transport.writes.any((w) => w.$3.length == 3 && (w.$3[1] & HidDictationProtocol.flagCancel) != 0),
+      isTrue,
+    );
+    expect(haptics, contains(('pendant', 3)));
   });
 }

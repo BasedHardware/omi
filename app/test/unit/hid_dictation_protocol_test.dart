@@ -31,32 +31,34 @@ void main() {
       expect(frames.single.sublist(3), 'hi'.codeUnits);
     });
 
-    test('long text chunks with final flag only on the last frame', () {
-      final text = 'a' * 450; // 200 + 200 + 50
+    test('default payload is MTU-23-safe and chunks long text', () {
+      expect(HidDictationProtocol.maxFramePayload, 17);
+      final text = 'a' * 40; // 17 + 17 + 6 at the conservative default
       final frames = HidDictationProtocol.buildFrames(9, text);
       expect(frames, hasLength(3));
+      expect(frames[0][2], 17);
+      expect(frames[1][2], 17);
+      expect(frames[2][2], 6);
       expect(frames[0][1], 0x00);
-      expect(frames[0][2], 200);
       expect(frames[1][1], 0x00);
-      expect(frames[1][2], 200);
       expect(frames[2][1], HidDictationProtocol.flagFinal);
-      expect(frames[2][2], 50);
-      final rebuilt = frames.map((f) => String.fromCharCodes(f.sublist(3))).join();
-      expect(rebuilt, text);
+      expect(frames.map((f) => String.fromCharCodes(f.sublist(3))).join(), text);
     });
 
-    test('empty text yields no frames and cancel frame is well-formed', () {
-      expect(HidDictationProtocol.buildFrames(3, ''), isEmpty);
-      final cancel = HidDictationProtocol.buildCancelFrame(3);
-      expect(cancel, [3, HidDictationProtocol.flagCancel, 0]);
+    test('fails closed on bad input instead of silently filtering', () {
+      expect(() => HidDictationProtocol.buildFrames(0, 'ok'), throwsArgumentError);
+      expect(() => HidDictationProtocol.buildFrames(256, 'ok'), throwsArgumentError);
+      expect(() => HidDictationProtocol.buildFrames(1, 'ok\n'), throwsArgumentError);
+      expect(() => HidDictationProtocol.buildFrames(1, 'é'), throwsArgumentError);
+      expect(() => HidDictationProtocol.buildFrames(1, 'a' * (HidDictationProtocol.maxTextLength + 1)),
+          throwsArgumentError);
+      expect(() => HidDictationProtocol.buildFrames(1, 'ok', maxPayload: 245), throwsArgumentError);
+      expect(() => HidDictationProtocol.buildFrames(1, 'ok', maxPayload: 0), throwsArgumentError);
+    });
+
+    test('cancel frames are well-formed', () {
+      expect(HidDictationProtocol.buildCancelFrame(3), [3, HidDictationProtocol.flagCancel, 0]);
       expect(HidDictationProtocol.buildCancelFrame(), [0, HidDictationProtocol.flagCancel, 0]);
-    });
-
-    test('session ids never hit the reserved zero', () {
-      // Mirrors the firmware rule: 0 is reserved. The controller's generator
-      // is exercised in the controller test; here we assert the invariant the
-      // protocol itself documents.
-      expect(HidDictationProtocol.sessionNone, 0);
     });
   });
 
@@ -87,9 +89,12 @@ void main() {
       expect(s.describe(), 'unsupported character at 42');
     });
 
-    test('rejects short payloads', () {
+    test('fails closed on short payloads and unknown versions', () {
       expect(HidDictationProtocol.parseStatus(Uint8List(9)), isNull);
       expect(HidDictationProtocol.parseStatus(Uint8List(0)), isNull);
+      final future = Uint8List(10);
+      future[0] = 2; // a protocol this build does not speak
+      expect(HidDictationProtocol.parseStatus(future), isNull);
     });
   });
 }

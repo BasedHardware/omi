@@ -42,9 +42,11 @@ class HidDictationProtocol {
   /// Session id 0 is never a valid data session.
   static const int sessionNone = 0;
 
-  /// Payload bound per frame. The firmware accepts up to 244 payload bytes;
-  /// staying at 200 also fits comfortably inside a 247-byte ATT MTU.
-  static const int maxFramePayload = 200;
+  /// Conservative per-frame payload: 17 bytes fit a 23-byte ATT MTU (the
+  /// pre-exchange default) with the 3-byte header and 3-byte ATT opcode left.
+  /// iOS frequently negotiates only 185 (182 usable), and the transport does
+  /// NOT split application-level writes — frames must fit the *worst* link.
+  static const int maxFramePayload = 17;
 
   /// Maximum committed text the firmware will type (mirror of
   /// CONFIG_OMI_HID_DICTATION_MAX_TEXT_LEN default).
@@ -65,16 +67,28 @@ class HidDictationProtocol {
     return null;
   }
 
-  /// Splits [text] into ordered frames for [session]. [text] must already be
-  /// validated (see [firstUnsupportedIndex]); empty text yields no frames.
+  /// Splits [text] into ordered frames for [session].
+  ///
+  /// Fails closed: throws [ArgumentError] instead of silently filtering —
+  /// a caller that has not validated the text must not get mangled frames
+  /// (asserts are stripped in release mode, so filtering would ship).
   static List<Uint8List> buildFrames(int session, String text, {int maxPayload = maxFramePayload}) {
-    assert(session != sessionNone);
-    assert(maxPayload > 0 && maxPayload <= 244);
-    final bytes = text.codeUnits.where(isCharSupported).toList();
-    // The where() above is a safety net; callers validate first and must not
-    // rely on it (silent filtering here would mask a validation bug).
-    assert(bytes.length == text.length);
-    if (bytes.isEmpty) return [];
+    if (session == sessionNone || session < 1 || session > 255) {
+      throw ArgumentError.value(session, 'session', 'must be 1..255 (0 is reserved)');
+    }
+    if (maxPayload < 1 || maxPayload > 244) {
+      throw ArgumentError.value(maxPayload, 'maxPayload', 'must be 1..244 (firmware frame bound)');
+    }
+    if (text.length > maxTextLength) {
+      throw ArgumentError.value(text.length, 'text.length', 'exceeds firmware max $maxTextLength');
+    }
+    final bad = firstUnsupportedIndex(text);
+    if (bad != null) {
+      throw ArgumentError.value(text.codeUnitAt(bad), 'text[$bad]', 'unsupported character (reject whole text first)');
+    }
+
+    final bytes = text.codeUnits;
+    if (bytes.isEmpty) return const [];
 
     final frames = <Uint8List>[];
     for (int offset = 0; offset < bytes.length; offset += maxPayload) {
@@ -97,9 +111,12 @@ class HidDictationProtocol {
     return Uint8List.fromList([session & 0xFF, flagCancel, 0]);
   }
 
-  /// Parses the 10-byte status payload. Returns null on length mismatch.
+  /// Parses the 10-byte status payload. Fails closed: null on truncated
+  /// payloads or an unknown protocol version (the peer speaks a wire format
+  /// this build cannot interpret).
   static HidDictationStatus? parseStatus(Uint8List data) {
     if (data.length < 10) return null;
+    if (data[0] != protocolVersion) return null;
     final view = ByteData.view(data.buffer, data.offsetInBytes, data.length);
     return HidDictationStatus(
       version: data[0],
@@ -141,6 +158,7 @@ class HidDictationStatus {
 
   bool get isTyping => state == HidDictationProtocol.stateTyping;
   bool get isError => state == HidDictationProtocol.stateError;
+  bool get wasCancelled => lastError == HidDictationProtocol.errCancelled;
 
   String describe() {
     switch (lastError) {

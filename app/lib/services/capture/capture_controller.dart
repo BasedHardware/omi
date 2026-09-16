@@ -480,12 +480,27 @@ class CaptureController extends ChangeNotifier
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
   // Experimental: pendant-as-keyboard dictation prototype (developer toggle).
+  // The resolver is strictly passive — connectionFor + isConnected — so a
+  // dictation pipeline never resurrects a dropped link to deliver old text.
   final PendantDictationController _dictation = PendantDictationController(
     resolveConnection: (deviceId) async {
-      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-      return connection is OmiDeviceConnection ? connection : null;
+      final connection = ServiceManager.instance().device.connectionFor(deviceId);
+      if (connection is! OmiDeviceConnection) return null;
+      if (!await connection.isConnected()) return null;
+      return connection;
     },
+    getCodec: (deviceId) async {
+      final connection = ServiceManager.instance().device.connectionFor(deviceId);
+      if (connection is OmiDeviceConnection && await connection.isConnected()) {
+        return await connection.getAudioCodec();
+      }
+      return BleAudioCodec.pcm8;
+    },
+    captureGate: () => !SharedPreferencesUtil().batchModeEnabled,
   );
+
+  /// User-visible HID dictation state (developer settings status line).
+  ValueListenable<PendantDictationUiState> get dictationState => _dictation.state;
 
   StreamSubscription? _storageStream;
 
@@ -966,11 +981,13 @@ class CaptureController extends ChangeNotifier
         }
 
         // Experimental HID dictation prototype: while the developer toggle is
-        // on, pendant press (4) / release (5) delimit one dictation utterance.
-        // The transcript is typed by the pendant into the phone's focused
-        // field over BLE HID; press again to dictate another utterance.
-        if (SharedPreferencesUtil().hidDictationEnabled && (buttonState == 4 || buttonState == 5)) {
-          unawaited(_handleDictationButton(deviceId, buttonState));
+        // on, dictation owns the pendant button — tap once to start an
+        // utterance, tap again to type it into the focused field. EVERY
+        // button event is consumed here (taps, double taps, long press, raw
+        // press/release) so no assistant voice command can fire from an
+        // HID-mode click.
+        if (SharedPreferencesUtil().hidDictationEnabled) {
+          _dictation.onButtonEvent(deviceId, buttonState);
           return;
         }
 
@@ -1073,14 +1090,7 @@ class CaptureController extends ChangeNotifier
     );
   }
 
-  /// Experimental HID dictation prototype button handler (see streamButton).
-  Future<void> _handleDictationButton(String deviceId, int buttonState) async {
-    if (buttonState == 4) {
-      _dictation.startCapture(await _getAudioCodec(deviceId));
-    } else {
-      await _dictation.finishCapture(deviceId);
-    }
-  }
+  // (HID dictation button handling lives in PendantDictationController.)
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     Logger.debug('streamAudioToWs in capture_provider');

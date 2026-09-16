@@ -34,6 +34,12 @@ LOG_MODULE_REGISTER(hid_dictation, CONFIG_LOG_DEFAULT_LEVEL);
 #define DICTATION_FRAME_TIMEOUT_MS CONFIG_OMI_HID_DICTATION_FRAME_TIMEOUT_MS
 #define DICTATION_TYPE_BUDGET_MS CONFIG_OMI_HID_DICTATION_TYPE_BUDGET_MS
 
+// The whole typing budget must cover max text at the configured two-reports-
+// per-character pacing, or a long session could be killed mid-word by design.
+BUILD_ASSERT(CONFIG_OMI_HID_DICTATION_MAX_TEXT_LEN * 2 * CONFIG_OMI_HID_DICTATION_KEY_INTERVAL_MS <=
+                 CONFIG_OMI_HID_DICTATION_TYPE_BUDGET_MS,
+             "typing budget must cover max text at configured pacing");
+
 static uint8_t dictation_text[CONFIG_OMI_HID_DICTATION_MAX_TEXT_LEN];
 static struct hid_dictation_limits dictation_limits = {
     .max_text_len = sizeof(dictation_text),
@@ -46,6 +52,13 @@ static bool hid_wanted;     // requested by the app
 static bool hid_registered; // HIDS currently in the GATT table
 
 static struct bt_conn *conn_ref; // last connection handed to on_connected
+
+// Serializes dictation state (dictation_ctx, conn_ref, enable flags) across
+// the BT RX thread (GATT writes, connect/disconnect callbacks) and the
+// system workqueue (typing/timeout work). Zephyr k_mutex is recursive, so
+// locked helpers may call each other; nothing calls back into this module
+// while the lock is held.
+static struct k_mutex dictation_lock;
 
 // --- HIDS instance (standard HID over GATT keyboard) ---
 
@@ -69,6 +82,15 @@ static void hids_inp_rep_handler(enum bt_hids_notify_evt evt)
     } else {
         LOG_INF("HID host unsubscribed from input reports");
     }
+}
+
+// Keyboard LED output report (caps lock etc.): accepted and ignored. The
+// pendant is a typer, not a feedback surface; LEDs state is not surfaced.
+static void hids_kb_outp_rep_handler(struct bt_hids_rep *rep, struct bt_conn *conn, bool write)
+{
+    ARG_UNUSED(rep);
+    ARG_UNUSED(conn);
+    ARG_UNUSED(write);
 }
 
 static int hids_register(void)
@@ -128,6 +150,16 @@ static int hids_register(void)
     inp_rep->handler = hids_inp_rep_handler;
     init.inp_rep_group_init.cnt++;
 
+    // The report map declares the standard LED output report; register it so
+    // report-protocol hosts find the matching Report characteristic, and wire
+    // boot-protocol LED writes to the same ignoring handler.
+    struct bt_hids_outp_feat_rep *outp_rep = &init.outp_rep_group_init.reports[0];
+    outp_rep->id = 0x00;
+    outp_rep->size = 1;
+    outp_rep->handler = hids_kb_outp_rep_handler;
+    init.outp_rep_group_init.cnt++;
+    init.boot_kb_outp_rep_handler = hids_kb_outp_rep_handler;
+
     int err = bt_hids_init(&hids_obj, &init);
     if (err) {
         LOG_ERR("bt_hids_init failed: %d", err);
@@ -138,16 +170,23 @@ static int hids_register(void)
     return 0;
 }
 
-static void hids_unregister(void)
+// bt_hids_uninit() only fails when bt_gatt_service_unregister() fails, in
+// which case the service is still in the GATT table — so hid_registered must
+// stay true and the next enable cycle skips re-registration on purpose.
+// Every other path (including the internal pool/ctx cleanup) leaves the
+// service removed and clears the flag.
+static int hids_unregister(void)
 {
     if (!hid_registered) {
-        return;
+        return 0;
     }
     int err = bt_hids_uninit(&hids_obj);
     if (err) {
-        LOG_ERR("bt_hids_uninit failed: %d", err);
-        return;
+        LOG_ERR("bt_hids_uninit failed: %d (service still registered)", err);
+        return err;
     }
+    hid_registered = false;
+    return 0;
 }
 
 // --- Dictation control-plane GATT service ---
@@ -192,8 +231,9 @@ static struct hid_dictation_status current_status(void)
 static void notify_status(void)
 {
     struct hid_dictation_status s = current_status();
-    // attrs[1] is the control characteristic value attribute.
-    bt_gatt_notify(NULL, &dictation_service.attrs[1], &s, sizeof(s));
+    // Attribute layout: [0] primary service, [1] characteristic declaration,
+    // [2] characteristic VALUE. Notify on the value attribute.
+    bt_gatt_notify(NULL, &dictation_service.attrs[2], &s, sizeof(s));
 }
 
 // --- Typing engine ---
@@ -222,18 +262,22 @@ static void release_all_keys(void)
     (void) send_report(zero);
 }
 
-static void stop_typing(uint8_t error, uint8_t detail)
+// Callers hold dictation_lock. Cancels pending work, closes the session,
+// releases every held key, and publishes the terminal status. Because this
+// runs under the same lock as the typing handler, a handler in flight either
+// finishes before us (its press is released by our release_all_keys below)
+// or observes the cleared session state and exits — no press can survive
+// cancellation's final release.
+static void stop_typing_locked(uint8_t error, uint8_t detail)
 {
     k_work_cancel_delayable(&typing_work);
     k_work_cancel_delayable(&frame_timeout_work);
     if (dictation_ctx.typing_ready || dictation_ctx.active_session != HID_DICTATION_SESSION_NONE) {
-        if (error == HID_DICTATION_ERR_NONE) {
-            hid_dictation_core_abort(&dictation_ctx); // marks session finished
-        } else {
+        if (error != HID_DICTATION_ERR_NONE) {
             dictation_ctx.last_error = error;
             dictation_ctx.error_detail = detail;
-            hid_dictation_core_abort(&dictation_ctx);
         }
+        hid_dictation_core_abort(&dictation_ctx); // marks session finished
         release_all_keys();
         notify_status();
     } else {
@@ -242,11 +286,22 @@ static void stop_typing(uint8_t error, uint8_t detail)
     }
 }
 
+// Locking entry point for callers outside the GATT/work contexts.
+static void stop_typing(uint8_t error, uint8_t detail)
+{
+    k_mutex_lock(&dictation_lock, K_FOREVER);
+    stop_typing_locked(error, detail);
+    k_mutex_unlock(&dictation_lock);
+}
+
 static void typing_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
+    k_mutex_lock(&dictation_lock, K_FOREVER);
+
     if (!dictation_ctx.typing_ready || conn_ref == NULL) {
+        k_mutex_unlock(&dictation_lock);
         return;
     }
 
@@ -255,7 +310,8 @@ static void typing_work_handler(struct k_work *work)
         typing_started_ms = k_uptime_get_32();
     }
     if (k_uptime_get_32() - typing_started_ms > DICTATION_TYPE_BUDGET_MS) {
-        stop_typing(HID_DICTATION_ERR_TIMEOUT, dictation_ctx.active_session);
+        stop_typing_locked(HID_DICTATION_ERR_TIMEOUT, dictation_ctx.active_session);
+        k_mutex_unlock(&dictation_lock);
         return;
     }
 
@@ -263,25 +319,33 @@ static void typing_work_handler(struct k_work *work)
     enum hid_dictation_key_event evt = hid_dictation_core_next_key(&dictation_ctx, report);
 
     if (evt == HID_DICTATION_KEY_DONE) {
+        // Session finished: last emitted report was the final release; publish
+        // DONE so notification-based completion waits resolve immediately.
+        notify_status();
+        k_mutex_unlock(&dictation_lock);
         return;
     }
 
     int err = send_report(report);
     if (err != 0) {
         uint8_t code = (err == -EACCES) ? HID_DICTATION_ERR_NOT_SUBSCRIBED : HID_DICTATION_ERR_INTERNAL;
-        stop_typing(code, dictation_ctx.active_session);
+        stop_typing_locked(code, dictation_ctx.active_session);
+        k_mutex_unlock(&dictation_lock);
         return;
     }
 
     k_work_reschedule(&typing_work, K_MSEC(DICTATION_KEY_INTERVAL_MS));
+    k_mutex_unlock(&dictation_lock);
 }
 
 static void frame_timeout_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
+    k_mutex_lock(&dictation_lock, K_FOREVER);
     if (dictation_ctx.active_session != HID_DICTATION_SESSION_NONE && !dictation_ctx.typing_ready) {
-        stop_typing(HID_DICTATION_ERR_TIMEOUT, dictation_ctx.active_session);
+        stop_typing_locked(HID_DICTATION_ERR_TIMEOUT, dictation_ctx.active_session);
     }
+    k_mutex_unlock(&dictation_lock);
 }
 
 // --- GATT handlers ---
@@ -321,18 +385,22 @@ static ssize_t dictation_control_write(struct bt_conn *conn,
         return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
     }
 
+    k_mutex_lock(&dictation_lock, K_FOREVER);
+
     bool enable = (cmd == HID_DICTATION_CMD_ENABLE);
     if (enable == hid_wanted) {
         notify_status();
+        k_mutex_unlock(&dictation_lock);
         return len;
     }
 
     hid_wanted = enable;
     printk("hid_dictation: %s requested (reconnect to apply)\n", enable ? "enable" : "disable");
     if (!enable) {
-        stop_typing(HID_DICTATION_ERR_NONE, 0);
+        stop_typing_locked(HID_DICTATION_ERR_NONE, 0);
     }
     notify_status();
+    k_mutex_unlock(&dictation_lock);
     return len;
 }
 
@@ -353,6 +421,8 @@ static ssize_t dictation_text_write(struct bt_conn *conn,
     if (!hid_registered) {
         return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
     }
+
+    k_mutex_lock(&dictation_lock, K_FOREVER);
 
     enum hid_dictation_feed_result result = hid_dictation_core_feed(&dictation_ctx, (const uint8_t *) buf, len);
 
@@ -377,21 +447,26 @@ static ssize_t dictation_text_write(struct bt_conn *conn,
     }
 
     notify_status();
+    k_mutex_unlock(&dictation_lock);
     return len;
 }
 
 static struct bt_gatt_attr dictation_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&dictation_service_uuid),
+    // Encrypted/bonded link required: committed text is user content typed
+    // into whatever field has focus; it must never ride a plaintext link.
+    // iOS pairs transparently on the first encrypted access (the ENABLE
+    // write), which is also when the HID half needs the bond.
     BT_GATT_CHARACTERISTIC(&dictation_control_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT,
                            dictation_control_read,
                            dictation_control_write,
                            NULL),
-    BT_GATT_CCC(dictation_control_ccc_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(dictation_control_ccc_handler, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
     BT_GATT_CHARACTERISTIC(&dictation_text_uuid.uuid,
                            BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_WRITE,
+                           BT_GATT_PERM_WRITE_ENCRYPT,
                            NULL,
                            dictation_text_write,
                            NULL),
@@ -404,6 +479,7 @@ static struct bt_gatt_service dictation_service = BT_GATT_SERVICE(dictation_serv
 int hid_dictation_service_register(void)
 {
     hid_dictation_core_init(&dictation_ctx, dictation_text, &dictation_limits);
+    k_mutex_init(&dictation_lock);
     return bt_gatt_service_register(&dictation_service);
 }
 
@@ -422,6 +498,7 @@ void hid_dictation_bt_ready(void)
 
 void hid_dictation_on_connected(struct bt_conn *conn)
 {
+    k_mutex_lock(&dictation_lock, K_FOREVER);
     if (conn_ref != NULL) {
         bt_conn_unref(conn_ref);
     }
@@ -434,12 +511,14 @@ void hid_dictation_on_connected(struct bt_conn *conn)
         }
     }
     notify_status();
+    k_mutex_unlock(&dictation_lock);
 }
 
 void hid_dictation_on_disconnected(struct bt_conn *conn)
 {
     // Forget everything about the session: no replay after reconnect.
-    stop_typing(HID_DICTATION_ERR_NONE, 0);
+    k_mutex_lock(&dictation_lock, K_FOREVER);
+    stop_typing_locked(HID_DICTATION_ERR_NONE, 0);
     hid_dictation_core_init(&dictation_ctx, dictation_text, &dictation_limits);
 
     if (hid_registered) {
@@ -460,9 +539,11 @@ void hid_dictation_on_disconnected(struct bt_conn *conn)
         hids_register();
         printk("hid_dictation: HID keyboard service registered\n");
     } else if (!hid_wanted && hid_registered) {
-        hids_unregister();
-        printk("hid_dictation: HID keyboard service removed\n");
+        if (hids_unregister() == 0) {
+            printk("hid_dictation: HID keyboard service removed\n");
+        }
     }
+    k_mutex_unlock(&dictation_lock);
 }
 
 bool hid_dictation_hid_active(void)

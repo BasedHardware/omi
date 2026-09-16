@@ -1030,13 +1030,4 @@ class OmiDeviceConnection extends DeviceConnection {
       return false;
     }
   }
-
-  Stream<HidDictationStatus> performSubscribeHidDictationStatus() {
-    return transport
-        .getCharacteristicStream(dictationServiceUuid, dictationControlCharacteristicUuid)
-        .where((data) => data is List<int>)
-        .map((data) => HidDictationProtocol.parseStatus(Uint8List.fromList(data as List<int>)))
-        .where((s) => s != null)
-        .cast<HidDictationStatus>();
-  }
 }
