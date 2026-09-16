@@ -21,7 +21,7 @@ class JourneyEvidence {
   final String lane;
   final DateTime startedAt;
   final Map<String, Object?> artifactIdentity;
-  final DateTime finishedAt = DateTime.now().toUtc();
+  DateTime? _finishedAt;
 
   int passed = 0;
   int failed = 0;
@@ -70,7 +70,7 @@ class JourneyEvidence {
         },
         'artifact': artifactIdentity,
         'started_at': startedAt.toIso8601String(),
-        'finished_at': finishedAt.toIso8601String(),
+        'finished_at': (_finishedAt ?? DateTime.now().toUtc()).toIso8601String(),
         'counts': {'passed': passed, 'failed': failed, 'skipped': skipped, 'executed': passed + failed + skipped},
         'outcome': failed > 0
             ? 'failed'
@@ -86,6 +86,7 @@ class JourneyEvidence {
   /// Writes the receipt. Directory defaults to a temp dir; the runner passes
   /// `OMI_JOURNEY_EVIDENCE_DIR` to collect receipts for handoff.
   Future<String> write() async {
+    _finishedAt = DateTime.now().toUtc();
     final dir = Platform.environment['OMI_JOURNEY_EVIDENCE_DIR'] ?? Directory.systemTemp.path;
     final target = Directory(dir);
     if (!target.existsSync()) target.createSync(recursive: true);
