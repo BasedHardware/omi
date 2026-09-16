@@ -1,60 +1,81 @@
-import re
-from typing import Optional, Tuple
-from openai import AsyncOpenAI
+import difflib
 import os
+import re
+from typing import Optional, Tuple, Dict
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
+def resolve_channel(spoken_name: Optional[str], channel_map: Optional[Dict[str, str]]) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve spoken channel name against workspace channels.
+    1. Exact case-insensitive match returns (channel_id, channel_name).
+    2. Otherwise, scores all substring-matching candidates using difflib.SequenceMatcher.
+    3. If there is a single closest candidate, returns (channel_id, channel_name).
+    4. If there is a tie between top candidates or no match, returns (None, None).
+    """
+    if not spoken_name or not channel_map:
+        return None, None
+
+    cleaned = spoken_name.strip().lstrip("#").lower()
+    if not cleaned:
+        return None, None
+
+    # 1. Exact case-insensitive match
+    for name, ch_id in channel_map.items():
+        if name.lower() == cleaned:
+            return ch_id, name
+
+    # 2. Substring matching candidates scored by SequenceMatcher ratio
+    candidates = []
+    for name, ch_id in channel_map.items():
+        name_lower = name.lower()
+        if cleaned in name_lower or name_lower in cleaned:
+            score = difflib.SequenceMatcher(None, cleaned, name_lower).ratio()
+            candidates.append((score, ch_id, name))
+
+    if not candidates:
+        return None, None
+
+    # Sort by score descending
+    candidates.sort(key=lambda x: x[0], reverse=True)
+
+    # Check for tie at the top
+    if len(candidates) > 1 and abs(candidates[0][0] - candidates[1][0]) < 1e-9:
+        return None, None
+
+    best = candidates[0]
+    return best[1], best[2]
+
+
 class MessageDetector:
     """Detects Slack message commands and extracts message content + channel intelligently."""
-    
+
     TRIGGER_PHRASES = [
         "send slack message",
         "post slack message",
         "post in slack"
     ]
-    
+
     @staticmethod
     def normalize_text(text: str) -> str:
         """Normalize text for comparison."""
         return text.lower().strip()
-    
-    @staticmethod
-    def resolve_channel(channel_name: str, channel_map: dict) -> Tuple[Optional[str], Optional[str], list]:
-        """Map a spoken channel name to exactly one channel id.
-
-        An exact (case insensitive) name wins. Otherwise a fuzzy match is
-        accepted only when a single channel contains the spoken name or is
-        contained by it; "dev" in a workspace with #dev-ops and #frontend-dev
-        must not post to whichever came first. Returns (id, name, candidates):
-        id and name are None when nothing or several channels matched, and
-        candidates lists the fuzzy matches so the caller can say why.
-        """
-        spoken = channel_name.lstrip('#').strip().lower()
-        if not spoken:
-            return None, None, []
-        for name, channel_id in channel_map.items():
-            if name.lower() == spoken:
-                return channel_id, name, [name]
-        candidates = [name for name in channel_map if spoken in name.lower() or name.lower() in spoken]
-        if len(candidates) == 1:
-            return channel_map[candidates[0]], candidates[0], candidates
-        return None, None, candidates
 
     @classmethod
     def detect_trigger(cls, text: str) -> bool:
         """Check if text contains a Slack message trigger phrase."""
         normalized = cls.normalize_text(text)
         return any(trigger in normalized for trigger in cls.TRIGGER_PHRASES)
-    
+
     @classmethod
     def extract_message_content(cls, text: str) -> Optional[str]:
         """Extract message content after trigger phrase."""
         normalized = cls.normalize_text(text)
-        
+
         # Find the trigger phrase
         trigger_index = -1
         matched_trigger = None
@@ -64,28 +85,28 @@ class MessageDetector:
                 trigger_index = idx
                 matched_trigger = trigger
                 break
-        
+
         if trigger_index == -1:
             return None
-        
+
         # Extract content after trigger
         start_index = trigger_index + len(matched_trigger)
         content = text[start_index:].strip()
-        
+
         return content if content else None
-    
+
     @classmethod
     async def ai_extract_message_and_channel(cls, all_segments_text: str, available_channels: list) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Extract message content and target channel from voice segments.
         Uses AI to intelligently parse "send X message to/in Y channel"
-        
+
         Returns: (channel_id, channel_name, message_content) or (None, None, None)
         """
         # Create channel list for AI
         channel_names = [ch["name"] for ch in available_channels]
         channel_map = {ch["name"]: ch["id"] for ch in available_channels}
-        
+
         try:
             response = await client.chat.completions.create(
                 model="gpt-4o",
@@ -143,47 +164,42 @@ MESSAGE: Hello everyone, this is a test message"""
                 temperature=0.3,
                 max_tokens=200
             )
-            
+
             result = response.choices[0].message.content.strip()
-            
+
             # Parse response
             channel_name = None
             message = None
-            
+
             for line in result.split('\n'):
                 if line.startswith("CHANNEL:"):
                     channel_name = line.replace("CHANNEL:", "").strip()
                 elif line.startswith("MESSAGE:"):
                     message = line.replace("MESSAGE:", "").strip()
-            
+
             # Handle unknown channel
             if not channel_name or channel_name.upper() == "UNKNOWN":
                 print(f"⚠️  No channel identified in message", flush=True)
                 return None, None, message
-            
+
             # Remove # if present
             channel_name = channel_name.lstrip('#')
-            
-            channel_id, resolved_name, candidates = cls.resolve_channel(channel_name, channel_map)
-            
-            if not channel_id:
-                if candidates:
-                    print(f"⚠️  Channel '{channel_name}' is ambiguous, matches: {', '.join('#' + c for c in candidates)}", flush=True)
-                else:
-                    print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
-                return None, channel_name, message
-            
-            if resolved_name.lower() != channel_name.lower():
-                print(f"🔍 Fuzzy matched '{channel_name}' to '{resolved_name}'", flush=True)
-            channel_name = resolved_name  # Use exact name from map
 
-            print(f"✅ Extracted - Channel: #{channel_name}, Message: '{message}'", flush=True)
-            return channel_id, channel_name, message
-            
+            # Resolve channel using exact and scored fuzzy matching
+            channel_id, resolved_name = resolve_channel(channel_name, channel_map)
+            if resolved_name:
+                channel_name = resolved_name
+                if channel_id:
+                    print(f"✅ Extracted - Channel: #{channel_name}, Message: '{message}'", flush=True)
+                    return channel_id, channel_name, message
+
+            print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
+            return None, channel_name, message
+
         except Exception as e:
             print(f"⚠️  AI extraction failed: {e}", flush=True)
             return None, None, all_segments_text
-    
+
     @classmethod
     async def ai_match_channel(cls, spoken_channel: str, available_channels: list) -> Optional[dict]:
         """
@@ -192,9 +208,9 @@ MESSAGE: Hello everyone, this is a test message"""
         """
         if not available_channels:
             return None
-        
+
         channel_names = [ch["name"] for ch in available_channels]
-        
+
         try:
             response = await client.chat.completions.create(
                 model="gpt-4o",
@@ -224,27 +240,27 @@ User said: "engineering team" → engineering
 User said: "xyz123" (not in list) → NONE"""
                     },
                     {
-                        "role": "user", 
+                        "role": "user",
                         "content": f"User said channel: '{spoken_channel}'\n\nBest match from available channels:"
                     }
                 ],
                 temperature=0.1,
                 max_tokens=20
             )
-            
+
             matched = response.choices[0].message.content.strip().lstrip('#')
-            
+
             if matched.upper() == "NONE":
                 return None
-            
+
             # Find the channel with this name
             for ch in available_channels:
                 if ch["name"].lower() == matched.lower():
                     print(f"🎯 AI matched '{spoken_channel}' → #{ch['name']}", flush=True)
                     return ch
-            
+
             return None
-            
+
         except Exception as e:
             print(f"⚠️  AI channel matching failed: {e}", flush=True)
             # Fallback to simple matching
@@ -253,23 +269,23 @@ User said: "xyz123" (not in list) → NONE"""
                 if ch["name"].lower() == spoken_lower:
                     return ch
             return None
-    
+
     @classmethod
     def clean_content(cls, content: str) -> str:
         """Basic cleaning of content (fallback)."""
         # Remove multiple spaces
         content = re.sub(r'\s+', ' ', content)
-        
+
         # Remove common filler words
         filler_words = ["um", "uh", "like", "you know", "so", "yeah"]
         words = content.split()
         cleaned_words = [w for w in words if w.lower().rstrip('.,!?') not in filler_words]
-        
+
         content = ' '.join(cleaned_words).strip()
-        
+
         # Ensure proper capitalization of first letter
         if content and content[0].islower():
             content = content[0].upper() + content[1:]
-        
+
         return content
 
