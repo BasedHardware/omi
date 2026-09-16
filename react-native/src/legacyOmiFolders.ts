@@ -159,11 +159,7 @@ export async function loadOmiFolderNames(
   ) {
     return [];
   }
-  try {
-    return parseOmiFolders(response.body);
-  } catch {
-    return [];
-  }
+  return parseOmiFolders(response.body);
 }
 
 export async function loadOmiFolder(
@@ -190,13 +186,7 @@ export async function loadOmiFolder(
   ) {
     return undefined;
   }
-  try {
-    return parseOmiFolders(response.body).find(
-      folder => folder.id === folderId,
-    );
-  } catch {
-    return undefined;
-  }
+  return parseOmiFolders(response.body).find(folder => folder.id === folderId);
 }
 
 export async function loadOmiFolderName(

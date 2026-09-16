@@ -390,7 +390,7 @@ test('loadOmiFolderNames names resolved GET folders and omits failures', async (
   request.mockResolvedValueOnce({id: 'folders', status: 404, body: null});
   expect(await loadOmiFolderNames(backend)).toEqual([]);
   request.mockResolvedValueOnce({id: 'folders', status: 200, body: '{'});
-  expect(await loadOmiFolderNames(backend)).toEqual([]);
+  await expect(loadOmiFolderNames(backend)).rejects.toThrow();
 });
 
 test('loadOmiFolder names a resolved GET folder color and omits misses', async () => {
@@ -448,4 +448,28 @@ test('loadOmiFolderName names a resolved GET folder and omits misses', async () 
   expect(await loadOmiFolderName(backend, 'folder-missing')).toBeUndefined();
   request.mockResolvedValueOnce({id: 'folders', status: 500, body: '[]'});
   expect(await loadOmiFolderName(backend, 'folder-work')).toBeUndefined();
+});
+
+test('old folders name Flutter FolderProvider fromJson padded GET created_at instead of empty folder chips', async () => {
+  const request = jest.fn(async () => ({
+    id: 'folders',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'folder-work',
+        name: 'Neighbor',
+        created_at: '  2026-09-07T00:00:00.000Z  ',
+      },
+    ]),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiFolderNames(backend)).rejects.toThrow(
+    'Omi folders are malformed',
+  );
+  await expect(loadOmiFolder(backend, 'folder-work')).rejects.toThrow(
+    'Omi folders are malformed',
+  );
+  await expect(loadOmiFolderName(backend, 'folder-work')).rejects.toThrow(
+    'Omi folders are malformed',
+  );
 });

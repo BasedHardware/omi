@@ -11,6 +11,7 @@ import {
   conversationsStarredEmptyCopy,
   desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
+  desktopReadErrorCopy,
   type ConversationProjection,
 } from '../desktopReadClient';
 import {
@@ -4128,5 +4129,74 @@ test('conversation list omits GET calendar capture gaps on failure and empty lib
         call[0].path.startsWith('/v1/calendar/capture-gaps?'),
     ),
   ).toBe(true);
+});
+
+test('conversation list names Flutter FolderProvider fromJson padded GET created_at instead of empty folder chips', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'folder-work',
+            name: 'Neighbor',
+            created_at: '  2026-09-07T00:00:00.000Z  ',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                kind: 'conversation',
+                id: 'chat:work',
+                title: 'Standup',
+                summary: 'Notes',
+                searchableText: 'Standup\nNotes',
+                createdAt: '2026-09-07T00:00:00.000Z',
+                updatedAt: '2026-09-07T00:01:00.000Z',
+                startedAt: '2026-09-07T00:00:00.000Z',
+                finishedAt: null,
+                starred: false,
+                status: 'in_progress',
+                source: 'chat',
+                visibility: 'private',
+                locked: false,
+                discarded: false,
+                folderId: 'folder-work',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi folders are malformed')),
+  );
+  expect(tree).toContain('Folders');
+  expect(tree).toContain('Standup');
+  expect(tree).not.toContain('Neighbor');
 });
 
