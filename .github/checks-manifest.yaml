@@ -1097,6 +1097,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13976: update_task_status disambiguates matching task candidates instead of mutating the first search hit, and exposes task IDs across get_tasks and search"
 
+  - id: gcal-event-id-round-trip-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_event_ids.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "list_events printed event ids cut to 20 characters and create_event printed none, so the ids the tools handed back could not be passed to get_event, update_event or delete_event; the suite round-trips every emitted id through those handlers"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
