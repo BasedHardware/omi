@@ -17,3 +17,4 @@
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
 * [`quickstart.ca.md`](quickstart.ca.md) — guia d'inici ràpid per a omi-cli en català (Catalan Quickstart).
+* [`quickstart.bn.md`](quickstart.bn.md) — বাংলা দ্রুত শুরুর নির্দেশিকা (Bengali Quickstart).
