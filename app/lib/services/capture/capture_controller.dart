@@ -513,6 +513,10 @@ class CaptureController extends ChangeNotifier
   Future<bool> enableHidDictation(String deviceId) {
     return _dictation.enableHid(deviceId, reconnect: () async {
       await ServiceManager.instance().device.disconnectDevice(deviceId);
+      // disconnectDevice removes the transport and disables native reconnect.
+      // This explicit user activation is the only dictation path allowed to
+      // establish a new connection; utterance delivery remains passive.
+      await ServiceManager.instance().device.ensureConnection(deviceId, force: true);
     });
   }
 
@@ -521,6 +525,10 @@ class CaptureController extends ChangeNotifier
   Future<bool> disableHidDictation(String deviceId) {
     return _dictation.disableHid(deviceId, reconnect: () async {
       await ServiceManager.instance().device.disconnectDevice(deviceId);
+      // disconnectDevice removes the transport and disables native reconnect.
+      // This explicit user activation is the only dictation path allowed to
+      // establish a new connection; utterance delivery remains passive.
+      await ServiceManager.instance().device.ensureConnection(deviceId, force: true);
     });
   }
 

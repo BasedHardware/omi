@@ -244,8 +244,7 @@ static bool session_open_or_start(struct hid_dictation_ctx *ctx, uint8_t session
     return true;
 }
 
-enum hid_dictation_feed_result
-hid_dictation_core_feed(struct hid_dictation_ctx *ctx, const uint8_t *frame, uint16_t len)
+static enum hid_dictation_feed_result feed_frame(struct hid_dictation_ctx *ctx, const uint8_t *frame, uint16_t len)
 {
     ctx->last_error = HID_DICTATION_ERR_NONE;
     ctx->error_detail = 0;
@@ -333,6 +332,22 @@ hid_dictation_core_feed(struct hid_dictation_ctx *ctx, const uint8_t *frame, uin
     ctx->key_down = false;
     ctx->typing_ready = true;
     return HID_DICTATION_FEED_COMPLETE;
+}
+
+enum hid_dictation_feed_result
+hid_dictation_core_feed(struct hid_dictation_ctx *ctx, const uint8_t *frame, uint16_t len)
+{
+    const uint8_t active = ctx->active_session;
+    const uint8_t error = ctx->last_error;
+    const uint8_t detail = ctx->error_detail;
+    enum hid_dictation_feed_result result = feed_frame(ctx, frame, len);
+    if (result == HID_DICTATION_FEED_REJECTED && active != HID_DICTATION_SESSION_NONE) {
+        // A rejected foreign write must not turn the current session's DONE
+        // status into an error, even when it arrives after the final frame.
+        ctx->last_error = error;
+        ctx->error_detail = detail;
+    }
+    return result;
 }
 
 enum hid_dictation_key_event hid_dictation_core_next_key(struct hid_dictation_ctx *ctx, uint8_t report[8])

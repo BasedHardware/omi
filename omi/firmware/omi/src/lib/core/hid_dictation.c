@@ -243,12 +243,20 @@ static void frame_timeout_handler(struct k_work *work);
 
 K_WORK_DELAYABLE_DEFINE(typing_work, typing_work_handler);
 K_WORK_DELAYABLE_DEFINE(frame_timeout_work, frame_timeout_handler);
+// Track reports accepted by the BLE stack independently of the core cursor.
+// next_key advances before transmission; a failed RELEASE must still remember
+// the preceding successful PRESS. All accesses hold dictation_lock.
+static bool report_key_held;
+
 static int send_report(const uint8_t report[DICTATION_INPUT_REPORT_LEN])
 {
     if (conn_ref == NULL) {
         return -ENOTCONN;
     }
     int err = bt_hids_inp_rep_send(&hids_obj, conn_ref, 0, report, DICTATION_INPUT_REPORT_LEN, NULL);
+    if (err == 0) {
+        report_key_held = report[0] != 0 || report[2] != 0;
+    }
     if (err == -EACCES) {
         // Nobody subscribed to HID input reports on this link.
         return -EACCES;
@@ -274,7 +282,7 @@ static void release_retry_delay(void)
 // it (abort/cancel), or a physically-held key would look released.
 static void release_all_keys(bool key_held)
 {
-    if (hid_dictation_core_release_all(send_zero_report, release_retry_delay, key_held, 3) != 0) {
+    if (hid_dictation_core_release_all(send_zero_report, release_retry_delay, key_held || report_key_held, 3) != 0) {
         LOG_ERR("key release could not be queued; failing closed (drop link)");
         struct bt_conn *conn = conn_ref;
         if (conn != NULL) {
@@ -442,7 +450,7 @@ static ssize_t dictation_text_write(struct bt_conn *conn,
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
 
-    if (!hid_registered) {
+    if (!hid_registered || !hid_wanted) {
         return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
     }
 
@@ -472,10 +480,9 @@ static ssize_t dictation_text_write(struct bt_conn *conn,
         release_all_keys(key_held);
         break;
     case HID_DICTATION_FEED_REJECTED:
-        // Invalid or foreign frame (e.g. a late cancel for a dead session):
-        // the live session — including any in-flight key press — must not be
-        // disturbed. Report the refusal via status only.
-        break;
+        // Reject the write without changing the live session or its status.
+        k_mutex_unlock(&dictation_lock);
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
     }
 
     notify_status();
@@ -552,6 +559,7 @@ void hid_dictation_on_disconnected(struct bt_conn *conn)
     k_mutex_lock(&dictation_lock, K_FOREVER);
     stop_typing_locked(HID_DICTATION_ERR_NONE, 0);
     hid_dictation_core_init(&dictation_ctx, dictation_text, &dictation_limits);
+    report_key_held = false; // the disconnected HID host no longer owns held keys
 
     if (hid_registered) {
         int err = bt_hids_disconnected(&hids_obj, conn);

@@ -322,6 +322,51 @@ void main() {
     expect(transcribedPayloads, isNotEmpty); // transcription did run
   });
 
+  test('drop during capture discards audio before transcription', () async {
+    final controller = buildController();
+    await controller.onButtonEvent('pendant', 1);
+    await Future<void>.delayed(Duration.zero);
+    controller.onAudioPayload([1]);
+    transport.emitDropAndReconnect();
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.isCapturing, isFalse);
+    expect(transcribedPayloads, isEmpty);
+    expect(textWrites(), isEmpty);
+    controller.dispose();
+  });
+
+  test('drop during typing never sends a stale cancel over the replacement link', () async {
+    transcriptToReturn = 'pending';
+    transport.neverTerminal = true;
+    final controller = buildController();
+    await controller.onButtonEvent('pendant', 1);
+    controller.onAudioPayload([1]);
+    final finishing = controller.onButtonEvent('pendant', 1);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(textWrites(), isNotEmpty);
+    transport.emitDropAndReconnect();
+    await finishing;
+    expect(textWrites().where((f) => (f[1] & HidDictationProtocol.flagCancel) != 0), isEmpty);
+    expect(haptics, isNot(contains(('pendant', 2))));
+    controller.dispose();
+  });
+
+  test('dispose while typing cancels only its owned session', () async {
+    transcriptToReturn = 'pending';
+    transport.neverTerminal = true;
+    final controller = buildController();
+    await controller.onButtonEvent('pendant', 1);
+    controller.onAudioPayload([1]);
+    final finishing = controller.onButtonEvent('pendant', 1);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    controller.dispose();
+    await finishing;
+    final cancels = textWrites().where((f) => (f[1] & HidDictationProtocol.flagCancel) != 0);
+    expect(cancels, isNotEmpty);
+    expect(cancels.every((f) => f[0] == 1), isTrue);
+    expect(haptics, isNot(contains(('pendant', 2))));
+  });
+
   test('enable flow writes the command, reconnects, and verifies activation', () async {
     final controller = buildController();
     bool reconnected = false;

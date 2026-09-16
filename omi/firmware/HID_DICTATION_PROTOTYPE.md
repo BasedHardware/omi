@@ -20,7 +20,7 @@ released. Default off — production firmware behavior is unchanged.**
         │ dictation text 19B10042 (frames)             │
         │ HID service   0x1812 (keyboard reports)      │
         └──────────────────────────────────────────────┘
- 1. Hold the pendant button and speak; release to finish.
+ 1. Tap the pendant button, speak, then tap again to finish.
  2. The app (existing transcription infra) transcribes the utterance.
  3. The app validates the transcript is printable US ASCII and writes it to
     the pendant as bounded GATT frames (new 19B10042).
@@ -44,8 +44,8 @@ required.
   typing engine. `src/lib/core/hid_dictation_core.c` — pure protocol/mapping
   logic, host-tested (`test/host`, `scripts/test-host-hid-dictation.sh`).
 - Opt-in state is **RAM-only**: enable via the app, effective after one
-  reconnect; any reboot/power-cycle returns the pendant to stock (also the
-  recovery path). Nothing is persisted.
+  reconnect; reboot/power-cycle removes keyboard mode (also the recovery
+  path). The opt-in is not persisted; Bluetooth bonds may be persisted.
 - With the prototype compiled in, the GATT table is NOT identical to stock:
   the small dictation control service (19B10040 family, encrypted perms) is
   always present, and the build enables bond storage / service-changed /
@@ -101,6 +101,21 @@ docker run --rm \
 Outputs in `omi/firmware/v2.9.0/build-hid/`:
 `dfu_application.zip` (OTA), `merged.hex` (full flash), `merged_CPUNET.hex`.
 
+### App build
+
+Both halves must come from this PR; the App Store build lacks this controller.
+Follow [the app's iPhone build instructions](../../app/README.md#building-and-deploying-to-iphone)
+and use an AOT profile/release build so it opens without a debugger attached:
+
+```bash
+cd app
+OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios
+```
+
+Use the setup wrapper's validated backend/profile configuration and ensure the
+phone can reach that backend for one-shot transcription. This task does not
+install the app or publish a TestFlight build.
+
 ### Flash
 
 - **J-Link / nrfjprog (dev fixtures):** flash `merged.hex` (and
@@ -127,19 +142,19 @@ Outputs in `omi/firmware/v2.9.0/build-hid/`:
 
 ### Enable
 
-1. App → Settings → Developer → Experimental → **Pendant HID Dictation** on.
-2. Open the device page / toggle recording off-on so the pendant reconnects.
-   The app writes the opt-in to the pendant before disconnecting; on
-   reconnect the pendant's GATT table includes the standard HID service and
-   its advertisement carries the HID UUID. If iOS shows a pairing prompt,
-   accept it (the HID half needs an encrypted link).
-3. In the app, Developer settings → Experimental → toggle **Pendant HID
-   Dictation** ON while the pendant is connected: the app writes ENABLE,
-   cycles the link, and verifies — the status line under the toggle shows
-   "HID active on the pendant" (or the failure reason; accept the iOS pairing
-   prompt if it appears and re-toggle).
-4. Focus a text field (e.g. a new iOS Note), tap the pendant button once,
-   speak, tap again. The transcript should appear keystroke by keystroke.
+1. Use the app built from this PR, with the pendant connected and live
+   recording enabled. Turn off **Transcribe Later** for this test.
+2. App → Settings → Developer → Experimental → **Pendant HID Dictation** ON.
+   Accept the iOS Bluetooth pairing prompt if shown. The app sends ENABLE,
+   explicitly disconnects/reconnects, and verifies the resulting HID state.
+   Wait for **HID active on the pendant** below the toggle. Activation failure
+   leaves the preference off; the status line remains visible for retry.
+3. Select a US hardware-keyboard layout and leave Caps Lock off. Focus an
+   empty iOS Notes field, tap the pendant button, speak a short English
+   phrase, then tap again. Text should appear without an Enter/Send action.
+4. Repeat in Messages, then test with the Omi app backgrounded. Background
+   execution and HID/audio coexistence are unverified device-test results,
+   not guarantees from the passing software tests.
 
 ### Test matrix (run on device)
 
@@ -164,8 +179,9 @@ the link, and verifies the HID service is gone (status line confirms).
 
 ### Recover (if anything wedges)
 
-- **Power-cycle the pendant** (long-press to power off, or replug). The
-  opt-in is RAM-only, so a reboot always returns to stock behavior.
+- **Power-cycle the pendant** using the normal CV1 reset/power procedure. The
+  opt-in is RAM-only, so a reboot removes keyboard mode. Prototype control
+  characteristics and bond storage remain until stock firmware is restored.
 - Worst case (device unreachable): reflash stock release firmware from
   `BUILD_AND_OTA_FLASH.md` or the OTA archive.
 
@@ -175,8 +191,8 @@ the link, and verifies the HID service is gone (status line confirms).
   devices for the OS. Whether the Omi app's CoreBluetooth link survives with
   an HID service in the pendant's table (and after iOS bonding) is exactly
   what device testing must establish. The macOS/iPad host row in the test
-  matrix gives a known-good HID path to separate "HID works" from "iOS allows
-  the app link".
+  matrix is an optional cross-check, not a known-good result.
+- The experimental developer diagnostics are English-only in this draft.
 - Print transcripts only: US ASCII 0x20–0x7E. Accented characters, emoji, and
   newlines are rejected before typing (by design, no silent mangling).
 - No Enter/Return/backspace is ever typed; long transcripts (>256 chars) are
@@ -191,12 +207,12 @@ the link, and verifies the HID service is gone (status line confirms).
 
 ## For reviewers
 
-- `test/host/test_hid_dictation_core.c` — 513 assertions on the pure core:
+- `test/host/test_hid_dictation_core.c` — 540 assertions on the pure core:
   mapping completeness/rejections, all-or-nothing validation, session
   duplicate/busy/cancel rules, frame bounds, abort semantics.
 - `app/test/unit/hid_dictation_protocol_test.dart`,
   `app/test/unit/pendant_dictation_controller_test.dart` — wire-format
-  parity and the press→transcribe→validate→send→status loop, including the
+  parity and the tap→transcribe→validate→send→status loop, including the
   reject paths.
 - Firmware compile: stock build and HID-prototype build both build via the
   Docker NCS 2.9.0 pipeline (see PR body for the exact commands and SHAs).

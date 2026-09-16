@@ -203,8 +203,8 @@ static void test_busy_on_foreign_session(void)
 
     n = frame(f, 12, HID_DICTATION_FLAG_FINAL, "tial");
     CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
-    CHECK(ctx.last_error == HID_DICTATION_ERR_BUSY);
-    CHECK(ctx.error_detail == 11);
+    CHECK(ctx.last_error == HID_DICTATION_ERR_NONE);
+    CHECK(ctx.error_detail == 0);
     CHECK(ctx.active_session == 11); // foreign frame must not disturb it
     // The live session still completes normally afterwards.
     n = frame(f, 11, HID_DICTATION_FLAG_FINAL, "tial");
@@ -239,7 +239,7 @@ static void test_cancel_wrong_session_is_busy(void)
 
     n = frame(f, 32, HID_DICTATION_FLAG_CANCEL, NULL);
     CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
-    CHECK(ctx.last_error == HID_DICTATION_ERR_BUSY);
+    CHECK(ctx.last_error == HID_DICTATION_ERR_NONE);
     CHECK(ctx.active_session == 31); // late cancel must not abort the live one
     // The live session still completes.
     n = frame(f, 31, HID_DICTATION_FLAG_FINAL, "xx");
@@ -305,8 +305,8 @@ static void test_no_frames_while_typing_ready(void)
 
     n = frame(f, 72, HID_DICTATION_FLAG_FINAL, "b");
     CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
-    CHECK(ctx.last_error == HID_DICTATION_ERR_BUSY);
-    CHECK(ctx.error_detail == 71);
+    CHECK(ctx.last_error == HID_DICTATION_ERR_NONE);
+    CHECK(ctx.error_detail == 0);
     CHECK(ctx.typing_ready); // the typing session is untouched
 
     // Even a cancel for the typing session is honoured: typing stops.
@@ -356,7 +356,7 @@ static void test_late_cancel_does_not_kill_next_session(void)
     n = frame(f, 5, HID_DICTATION_FLAG_CANCEL, NULL);
     CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.active_session == 6);
-    CHECK(ctx.last_error == HID_DICTATION_ERR_BUSY);
+    CHECK(ctx.last_error == HID_DICTATION_ERR_NONE);
 
     // Session 6 completes normally.
     n = frame(f, 6, HID_DICTATION_FLAG_FINAL, "two");
@@ -365,6 +365,20 @@ static void test_late_cancel_does_not_kill_next_session(void)
         ;
     }
     CHECK(ctx.last_finished_session == 6);
+
+    // Repeat with the stale cancel arriving during typing, after FINAL.
+    n = frame(f, 7, HID_DICTATION_FLAG_FINAL, "three");
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_COMPLETE);
+    CHECK(hid_dictation_core_next_key(&ctx, report) == HID_DICTATION_KEY_PRESS);
+    n = frame(f, 6, HID_DICTATION_FLAG_CANCEL, NULL);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
+    CHECK(ctx.key_down);
+    while (hid_dictation_core_next_key(&ctx, report) != HID_DICTATION_KEY_DONE) {
+        ;
+    }
+    CHECK(ctx.last_finished_session == 7);
+    CHECK(ctx.last_error == HID_DICTATION_ERR_NONE);
+    CHECK(ctx.pos == 5);
 }
 
 // Injected-sender tests for the bounded release-all retry policy.

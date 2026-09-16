@@ -58,6 +58,7 @@ class _DeveloperSettingsPageView extends StatefulWidget {
 }
 
 class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
+  bool _hidActivationBusy = false;
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -155,30 +156,45 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   /// preference flips only via the provider; activation state (pending
   /// reconnect, verified, or failed with reason) surfaces in the status line.
   Future<void> _onHidDictationToggled(BuildContext context, bool value) async {
+    if (_hidActivationBusy) return;
     final provider = context.read<DeveloperModeProvider>();
-    provider.onHidDictationEnabledChanged(value);
     final capture = context.read<CaptureProvider>();
-    final pendants = ServiceManager.instance()
-        .device
-        .connections
-        .where((c) => c.device.type == DeviceType.omi)
-        .map((c) => c.device.id)
-        .toList();
-    if (pendants.isEmpty) {
-      capture.reportDictationStatus(PendantDictationUiState(
-        PendantDictationPhase.error,
-        value
-            ? 'no pendant connected — toggle again with the pendant connected'
-            : 'no pendant connected; power-cycle it if HID was active',
-      ));
-      return;
-    }
-    for (final id in pendants) {
-      if (value) {
-        await capture.enableHidDictation(id);
-      } else {
-        await capture.disableHidDictation(id);
+    setState(() => _hidActivationBusy = true);
+    // Stop button routing immediately on opt-out, even if the pendant is away.
+    // Opt-in is committed only after the pendant confirms activation.
+    if (!value) provider.onHidDictationEnabledChanged(false);
+    try {
+      final pendants = ServiceManager.instance()
+          .device
+          .connections
+          .where((c) => c.device.type == DeviceType.omi)
+          .map((c) => c.device.id)
+          .toList();
+      if (pendants.isEmpty) {
+        capture.reportDictationStatus(PendantDictationUiState(
+          PendantDictationPhase.error,
+          value
+              ? 'no pendant connected — toggle again with the pendant connected'
+              : 'no pendant connected; power-cycle it if HID was active',
+        ));
+        return;
       }
+      bool activated = false;
+      for (final id in pendants) {
+        if (value) {
+          activated = await capture.enableHidDictation(id) || activated;
+        } else {
+          await capture.disableHidDictation(id);
+        }
+      }
+      if (value) provider.onHidDictationEnabledChanged(activated);
+    } catch (_) {
+      capture.reportDictationStatus(const PendantDictationUiState(
+        PendantDictationPhase.error,
+        'activation failed; reconnect and retry',
+      ));
+    } finally {
+      if (mounted) setState(() => _hidActivationBusy = false);
     }
   }
 
@@ -1555,20 +1571,19 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               'into the focused text field (prototype firmware required)',
                           icon: FontAwesomeIcons.keyboard,
                           value: provider.hidDictationEnabled,
-                          onChanged: (value) => _onHidDictationToggled(context, value),
+                          onChanged: _hidActivationBusy ? null : (value) => _onHidDictationToggled(context, value),
                         ),
-                        if (provider.hidDictationEnabled)
-                          ValueListenableBuilder<PendantDictationUiState>(
-                            valueListenable: context.read<CaptureProvider>().dictationState,
-                            builder: (context, dictation, _) => Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'Dictation: ${dictation.phase.name}'
-                                '${dictation.message.isEmpty ? '' : ' — ${dictation.message}'}',
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                              ),
+                        ValueListenableBuilder<PendantDictationUiState>(
+                          valueListenable: context.read<CaptureProvider>().dictationState,
+                          builder: (context, dictation, _) => Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Dictation: ${dictation.phase.name}'
+                              '${dictation.message.isEmpty ? '' : ' — ${dictation.message}'}',
+                              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),

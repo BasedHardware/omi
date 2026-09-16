@@ -314,6 +314,47 @@ static const struct bt_data bt_sd[] = {
 static const struct bt_data bt_sd_hid[] = {
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL), BT_UUID_16_ENCODE(BT_UUID_HIDS_VAL)),
 };
+
+static atomic_t hid_adv_refresh_pending;
+static uint8_t hid_adv_refresh_attempts;
+static void hid_adv_refresh_handler(struct k_work *work);
+K_WORK_DELAYABLE_DEFINE(hid_adv_refresh_work, hid_adv_refresh_handler);
+
+static void hid_adv_refresh_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    if (!atomic_get(&hid_adv_refresh_pending) || is_connected) {
+        return;
+    }
+    const bool active = hid_dictation_hid_active();
+    const struct bt_data *sd = active ? bt_sd_hid : bt_sd;
+    const size_t sd_len = active ? ARRAY_SIZE(bt_sd_hid) : ARRAY_SIZE(bt_sd);
+    // Zephyr may already have resumed persistent advertising. Updating the
+    // live data handles that case; otherwise start only after slot recycling.
+    int err = bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), sd, sd_len);
+    if (err == -EAGAIN || err == -EINVAL) {
+        err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), sd, sd_len);
+        if (err == -EALREADY) {
+            err = bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), sd, sd_len);
+        }
+    }
+    if (!err) {
+        atomic_clear(&hid_adv_refresh_pending);
+        LOG_INF("HID advertising refreshed (active=%d)", active);
+    } else if (++hid_adv_refresh_attempts < 5) {
+        k_work_reschedule(&hid_adv_refresh_work, K_MSEC(50));
+    } else {
+        LOG_ERR("HID advertising refresh failed after retries: %d", err);
+    }
+}
+
+static void _transport_recycled(void)
+{
+    if (atomic_get(&hid_adv_refresh_pending)) {
+        k_work_reschedule(&hid_adv_refresh_work, K_NO_WAIT);
+    }
+}
+
 #endif
 
 //
@@ -721,26 +762,20 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
 #ifdef CONFIG_OMI_ENABLE_HID_DICTATION
-    // Forget the dictation session (no replay), apply a pending enable/disable
-    // to the GATT table, then bring advertising back up so the app can
-    // reconnect — stock builds never restart advertising here, and prototype
-    // builds only do it once the feature has been touched (see
-    // hid_dictation_wants_adv_restart()).
-    hid_dictation_on_disconnected(conn);
+    // Stop persistent advertising before recycling this connection. Capture
+    // the old active state too: DISABLE removes HIDS below, but must also
+    // remove its UUID from the next scan response.
     if (hid_dictation_wants_adv_restart()) {
-        const struct bt_data *sd = bt_sd;
-        size_t sd_len = ARRAY_SIZE(bt_sd);
-        if (hid_dictation_hid_active()) {
-            sd = bt_sd_hid;
-            sd_len = ARRAY_SIZE(bt_sd_hid);
-        }
-        int adv_err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), sd, sd_len);
+        atomic_set(&hid_adv_refresh_pending, 1);
+        hid_adv_refresh_attempts = 0;
+        int adv_err = bt_le_adv_stop();
         if (adv_err) {
-            LOG_ERR("Failed to restart advertising after disconnect (err %d)", adv_err);
-        } else {
-            LOG_INF("Advertising restarted (hid_active=%d)", hid_dictation_hid_active());
+            LOG_ERR("Could not stop advertising for HID transition: %d", adv_err);
         }
     }
+    hid_dictation_on_disconnected(conn);
+    // The connection slot is not free inside this callback. recycled queues
+    // the refresh after the last reference is gone (CONFIG_BT_MAX_CONN=1).
 #endif
 }
 
@@ -802,6 +837,9 @@ static void _le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data
 static struct bt_conn_cb _callback_references = {
     .connected = _transport_connected,
     .disconnected = _transport_disconnected,
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+    .recycled = _transport_recycled,
+#endif
     .le_param_req = _le_param_req,
     .le_param_updated = _le_param_updated,
     .le_phy_updated = _le_phy_updated,

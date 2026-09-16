@@ -83,7 +83,7 @@ class _DictationOp {
 ///   failure) bumps a generation; the capture→transcribe→send→typed pipeline
 ///   checks the generation AND the BLE-link epoch after each await.
 /// - The link epoch is pinned from the transport's connection-state stream at
-///   utterance finish: if the SAME connection object dropped and reconnected
+///   utterance start: if the SAME connection object dropped and reconnected
 ///   while the pipeline waited (native auto-reconnect), the epoch changed and
 ///   the utterance is voided — even though isConnected() is true again.
 /// - Stale pipelines cancel only their own session id over their own captured
@@ -116,6 +116,9 @@ class PendantDictationController {
       ValueNotifier<PendantDictationUiState>(PendantDictationUiState.idle);
 
   int _generation = 0;
+  bool _disposed = false;
+  Future<OmiDeviceConnection?>? _captureConnection;
+  int? _captureEpoch;
   bool _capturing = false;
   final List<List<int>> _payloads = [];
   Timer? _utteranceTimer;
@@ -164,10 +167,29 @@ class PendantDictationController {
     _epochSub = connection.transport.connectionStateStream.listen((event) {
       if (event == DeviceTransportState.disconnected) {
         _linkEpoch++;
+        _generation++;
+        _capturing = false;
+        _utteranceTimer?.cancel();
+        _payloads.clear();
+        _activeOp = null; // firmware forgets sessions when the link drops
+        _report(const PendantDictationUiState(
+          PendantDictationPhase.error,
+          'link dropped; utterance dropped (never re-delivered)',
+        ));
       }
     }, onError: (Object e) {
       Logger.debug('[hid-dictation] transport state stream error: $e');
     });
+  }
+
+  Future<OmiDeviceConnection?> _pinCaptureConnection(String deviceId, int generation) async {
+    final connection = await resolveConnection(deviceId);
+    if (_disposed || generation != _generation) return null;
+    if (connection != null) {
+      _watchTransport(connection);
+      _captureEpoch = _linkEpoch;
+    }
+    return connection;
   }
 
   // --- Button entry point (consumes every event in HID mode) ---
@@ -200,6 +222,8 @@ class PendantDictationController {
     }
     _cancelOwnedOp(); // supersede any in-flight pipeline from a previous utterance
     _generation++;
+    _captureEpoch = null;
+    _captureConnection = _pinCaptureConnection(deviceId, _generation);
     _capturing = true;
     _payloads.clear();
     _utteranceTimer?.cancel();
@@ -238,6 +262,8 @@ class PendantDictationController {
   Future<void> invalidate(String deviceId) => _cancel(deviceId);
 
   void dispose() {
+    _disposed = true;
+    _cancelOwnedOp();
     _generation++;
     _capturing = false;
     _utteranceTimer?.cancel();
@@ -264,7 +290,9 @@ class PendantDictationController {
   /// a fresh connection (no reconnect), never session 0.
   Future<void> _cancelOp(_DictationOp op) async {
     try {
-      if (await op.connection.isConnected()) {
+      if (_epochChanged(op)) return;
+      final connected = await op.connection.isConnected();
+      if (connected && !_epochChanged(op)) {
         await op.connection.performSendHidDictationFrame(HidDictationProtocol.buildCancelFrame(op.session));
       }
     } catch (e) {
@@ -288,14 +316,14 @@ class PendantDictationController {
       return;
     }
 
-    // Deliver only over the link that exists right now; never reconnect.
-    final connection = await resolveConnection(deviceId);
+    // Resolve the link pinned at capture start, never a replacement link.
+    final connection = await _captureConnection;
     if (generation != _generation) return;
     if (connection == null) {
       _report(const PendantDictationUiState(PendantDictationPhase.error, 'pendant not connected; utterance dropped'));
       return;
     }
-    _watchTransport(connection);
+    if (_captureEpoch == null || _captureEpoch != _linkEpoch) return;
     final op = _DictationOp(
       generation: generation,
       session: 0, // assigned when frames are sent
@@ -383,7 +411,7 @@ class PendantDictationController {
         await _cancelOp(op); // exactly this session, over exactly this link
       }
       if (_activeOp == op) _activeOp = null;
-      if (!_stale(op)) {
+      if (_opValid(op) && !_disposed) {
         _report(PendantDictationUiState(PendantDictationPhase.error, message));
         await sendHaptic(deviceId, 3);
       }
@@ -404,6 +432,7 @@ class PendantDictationController {
           }
           return;
         }
+        if (!_opValid(op)) return; // isConnected itself is an async boundary
         final ok = await op.connection.performSendHidDictationFrame(frame);
         if (!_opValid(op)) {
           await _cancelOp(op);
@@ -468,6 +497,7 @@ class PendantDictationController {
   }
 
   void _report(PendantDictationUiState s) {
+    if (_disposed) return;
     state.value = s;
     debugPrint('[hid-dictation] ${s.phase.name}: ${s.message}');
   }
@@ -541,11 +571,12 @@ class PendantDictationController {
     // Bounded wait for the transport to come back, then verify the result.
     final deadline = DateTime.now().add(activationReconnectTimeout);
     OmiDeviceConnection? fresh;
-    while (DateTime.now().isBefore(deadline)) {
+    while (!_disposed && DateTime.now().isBefore(deadline)) {
       await Future.delayed(const Duration(milliseconds: 500));
       fresh = await resolveConnection(deviceId);
       if (fresh != null) break;
     }
+    if (_disposed) return false;
     final status = fresh == null ? null : await fresh.performGetHidDictationStatus();
     final active = status?.hidActive == wantActive && status?.hidPending != true;
     if (active) {
