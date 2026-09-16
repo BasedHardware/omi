@@ -9,6 +9,7 @@ import sys
 import secrets
 import hashlib
 import base64
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlencode
@@ -17,6 +18,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from db import (
     store_twitter_tokens,
@@ -29,7 +31,19 @@ from db import (
     store_user_setting,
     get_user_setting,
 )
-from models import ChatToolResponse
+from models import (
+    ChatToolResponse,
+    PostTweetRequest,
+    GetTimelineRequest,
+    GetMyTweetsRequest,
+    GetMentionsRequest,
+    SearchTweetsRequest,
+    LikeTweetRequest,
+    UnlikeTweetRequest,
+    RetweetRequest,
+    DeleteTweetRequest,
+    GetUserProfileRequest,
+)
 
 load_dotenv()
 
@@ -68,9 +82,81 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Gracefully envelope validation errors for chat tool endpoints."""
+    return JSONResponse(
+        status_code=200,
+        content={"error": f"Invalid request payload: {exc.errors()}"}
+    )
+
+
+
 # ============================================
 # Helper Functions
 # ============================================
+
+def _safe_dict(val: Any) -> dict:
+    """Ensure val is a dictionary."""
+    return val if isinstance(val, dict) else {}
+
+
+async def _safe_body(request: Any) -> dict:
+    """Extract json dict safely from request or return empty dict."""
+    if isinstance(request, dict):
+        return request
+    if hasattr(request, "json"):
+        try:
+            res = request.json()
+            if asyncio.iscoroutine(res):
+                res = await res
+            return res if isinstance(res, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _clean_str(val: Any) -> str:
+    """Strip whitespace from string and return clean str."""
+    if val is None:
+        return ""
+    return str(val).strip()
+
+
+def _clean_tweet_id(val: Any) -> str:
+    """Clean tweet id, stripping leading # and spaces."""
+    return _clean_str(val).lstrip("#").strip()
+
+
+def _clean_username(val: Any) -> Optional[str]:
+    """Clean Twitter username by removing leading @ and whitespace."""
+    if val is None:
+        return None
+    clean = str(val).strip().lstrip("@").strip()
+    return clean if clean else None
+
+
+def _coerce_int_bounds(val: Any, default: int, min_val: int, max_val: int) -> int:
+    """Coerce value to integer and clamp within bounds."""
+    try:
+        if val is None:
+            return default
+        num = int(val)
+        return max(min_val, min(num, max_val))
+    except (ValueError, TypeError):
+        return default
+
+
+def _format_count(val: Any) -> str:
+    """Format numeric counts with comma separators defensively."""
+    try:
+        if val is None:
+            return "0"
+        num = int(val)
+        return f"{num:,}"
+    except (ValueError, TypeError):
+        return str(val) if val is not None else "0"
+
 
 def generate_code_verifier() -> str:
     """Generate PKCE code verifier."""
@@ -163,7 +249,10 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
             return None
 
         if response.status_code in [200, 201]:
-            return response.json()
+            try:
+                return response.json()
+            except Exception:
+                return {"data": {}}
         elif response.status_code == 204:
             return {"success": True}
         else:
@@ -177,45 +266,49 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
 
 def format_tweet(tweet: dict, includes: dict = None) -> str:
     """Format a tweet for display."""
-    text = tweet.get("text", "")
-    tweet_id = tweet.get("id", "")
-    created_at = tweet.get("created_at", "")
-    metrics = tweet.get("public_metrics", {})
+    tweet = _safe_dict(tweet)
+    text = tweet.get("text") or ""
+    tweet_id = tweet.get("id") or ""
+    created_at = tweet.get("created_at") or ""
+    metrics = _safe_dict(tweet.get("public_metrics"))
 
     # Get author info if available
     author_name = "Unknown"
     author_username = ""
-    if includes and "users" in includes:
+    safe_includes = _safe_dict(includes)
+    users_list = safe_includes.get("users")
+    if isinstance(users_list, list):
         author_id = tweet.get("author_id")
-        for user in includes["users"]:
-            if user.get("id") == author_id:
-                author_name = user.get("name", "Unknown")
-                author_username = user.get("username", "")
+        for user in users_list:
+            if isinstance(user, dict) and user.get("id") == author_id:
+                author_name = user.get("name") or "Unknown"
+                author_username = user.get("username") or ""
                 break
 
     # Format timestamp
     time_str = ""
-    if created_at:
+    if isinstance(created_at, str) and created_at:
         try:
             dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
             time_str = dt.strftime("%b %d, %Y %I:%M %p")
-        except:
+        except Exception:
             time_str = created_at[:10]
 
     # Build output
     parts = []
     if author_username:
         parts.append(f"**@{author_username}** ({author_name})")
-    parts.append(text)
+    if text:
+        parts.append(text)
 
     if time_str:
         parts.append(f"*{time_str}*")
 
     # Add engagement metrics
-    likes = metrics.get("like_count", 0)
-    retweets = metrics.get("retweet_count", 0)
-    replies = metrics.get("reply_count", 0)
-    if likes or retweets or replies:
+    likes = _format_count(metrics.get("like_count", 0))
+    retweets = _format_count(metrics.get("retweet_count", 0))
+    replies = _format_count(metrics.get("reply_count", 0))
+    if metrics.get("like_count") or metrics.get("retweet_count") or metrics.get("reply_count"):
         parts.append(f"Likes: {likes} | Retweets: {retweets} | Replies: {replies}")
 
     parts.append(f"ID: `{tweet_id}`")
@@ -451,12 +544,12 @@ async def get_omi_tools_manifest():
 async def tool_post_tweet(request: Request):
     """Post a new tweet."""
     try:
-        body = await request.json()
+        body = await _safe_body(request)
         log(f"=== POST_TWEET ===")
 
-        uid = body.get("uid")
-        text = body.get("text")
-        reply_to = body.get("reply_to")
+        uid = _clean_str(body.get("uid"))
+        text = _clean_str(body.get("text"))
+        reply_to = _clean_tweet_id(body.get("reply_to")) if body.get("reply_to") else None
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -479,11 +572,12 @@ async def tool_post_tweet(request: Request):
         result = twitter_api_request(uid, "POST", "/tweets", json_data=tweet_data)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to post tweet: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to post tweet: {err_msg}")
 
-        tweet = result.get("data", {})
-        tweet_id = tweet.get("id", "")
-        tweet_text = tweet.get("text", text)
+        tweet = _safe_dict(result.get("data"))
+        tweet_id = tweet.get("id") or ""
+        tweet_text = tweet.get("text") or text
 
         result_parts = [
             "**Tweet Posted!**",
@@ -507,11 +601,11 @@ async def tool_post_tweet(request: Request):
 async def tool_get_timeline(request: Request):
     """Get user's home timeline."""
     try:
-        body = await request.json()
+        body = await _safe_body(request)
         log(f"=== GET_TIMELINE ===")
 
-        uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        uid = _clean_str(body.get("uid"))
+        max_results = _coerce_int_bounds(body.get("max_results"), default=10, min_val=1, max_val=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -532,10 +626,13 @@ async def tool_get_timeline(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get timeline: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to get timeline: {err_msg}")
 
-        tweets = result.get("data", [])
-        includes = result.get("includes", {})
+        tweets = result.get("data")
+        if not isinstance(tweets, list):
+            tweets = []
+        includes = _safe_dict(result.get("includes"))
 
         if not tweets:
             return ChatToolResponse(result="No tweets in your timeline.")
@@ -559,11 +656,11 @@ async def tool_get_timeline(request: Request):
 async def tool_get_my_tweets(request: Request):
     """Get user's own tweets."""
     try:
-        body = await request.json()
+        body = await _safe_body(request)
         log(f"=== GET_MY_TWEETS ===")
 
-        uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        uid = _clean_str(body.get("uid"))
+        max_results = _coerce_int_bounds(body.get("max_results"), default=10, min_val=5, max_val=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -582,9 +679,12 @@ async def tool_get_my_tweets(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get tweets: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to get tweets: {err_msg}")
 
-        tweets = result.get("data", [])
+        tweets = result.get("data")
+        if not isinstance(tweets, list):
+            tweets = []
 
         if not tweets:
             return ChatToolResponse(result="You haven't posted any tweets yet.")
@@ -592,24 +692,25 @@ async def tool_get_my_tweets(request: Request):
         result_parts = [f"**Your Tweets ({len(tweets)})**", ""]
 
         for tweet in tweets:
-            text = tweet.get("text", "")
-            tweet_id = tweet.get("id", "")
-            created_at = tweet.get("created_at", "")
-            metrics = tweet.get("public_metrics", {})
+            tweet_dict = _safe_dict(tweet)
+            text = tweet_dict.get("text") or ""
+            tweet_id = tweet_dict.get("id") or ""
+            created_at = tweet_dict.get("created_at") or ""
+            metrics = _safe_dict(tweet_dict.get("public_metrics"))
 
             time_str = ""
-            if created_at:
+            if isinstance(created_at, str) and created_at:
                 try:
                     dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                     time_str = dt.strftime("%b %d, %Y %I:%M %p")
-                except:
+                except Exception:
                     time_str = created_at[:10]
 
             result_parts.append(f"- {text}")
             if time_str:
                 result_parts.append(f"  *{time_str}*")
-            likes = metrics.get("like_count", 0)
-            retweets = metrics.get("retweet_count", 0)
+            likes = _format_count(metrics.get("like_count", 0))
+            retweets = _format_count(metrics.get("retweet_count", 0))
             result_parts.append(f"  Likes: {likes} | Retweets: {retweets}")
             result_parts.append(f"  ID: `{tweet_id}`")
             result_parts.append("")
@@ -625,9 +726,9 @@ async def tool_get_my_tweets(request: Request):
 async def tool_get_mentions(request: Request):
     """Get tweets mentioning the user."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        max_results = _coerce_int_bounds(body.get("max_results"), default=10, min_val=5, max_val=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -648,10 +749,13 @@ async def tool_get_mentions(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get mentions: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to get mentions: {err_msg}")
 
-        tweets = result.get("data", [])
-        includes = result.get("includes", {})
+        tweets = result.get("data")
+        if not isinstance(tweets, list):
+            tweets = []
+        includes = _safe_dict(result.get("includes"))
 
         if not tweets:
             return ChatToolResponse(result="No mentions found.")
@@ -675,10 +779,10 @@ async def tool_get_mentions(request: Request):
 async def tool_search_tweets(request: Request):
     """Search for tweets."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        query = body.get("query")
-        max_results = min(body.get("max_results", 10), 100)
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        query = _clean_str(body.get("query"))
+        max_results = _coerce_int_bounds(body.get("max_results"), default=10, min_val=10, max_val=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -699,10 +803,13 @@ async def tool_search_tweets(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Search failed: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Search failed: {err_msg}")
 
-        tweets = result.get("data", [])
-        includes = result.get("includes", {})
+        tweets = result.get("data")
+        if not isinstance(tweets, list):
+            tweets = []
+        includes = _safe_dict(result.get("includes"))
 
         if not tweets:
             return ChatToolResponse(result=f"No tweets found for '{query}'.")
@@ -726,9 +833,9 @@ async def tool_search_tweets(request: Request):
 async def tool_like_tweet(request: Request):
     """Like a tweet."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        tweet_id = body.get("tweet_id")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        tweet_id = _clean_tweet_id(body.get("tweet_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -749,7 +856,8 @@ async def tool_like_tweet(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to like tweet: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to like tweet: {err_msg}")
 
         return ChatToolResponse(result=f"**Liked!**\n\nTweet ID: `{tweet_id}`")
 
@@ -762,9 +870,9 @@ async def tool_like_tweet(request: Request):
 async def tool_unlike_tweet(request: Request):
     """Unlike a tweet."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        tweet_id = body.get("tweet_id")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        tweet_id = _clean_tweet_id(body.get("tweet_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -783,7 +891,8 @@ async def tool_unlike_tweet(request: Request):
         result = twitter_api_request(uid, "DELETE", f"/users/{twitter_user_id}/likes/{tweet_id}")
 
         if result and "error" in result:
-            return ChatToolResponse(error=f"Failed to unlike tweet: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to unlike tweet: {err_msg}")
 
         return ChatToolResponse(result=f"**Unliked!**\n\nTweet ID: `{tweet_id}`")
 
@@ -796,9 +905,9 @@ async def tool_unlike_tweet(request: Request):
 async def tool_retweet(request: Request):
     """Retweet a tweet."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        tweet_id = body.get("tweet_id")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        tweet_id = _clean_tweet_id(body.get("tweet_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -819,7 +928,8 @@ async def tool_retweet(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to retweet: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to retweet: {err_msg}")
 
         return ChatToolResponse(result=f"**Retweeted!**\n\nTweet ID: `{tweet_id}`")
 
@@ -832,9 +942,9 @@ async def tool_retweet(request: Request):
 async def tool_delete_tweet(request: Request):
     """Delete a tweet."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        tweet_id = body.get("tweet_id")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        tweet_id = _clean_tweet_id(body.get("tweet_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -849,7 +959,8 @@ async def tool_delete_tweet(request: Request):
         result = twitter_api_request(uid, "DELETE", f"/tweets/{tweet_id}")
 
         if result and "error" in result:
-            return ChatToolResponse(error=f"Failed to delete tweet: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to delete tweet: {err_msg}")
 
         return ChatToolResponse(result=f"**Tweet Deleted!**\n\nTweet ID: `{tweet_id}`")
 
@@ -862,9 +973,9 @@ async def tool_delete_tweet(request: Request):
 async def tool_get_user_profile(request: Request):
     """Get a user's profile."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        username = body.get("username")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        username = _clean_username(body.get("username"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -885,23 +996,24 @@ async def tool_get_user_profile(request: Request):
             })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get profile: {result.get('error', 'Unknown error')}")
+            err_msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Unknown error"
+            return ChatToolResponse(error=f"Failed to get profile: {err_msg}")
 
-        user = result.get("data", {})
-        name = user.get("name", "Unknown")
-        handle = user.get("username", "")
-        bio = user.get("description", "")
-        verified = user.get("verified", False)
-        metrics = user.get("public_metrics", {})
-        created = user.get("created_at", "")[:10]
+        user = _safe_dict(result.get("data"))
+        name = user.get("name") or "Unknown"
+        handle = user.get("username") or ""
+        bio = user.get("description") or ""
+        verified = bool(user.get("verified", False))
+        metrics = _safe_dict(user.get("public_metrics"))
+        created = (user.get("created_at") or "")[:10]
 
-        followers = metrics.get("followers_count", 0)
-        following = metrics.get("following_count", 0)
-        tweets = metrics.get("tweet_count", 0)
+        followers = _format_count(metrics.get("followers_count", 0))
+        following = _format_count(metrics.get("following_count", 0))
+        tweets = _format_count(metrics.get("tweet_count", 0))
 
         result_parts = [
-            f"**{name}** {'(Verified)' if verified else ''}",
-            f"@{handle}",
+            f"**{name}** {'(Verified)' if verified else ''}".strip(),
+            f"@{handle}" if handle else "",
             ""
         ]
 
@@ -909,14 +1021,15 @@ async def tool_get_user_profile(request: Request):
             result_parts.append(bio)
             result_parts.append("")
 
-        result_parts.append(f"**Followers:** {followers:,}")
-        result_parts.append(f"**Following:** {following:,}")
-        result_parts.append(f"**Tweets:** {tweets:,}")
+        result_parts.append(f"**Followers:** {followers}")
+        result_parts.append(f"**Following:** {following}")
+        result_parts.append(f"**Tweets:** {tweets}")
 
         if created:
             result_parts.append(f"**Joined:** {created}")
 
-        result_parts.append(f"\nProfile: https://twitter.com/{handle}")
+        if handle:
+            result_parts.append(f"\nProfile: https://twitter.com/{handle}")
 
         return ChatToolResponse(result="\n".join(result_parts))
 
