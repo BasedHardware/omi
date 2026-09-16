@@ -211,16 +211,8 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/get_front_page", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_front_page(payload: Any = None):
-    try:
-        if isinstance(payload, FrontPageRequest):
-            req = payload
-        elif isinstance(payload, dict):
-            req = FrontPageRequest(**payload)
-        else:
-            req = FrontPageRequest()
-    except (TypeError, ValueError) as exc:
-        return ChatToolResponse(error=f"invalid tool request: {exc}")
+async def get_front_page(payload: Optional[FrontPageRequest] = None):
+    req = payload if payload is not None else FrontPageRequest()
 
     try:
         limit = _safe_limit(req.limit, default=10)
@@ -241,24 +233,14 @@ async def get_front_page(payload: Any = None):
 
 
 @app.post("/tools/search_stories", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_stories(payload: Any = None):
-    try:
-        if isinstance(payload, SearchStoriesRequest):
-            req = payload
-        elif isinstance(payload, dict):
-            req = SearchStoriesRequest(**payload)
-        else:
-            return ChatToolResponse(error="Missing required field: query")
-    except (TypeError, ValueError) as exc:
-        return ChatToolResponse(error=f"invalid tool request: {exc}")
-
-    query = (req.query or "").strip()
+async def search_stories(payload: SearchStoriesRequest):
+    query = (payload.query or "").strip()
     if not query:
         return ChatToolResponse(error="Missing required field: query")
 
     try:
-        limit = _safe_limit(req.limit, default=10)
-        sort_by = req.sort_by or "relevance"
+        limit = _safe_limit(payload.limit, default=10)
+        sort_by = payload.sort_by or "relevance"
         endpoint = "/search_by_date" if sort_by == "date" else "/search"
         data = await _request_json(endpoint, {"query": query, "tags": "story", "hitsPerPage": limit})
         if not isinstance(data, dict):
@@ -277,32 +259,22 @@ async def search_stories(payload: Any = None):
 
 
 @app.post("/tools/get_discussion", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_discussion(payload: Any = None):
-    try:
-        if isinstance(payload, DiscussionRequest):
-            req = payload
-        elif isinstance(payload, dict):
-            req = DiscussionRequest(**payload)
-        else:
-            return ChatToolResponse(error="Missing required field: item_id")
-    except (TypeError, ValueError) as exc:
-        return ChatToolResponse(error=f"invalid tool request: {exc}")
-
-    if req.item_id is None:
+async def get_discussion(payload: DiscussionRequest):
+    if payload.item_id is None:
         return ChatToolResponse(error="Missing required field: item_id")
-    if req.item_id <= 0:
+    if payload.item_id <= 0:
         return ChatToolResponse(error="item_id must be a positive integer")
 
     try:
-        comment_limit = _safe_limit(req.comment_limit, default=5)
-        item = await _request_json(f"/items/{req.item_id}")
+        comment_limit = _safe_limit(payload.comment_limit, default=5)
+        item = await _request_json(f"/items/{payload.item_id}")
         if not isinstance(item, dict) or not item:
-            return ChatToolResponse(result=f"No Hacker News discussion found for item {req.item_id}.")
+            return ChatToolResponse(result=f"No Hacker News discussion found for item {payload.item_id}.")
 
         title = item.get("title") or item.get("story_title") or "(untitled)"
         author = item.get("author") or "unknown"
         points = item.get("points") or 0
-        url = item.get("url") or item.get("story_url") or f"https://news.ycombinator.com/item?id={req.item_id}"
+        url = item.get("url") or item.get("story_url") or f"https://news.ycombinator.com/item?id={payload.item_id}"
 
         raw_children = item.get("children")
         children = (raw_children if isinstance(raw_children, list) else [])
@@ -313,7 +285,7 @@ async def get_discussion(payload: Any = None):
             f"{title}",
             f"by {author} | {points} points",
             url,
-            f"HN: https://news.ycombinator.com/item?id={req.item_id}",
+            f"HN: https://news.ycombinator.com/item?id={payload.item_id}",
         ]
 
         text = _clean_text(item.get("text"))
@@ -337,7 +309,7 @@ async def get_discussion(payload: Any = None):
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPStatusError as exc:
         if exc.response is not None and getattr(exc.response, "status_code", None) == 404:
-            return ChatToolResponse(error=f"Hacker News item {req.item_id} not found.")
+            return ChatToolResponse(error=f"Hacker News item {payload.item_id} not found.")
         return ChatToolResponse(error=f"Hacker News discussion request failed: {exc}")
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"Hacker News discussion request failed: {exc}")

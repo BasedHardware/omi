@@ -232,7 +232,7 @@ class ToolFrontPageTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = mock_data
-            resp = await main.get_front_page({"limit": 5})
+            resp = await main.get_front_page(models.FrontPageRequest(limit=5))
             self.assertIsNone(resp.error)
             self.assertIn("Front page story", resp.result)
             self.assertIn("alice", resp.result)
@@ -240,14 +240,14 @@ class ToolFrontPageTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_front_page_empty_and_null_hits(self):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = {"hits": []}
-            resp = await main.get_front_page({})
+            resp = await main.get_front_page(models.FrontPageRequest())
             self.assertEqual(resp.result, "No Hacker News front page stories were returned.")
 
             mock_req.return_value = {"hits": None}
-            resp = await main.get_front_page({})
+            resp = await main.get_front_page(models.FrontPageRequest())
             self.assertEqual(resp.result, "No Hacker News front page stories were returned.")
 
-    async def test_get_front_page_non_dict_payload_and_response(self):
+    async def test_get_front_page_no_payload_uses_defaults(self):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = "<html>502 Bad Gateway</html>"
             resp = await main.get_front_page(None)
@@ -257,7 +257,7 @@ class ToolFrontPageTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_front_page_http_error(self):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.side_effect = main.httpx.HTTPError("Network down")
-            resp = await main.get_front_page({"limit": 10})
+            resp = await main.get_front_page(models.FrontPageRequest(limit=10))
             self.assertIn("Hacker News request failed: Network down", resp.error)
 
 
@@ -277,7 +277,7 @@ class ToolSearchStoriesTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = mock_data
-            resp = await main.search_stories({"query": "python", "limit": 5})
+            resp = await main.search_stories(models.SearchStoriesRequest(query="python", limit=5))
             self.assertIsNone(resp.error)
             self.assertIn("Python 3.13 Released", resp.result)
             mock_req.assert_called_once_with("/search", {"query": "python", "tags": "story", "hitsPerPage": 5})
@@ -286,30 +286,27 @@ class ToolSearchStoriesTests(unittest.IsolatedAsyncioTestCase):
         mock_data = {"hits": [{"title": "Latest News", "objectID": "203"}]}
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = mock_data
-            resp = await main.search_stories({"query": "ai", "sort_by": "date"})
+            resp = await main.search_stories(models.SearchStoriesRequest(query="ai", sort_by="date"))
             self.assertIsNone(resp.error)
             mock_req.assert_called_once_with("/search_by_date", {"query": "ai", "tags": "story", "hitsPerPage": 10})
 
     async def test_search_stories_missing_query(self):
-        resp = await main.search_stories({})
+        resp = await main.search_stories(models.SearchStoriesRequest(query=""))
         self.assertEqual(resp.error, "Missing required field: query")
 
-        resp = await main.search_stories({"query": "   "})
-        self.assertEqual(resp.error, "Missing required field: query")
-
-        resp = await main.search_stories(None)
+        resp = await main.search_stories(models.SearchStoriesRequest(query="   "))
         self.assertEqual(resp.error, "Missing required field: query")
 
     async def test_search_stories_empty_hits(self):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = {"hits": []}
-            resp = await main.search_stories({"query": "unknownterm123"})
+            resp = await main.search_stories(models.SearchStoriesRequest(query="unknownterm123"))
             self.assertEqual(resp.result, "No Hacker News stories found for 'unknownterm123'.")
 
     async def test_search_stories_http_error(self):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.side_effect = main.httpx.HTTPError("Timeout")
-            resp = await main.search_stories({"query": "crash"})
+            resp = await main.search_stories(models.SearchStoriesRequest(query="crash"))
             self.assertIn("Hacker News search failed: Timeout", resp.error)
 
 
@@ -328,7 +325,7 @@ class ToolGetDiscussionTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = mock_item
-            resp = await main.get_discussion({"item_id": 303, "comment_limit": 5})
+            resp = await main.get_discussion(models.DiscussionRequest(item_id=303, comment_limit=5))
             self.assertIsNone(resp.error)
             self.assertIn("Ask HN: Favorite tools?", resp.result)
             self.assertIn("Post text:\nUse <vector> here.", resp.result)
@@ -345,40 +342,34 @@ class ToolGetDiscussionTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = mock_item
-            resp = await main.get_discussion({"item_id": 404})
+            resp = await main.get_discussion(models.DiscussionRequest(item_id=404))
             self.assertIsNone(resp.error)
             self.assertIn("No top-level comments returned.", resp.result)
 
             mock_item["children"] = None
-            resp = await main.get_discussion({"item_id": 404})
+            resp = await main.get_discussion(models.DiscussionRequest(item_id=404))
             self.assertIsNone(resp.error)
             self.assertIn("No top-level comments returned.", resp.result)
 
-    async def test_get_discussion_missing_and_invalid_item_id(self):
-        resp = await main.get_discussion({})
-        self.assertEqual(resp.error, "Missing required field: item_id")
-
-        resp = await main.get_discussion({"item_id": -5})
+    async def test_get_discussion_invalid_item_id(self):
+        resp = await main.get_discussion(models.DiscussionRequest(item_id=-5))
         self.assertEqual(resp.error, "item_id must be a positive integer")
 
-        resp = await main.get_discussion({"item_id": 0})
+        resp = await main.get_discussion(models.DiscussionRequest(item_id=0))
         self.assertEqual(resp.error, "item_id must be a positive integer")
-
-        resp = await main.get_discussion(None)
-        self.assertEqual(resp.error, "Missing required field: item_id")
 
     async def test_get_discussion_404_not_found(self):
         resp_404 = types.SimpleNamespace(status_code=404)
         exc = main.httpx.HTTPStatusError("Not Found", response=resp_404)
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.side_effect = exc
-            resp = await main.get_discussion({"item_id": 999999})
+            resp = await main.get_discussion(models.DiscussionRequest(item_id=999999))
             self.assertEqual(resp.error, "Hacker News item 999999 not found.")
 
-    async def test_get_discussion_non_dict_payload(self):
+    async def test_get_discussion_non_dict_response(self):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = "<html>404</html>"
-            resp = await main.get_discussion({"item_id": 123})
+            resp = await main.get_discussion(models.DiscussionRequest(item_id=123))
             self.assertEqual(resp.result, "No Hacker News discussion found for item 123.")
 
 
@@ -426,5 +417,81 @@ class ClientPoolingAndLifespanTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res2.content, {"result": None, "error": "invalid tool request: invalid request payload"})
 
 
+class HttpBodyBindingTests(unittest.TestCase):
+    """Integration tests via FastAPI TestClient.
+
+    These verify that JSON sent in the HTTP request body is correctly bound
+    to the typed Pydantic model parameters — the regression scenario flagged
+    in code review where ``payload: Any = None`` caused FastAPI to treat the
+    argument as a query parameter, silently ignoring the request body.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from fastapi.testclient import TestClient  # type: ignore
+        except ImportError:
+            raise unittest.SkipTest("fastapi[testclient] not installed — skipping HTTP binding tests")
+
+        cls.client = TestClient(main.app, raise_server_exceptions=False)
+
+    def _post(self, path, json_body):
+        return self.client.post(path, json=json_body)
+
+    def test_get_front_page_body_is_bound(self):
+        """Omitting body (no required fields) should still return 200."""
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = {
+                "hits": [{"title": "T", "author": "a", "points": 1, "num_comments": 0, "objectID": "1"}]
+            }
+            resp = self._post("/tools/get_front_page", {"limit": 3})
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertIsNone(data.get("error"))
+            self.assertIn("T", data.get("result", ""))
+
+    def test_search_stories_body_is_bound(self):
+        """query field sent in JSON body must reach the handler."""
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = {
+                "hits": [{"title": "FastAPI rocks", "author": "u", "points": 5, "num_comments": 0, "objectID": "9"}]
+            }
+            resp = self._post("/tools/search_stories", {"query": "fastapi"})
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertIsNone(data.get("error"))
+            self.assertIn("FastAPI rocks", data.get("result", ""))
+
+    def test_search_stories_missing_query_returns_200_error(self):
+        """Empty query in body → 200 with error field (not 422)."""
+        resp = self._post("/tools/search_stories", {"query": ""})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data.get("error"), "Missing required field: query")
+
+    def test_get_discussion_body_is_bound(self):
+        """item_id sent in JSON body must reach the handler."""
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = {
+                "title": "A discussion",
+                "author": "x",
+                "points": 10,
+                "children": [],
+            }
+            resp = self._post("/tools/get_discussion", {"item_id": 42})
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertIsNone(data.get("error"))
+            self.assertIn("A discussion", data.get("result", ""))
+
+    def test_get_discussion_negative_id_returns_200_error(self):
+        """Negative item_id → 200 with error field."""
+        resp = self._post("/tools/get_discussion", {"item_id": -1})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data.get("error"), "item_id must be a positive integer")
+
+
 if __name__ == "__main__":
     unittest.main()
+
