@@ -13,6 +13,63 @@ const secondsPerFlashPage = 1.4;
 /// Aligns with backend `SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS` (default 300).
 const int walMaxFutureSkewSeconds = 300;
 
+/// Shared positive clock skew for a set of WAL capture windows (#4771).
+///
+/// Mirrors backend [batch_clock_shift]: one shift for the batch so successive
+/// offline shards keep their relative spacing instead of collapsing onto the
+/// same [timerStart].
+int batchWalClockShiftSeconds(
+  Iterable<({int start, int durationSeconds})> windows, {
+  int? nowSeconds,
+}) {
+  final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  int? newestEnd;
+  for (final window in windows) {
+    final duration = window.durationSeconds < 0 ? 0 : window.durationSeconds;
+    final end = window.start + duration;
+    if (newestEnd == null || end > newestEnd) {
+      newestEnd = end;
+    }
+  }
+  if (newestEnd == null) {
+    return 0;
+  }
+  return newestEnd > now ? newestEnd - now : 0;
+}
+
+/// Shift a capture window so it never ends after [nowSeconds] (#4770/#4771).
+({int start, int end}) normalizeWalCaptureWindow(
+  int startTs,
+  int endTs, {
+  int? nowSeconds,
+  int? clockShiftSeconds,
+}) {
+  final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  var start = startTs;
+  var end = endTs;
+  if (clockShiftSeconds == null) {
+    if (end <= now) {
+      return (start: start, end: end);
+    }
+    final shift = end - now;
+    start -= shift;
+    end -= shift;
+  } else {
+    final shift = clockShiftSeconds < 0 ? 0 : clockShiftSeconds;
+    if (shift == 0 && end <= now) {
+      return (start: start, end: end);
+    }
+    start -= shift;
+    end -= shift;
+  }
+  if (end > now) {
+    final extra = end - now;
+    start -= extra;
+    end -= extra;
+  }
+  return (start: start, end: end);
+}
+
 /// Clamp a device/phone-proposed WAL capture start so the recording window
 /// never ends after [nowSeconds] (#4770).
 int normalizeWalTimerStart(
@@ -27,10 +84,68 @@ int normalizeWalTimerStart(
     return now - duration;
   }
   final end = proposed + duration;
-  if (end > now) {
-    return now - duration;
+  if (end <= now) {
+    return proposed;
   }
-  return proposed;
+  return normalizeWalCaptureWindow(proposed, end, nowSeconds: now).start;
+}
+
+/// Applies one shared batch clock shift to every WAL whose window ends after
+/// [nowSeconds], preserving inter-shard spacing (#4771).
+void normalizeWalTimerStartsInBatch(
+  List<Wal> wals, {
+  int? nowSeconds,
+  int maxFutureSkewSeconds = walMaxFutureSkewSeconds,
+}) {
+  if (wals.isEmpty) {
+    return;
+  }
+  final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final needsShift = <Wal>[];
+  for (final wal in wals) {
+    final duration = wal.seconds < 0 ? 0 : wal.seconds;
+    if (wal.timerStart > now + maxFutureSkewSeconds) {
+      wal.timerStart = now - duration;
+      continue;
+    }
+    if (wal.timerStart + duration > now) {
+      needsShift.add(wal);
+    }
+  }
+  if (needsShift.isEmpty) {
+    _ensureUniqueWalTimerStarts(wals);
+    return;
+  }
+  final shift = batchWalClockShiftSeconds(
+    needsShift.map((w) => (start: w.timerStart, durationSeconds: w.seconds)),
+    nowSeconds: now,
+  );
+  for (final wal in needsShift) {
+    final duration = wal.seconds < 0 ? 0 : wal.seconds;
+    final end = wal.timerStart + duration;
+    final normalized = normalizeWalCaptureWindow(
+      wal.timerStart,
+      end,
+      nowSeconds: now,
+      clockShiftSeconds: shift,
+    );
+    wal.timerStart = normalized.start;
+  }
+  _ensureUniqueWalTimerStarts(wals);
+}
+
+void _ensureUniqueWalTimerStarts(List<Wal> wals) {
+  final seenStartsByDevice = <String, Set<int>>{};
+  final ordered = List<Wal>.from(wals)..sort((a, b) => a.timerStart.compareTo(b.timerStart));
+  for (final wal in ordered) {
+    final used = seenStartsByDevice.putIfAbsent(wal.device, () => <int>{});
+    var start = wal.timerStart;
+    while (used.contains(start)) {
+      start += 1;
+    }
+    wal.timerStart = start;
+    used.add(start);
+  }
 }
 
 /// Sync lifecycle of a recording.

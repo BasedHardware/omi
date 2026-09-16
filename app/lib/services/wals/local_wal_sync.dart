@@ -134,10 +134,16 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future<void> addExternalWal(Wal wal) async {
-    final normalized = normalizeWalTimerStart(wal.timerStart, durationSeconds: wal.seconds);
-    if (normalized != wal.timerStart) {
-      Logger.debug('LocalWalSync: clamped future timerStart ${wal.timerStart} → $normalized (${wal.seconds}s)');
-      wal.timerStart = normalized;
+    final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
+    if (existingIndex >= 0) {
+      Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
+      return;
+    }
+    final before = wal.timerStart;
+    _wals.add(wal);
+    normalizeWalTimerStartsInBatch(_wals);
+    if (before != wal.timerStart) {
+      Logger.debug('LocalWalSync: clamped future timerStart $before → ${wal.timerStart} (${wal.seconds}s)');
     }
     // Native-storage recovery can surface old WALs while a new recording is
     // active. Only inherit the current session's location for WALs that began
@@ -148,12 +154,6 @@ class LocalWalSyncImpl implements LocalWalSync {
         wal.timerStart >= _sessionGeolocationSetAt! - 60) {
       wal.geolocation = _copyGeolocation(_sessionGeolocation);
     }
-    final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
-    if (existingIndex >= 0) {
-      Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
-      return;
-    }
-    _wals.add(wal);
     await _saveWalsToFile();
     listener.onWalUpdated();
     Logger.debug("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
@@ -177,14 +177,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     _wals = await WalFileManager.loadWals();
     Logger.debug("wal service start: ${_wals.length}");
 
-    var clamped = false;
-    for (final wal in _wals) {
-      final normalized = normalizeWalTimerStart(wal.timerStart, durationSeconds: wal.seconds);
-      if (normalized != wal.timerStart) {
-        wal.timerStart = normalized;
-        clamped = true;
-      }
-    }
+    final beforeStarts = {for (final w in _wals) w.id: w.timerStart};
+    normalizeWalTimerStartsInBatch(_wals);
+    final clamped = _wals.any((w) => beforeStarts[w.id] != w.timerStart);
     if (clamped) {
       await _saveWalsToFile();
     }

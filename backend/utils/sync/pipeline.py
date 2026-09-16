@@ -1474,10 +1474,14 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     directory = f'syncing/{uid}/{job_id}/'
     os.makedirs(directory, exist_ok=True)
     paths = []
+    seen_filenames: set[str] = set()
     for file in files:
         filename = file.filename
         if not filename:
             raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
+        if filename in seen_filenames:
+            raise HTTPException(status_code=400, detail='Duplicate sync filename in upload batch')
+        seen_filenames.add(filename)
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail='Invalid sync file format')
         if '_' not in filename:

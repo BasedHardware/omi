@@ -136,6 +136,19 @@ def test_retrieve_file_paths_v2_bad_extension_still_400(tmp_path, monkeypatch):
     assert upload.filename not in exc_info.value.detail
 
 
+def test_retrieve_file_paths_v2_duplicate_filename_raises_400(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    duplicate = 'audio_omi_opus_16000_1_fs160_1720000000.bin'
+    uploads = [_StubUploadFile(filename=duplicate), _StubUploadFile(filename=duplicate)]
+    monkeypatch.setattr(mod, 'get_timestamp_from_path', lambda _filename: 1_720_000_000)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mod._retrieve_file_paths_v2(uploads, 'u1', 'job-1')
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == 'Duplicate sync filename in upload batch'
+
+
 def test_retrieve_file_paths_v2_write_failure_keeps_private_filename_out_of_response(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     upload = _StubUploadFile(filename='private-recording_1704067200.bin')
