@@ -64,7 +64,9 @@ def load_fixture(version: str = CURRENT_FIXTURE_VERSION) -> MobileFixture:
         raise FixtureError(f"mobile fixture {version!r} not found at {path}; available: {available}")
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("fixture_version") != version:
-        raise FixtureError(f"fixture file {path} declares version {data.get('fixture_version')!r}, expected {version!r}")
+        raise FixtureError(
+            f"fixture file {path} declares version {data.get('fixture_version')!r}, expected {version!r}"
+        )
     auth = data.get("auth")
     if not isinstance(auth, dict) or not isinstance(auth.get("users"), list) or not auth["users"]:
         raise FixtureError(f"fixture {path} must define auth.users as a non-empty list")

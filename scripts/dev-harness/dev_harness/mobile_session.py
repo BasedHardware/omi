@@ -96,6 +96,7 @@ _EVIDENCE_STATE_FOR_LEASE = {
     "failed": "failed",
 }
 
+
 def sessions_root(repo_root: Path, env: Mapping[str, str] | None = None) -> Path:
     return safety.default_state_base(Path(repo_root), env) / SESSIONS_DIRNAME
 
@@ -107,9 +108,7 @@ def session_dir(repo_root: Path, session_id: str, env: Mapping[str, str] | None 
 
 def _validate_session_id(session_id: str) -> str:
     if not re.fullmatch(rf"{SESSION_ID_PREFIX}[a-z0-9][a-z0-9-]{{0,63}}", session_id or ""):
-        raise SessionError(
-            f"session id {session_id!r} must match {SESSION_ID_PREFIX}<lowercase-alnum-dash>"
-        )
+        raise SessionError(f"session id {session_id!r} must match {SESSION_ID_PREFIX}<lowercase-alnum-dash>")
     return session_id
 
 
@@ -322,9 +321,7 @@ class DeviceController:
             return False, f"emulator engine missing at {emulator} (sdkmanager 'emulator' 'cmdline-tools;latest')"
         if sdkmanager.exists():
             code, out = self._runner([str(sdkmanager), "--list_installed"])
-            if code == 0 and not any(
-                line.strip().startswith("system-images;") for line in out.splitlines()
-            ):
+            if code == 0 and not any(line.strip().startswith("system-images;") for line in out.splitlines()):
                 return (
                     False,
                     "no Android system image installed "
@@ -537,9 +534,7 @@ def seed(
     if not healthy:
         lease = {**lease, "status": "blocked", "blocked_reason": f"session backend unreachable: {detail}"}
         _save_json_atomic(directory / LEASE_FILENAME, lease)
-        raise SessionError(
-            f"session backend at {base_url} is unreachable ({detail}); start the session before seeding"
-        )
+        raise SessionError(f"session backend at {base_url} is unreachable ({detail}); start the session before seeding")
 
     receipt = mobile_fixtures.seed_synthetic_user(base_url, fixture, post=post)
     mobile_fixtures.write_seed_receipt(directory / SEED_FILENAME, receipt)
@@ -734,10 +729,14 @@ def build_session_evidence(
             "auth_uid": lease.get("default_auth_uid"),
         },
         runners=runners,
-        status={"state": resolved_state} if resolved_state != "blocked" else {
-            "state": "blocked",
-            "blocked_reason": str(lease.get("blocked_reason", "blocked")),
-        },
+        status=(
+            {"state": resolved_state}
+            if resolved_state != "blocked"
+            else {
+                "state": "blocked",
+                "blocked_reason": str(lease.get("blocked_reason", "blocked")),
+            }
+        ),
         timestamps={
             "created_at": str(lease.get("created_at", session_evidence.utc_now())),
             **({"started_at": str(lease["started_at"])} if lease.get("started_at") else {}),
@@ -884,7 +883,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             _emit(status(repo_root, args.session_id), as_json=args.json)
             return 0
         if args.command == "evidence":
-            _emit(evidence(repo_root, args.session_id, artifact_path=args.artifact, state=args.state), as_json=args.json)
+            _emit(
+                evidence(repo_root, args.session_id, artifact_path=args.artifact, state=args.state), as_json=args.json
+            )
             return 0
         if args.command == "stop":
             _emit(stop(repo_root, args.session_id), as_json=args.json)

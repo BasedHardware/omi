@@ -27,7 +27,9 @@ class TestFixtureLoading:
         with pytest.raises(mf.FixtureError, match="available: \\['v1'\\]"):
             mf.load_fixture("v99")
 
-    def test_fixture_declaring_the_wrong_version_is_rejected(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_fixture_declaring_the_wrong_version_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         directory = tmp_path / "fixtures"
         directory.mkdir()
         (directory / "v2.json").write_text(json.dumps({"fixture_version": "v3", "auth": {"users": []}}), "utf-8")
@@ -84,9 +86,7 @@ def _ok_post(url: str, form: dict) -> dict:
 class TestSeeding:
 
     def test_happy_path_receipt_never_contains_the_token(self) -> None:
-        receipt = mf.seed_synthetic_user(
-            "http://127.0.0.1:8300/", mf.load_fixture("v1"), post=_ok_post
-        )
+        receipt = mf.seed_synthetic_user("http://127.0.0.1:8300/", mf.load_fixture("v1"), post=_ok_post)
         serialized = json.dumps(receipt)
         assert "minted-token-value" not in serialized
         assert receipt["token_minted"] is True
@@ -117,9 +117,7 @@ class TestSeeding:
 
     def test_missing_token_in_response_is_rejected(self) -> None:
         with pytest.raises(mf.FixtureError, match="no custom_token"):
-            mf.seed_synthetic_user(
-                "http://127.0.0.1:8300/", mf.load_fixture("v1"), post=lambda url, form: {}
-            )
+            mf.seed_synthetic_user("http://127.0.0.1:8300/", mf.load_fixture("v1"), post=lambda url, form: {})
 
 
 class TestSeedReceipts:

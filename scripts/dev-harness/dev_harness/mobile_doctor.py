@@ -82,9 +82,7 @@ class Runner:
 
     def run(self, command: Sequence[str], timeout: float = 15.0) -> tuple[int, str]:
         try:
-            completed = subprocess.run(
-                list(command), capture_output=True, text=True, timeout=timeout, check=False
-            )
+            completed = subprocess.run(list(command), capture_output=True, text=True, timeout=timeout, check=False)
         except (OSError, subprocess.TimeoutExpired) as exc:
             return 127, str(exc)
         return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
@@ -128,7 +126,9 @@ def _check_git(repo_root: Path, runner: Runner) -> CheckResult:
     code, out = runner.run(["git", "-C", str(repo_root), "rev-parse", "--is-inside-work-tree"])
     if code == 0 and out.strip() == "true":
         return _ok("git", "repository checkout detected", (LANE_BACKEND,))
-    return _agent("git", f"{repo_root} is not a usable git worktree", "Re-clone or repair the task worktree", (LANE_BACKEND,))
+    return _agent(
+        "git", f"{repo_root} is not a usable git worktree", "Re-clone or repair the task worktree", (LANE_BACKEND,)
+    )
 
 
 def _check_python311(repo_root: Path, runner: Runner, env: Mapping[str, str]) -> CheckResult:
@@ -233,9 +233,7 @@ def _check_datastore(repo_root: Path, runner: Runner, env: Mapping[str, str]) ->
     if redis:
         results.append(_ok("redis", f"redis-server at {redis}", (LANE_BACKEND,)))
     else:
-        results.append(
-            _agent("redis", "redis-server not found", "brew install redis (user-space)", (LANE_BACKEND,))
-        )
+        results.append(_agent("redis", "redis-server not found", "brew install redis (user-space)", (LANE_BACKEND,)))
     typesense = env.get("OMI_TYPESENSE_SERVER_BIN", "").strip() or runner.which("typesense-server")
     docker = runner.which("docker")
     if typesense:
@@ -270,7 +268,6 @@ def _android_home(env: Mapping[str, str]) -> str:
         value = env.get(key, "").strip()
         if value:
             return value
-
 
 
 def _check_android(repo_root: Path, runner: Runner, env: Mapping[str, str]) -> list[CheckResult]:
@@ -366,7 +363,12 @@ def _check_ios(repo_root: Path, runner: Runner) -> list[CheckResult]:
     version = out.strip().splitlines()[0] if out.strip() else "unknown"
     if code != 0:
         results.append(
-            _operator("xcode", "xcodebuild -version failed (first-launch/license?)", "Accept the Xcode license / complete first launch", (LANE_IOS,))
+            _operator(
+                "xcode",
+                "xcodebuild -version failed (first-launch/license?)",
+                "Accept the Xcode license / complete first launch",
+                (LANE_IOS,),
+            )
         )
     else:
         results.append(_ok("xcode", version, (LANE_IOS,)))

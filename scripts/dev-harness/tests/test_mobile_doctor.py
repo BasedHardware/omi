@@ -130,7 +130,10 @@ class TestIndividualChecks:
 
     def test_docker_daemon_down_with_no_native_typesense_is_operator(self, tmp_path: Path) -> None:
         runner = _provisioned_runner(tmp_path)
-        runner.outputs[("/usr/local/bin/docker", "info", "--format", "{{.ServerVersion}}")] = (1, "Cannot connect to the Docker daemon")
+        runner.outputs[("/usr/local/bin/docker", "info", "--format", "{{.ServerVersion}}")] = (
+            1,
+            "Cannot connect to the Docker daemon",
+        )
         runner.which_results["docker"] = "/usr/local/bin/docker"
         report = md.run_doctor(tmp_path, runner=runner, env={})
         typesense = next(c for c in report.checks if c.check == "typesense")

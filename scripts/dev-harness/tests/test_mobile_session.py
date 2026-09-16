@@ -35,9 +35,7 @@ class TestAcquire:
         directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
         assert (directory / "lease.json").is_file()
         assert (directory / ".omi-dev-harness-owned.json").is_file()
-        claim = (
-            ms.sessions_root(REPO_ROOT, env) / "ports" / f"{lease['port_offset']}.json"
-        )
+        claim = ms.sessions_root(REPO_ROOT, env) / "ports" / f"{lease['port_offset']}.json"
         assert json.loads(claim.read_text("utf-8"))["session_id"] == lease["session_id"]
         assert lease["status"] == "creating"
         assert lease["fixture_version"] == "v1"
@@ -88,9 +86,7 @@ class TestAcquire:
             sleeper.wait()
 
     def test_auto_offset_skips_a_port_held_by_a_foreign_process(self, tmp_path: Path, env: dict) -> None:
-        lease = ms.acquire(
-            REPO_ROOT, env, name="skipper", listeners=lambda port: (424242,) if port == 8100 else ()
-        )
+        lease = ms.acquire(REPO_ROOT, env, name="skipper", listeners=lambda port: (424242,) if port == 8100 else ())
         assert lease["port_offset"] != 100
 
 
@@ -163,13 +159,9 @@ class TestSeedResetStop:
         def post(url: str, form: dict) -> dict:
             return {"custom_token": "secret-minted-token", "uid": form["uid"], "provider": "local_dev"}
 
-        receipt = ms.seed(
-            REPO_ROOT, lease["session_id"], env, probe=lambda url: (True, "HTTP 200"), post=post
-        )
+        receipt = ms.seed(REPO_ROOT, lease["session_id"], env, probe=lambda url: (True, "HTTP 200"), post=post)
         assert "secret-minted-token" not in json.dumps(receipt)
-        stored = json.loads(
-            (ms.session_dir(REPO_ROOT, lease["session_id"], env) / "seed.json").read_text("utf-8")
-        )
+        stored = json.loads((ms.session_dir(REPO_ROOT, lease["session_id"], env) / "seed.json").read_text("utf-8"))
         assert "secret-minted-token" not in json.dumps(stored)
         assert stored["uid"] == "omi-fixture-v1-user-1"
 
@@ -188,12 +180,12 @@ class TestSeedResetStop:
         assert first["status"] == second["status"] == "reset"
         assert not (directory / "seed.json").exists()
         # The other session's lease is untouched.
-        keeper = json.loads(
-            (ms.session_dir(REPO_ROOT, other["session_id"], env) / "lease.json").read_text("utf-8")
-        )
+        keeper = json.loads((ms.session_dir(REPO_ROOT, other["session_id"], env) / "lease.json").read_text("utf-8"))
         assert keeper["status"] == "creating"
 
-    def test_stop_shuts_down_a_session_owned_simulator(self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_stop_shuts_down_a_session_owned_simulator(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         lease = ms.acquire(REPO_ROOT, env, name="stoppy", platform_name="ios-simulator", listeners=_no_listeners)
         monkeypatch.setattr("dev_harness.cli.cmd_down", lambda namespace: 0)
         calls: list[tuple[str, ...]] = []
@@ -216,9 +208,7 @@ class TestSeedResetStop:
 
 
 class TestStart:
-    def test_start_android_fails_closed_when_the_lane_is_not_ready(
-        self, tmp_path: Path, env: dict
-    ) -> None:
+    def test_start_android_fails_closed_when_the_lane_is_not_ready(self, tmp_path: Path, env: dict) -> None:
         lease = ms.acquire(REPO_ROOT, env, name="dry", platform_name="android", listeners=_no_listeners)
 
         class NotReady:
@@ -227,9 +217,7 @@ class TestStart:
 
         with pytest.raises(ms.SessionError, match="doctor"):
             ms.start(REPO_ROOT, lease["session_id"], env, devices=NotReady())
-        stored = json.loads(
-            (ms.session_dir(REPO_ROOT, lease["session_id"], env) / "lease.json").read_text("utf-8")
-        )
+        stored = json.loads((ms.session_dir(REPO_ROOT, lease["session_id"], env) / "lease.json").read_text("utf-8"))
         assert stored["status"] == "blocked"
 
     def test_start_runs_harness_up_under_the_session_instance(
