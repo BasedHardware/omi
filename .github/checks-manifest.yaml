@@ -1089,6 +1089,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: dropbox-app-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_main.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14130: chat tool endpoints called .get() on unchecked request.json() and /audio accumulated per-user bytes with no bound, so malformed or non-object payloads raised instead of returning ChatToolResponse errors and long streams could exhaust memory; the suite asserts clean tool errors, null/whitespace coercion, and the 50MB buffer ceiling"
   - id: mcp-date-filter-tests
     command: ["python3", "mcp/tests/test_date_filters.py"]
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
