@@ -1,6 +1,12 @@
 """Coordinate bounds for Uber deep links (#13291)."""
 
+from pathlib import Path
+import sys
 import unittest
+
+PLUGIN_DIR = Path(__file__).resolve().parent
+if str(PLUGIN_DIR) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_DIR))
 
 from uber_links import build_location
 

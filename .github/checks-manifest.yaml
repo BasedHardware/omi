@@ -24,6 +24,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: uber-call-tests
+    command: ["python3", "plugins/uber_call/test_main.py"]
+    triggers: ["plugins/uber_call/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "validate Uber deep link generation, manifest schema, and reject invalid coordinates or unparseable geolocation payloads"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]
