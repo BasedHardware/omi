@@ -614,6 +614,9 @@ export async function loadLegacyConversationDetail(
     for (const raw of value.audio_files) {
       const file = object(raw);
       presentOptionalFinite(file.duration);
+      if (file.started_at !== undefined && file.started_at !== null) {
+        calendarEventTimeCopy(file.started_at);
+      }
       if (file.chunk_timestamps === undefined) {
         continue;
       }

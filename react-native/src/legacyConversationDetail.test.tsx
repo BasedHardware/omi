@@ -2785,6 +2785,67 @@ test('old conversation details name Flutter GeneratedConversationAudioSpan fromJ
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('old conversation details name Flutter GeneratedAudioFile fromJson padded GET started_at instead of remapping to a recap', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      audio_files: [
+        {
+          id: 'audio-1',
+          uid: 'user-1',
+          conversation_id: fixture.id,
+          duration: 12.5,
+          started_at: '2026-09-07T00:00:00.000Z',
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      audio_files: [
+        {
+          id: 'audio-1',
+          uid: 'user-1',
+          conversation_id: fixture.id,
+          duration: 12.5,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  for (const started_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        audio_files: [
+          {
+            id: 'audio-1',
+            uid: 'user-1',
+            conversation_id: fixture.id,
+            duration: 12.5,
+            started_at,
+          },
+        ],
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
 test('keeps first GET apps_results content and falls back to plugins_results', async () => {
   mockRequest.mockResolvedValue(
     response({
