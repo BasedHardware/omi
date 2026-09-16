@@ -400,9 +400,11 @@ static void exit_hw_aad(void)
     t5838_aad_release_clk(); /* hand CLK back to the PDM peripheral */
     atomic_set(&aad_in_sleep, 0);
     atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
-    sd_request_power(true);   /* power on + remount SD before audio starts flowing */
-    mic_resume();             /* dmic START reclaims CLK via pinctrl */
+    sd_request_power(true); /* power on + remount SD before audio starts flowing */
+    /* Reset software VAD before mic_resume(): mic thread must not run software_vad_process()
+     * concurrently with software_vad_on_hardware_wake(). */
     vad_gate_on_hw_wake(k_uptime_get());
+    mic_resume(); /* dmic START reclaims CLK via pinctrl */
     LOG_INF("AAD: WAKE -> mic resumed");
 }
 

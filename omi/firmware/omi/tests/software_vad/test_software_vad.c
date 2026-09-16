@@ -43,14 +43,14 @@ static void test_software_vad_preroll_and_transitions(void)
     int16_t block[SOFTWARE_VAD_MAX_SAMPLES];
 
     software_vad_init(&state, &config, 0);
-    assert(state.recording);
+    assert(software_vad_is_recording(&state));
     assert(state.metrics.magic == SOFTWARE_VAD_DIAG_MAGIC);
 
     fill_block(block, 0);
     assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 0, capture_emit, &log) == 0);
     assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 500, capture_emit, &log) == 0);
     assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1000, capture_emit, &log) == 0);
-    assert(!state.recording);
+    assert(!software_vad_is_recording(&state));
     assert(state.metrics.quiet_transitions == 1U);
 
     fill_block(block, 10);
@@ -60,7 +60,7 @@ static void test_software_vad_preroll_and_transitions(void)
     assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1300, capture_emit, &log) == 0);
     assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1400, capture_emit, &log) == 0);
 
-    assert(state.recording);
+    assert(software_vad_is_recording(&state));
     assert(state.metrics.active_transitions == 1U);
     assert(state.metrics.gated_blocks == 4U);
     assert(state.metrics.replayed_blocks == 4U);
@@ -84,10 +84,10 @@ static void test_software_vad_on_hardware_wake(void)
     software_vad_init(&state, &config, 0);
     fill_block(block, 0);
     assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1000, capture_emit, &log) == 0);
-    assert(!state.recording);
+    assert(!software_vad_is_recording(&state));
 
     software_vad_on_hardware_wake(&state, 2000);
-    assert(state.recording);
+    assert(software_vad_is_recording(&state));
     fill_block(block, 50);
     size_t emits_before = log.count;
     assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 2100, capture_emit, &log) == 0);
@@ -95,10 +95,39 @@ static void test_software_vad_on_hardware_wake(void)
     assert(log.first_sample[log.count - 1] == 50);
 }
 
+static void test_software_vad_emit_failure_stays_active(void)
+{
+    struct software_vad_state state;
+    const struct software_vad_config config = {
+        .amplitude_threshold = 100U,
+        .debounce_frames = 3U,
+        .hold_ms = 1000,
+    };
+    struct emit_log log = {.fail_at = 3U};
+    int16_t block[SOFTWARE_VAD_MAX_SAMPLES];
+
+    software_vad_init(&state, &config, 0);
+    fill_block(block, 0);
+    assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1000, capture_emit, &log) == 0);
+    assert(!software_vad_is_recording(&state));
+
+    fill_block(block, 200);
+    assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1100, capture_emit, &log) == 0);
+    assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1200, capture_emit, &log) == 0);
+    assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1300, capture_emit, &log) == -ENOSPC);
+    assert(software_vad_is_recording(&state));
+    assert(state.metrics.emit_failures == 1U);
+
+    log.fail_at = SIZE_MAX;
+    assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1400, capture_emit, &log) == 0);
+    assert(software_vad_is_recording(&state));
+}
+
 int main(void)
 {
     test_software_vad_preroll_and_transitions();
     test_software_vad_on_hardware_wake();
+    test_software_vad_emit_failure_stays_active();
     puts("software_vad host tests passed");
     return 0;
 }

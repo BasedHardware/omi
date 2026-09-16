@@ -40,7 +40,8 @@ struct software_vad_state {
     uint32_t voice_streak;
     uint32_t preroll_write;
     uint32_t preroll_count;
-    bool recording;
+    /* Updated with __atomic_* in software_vad.c (AAD thread vs mic thread). */
+    uint32_t recording;
     int16_t preroll[SOFTWARE_VAD_PREROLL_FRAMES][SOFTWARE_VAD_MAX_SAMPLES];
 };
 

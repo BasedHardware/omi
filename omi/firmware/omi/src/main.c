@@ -109,12 +109,13 @@ static void mic_handler(int16_t *buffer)
 #endif
 
 #ifdef CONFIG_OMI_ENABLE_VAD_GATE
-    bool was_recording = g_software_vad.recording;
+    bool was_recording = software_vad_is_recording(&g_software_vad);
     int err =
         software_vad_process(&g_software_vad, buffer, MIC_BUFFER_SAMPLES, k_uptime_get(), emit_pcm_to_codec, NULL);
-    if (was_recording != g_software_vad.recording) {
+    bool is_recording = software_vad_is_recording(&g_software_vad);
+    if (was_recording != is_recording) {
         LOG_INF("Software VAD: %s (avg=%u, input=%u, emitted=%u, gated=%u)",
-                g_software_vad.recording ? "ACTIVE" : "QUIET",
+                is_recording ? "ACTIVE" : "QUIET",
                 g_software_vad.metrics.last_average_amplitude,
                 g_software_vad.metrics.input_blocks,
                 g_software_vad.metrics.emitted_blocks,
@@ -377,6 +378,7 @@ int main(void)
     }
 
 #ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    BUILD_ASSERT(MIC_BUFFER_SAMPLES == SOFTWARE_VAD_MAX_SAMPLES);
     const struct software_vad_config vad_config = {
         .amplitude_threshold = CONFIG_OMI_VAD_ABS_THRESHOLD,
         .debounce_frames = CONFIG_OMI_VAD_DEBOUNCE_FRAMES,

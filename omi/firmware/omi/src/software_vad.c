@@ -3,6 +3,17 @@
 #include <errno.h>
 #include <string.h>
 
+static bool recording_load(const struct software_vad_state *state)
+{
+    return __atomic_load_n(&state->recording, __ATOMIC_SEQ_CST) != 0U;
+}
+
+static void recording_store(struct software_vad_state *state, bool active)
+{
+    __atomic_store_n(&state->recording, active ? 1U : 0U, __ATOMIC_SEQ_CST);
+    state->metrics.recording = active ? 1U : 0U;
+}
+
 static uint32_t average_absolute_amplitude(const int16_t *samples, size_t sample_count)
 {
     uint64_t total = 0U;
@@ -48,8 +59,7 @@ void software_vad_init(struct software_vad_state *state, const struct software_v
     state->metrics.magic = SOFTWARE_VAD_DIAG_MAGIC;
     state->config = *config;
     state->last_voice_ms = now_ms;
-    state->recording = true;
-    state->metrics.recording = 1U;
+    recording_store(state, true);
 }
 
 void software_vad_on_hardware_wake(struct software_vad_state *state, int64_t now_ms)
@@ -57,18 +67,17 @@ void software_vad_on_hardware_wake(struct software_vad_state *state, int64_t now
     if (state == NULL) {
         return;
     }
-    state->recording = true;
+    recording_store(state, true);
     state->last_voice_ms = now_ms;
     state->voice_streak = 0U;
     state->preroll_count = 0U;
     state->preroll_write = 0U;
-    state->metrics.recording = 1U;
     state->metrics.preroll_count = 0U;
 }
 
 bool software_vad_is_recording(const struct software_vad_state *state)
 {
-    return state != NULL && state->recording;
+    return state != NULL && recording_load(state);
 }
 
 int software_vad_process(struct software_vad_state *state,
@@ -90,19 +99,18 @@ int software_vad_process(struct software_vad_state *state,
         state->metrics.maximum_average_amplitude = average;
     }
 
-    if (state->recording) {
+    if (recording_load(state)) {
         if (voice) {
             state->last_voice_ms = now_ms;
         }
 
         int ret = emit_block(state, samples, sample_count, emit, context, false);
         if (!voice && now_ms - state->last_voice_ms >= state->config.hold_ms) {
-            state->recording = false;
+            recording_store(state, false);
             state->voice_streak = 0U;
             state->preroll_count = 0U;
             state->preroll_write = 0U;
             state->metrics.quiet_transitions++;
-            state->metrics.recording = 0U;
             state->metrics.preroll_count = 0U;
         }
         return ret;
@@ -120,11 +128,10 @@ int software_vad_process(struct software_vad_state *state,
         return 0;
     }
 
-    state->recording = true;
+    recording_store(state, true);
     state->last_voice_ms = now_ms;
     state->voice_streak = 0U;
     state->metrics.active_transitions++;
-    state->metrics.recording = 1U;
 
     uint32_t first =
         (state->preroll_write + SOFTWARE_VAD_PREROLL_FRAMES - state->preroll_count) % SOFTWARE_VAD_PREROLL_FRAMES;
