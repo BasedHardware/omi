@@ -2648,6 +2648,143 @@ test('old conversation details name Flutter GeneratedClientProcessing fromJson p
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('old conversation details name Flutter GeneratedConversationAudioSpan fromJson padded GET artifact_offset instead of remapping to a recap', async () => {
+  const audio = {
+    duration: 12.5,
+    captured_duration: 12.5,
+    spans: [
+      {
+        file_id: 'audio-1',
+        artifact_offset: '1.5',
+        len: 2,
+        wall_offset: 0,
+      },
+    ],
+  };
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      conversation_audio: audio,
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      conversation_audio: {
+        ...audio,
+        spans: [
+          {
+            file_id: 'audio-1',
+            artifact_offset: 1.5,
+            len: 2,
+            wall_offset: 0,
+          },
+        ],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      conversation_audio: {
+        duration: 12.5,
+        captured_duration: 12.5,
+        built_at: '2026-09-07T00:00:00.000Z',
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      conversation_audio: {duration: 12.5, captured_duration: 12.5},
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  for (const artifact_offset of ['  1.5  ', '1.5 ', '  1.5', '1.5\n', '\u00851.5']) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        conversation_audio: {
+          ...audio,
+          spans: [
+            {
+              file_id: 'audio-1',
+              artifact_offset,
+              len: 2,
+              wall_offset: 0,
+            },
+          ],
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      conversation_audio: {
+        ...audio,
+        spans: [
+          {
+            file_id: 'audio-1',
+            artifact_offset: 1.5,
+            len: '  2  ',
+            wall_offset: 0,
+          },
+        ],
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      conversation_audio: {
+        ...audio,
+        spans: [
+          {
+            file_id: 'audio-1',
+            artifact_offset: 1.5,
+            len: 2,
+            wall_offset: '  0  ',
+          },
+        ],
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      conversation_audio: {
+        duration: 12.5,
+        captured_duration: 12.5,
+        built_at: '  2026-09-07T00:00:00.000Z  ',
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('keeps first GET apps_results content and falls back to plugins_results', async () => {
   mockRequest.mockResolvedValue(
     response({

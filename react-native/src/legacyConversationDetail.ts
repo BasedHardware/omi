@@ -629,6 +629,21 @@ export async function loadLegacyConversationDetail(
     const audio = object(value.conversation_audio);
     presentOptionalFinite(audio.duration);
     presentOptionalFinite(audio.captured_duration);
+    if (audio.built_at !== undefined && audio.built_at !== null) {
+      calendarEventTimeCopy(audio.built_at);
+    }
+    if (audio.spans !== undefined) {
+      if (!Array.isArray(audio.spans)) {
+        throw new DetailError('invalid');
+      }
+      for (const item of audio.spans) {
+        const span = object(item);
+        text(span.file_id);
+        finite(span.artifact_offset);
+        finite(span.len);
+        finite(span.wall_offset);
+      }
+    }
   }
   if (value.client_processing !== undefined && value.client_processing !== null) {
     const processing = object(value.client_processing);
