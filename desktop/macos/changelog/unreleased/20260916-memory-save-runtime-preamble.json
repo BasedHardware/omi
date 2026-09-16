@@ -1,3 +1,0 @@
-{
-  "change": "Explicit remember/save requests typed in chat now save the memory reliably; a runtime timestamp prefix on the request could previously make them be rejected as unauthorized."
-}
