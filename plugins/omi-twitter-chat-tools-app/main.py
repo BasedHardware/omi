@@ -196,53 +196,94 @@ def page_size(count: int, floor: int) -> int:
     return max(floor, min(count, MAX_RESULTS_CEILING))
 
 
+
+async def parse_tool_body(request: Request) -> tuple[Optional[dict], Optional[ChatToolResponse]]:
+    """Safely parse JSON request body and return dict or ChatToolResponse error."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return None, ChatToolResponse(error="Invalid request payload: expected JSON object")
+        return body, None
+    except Exception as e:
+        return None, ChatToolResponse(error=f"Invalid JSON request: {str(e)}")
+
+
+def _sanitize_tweet_id(val: Any) -> Optional[str]:
+    """Safely sanitize tweet IDs by stripping whitespace and leading #."""
+    if val is None:
+        return None
+    cleaned = str(val).strip().lstrip("#").strip()
+    return cleaned if cleaned else None
+
+
+def _sanitize_username(val: Any) -> Optional[str]:
+    """Safely normalize twitter username/handle."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if s.startswith("http://") or s.startswith("https://"):
+        s = s.rstrip("/").split("/")[-1]
+    cleaned = s.lstrip("@").strip()
+    return cleaned if cleaned else None
+
+
+def _safe_int(val: Any, default: int = 0) -> int:
+    """Safely convert value to int."""
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
 def format_tweet(tweet: dict, includes: dict = None) -> str:
     """Format a tweet for display."""
-    text = tweet.get("text", "")
-    tweet_id = tweet.get("id", "")
-    created_at = tweet.get("created_at", "")
-    metrics = tweet.get("public_metrics", {})
+    if not isinstance(tweet, dict):
+        return ""
+
+    text = tweet.get("text") or ""
+    tweet_id = tweet.get("id") or ""
+    created_at = tweet.get("created_at") or ""
+    metrics = tweet.get("public_metrics")
+    if not isinstance(metrics, dict):
+        metrics = {}
 
     # Get author info if available
     author_name = "Unknown"
     author_username = ""
-    if includes and "users" in includes:
+    if isinstance(includes, dict) and isinstance(includes.get("users"), list):
         author_id = tweet.get("author_id")
         for user in includes["users"]:
-            if user.get("id") == author_id:
-                author_name = user.get("name", "Unknown")
-                author_username = user.get("username", "")
+            if isinstance(user, dict) and user.get("id") == author_id:
+                author_name = user.get("name") or "Unknown"
+                author_username = user.get("username") or ""
                 break
 
     # Format timestamp
     time_str = ""
-    if created_at:
+    if created_at and isinstance(created_at, str):
         try:
             dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
             time_str = dt.strftime("%b %d, %Y %I:%M %p")
-        except:
+        except Exception:
             time_str = created_at[:10]
 
     # Build output
     parts = []
     if author_username:
         parts.append(f"**@{author_username}** ({author_name})")
-    parts.append(text)
+    parts.append(str(text))
 
     if time_str:
         parts.append(f"*{time_str}*")
 
     # Add engagement metrics
-    likes = metrics.get("like_count", 0)
-    retweets = metrics.get("retweet_count", 0)
-    replies = metrics.get("reply_count", 0)
+    likes = _safe_int(metrics.get("like_count", 0))
+    retweets = _safe_int(metrics.get("retweet_count", 0))
+    replies = _safe_int(metrics.get("reply_count", 0))
     if likes or retweets or replies:
         parts.append(f"Likes: {likes} | Retweets: {retweets} | Replies: {replies}")
 
     parts.append(f"ID: `{tweet_id}`")
 
     return "\n".join(parts)
-
 
 def get_user_id(uid: str) -> Optional[str]:
     """Get the Twitter user ID for the authenticated user."""
@@ -472,63 +513,58 @@ async def get_omi_tools_manifest():
 async def tool_post_tweet(request: Request):
     """Post a new tweet."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         log(f"=== POST_TWEET ===")
 
         uid = body.get("uid")
         text = body.get("text")
-        reply_to = body.get("reply_to")
+        reply_to = _sanitize_tweet_id(body.get("reply_to"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not text:
+        if text is None or not str(text).strip():
             return ChatToolResponse(error="Tweet text is required")
 
-        if len(text) > 280:
-            return ChatToolResponse(error=f"Tweet is too long ({len(text)} characters). Maximum is 280 characters.")
+        text = str(text).strip()
 
         access_token = get_valid_access_token(uid)
         if not access_token:
             return ChatToolResponse(error="Please connect your Twitter account first in the app settings.")
 
-        tweet_data = {"text": text}
-
+        # Post tweet via Twitter API v2
+        payload = {"text": text}
         if reply_to:
-            tweet_data["reply"] = {"in_reply_to_tweet_id": reply_to}
+            payload["reply"] = {"in_reply_to_tweet_id": reply_to}
 
-        result = twitter_api_request(uid, "POST", "/tweets", json_data=tweet_data)
+        result = twitter_api_request(uid, "POST", "/tweets", json_data=payload)
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to post tweet: {result.get('error', 'Unknown error')}")
 
-        tweet = result.get("data", {})
-        tweet_id = tweet.get("id", "")
-        tweet_text = tweet.get("text", text)
+        tweet_data = result.get("data", {})
+        tweet_id = tweet_data.get("id", "Unknown")
 
-        result_parts = [
-            "**Tweet Posted!**",
-            "",
-            tweet_text,
-            "",
-            f"ID: `{tweet_id}`",
-            f"Link: https://twitter.com/i/status/{tweet_id}"
-        ]
+        # Invalidate timeline caches so new tweet appears
+        invalidate_user_caches(uid)
 
-        return ChatToolResponse(result="\n".join(result_parts))
+        return ChatToolResponse(
+            result=f"Tweet posted successfully!\n\nID: {tweet_id}\nText: {text}"
+        )
 
     except Exception as e:
         log(f"Error posting tweet: {e}")
-        import traceback
-        traceback.print_exc()
         return ChatToolResponse(error=f"Failed to post tweet: {str(e)}")
 
 
-@app.post("/tools/get_timeline", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_get_timeline(request: Request):
     """Get user's home timeline."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         log(f"=== GET_TIMELINE ===")
 
         uid = body.get("uid")
@@ -580,7 +616,9 @@ async def tool_get_timeline(request: Request):
 async def tool_get_my_tweets(request: Request):
     """Get user's own tweets."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         log(f"=== GET_MY_TWEETS ===")
 
         uid = body.get("uid")
@@ -646,7 +684,9 @@ async def tool_get_my_tweets(request: Request):
 async def tool_get_mentions(request: Request):
     """Get tweets mentioning the user."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         uid = body.get("uid")
         count = requested_count(body)
 
@@ -696,7 +736,9 @@ async def tool_get_mentions(request: Request):
 async def tool_search_tweets(request: Request):
     """Search for tweets."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         uid = body.get("uid")
         query = body.get("query")
         count = requested_count(body)
@@ -747,9 +789,11 @@ async def tool_search_tweets(request: Request):
 async def tool_like_tweet(request: Request):
     """Like a tweet."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         uid = body.get("uid")
-        tweet_id = body.get("tweet_id")
+        tweet_id = _sanitize_tweet_id(body.get("tweet_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -783,9 +827,11 @@ async def tool_like_tweet(request: Request):
 async def tool_unlike_tweet(request: Request):
     """Unlike a tweet."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         uid = body.get("uid")
-        tweet_id = body.get("tweet_id")
+        tweet_id = _sanitize_tweet_id(body.get("tweet_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -817,9 +863,11 @@ async def tool_unlike_tweet(request: Request):
 async def tool_retweet(request: Request):
     """Retweet a tweet."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         uid = body.get("uid")
-        tweet_id = body.get("tweet_id")
+        tweet_id = _sanitize_tweet_id(body.get("tweet_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -853,9 +901,11 @@ async def tool_retweet(request: Request):
 async def tool_delete_tweet(request: Request):
     """Delete a tweet."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         uid = body.get("uid")
-        tweet_id = body.get("tweet_id")
+        tweet_id = _sanitize_tweet_id(body.get("tweet_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -883,9 +933,11 @@ async def tool_delete_tweet(request: Request):
 async def tool_get_user_profile(request: Request):
     """Get a user's profile."""
     try:
-        body = await request.json()
+        body, err = await parse_tool_body(request)
+        if err:
+            return err
         uid = body.get("uid")
-        username = body.get("username")
+        username = _sanitize_username(body.get("username"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -908,17 +960,24 @@ async def tool_get_user_profile(request: Request):
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get profile: {result.get('error', 'Unknown error')}")
 
-        user = result.get("data", {})
-        name = user.get("name", "Unknown")
-        handle = user.get("username", "")
-        bio = user.get("description", "")
-        verified = user.get("verified", False)
-        metrics = user.get("public_metrics", {})
-        created = user.get("created_at", "")[:10]
+        user = result.get("data")
+        if not isinstance(user, dict):
+            user = {}
 
-        followers = metrics.get("followers_count", 0)
-        following = metrics.get("following_count", 0)
-        tweets = metrics.get("tweet_count", 0)
+        name = user.get("name") or "Unknown"
+        handle = user.get("username") or ""
+        bio = user.get("description") or ""
+        verified = bool(user.get("verified", False))
+        metrics = user.get("public_metrics")
+        if not isinstance(metrics, dict):
+            metrics = {}
+
+        created_raw = user.get("created_at")
+        created = created_raw[:10] if isinstance(created_raw, str) else ""
+
+        followers = _safe_int(metrics.get("followers_count", 0))
+        following = _safe_int(metrics.get("following_count", 0))
+        tweets = _safe_int(metrics.get("tweet_count", 0))
 
         result_parts = [
             f"**{name}** {'(Verified)' if verified else ''}",
@@ -942,7 +1001,7 @@ async def tool_get_user_profile(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting profile: {e}")
+        log(f"Error getting user profile: {e}")
         return ChatToolResponse(error=f"Failed to get profile: {str(e)}")
 
 
