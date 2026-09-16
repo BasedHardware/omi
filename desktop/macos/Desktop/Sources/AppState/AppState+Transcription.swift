@@ -228,6 +228,12 @@ extension AppState {
       currentBackendConversationId = nil
       pendingBackendConversationId = nil
       ignoredRotatedBackendConversationIds = []
+      // One attempt identity spans this arming through every conversation
+      // rotation to the session's terminalization; sessions created during the
+      // attempt persist it so `Memory Created` can join the attempt.
+      captureAttempt = CaptureAttemptOutcomeState(
+        mode: AssistantSettings.shared.audioRecordingMode.rawValue,
+        intent: userInitiated ? .userStart : .auto)
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
 
@@ -265,7 +271,8 @@ extension AppState {
             inputDeviceName: recordingInputDeviceName,
             clientConversationId: sttSession.useLocalSTT ? nil : clientConversationId,
             conversationRole: sessionConversationRole,
-            finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile
+            finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile,
+            captureAttemptId: captureAttempt?.attemptId
           )
           // Stale after creation: leave the orphaned row to the crash-safe
           // reconciler rather than pointing a newer recording at it — and stop
@@ -358,7 +365,10 @@ extension AppState {
       }
 
       // Track transcription started
-      AnalyticsManager.shared.transcriptionStarted()
+      AnalyticsManager.shared.transcriptionStarted(
+        attemptId: captureAttempt?.attemptId,
+        mode: captureAttempt?.mode,
+        intent: captureAttempt?.intent.rawValue)
 
       log("Transcription: Starting...")
 
@@ -440,6 +450,7 @@ extension AppState {
       } else {
         log("Transcription: automatic capture abandoned after microphone authorization changed")
       }
+      captureAttempt?.noteErrorTerminal()
       stopTranscription()
       return
     }
@@ -468,7 +479,10 @@ extension AppState {
   @discardableResult
   func startMicCaptureIfNeeded() async -> Bool {
     guard var mic = audioCaptureService else { return false }
-    guard !mic.capturing else { return true }
+    guard !mic.capturing else {
+      captureAttempt?.noteCaptureEligible()
+      return true
+    }
 
     // Honor the user's persisted microphone choice (e.g. Ray-Ban Meta glasses)
     // at the moment the device opens — this also covers the meetings-only gate
@@ -526,8 +540,12 @@ extension AppState {
       let mixer = audioMixer
       // A dictation app holding the mic replaces the chunk with silence (`DictationMicSuppression`).
       let dictationGate = ensureDictationMicSuppressionMonitor().gate
+      let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
       try await mic.startCapture(
         onAudioChunk: { rawAudioData in
+          firstAudioFrame.noteFirstAudioFrame { [weak self] in
+            self?.captureAttempt?.noteFirstAudioFrame()
+          }
           let audioData = dictationGate.gated(rawAudioData)
           if useLocalSTT {
             localService?.appendAudio(audioData)
@@ -556,6 +574,7 @@ extension AppState {
       // around a contended input, so the warm capture it opens is not the one
       // this session holds.
       PushToTalkManager.shared.schedulePTTCaptureWarmup(trigger: .ambientCaptureStarted)
+      captureAttempt?.noteCaptureEligible()
       return true
     } catch {
       logError("Transcription: Failed to start microphone capture", error: error)
@@ -576,8 +595,12 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localSystem = localSystemService
       let mixer = audioMixer
+      let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
       try await systemService.startCapture(
         onAudioChunk: { audioData in
+          firstAudioFrame.noteFirstAudioFrame { [weak self] in
+            self?.captureAttempt?.noteFirstAudioFrame()
+          }
           if useLocalSTT {
             localSystem?.appendAudio(audioData)
           } else {
@@ -659,6 +682,9 @@ extension AppState {
     // continuously, subject to OS capability and the hidden developer system-tap override.
     let shouldCapture = mode == .always || meetingActive
     isAwaitingMeeting = mode == .onlyMeetings && !meetingActive
+    if isAwaitingMeeting {
+      captureAttempt?.noteIdleMeetingWait()
+    }
 
     guard meetingStateReady else {
       // Fail closed while the gate has not answered — see `pauseCaptureWhileMeetingGateUnknown`.
@@ -677,6 +703,7 @@ extension AppState {
           // Hard mic failure on a required start — stop the session rather than leave it silently
           // "recording" with no audio (the silent-mic watchdog handles zero-sample mics separately).
           log("Transcription: stopping — microphone could not start")
+          captureAttempt?.noteErrorTerminal()
           captureGateInFlight = false
           stopTranscription()
           return
@@ -851,6 +878,7 @@ extension AppState {
       log("Transcription: stopping after repeated silent microphone recovery failures")
       DesktopDiagnosticsManager.shared.recordTranscriptionSilentCaptureExhausted(
         recoveryAttempts: silentMicRecoveryAttempts)
+      captureAttempt?.noteErrorTerminal()
       stopTranscription()
       // An unauthorized app receives exactly this symptom — endless zero samples — so
       // the policy checks permission before blaming the hardware.
@@ -903,6 +931,7 @@ extension AppState {
       let transcriptionService = transcriptionService
     else {
       logError("Transcription: No device connection or transcription service", error: nil)
+      captureAttempt?.noteErrorTerminal()
       stopTranscription()
       return
     }
@@ -1068,6 +1097,7 @@ extension AppState {
     )
     let source = audioSource
     let conversationRole = currentConversationRole
+    captureAttempt?.noteErrorTerminal()
     stopTranscription()
     // Restart in cloud mode once stop has settled (isTranscribing flips false inside the stop's
     // async teardown). Bounded wait avoids racing the `!isTranscribing` guard in startTranscription.
@@ -1103,6 +1133,7 @@ extension AppState {
         reason: "cloud_stt_reconnect_failed",
         outcome: .exhausted,
         extra: ["source": currentConversationSource.rawValue])
+      captureAttempt?.noteErrorTerminal()
       stopTranscription()
       return
     }
@@ -1124,6 +1155,7 @@ extension AppState {
     )
     let source = audioSource
     let conversationRole = currentConversationRole
+    captureAttempt?.noteErrorTerminal()
     stopTranscription()
     Task { @MainActor [weak self] in
       guard let self else { return }
@@ -1370,7 +1402,8 @@ extension AppState {
           inputDeviceName: recordingInputDeviceName,
           clientConversationId: nextClientConversationId,
           conversationRole: sessionConversationRole,
-          finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile
+          finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile,
+          captureAttemptId: await MainActor.run(body: { self.captureAttempt?.attemptId })
         )
         let sessionStillCurrent = await MainActor.run { () -> Bool in
           guard self.isTranscribing, self.recordingGeneration == sessionGeneration else { return false }
@@ -1531,9 +1564,16 @@ extension AppState {
     currentClientConversationId = nil
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
+    // Terminal outcome of the armed capture attempt (one per arming; the
+    // guard keeps double clears and the hermetic automation session silent).
+    let attemptIdForEvents = captureAttempt?.attemptId
+    if var attempt = captureAttempt {
+      captureAttempt = nil
+      AnalyticsManager.shared.captureAttemptOutcome(&attempt, finalizationReason: finalizationReason)
+    }
 
     // Track transcription stopped
-    AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount)
+    AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount, attemptId: attemptIdForEvents)
     totalSegmentCount = 0
     totalWordCount = 0
     currentTranscript = ""

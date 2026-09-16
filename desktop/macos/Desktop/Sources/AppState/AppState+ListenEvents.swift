@@ -164,6 +164,7 @@ extension AppState {
     totalWordCount += newSegment.text.split(separator: " ").count
     speakerSegments.append(newSegment)
     totalSegmentCount += 1
+    captureAttempt?.noteSpeech()
     segmentsToPersist.append(segment)
     log(
       "Transcript [ADD] Speaker \(newSegment.speaker) [\(String(format: "%.1f", newSegment.start))s-\(String(format: "%.1f", newSegment.end))s]: \(segment.text.prefix(80))"
