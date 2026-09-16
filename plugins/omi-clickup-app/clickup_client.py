@@ -1,6 +1,6 @@
 import os
 import requests
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 
 load_dotenv()
