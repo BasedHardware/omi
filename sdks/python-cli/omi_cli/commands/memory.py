@@ -1,7 +1,7 @@
 """``omi memory`` — facts and learnings about the user."""
 
 from __future__ import annotations
-    
+
 import json
 import os
 import tempfile
@@ -10,13 +10,12 @@ from typing import TYPE_CHECKING, Optional, List
 
 import typer
 
-from omi_cli.errors import NotFoundError, UsageError
+from omi_cli.errors import NotFoundError, UsageError, CliError
 from omi_cli.models import MemoryCategory, MemoryVisibility
 from omi_cli.output import shorten
 
 if TYPE_CHECKING:
     from omi_cli.main import AppContext
-
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -244,9 +243,9 @@ def export_memories(
             temp_file.close()
             os.replace(temp_file.name, output)
     except Exception:
+        temp_file.close()
         if os.path.exists(temp_file.name):
             os.remove(temp_file.name)
         raise
 
     ctx.renderer.success(f"Exported memories to [bold]{output}[/bold] via streaming.")
-
