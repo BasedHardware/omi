@@ -13,6 +13,12 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function presentPaddedKnown(value: unknown): void {
+  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+    throw new Error('Omi chat message is malformed');
+  }
+}
+
 function timestampMs(value: unknown): number {
   return typeof value === 'string'
     ? Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'))
@@ -91,6 +97,12 @@ function parseOmiChatMemories(
   }
   return value.map(raw => {
     const row = object(raw);
+    if (
+      typeof row.created_at === 'string' &&
+      visibleDisplayText(row.created_at) !== row.created_at
+    ) {
+      throw new Error('Omi chat memories are malformed');
+    }
     const structured = object(row.structured);
     if (
       typeof structured.title !== 'string' ||
@@ -805,6 +817,8 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   ) {
     throw new Error('Omi chat message is malformed');
   }
+  presentPaddedKnown(row.rating);
+  presentPaddedKnown(row.journal_revision);
   const memories = parseOmiChatMemories(row.memories);
   const attachments = parseOmiChatFiles(row.files, row.files_id);
   const chart = parseOmiChatChart(row.chart_data);

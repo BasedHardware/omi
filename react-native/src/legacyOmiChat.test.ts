@@ -271,6 +271,148 @@ test('old chat history rejects malformed GET memories', () => {
   ).toThrow();
 });
 
+test('old chat history name Flutter ServerMessage.fromGenerated padded GET rating instead of remapping to a chat chip', () => {
+  const neighbor = {
+    id: 'neighbor',
+    sender: 'ai',
+    text: 'Neighbor stays.',
+    created_at: '2026-09-07T01:02:04Z',
+    type: 'text',
+  };
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'rated-exact',
+          sender: 'ai',
+          text: 'Hello 世界',
+          created_at: '2026-09-07T01:02:03Z',
+          type: 'text',
+          rating: '1',
+          journal_revision: '2',
+          memories: [
+            {
+              id: 'conv-1',
+              created_at: '2026-09-06T00:00:00Z',
+              structured: {title: 'Morning standup', emoji: '🚀'},
+            },
+          ],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'rated-exact']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'rated-json',
+          sender: 'ai',
+          text: 'Hello 世界',
+          created_at: '2026-09-07T01:02:03Z',
+          type: 'text',
+          rating: 1,
+          journal_revision: 2,
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'rated-json']);
+  expect(
+    parseOmiHistory(JSON.stringify([message('rated-omitted'), neighbor]), 0)
+      .messages.map(row => row.id),
+  ).toEqual(['neighbor', 'rated-omitted']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('rated-null'),
+          rating: null,
+          journal_revision: null,
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'rated-null']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('cited-omitted-clock'),
+          memories: [
+            {id: 'conv-1', structured: {title: 'Morning standup', emoji: '🚀'}},
+          ],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.find(row => row.id === 'cited-omitted-clock')?.memories,
+  ).toEqual([{title: 'Morning standup', emoji: '🚀'}]);
+  for (const rating of ['  1  ', '1 ', '  1', '1\n', '\u00851']) {
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([{...message('rated-padded'), rating}, neighbor]),
+        0,
+      ),
+    ).toThrow('Omi chat message is malformed');
+  }
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {...message('journal-padded'), journal_revision: '  2  '},
+        neighbor,
+      ]),
+      0,
+    ),
+  ).toThrow('Omi chat message is malformed');
+  for (const created_at of [
+    '  2026-09-06T00:00:00Z  ',
+    '2026-09-06T00:00:00Z ',
+    '  2026-09-06T00:00:00Z',
+    '2026-09-06T00:00:00Z\n',
+    '\u00852026-09-06T00:00:00Z',
+  ]) {
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {
+            ...message('cited-padded'),
+            memories: [
+              {
+                id: 'conv-1',
+                created_at,
+                structured: {title: 'Morning standup', emoji: '🚀'},
+              },
+            ],
+          },
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat memories are malformed');
+  }
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('evidence-padded'),
+          evidence: {
+            schema_version: '  1  ',
+            references: [
+              {id: 'screen-1', kind: 'screen', state: 'available', title: 'Calendar'},
+            ],
+          },
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'evidence-padded']);
+});
+
 test('old chat history keeps GET files when files_id is present', () => {
   const page = parseOmiHistory(
     JSON.stringify([
