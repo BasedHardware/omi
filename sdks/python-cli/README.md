@@ -79,6 +79,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [डोगरी च शुरूआती मार्गदर्शिका (Dogri Quickstart)](examples/quickstart.doi.md).
 
 > Looking for localized guides? See the [🇫🇷 Guide de démarrage rapide en français (French Quickstart)](examples/quickstart.fr.md), the [🇩🇪 Deutsche Schnellstartanleitung (German Quickstart)](examples/quickstart.de.md), the [🇵🇹 Guia de início rápido em português (Portuguese Quickstart)](examples/quickstart.pt.md), or the [🇮🇹 Guida rapida in italiano (Italian Quickstart)](examples/quickstart.it.md).
+> Looking for localized guides? See the [🇮🇳 हिंदी में शुरुआत (Hindi Quickstart)](examples/quickstart.hi.md).
 
 ## Auth
 
