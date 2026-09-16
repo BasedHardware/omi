@@ -131,6 +131,63 @@ function presentGeolocation(value: unknown): void {
   presentNullableDouble(geolocation.altitude);
   presentNullableDate(geolocation.captured_at);
 }
+function presentRequiredDate(value: unknown): void {
+  if (date(value) === null) {
+    throw new Error('Omi timestamp is malformed');
+  }
+}
+function presentRequiredDoubleList(value: unknown): void {
+  if (!Array.isArray(value)) throw new Error('Omi list is malformed');
+  for (const item of value) {
+    presentRequiredDouble(item);
+  }
+}
+function presentCalendarEvent(value: unknown): void {
+  if (value === undefined || value === null) return;
+  const event = object(value);
+  text(event.event_id);
+  text(event.title);
+  presentRequiredDate(event.start_time);
+  presentRequiredDate(event.end_time);
+}
+function presentAudioFiles(value: unknown): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) throw new Error('Omi list is malformed');
+  for (const item of value) {
+    const file = object(item);
+    text(file.id);
+    text(file.uid);
+    text(file.conversation_id);
+    presentRequiredDouble(file.duration);
+    presentRequiredDoubleList(file.chunk_timestamps);
+    presentNullableDate(file.started_at);
+  }
+}
+function presentConversationAudio(value: unknown): void {
+  if (value === undefined || value === null) return;
+  const audio = object(value);
+  text(audio.audio_files_fingerprint);
+  presentRequiredDouble(audio.duration);
+  presentRequiredDouble(audio.captured_duration);
+  presentNullableDate(audio.built_at);
+  if (audio.spans === undefined) return;
+  if (!Array.isArray(audio.spans)) throw new Error('Omi list is malformed');
+  for (const item of audio.spans) {
+    const span = object(item);
+    text(span.file_id);
+    presentRequiredDouble(span.artifact_offset);
+    presentRequiredDouble(span.len);
+    presentRequiredDouble(span.wall_offset);
+  }
+}
+function presentPhotos(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) throw new Error('Omi photos are malformed');
+  for (const item of value) {
+    const photo = object(item);
+    presentNullableDate(photo.created_at);
+  }
+}
 function presentNullableStringList(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) throw new Error('Omi list is malformed');
@@ -355,6 +412,10 @@ export async function loadOmiConversations(
     presentGeolocation(row.geolocation);
     presentNullableDouble(row.meeting_duration_s);
     presentNullableDouble(row.meeting_dedup_speech_s);
+    presentCalendarEvent(row.calendar_event);
+    presentAudioFiles(row.audio_files);
+    presentConversationAudio(row.conversation_audio);
+    presentPhotos(row.photos);
     const emoji = conversationStructuredEmojiCopy(
       structured.emoji === undefined || structured.emoji === null
         ? structured.emoji

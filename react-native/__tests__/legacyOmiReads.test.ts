@@ -165,6 +165,153 @@ test('old conversations name Flutter ConversationListItem fromJson padded GET la
   ).rejects.toThrow('Omi order is malformed');
 });
 
+test('old conversations name Flutter ConversationListItem fromJson padded GET calendar start_time instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+  };
+  const event = {
+    event_id: 'evt-1',
+    title: 'Standup',
+    start_time: '2026-09-07T15:00:00.000Z',
+    end_time: '2026-09-07T15:30:00.000Z',
+  };
+  const audio = {
+    id: 'audio-1',
+    uid: 'user-1',
+    conversation_id: 'located',
+    chunk_timestamps: [0, 1.5],
+    duration: '12.5',
+  };
+  const keptExact = await loadConversations(
+    backend([
+      {...row, calendar_event: event},
+      {
+        ...row,
+        id: 'json-audio',
+        audio_files: [{...audio, duration: 12.5}],
+      },
+      {
+        ...row,
+        id: 'string-audio',
+        audio_files: [audio],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptExact.items.map(item => item.id)).toEqual([
+    'located',
+    'json-audio',
+    'string-audio',
+    'named',
+  ]);
+  const keptOmitted = await loadConversations(backend([row, neighbor]).api);
+  expect(keptOmitted.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptNull = await loadConversations(
+    backend([{...row, calendar_event: null}, neighbor]).api,
+  );
+  expect(keptNull.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptConversationAudio = await loadConversations(
+    backend([
+      {
+        ...row,
+        conversation_audio: {
+          audio_files_fingerprint: 'fp-1',
+          duration: '60',
+          captured_duration: 55,
+        },
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptConversationAudio.items.map(item => item.id)).toEqual([
+    'located',
+    'named',
+  ]);
+  for (const start_time of [
+    '  2026-09-07T15:00:00.000Z  ',
+    '2026-09-07T15:00:00.000Z ',
+    '  2026-09-07T15:00:00.000Z',
+    '2026-09-07T15:00:00.000Z\n',
+    '\u00852026-09-07T15:00:00.000Z',
+  ]) {
+    await expect(
+      loadConversations(
+        backend([{...row, calendar_event: {...event, start_time}}, neighbor])
+          .api,
+      ),
+    ).rejects.toThrow('Omi timestamp is malformed');
+  }
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          calendar_event: {
+            ...event,
+            end_time: '  2026-09-07T15:30:00.000Z  ',
+          },
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          audio_files: [{...audio, duration: '  12.5  '}],
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          audio_files: [{...audio, chunk_timestamps: ['  0  ', 1.5]}],
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          conversation_audio: {
+            audio_files_fingerprint: 'fp-1',
+            duration: '  60  ',
+            captured_duration: 55,
+          },
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...row,
+          photos: [{id: 'one', created_at: '  2026-09-07T00:00:00.000Z  '}],
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi timestamp is malformed');
+});
+
 test('old discarded conversations name GET transcript_segments as the list title', async () => {
   const {api} = backend([
     {
