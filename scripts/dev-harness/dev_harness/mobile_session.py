@@ -800,6 +800,8 @@ def _repo_root_from_cwd() -> Path:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from . import device_lease  # lazy: device_lease builds on this module's primitives
+
     parser = argparse.ArgumentParser(prog="mobile-session", description=__doc__.splitlines()[0])
     parser.add_argument("--version", action="version", version=f"mobile-session {CLI_VERSION}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -840,6 +842,51 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--artifact", type=Path, default=None, help="built app (apk/bundle) to bind")
     ev.add_argument("--state", default=None, choices=list(session_evidence.STATES))
     ev.add_argument("--json", action="store_true")
+    device = sub.add_parser("device", help="C5 physical-device lane: leases + qualification runner")
+    device.add_argument("--json", action="store_true")
+    device_sub = device.add_subparsers(dest="device_command", required=True)
+
+    dev_doctor = device_sub.add_parser("doctor", help="read-only physical-device readiness report")
+    dev_doctor.add_argument("--platform", action="append", choices=list(device_lease.PLATFORMS))
+
+    dev_register = device_sub.add_parser(
+        "register", help="register a dedicated test device (personal devices are refused)"
+    )
+    dev_register.add_argument("--platform", required=True, choices=list(device_lease.PLATFORMS))
+    dev_register.add_argument("--device-id", required=True)
+    dev_register.add_argument("--label", default="")
+    dev_register.add_argument("--os-version", default="")
+    dev_register.add_argument("--confirm-test-device", action="store_true")
+
+    dev_deregister = device_sub.add_parser("deregister", help="remove a device from the qualification registry")
+    dev_deregister.add_argument("--platform", required=True, choices=list(device_lease.PLATFORMS))
+    dev_deregister.add_argument("--device-id", required=True)
+
+    dev_list = device_sub.add_parser("list", help="registry + lease status")
+    dev_list.add_argument("--platform", choices=list(device_lease.PLATFORMS))
+    dev_list.add_argument("--device-id", default=None)
+
+    dev_acquire = device_sub.add_parser("acquire", help="acquire the exclusive device lease")
+    dev_acquire.add_argument("--platform", required=True, choices=list(device_lease.PLATFORMS))
+    dev_acquire.add_argument("--device-id", required=True)
+    dev_acquire.add_argument("--purpose", required=True)
+    dev_acquire.add_argument("--session", default=None, help="bind to a C1 mobile session id")
+    dev_acquire.add_argument("--wait-timeout", type=float, default=0.0, dest="wait_timeout_s")
+
+    for name, help_text in (
+        ("release", "release the caller's device lease (idempotent)"),
+        ("recover", "take over a provably stale same-host device lease"),
+        ("status", "one device's registry + lease state"),
+    ):
+        command = device_sub.add_parser(name, help=help_text)
+        command.add_argument("--platform", required=True, choices=list(device_lease.PLATFORMS))
+        command.add_argument("--device-id", required=True)
+
+    dev_run = device_sub.add_parser("run", help="automatable part of a qualification run against a leased device")
+    dev_run.add_argument("--session", required=True, help="C1 mobile session id (manifest: ports/fixture/app id)")
+    dev_run.add_argument("--platform", required=True, choices=list(device_lease.PLATFORMS))
+    dev_run.add_argument("--device-id", required=True)
+    dev_run.add_argument("--artifact", type=Path, required=True, help="built apk/ipa to install")
 
     return parser
 
@@ -900,10 +947,99 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "release":
             _emit(release(repo_root, args.session_id), as_json=args.json)
             return 0
+        if args.command == "device":
+            return _dispatch_device(args, repo_root)
     except (SessionError, safety.SafetyError, EvidenceError, mobile_fixtures.FixtureError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     raise AssertionError(f"unhandled command {args.command!r}")
+
+
+def _dispatch_device(args: argparse.Namespace, repo_root: Path) -> int:
+    """C5 physical-device lane (SCA-491). Imported lazily: device_lease and
+    device_runner build on this module's ownership primitives, so a module-
+    level import would be circular."""
+
+    from . import device_lease, device_runner
+
+    def _default_device_runner(command: Sequence[str]) -> tuple[int, str]:
+        completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=180)
+        return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+
+    try:
+        if args.device_command == "doctor":
+            platforms = args.platform or ["android", "ios"]
+            report = device_runner.device_doctor(
+                repo_root,
+                android=device_runner.AndroidTooling(_default_device_runner) if "android" in platforms else None,
+                ios=device_runner.IosTooling(_default_device_runner) if "ios" in platforms else None,
+            )
+            _emit(report, as_json=args.json)
+            statuses = {check["status"] for check in report["checks"]}
+            if "operator-action-needed" in statuses or "agent-remediable" in statuses:
+                return 2
+            return 0
+        if args.device_command == "register":
+            _emit(
+                device_lease.register_device(
+                    repo_root,
+                    args.platform,
+                    args.device_id,
+                    label=args.label,
+                    os_version=args.os_version,
+                    confirm=args.confirm_test_device,
+                ),
+                as_json=args.json,
+            )
+            return 0
+        if args.device_command == "deregister":
+            _emit(device_lease.deregister_device(repo_root, args.platform, args.device_id), as_json=args.json)
+            return 0
+        if args.device_command == "list":
+            _emit(device_lease.status(repo_root, platform=args.platform, device_id=args.device_id), as_json=args.json)
+            return 0
+        if args.device_command == "acquire":
+            _emit(
+                device_lease.acquire(
+                    repo_root,
+                    args.platform,
+                    args.device_id,
+                    purpose=args.purpose,
+                    session_id=args.session,
+                    wait_timeout_s=args.wait_timeout_s,
+                ),
+                as_json=args.json,
+            )
+            return 0
+        if args.device_command == "release":
+            _emit(device_lease.release(repo_root, args.platform, args.device_id), as_json=args.json)
+            return 0
+        if args.device_command == "recover":
+            _emit(device_lease.recover(repo_root, args.platform, args.device_id), as_json=args.json)
+            return 0
+        if args.device_command == "status":
+            _emit(device_lease.status(repo_root, platform=args.platform, device_id=args.device_id), as_json=args.json)
+            return 0
+        if args.device_command == "run":
+            tooling = (
+                device_runner.AndroidTooling(_default_device_runner)
+                if args.platform == "android"
+                else device_runner.IosTooling(_default_device_runner)
+            )
+            receipt = device_runner.run(
+                repo_root,
+                args.session,
+                args.platform,
+                args.device_id,
+                artifact=args.artifact,
+                **({"android": tooling} if args.platform == "android" else {"ios": tooling}),
+            )
+            _emit(receipt, as_json=args.json)
+            return 0
+    except (device_lease.DeviceLeaseError, device_runner.DeviceRunnerError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    raise AssertionError(f"unhandled device command {args.device_command!r}")
 
 
 if __name__ == "__main__":

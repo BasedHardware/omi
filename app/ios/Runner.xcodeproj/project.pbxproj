@@ -115,6 +115,8 @@
 		BAADF00DF00DF00DF00DFD1A /* PhoneMicOpusEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */; };
 		BAADF00DF00DF00DF00DFD1B /* PhoneMicBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */; };
 		BAADF00DF00DF00DF00DFD1D /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
+		BAADF00DF00DF00DF00DFD1F /* PhoneMicControllerSeams.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */; };
+		CAFEF00DF00DF00DF00DF001 /* PhoneMicControllerSeams.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */; };
 		BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */; };
 		BEC15258E40BD718849A70C0 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		C6DD8F6A334A31116A75C4EE /* devDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */; };
@@ -280,6 +282,7 @@
 		BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicBatchAudioWriter.swift; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DFD0C /* PhoneMicOpusShim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PhoneMicOpusShim.h; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PhoneMicOpusShim.m; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicControllerSeams.swift; sourceTree = "<group>"; };
 		C7894CA52D931C30BB891A25 /* raybanDatDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = raybanDatDebug.xcconfig; path = Flutter/raybanDatDebug.xcconfig; sourceTree = "<group>"; };
 		C84EE89ABD9CB9B1CFD8B8CB /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
 		CD12345678901234567890CD /* AppleRemindersService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleRemindersService.swift; sourceTree = "<group>"; };
@@ -555,6 +558,7 @@
 				BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */,
 				BAADF00DF00DF00DF00DFD0C /* PhoneMicOpusShim.h */,
 				BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */,
+				BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */,
 			);
 			path = PhoneMic;
 			sourceTree = "<group>";
@@ -969,6 +973,7 @@
 				BAADF00DF00DF00DF00DFD1A /* PhoneMicOpusEncoder.swift in Sources */,
 				BAADF00DF00DF00DF00DFD1B /* PhoneMicBatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DFD1D /* PhoneMicOpusShim.m in Sources */,
+				BAADF00DF00DF00DF00DFD1F /* PhoneMicControllerSeams.swift in Sources */,
 				42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */,
 				42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */,
 				42BABFD12F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift in Sources */,
@@ -1013,6 +1018,7 @@
 				2AE34400DB52FFE4BE215840 /* PhoneMicInterruptionMonitor.swift in Sources */,
 				9EF175369890F17FC6D78D03 /* PhoneMicEventEmitter.swift in Sources */,
 				6382AF22C65ED5A1AA482ECD /* PhoneMicHostApiImpl.swift in Sources */,
+				CAFEF00DF00DF00DF00DF001 /* PhoneMicControllerSeams.swift in Sources */,
 				B94F29DDABCC004D34ADA4EA /* PhoneMicOpusEncoder.swift in Sources */,
 				83D001C5192F68F4DD76AB23 /* PhoneMicBatchAudioWriter.swift in Sources */,
 				7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */,
