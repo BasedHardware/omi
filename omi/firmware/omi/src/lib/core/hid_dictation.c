@@ -58,7 +58,7 @@ static struct bt_conn *conn_ref; // last connection handed to on_connected
 // system workqueue (typing/timeout work). Zephyr k_mutex is recursive, so
 // locked helpers may call each other; nothing calls back into this module
 // while the lock is held.
-static struct k_mutex dictation_lock;
+K_MUTEX_DEFINE(dictation_lock);
 
 // --- HIDS instance (standard HID over GATT keyboard) ---
 
@@ -318,14 +318,6 @@ static void stop_typing_locked(uint8_t error, uint8_t detail)
     }
 }
 
-// Locking entry point for callers outside the GATT/work contexts.
-static void stop_typing(uint8_t error, uint8_t detail)
-{
-    k_mutex_lock(&dictation_lock, K_FOREVER);
-    stop_typing_locked(error, detail);
-    k_mutex_unlock(&dictation_lock);
-}
-
 static void typing_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
@@ -518,7 +510,6 @@ static struct bt_gatt_service dictation_service = BT_GATT_SERVICE(dictation_serv
 int hid_dictation_service_register(void)
 {
     hid_dictation_core_init(&dictation_ctx, dictation_text, &dictation_limits);
-    k_mutex_init(&dictation_lock);
     return bt_gatt_service_register(&dictation_service);
 }
 
@@ -601,8 +592,12 @@ bool hid_dictation_wants_adv_restart(void)
 
 void hid_dictation_button_pressed(void)
 {
+    // Button work races GATT writes on the Bluetooth RX thread. Inspect and
+    // cancel under one lock so session identity cannot change between them.
+    k_mutex_lock(&dictation_lock, K_FOREVER);
     if (dictation_ctx.typing_ready || dictation_ctx.active_session != HID_DICTATION_SESSION_NONE) {
         printk("hid_dictation: button press cancels active session\n");
-        stop_typing(HID_DICTATION_ERR_CANCELLED, dictation_ctx.active_session);
+        stop_typing_locked(HID_DICTATION_ERR_CANCELLED, dictation_ctx.active_session);
     }
+    k_mutex_unlock(&dictation_lock);
 }

@@ -401,6 +401,25 @@ void main() {
     expect(controller.state.value.phase, PendantDictationPhase.error);
   });
 
+  test('disable refuses success while the pendant still reports HID active', () async {
+    final controller = buildController();
+    final ok = await controller.disableHid('pendant', reconnect: () async {});
+    expect(ok, isFalse);
+    expect(transport.controlCommands, [HidDictationProtocol.cmdDisable]);
+    expect(controller.state.value.phase, PendantDictationPhase.error);
+    controller.dispose();
+  });
+
+  test('disable succeeds only after HID is absent', () async {
+    final controller = buildController();
+    final ok = await controller.disableHid('pendant', reconnect: () async {
+      transport.hidActiveInStatus = false;
+    });
+    expect(ok, isTrue);
+    expect(controller.state.value.phase, PendantDictationPhase.idle);
+    controller.dispose();
+  });
+
   test('stale pipeline never cancels a newer session', () async {
     transcriptToReturn = 'first';
     final controller = buildController();

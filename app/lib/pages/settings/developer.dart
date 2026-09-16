@@ -160,10 +160,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     final provider = context.read<DeveloperModeProvider>();
     final capture = context.read<CaptureProvider>();
     setState(() => _hidActivationBusy = true);
-    // Stop button routing immediately on opt-out, even if the pendant is away.
-    // Opt-in is committed only after the pendant confirms activation.
-    if (!value) provider.onHidDictationEnabledChanged(false);
+    // Keep button ownership until opt-out is verified. A failed command can
+    // leave HID active; its taps must not fall through to assistant actions.
     try {
+      await capture.cancelHidDictation();
       final pendants = ServiceManager.instance()
           .device
           .connections
@@ -180,14 +180,19 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         return;
       }
       bool activated = false;
+      bool allDisabled = true;
       for (final id in pendants) {
         if (value) {
           activated = await capture.enableHidDictation(id) || activated;
         } else {
-          await capture.disableHidDictation(id);
+          allDisabled = await capture.disableHidDictation(id) && allDisabled;
         }
       }
-      if (value) provider.onHidDictationEnabledChanged(activated);
+      if (value) {
+        provider.onHidDictationEnabledChanged(activated);
+      } else if (allDisabled) {
+        provider.onHidDictationEnabledChanged(false);
+      }
     } catch (_) {
       capture.reportDictationStatus(const PendantDictationUiState(
         PendantDictationPhase.error,

@@ -175,7 +175,9 @@ install the app or publish a TestFlight build.
 
 Toggle **Pendant HID Dictation** OFF in Developer settings (pendant
 connected): the app cancels any in-flight dictation, writes DISABLE, cycles
-the link, and verifies the HID service is gone (status line confirms).
+the link, and verifies the HID service is gone (status line confirms). If
+verification fails, the toggle remains on and pendant taps remain reserved
+for dictation; retry or power-cycle the pendant before disabling again.
 
 ### Recover (if anything wedges)
 

@@ -22,6 +22,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/pendant_dictation_controller.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
@@ -327,6 +328,34 @@ void main() {
   // ------------------------------------------------------------------ //
   // Existing tests (preserved verbatim from the original file)          //
   // ------------------------------------------------------------------ //
+
+  PendantDictationController dictationForTeardownTest() => PendantDictationController(
+        resolveConnection: (_) async => null,
+        getCodec: (_) async => BleAudioCodec.pcm8,
+        hapticSender: (_, __) async {},
+      );
+
+  test('stopping device capture invalidates dictation without a BLE disconnect', () async {
+    final dictation = dictationForTeardownTest();
+    final provider = CaptureProvider(dictationController: dictation);
+    provider.updateRecordingDevice(_device(id: 'pendant-a', type: DeviceType.omi));
+    await dictation.onButtonEvent('pendant-a', 1);
+    expect(dictation.isCapturing, isTrue);
+    await provider.stopStreamDeviceRecording();
+    expect(dictation.isCapturing, isFalse);
+    provider.dispose();
+  });
+
+  test('switching recording device invalidates the previous dictation', () async {
+    final dictation = dictationForTeardownTest();
+    final provider = CaptureProvider(dictationController: dictation);
+    provider.updateRecordingDevice(_device(id: 'pendant-a', type: DeviceType.omi));
+    await dictation.onButtonEvent('pendant-a', 1);
+    expect(dictation.isCapturing, isTrue);
+    provider.updateRecordingDevice(_device(id: 'pendant-b', type: DeviceType.omi));
+    expect(dictation.isCapturing, isFalse);
+    provider.dispose();
+  });
 
   test('removes segments and related state on deletion event', () {
     final provider = CaptureProvider();

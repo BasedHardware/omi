@@ -208,7 +208,9 @@ class CaptureController extends ChangeNotifier
     Future<bool> Function()? microphonePermissionRequester,
     IMicRecorderService? phoneMicBatchRecorder,
     RecordingLifecycleTelemetry? recordingTelemetry,
-  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+    PendantDictationController? dictationController,
+  })  : _dictation = dictationController ?? _createDictationController(),
+        externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ??
             ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
         _inProgressConversationLoader = inProgressConversationLoader,
@@ -482,22 +484,24 @@ class CaptureController extends ChangeNotifier
   // Experimental: pendant-as-keyboard dictation prototype (developer toggle).
   // The resolver is strictly passive — connectionFor + isConnected — so a
   // dictation pipeline never resurrects a dropped link to deliver old text.
-  final PendantDictationController _dictation = PendantDictationController(
-    resolveConnection: (deviceId) async {
-      final connection = ServiceManager.instance().device.connectionFor(deviceId);
-      if (connection is! OmiDeviceConnection) return null;
-      if (!await connection.isConnected()) return null;
-      return connection;
-    },
-    getCodec: (deviceId) async {
-      final connection = ServiceManager.instance().device.connectionFor(deviceId);
-      if (connection is OmiDeviceConnection && await connection.isConnected()) {
-        return await connection.getAudioCodec();
-      }
-      return BleAudioCodec.pcm8;
-    },
-    captureGate: () => !SharedPreferencesUtil().batchModeEnabled,
-  );
+  final PendantDictationController _dictation;
+
+  static PendantDictationController _createDictationController() => PendantDictationController(
+        resolveConnection: (deviceId) async {
+          final connection = ServiceManager.instance().device.connectionFor(deviceId);
+          if (connection is! OmiDeviceConnection) return null;
+          if (!await connection.isConnected()) return null;
+          return connection;
+        },
+        getCodec: (deviceId) async {
+          final connection = ServiceManager.instance().device.connectionFor(deviceId);
+          if (connection is OmiDeviceConnection && await connection.isConnected()) {
+            return await connection.getAudioCodec();
+          }
+          return BleAudioCodec.pcm8;
+        },
+        captureGate: () => !SharedPreferencesUtil().batchModeEnabled,
+      );
 
   /// User-visible HID dictation state (developer settings status line).
   ValueListenable<PendantDictationUiState> get dictationState => _dictation.state;
@@ -519,6 +523,9 @@ class CaptureController extends ChangeNotifier
       await ServiceManager.instance().device.ensureConnection(deviceId, force: true);
     });
   }
+
+  /// Cancel pending dictation without changing the pendant's HID mode.
+  Future<void> cancelHidDictation() => _dictation.invalidate(_recordingDevice?.id ?? '');
 
   /// Real opt-out path: cancels any in-flight dictation, writes DISABLE,
   /// cycles the link, and verifies the HID service is gone.
@@ -593,6 +600,9 @@ class CaptureController extends ChangeNotifier
 
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
+    if (_recordingDevice?.id != device?.id) {
+      unawaited(_dictation.invalidate(_recordingDevice?.id ?? ''));
+    }
     _recordingDevice = device;
     if (device == null) _endOfflineSession();
     notifyListeners();
@@ -1583,6 +1593,9 @@ class CaptureController extends ChangeNotifier
   }
 
   Future _closeBleStream({bool disableNativeBackground = false}) async {
+    // Teardown can stop or switch capture without dropping Bluetooth. Void
+    // pending dictation before awaiting stream cancellation or WAL cleanup.
+    await _dictation.invalidate(_recordingDevice?.id ?? '');
     await _bleBytesStream?.cancel();
     await _blePhotoStream?.cancel();
     await _bleButtonStream?.cancel();
