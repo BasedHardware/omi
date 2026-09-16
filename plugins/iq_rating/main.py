@@ -1022,7 +1022,7 @@ def calculate_iq_with_ai(people_dict: dict) -> dict:
             snippets = [snippets]
         elif not isinstance(snippets, list):
             snippets = []
-        context = " | ".join(snippets[:10])  # More snippets
+        context = " | ".join(str(s) for s in snippets[:10] if s)  # More snippets
         if context:
             people_to_analyze.append({
                 "name": data["name"],
