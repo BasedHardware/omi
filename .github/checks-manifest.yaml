@@ -24,6 +24,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: hermes-agent-tests
+    command: ["python3", "plugins/omi-hermes-agent-app/test_main.py"]
+    triggers: ["plugins/omi-hermes-agent-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "guard non-dict run creation and status polling responses, enforce allowlist and idempotency, and execute hermetic bridge tests without external dependencies"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]

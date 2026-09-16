@@ -114,8 +114,10 @@ class HermesClient:
                             json=payload,
                             headers=headers,
                         )
-                        response.raise_for_status()
-                        run_id = str(response.json().get("run_id") or "")
+                        create_data = response.json()
+                        if not isinstance(create_data, dict):
+                            raise BridgeError(502, "invalid_hermes_response")
+                        run_id = str(create_data.get("run_id") or "")
                         if not run_id:
                             raise BridgeError(502, "invalid_hermes_response")
 
@@ -126,6 +128,8 @@ class HermesClient:
                             )
                             status_response.raise_for_status()
                             run = status_response.json()
+                            if not isinstance(run, dict):
+                                raise BridgeError(502, "invalid_hermes_response")
                             status = str(run.get("status") or "")
                             if status == "completed":
                                 output = str(run.get("output") or "").strip()
@@ -138,12 +142,12 @@ class HermesClient:
                                 await self._stop_run(client, run_id)
                                 raise BridgeError(409, "approval_required")
                             await asyncio.sleep(0.5)
-                except TimeoutError as exc:
+                except (TimeoutError, asyncio.TimeoutError) as exc:
                     if run_id:
                         try:
                             async with asyncio.timeout(STOP_TIMEOUT_SECONDS):
                                 await self._stop_run(client, run_id)
-                        except TimeoutError as stop_exc:
+                        except (TimeoutError, asyncio.TimeoutError) as stop_exc:
                             raise BridgeError(502, "hermes_stop_failed") from stop_exc
                     raise BridgeError(504, "hermes_timeout") from exc
         except BridgeError:
