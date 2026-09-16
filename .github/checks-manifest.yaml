@@ -34,6 +34,11 @@ checks:
     triggers: ["plugins/omi-google-calendar-app/**"]
     lanes: ["local", "ci"]
     reason: "#13937: the Omi backend sends JSON null for omitted optional tool params and body.get(key, default) only applies defaults to absent keys, so min(None, 30) crashed list_events and sibling handlers trusted untyped optionals; the suite executes the production tool handlers through the calendar_api_request seam"
+  - id: ms365-pagination-tests
+    command: ["python3", "plugins/omi-ms365-app/test_main.py"]
+    triggers: ["plugins/omi-ms365-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13913: list_upcoming read one calendarView page ($top is a page size, not a result cap) and silently dropped every event past the 50th; the suite walks @odata.nextLink chains through the real GraphClient.get_all, asserts the page cap and repeat-link guard, and covers explicit-null optional args"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
@@ -1148,12 +1153,6 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
-  - id: ms365-pagination-tests
-    command: ["python3", "plugins/omi-ms365-app/test_main.py"]
-    triggers: ["plugins/omi-ms365-app/**"]
-    lanes: ["local", "ci"]
-    reason: "#13913: list_upcoming read one calendarView page ($top is a page size, not a result cap) and silently dropped every event past the 50th; the suite walks @odata.nextLink chains through the real GraphClient.get_all, asserts the page cap and repeat-link guard, and covers explicit-null optional args"
-
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
