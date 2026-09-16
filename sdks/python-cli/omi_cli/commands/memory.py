@@ -1,12 +1,12 @@
 """``omi memory`` — facts and learnings about the user."""
 
 from __future__ import annotations
-
+    
 import json
 import os
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, List
 
 import typer
 

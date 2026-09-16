@@ -228,3 +228,42 @@ def test_memory_export_api_none_at_offset(authed_profile, respx_mock, cli_runner
            "API returned None unexpectedly at offset 100" in result.stderr
     # Crucial: verify no file was left behind
     assert not out_file.exists()
+
+
+
+def test_memory_export_categories(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    """Verify that export filters by category both via API and client-side."""
+    import httpx
+    # Mock API: return a mix of categories on first page, then empty
+    page1 = [
+        {"id": "m1", "category": "work", "content": "work 1"},
+        {"id": "m2", "category": "personal", "content": "personal 1"},
+        {"id": "m3", "category": "work", "content": "work 2"},
+    ]
+    
+    respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(200, json=page1), httpx.Response(200, json=[])]
+    )
+    
+    out_file = tmp_path / "cat_export.json"
+    
+    # Export only 'work'
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file), "--categories", "work"])
+    
+    assert result.exit_code == 0
+    assert out_file.exists()
+    
+    # Verify content
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert len(data) == 2
+    assert all(item["category"] == "work" for item in data)
+    assert any(item["id"] == "m1" for item in data)
+    assert any(item["id"] == "m3" for item in data)
+    
+    # Verify API call included categories param
+    # we need to check the last call since side_effect was used
+    # respx stores calls in the route
+    route = respx_mock.get("/v1/dev/user/memories")
+    request = route.calls.last.request
+    assert request.url.params["categories"] == "work"
+
