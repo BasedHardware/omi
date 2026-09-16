@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: public-holidays-app-tests
+    command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
+    triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manifest parameter schema compliance, holiday and weekend formatting, country normalization, and tool endpoints"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

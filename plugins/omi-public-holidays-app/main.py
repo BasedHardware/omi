@@ -204,7 +204,7 @@ async def omi_tools() -> dict[str, Any]:
                 "description": "List countries supported by the public holidays API.",
                 "endpoint": "/tools/list_supported_countries",
                 "method": "POST",
-                "parameters": {"type": "object", "properties": {}},
+                "parameters": {"type": "object", "properties": {}, "required": []},
             },
         ],
     }
