@@ -129,6 +129,12 @@ function presentOptionalInteger(value: unknown): void {
     throw new DetailError('invalid');
   }
 }
+function presentRequiredInteger(value: unknown): void {
+  if (value === undefined || value === null) {
+    throw new DetailError('invalid');
+  }
+  presentOptionalInteger(value);
+}
 function array(value: unknown): unknown[] {
   if (!Array.isArray(value)) {
     throw new DetailError('invalid');
@@ -623,6 +629,29 @@ export async function loadLegacyConversationDetail(
     const audio = object(value.conversation_audio);
     presentOptionalFinite(audio.duration);
     presentOptionalFinite(audio.captured_duration);
+  }
+  if (value.client_processing !== undefined && value.client_processing !== null) {
+    const processing = object(value.client_processing);
+    text(processing.transcript_sha256);
+    presentRequiredInteger(processing.schema_version);
+    const provenance = object(processing.provenance);
+    text(provenance.device_class);
+    text(provenance.model_id);
+    text(provenance.runtime);
+    calendarEventTimeCopy(provenance.generated_at);
+    const structure = object(processing.structure);
+    text(structure.title);
+    if (structure.events !== undefined && structure.events !== null) {
+      if (!Array.isArray(structure.events)) {
+        throw new DetailError('invalid');
+      }
+      for (const item of structure.events) {
+        const event = object(item);
+        text(event.title);
+        calendarEventTimeCopy(event.start);
+        presentRequiredInteger(event.duration);
+      }
+    }
   }
   const linkedEvent = calendarEvent(value.calendar_event);
   const photos = conversationPhotos(value.photos);

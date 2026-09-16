@@ -2556,6 +2556,98 @@ test('old conversation details name Flutter GeneratedGeolocation fromJson padded
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('old conversation details name Flutter GeneratedClientProcessing fromJson padded GET schema_version instead of remapping to a recap', async () => {
+  const processing = {
+    transcript_sha256: 'abc',
+    schema_version: '1',
+    provenance: {
+      device_class: 'phone',
+      generated_at: '2026-09-07T00:00:00.000Z',
+      model_id: 'm1',
+      runtime: 'ios',
+    },
+    structure: {title: 'Projected'},
+  };
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: processing,
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: {...processing, schema_version: 1},
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(response({...fixture}));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: null,
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  for (const schema_version of ['  1  ', '1 ', '  1', '1\n', '\u00851']) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        client_processing: {...processing, schema_version},
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: {
+        ...processing,
+        provenance: {
+          ...processing.provenance,
+          generated_at: '  2026-09-07T00:00:00.000Z  ',
+        },
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: {
+        ...processing,
+        structure: {
+          title: 'Projected',
+          events: [
+            {
+              title: 'Standup',
+              start: '2026-09-07T15:00:00.000Z',
+              duration: '  30  ',
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('keeps first GET apps_results content and falls back to plugins_results', async () => {
   mockRequest.mockResolvedValue(
     response({
