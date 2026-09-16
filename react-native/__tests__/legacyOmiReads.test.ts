@@ -2115,6 +2115,84 @@ test('names Flutter ActionItemsPage empty GET ids instead of omitting neighborin
   ).rejects.toThrow('Omi IDs are duplicated');
 });
 
+test('old tasks name Flutter ActionItemsPage fromJson padded GET due_confidence instead of remapping to a task chip', async () => {
+  const neighbor = {id: 'named', description: 'Call Sam', completed: false};
+  const row = {id: 'due', description: 'Send the agenda', completed: false};
+  const keptExact = await loadTasks(
+    backend({
+      action_items: [
+        {...row, due_confidence: '0.9'},
+        {...row, id: 'json', due_confidence: 0.9},
+        neighbor,
+      ],
+      has_more: false,
+    }).api,
+  );
+  expect(keptExact.items.map(item => item.id)).toEqual(['due', 'json', 'named']);
+  const keptOmitted = await loadTasks(
+    backend({action_items: [row, neighbor], has_more: false}).api,
+  );
+  expect(keptOmitted.items.map(item => item.id)).toEqual(['due', 'named']);
+  const keptNull = await loadTasks(
+    backend({
+      action_items: [{...row, due_confidence: null, export_date: null}, neighbor],
+      has_more: false,
+    }).api,
+  );
+  expect(keptNull.items.map(item => item.id)).toEqual(['due', 'named']);
+  const keptExportExact = await loadTasks(
+    backend({
+      action_items: [
+        {...row, export_date: '2026-09-07T00:00:00.000Z'},
+        neighbor,
+      ],
+      has_more: false,
+    }).api,
+  );
+  expect(keptExportExact.items.map(item => item.id)).toEqual(['due', 'named']);
+  for (const due_confidence of [
+    '  0.9  ',
+    '0.9 ',
+    '  0.9',
+    '0.9\n',
+    '\u00850.9',
+  ]) {
+    await expect(
+      loadTasks(
+        backend({
+          action_items: [{...row, due_confidence}, neighbor],
+          has_more: false,
+        }).api,
+      ),
+    ).rejects.toThrow('Omi order is malformed');
+  }
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [
+          {...row, export_date: '  2026-09-07T00:00:00.000Z  '},
+          neighbor,
+        ],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi timestamp is malformed');
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [
+          {
+            ...row,
+            provenance: [{id: 'ev-1', start_seconds: '  1.5  '}],
+          },
+          neighbor,
+        ],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+});
+
 test('old empty task descriptions stay searchable instead of failing the page', async () => {
   const {api} = backend({
     action_items: [

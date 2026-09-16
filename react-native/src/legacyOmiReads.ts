@@ -693,6 +693,8 @@ export async function loadOmiTasks(
         ? undefined
         : text(row.export_platform),
     );
+    presentNullableDouble(row.due_confidence);
+    presentNullableDate(row.export_date);
     const rawTaskId = row.taskId ?? row.task_id;
     const parsedTaskId =
       rawTaskId === undefined || rawTaskId === null
@@ -716,6 +718,8 @@ export async function loadOmiTasks(
       provenance: evidence.map(item => {
         const ref = object(item);
         text(ref.id);
+        presentNullableDouble(ref.start_seconds);
+        presentNullableDouble(ref.end_seconds);
         return JSON.stringify(ref);
       }),
       sortOrder: integer(row.sort_order),
