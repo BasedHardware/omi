@@ -7,7 +7,7 @@
 
 * **memories** — Далелҳо ва ёддоштҳо
 * **conversations** — Гуфтугӯҳои сабтшуда ва коркардшуда бо матн
-* **action items** — Вазиفاҳо ва амалҳои пайгирӣ
+* **action items** — Вазифаҳо ва амалҳои пайгирӣ
 * **goals** — Метрикаҳои пешрафти пайгиришаванда
 
 * **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
@@ -121,7 +121,7 @@ for m in memories:
 
 ---
 
-## 5. Раمзҳои баромад (Exit Codes)
+## 5. Рамзҳои баромад (Exit Codes)
 
 | Рамз | Маънӣ | Амал |
 | :--- | :--- | :--- |
