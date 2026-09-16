@@ -33,6 +33,108 @@ test('names Flutter People.build empty GET ids instead of omitting them', () => 
   expect(names.get('  padded  ')).toBe('Padded id');
 });
 
+test('old people names name Flutter Person.fromGenerated padded GET created_at instead of remapping to a person chip', () => {
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          created_at: '2026-09-07T00:00:00.000Z',
+          updated_at: '2026-09-07T00:00:00.000Z',
+          speech_samples_version: '3',
+        },
+        {
+          id: 'person-json',
+          name: 'Jordan Lee',
+          created_at: '2026-09-07T00:00:00.000Z',
+          updated_at: '2026-09-07T00:00:00.000Z',
+          speech_samples_version: 3,
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-json', 'Jordan Lee'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {id: 'person-alex', name: 'Alex Chen'},
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          created_at: null,
+          updated_at: null,
+          speech_samples_version: null,
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  for (const created_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    expect(() =>
+      parseOmiPeopleNames(
+        JSON.stringify([
+          {id: 'person-alex', name: 'Alex Chen', created_at},
+          {id: 'person-kept', name: 'Neighbor'},
+        ]),
+      ),
+    ).toThrow('Omi people are malformed');
+  }
+  expect(() =>
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          updated_at: '  2026-09-07T00:00:00.000Z  ',
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toThrow('Omi people are malformed');
+  expect(() =>
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          speech_samples_version: '  3  ',
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toThrow('Omi people are malformed');
+});
+
 test('keeps GET people names when a person id exceeds 256', () => {
   const id = 'p'.repeat(257);
   const names = parseOmiPeopleNames(

@@ -1,4 +1,5 @@
 import type {OmiBackend} from './omiNativeTypes';
+import {visibleDisplayText} from './desktopReadClient';
 
 class PeopleError extends Error {
   constructor() {
@@ -24,6 +25,12 @@ function array(value: unknown): unknown[] {
   return value;
 }
 
+function presentPaddedKnown(value: unknown): void {
+  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+    throw new PeopleError();
+  }
+}
+
 export function parseOmiPeopleNames(body: string): Map<string, string> {
   const rows = array(JSON.parse(body));
   const names = new Map<string, string>();
@@ -34,6 +41,9 @@ export function parseOmiPeopleNames(body: string): Map<string, string> {
       throw new PeopleError();
     }
     const name = text(person.name, 1_000_000);
+    presentPaddedKnown(person.created_at);
+    presentPaddedKnown(person.updated_at);
+    presentPaddedKnown(person.speech_samples_version);
     names.set(id, name);
   }
   return names;
