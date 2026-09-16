@@ -1,3 +1,4 @@
+import difflib
 import re
 from typing import Optional, Tuple
 from openai import AsyncOpenAI
@@ -8,8 +9,53 @@ load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
+def resolve_channel(spoken_name: Optional[str], channel_map: dict) -> Tuple[Optional[str], Optional[str]]:
+    """Resolve spoken channel name against channel_map.
+    
+    1. Exact (case-insensitive) match wins outright.
+    2. Otherwise, score substring candidates with difflib.SequenceMatcher ratio
+       against the spoken name and take the single closest one.
+    3. An ambiguous tie between two equally-close top candidates resolves to
+       (None, None) instead of an arbitrary pick.
+    """
+    if not spoken_name or not channel_map:
+        return None, None
+    
+    clean_spoken = spoken_name.lstrip('#').strip().lower()
+    if not clean_spoken:
+        return None, None
+
+    # 1. Exact case-insensitive match
+    for name, cid in channel_map.items():
+        if name.lower() == clean_spoken:
+            return cid, name
+
+    # 2. Score substring candidates
+    candidates = []
+    for name, cid in channel_map.items():
+        name_lower = name.lower()
+        if clean_spoken in name_lower or name_lower in clean_spoken:
+            ratio = difflib.SequenceMatcher(None, clean_spoken, name_lower).ratio()
+            candidates.append((ratio, name, cid))
+
+    if not candidates:
+        return None, None
+
+    # Sort candidates by ratio descending
+    candidates.sort(key=lambda item: item[0], reverse=True)
+
+    # 3. Check for ambiguous tie at the top
+    if len(candidates) > 1 and candidates[0][0] == candidates[1][0]:
+        return None, None
+
+    best = candidates[0]
+    return best[2], best[1]
+
+
 class MessageDetector:
     """Detects Slack message commands and extracts message content + channel intelligently."""
+    
+    resolve_channel = staticmethod(resolve_channel)
     
     TRIGGER_PHRASES = [
         "send slack message",
@@ -139,27 +185,13 @@ MESSAGE: Hello everyone, this is a test message"""
                 print(f"⚠️  No channel identified in message", flush=True)
                 return None, None, message
             
-            # Remove # if present
-            channel_name = channel_name.lstrip('#')
-            
-            # Get channel ID from map (case insensitive)
-            channel_id = None
-            for name, id in channel_map.items():
-                if name.lower() == channel_name.lower():
-                    channel_id = id
-                    channel_name = name  # Use exact name from map
-                    break
-            
-            if not channel_id:
-                # Try fuzzy match
-                for name, id in channel_map.items():
-                    if channel_name.lower() in name.lower() or name.lower() in channel_name.lower():
-                        channel_id = id
-                        channel_name = name
-                        print(f"🔍 Fuzzy matched '{channel_name}' to '{name}'", flush=True)
-                        break
-            
-            if not channel_id:
+            # Resolve channel using resolve_channel helper
+            channel_id, resolved_name = resolve_channel(channel_name, channel_map)
+            if channel_id:
+                if resolved_name.lower() != channel_name.lower():
+                    print(f"🔍 Fuzzy matched '{channel_name}' to '{resolved_name}'", flush=True)
+                channel_name = resolved_name
+            else:
                 print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
                 return None, channel_name, message
             
