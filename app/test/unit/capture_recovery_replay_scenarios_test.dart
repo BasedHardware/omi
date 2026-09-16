@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -395,6 +396,13 @@ void main() {
   test('failed upload stays retryable with bounded backoff and succeeds on the scheduled retry', () async {
     await produceWalOnDisk(12);
 
+    void eventQueuePressure() {
+      for (var i = 0; i < 32; i++) {
+        scheduleMicrotask(() {});
+        Timer.run(() {});
+      }
+    }
+
     // First drain: server refuses (non-transient) -> WAL stays miss.
     world.uploads.enqueueOutcome(() => throw StateError('server refused upload'));
     await world.coordinator.wake(WakeTrigger.userRetry);
@@ -404,15 +412,20 @@ void main() {
     expect(world.coordinator.nextCooldownAt, world.clock.now().add(const Duration(seconds: 5)),
         reason: 'first failure schedules the first backoff step (5s)');
 
-    // Retry at +5s fails again -> next backoff step is 10s.
+    // Retry at +5s fails again -> next backoff step is 10s. Event-queue
+    // pressure must not hide the cooldown drain (CI load reproduced this).
     world.uploads.enqueueOutcome(() => throw StateError('server refused upload'));
+    eventQueuePressure();
     await world.elapse(const Duration(seconds: 5));
+    eventQueuePressure();
+    await world.settle();
     expect(world.uploads.attempts, hasLength(2));
     expect((await world.walCounts())[WalStatus.miss], 1);
     expect(world.coordinator.nextCooldownAt, world.clock.now().add(const Duration(seconds: 10)),
         reason: 'backoff escalates 5s -> 10s');
 
     // Second retry succeeds -> terminal synced, retries stop.
+    eventQueuePressure();
     await world.elapse(const Duration(seconds: 10));
     expect(world.uploads.attempts, hasLength(3));
     expect((await world.walCounts())[WalStatus.synced], 1);
@@ -420,6 +433,25 @@ void main() {
 
     await world.elapse(const Duration(seconds: 30));
     expect(world.uploads.attempts, hasLength(3), reason: 'no retries after acknowledgement');
+  });
+
+  test('in-flight cooldown drain finishes before dispose so WAL index writes cannot race temp-dir teardown', () async {
+    await produceWalOnDisk(12);
+    world.uploads.enqueueOutcome(() => throw StateError('server refused upload'));
+    await world.coordinator.wake(WakeTrigger.userRetry);
+    await world.settle();
+    expect(world.uploads.attempts, hasLength(1));
+
+    world.uploads.enqueueOutcome(() => throw StateError('server refused upload'));
+    // Fire the backoff timer without settling: the production cooldown wake is
+    // unawaited. dispose() must still drain it before the caller may delete
+    // the documents directory.
+    world.scheduler.elapse(const Duration(seconds: 5));
+    await world.dispose();
+    expect(world.uploads.attempts, hasLength(2), reason: 'dispose waits for the in-flight retry drain');
+    expect(tempDir.existsSync(), isTrue);
+    tempDir.deleteSync(recursive: true);
+    expect(tempDir.existsSync(), isFalse);
   });
 
   test('queued upload: persisted -> enqueued(jobId) -> server-acknowledged(synced) stay distinct', () async {

@@ -432,18 +432,21 @@ class CaptureReplayWorld {
     connectivityStream.add(value);
   }
 
-  /// Let real async work (file I/O on temp files, microtask chains) settle
-  /// after synchronous timer fires and injections.
-  Future<void> settle({int rounds = 12}) async {
-    for (var i = 0; i < rounds; i++) {
-      await Future<void>.delayed(Duration.zero);
-      await Future<void>.delayed(const Duration(milliseconds: 2));
+  /// Drain work started by timer callbacks and injections: coordinator
+  /// recovery passes (including unawaited cooldown wakes) and event-queue
+  /// IO. Quiescence is observed — no wall-clock sleeps.
+  Future<void> settle({int maxTurns = 64}) async {
+    for (var i = 0; i < maxTurns; i++) {
+      await coordinator.waitUntilIdle();
+      await pumpEventQueue();
+      await coordinator.waitUntilIdle();
+      if (!coordinator.hasInFlight) return;
     }
-    await pumpEventQueue();
+    throw StateError('CaptureReplayWorld.settle: coordinator did not go idle after $maxTurns turns');
   }
 
   /// Advance virtual time by [duration], firing due timers in order, then
-  /// settle real async work.
+  /// settle real async work (including cooldown wakes started with unawaited).
   Future<void> elapse(Duration duration) async {
     scheduler.elapse(duration);
     await settle();
@@ -480,6 +483,8 @@ class CaptureReplayWorld {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    // Finish in-flight drain/index writes before callers delete [tempDir].
+    await coordinator.waitUntilIdle();
     if (!_controllerDisposed) _controller?.dispose();
     coordinator.dispose();
     await connectivityStream.close();

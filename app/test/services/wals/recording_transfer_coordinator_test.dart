@@ -195,6 +195,34 @@ void main() {
       expect(harness.scheduledCooldowns, hasLength(1));
       expect(harness.coordinator.nextCooldownAt, DateTime.utc(2026, 1, 1, 0, 0, 5));
     });
+
+    test('waitUntilIdle observes an unawaited injected cooldown wake', () async {
+      final harness = _TransferHarness()..drainFails = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+      expect(harness.drainPasses, 1);
+      expect(harness.scheduledCooldowns, hasLength(1));
+
+      harness.drainFails = false;
+      harness.scheduledCooldowns.single.callback();
+      expect(harness.coordinator.hasInFlight, isTrue);
+      await harness.coordinator.waitUntilIdle();
+      expect(harness.coordinator.hasInFlight, isFalse);
+      expect(harness.drainPasses, 2);
+    });
+
+    test('dispose invalidates a pending injected cooldown so it cannot start a new drain', () async {
+      final harness = _TransferHarness()..drainFails = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+      final pending = harness.scheduledCooldowns.single;
+      harness.coordinator.dispose();
+      pending.callback();
+      await harness.coordinator.waitUntilIdle();
+      expect(harness.drainPasses, 1);
+    });
   });
 }
 
