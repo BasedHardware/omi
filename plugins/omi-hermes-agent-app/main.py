@@ -114,6 +114,7 @@ class HermesClient:
                             json=payload,
                             headers=headers,
                         )
+                        response.raise_for_status()
                         create_data = response.json()
                         if not isinstance(create_data, dict):
                             raise BridgeError(502, "invalid_hermes_response")

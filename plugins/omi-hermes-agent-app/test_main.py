@@ -301,6 +301,78 @@ class HermesClientAsyncTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 502)
         self.assertEqual(raised.exception.code, "hermes_stop_failed")
 
+    def test_approval_stop_http_error_reported_as_hermes_unavailable(self) -> None:
+        client, context = self._async_client()
+        stop_response = mock.Mock()
+        stop_response.raise_for_status.side_effect = main.httpx.HTTPError("stop failed")
+        client.post = mock.AsyncMock(
+            side_effect=[
+                self._response({"run_id": "run-stop-err"}),
+                stop_response,
+            ]
+        )
+        client.get = mock.AsyncMock(
+            return_value=self._response({"status": "waiting_for_approval"})
+        )
+
+        with (
+            mock.patch.object(main.httpx, "AsyncClient", return_value=context),
+            self.assertRaises(main.BridgeError) as raised,
+        ):
+            asyncio.run(
+                main.HermesClient(self.settings).ask(
+                    "action requiring approval",
+                    uid="uid-1",
+                    idempotency_key="omi-call-stop-err",
+                )
+            )
+
+        self.assertEqual(raised.exception.status_code, 502)
+        self.assertEqual(raised.exception.code, "hermes_unavailable")
+
+    def test_end_to_end_timeout_where_stop_succeeds_raises_hermes_timeout(self) -> None:
+        settings = main.Settings(
+            hermes_api_url="http://hermes.test",
+            hermes_api_key="test-key",
+            allowed_uids=frozenset({"uid-1"}),
+            allowed_app_ids=frozenset({"app-1"}),
+            timeout_seconds=0.01,
+            instructions="Test instructions",
+        )
+        client, context = self._async_client()
+        stop_response = self._response({})
+
+        async def post(url: str, **_kwargs: object) -> mock.Mock:
+            if url.endswith("/v1/runs"):
+                return self._response({"run_id": "run-timeout-ok"})
+            return stop_response
+
+        async def slow_status(*_args: object, **_kwargs: object) -> mock.Mock:
+            await asyncio.sleep(0.05)
+            return self._response({"status": "running"})
+
+        client.post = mock.AsyncMock(side_effect=post)
+        client.get = mock.AsyncMock(side_effect=slow_status)
+
+        with (
+            mock.patch.object(main.httpx, "AsyncClient", return_value=context),
+            self.assertRaises(main.BridgeError) as raised,
+        ):
+            asyncio.run(
+                main.HermesClient(settings).ask(
+                    "long task",
+                    uid="uid-1",
+                    idempotency_key="omi-call-timeout-ok",
+                )
+            )
+
+        self.assertEqual(raised.exception.status_code, 504)
+        self.assertEqual(raised.exception.code, "hermes_timeout")
+        client.post.assert_awaited_with(
+            "http://hermes.test/v1/runs/run-timeout-ok/stop",
+            headers=main.HermesClient(settings).headers,
+        )
+
 
 class HermesSettingsTests(unittest.TestCase):
     def test_validate_missing_api_key(self) -> None:
