@@ -66,6 +66,19 @@ function presentLocations(value: unknown): void {
   }
 }
 
+function presentMemoriesLearned(value: unknown): void {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const raw of value) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      continue;
+    }
+    const memory = raw as Record<string, unknown>;
+    presentPaddedKnown(memory.captured_at);
+  }
+}
+
 function optionalCount(value: unknown): number | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -139,6 +152,8 @@ function summaryStats(value: unknown): {
   const durationMinutes = optionalCount(stats.total_duration_minutes);
   const watchingMinutes = optionalCount(stats.watching_minutes);
   const proactiveMoments = optionalCount(stats.proactive_moments);
+  optionalCount(stats.action_items_created);
+  optionalCount(stats.memories_created);
   return {
     ...(conversations === undefined ? {} : {conversations}),
     ...(actionItems === undefined ? {} : {actionItems}),
@@ -180,6 +195,7 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
     const overview = optionalWireString(summary.overview, 1_000_000);
     presentPaddedKnown(summary.created_at);
     presentLocations(summary.locations);
+    presentMemoriesLearned(summary.memories_learned);
     const stats = summaryStats(summary.stats);
     items.push({
       id,
