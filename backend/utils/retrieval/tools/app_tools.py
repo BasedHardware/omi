@@ -168,6 +168,17 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
     return create_model(model_name, **field_definitions)
 
 
+def _supplied_arguments(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop the optional parameters the model did not supply.
+
+    Every non-required manifest parameter is typed Optional with default None, and
+    langchain forwards those defaulted fields as explicit None. The tool endpoint
+    would receive JSON null for a parameter its schema types as string or integer,
+    so an omitted parameter must be omitted on the wire too.
+    """
+    return {name: value for name, value in kwargs.items() if value is not None}
+
+
 def create_app_tool(
     app_tool: ChatTool,
     app_id: str,
@@ -214,13 +225,14 @@ def create_app_tool(
         async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
             kwargs.pop('config', None)
+            arguments = _supplied_arguments(kwargs)
             if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
                 return f"The {app_tool.name} tool is temporarily disabled due to sustained failures."
             cb = get_webhook_circuit_breaker(_mcp_url)
             if not cb.allow_request():
                 return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
             try:
-                result = await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
+                result = await call_mcp_tool(_mcp_url, app_tool.name, arguments, _access_token, _mcp_tokens, _transport)
                 if result.startswith('Error') or result.startswith('MCP error'):
                     cb.record_failure()
                     action = await run_blocking(
@@ -263,7 +275,7 @@ def create_app_tool(
     async def tool_function(**kwargs: Any) -> str:
         """Tool dynamically created from app definition."""
         config_param: Optional[RunnableConfig] = kwargs.pop('config', None)
-        return await _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
+        return await _call_tool_endpoint(_supplied_arguments(kwargs), config_param, app_tool, app_id)
 
     # Create StructuredTool with the schema
     return StructuredTool(

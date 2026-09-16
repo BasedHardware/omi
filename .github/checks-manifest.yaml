@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: omi-frankfurter-tests
+    command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
+    triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Frankfurter currency conversion, latest rates, and supported currencies must safely handle unmanaged HTTP client contexts, non-dict API responses, and non-finite numbers without 500s or AttributeErrors"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
@@ -13,22 +18,22 @@ checks:
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit"
+    reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit; find_state_by_name must refuse an ambiguous status name (partial match or a shared workflow type) instead of silently moving the issue to whichever state a team happens to list first"
   - id: github-app-coerce-tests
     command: ["python3", "plugins/omi-github-app/test_main.py"]
-    triggers: ["plugins/omi-github-app/**"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#13911: issue numbers/limits arriving as JSON null or '#42'-style strings must be coerced, and GitHub API errors must reach ChatToolResponse(error=...) instead of being masked as empty results"
+    reason: "issue numbers/limits arriving as JSON null or formatted strings must be coerced cleanly, while repo parameter resolution disambiguates short names, sanitizes URLs, and catches dirty types"
   - id: plugin-db-transcript-segments-tests
     command: ["python3", "plugins/test_db_transcript_segments.py"]
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
-  - id: coingecko-crypto-tests
-    command: ["python3", "plugins/omi-coingecko-crypto-app/test_main.py"]
-    triggers: ["plugins/omi-coingecko-crypto-app/**"]
+  - id: gcal-null-params-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
+    triggers: ["plugins/omi-google-calendar-app/**"]
     lanes: ["local", "ci"]
-    reason: "#13935: CoinGecko /coins/markets returns a dict on error payloads (429/error bodies) whose string keys crashed .get() iteration; the app must also survive missing lifespan client state and string-typed numeric fields"
+    reason: "#13937: the Omi backend sends JSON null for omitted optional tool params and body.get(key, default) only applies defaults to absent keys, so min(None, 30) crashed list_events and sibling handlers trusted untyped optionals; the suite executes the production tool handlers through the calendar_api_request seam"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
@@ -44,6 +49,11 @@ checks:
     triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13925: null or non-dict data/papers payloads, mixed-type year/citationCount sort keys, null authors, and unnormalized DOI/arXiv identifiers must produce clean chat-tool responses, not TypeErrors or 500s"
+  - id: public-holidays-app-tests
+    command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
+    triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13928: holiday API error payloads, whitespace country codes, missing lifespan clients, and malformed holiday fields must return clean chat-tool responses without uncaught exceptions"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]
@@ -54,6 +64,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13920: tool_list_my_issues and tool_list_recent_issues interpolated limit and team into GraphQL text, so null/string/over-cap limits produced malformed queries and crafted team keys could inject GraphQL; limits must be coerced and inputs bound as variables"
+  - id: ms365-calendar-pagination-tests
+    command: ["python3", "plugins/omi-ms365-app/test_calendar_pagination.py"]
+    triggers: ["plugins/omi-ms365-app/**"]
+    lanes: ["local", "ci"]
+    reason: "list_upcoming read one calendarView page and ignored @odata.nextLink, so a window with more than 50 events silently dropped every later event"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
@@ -406,6 +421,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-ble-pairing-policy
+    command: ["ruby", "app/ios/test/omi_ble_pairing_policy_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiBlePairingPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_pairing_policy_test.rb", "app/ios/Runner.xcodeproj/project.pbxproj", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "CV1 DFU stale iOS bonds surface as CB error 14; native reconnect must classify pairing_lost reliably"
   - id: ios-batch-audio-energy
     command: ["ruby", "app/ios/test/batch_audio_energy_test.rb"]
     triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", ".github/checks-manifest.yaml"]
@@ -822,10 +843,15 @@ checks:
     reason: "#9843 Ticket 07: adversarial fixtures for baseline guard and disable policy"
   - id: desktop-feature-sentinels
     command: ["bash", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
-    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
-    reason: "#9843 Ticket 09: semantic feature sentinels prove flags are active; negative control proves silent-acceptance trap"
+    reason: "#9843/#13144: semantic feature sentinels prove flags are active without compiling every unrelated Swift test target"
+  - id: desktop-feature-sentinel-scope-test
+    command: ["bash", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13144: the feature sentinel must select its compile-only target and never regress to a package-wide --build-tests invocation"
   - id: desktop-hub-controller-ratchet
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
@@ -1004,6 +1030,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "process_segments called seg.get(\"text\") on every transcript segment, so a non-dict segment crashed the realtime webhook with AttributeError; list_channels also re-requested forever when Slack returned a repeated next_cursor"
 
+  - id: slack-channel-resolution-tests
+    command: ["python3", "plugins/omi-slack-app/test_channel_resolution.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the fuzzy channel match posted to the first workspace channel containing the spoken name (\"dev\" hit whichever of #dev-ops and #frontend-dev was listed first), and a named channel that did not resolve fell through to the user's default channel; resolve_channel accepts one exact or one fuzzy candidate only and process_segments refuses a named channel it could not resolve"
+
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
@@ -1059,6 +1091,35 @@ checks:
     lanes: ["local", "ci"]
     reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
 
+  - id: hive-update-task-status-tests
+    command: ["python3", "plugins/omi-hive-app/test_update_task_status.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13976: update_task_status disambiguates matching task candidates instead of mutating the first search hit, and exposes task IDs across get_tasks and search"
+
+  - id: gcal-event-id-round-trip-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_event_ids.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "list_events printed event ids cut to 20 characters and create_event printed none, so the ids the tools handed back could not be passed to get_event, update_event or delete_event; the suite round-trips every emitted id through those handlers"
+
+  - id: twitter-chat-tools-max-results-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "get_timeline, get_my_tweets, get_mentions and search_tweets clamped max_results only at 100, so a request for fewer posts than the X endpoint floor (10 for search, 5 for user posts and mentions) was sent as is and rejected with HTTP 400; the suite drives the real handlers against a seam that enforces the documented ranges"
+
+  - id: ms365-tool-dispatch-tests
+    command: ["python3", "plugins/omi-ms365-app/test_tool_dispatch.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+
+  - id: coingecko-crypto-tests
+    command: ["python3", "plugins/omi-coingecko-crypto-app/test_main.py"]
+    triggers: ["plugins/omi-coingecko-crypto-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13935: CoinGecko /coins/markets returns a dict on error payloads (429/error bodies) whose string keys crashed .get() iteration; the app must also survive missing lifespan client state and string-typed numeric fields"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

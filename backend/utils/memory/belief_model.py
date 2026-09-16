@@ -12,8 +12,10 @@ from enum import Enum
 from typing import Mapping, Optional
 
 from utils.memory.decision_path_telemetry import classify_model_about
+from utils.memory.belief_source_policy import has_verified_owner_authorship, original_evidence_time
 
 MEMORY_BELIEF_MODEL_ENABLED_ENV = "MEMORY_BELIEF_MODEL_ENABLED"
+MEMORY_BELIEF_AUTOMATION_PAUSED_ENV = "MEMORY_BELIEF_AUTOMATION_PAUSED"
 
 # Named classes the extractor uses. Priors are days; None means no decay.
 HALF_LIFE_DAYS_BY_CLASS: Mapping[str, Optional[float]] = {
@@ -29,6 +31,7 @@ HALF_LIFE_DAYS_BY_CLASS: Mapping[str, Optional[float]] = {
 
 CURRENT_BAND_MIN = 0.5
 FADING_BAND_MIN = 0.25
+TEMPORAL_READ_VIEWS = frozenset({"released", "useful_now", "history", "all"})
 
 
 class CurrencyBand(str, Enum):
@@ -39,8 +42,8 @@ class CurrencyBand(str, Enum):
 
 @dataclass(frozen=True)
 class BeliefView:
-    currency: float
-    band: CurrencyBand
+    currency: Optional[float]
+    band: Optional[CurrencyBand]
     as_of: datetime
     half_life_days: Optional[float]
     last_evidenced_at: datetime
@@ -49,6 +52,16 @@ class BeliefView:
 def belief_model_enabled() -> bool:
     """Deployment-wide flag. Unset and any value other than true fail closed to off."""
     return os.getenv(MEMORY_BELIEF_MODEL_ENABLED_ENV, "false").lower() == "true"
+
+
+def belief_automation_enabled() -> bool:
+    """Whether belief-producing jobs and admission paths may run.
+
+    Read-side overlays remain available while the independent automation pause
+    is active, so an operator can stop writes/backfills without removing the
+    beta read contract from clients.
+    """
+    return belief_model_enabled() and os.getenv(MEMORY_BELIEF_AUTOMATION_PAUSED_ENV, "false").lower() != "true"
 
 
 def _coerce_aware_utc(value: datetime) -> datetime:
@@ -88,7 +101,9 @@ def derive_half_life_days(
         if stored_half_life_days <= 0:
             raise ValueError("half_life_days must be positive when set")
         return stored_half_life_days
-    if user_asserted:
+    if user_asserted and not belief_class:
+        # Manual adoption without a class is authoritative evidence, but it
+        # does not contain enough temporal information to claim currentness.
         return None
     if belief_class:
         if belief_class not in HALF_LIFE_DAYS_BY_CLASS:
@@ -146,14 +161,20 @@ def horizon_from_extraction(
     half_life_days_override: Optional[float] = None,
     user_asserted: bool = False,
 ) -> tuple[Optional[str], Optional[float]]:
-    """Return (belief_class, half_life_days) for a new claim."""
-    if user_asserted:
-        return (belief_class or "identity", None)
-    resolved_class = belief_class if belief_class is not None and belief_class in HALF_LIFE_DAYS_BY_CLASS else "state"
+    """Return (belief_class, half_life_days) for a new claim.
+
+    Manual adoption is an authority signal, not a promise that the claim is
+    timeless.  A supplied class or explicit horizon therefore remains in
+    force for user-asserted memories.  Missing classification stays unknown;
+    it is never silently promoted to ``identity``.
+    """
+    resolved_class = belief_class if belief_class is not None and belief_class in HALF_LIFE_DAYS_BY_CLASS else None
     if half_life_days_override is not None:
         if half_life_days_override <= 0:
             raise ValueError("half_life_days must be positive when set")
         return resolved_class, half_life_days_override
+    if resolved_class is None:
+        return None, None
     return resolved_class, HALF_LIFE_DAYS_BY_CLASS[resolved_class]
 
 
@@ -177,12 +198,104 @@ def compute_currency(
     return 0.5 ** (days_since / half_life_days)
 
 
-def currency_band(currency: float) -> CurrencyBand:
+def currency_band(currency: Optional[float]) -> Optional[CurrencyBand]:
+    if currency is None:
+        return None
     if currency > CURRENT_BAND_MIN:
         return CurrencyBand.current
     if currency >= FADING_BAND_MIN:
         return CurrencyBand.fading
     return CurrencyBand.history
+
+
+def normalize_temporal_read_view(value: Optional[str]) -> str:
+    """Normalize the additive list view selector.
+
+    ``released`` is deliberately the default so older clients and callers
+    retain the shipped list contract when they omit the new query parameter.
+    """
+    normalized = (value or "released").strip().lower()
+    if normalized not in TEMPORAL_READ_VIEWS:
+        raise ValueError(f"unsupported memory read view: {value}")
+    return normalized
+
+
+def memory_use_suppressed(item: object) -> bool:
+    """Read the canonical owner-use suppression without interpreting confidence."""
+    arguments = getattr(item, "arguments", None)
+    use = arguments.get("memory_use") if isinstance(arguments, Mapping) else None
+    return isinstance(use, Mapping) and use.get("suppressed") is True
+
+
+def belief_classification_known(item: object) -> bool:
+    """Whether a record carries an explicit class or stored horizon."""
+    stored_half_life = getattr(item, "half_life_days", None)
+    belief_class = getattr(item, "belief_class", None)
+    return stored_half_life is not None or (belief_class is not None and belief_class in HALF_LIFE_DAYS_BY_CLASS)
+
+
+def temporal_view_allows_record(
+    item: object,
+    *,
+    view: str,
+    now: datetime,
+    include_archive: bool = False,
+) -> bool:
+    """Apply the shared temporal presentation policy to one decoded record.
+
+    This is a presentation filter only.  It never mutates lifecycle state and
+    never treats a missing class as current.  ``released`` leaves historical
+    lifecycle filtering to the existing owner; the other views use the
+    read-side currency bands while retaining the existing access fences.
+    """
+    normalized = normalize_temporal_read_view(view)
+    tier = _enum_value(getattr(item, "tier", None)) or _enum_value(getattr(item, "memory_tier", None))
+    status = _enum_value(getattr(item, "status", None)) or _enum_value(getattr(item, "ledger_status", None))
+    # Legacy/non-ledger projections carry lineage closure on the public row
+    # without a separate status field. Treat that retained version as history
+    # for the temporal presentation policy instead of guessing it is current.
+    if status is None and getattr(item, "superseded_by", None):
+        status = "superseded"
+    # Suppression is a default-use fence.  An explicit owner history read may
+    # inspect the retained record and its suppression state; only useful-now
+    # and automated consumers must honor the fence.
+    suppressed = memory_use_suppressed(item)
+    if suppressed and normalized == "useful_now":
+        return False
+    if getattr(item, "user_review", None) is False:
+        return False
+    if getattr(item, "invalid_at", None) is not None and normalized == "useful_now":
+        return False
+    if getattr(item, "invalid_at", None) is not None and normalized == "history":
+        return True
+    if tier == "archive":
+        # Archive is never part of the everyday useful-now view, even when a
+        # caller also holds the explicit archive capability.  History/all may
+        # opt in through the existing include_archive authorization.
+        if normalized == "useful_now" or not include_archive:
+            return False
+    if normalized == "released":
+        return True
+    if status in {"tombstoned", "hidden"}:
+        return False
+    assessment = belief_view_for_record(item, now=now)
+    if normalized == "useful_now":
+        # Unclassified rows are inspectable on history/all, never the current
+        # working set — matching record_passes_proactive_bar and the overlay
+        # that refuses to mint a current band without a class.
+        if not belief_classification_known(item):
+            return False
+        return assessment.band in {CurrencyBand.current, CurrencyBand.fading} or assessment.band is None
+    if normalized == "history":
+        # History is the explicit dated/retained view: current facts stay in
+        # useful-now, while expired claims, unknown legacy rows, superseded
+        # records, and owner-suppressed records remain inspectable.
+        if suppressed or status == "superseded" or not belief_classification_known(item):
+            return True
+        return assessment.band in {CurrencyBand.fading, CurrencyBand.history}
+    # ``all`` is the explicit owner-visible superset and may include archive
+    # only when the caller has that grant.
+    return True
 
 
 def belief_view(
@@ -243,12 +356,14 @@ def passes_proactive_bar(
     subject_scope: Optional[str],
     superseded_by: Optional[str] = None,
     confidence: Optional[float] = None,
+    suppressed: bool = False,
 ) -> bool:
     """JIT / proactive nudges: current band, user subject, truth not contradicted."""
     return (
         view.band == CurrencyBand.current
         and is_user_subject(subject_scope)
         and not is_contradicted(superseded_by=superseded_by, confidence=confidence)
+        and not suppressed
     )
 
 
@@ -271,7 +386,7 @@ def _record_category(item: object) -> Optional[str]:
 
 def belief_view_for_record(item: object, *, now: datetime) -> BeliefView:
     """Read-side view from a MemoryItem or MemoryDB-shaped record. No I/O."""
-    captured_at = getattr(item, "captured_at", None) or getattr(item, "created_at")
+    captured_at = original_evidence_time(item)
     return belief_view(
         captured_at=captured_at,
         now=now,
@@ -287,12 +402,22 @@ def belief_view_for_record(item: object, *, now: datetime) -> BeliefView:
 
 
 def record_passes_proactive_bar(item: object, *, now: datetime) -> bool:
+    if not belief_classification_known(item):
+        return False
+    if getattr(item, "user_review", None) is False:
+        return False
+    promotion = getattr(item, "promotion", None)
+    if isinstance(promotion, Mapping) and promotion.get("user_review") is False:
+        return False
+    if not has_verified_owner_authorship(item):
+        return False
     scope = getattr(item, "subject_scope", None)
     return passes_proactive_bar(
         belief_view_for_record(item, now=now),
         subject_scope=_enum_value(scope) or (scope if isinstance(scope, str) else None),
         superseded_by=getattr(item, "superseded_by", None),
         confidence=getattr(item, "confidence", None),
+        suppressed=memory_use_suppressed(item),
     )
 
 
@@ -301,18 +426,21 @@ def public_belief_overlay(item: object, *, now: datetime) -> dict[str, object]:
     if not belief_model_enabled():
         return {}
     view = belief_view_for_record(item, now=now)
+    classified = belief_classification_known(item)
     return {
-        "currency": view.currency,
-        "currency_band": view.band.value,
+        "currency": view.currency if classified else None,
+        "currency_band": view.band.value if classified and view.band is not None else None,
         "as_of": view.as_of,
         "half_life_days": view.half_life_days,
         "belief_class": getattr(item, "belief_class", None),
+        "belief_computed_at": now,
     }
 
 
 def public_belief_overlay_json(item: object, *, now: datetime) -> dict[str, object]:
     overlay = public_belief_overlay(item, now=now)
-    as_of = overlay.get("as_of")
-    if isinstance(as_of, datetime):
-        overlay = {**overlay, "as_of": as_of.isoformat()}
+    for field in ("as_of", "belief_computed_at"):
+        value = overlay.get(field)
+        if isinstance(value, datetime):
+            overlay = {**overlay, field: value.isoformat()}
     return overlay

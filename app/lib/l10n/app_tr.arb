@@ -3291,6 +3291,11 @@
     "speechProfileTopicGoal": "Uzun vadeli hedefiniz nedir?",
     "speechToTextUnavailableDesc": "Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.",
     "memoryHistoryPartial": "Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.",
+    "memoryHistory": "Geçmiş",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Kaydı başlatmak için + simgesine dokunun",
-    "processingTakingLonger": "Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor."
+    "processingTakingLonger": "Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.",
+    "speechProfileEnrollmentPrompt": "Omi'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun."
 }

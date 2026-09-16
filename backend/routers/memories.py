@@ -1,6 +1,12 @@
+import base64
+import hashlib
+import hmac
+import json
 import logging
+import time
 import uuid
-from typing import Any, Callable, Dict, List, Literal, Optional, cast
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 import database._client as db_client_module
 from database.legal_holds import DestructiveOperationInProgress
@@ -34,6 +40,8 @@ from utils.memory.import_write_guard import (
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout_sync
 from utils.memory.memory_api_contract import MemoryApiExposure
 from utils.memory.memory_api_response import memory_item_response, memory_list_response
+from utils.memory.belief_model import belief_model_enabled, normalize_temporal_read_view
+from utils.memory.universal_list_cursor import UniversalListCursorError, cursor_secret, cursor_ttl_seconds
 from utils.memory.memory_system import MemorySystem
 from utils.other.list_budget import (
     ListReadBudgetExhausted,
@@ -104,6 +112,8 @@ _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-E
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
 _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported'
 _MEMORY_NEXT_CURSOR_HEADER = 'X-Omi-Memory-Next-Cursor'
+_MEMORY_BELIEF_ENABLED_HEADER = 'X-Omi-Memory-Belief-Enabled'
+_MEMORY_AS_OF_HEADER = 'X-Omi-Memory-As-Of'
 
 
 def _normalize_memory_list_cursor(cursor: Optional[str]) -> Optional[str]:
@@ -112,6 +122,75 @@ def _normalize_memory_list_cursor(cursor: Optional[str]) -> Optional[str]:
         return None
     stripped = cursor.strip()
     return stripped or None
+
+
+_LEDGER_HISTORY_CURSOR_PREFIX = 'umh'
+_LEDGER_HISTORY_CURSOR_VERSION = 1
+
+
+def _encode_ledger_history_cursor(uid: str, start_after: tuple[datetime, str]) -> Optional[str]:
+    """Sign a bounded canonical-history provider keyset for UI continuation."""
+    try:
+        secret = cursor_secret()
+    except UniversalListCursorError:
+        return None
+    updated_at, memory_id = start_after
+    payload = {
+        'v': _LEDGER_HISTORY_CURSOR_VERSION,
+        'uid': uid,
+        'updated_at': updated_at.isoformat(),
+        'memory_id': memory_id,
+        'expires_at': int(time.time()) + cursor_ttl_seconds(),
+    }
+    segment = (
+        base64.urlsafe_b64encode(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8'))
+        .decode('ascii')
+        .rstrip('=')
+    )
+    signature = (
+        base64.urlsafe_b64encode(hmac.new(secret, segment.encode('ascii'), hashlib.sha256).digest())
+        .decode('ascii')
+        .rstrip('=')
+    )
+    return f'{_LEDGER_HISTORY_CURSOR_PREFIX}.{segment}.{signature}'
+
+
+def _decode_ledger_history_cursor(cursor: str, uid: str) -> tuple[datetime, str]:
+    """Validate one owner-bound history provider keyset cursor."""
+    try:
+        secret = cursor_secret()
+    except UniversalListCursorError as exc:
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:missing_secret') from exc
+    parts = cursor.split('.')
+    if len(parts) != 3 or parts[0] != _LEDGER_HISTORY_CURSOR_PREFIX:
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:malformed_cursor')
+    _, segment, signature = parts
+    expected = (
+        base64.urlsafe_b64encode(hmac.new(secret, segment.encode('ascii'), hashlib.sha256).digest())
+        .decode('ascii')
+        .rstrip('=')
+    )
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:invalid_signature')
+    try:
+        padded = segment + '=' * (-len(segment) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode('ascii')).decode('utf-8'))
+        updated_at = datetime.fromisoformat(payload['updated_at'])
+        memory_id = payload['memory_id']
+        if (
+            payload.get('v') != _LEDGER_HISTORY_CURSOR_VERSION
+            or payload.get('uid') != uid
+            or type(payload.get('expires_at')) is not int
+            or int(time.time()) > payload['expires_at']
+            or updated_at.tzinfo is None
+            or not isinstance(memory_id, str)
+            or not memory_id.strip()
+            or '/' in memory_id
+        ):
+            raise ValueError('invalid cursor claims')
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:malformed_cursor') from exc
+    return updated_at, memory_id
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -555,6 +634,8 @@ def get_memories(
     ),
     device_scope: str = Query('all'),
     client_device_id: Optional[str] = Query(None),
+    view: str = 'released',
+    as_of: Optional[datetime] = None,
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
@@ -565,6 +646,22 @@ def get_memories(
     partial array with the ``X-Omi-List-Truncated: true`` header and no
     ``X-Omi-Memory-Next-Cursor`` instead of a bare middleware 504 (#11831).
     """
+    if view == 'released':
+        # Keep the direct-import/stub compatibility path cheap and preserve
+        # the exact released behavior when the selector is omitted.
+        temporal_view = 'released'
+    else:
+        try:
+            temporal_view = normalize_temporal_read_view(view)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not belief_model_enabled():
+            temporal_view = 'released'
+    if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
+        raise HTTPException(status_code=422, detail='as_of must be timezone-aware')
+    if as_of is not None:
+        as_of = as_of.astimezone(timezone.utc)
+
     scope_request = _resolve_get_memories_device_scope(
         device_scope,
         client_device_id,
@@ -587,8 +684,11 @@ def get_memories(
         _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
         _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
         _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'true',
+        _MEMORY_BELIEF_ENABLED_HEADER: 'true' if belief_model_enabled() else 'false',
         'Cache-Control': 'no-store',
     }
+    if as_of is not None:
+        response_headers[_MEMORY_AS_OF_HEADER] = as_of.isoformat()
 
     def _finalize(page_memories: List[MemoryDB], *, truncated: bool, next_cursor: Optional[str]) -> JSONResponse:
         if next_cursor and not truncated:
@@ -620,6 +720,8 @@ def get_memories(
             include_pending_processing=True,
             include_archive=include_archive,
             request_budget=budget,
+            view=temporal_view,
+            as_of=as_of,
         )
         return _finalize(page.memories, truncated=page.truncated or budget.truncated, next_cursor=page.next_cursor)
 
@@ -635,6 +737,8 @@ def get_memories(
                 include_pending_processing=True,
                 include_archive=include_archive,
                 request_budget=budget,
+                view=temporal_view,
+                as_of=as_of,
             )
         except MemoryBackingStoreUnavailable as exc:
             # First page must succeed whenever the legacy offset read can serve
@@ -664,15 +768,31 @@ def get_memories(
                 next_cursor=page.next_cursor,
             )
 
-    memories = MemoryService(db_client=db_client).read(
-        uid,
-        limit=bounded_limit,
-        offset=bounded_offset,
-        device_scope_request=scope_request,
-        include_pending_processing=True,
-        include_archive=include_archive,
-        budget=budget,
-    )
+    read_kwargs: Dict[str, Any] = {
+        "limit": bounded_limit,
+        "offset": bounded_offset,
+        "device_scope_request": scope_request,
+        "include_pending_processing": True,
+        "include_archive": include_archive,
+        "budget": budget,
+    }
+    if temporal_view != 'released':
+        # Apply the temporal admission before offset/limit slicing inside the
+        # service read; post-filtering one already-paged released window would
+        # drop history rows and underfill every offset page.
+        read_kwargs["view"] = temporal_view
+        if as_of is not None:
+            read_kwargs["as_of"] = as_of
+    memories = MemoryService(db_client=db_client).read(uid, **read_kwargs)
+    if temporal_view != 'released':
+        from utils.memory.belief_model import temporal_view_allows_record
+
+        clock = as_of or datetime.now(timezone.utc)
+        memories = [
+            memory
+            for memory in memories
+            if temporal_view_allows_record(memory, view=temporal_view, now=clock, include_archive=include_archive)
+        ]
     return _finalize(memories, truncated=budget.truncated, next_cursor=None)
 
 
@@ -682,6 +802,7 @@ def get_ledger_history(
     request: Request = None,  # type: ignore[assignment]
     limit: int = 100,
     offset: int = 0,
+    cursor: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Return explicit owner-scoped rejected and closed ledger rows.
@@ -691,7 +812,9 @@ def get_ledger_history(
     canonical-only; it returns rows newest-first by ``updated_at`` then
     ``memory_id`` (``limit`` is capped at 500 and the compatibility
     ``offset + limit`` window at 5000).  The provider window is bounded to 500
-    rows plus one sentinel; an incomplete provider/budget window is marked with
+    rows plus one sentinel.  When available, the sentinel becomes an
+    owner-bound signed keyset cursor in ``X-Omi-Memory-Next-Cursor``; an
+    incomplete provider/budget window is also marked with
     ``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never
     resurrected for history UI.
     """
@@ -702,17 +825,32 @@ def get_ledger_history(
     # Unknown/error rollout states also take this cheap path (fail closed).
     rollout = resolve_jit_rollout_sync(uid, stage=JITDecisionStage.READ_ONLY)
     if not rollout.permits_work:
-        return memory_list_response([], MemoryApiExposure.CANONICAL, headers={'Cache-Control': 'no-store'})
+        return memory_list_response(
+            [],
+            MemoryApiExposure.CANONICAL,
+            headers={
+                'Cache-Control': 'no-store',
+                _MEMORY_BELIEF_ENABLED_HEADER: 'true' if belief_model_enabled() else 'false',
+            },
+        )
 
     db_client = getattr(db_client_module, 'db', None)
     budget = list_read_budget_for_request(request, route='memories-ledger-history')
+    history_start_after: Optional[tuple[datetime, str]] = None
+    if cursor:
+        history_start_after = _decode_ledger_history_cursor(cursor, uid)
     try:
-        page = MemoryService(db_client=db_client).read_ledger_history_page(
-            uid,
-            limit=limit,
-            offset=offset,
-            budget=budget,
-        )
+        history_kwargs: Dict[str, Any] = {
+            'limit': limit,
+            # Cursor pages are keyset pages.  The offset sent by newer clients
+            # is only a compatibility bookkeeping value and must not be
+            # applied a second time.
+            'offset': 0 if history_start_after is not None else offset,
+            'budget': budget,
+        }
+        if history_start_after is not None:
+            history_kwargs['start_after'] = history_start_after
+        page = MemoryService(db_client=db_client).read_ledger_history_page(uid, **history_kwargs)
     except HTTPException:
         raise
     except ListReadBudgetExhausted as exc:
@@ -722,6 +860,24 @@ def get_ledger_history(
         raise HTTPException(status_code=503, detail="Ledger history unavailable") from exc
 
     headers = {'Cache-Control': 'no-store'}
+    headers[_MEMORY_BELIEF_ENABLED_HEADER] = 'true' if belief_model_enabled() else 'false'
+    next_cursor = None
+    next_start_after_raw = getattr(page, 'next_start_after', None)
+    if isinstance(next_start_after_raw, tuple):
+        next_start_after_values = cast(Tuple[object, ...], next_start_after_raw)
+        if (
+            len(next_start_after_values) == 2
+            and isinstance(next_start_after_values[0], datetime)
+            and isinstance(next_start_after_values[1], str)
+        ):
+            next_start_after = (next_start_after_values[0], next_start_after_values[1])
+        else:
+            next_start_after = None
+        if page.truncated:
+            if next_start_after is not None:
+                next_cursor = _encode_ledger_history_cursor(uid, next_start_after)
+    if next_cursor:
+        headers[_MEMORY_NEXT_CURSOR_HEADER] = next_cursor
     if budget.truncated or page.truncated:
         headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated or page.truncated else 'complete')

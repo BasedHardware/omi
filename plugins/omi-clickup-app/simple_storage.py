@@ -172,7 +172,7 @@ class SimpleSessionStorage:
             # Always update the last activity timestamp
             kwargs["last_segment_at"] = datetime.utcnow().isoformat()
             sessions[session_id].update(kwargs)
-            print(f"💾 Updated session {session_id}: {kwargs}", flush=True)
+            print(f"💾 Updated session {session_id}: {sorted(kwargs.keys())}", flush=True)
         else:
             print(f"⚠️  Session {session_id} not found for update!", flush=True)
     

@@ -2000,6 +2000,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistoryPartial => '部分记忆历史暂不可用。正在显示目前已获取的历史记录。';
 
   @override
+  String get memoryHistory => '历史';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => '撤销';
 
   @override
@@ -9792,4 +9801,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
+
+  @override
+  String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
 }

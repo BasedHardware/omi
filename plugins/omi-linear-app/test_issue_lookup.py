@@ -86,7 +86,7 @@ class IssueLookupTests(unittest.TestCase):
 
         module.linear_graphql_request = graphql
         module.get_linear_tokens = lambda uid: authenticated
-        module.find_state_by_name = Mock(return_value=SimpleNamespace(id='done-id', name='Done'))
+        module.find_state_by_name = Mock(return_value=(SimpleNamespace(id='done-id', name='Done'), [SimpleNamespace(id='done-id', name='Done')]))
         payload = dict(uid='fixture-user', issue_identifier='eng-123', new_status='Done', comment='Test note')
         if body:
             payload.update(body)
@@ -144,6 +144,91 @@ class IssueLookupTests(unittest.TestCase):
         self.assertIn('ENG-1234', response.result)
         self.assertEqual(calls[0][1], {'term': 'keyword', 'first': 3})
 
+    def test_find_state_by_name_precedence(self):
+        module = load_app()
+        states = [
+            SimpleNamespace(id='not-done-id', name='Not Done', type='unstarted'),
+            SimpleNamespace(id='shipped-id', name='Shipped', type='completed'),
+            SimpleNamespace(id='incomplete-id', name='Incomplete', type='unstarted'),
+            SimpleNamespace(id='todo-later-id', name='Todo Later', type='unstarted'),
+            SimpleNamespace(id='not-in-prog-id', name='Not In Progress', type='unstarted'),
+            SimpleNamespace(id='active-id', name='Active', type='started'),
+        ]
+        module.get_team_states = Mock(return_value=states)
+
+        # Exact match takes precedence
+        state, candidates = module.find_state_by_name('uid', 'team', 'Not Done')
+        self.assertEqual(state.id, 'not-done-id')
+        self.assertEqual([c.id for c in candidates], ['not-done-id'])
+
+        # Type alias takes precedence over partial match
+        # 'done' -> type 'completed' ('Shipped'), NOT substring match in 'Not Done'
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'done')[0].id, 'shipped-id')
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'complete')[0].id, 'shipped-id')
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'in progress')[0].id, 'active-id')
+
+        # Partial match works when no exact or type match
+        self.assertEqual(module.find_state_by_name('uid', 'team', 'Later')[0].id, 'todo-later-id')
+
+        # Unknown state returns no state and no candidates
+        state, candidates = module.find_state_by_name('uid', 'team', 'Nonexistent Status')
+        self.assertIsNone(state)
+        self.assertEqual(candidates, [])
+
+    def test_find_state_by_name_ambiguous_partial_match_is_refused(self):
+        # Regression: 'find_state_by_name' used to return whichever state
+        # happened to be listed first when several names matched. "review"
+        # matches both "In Review" and "Peer Review"; silently picking one
+        # would move the issue to a status the caller never asked for.
+        module = load_app()
+        states = [
+            SimpleNamespace(id='in-review-id', name='In Review', type='started'),
+            SimpleNamespace(id='peer-review-id', name='Peer Review', type='started'),
+        ]
+        module.get_team_states = Mock(return_value=states)
+        state, candidates = module.find_state_by_name('uid', 'team', 'review')
+        self.assertIsNone(state)
+        self.assertEqual(sorted(c.id for c in candidates), ['in-review-id', 'peer-review-id'])
+
+    def test_find_state_by_name_ambiguous_type_alias_is_refused(self):
+        # A Linear team can have more than one state of the same type, e.g.
+        # two "started" columns for two stages of in-progress work.
+        module = load_app()
+        states = [
+            SimpleNamespace(id='dev-id', name='In Dev', type='started'),
+            SimpleNamespace(id='qa-id', name='In QA', type='started'),
+        ]
+        module.get_team_states = Mock(return_value=states)
+        state, candidates = module.find_state_by_name('uid', 'team', 'in progress')
+        self.assertIsNone(state)
+        self.assertEqual(sorted(c.id for c in candidates), ['dev-id', 'qa-id'])
+
+    def test_update_issue_status_reports_ambiguous_candidates(self):
+        module = load_app()
+        states = [
+            SimpleNamespace(id='in-review-id', name='In Review', type='started'),
+            SimpleNamespace(id='peer-review-id', name='Peer Review', type='started'),
+        ]
+
+        def graphql(uid, query, variables=None):
+            if 'searchIssues' in query:
+                return {'searchIssues': {'nodes': [WRONG]}}
+            return {'issue': ISSUE}
+
+        module.linear_graphql_request = graphql
+        module.get_linear_tokens = lambda uid: True
+        module.get_team_states = Mock(return_value=states)
+        payload = dict(uid='fixture-user', issue_identifier='eng-123', new_status='review')
+
+        async def json():
+            return payload
+
+        response = asyncio.run(module.tool_update_issue_status(SimpleNamespace(json=json)))
+        self.assertIsNotNone(response.error)
+        self.assertIn('In Review', response.error)
+        self.assertIn('Peer Review', response.error)
+
 
 if __name__ == '__main__':
     unittest.main()
+

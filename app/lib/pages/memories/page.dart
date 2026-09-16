@@ -336,11 +336,15 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                 ),
                               ),
                             ),
-                            if (provider.ledgerHistoryTruncated)
-                              const SliverToBoxAdapter(
+                            if (provider.memoryBeliefEnabled &&
+                                provider.showHistory &&
+                                (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))
+                              SliverToBoxAdapter(
                                 child: Padding(
-                                  padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-                                  child: MemoryHistoryStatusBanner(),
+                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                  child: MemoryHistoryStatusBanner(
+                                    onLoadMore: provider.ledgerHistoryHasMore ? provider.loadMoreHistory : null,
+                                  ),
                                 ),
                               ),
                             if (provider.showLoadError || provider.filteredMemories.isEmpty)
