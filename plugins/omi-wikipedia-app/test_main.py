@@ -1,65 +1,106 @@
 """
-Unit test suite for the Omi Wikipedia integration app.
+Hermetic test suite for the Omi Wikipedia integration app.
 
-Tests endpoint routing, query formatting, HTML snippet cleaning,
-parameter sanitization, null safety, error handling, and mock API calls.
+Exercises endpoint handlers, string sanitization, null safety, HTML stripping,
+and tools manifest without requiring third-party libraries (httpx, fastapi, pydantic).
+Can run cleanly in isolated python3 environments (e.g., under python3 -S).
 """
 
 from __future__ import annotations
 
 import importlib.util
-import sys
-import unittest
 from pathlib import Path
-from unittest import mock
+import sys
+from types import ModuleType
+import unittest
+from unittest.mock import AsyncMock, patch
 
-try:
-    from fastapi.testclient import TestClient
-except ModuleNotFoundError:
-    TestClient = None
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+def load_app():
+    class FastAPI:
+        def __init__(self, **kwargs):
+            pass
 
-_SPEC = importlib.util.spec_from_file_location(
-    "omi_wikipedia_main", Path(__file__).with_name("main.py")
-)
-assert _SPEC is not None and _SPEC.loader is not None
-main = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = main
-_SPEC.loader.exec_module(main)
+        def get(self, *args, **kwargs):
+            return lambda handler: handler
+
+        post = get
+
+    class BaseModel:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    class HTTPError(Exception):
+        pass
+
+    class HTTPStatusError(HTTPError):
+        def __init__(self, message="", *, request=None, response=None):
+            super().__init__(message)
+            self.response = response
+
+    httpx = ModuleType("httpx")
+    httpx.AsyncClient = object
+    httpx.HTTPError = HTTPError
+    httpx.HTTPStatusError = HTTPStatusError
+
+    fastapi = ModuleType("fastapi")
+    fastapi.FastAPI = FastAPI
+    responses = ModuleType("fastapi.responses")
+    responses.HTMLResponse = str
+    pydantic = ModuleType("pydantic")
+    pydantic.BaseModel = BaseModel
+
+    spec = importlib.util.spec_from_file_location(
+        "omi_wikipedia_main", Path(__file__).with_name("main.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    with patch.dict(
+        sys.modules,
+        {
+            "httpx": httpx,
+            "fastapi": fastapi,
+            "fastapi.responses": responses,
+            "pydantic": pydantic,
+        },
+    ):
+        spec.loader.exec_module(module)
+    return module
+
+
+app = load_app()
 
 
 class WikipediaUnitHelperTests(unittest.TestCase):
     def test_safe_limit_defaults_and_bounds(self):
-        self.assertEqual(main._safe_limit(None), 5)
-        self.assertEqual(main._safe_limit(""), 5)
-        self.assertEqual(main._safe_limit("invalid"), 5)
-        self.assertEqual(main._safe_limit(0), 1)
-        self.assertEqual(main._safe_limit(-10), 1)
-        self.assertEqual(main._safe_limit(7), 7)
-        self.assertEqual(main._safe_limit("7"), 7)
-        self.assertEqual(main._safe_limit(15), 10)
+        self.assertEqual(app._safe_limit(None), 5)
+        self.assertEqual(app._safe_limit(""), 5)
+        self.assertEqual(app._safe_limit("invalid"), 5)
+        self.assertEqual(app._safe_limit(0), 1)
+        self.assertEqual(app._safe_limit(-10), 1)
+        self.assertEqual(app._safe_limit(7), 7)
+        self.assertEqual(app._safe_limit("7"), 7)
+        self.assertEqual(app._safe_limit(15), 10)
 
     def test_safe_language_sanitization(self):
-        self.assertEqual(main._safe_language(None), "en")
-        self.assertEqual(main._safe_language(""), "en")
-        self.assertEqual(main._safe_language("   "), "en")
-        self.assertEqual(main._safe_language("fr"), "fr")
-        self.assertEqual(main._safe_language("ES"), "es")
-        self.assertEqual(main._safe_language("zh-cn"), "zh-cn")
-        self.assertEqual(main._safe_language("invalid_lang!"), "en")
-        self.assertEqual(main._safe_language("toolonglanguagecode"), "en")
+        self.assertEqual(app._safe_language(None), "en")
+        self.assertEqual(app._safe_language(""), "en")
+        self.assertEqual(app._safe_language("   "), "en")
+        self.assertEqual(app._safe_language("fr"), "fr")
+        self.assertEqual(app._safe_language("ES"), "es")
+        self.assertEqual(app._safe_language("zh-cn"), "zh-cn")
+        self.assertEqual(app._safe_language("invalid_lang!"), "en")
+        self.assertEqual(app._safe_language("toolonglanguagecode"), "en")
 
     def test_clean_snippet_strips_html_and_unescapes(self):
-        self.assertEqual(main._clean_snippet(None), "")
-        self.assertEqual(main._clean_snippet(""), "")
+        self.assertEqual(app._clean_snippet(None), "")
+        self.assertEqual(app._clean_snippet(""), "")
         snippet = '<span class="searchmatch">Albert</span> Einstein &amp; Niels Bohr'
-        self.assertEqual(main._clean_snippet(snippet), "Albert Einstein & Niels Bohr")
+        self.assertEqual(app._clean_snippet(snippet), "Albert Einstein & Niels Bohr")
 
     def test_article_url_encoding(self):
-        url = main._article_url("en", "Albert Einstein")
+        url = app._article_url("en", "Albert Einstein")
         self.assertEqual(url, "https://en.wikipedia.org/wiki/Albert_Einstein")
-        url_special = main._article_url("fr", "Café & Thé")
+        url_special = app._article_url("fr", "Café & Thé")
         self.assertEqual(url_special, "https://fr.wikipedia.org/wiki/Caf%C3%A9_%26_Th%C3%A9")
 
     def test_format_summary_null_safety(self):
@@ -74,62 +115,52 @@ class WikipediaUnitHelperTests(unittest.TestCase):
                 }
             },
         }
-        formatted = main._format_summary(data_full, "en")
+        formatted = app._format_summary(data_full, "en")
         self.assertIn("Quantum mechanics", formatted)
         self.assertIn("Branch of physics", formatted)
         self.assertIn("https://en.wikipedia.org/wiki/Quantum_mechanics", formatted)
 
         # Regressions: None content_urls or None desktop must not raise AttributeError
         data_none_urls = {"title": "Null URLs", "content_urls": None}
-        formatted_none = main._format_summary(data_none_urls, "en")
+        formatted_none = app._format_summary(data_none_urls, "en")
         self.assertIn("Null URLs", formatted_none)
         self.assertIn("https://en.wikipedia.org/wiki/Null_URLs", formatted_none)
 
         data_none_desktop = {"title": "Null Desktop", "content_urls": {"desktop": None}}
-        formatted_desktop = main._format_summary(data_none_desktop, "en")
+        formatted_desktop = app._format_summary(data_none_desktop, "en")
         self.assertIn("Null Desktop", formatted_desktop)
         self.assertIn("https://en.wikipedia.org/wiki/Null_Desktop", formatted_desktop)
 
 
-@unittest.skipIf(TestClient is None, "fastapi/httpx test dependencies are not installed")
-class WikipediaEndpointTests(unittest.TestCase):
-    def setUp(self):
-        self.client = TestClient(main.app)
+class WikipediaEndpointAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_root_endpoint(self):
+        res = await app.root()
+        self.assertIn("Wikipedia x Omi", res)
 
-    def test_root_endpoint(self):
-        res = self.client.get("/")
-        self.assertEqual(res.status_code, 200)
-        self.assertIn("Wikipedia x Omi", res.text)
+    async def test_health_endpoint(self):
+        res = await app.health()
+        self.assertEqual(res, {"status": "ok"})
 
-    def test_health_endpoint(self):
-        res = self.client.get("/health")
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json(), {"status": "ok"})
-
-    def test_tools_manifest(self):
-        res = self.client.get("/.well-known/omi-tools.json")
-        self.assertEqual(res.status_code, 200)
-        tools = res.json()["tools"]
-        tool_names = [t["name"] for t in tools]
+    async def test_tools_manifest(self):
+        res = await app.get_omi_tools_manifest()
+        self.assertIn("tools", res)
+        tool_names = [t["name"] for t in res["tools"]]
         self.assertIn("search_articles", tool_names)
         self.assertIn("get_article_summary", tool_names)
         self.assertIn("get_random_article", tool_names)
 
-        # Validate JSON schema structure
-        for t in tools:
+        for t in res["tools"]:
             self.assertEqual(t["parameters"]["type"], "object")
             self.assertIn("properties", t["parameters"])
 
-    def test_search_articles_missing_query(self):
-        res = self.client.post("/tools/search_articles", json={})
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json()["error"], "Missing required field: query")
+    async def test_search_articles_missing_query(self):
+        res = await app.search_articles({})
+        self.assertEqual(res.error, "Missing required field: query")
 
-        res_empty = self.client.post("/tools/search_articles", json={"query": "   "})
-        self.assertEqual(res_empty.status_code, 200)
-        self.assertEqual(res_empty.json()["error"], "Missing required field: query")
+        res_empty = await app.search_articles({"query": "   "})
+        self.assertEqual(res_empty.error, "Missing required field: query")
 
-    def test_search_articles_success(self):
+    async def test_search_articles_success(self):
         mock_data = {
             "query": {
                 "search": [
@@ -140,37 +171,34 @@ class WikipediaEndpointTests(unittest.TestCase):
                 ]
             }
         }
-        with mock.patch.object(main, "_request_json", return_value=mock_data) as mock_req:
-            res = self.client.post("/tools/search_articles", json={"query": "AI", "limit": 3})
-            self.assertEqual(res.status_code, 200)
-            mock_req.assert_called_once()
-            result = res.json()["result"]
-            self.assertIn("Wikipedia search results for 'AI':", result)
-            self.assertIn("1. Artificial intelligence", result)
-            self.assertIn("Intelligence demonstrated by machines.", result)
-            self.assertIn("https://en.wikipedia.org/wiki/Artificial_intelligence", result)
+        with patch.object(app, "_request_json", AsyncMock(return_value=mock_data)) as mock_req:
+            res = await app.search_articles({"query": "AI", "limit": 3})
+            self.assertIsNone(res.error)
+            mock_req.assert_awaited_once()
+            self.assertIn("Wikipedia search results for 'AI':", res.result)
+            self.assertIn("1. Artificial intelligence", res.result)
+            self.assertIn("Intelligence demonstrated by machines.", res.result)
+            self.assertIn("https://en.wikipedia.org/wiki/Artificial_intelligence", res.result)
 
-    def test_search_articles_no_results(self):
+    async def test_search_articles_no_results(self):
         mock_data = {"query": {"search": []}}
-        with mock.patch.object(main, "_request_json", return_value=mock_data):
-            res = self.client.post("/tools/search_articles", json={"query": "xyz123nonsense456"})
-            self.assertEqual(res.status_code, 200)
-            self.assertIn("No Wikipedia articles found", res.json()["result"])
+        with patch.object(app, "_request_json", AsyncMock(return_value=mock_data)):
+            res = await app.search_articles({"query": "xyz123nonsense456"})
+            self.assertIsNone(res.error)
+            self.assertIn("No Wikipedia articles found", res.result)
 
-    def test_search_articles_malformed_query_dict(self):
-        # Query payload returning null query field or non-list search
+    async def test_search_articles_malformed_query_dict(self):
         mock_data = {"query": None}
-        with mock.patch.object(main, "_request_json", return_value=mock_data):
-            res = self.client.post("/tools/search_articles", json={"query": "something"})
-            self.assertEqual(res.status_code, 200)
-            self.assertIn("No Wikipedia articles found", res.json()["result"])
+        with patch.object(app, "_request_json", AsyncMock(return_value=mock_data)):
+            res = await app.search_articles({"query": "something"})
+            self.assertIsNone(res.error)
+            self.assertIn("No Wikipedia articles found", res.result)
 
-    def test_get_article_summary_missing_title(self):
-        res = self.client.post("/tools/get_article_summary", json={})
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json()["error"], "Missing required field: title")
+    async def test_get_article_summary_missing_title(self):
+        res = await app.get_article_summary({})
+        self.assertEqual(res.error, "Missing required field: title")
 
-    def test_get_article_summary_success(self):
+    async def test_get_article_summary_success(self):
         mock_data = {
             "title": "Python (programming language)",
             "description": "High-level programming language",
@@ -181,28 +209,24 @@ class WikipediaEndpointTests(unittest.TestCase):
                 }
             },
         }
-        with mock.patch.object(main, "_request_json", return_value=mock_data):
-            res = self.client.post(
-                "/tools/get_article_summary", json={"title": "Python (programming language)"}
-            )
-            self.assertEqual(res.status_code, 200)
-            result = res.json()["result"]
-            self.assertIn("Python (programming language)", result)
-            self.assertIn("High-level programming language", result)
+        with patch.object(app, "_request_json", AsyncMock(return_value=mock_data)):
+            res = await app.get_article_summary({"title": "Python (programming language)"})
+            self.assertIsNone(res.error)
+            self.assertIn("Python (programming language)", res.result)
+            self.assertIn("High-level programming language", res.result)
 
-    def test_get_article_summary_disambiguation(self):
+    async def test_get_article_summary_disambiguation(self):
         mock_data = {
             "type": "disambiguation",
             "title": "Mercury",
             "extract": "Mercury most often refers to...",
         }
-        with mock.patch.object(main, "_request_json", return_value=mock_data):
-            res = self.client.post("/tools/get_article_summary", json={"title": "Mercury"})
-            self.assertEqual(res.status_code, 200)
-            result = res.json()["result"]
-            self.assertIn("This is a disambiguation page", result)
+        with patch.object(app, "_request_json", AsyncMock(return_value=mock_data)):
+            res = await app.get_article_summary({"title": "Mercury"})
+            self.assertIsNone(res.error)
+            self.assertIn("This is a disambiguation page", res.result)
 
-    def test_get_random_article_success(self):
+    async def test_get_random_article_success(self):
         mock_random = {
             "query": {
                 "random": [
@@ -214,19 +238,18 @@ class WikipediaEndpointTests(unittest.TestCase):
             "title": "Random Article Title",
             "extract": "A fascinating random topic.",
         }
-        with mock.patch.object(main, "_request_json", side_effect=[mock_random, mock_summary]):
-            res = self.client.post("/tools/get_random_article", json={})
-            self.assertEqual(res.status_code, 200)
-            result = res.json()["result"]
-            self.assertIn("Random Wikipedia article:", result)
-            self.assertIn("Random Article Title", result)
+        with patch.object(app, "_request_json", AsyncMock(side_effect=[mock_random, mock_summary])):
+            res = await app.get_random_article({})
+            self.assertIsNone(res.error)
+            self.assertIn("Random Wikipedia article:", res.result)
+            self.assertIn("Random Article Title", res.result)
 
-    def test_get_random_article_empty_response(self):
+    async def test_get_random_article_empty_response(self):
         mock_random = {"query": {"random": []}}
-        with mock.patch.object(main, "_request_json", return_value=mock_random):
-            res = self.client.post("/tools/get_random_article", json={})
-            self.assertEqual(res.status_code, 200)
-            self.assertIn("No random Wikipedia article was returned", res.json()["result"])
+        with patch.object(app, "_request_json", AsyncMock(return_value=mock_random)):
+            res = await app.get_random_article({})
+            self.assertIsNone(res.error)
+            self.assertIn("No random Wikipedia article was returned", res.result)
 
 
 if __name__ == "__main__":
