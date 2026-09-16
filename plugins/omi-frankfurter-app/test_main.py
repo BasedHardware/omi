@@ -292,7 +292,7 @@ class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = []
             resp = await main.list_supported_currencies()
-            self.assertEqual(resp.error, "currency list request returned no countries" if "countries" in resp.error else "currency list request returned no currencies")
+            self.assertEqual(resp.error, "currency list request returned no currencies")
 
 
 class LifespanAndFallbackTests(unittest.IsolatedAsyncioTestCase):
