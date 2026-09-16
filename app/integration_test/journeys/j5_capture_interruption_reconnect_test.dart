@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -7,9 +6,7 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/scenarios/capture_scenario.dart';
 import 'package:omi/services/dev_controls/journey_faults.dart';
-import 'package:omi/services/dev_controls/semantic_controls.dart';
 import 'package:omi/services/wals/wal.dart';
-import 'package:omi/services/wals/wal_interfaces.dart' show WalStatus;
 
 import '../../test/support/capture/capture_replay_world.dart';
 import 'support/journey_evidence.dart';

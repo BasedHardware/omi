@@ -118,7 +118,7 @@ void main() {
   });
 }
 
-AuthUserSnapshot get gatewayUser => AuthUserSnapshot(
+AuthUserSnapshot get gatewayUser => const AuthUserSnapshot(
       uid: 'omi-fixture-v1-user-1',
       email: 'omi-fixture-v1-user-1@local.test',
       displayName: 'Journey Fixture',
