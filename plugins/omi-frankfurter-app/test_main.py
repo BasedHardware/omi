@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from main import _parse_amount, app
+from main import FRANKFURTER_BASE_URL, _format_decimal, _parse_amount, app
 
 
 def test_parse_amount_valid():
@@ -93,3 +93,49 @@ def test_convert_currency_valid_amount_success():
         assert "50 USD on 2026-09-09:" in data["result"]
         assert "- EUR: 45.5" in data["result"]
         assert "- GBP: 39.2" in data["result"]
+
+
+# =========================================================================
+# Regression tests for Issue #14161 (Redirect & Small Reference Rate Display)
+# =========================================================================
+
+def test_frankfurter_base_url_canonical_v1():
+    """Verify endpoint is updated to canonical v1 to avoid 301 redirects."""
+    assert FRANKFURTER_BASE_URL == "https://api.frankfurter.dev/v1"
+
+
+def test_format_decimal_preserves_small_rates_precision():
+    """Verify small reference rates (<0.0001) do not display as 0."""
+    # Standard rates
+    assert _format_decimal(50) == "50"
+    assert _format_decimal("19.95") == "19.95"
+    assert _format_decimal(1.23456) == "1.2346"
+
+    # Small rates (e.g. 1 IDR = 0.000042 GBP)
+    assert _format_decimal(0.000042) == "0.000042"
+    assert _format_decimal("0.000042") == "0.000042"
+    assert _format_decimal(0.00000123) == "0.00000123"
+
+
+def test_get_latest_rates_small_reference_rate_display():
+    """Verify get_latest_rates outputs precise small rates without truncating to 0."""
+    client = TestClient(app)
+
+    mock_payload = {
+        "amount": 1.0,
+        "base": "IDR",
+        "date": "2026-09-15",
+        "rates": {"GBP": 0.000042},
+    }
+
+    with patch("main._request_json", new_callable=AsyncMock) as mock_req:
+        mock_req.return_value = mock_payload
+        resp = client.post(
+            "/tools/get_latest_rates",
+            json={"base_currency": "IDR", "to_currencies": ["GBP"]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["error"] is None
+        assert "1 IDR = 0.000042 GBP" in data["result"]
+        assert "1 IDR = 0 GBP" not in data["result"]
