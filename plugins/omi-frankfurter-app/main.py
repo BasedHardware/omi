@@ -16,14 +16,16 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 
-FRANKFURTER_BASE_URL = "https://api.frankfurter.app"
+# Updated to canonical v1 API endpoint to prevent 301 Moved Permanently redirects
+FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_TARGET_CURRENCIES = 10
 
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+    # follow_redirects=True ensures resilience against future URL relocations
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=True) as client:
         app_instance.state.http_client = client
         yield
 
@@ -31,7 +33,7 @@ async def lifespan(app_instance: FastAPI):
 app = FastAPI(
     title="Omi Frankfurter Currency Integration",
     description="Convert currencies and check reference exchange rates from Omi chat tools",
-    version="1.0.0",
+    version="1.0.1",
     lifespan=lifespan,
 )
 
@@ -110,7 +112,12 @@ def _parse_amount(value: str | float | int) -> Decimal:
 
 
 def _format_decimal(value: Decimal | float | int) -> str:
-    number = Decimal(str(value)).quantize(Decimal("0.0001")).normalize()
+    dec = Decimal(str(value))
+    # If the rate is smaller than 0.0001, format with up to 8 decimal places so small exchange rates don't display as 0
+    if 0 < abs(dec) < Decimal("0.0001"):
+        number = dec.quantize(Decimal("0.00000001")).normalize()
+    else:
+        number = dec.quantize(Decimal("0.0001")).normalize()
     return format(number, "f")
 
 
