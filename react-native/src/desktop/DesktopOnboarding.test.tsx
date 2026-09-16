@@ -43,13 +43,14 @@ async function mount(
 }
 async function press(label: string) {
   await act(async () => {
-    const button = renderer.root
-      .findAllByType(Button)
-      .find(
-        node =>
-          node.props.accessibilityLabel === label ||
-          node.props.children === label,
-      );
+    const button = renderer.root.findAll(node => {
+      if (typeof node.props.onPress !== 'function') {
+        return false;
+      }
+      const named = String(node.props.accessibilityLabel ?? '');
+      const child = String(node.props.children ?? '');
+      return named === label || child === label || named.includes(label);
+    })[0];
     expect(button).toBeDefined();
     expect(button!.props.disabled).not.toBe(true);
     button!.props.onPress();
@@ -65,9 +66,10 @@ test('explains privacy before sign-in, handles auth transition, and finishes onl
   expect(requestDesktopPermission).not.toHaveBeenCalled();
   await press('Get started');
   expect(content()).toContain('Cloud AI services');
+  expect(content()).toContain('you read it back from Home');
   expect(signIn).not.toHaveBeenCalled();
   await press('Continue');
-  expect(content()).toMatch(/Step\s+2\s+of\s+5/);
+  expect(content()).toMatch(/Step\s+2\s+of\s+6/);
   await press('Sign in');
   expect(signIn).toHaveBeenCalledTimes(1);
   await act(async () =>
@@ -80,13 +82,21 @@ test('explains privacy before sign-in, handles auth transition, and finishes onl
       />,
     ),
   );
-  expect(content()).toContain('Choose what Omi can access');
-  expect(content()).toMatch(/Step\s+3\s+of\s+5/);
+  expect(content()).toContain('Now the permissions.');
+  expect(content()).toMatch(/Step\s+3\s+of\s+6/);
   expect(loadPermissionStatus).toHaveBeenCalledTimes(1);
   expect(requestDesktopPermission).not.toHaveBeenCalled();
-  await press('Continue without more permissions');
-  expect(content()).toContain('A quick look around');
+  await press("I'll do these later");
+  expect(content()).toContain('Connect harnesses');
+  expect(content()).toContain('AI assistants');
+  expect(content()).toContain('Connect data');
+  expect(content()).toContain('OpenClaw');
+  expect(content()).toContain('Local files');
+  expect(content()).toContain('X (Twitter)');
+  expect(content()).not.toContain('Connect Claude when you are ready');
   await press('Continue');
+  expect(content()).toContain('A quick look around');
+  await press('Not now');
   expect(complete).not.toHaveBeenCalled();
   await press('Agree and continue');
   expect(complete).toHaveBeenCalledWith(false);
@@ -96,16 +106,16 @@ test('restored accounts skip sign-in, permission denial and failure never block 
   await mount({setupRequired: true});
   await press('Get started');
   await press('Continue');
-  await press('Allow screen recording');
-  expect(content()).toContain('Not allowed');
+  await press('I would like to see your screen');
+  expect(content()).toContain('Open Settings');
   jest
     .mocked(requestDesktopPermission)
     .mockRejectedValueOnce(new Error('private native error'));
-  await press('Allow screen recording');
+  await press('I would like to see your screen');
   expect(content()).toContain('Permission request failed');
   expect(content()).not.toContain('private native error');
-  await press('Continue without more permissions');
-  expect(content()).toContain('A quick look around');
+  await press("I'll do these later");
+  expect(content()).toContain('Connect harnesses');
   expect(signIn).not.toHaveBeenCalled();
 });
 
@@ -120,9 +130,9 @@ test('late permission completion cannot change a retired account or block the la
   await mount({setupRequired: true});
   await press('Get started');
   await press('Continue');
-  await press('Allow screen recording');
-  expect(content()).toContain('Waiting for macOS');
-  await press('Continue without more permissions');
+  await press('I would like to see your screen');
+  expect(content()).toContain('Asking');
+  await press("I'll do these later");
   await act(async () =>
     renderer.update(<DesktopOnboarding onSignIn={signIn} signingIn={false} />),
   );
@@ -154,8 +164,9 @@ test('sign-in cancellation and setup failure preserve retry controls without aut
       />,
     ),
   );
-  await press('Continue without more permissions');
+  await press("I'll do these later");
   await press('Continue');
+  await press('Not now');
   await act(async () =>
     renderer.update(
       <DesktopOnboarding
