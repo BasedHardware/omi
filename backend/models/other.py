@@ -1,12 +1,30 @@
 from datetime import datetime
 from typing import Any, Callable, Iterable, List, Mapping, Optional
 
-from pydantic import BaseModel, Field
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class SaveFcmTokenRequest(BaseModel):
     fcm_token: str
     time_zone: str
+
+
+class SyncUserTimeZoneRequest(BaseModel):
+    time_zone: str
+
+    @field_validator("time_zone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("time_zone must be a non-empty IANA timezone")
+        try:
+            ZoneInfo(stripped)
+        except Exception as exc:
+            raise ValueError("time_zone must be a valid IANA timezone") from exc
+        return stripped
 
 
 class FcmTokenResponse(BaseModel):

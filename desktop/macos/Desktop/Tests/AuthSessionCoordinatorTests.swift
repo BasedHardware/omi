@@ -75,6 +75,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(authSource.contains("func performLightSessionInvalidation()"))
     XCTAssertTrue(authSource.contains("clearTokens()"))
     XCTAssertTrue(authSource.contains("commitSignedOutSession("))
+    XCTAssertTrue(authSource.contains("commitLightInvalidatedSession("))
 
     // Nuclear signOut still wipes onboarding — invalidate must not.
     let signOutRange = authSource.range(of: "func signOut(")
@@ -87,23 +88,46 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(signOutSnippet.contains("OnboardingFlow.clearPersistedState()"))
     XCTAssertTrue(signOutSnippet.contains("userDidSignOut"))
 
-    let invalidateRange = authSource.range(of: "func performLightSessionInvalidation()")
-    XCTAssertNotNil(invalidateRange)
-    let invalidateSnippet = String(authSource[invalidateRange!.lowerBound...]).prefix(500)
+    let invalidateRange = try XCTUnwrap(authSource.range(of: "func performLightSessionInvalidation()"))
+    let invalidateSnippet = String(authSource[invalidateRange.lowerBound...]).prefix(900)
     XCTAssertFalse(invalidateSnippet.contains("clearPersistedState"))
     XCTAssertFalse(invalidateSnippet.contains("onboardingStep"))
     XCTAssertFalse(invalidateSnippet.contains("userDidSignOut"))
     XCTAssertFalse(invalidateSnippet.contains("stopTranscription"))
+    XCTAssertFalse(invalidateSnippet.contains("commitSignedOutSession"))
+    XCTAssertTrue(invalidateSnippet.contains("commitLightInvalidatedSession"))
   }
 
   func testChatProviderStopsBridgeOnSessionInvalidateWithoutFullReset() throws {
-    let source = try sourceFile("Providers/ChatProvider.swift")
-    XCTAssertTrue(source.contains("sessionDidInvalidate"))
-    XCTAssertTrue(source.contains("sessionInvalidateObserver"))
-    let invalidateBlock = source.range(of: "sessionDidInvalidate — stopping agent bridge")
-    XCTAssertNotNil(invalidateBlock)
-    let snippet = String(source[invalidateBlock!.lowerBound...]).prefix(400)
+    let provider = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(provider.contains("makeAuthSessionNotificationObserver"))
+    XCTAssertTrue(provider.contains("stopAgentBridgeAfterSessionInvalidation"))
+    let invalidateBlock = try XCTUnwrap(provider.range(of: "sessionDidInvalidate — stopping agent bridge"))
+    let snippet = String(provider[invalidateBlock.lowerBound...]).prefix(400)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
+  }
+
+  func testChatProviderReloadsSessionsAfterAuthentication() throws {
+    let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
+    XCTAssertTrue(authExtension.contains("reloadChatSessionsAfterAuthentication"))
+    XCTAssertTrue(authExtension.contains("sessionDidAuthenticate"))
+    let authBlock = try XCTUnwrap(authExtension.range(of: "sessionDidAuthenticate — reloading chat sessions"))
+    let snippet = String(authExtension[authBlock.lowerBound...]).prefix(350)
+    XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
+  }
+
+  func testRestoreAuthStatePreservesReauthOwnerWithoutSignedInBoolean() throws {
+    let source = try sourceFile("AuthService.swift")
+    let restoreRange = try XCTUnwrap(source.range(of: "private func restoreAuthState(attempt:"))
+    let restoreSnippet = String(source[restoreRange.lowerBound...]).prefix(2200)
+    XCTAssertTrue(restoreSnippet.contains("preservedReauthOwnerId()"))
+    XCTAssertTrue(restoreSnippet.contains("restorePreservedReauthOwner"))
+    let ownerTransition = try sourceFile("Auth/AuthOwnerTransition.swift")
+    XCTAssertTrue(ownerTransition.contains("transition(to: .needsReauth)"))
+    let listenerRange = try XCTUnwrap(source.range(of: "private func setupAuthStateListener()"))
+    let listenerSnippet = String(source[listenerRange.lowerBound...]).prefix(3200)
+    XCTAssertTrue(listenerSnippet.contains("handleFirebaseNilUserWithoutSavedSignedIn()"))
+    XCTAssertTrue(ownerTransition.contains("preserving needsReauth"))
   }
 
   func testRefreshIdTokenUsesClassifierNotBlanket400() throws {

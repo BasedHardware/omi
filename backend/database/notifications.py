@@ -13,10 +13,12 @@ once a time_zone or preference write has run (and after the one-time backfill).
 Those two fields are the write-time form of the Python defaults True / 22.
 """
 
+from zoneinfo import ZoneInfo
+
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
-from ._client import db
+from ._client import db, get_firestore_client
 from .cache import get_memory_cache
 from .firestore_index_registry import DAILY_SUMMARY_RECIPIENTS_QUERY
 import logging
@@ -104,6 +106,45 @@ def get_user_time_zone(uid: str) -> Optional[str]:
         tz = user_data.get('time_zone')
         return str(tz) if tz is not None else None
     return None
+
+
+def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
+    """Persist the client's reported IANA timezone on the user document."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+
+
+def resolve_user_timezone(uid: str) -> str:
+    """Return a validated IANA timezone for ``uid``, or ``UTC`` when missing/invalid."""
+    tz = get_user_time_zone(uid)
+    if tz is None:
+        return "UTC"
+    try:
+        ZoneInfo(tz)
+        return tz
+    except Exception:
+        return "UTC"
+
+
+def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
+    """Persist a client-reported IANA timezone when it changes and return the resolved zone."""
+    if not request_tz:
+        return resolve_user_timezone(uid)
+    try:
+        ZoneInfo(request_tz)
+    except Exception:
+        logger.warning("sync_user_time_zone_from_client - invalid request_tz, ignoring")
+        return resolve_user_timezone(uid)
+    stored = get_user_time_zone(uid)
+    if stored != request_tz:
+        try:
+            set_user_time_zone(uid, request_tz)
+        except Exception:
+            logger.exception(
+                "sync_user_time_zone_from_client - failed to persist time_zone uid=%s",
+                uid,
+            )
+    return request_tz
 
 
 def set_user_time_zone_if_missing(uid: str, time_zone: str) -> bool:

@@ -2059,6 +2059,15 @@ class AppLocalizationsEl extends AppLocalizations {
       'Ένα μέρος του ιστορικού αναμνήσεων δεν είναι διαθέσιμο. Εμφανίζεται το ιστορικό που έχει ληφθεί μέχρι τώρα.';
 
   @override
+  String get memoryHistory => 'Ιστορικό';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Αναίρεση';
 
   @override
@@ -10052,4 +10061,8 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ακόμα σε εξέλιξη — χρειάζεται περισσότερο χρόνο από το συνηθισμένο.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Για να ξέρει το Omi ποια φωνή είναι δική σας — μιλήστε για οτιδήποτε για περίπου 5 δευτερόλεπτα.';
 }

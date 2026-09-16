@@ -43,18 +43,31 @@ class VertexPTPolicyMixin:
         return [(serving, self._capacity_for(serving))]
 
     def _serving_model(self, anchor: str) -> str:
-        intended = ptr.desktop_serving_model(
-            anchor,
-            target_dedicated_ready=self._pt_target_is_ready(),
-            override=self._env(self._pt_model_override_env),
+        intended = self._validated_pin(
+            lambda: ptr.desktop_serving_model(
+                anchor,
+                target_dedicated_ready=self._pt_target_is_ready(),
+                override=self._env(self._pt_model_override_env),
+            )
         )
         return self._first_reachable(intended)
 
     def _provisioned_model(self) -> str:
-        return ptr.resolve_pt_model(
-            target_dedicated_ready=self._pt_target_is_ready(),
-            override=self._env(self._pt_model_override_env),
+        return self._validated_pin(
+            lambda: ptr.resolve_pt_model(
+                target_dedicated_ready=self._pt_target_is_ready(),
+                override=self._env(self._pt_model_override_env),
+            )
         )
+
+    @staticmethod
+    def _validated_pin(resolve: Callable[[], str]) -> str:
+        """SCA-481: a prohibited or undeclared operator pin — a Pro/image-output
+        shape — fails the request closed instead of dispatching PayGo."""
+        try:
+            return resolve()
+        except ValueError as exc:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG, str(exc)) from exc
 
     def _capacity_for(self, model: str) -> str:
         return ptr.request_type_for(model=model, pt_model=self._provisioned_model())

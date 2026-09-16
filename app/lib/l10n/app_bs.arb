@@ -10822,6 +10822,11 @@
     "speechProfileTopicGoal": "Koji je vaš dugoročni cilj?",
     "speechToTextUnavailableDesc": "Pretvaranje govora u tekst trenutno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju, pa pokušajte ponovo.",
     "memoryHistoryPartial": "Dio historije sjećanja nije dostupan. Prikazuje se dosad primljena historija.",
+    "memoryHistory": "Historija",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Dodirnite + za početak snimanja",
-    "processingTakingLonger": "Još traje — ovo traje duže nego inače."
+    "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
+    "speechProfileEnrollmentPrompt": "Da Omi zna koji je glas vaš — pričajte o bilo čemu oko 5 sekundi."
 }
