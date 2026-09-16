@@ -560,6 +560,7 @@ export async function loadLegacyConversationDetail(
                   segment.person_id === undefined || segment.person_id === null
                     ? undefined
                     : text(segment.person_id, 1_000_000);
+                presentOptionalInteger(segment.speaker_id);
                 const translations = segmentTranslations(segment.translations);
                 const sttProvider =
                   segment.stt_provider === undefined ||

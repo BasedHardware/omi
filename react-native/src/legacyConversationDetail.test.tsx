@@ -2846,6 +2846,67 @@ test('old conversation details name Flutter GeneratedAudioFile fromJson padded G
   }
 });
 
+test('old conversation details name Flutter GeneratedTranscriptSegment fromJson padded GET speaker_id instead of remapping to a recap', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          speaker_id: '1',
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          speaker_id: 1,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          speaker_id: null,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+  });
+  for (const speaker_id of ['  1  ', '1 ', '  1', '1\n', '\u00851']) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        transcript_segments: [
+          {
+            ...fixture.transcript_segments[0],
+            speaker_id,
+          },
+        ],
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
 test('keeps first GET apps_results content and falls back to plugins_results', async () => {
   mockRequest.mockResolvedValue(
     response({
