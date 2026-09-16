@@ -154,7 +154,7 @@ async function openChat(renderer: ReactTestRenderer.ReactTestRenderer) {
   );
 }
 async function reachAgreement(renderer: ReactTestRenderer.ReactTestRenderer) {
-  for (const label of ['Continue without more permissions', 'Continue']) {
+  for (const label of ["I'll do these later", 'Continue', 'Not now']) {
     await act(async () =>
       renderer.root
         .find(node => node.props.accessibilityLabel === label)
@@ -249,7 +249,7 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
   });
   expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
   expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
-  expect(textOf(renderer)).toContain('Choose what Omi can access');
+  expect(textOf(renderer)).toContain('Now the permissions.');
   expect(mockBackend.request).not.toHaveBeenCalled();
   mockAuth.hasCloudSession.mockResolvedValue(true);
   await reachAgreement(renderer);
