@@ -134,7 +134,14 @@ export function localProxyRequestInit(init: RequestInit = {}): RequestInit {
       throw new Error(`browser requests cannot set ${name}`);
     }
   });
-  if (init.body !== undefined && init.body !== null) {
+  if (
+    init.body !== undefined &&
+    init.body !== null &&
+    typeof FormData === 'function' &&
+    init.body instanceof FormData
+  ) {
+    headers.delete('content-type');
+  } else if (init.body !== undefined && init.body !== null) {
     headers.set('content-type', 'application/json');
   }
   return {...init, credentials: 'omit', headers};
