@@ -75,6 +75,18 @@ jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => mockReduceMotion,
 }));
 
+jest.mock('../omiNative', () => ({
+  omiAuth: null,
+  omiBackend: null,
+  omiNative: {
+    requestPermissions: jest.fn(async () => ({
+      microphone: 'denied',
+      notifications: 'denied',
+    })),
+  },
+  requestBluetoothScanPermission: jest.fn(async () => false),
+}));
+
 import {Animated} from 'react-native';
 import {Button} from './Button';
 import {ReadStatus} from './ReadStatus';
@@ -335,7 +347,32 @@ describe('Onboarding chrome', () => {
     ).toHaveLength(0);
   });
 
-  test('browser setup continues without offering unavailable wearable capture', () => {
+  async function finishMobileSetup(
+    renderer: ReactTestRenderer.ReactTestRenderer,
+  ) {
+    const press = async (label: string) => {
+      await act(async () => {
+        renderer.root
+          .find(node => node.props.accessibilityLabel === label)
+          .props.onPress();
+      });
+    };
+    await press('Agree & Continue');
+    await act(async () => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Enter your name')
+        .props.onChangeText('Sam');
+    });
+    await press('Continue');
+    await press('Continue');
+    await press('TikTok');
+    await press('Continue');
+    await press("I'll do these later");
+    await press('Skip for now');
+    await press('Continue');
+  }
+
+  test('browser setup continues without offering unavailable wearable capture', async () => {
     mockPlatformOS = 'web';
     const complete = jest.fn();
     const renderer = render(
@@ -346,13 +383,14 @@ describe('Onboarding chrome', () => {
         onCompleteSetup={complete}
       />,
     );
+    await finishMobileSetup(renderer);
     expect(
       renderer.root.findAll(
         node => node.props.accessibilityLabel === 'Agree and connect Omi',
       ),
     ).toHaveLength(0);
     const action = renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Agree and continue',
+      node => node.props.accessibilityLabel === 'Start Using Omi',
     )[0];
     act(() => action.props.onPress());
     expect(complete).toHaveBeenCalledWith(false);
@@ -370,14 +408,16 @@ describe('Onboarding chrome', () => {
     );
     const output = JSON.stringify(renderer.toJSON());
 
+    expect(output).toContain('Data & Privacy');
     expect(output).toContain(
-      'Omi saves your conversations, memories, and tasks to your Omi account',
+      'your conversations, recordings, and personal information will be securely stored',
     );
-    expect(output).toContain('read them back on Home');
     expect(output).toContain(
-      'Cloud AI services transcribe audio and use your messages to generate replies',
+      'Deepgram for transcription and OpenAI for analysis',
     );
-    expect(output).toContain('Agree and continue without a device');
+    expect(output).toContain('Privacy Policy');
+    expect(output).toContain('Terms of Service');
+    expect(output).toContain('Agree & Continue');
     expect(output).not.toContain('Claude');
   });
 

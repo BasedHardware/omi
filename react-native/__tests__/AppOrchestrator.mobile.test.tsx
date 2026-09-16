@@ -17,6 +17,10 @@ const mockNative = {
   startScan: jest.fn(async () => [mockDevice]),
   connectDevice: jest.fn(async () => undefined),
   disconnectDevice: jest.fn(async () => undefined),
+  requestPermissions: jest.fn(async () => ({
+    microphone: 'denied',
+    notifications: 'denied',
+  })),
 };
 
 const mockAuth = {
@@ -54,6 +58,28 @@ function control(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
   return renderer.root.findAll(
     node => node.props.accessibilityLabel === label,
   )[0];
+}
+
+async function finishMobileSetup(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+) {
+  const press = async (label: string) => {
+    await act(async () => control(renderer, label).props.onPress());
+  };
+  await press('Agree & Continue');
+  await act(async () => {
+    renderer.root
+      .findAllByType(TextInput)
+      .find(node => node.props.accessibilityLabel === 'Enter your name')!
+      .props.onChangeText('Sam');
+  });
+  await press('Continue');
+  await press('Continue');
+  await press('TikTok');
+  await press('Continue');
+  await press("I'll do these later");
+  await press('Skip for now');
+  await press('Continue');
 }
 
 afterEach(() => {
@@ -163,6 +189,7 @@ test.each([true, false])(
       expect(mockNative.getSnapshot).not.toHaveBeenCalled();
       expect(mockNative.startScan).not.toHaveBeenCalled();
       expect(mockNative.connectDevice).not.toHaveBeenCalled();
+      await finishMobileSetup(renderer);
       await act(async () =>
         control(
           renderer,
