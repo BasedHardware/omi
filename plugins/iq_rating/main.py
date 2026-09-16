@@ -292,11 +292,14 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
             
             if response.status_code == 200:
                 result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
-                
-                if answer.upper() != "NONE":
-                    batch_valid = [n.strip() for n in answer.split(",") if n.strip()]
-                    valid_names.extend(batch_valid)
+                choices = result.get("choices") if isinstance(result, dict) else None
+                if choices and len(choices) > 0:
+                    message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+                    answer = (message.get("content") or "").strip()
+
+                    if answer.upper() != "NONE":
+                        batch_valid = [n.strip() for n in answer.split(",") if n.strip()]
+                        valid_names.extend(batch_valid)
             else:
                 logger.error(f"OpenAI API error: {response.status_code}")
                 # On error, skip this batch
@@ -1014,7 +1017,12 @@ def calculate_iq_with_ai(people_dict: dict) -> dict:
     # Prepare batch for AI analysis
     people_to_analyze = []
     for name_lower, data in people_dict.items():
-        context = " | ".join(data.get("context_snippets", [])[:10])  # More snippets
+        snippets = data.get("context_snippets", [])
+        if isinstance(snippets, str):
+            snippets = [snippets]
+        elif not isinstance(snippets, list):
+            snippets = []
+        context = " | ".join(snippets[:10])  # More snippets
         if context:
             people_to_analyze.append({
                 "name": data["name"],
@@ -1078,7 +1086,11 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
             
             if response.status_code == 200:
                 result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                choices = result.get("choices") if isinstance(result, dict) else None
+                if not choices or len(choices) == 0:
+                    continue
+                message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+                answer = (message.get("content") or "").strip()
                 
                 # Parse JSON from response
                 try:
