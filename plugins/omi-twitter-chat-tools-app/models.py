@@ -1,7 +1,7 @@
 """Pydantic models for Twitter Omi Integration."""
 import re
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 
 class ChatToolResponse(BaseModel):

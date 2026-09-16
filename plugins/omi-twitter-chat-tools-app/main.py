@@ -529,6 +529,8 @@ async def tool_post_tweet(request: Request):
             return ChatToolResponse(error="Tweet text is required")
 
         text = str(text).strip()
+        if len(text) > 280:
+            return ChatToolResponse(error=f"Tweet is too long ({len(text)} characters). Maximum is 280 characters.")
 
         access_token = get_valid_access_token(uid)
         if not access_token:
@@ -547,18 +549,19 @@ async def tool_post_tweet(request: Request):
         tweet_data = result.get("data", {})
         tweet_id = tweet_data.get("id", "Unknown")
 
-        # Invalidate timeline caches so new tweet appears
-        invalidate_user_caches(uid)
-
-        return ChatToolResponse(
-            result=f"Tweet posted successfully!\n\nID: {tweet_id}\nText: {text}"
-        )
+        tweet_url = f"https://twitter.com/i/web/status/{tweet_id}" if tweet_id and tweet_id != "Unknown" else ""
+        msg = f"Tweet posted successfully!\n\nID: {tweet_id}"
+        if tweet_url:
+            msg += f"\nURL: {tweet_url}"
+        msg += f"\nText: {text}"
+        return ChatToolResponse(result=msg)
 
     except Exception as e:
         log(f"Error posting tweet: {e}")
         return ChatToolResponse(error=f"Failed to post tweet: {str(e)}")
 
 
+@app.post("/tools/get_timeline", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_get_timeline(request: Request):
     """Get user's home timeline."""
     try:
