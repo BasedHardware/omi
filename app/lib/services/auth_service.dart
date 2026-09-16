@@ -26,7 +26,8 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
   AuthUserSnapshot? get currentUser {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
-    return AuthUserSnapshot(uid: user.uid, email: user.email, displayName: user.displayName);
+    return AuthUserSnapshot(
+        uid: user.uid, email: user.email, displayName: user.displayName, isAnonymous: user.isAnonymous);
   }
 
   @override
@@ -102,6 +103,22 @@ class AuthService {
         _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
         _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
 
+  /// Replaces the production Firebase token gateway on the **singleton** for
+  /// the local hermetic journey lane (SCA-488).
+  ///
+  /// The gateway is an external-I/O boundary — installing a synthetic one
+  /// fakes Firebase token I/O, never a product decision: every caller
+  /// (`getIdToken`, refresh retries, session expiry) keeps running its real
+  /// logic against the gateway. The full-stack simulator lane does NOT use
+  /// this: it signs in through real FirebaseAuth against the local Auth
+  /// emulator. Debug-only and local_dev-profile-gated; assertions fail in
+  /// production-family builds instead of installing.
+  static void installLocalHarnessTokenGateway(AuthTokenGateway gateway) {
+    assert(kDebugMode, 'local-harness token gateway is a debug-only seam');
+    assert(Env.profile == AppEnvironmentProfile.localDev, 'local-harness token gateway requires the local_dev profile');
+    _instance._tokenGateway = gateway;
+  }
+
   static const int _maxRefreshAttempts = 3;
 
   /// Per-attempt ceiling on the Firebase forced token refresh.
@@ -125,7 +142,9 @@ class AuthService {
 
   static Future<void> _defaultRefreshDelay(Duration duration) => Future<void>.delayed(duration);
 
-  final AuthTokenGateway _tokenGateway;
+  // Non-final solely for the debug-gated local-harness seam above; every
+  // production construction still assigns exactly once in the constructor.
+  AuthTokenGateway _tokenGateway;
   final Duration _refreshAttemptTimeout;
   final AuthRefreshDelay _refreshDelay;
   final AuthTelemetryRecorder _recordTelemetry;
@@ -150,7 +169,14 @@ class AuthService {
         'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
       };
 
-  bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
+  /// Routes through the token gateway so the declared Firebase I/O seam
+  /// covers identity reads too: the production gateway still answers from
+  /// FirebaseAuth; the local hermetic harness answers from its synthetic
+  /// principal. No behavior change for real builds.
+  bool isSignedIn() {
+    final user = _tokenGateway.currentUser;
+    return user != null && !user.isAnonymous;
+  }
 
   static const _pkceCodeVerifierLength = 64;
   static const _pkceCharset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
