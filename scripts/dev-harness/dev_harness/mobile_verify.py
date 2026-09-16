@@ -807,12 +807,18 @@ def cmd_physical(repo_root: Path, args: argparse.Namespace) -> int:
     payload = {
         "outcome": "blocked",
         "lane": "physical",
-        "reason": "physical qualification is a separately trusted, manual admission path (C5/SCA-491)",
+        "reason": "physical qualification is a separately trusted, manual admission path (C5/SCA-491); software exists, hardware evidence is pending user-run results",
+        "handoff": "scripts/dev-harness/PHYSICAL_DEVICES.md",
+        "commands": [
+            "make mobile-session ARGS=\"device doctor\"",
+            "make mobile-session ARGS=\"device run ...\" (see PHYSICAL_DEVICES.md)",
+        ],
         "requires": [
             "provisioned device + signing per SCA-491 external handoff",
             "C1 session lease on the device",
-            "the same journey definitions via run_journeys.sh --lane simulator --device <device-udid>",
+            "C5 device lease + runner (mobile-session device acquire/run)",
         ],
+        "physical_acceptance": "pending-user-run-evidence",
         "ci_policy": "ordinary CI (including forks) never runs this lane; simulator passes are not physical evidence",
         "simulator_vs_hardware": "separate visibility is the contract: hermetic/simulator results never stand in for hardware",
     }
@@ -871,7 +877,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_smoke.add_argument("--evidence-dir")
     p_smoke.add_argument("--journey-timeout", type=int, default=3600)
 
-    _add("physical", help="physical admission document (always blocked pending C5)")
+    _add("physical", help="physical admission document (always blocked until user-run hardware evidence)")
     return parser
 
 

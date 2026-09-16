@@ -12,7 +12,7 @@ make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"   # focused 
 make mobile-verify ARGS="fast --all"                # full hermetic suite
 make mobile-verify ARGS="fast --filter j2 --runs 5" # deterministic repeat signal
 make mobile-verify ARGS="smoke --session oms-<id>"  # bounded simulator smoke (fail-closed)
-make mobile-verify ARGS="physical"                  # admission document (always blocked pending C5)
+make mobile-verify ARGS="physical"                  # admission document (always blocked until user-run hardware evidence)
 ```
 
 Direct form: `scripts/dev-harness/mobile-verify.sh <op> …` (add `--json` anywhere).
@@ -82,6 +82,7 @@ oracle rejects wrong behavior, not just accepts right behavior.
 `smoke` requires a ready C1 session (`mobile-session doctor --platform ios`),
 attaches the session's simulator + API base, and runs the same journeys on the
 full app. Missing infrastructure exits `2` with the remedy — CI never runs it.
-`physical` always reports blocked with the C5 (SCA-491) admission
-requirements: hardware evidence comes only from the trusted device lane and is
-reported separately from simulator/hermetic results.
+`physical` always reports blocked. The C5 (SCA-491) software lane is
+`mobile-session device` plus `scripts/dev-harness/PHYSICAL_DEVICES.md`;
+hardware evidence comes only from that trusted device path on provisioned
+phones and is reported separately from simulator/hermetic results.
