@@ -94,6 +94,8 @@ finally:
     for n in list(sys.modules):
         if _is_stubbed(n) and n not in _saved:
             sys.modules.pop(n, None)
+        if n == 'utils.sync' or n.startswith('utils.sync.'):
+            sys.modules.pop(n, None)
     sys.modules.update(_saved)
 
 from fastapi import HTTPException  # noqa: E402  (import after the finder block)

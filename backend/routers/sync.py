@@ -143,7 +143,7 @@ from utils.sync.capture_manifest import (
     manifest_claims_match_paths,
     verify_capture_manifest,
 )
-from utils.sync.lanes import SyncLane, classify_sync_lane
+from utils.sync.lanes import SyncLane, batch_clock_shift, classify_sync_lane
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -735,6 +735,12 @@ async def sync_local_files(
         # racing into separate conversations (#6551, #5747).
         ordered_paths = sorted(segmented_paths, key=get_timestamp_from_path)
         assignment_turnstile = _OrderedTurnstile(ordered_paths)
+        batch_windows = []
+        for segment_path in ordered_paths:
+            segment_start = float(get_timestamp_from_path(segment_path))
+            segment_duration = float(get_wav_duration(segment_path) or 0.0)
+            batch_windows.append((segment_start, segment_start + segment_duration))
+        shared_clock_shift = batch_clock_shift(batch_windows)
         await asyncio.gather(
             *[
                 run_blocking(
@@ -755,6 +761,7 @@ async def sync_local_files(
                     data_protection_level=data_protection_level,
                     client_device_id=client_device_context.client_device_id,
                     client_platform=client_device_context.platform,
+                    clock_shift=shared_clock_shift,
                 )
                 for path in ordered_paths
             ]

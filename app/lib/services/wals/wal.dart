@@ -10,6 +10,29 @@ const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
 
+/// Aligns with backend `SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS` (default 300).
+const int walMaxFutureSkewSeconds = 300;
+
+/// Clamp a device/phone-proposed WAL capture start so the recording window
+/// never ends after [nowSeconds] (#4770).
+int normalizeWalTimerStart(
+  int proposed, {
+  required int durationSeconds,
+  int? nowSeconds,
+  int maxFutureSkewSeconds = walMaxFutureSkewSeconds,
+}) {
+  final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final duration = durationSeconds < 0 ? 0 : durationSeconds;
+  if (proposed > now + maxFutureSkewSeconds) {
+    return now - duration;
+  }
+  final end = proposed + duration;
+  if (end > now) {
+    return now - duration;
+  }
+  return proposed;
+}
+
 /// Sync lifecycle of a recording.
 ///
 /// - [inProgress] — still being written (audio is live).

@@ -12,12 +12,14 @@ does not cover (multipart/form-data JSON-string fields, multi-field calendar
 date validation, filename timestamp parsing, chunked-upload envelopes).
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, TypeVar, cast
 
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
+
+from utils.sync.capture_skew import maximum_future_skew_seconds
 
 PositiveLimit = Annotated[int, Query(ge=1, le=1000)]
 CalendarMeetingsLimit = Annotated[int, Query(ge=1, le=100)]
@@ -124,7 +126,9 @@ def parse_sync_filename_timestamp(path: str) -> int | float:
         raise ValueError('invalid timestamp') from e
 
     now = datetime.now(timezone.utc)
-    if timestamp_dt > now or timestamp_dt < datetime(2024, 1, 1, tzinfo=timezone.utc):
+    if timestamp_dt < datetime(2024, 1, 1, tzinfo=timezone.utc):
+        raise ValueError('invalid timestamp')
+    if timestamp_dt > now + timedelta(seconds=maximum_future_skew_seconds()):
         raise ValueError('invalid timestamp')
     return timestamp
 

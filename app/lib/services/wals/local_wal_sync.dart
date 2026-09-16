@@ -134,6 +134,11 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future<void> addExternalWal(Wal wal) async {
+    final normalized = normalizeWalTimerStart(wal.timerStart, durationSeconds: wal.seconds);
+    if (normalized != wal.timerStart) {
+      Logger.debug('LocalWalSync: clamped future timerStart ${wal.timerStart} → $normalized (${wal.seconds}s)');
+      wal.timerStart = normalized;
+    }
     // Native-storage recovery can surface old WALs while a new recording is
     // active. Only inherit the current session's location for WALs that began
     // at (or after) this session, never for historical recordings.
@@ -171,6 +176,18 @@ class LocalWalSyncImpl implements LocalWalSync {
     await WalFileManager.init();
     _wals = await WalFileManager.loadWals();
     Logger.debug("wal service start: ${_wals.length}");
+
+    var clamped = false;
+    for (final wal in _wals) {
+      final normalized = normalizeWalTimerStart(wal.timerStart, durationSeconds: wal.seconds);
+      if (normalized != wal.timerStart) {
+        wal.timerStart = normalized;
+        clamped = true;
+      }
+    }
+    if (clamped) {
+      await _saveWalsToFile();
+    }
 
     final missingCount = _wals.where((w) => w.status == WalStatus.miss).length;
     final syncedCount = _wals.where((w) => w.status == WalStatus.synced).length;

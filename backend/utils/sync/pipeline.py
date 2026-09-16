@@ -18,7 +18,7 @@ import threading
 import time
 import wave
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
@@ -124,7 +124,8 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
-from utils.sync.lanes import SyncLane
+from utils.sync.capture_skew import maximum_future_skew_seconds
+from utils.sync.lanes import SyncLane, batch_clock_shift, normalize_capture_window
 from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
@@ -1064,6 +1065,7 @@ def process_segment(
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
     geolocation: Optional[Geolocation] = None,
+    clock_shift: Optional[float] = None,
 ):
     provider = 'unknown'
     model = 'unknown'
@@ -1150,6 +1152,10 @@ def process_segment(
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
+
+        timestamp, segment_end_timestamp = normalize_capture_window(
+            timestamp, segment_end_timestamp, clock_shift=clock_shift
+        )
 
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
@@ -1268,6 +1274,10 @@ def process_segment(
             # Ensure finished_at doesn't go backwards
             if new_finished_at < closest_memory['finished_at']:
                 new_finished_at = closest_memory['finished_at']
+
+            now_utc = datetime.now(timezone.utc)
+            if new_finished_at > now_utc:
+                new_finished_at = now_utc
 
             # remove timestamp field
             for segment in segments:
@@ -1478,7 +1488,10 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
             raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
 
         time_val = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        if time_val > datetime.now(timezone.utc) or time_val < datetime(2024, 1, 1, tzinfo=timezone.utc):
+        now_utc = datetime.now(timezone.utc)
+        if time_val > now_utc + timedelta(seconds=maximum_future_skew_seconds()) or time_val < datetime(
+            2024, 1, 1, tzinfo=timezone.utc
+        ):
             raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
 
         path = f"{directory}{filename}"
@@ -2116,6 +2129,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
 
+            batch_windows = []
+            for segment_path in segment_list:
+                segment_start = float(get_timestamp_from_path(segment_path))
+                segment_duration = float(get_wav_duration(segment_path) or 0.0)
+                batch_windows.append((segment_start, segment_start + segment_duration))
+            shared_clock_shift = batch_clock_shift(batch_windows)
+
             def _process_one_segment(path: str):
                 segment_id = segment_ids_by_path.get(path)
                 if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
@@ -2142,6 +2162,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     sync_lane=sync_lane,
                     deferred_outcome=deferred_outcome,
                     geolocation=geolocation,
+                    clock_shift=shared_clock_shift,
                 )
                 if ok:
                     # Persist result contributions before the processed marker.
