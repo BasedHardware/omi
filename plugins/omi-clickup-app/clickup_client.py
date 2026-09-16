@@ -1,7 +1,6 @@
 import os
-from datetime import datetime
 import requests
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,7 +29,7 @@ class ClickUpClient:
         try:
             response = requests.post(
                 "https://api.clickup.com/api/v2/oauth/token",
-                params={
+                data={
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "code": code
@@ -39,17 +38,18 @@ class ClickUpClient:
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"🔍 OAuth Response: {data}", flush=True)
                 
                 return {
                     "access_token": data.get("access_token"),
                     "token_type": data.get("token_type", "Bearer")
                 }
             else:
-                raise Exception(f"Token exchange failed: {response.status_code} - {response.text}")
+                raise Exception(f"Token exchange failed: {response.status_code}")
                 
-        except Exception as e:
-            print(f"❌ Token exchange error: {e}", flush=True)
+        except requests.RequestException as e:
+            print(f"❌ Token exchange error: {type(e).__name__}", flush=True)
+            raise Exception(f"Token exchange request failed: {type(e).__name__}") from e
+        except Exception:
             raise
     
     def get_authorized_user(self, access_token: str) -> dict:
@@ -74,7 +74,7 @@ class ClickUpClient:
                 return {}
                 
         except Exception as e:
-            print(f"❌ Error getting user: {e}", flush=True)
+            print(f"❌ Error getting user: {type(e).__name__}", flush=True)
             return {}
     
     def get_workspaces(self, access_token: str) -> List[Dict]:
@@ -105,7 +105,7 @@ class ClickUpClient:
                 return []
                 
         except Exception as e:
-            print(f"❌ Error getting workspaces: {e}", flush=True)
+            print(f"❌ Error getting workspaces: {type(e).__name__}", flush=True)
             return []
     
     def get_spaces(self, access_token: str, team_id: str) -> List[Dict]:
@@ -137,7 +137,7 @@ class ClickUpClient:
                 return []
                 
         except Exception as e:
-            print(f"❌ Error getting spaces: {e}", flush=True)
+            print(f"❌ Error getting spaces: {type(e).__name__}", flush=True)
             return []
     
     def get_lists(self, access_token: str, space_id: str) -> List[Dict]:
@@ -169,7 +169,7 @@ class ClickUpClient:
                 return []
                 
         except Exception as e:
-            print(f"❌ Error getting lists: {e}", flush=True)
+            print(f"❌ Error getting lists: {type(e).__name__}", flush=True)
             return []
     
     def get_folders(self, access_token: str, space_id: str) -> List[Dict]:
@@ -291,9 +291,9 @@ class ClickUpClient:
                 return []
                 
         except Exception as e:
-            print(f"❌ Error getting members: {e}", flush=True)
+            print(f"❌ Error getting members: {type(e).__name__}", flush=True)
             return []
-
+    
     @staticmethod
     def _coerce_assignee_ids(assignees) -> List[int]:
         """
@@ -365,45 +365,32 @@ class ClickUpClient:
         return value if 1 <= value <= 4 else None
 
     @staticmethod
-    def _coerce_due_date_ms(due_date, tz) -> Tuple[Optional[int], bool]:
+    def _coerce_due_date_ms(due_date) -> Optional[int]:
         """
-        Coerce a raw due date into (Unix milliseconds timestamp, has_time).
-
-        Accepts ISO strings with or without a time component and numeric
-        millisecond timestamps (int, float, digit string) — the form ClickUp
-        stores natively. A numeric input denotes an exact instant, so it
-        reports has_time=True. Returns (None, False) for values that carry no
-        interpretable date; malformed ISO strings still raise for the caller
-        to log. Never raises on wrong-typed input alone.
+        Return the Unix-milliseconds timestamp when due_date is already a
+        numeric timestamp (int, float, or digit string) — the form ClickUp
+        stores natively and the ISO parser in create_task cannot handle
+        ('T' in due_date raised TypeError on ints, silently dropping the
+        date). Returns None for everything else so the caller falls through
+        to ISO string parsing. Never raises.
         """
         # bool is an int subclass but never a timestamp
         if due_date is None or isinstance(due_date, bool):
-            return None, False
+            return None
 
         if isinstance(due_date, (int, float)):
             timestamp = int(due_date)
-            return (timestamp, True) if timestamp > 0 else (None, False)
+            return timestamp if timestamp > 0 else None
 
         if not isinstance(due_date, str):
-            return None, False
+            return None
 
         token = due_date.strip()
-        if not token:
-            return None, False
+        if not token or not token.isdigit():
+            return None
 
-        if token.isdigit():
-            timestamp = int(token)
-            return (timestamp, True) if timestamp > 0 else (None, False)
-
-        # ISO format: 'T' separates a full datetime from a bare date
-        has_time = 'T' in token
-        if has_time:
-            dt_naive = datetime.fromisoformat(token.replace('Z', ''))
-        else:
-            # Just a date — set time to end of day
-            dt_naive = datetime.fromisoformat(token + 'T23:59:59')
-        dt = tz.localize(dt_naive) if tz else dt_naive
-        return int(dt.timestamp() * 1000), has_time
+        timestamp = int(token)
+        return timestamp if timestamp > 0 else None
 
     async def create_task(
         self,
@@ -455,11 +442,11 @@ class ClickUpClient:
                 if priority_value is not None:
                     task_data["priority"] = priority_value
                 else:
-                    print(f"⚠️  Ignoring invalid priority {priority!r} (expected 1-4)", flush=True)
-
+                    print("⚠️  Ignoring invalid priority (expected 1-4)", flush=True)
+            
             if status:
                 task_data["status"] = status
-
+            
             assignee_ids = self._coerce_assignee_ids(assignees)
             if assignee_ids:
                 # ClickUp expects list of user IDs as integers
@@ -468,42 +455,67 @@ class ClickUpClient:
             elif assignees:
                 # Values arrived but none resolved to an ID — continue
                 # unassigned rather than aborting task creation.
-                print(f"⚠️  No usable assignee IDs in {assignees!r}; creating task unassigned", flush=True)
-
-            if due_date:
-                # ClickUp stores due dates as Unix milliseconds. ISO strings
-                # (with or without time) and numeric ms timestamps are
-                # accepted; anything else is dropped with a warning instead of
-                # failing task creation.
-                # Try to use timezone if pytz is available
-                try:
-                    import pytz
-                    tz = pytz.timezone(timezone)
-                except (ImportError, Exception):
-                    # Fallback to no timezone (naive datetime)
-                    tz = None
-
-                try:
-                    due_timestamp, has_time = self._coerce_due_date_ms(due_date, tz)
-                except Exception as e:
-                    print(f"⚠️  Could not parse due date '{due_date}': {e}", flush=True)
-                    import traceback
-                    traceback.print_exc()
-                    due_timestamp, has_time = None, False
-
-                if due_timestamp is not None:
-                    task_data["due_date"] = due_timestamp
-                    # CRITICAL: due_date_time=true tells ClickUp to display the
-                    # time, not just the date
-                    task_data["due_date_time"] = has_time
-                    if has_time:
-                        print(f"📅 Due date with TIME: {due_date} ({timezone if tz else 'system'}) → {due_timestamp}", flush=True)
-                    else:
-                        print(f"📅 Due date (no time): {due_date} ({timezone if tz else 'system'}) → {due_timestamp}", flush=True)
-                else:
-                    print(f"⚠️  Ignoring invalid due date {due_date!r}", flush=True)
+                print("⚠️  No usable assignee IDs; creating task unassigned", flush=True)
             
-            print(f"📤 Creating task: {name} in list {list_id}", flush=True)
+            # A numeric due_date (int, float, or digit string) is already a
+            # Unix-millisecond timestamp — ClickUp's native due-date form — so
+            # it is stored directly; only ISO strings reach the parser below.
+            due_timestamp = self._coerce_due_date_ms(due_date)
+            if due_timestamp is not None:
+                task_data["due_date"] = due_timestamp
+                # Numeric timestamps denote an exact instant.
+                task_data["due_date_time"] = True
+                print(f"📅 Due date timestamp → {due_timestamp}", flush=True)
+            elif due_date:
+                # Convert ISO date string to Unix timestamp in milliseconds
+                # ClickUp expects Unix timestamp in milliseconds
+                # IMPORTANT: Also need to set due_date_time=true for time to show!
+                from datetime import datetime
+                try:
+                    # Try to use timezone if pytz is available
+                    try:
+                        import pytz
+                        tz = pytz.timezone(timezone)
+                    except (ImportError, Exception):
+                        # Fallback to no timezone (naive datetime)
+                        tz = None
+                    
+                    # Check if time is included in the date string
+                    has_time = 'T' in due_date
+                    
+                    # Try parsing as ISO format
+                    if has_time:
+                        # Full datetime - parse the time component
+                        dt_naive = datetime.fromisoformat(due_date.replace('Z', ''))
+                        if tz:
+                            dt = tz.localize(dt_naive)
+                        else:
+                            dt = dt_naive
+                    else:
+                        # Just date, set time to end of day
+                        dt_naive = datetime.fromisoformat(due_date + 'T23:59:59')
+                        if tz:
+                            dt = tz.localize(dt_naive)
+                        else:
+                            dt = dt_naive
+                    
+                    # Convert to Unix timestamp in milliseconds
+                    due_timestamp = int(dt.timestamp() * 1000)
+                    task_data["due_date"] = due_timestamp
+                    
+                    # CRITICAL: Set due_date_time=true when time component exists
+                    # This tells ClickUp to display the time, not just the date
+                    if has_time:
+                        task_data["due_date_time"] = True
+                        print(f"📅 Due date with TIME → {due_timestamp}", flush=True)
+                    else:
+                        task_data["due_date_time"] = False
+                        print(f"📅 Due date (no time) → {due_timestamp}", flush=True)
+                        
+                except Exception as e:
+                    print(f"⚠️  Could not parse due date: {type(e).__name__}", flush=True)
+            
+            print(f"📤 Creating task in list {list_id} (name_len={len(name)})", flush=True)
             
             response = requests.post(
                 f"{self.base_url}/list/{list_id}/task",
@@ -526,7 +538,7 @@ class ClickUpClient:
                     "list_id": list_id
                 }
             else:
-                error_msg = f"{response.status_code} - {response.text}"
+                error_msg = f"HTTP {response.status_code}"
                 print(f"❌ Error creating task: {error_msg}", flush=True)
                 return {
                     "success": False,
@@ -534,11 +546,9 @@ class ClickUpClient:
                 }
                 
         except Exception as e:
-            print(f"❌ Error creating task: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Error creating task: {type(e).__name__}", flush=True)
             return {
                 "success": False,
-                "error": str(e)
+                "error": type(e).__name__
             }
 
