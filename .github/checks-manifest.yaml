@@ -19,6 +19,11 @@ checks:
     triggers: ["plugins/omi-hacker-news-app/**"]
     lanes: ["local", "ci"]
     reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+  - id: omi-wikipedia-tests
+    command: ["python3", "plugins/omi-wikipedia-app/test_main.py"]
+    triggers: ["plugins/omi-wikipedia-app/**"]
+    lanes: ["local", "ci"]
+    reason: "verify Wikipedia search, summary extraction, null-safety for content_urls/query items, and tools manifest registration"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]

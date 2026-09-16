@@ -79,7 +79,9 @@ def _format_summary(data: dict[str, Any], language: str) -> str:
     title = data.get("title") or "Untitled"
     extract = data.get("extract") or "No summary was returned for this article."
     description = data.get("description")
-    page_url = data.get("content_urls", {}).get("desktop", {}).get("page") or _article_url(language, title)
+    content_urls = data.get("content_urls") or {}
+    desktop_urls = content_urls.get("desktop") if isinstance(content_urls, dict) else {}
+    page_url = (desktop_urls.get("page") if isinstance(desktop_urls, dict) else None) or _article_url(language, title)
 
     lines = [title]
     if description:
@@ -205,7 +207,11 @@ async def search_articles(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        results = data.get("query", {}).get("search", [])[:limit]
+        query_data = data.get("query") if isinstance(data, dict) else {}
+        if not isinstance(query_data, dict):
+            query_data = {}
+        search_list = query_data.get("search")
+        results = search_list[:limit] if isinstance(search_list, list) else []
         if not results:
             return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
 
@@ -267,7 +273,11 @@ async def get_random_article(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        random_items = data.get("query", {}).get("random", [])
+        query_data = data.get("query") if isinstance(data, dict) else {}
+        if not isinstance(query_data, dict):
+            query_data = {}
+        random_list = query_data.get("random")
+        random_items = random_list if isinstance(random_list, list) else []
         if not random_items:
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 
