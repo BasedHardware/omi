@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify for Omi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Circular:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --spotify-green: #1DB954;
+            --spotify-green-hover: #1ed760;
+            --spotify-black: #121212;
+            --spotify-dark: #181818;
+            --spotify-gray: #282828;
+            --spotify-light-gray: #b3b3b3;
+            --spotify-white: #ffffff;
+            --omi-accent: #6366f1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Circular', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--spotify-black) 0%, #1a1a2e 50%, var(--spotify-dark) 100%);
+            min-height: 100vh;
+            color: var(--spotify-white);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-top: 20px;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .spotify-logo {
+            width: 56px;
+            height: 56px;
+        }
+
+        .plus-icon {
+            font-size: 28px;
+            color: var(--spotify-light-gray);
+            font-weight: 300;
+        }
+
+        .omi-logo {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--omi-accent) 0%, #8b5cf6 100%);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 20px;
+            letter-spacing: -1px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, var(--spotify-white), var(--spotify-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--spotify-light-gray);
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .card {
+            background: var(--spotify-gray);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .error-banner {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .error-icon {
+            font-size: 20px;
+        }
+
+        .success-banner {
+            background: linear-gradient(135deg, var(--spotify-green) 0%, #169c46 100%);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .success-icon {
+            font-size: 20px;
+        }
+
+        .profile-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .profile-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--spotify-green);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 700;
+            overflow: hidden;
+        }
+
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .profile-info h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .profile-info p {
+            color: var(--spotify-light-gray);
+            font-size: 14px;
+        }
+
+        .connected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(29, 185, 84, 0.15);
+            color: var(--spotify-green);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 16px 32px;
+            border-radius: 500px;
+            font-size: 16px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .btn-spotify {
+            background: var(--spotify-green);
+            color: var(--spotify-black);
+        }
+
+        .btn-spotify:hover {
+            background: var(--spotify-green-hover);
+            transform: scale(1.02);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: var(--spotify-white);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--spotify-white);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid #ff4444;
+            color: #ff4444;
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .btn-small {
+            padding: 10px 20px;
+            font-size: 14px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--spotify-light-gray);
+            margin-bottom: 16px;
+        }
+
+        .playlist-select {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--spotify-dark);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--spotify-white);
+            font-size: 15px;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23b3b3b3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 18px;
+            margin-bottom: 16px;
+        }
+
+        .playlist-select:focus {
+            outline: none;
+            border-color: var(--spotify-green);
+        }
+
+        .playlist-select option {
+            background: var(--spotify-dark);
+            padding: 12px;
+        }
+
+        .features-list {
+            list-style: none;
+            margin: 24px 0;
+        }
+
+        .features-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .features-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .feature-text strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .feature-text span {
+            color: var(--spotify-light-gray);
+            font-size: 14px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .footer p {
+            color: var(--spotify-light-gray);
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .footer a {
+            color: var(--spotify-green);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .action-buttons .btn {
+            flex: 1;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 12px;
+            }
+
+            h1 {
+                font-size: 26px;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <svg class="spotify-logo" viewBox="0 0 24 24" fill="#1DB954">
+                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                </svg>
+                <span class="plus-icon">+</span>
+                <div class="omi-logo">omi</div>
+            </div>
+            <h1>Spotify for Omi</h1>
+            <p class="subtitle">Control your music with voice commands</p>
+        </div>
+
+        {% if error %}
+        <div class="error-banner">
+            <span class="error-icon">⚠️</span>
+            <span>{{ error }}</span>
+        </div>
+        {% endif %}
+
+        {% if authenticated %}
+        <div class="card">
+            <div class="profile-section">
+                <div class="profile-avatar">
+                    {% if user_profile and user_profile.images and user_profile.images|length > 0 %}
+                    <img src="{{ user_profile.images[0].url }}" alt="Profile">
+                    {% else %}
+                    {{ user_profile.display_name[0] if user_profile else '?' }}
+                    {% endif %}
+                </div>
+                <div class="profile-info">
+                    <h3>{{ user_profile.display_name if user_profile else 'Spotify User' }}</h3>
+                    <p>{{ user_profile.email if user_profile else '' }}</p>
+                    <span class="connected-badge">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Connected
+                    </span>
+                </div>
+            </div>
+
+            <div class="section-title">Default Playlist</div>
+            <select class="playlist-select" id="playlist-select" onchange="setDefaultPlaylist()">
+                <option value="">Select a default playlist...</option>
+                {% for playlist in playlists %}
+                <option value="{{ playlist.id }}" data-name="{{ playlist.name }}" 
+                    {% if default_playlist and default_playlist.id == playlist.id %}selected{% endif %}>
+                    {{ playlist.name }} ({{ playlist.tracks_total }} tracks)
+                </option>
+                {% endfor %}
+            </select>
+            <p style="color: var(--spotify-light-gray); font-size: 13px; margin-bottom: 20px;">
+                Songs will be added to this playlist when you don't specify one.
+            </p>
+
+            <div class="action-buttons">
+                <a href="/auth/spotify?uid={{ uid }}" class="btn btn-outline btn-small">
+                    🔄 Reconnect
+                </a>
+                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
+                    Disconnect
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">What You Can Say</div>
+            <ul class="features-list">
+                <li>
+                    <span class="feature-icon">🎵</span>
+                    <div class="feature-text">
+                        <strong>"Search for Shape of You"</strong>
+                        <span>Find songs by name, artist, or album</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">📝</span>
+                    <div class="feature-text">
+                        <strong>"Add Blinding Lights to my workout playlist"</strong>
+                        <span>Add songs to any of your playlists</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">▶️</span>
+                    <div class="feature-text">
+                        <strong>"Play Bohemian Rhapsody"</strong>
+                        <span>Start playing a specific song</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">⏭️</span>
+                    <div class="feature-text">
+                        <strong>"Skip this song" or "Pause"</strong>
+                        <span>Control your playback</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">📋</span>
+                    <div class="feature-text">
+                        <strong>"Create a playlist called Road Trip"</strong>
+                        <span>Create new playlists instantly</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">🎧</span>
+                    <div class="feature-text">
+                        <strong>"What's playing?" or "Get recommendations"</strong>
+                        <span>See current track and discover new music</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        {% else %}
+
+        <div class="card">
+            <div class="section-title">Get Started</div>
+            <p style="color: var(--spotify-light-gray); margin-bottom: 24px; line-height: 1.6;">
+                Connect your Spotify account to control your music using voice commands through Omi.
+            </p>
+            
+            <a href="{{ oauth_url }}" class="btn btn-spotify">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                </svg>
+                Connect with Spotify
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="section-title">Features</div>
+            <ul class="features-list">
+                <li>
+                    <span class="feature-icon">🎵</span>
+                    <div class="feature-text">
+                        <strong>Search Songs</strong>
+                        <span>Find any song, artist, or album instantly</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">📝</span>
+                    <div class="feature-text">
+                        <strong>Manage Playlists</strong>
+                        <span>Add songs and create new playlists with voice</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">▶️</span>
+                    <div class="feature-text">
+                        <strong>Playback Control</strong>
+                        <span>Play, pause, skip, and control your music</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">🎧</span>
+                    <div class="feature-text">
+                        <strong>Discover Music</strong>
+                        <span>Get personalized recommendations</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <p>Made for <a href="https://omi.me" target="_blank">Omi</a></p>
+            <p>Your data is secure • <a href="https://spotify.com/privacy" target="_blank">Spotify Privacy</a></p>
+        </div>
+    </div>
+
+    <script>
+        function setDefaultPlaylist() {
+            const select = document.getElementById('playlist-select');
+            const selectedOption = select.options[select.selectedIndex];
+            const playlistId = selectedOption.value;
+            const playlistName = selectedOption.getAttribute('data-name');
+            
+            if (playlistId) {
+                const uid = new URLSearchParams(window.location.search).get('uid');
+                fetch(`/settings/default-playlist?uid=${uid}&playlist_id=${playlistId}&playlist_name=${encodeURIComponent(playlistName)}`, {
+                    method: 'POST'
+                }).then(response => {
+                    if (response.ok) {
+                        // Show brief success feedback
+                        select.style.borderColor = '#1DB954';
+                        setTimeout(() => {
+                            select.style.borderColor = '';
+                        }, 2000);
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>
+
