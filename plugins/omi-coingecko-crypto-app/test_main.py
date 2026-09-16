@@ -249,9 +249,13 @@ class RequestModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             models.GetCryptoPriceRequest(coin_ids="bitcoin", vs_currency="   ")
 
-    def test_vs_currency_non_string_rejected_cleanly(self):
+    def test_vs_currency_non_string_coerced_cleanly(self):
+        # Upstream semantics: non-string vs_currency is coerced via str()
+        # rather than rejected; a <2-char result still fails validation.
+        req = models.GetCryptoPriceRequest(coin_ids="bitcoin", vs_currency=123)
+        self.assertEqual(req.vs_currency, "123")
         with self.assertRaises(ValueError):
-            models.GetCryptoPriceRequest(coin_ids="bitcoin", vs_currency=123)
+            models.GetCryptoPriceRequest(coin_ids="bitcoin", vs_currency=7)
 
     def test_coin_ids_string_normalized_and_deduped(self):
         req = models.GetCryptoPriceRequest(coin_ids=" Bitcoin ,ETH,bitcoin ")
