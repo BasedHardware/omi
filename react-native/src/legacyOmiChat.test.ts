@@ -462,6 +462,78 @@ test('old chat history keeps GET files when files_id is present', () => {
   ).toBeUndefined();
 });
 
+test('old chat history name Flutter ServerMessage.fromGenerated padded GET files created_at instead of remapping to a chat chip', () => {
+  const neighbor = {
+    id: 'neighbor',
+    sender: 'ai',
+    text: 'Neighbor stays.',
+    created_at: '2026-09-07T01:02:04Z',
+    type: 'text',
+  };
+  const file = {
+    id: 'att-notes',
+    name: 'notes.txt',
+    mime_type: 'text/plain',
+    openai_file_id: 'file-abc',
+  };
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('file-exact'),
+          files: [{...file, created_at: '2026-09-07T00:00:00.000Z'}],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'file-exact']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('file-omitted-clock'),
+          files: [file],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'file-omitted-clock']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('file-null-clock'),
+          files: [{...file, created_at: null}],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'file-null-clock']);
+  for (const created_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {
+            ...message('file-padded'),
+            files: [{...file, created_at}],
+          },
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat message is malformed');
+  }
+});
+
 test('keeps GET chat files when more than 50', () => {
   const files = Array.from({length: 51}, (_, index) => ({
     id: `att-${index}`,

@@ -53,6 +53,12 @@ function parseOmiChatFiles(
   if (ids === null) {
     throw new Error('Omi chat files are malformed');
   }
+  for (const raw of files) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      continue;
+    }
+    presentPaddedKnown((raw as Record<string, unknown>).created_at);
+  }
   if (files.length === 0 || ids.length === 0) {
     return [];
   }
