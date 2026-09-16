@@ -22,20 +22,30 @@ def _slim_event(e: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def list_upcoming(user_id: str, days: int = 1) -> list[dict[str, Any]]:
+# calendarView is server-paged: $top is the page size, and anything past it
+# only arrives via @odata.nextLink. Events are ordered by start, so a single
+# page silently drops the *later* events in the window — exactly the ones a
+# "what's on next month" question is about.
+CALENDAR_PAGE_SIZE = 50
+MAX_EVENTS = 500
+
+
+async def list_upcoming(user_id: str, days: int = 1, limit: int = MAX_EVENTS) -> list[dict[str, Any]]:
     start = datetime.now(timezone.utc)
     end = start + timedelta(days=days)
+    limit = max(1, min(int(limit), MAX_EVENTS))
     async with GraphClient(user_id) as g:
-        data = await g.get(
+        events = await g.get_all(
             "/me/calendarView",
             params={
                 "startDateTime": start.isoformat(),
                 "endDateTime": end.isoformat(),
                 "$orderby": "start/dateTime",
-                "$top": 50,
+                "$top": min(CALENDAR_PAGE_SIZE, limit),
             },
+            max_items=limit,
         )
-        return [_slim_event(e) for e in data.get("value", [])]
+        return [_slim_event(e) for e in events]
 
 
 async def create_event(

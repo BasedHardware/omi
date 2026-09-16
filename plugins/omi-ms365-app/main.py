@@ -190,6 +190,20 @@ async def _auth_guard(uid: str) -> None:
         raise HTTPException(401, f"Microsoft not connected — {e}")
 
 
+# Keys the Omi backend adds to every chat tool call next to the tool's own
+# parameters (backend/utils/retrieval/tools/app_tools.py, _call_tool_endpoint).
+_ENVELOPE_KEYS = frozenset({"uid", "app_id", "tool_name", "geolocation"})
+
+
+def tool_args(body: dict[str, Any]) -> dict[str, Any]:
+    """Return the tool parameters from an Omi chat tool request body.
+
+    Omi posts the parameters flat at the top level of the JSON body together
+    with the envelope keys above, not nested under an ``args`` object.
+    """
+    return {key: value for key, value in body.items() if key not in _ENVELOPE_KEYS}
+
+
 @app.post("/tools/{tool_name}")
 async def tool_dispatch(tool_name: str, request: Request) -> Any:
     body: dict[str, Any] = {}
@@ -197,10 +211,12 @@ async def tool_dispatch(tool_name: str, request: Request) -> Any:
         body = await request.json()
     except Exception:
         pass
+    if not isinstance(body, dict):
+        body = {}
     uid: str | None = body.get("uid") or request.query_params.get("uid")
     if not uid:
         raise HTTPException(400, "uid (OMI user id) is required")
-    args: dict[str, Any] = body.get("args", {}) or {}
+    args = tool_args(body)
 
     await _auth_guard(uid)
 
