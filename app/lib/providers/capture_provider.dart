@@ -13,6 +13,7 @@ class CaptureProvider extends CaptureController {
     super.microphonePermissionRequester,
     super.phoneMicBatchRecorder,
     super.recordingTelemetry,
+    super.dictationController,
     LocalSegmentStore? localSegmentStore,
   }) : localSegmentStore = localSegmentStore ?? LocalSegmentStore.disabled() {
     addListener(_persistLiveSegments);

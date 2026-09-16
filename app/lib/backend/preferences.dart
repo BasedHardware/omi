@@ -467,6 +467,13 @@ class SharedPreferencesUtil {
 
   bool get vadGateEnabled => getBool('vadGateEnabled');
 
+  // Pendant HID dictation prototype (experimental): press/release on the
+  // pendant dictates into the focused text field via BLE HID. Requires a
+  // firmware build with CONFIG_OMI_ENABLE_HID_DICTATION=y.
+  set hidDictationEnabled(bool value) => saveBool('hidDictationEnabled', value);
+
+  bool get hidDictationEnabled => getBool('hidDictationEnabled');
+
   // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 0 (disabled)
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
 

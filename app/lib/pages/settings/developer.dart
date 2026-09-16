@@ -28,6 +28,9 @@ import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/capture/pendant_dictation_controller.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -55,6 +58,7 @@ class _DeveloperSettingsPageView extends StatefulWidget {
 }
 
 class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
+  bool _hidActivationBusy = false;
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -146,6 +150,57 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w500),
       ),
     );
+  }
+
+  /// Toggles the prototype on/off on every connected Omi pendant. The
+  /// preference flips only via the provider; activation state (pending
+  /// reconnect, verified, or failed with reason) surfaces in the status line.
+  Future<void> _onHidDictationToggled(BuildContext context, bool value) async {
+    if (_hidActivationBusy) return;
+    final provider = context.read<DeveloperModeProvider>();
+    final capture = context.read<CaptureProvider>();
+    setState(() => _hidActivationBusy = true);
+    // Keep button ownership until opt-out is verified. A failed command can
+    // leave HID active; its taps must not fall through to assistant actions.
+    try {
+      await capture.cancelHidDictation();
+      final pendants = ServiceManager.instance()
+          .device
+          .connections
+          .where((c) => c.device.type == DeviceType.omi)
+          .map((c) => c.device.id)
+          .toList();
+      if (pendants.isEmpty) {
+        capture.reportDictationStatus(PendantDictationUiState(
+          PendantDictationPhase.error,
+          value
+              ? 'no pendant connected — toggle again with the pendant connected'
+              : 'no pendant connected; power-cycle it if HID was active',
+        ));
+        return;
+      }
+      bool activated = false;
+      bool allDisabled = true;
+      for (final id in pendants) {
+        if (value) {
+          activated = await capture.enableHidDictation(id) || activated;
+        } else {
+          allDisabled = await capture.disableHidDictation(id) && allDisabled;
+        }
+      }
+      if (value) {
+        provider.onHidDictationEnabledChanged(activated);
+      } else if (allDisabled) {
+        provider.onHidDictationEnabledChanged(false);
+      }
+    } catch (_) {
+      capture.reportDictationStatus(const PendantDictationUiState(
+        PendantDictationPhase.error,
+        'activation failed; reconnect and retry',
+      ));
+    } finally {
+      if (mounted) setState(() => _hidActivationBusy = false);
+    }
   }
 
   Widget _buildExperimentalItem({
@@ -1505,6 +1560,34 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           icon: FontAwesomeIcons.microphoneSlash,
                           value: provider.vadGateEnabled,
                           onChanged: provider.onVadGateChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Pendant HID dictation prototype. The toggle is the
+                        // real opt-in/out: it writes the ENABLE/DISABLE command
+                        // to every connected Omi pendant, cycles the link, and
+                        // verifies the result; the status line below shows
+                        // activation progress and dictation state.
+                        _buildExperimentalItem(
+                          title: 'Pendant HID Dictation',
+                          description: 'Tap pendant button to start an utterance, tap again to type it '
+                              'into the focused text field (prototype firmware required)',
+                          icon: FontAwesomeIcons.keyboard,
+                          value: provider.hidDictationEnabled,
+                          onChanged: _hidActivationBusy ? null : (value) => _onHidDictationToggled(context, value),
+                        ),
+                        ValueListenableBuilder<PendantDictationUiState>(
+                          valueListenable: context.read<CaptureProvider>().dictationState,
+                          builder: (context, dictation, _) => Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Dictation: ${dictation.phase.name}'
+                              '${dictation.message.isEmpty ? '' : ' — ${dictation.message}'}',
+                              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                            ),
+                          ),
                         ),
                       ],
                     ),

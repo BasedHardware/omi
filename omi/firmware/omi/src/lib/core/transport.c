@@ -33,6 +33,9 @@
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+#include "hid_dictation.h"
+#endif
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -304,6 +307,56 @@ static const struct bt_data bt_sd[] = {
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
 };
 
+// HID dictation prototype (compiled in only when enabled): advertise the HID
+// service UUID alongside DIS while the prototype is active so an iOS host can
+// classify the pendant as a keyboard.
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+static const struct bt_data bt_sd_hid[] = {
+    BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL), BT_UUID_16_ENCODE(BT_UUID_HIDS_VAL)),
+};
+
+static atomic_t hid_adv_refresh_pending;
+static uint8_t hid_adv_refresh_attempts;
+static void hid_adv_refresh_handler(struct k_work *work);
+K_WORK_DELAYABLE_DEFINE(hid_adv_refresh_work, hid_adv_refresh_handler);
+
+static void hid_adv_refresh_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    if (!atomic_get(&hid_adv_refresh_pending) || is_connected) {
+        return;
+    }
+    const bool active = hid_dictation_hid_active();
+    const struct bt_data *sd = active ? bt_sd_hid : bt_sd;
+    const size_t sd_len = active ? ARRAY_SIZE(bt_sd_hid) : ARRAY_SIZE(bt_sd);
+    // Zephyr may already have resumed persistent advertising. Updating the
+    // live data handles that case; otherwise start only after slot recycling.
+    int err = bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), sd, sd_len);
+    if (err == -EAGAIN || err == -EINVAL) {
+        err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), sd, sd_len);
+        if (err == -EALREADY) {
+            err = bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), sd, sd_len);
+        }
+    }
+    if (!err) {
+        atomic_clear(&hid_adv_refresh_pending);
+        LOG_INF("HID advertising refreshed (active=%d)", active);
+    } else if (++hid_adv_refresh_attempts < 5) {
+        k_work_reschedule(&hid_adv_refresh_work, K_MSEC(50));
+    } else {
+        LOG_ERR("HID advertising refresh failed after retries: %d", err);
+    }
+}
+
+static void _transport_recycled(void)
+{
+    if (atomic_get(&hid_adv_refresh_pending)) {
+        k_work_reschedule(&hid_adv_refresh_work, K_NO_WAIT);
+    }
+}
+
+#endif
+
 //
 // State and Characteristics
 //
@@ -482,6 +535,9 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
     features |= OMI_FEATURE_HAPTIC;
 #endif
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+    features |= OMI_FEATURE_HID_DICTATION;
+#endif
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     features |= OMI_FEATURE_OFFLINE_STORAGE;
 #endif
@@ -643,6 +699,9 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     schedule_mtu_recheck();
 
     is_connected = true;
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+    hid_dictation_on_connected(conn);
+#endif
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         shell_bt_nus_enable(conn);
@@ -702,6 +761,22 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     k_sem_init(&audio_tx_sem,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+    // Stop persistent advertising before recycling this connection. Capture
+    // the old active state too: DISABLE removes HIDS below, but must also
+    // remove its UUID from the next scan response.
+    if (hid_dictation_wants_adv_restart()) {
+        atomic_set(&hid_adv_refresh_pending, 1);
+        hid_adv_refresh_attempts = 0;
+        int adv_err = bt_le_adv_stop();
+        if (adv_err) {
+            LOG_ERR("Could not stop advertising for HID transition: %d", adv_err);
+        }
+    }
+    hid_dictation_on_disconnected(conn);
+    // The connection slot is not free inside this callback. recycled queues
+    // the refresh after the last reference is gone (CONFIG_BT_MAX_CONN=1).
+#endif
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -762,6 +837,9 @@ static void _le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data
 static struct bt_conn_cb _callback_references = {
     .connected = _transport_connected,
     .disconnected = _transport_disconnected,
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+    .recycled = _transport_recycled,
+#endif
     .le_param_req = _le_param_req,
     .le_param_updated = _le_param_updated,
     .le_phy_updated = _le_phy_updated,
@@ -1333,6 +1411,17 @@ int transport_start()
     }
 
     LOG_INF("Transport bluetooth initialized");
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+    // Load bondable HID-host keys now that the stack is up (RAM-only opt-in:
+    // registration of the HID service itself happens on the first disconnect
+    // after the app enables the prototype).
+    hid_dictation_bt_ready();
+    err = hid_dictation_service_register();
+    if (err) {
+        LOG_ERR("Dictation service registration failed (err %d)", err);
+        return err;
+    }
+#endif
 
     err = ensure_local_ble_identity();
     if (err) {

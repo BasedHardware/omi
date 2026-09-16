@@ -63,6 +63,54 @@ config OMI_ENABLE_MONITOR
          Disable in production to save power, RAM, and flash space."
     default n
 
+
+config OMI_ENABLE_HID_DICTATION
+    bool "Enable HID dictation prototype (opt-in BLE keyboard)"
+    default n
+    help
+        "Experimental: adds the dictation control-plane GATT service and (after
+         an explicit app opt-in, RAM-only) a standard BLE HID keyboard service
+         so the pendant can type committed text into a connected host's
+         focused field. Audio keeps flowing over the existing audio service.
+         Production config stays with this off: stock behavior is unchanged."
+
+config OMI_HID_DICTATION_MAX_TEXT_LEN
+    int "HID dictation maximum committed text length"
+    range 16 1024
+    default 256
+    depends on OMI_ENABLE_HID_DICTATION
+    help
+        "Hard cap on a single dictation session's text. Longer transcripts are
+         rejected with TOO_LONG before any key is typed."
+
+config OMI_HID_DICTATION_FRAME_TIMEOUT_MS
+    int "HID dictation inter-frame timeout (ms)"
+    range 500 30000
+    default 3000
+    depends on OMI_ENABLE_HID_DICTATION
+    help
+        "A session stuck mid-transfer for this long is aborted and all keys
+         are released."
+
+config OMI_HID_DICTATION_TYPE_BUDGET_MS
+    int "HID dictation typing budget (ms)"
+    range 5000 120000
+    default 30000
+    depends on OMI_ENABLE_HID_DICTATION
+    help
+        "Hard wall-clock budget for one session's key reports. Exceeding it
+         aborts typing and releases all keys."
+
+config OMI_HID_DICTATION_KEY_INTERVAL_MS
+    int "HID dictation per-report pacing (ms)"
+    range 5 100
+    default 12
+    depends on OMI_ENABLE_HID_DICTATION
+    help
+        "Delay between consecutive HID reports (a press or a release). Must
+         comfortably exceed the connection interval so each report lands in
+         its own event."
+
 config OMI_ENABLE_T5838_AAD
     bool "Enable T5838 hardware AAD (ultra-low-power mic sleep)"
     default n

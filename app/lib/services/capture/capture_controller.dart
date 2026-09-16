@@ -34,6 +34,8 @@ import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
+import 'package:omi/services/capture/pendant_dictation_controller.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -206,7 +208,9 @@ class CaptureController extends ChangeNotifier
     Future<bool> Function()? microphonePermissionRequester,
     IMicRecorderService? phoneMicBatchRecorder,
     RecordingLifecycleTelemetry? recordingTelemetry,
-  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+    PendantDictationController? dictationController,
+  })  : _dictation = dictationController ?? _createDictationController(),
+        externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ??
             ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
         _inProgressConversationLoader = inProgressConversationLoader,
@@ -477,6 +481,63 @@ class CaptureController extends ChangeNotifier
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
+  // Experimental: pendant-as-keyboard dictation prototype (developer toggle).
+  // The resolver is strictly passive — connectionFor + isConnected — so a
+  // dictation pipeline never resurrects a dropped link to deliver old text.
+  final PendantDictationController _dictation;
+
+  static PendantDictationController _createDictationController() => PendantDictationController(
+        resolveConnection: (deviceId) async {
+          final connection = ServiceManager.instance().device.connectionFor(deviceId);
+          if (connection is! OmiDeviceConnection) return null;
+          if (!await connection.isConnected()) return null;
+          return connection;
+        },
+        getCodec: (deviceId) async {
+          final connection = ServiceManager.instance().device.connectionFor(deviceId);
+          if (connection is OmiDeviceConnection && await connection.isConnected()) {
+            return await connection.getAudioCodec();
+          }
+          return BleAudioCodec.pcm8;
+        },
+        captureGate: () => !SharedPreferencesUtil().batchModeEnabled,
+      );
+
+  /// User-visible HID dictation state (developer settings status line).
+  ValueListenable<PendantDictationUiState> get dictationState => _dictation.state;
+
+  /// Reports a dictation UI status from outside the pipeline (e.g. the
+  /// developer toggle when no pendant is connected).
+  void reportDictationStatus(PendantDictationUiState s) => _dictation.state.value = s;
+
+  /// Real opt-in path for the HID dictation prototype (developer toggle):
+  /// writes the ENABLE command and cycles the BLE link so the pendant can
+  /// add the HID service, then verifies the post-reconnect state. The only
+  /// code path allowed to reconnect for this feature.
+  Future<bool> enableHidDictation(String deviceId) {
+    return _dictation.enableHid(deviceId, reconnect: () async {
+      await ServiceManager.instance().device.disconnectDevice(deviceId);
+      // disconnectDevice removes the transport and disables native reconnect.
+      // This explicit user activation is the only dictation path allowed to
+      // establish a new connection; utterance delivery remains passive.
+      await ServiceManager.instance().device.ensureConnection(deviceId, force: true);
+    });
+  }
+
+  /// Cancel pending dictation without changing the pendant's HID mode.
+  Future<void> cancelHidDictation() => _dictation.invalidate(_recordingDevice?.id ?? '');
+
+  /// Real opt-out path: cancels any in-flight dictation, writes DISABLE,
+  /// cycles the link, and verifies the HID service is gone.
+  Future<bool> disableHidDictation(String deviceId) {
+    return _dictation.disableHid(deviceId, reconnect: () async {
+      await ServiceManager.instance().device.disconnectDevice(deviceId);
+      // disconnectDevice removes the transport and disables native reconnect.
+      // This explicit user activation is the only dictation path allowed to
+      // establish a new connection; utterance delivery remains passive.
+      await ServiceManager.instance().device.ensureConnection(deviceId, force: true);
+    });
+  }
 
   StreamSubscription? _storageStream;
 
@@ -539,6 +600,9 @@ class CaptureController extends ChangeNotifier
 
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
+    if (_recordingDevice?.id != device?.id) {
+      unawaited(_dictation.invalidate(_recordingDevice?.id ?? ''));
+    }
     _recordingDevice = device;
     if (device == null) _endOfflineSession();
     notifyListeners();
@@ -956,6 +1020,17 @@ class CaptureController extends ChangeNotifier
           }
         }
 
+        // Experimental HID dictation prototype: while the developer toggle is
+        // on, dictation owns the pendant button — tap once to start an
+        // utterance, tap again to type it into the focused field. EVERY
+        // button event is consumed here (taps, double taps, long press, raw
+        // press/release) so no assistant voice command can fire from an
+        // HID-mode click.
+        if (SharedPreferencesUtil().hidDictationEnabled) {
+          _dictation.onButtonEvent(deviceId, buttonState);
+          return;
+        }
+
         // double tap
         if (buttonState == 2) {
           Logger.debug("Double tap detected");
@@ -1055,6 +1130,8 @@ class CaptureController extends ChangeNotifier
     );
   }
 
+  // (HID dictation button handling lives in PendantDictationController.)
+
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     Logger.debug('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
@@ -1075,6 +1152,12 @@ class CaptureController extends ChangeNotifier
         if (_voiceCommandSession != null && voiceCommandSupported) {
           final payload = _activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
           _commandBytes.add(payload);
+        }
+
+        // Experimental HID dictation prototype: collect the same opus payload
+        // stream while a press-delimited capture is open.
+        if (_dictation.isCapturing && voiceCommandSupported) {
+          _dictation.onAudioPayload(_activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3));
         }
 
         // Local storage syncs. In batch mode the native layer owns writing the
@@ -1510,6 +1593,9 @@ class CaptureController extends ChangeNotifier
   }
 
   Future _closeBleStream({bool disableNativeBackground = false}) async {
+    // Teardown can stop or switch capture without dropping Bluetooth. Void
+    // pending dictation before awaiting stream cancellation or WAL cleanup.
+    await _dictation.invalidate(_recordingDevice?.id ?? '');
     await _bleBytesStream?.cancel();
     await _blePhotoStream?.cancel();
     await _bleButtonStream?.cancel();
@@ -1531,7 +1617,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void dispose() {
-    _phoneBatchGeolocationPreference.invalidateSession();
+    _dictation.dispose();
     _clearSessionLocation();
     _recordingTelemetry.complete(reason: 'pipeline_closed');
     _bleBytesStream?.cancel();
@@ -2632,6 +2718,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
+    unawaited(_dictation.invalidate(_recordingDevice!.id));
 
     // Write mute state first — before BLE cancel which may fire other events
     await BatteryWidgetService().updateMuteState(true);

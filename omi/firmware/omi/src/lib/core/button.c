@@ -18,6 +18,9 @@
 #include "mic.h"
 #include "speaker.h"
 #include "transport.h"
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+#include "hid_dictation.h"
+#endif
 #include "wdog_facade.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
@@ -103,6 +106,11 @@ static inline void notify_press()
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
+#ifdef CONFIG_OMI_ENABLE_HID_DICTATION
+    // Panic stop: a pendant button press during dictation typing cancels the
+    // session and releases all keys before the app hears anything else.
+    hid_dictation_button_pressed();
+#endif
 }
 
 static inline void notify_unpress()

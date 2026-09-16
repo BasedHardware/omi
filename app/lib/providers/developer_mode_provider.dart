@@ -39,6 +39,9 @@ class DeveloperModeProvider extends BaseProvider {
   // VAD Gate (experimental)
   bool vadGateEnabled = false;
 
+  // Pendant HID dictation prototype (experimental)
+  bool hidDictationEnabled = false;
+
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
     if (!value) {
@@ -113,6 +116,7 @@ class DeveloperModeProvider extends BaseProvider {
     showTasksEnabled = SharedPreferencesUtil().showTasksEnabled;
     showPhoneCallButton = SharedPreferencesUtil().showPhoneCallButton;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
+    hidDictationEnabled = SharedPreferencesUtil().hidDictationEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
@@ -277,6 +281,12 @@ class DeveloperModeProvider extends BaseProvider {
   void onVadGateChanged(bool value) {
     vadGateEnabled = value;
     SharedPreferencesUtil().vadGateEnabled = value;
+    notifyListeners();
+  }
+
+  void onHidDictationEnabledChanged(bool value) {
+    hidDictationEnabled = value;
+    SharedPreferencesUtil().hidDictationEnabled = value;
     notifyListeners();
   }
 }
