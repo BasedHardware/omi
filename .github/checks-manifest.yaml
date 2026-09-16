@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: public-holidays-tests
+    command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
+    triggers: ["plugins/omi-public-holidays-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13928: Nager.Date error objects are dicts, so holidays[:limit] raised TypeError, and a missing lifespan http_client crashed with AttributeError while whitespace-padded country codes failed max_length before normalization; the suite exercises every handler and formatter through stubs"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
@@ -1006,11 +1011,6 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
-  - id: public-holidays-tests
-    command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
-    triggers: ["plugins/omi-public-holidays-app/**"]
-    lanes: ["local", "ci"]
-    reason: "#13928: Nager.Date error objects are dicts, so holidays[:limit] raised TypeError, and a missing lifespan http_client crashed with AttributeError while whitespace-padded country codes failed max_length before normalization; the suite exercises every handler and formatter through stubs"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
