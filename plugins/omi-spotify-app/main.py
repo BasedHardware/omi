@@ -105,7 +105,7 @@ def refresh_access_token(refresh_token: str) -> Optional[Dict[str, Any]]:
     auth_header = base64.b64encode(
         f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()
     ).decode()
-    
+
     response = requests.post(
         SPOTIFY_TOKEN_URL,
         headers={
@@ -117,7 +117,7 @@ def refresh_access_token(refresh_token: str) -> Optional[Dict[str, Any]]:
             "refresh_token": refresh_token,
         },
     )
-    
+
     if response.status_code == 200:
         return response.json()
     return None
@@ -128,7 +128,7 @@ def get_valid_access_token(uid: str) -> Optional[str]:
     tokens = get_spotify_tokens(uid)
     if not tokens:
         return None
-    
+
     if is_token_expired(uid):
         # Refresh the token
         new_tokens = refresh_access_token(tokens["refresh_token"])
@@ -142,7 +142,7 @@ def get_valid_access_token(uid: str) -> Optional[str]:
             )
             return new_tokens["access_token"]
         return None
-    
+
     return tokens["access_token"]
 
 
@@ -157,10 +157,10 @@ def spotify_api_request(
     access_token = get_valid_access_token(uid)
     if not access_token:
         return {"error": "User not authenticated with Spotify"}
-    
+
     url = f"{SPOTIFY_API_BASE}{endpoint}"
     headers = get_auth_header(access_token)
-    
+
     try:
         if method.upper() == "GET":
             response = requests.get(url, headers=headers, params=params)
@@ -172,13 +172,13 @@ def spotify_api_request(
             response = requests.delete(url, headers=headers, params=params)
         else:
             return {"error": f"Unsupported HTTP method: {method}"}
-        
+
         if response.status_code == 204:
             return {"success": True}
         elif response.status_code >= 400:
             error_data = response.json() if response.content else {}
             return {"error": error_data.get("error", {}).get("message", f"API error: {response.status_code}")}
-        
+
         return response.json() if response.content else {"success": True}
     except requests.RequestException as e:
         return {"error": f"Request failed: {str(e)}"}
@@ -190,10 +190,10 @@ def search_tracks(uid: str, query: str, limit: int = 5) -> List[SpotifyTrack]:
         uid, "GET", "/search",
         params={"q": query, "type": "track", "limit": limit}
     )
-    
+
     if "error" in result:
         return []
-    
+
     tracks = []
     for item in result.get("tracks", {}).get("items", []):
         tracks.append(SpotifyTrack(
@@ -223,10 +223,10 @@ def get_user_playlists(uid: str, limit: int = 20) -> List[SpotifyPlaylist]:
         uid, "GET", "/me/playlists",
         params={"limit": limit}
     )
-    
+
     if "error" in result:
         return []
-    
+
     playlists = []
     for item in result.get("items", []):
         playlists.append(SpotifyPlaylist(
@@ -246,17 +246,17 @@ def find_playlist_by_name(uid: str, name: str) -> Optional[SpotifyPlaylist]:
     """Find a playlist by name (case-insensitive partial match)."""
     playlists = get_user_playlists(uid, limit=50)
     name_lower = name.lower()
-    
+
     # First try exact match
     for playlist in playlists:
         if playlist.name.lower() == name_lower:
             return playlist
-    
+
     # Then try partial match
     for playlist in playlists:
         if name_lower in playlist.name.lower():
             return playlist
-    
+
     return None
 
 
@@ -273,23 +273,23 @@ async def home(request: Request, uid: Optional[str] = None):
             "authenticated": False,
             "error": "Missing user ID"
         })
-    
+
     tokens = get_spotify_tokens(uid)
     authenticated = tokens is not None
-    
+
     # Get user profile if authenticated
     user_profile = None
     playlists = []
     default_playlist = None
-    
+
     if authenticated:
         profile_result = spotify_api_request(uid, "GET", "/me")
         if "error" not in profile_result:
             user_profile = profile_result
-        
+
         playlists = get_user_playlists(uid, limit=50)
         default_playlist = get_default_playlist(uid)
-    
+
     return templates.TemplateResponse("setup.html", {
         "request": request,
         "uid": uid,
@@ -307,7 +307,7 @@ async def spotify_auth(uid: str):
     _require_spotify_credentials()
     if not uid:
         raise HTTPException(status_code=400, detail="User ID is required")
-    
+
     params = {
         "client_id": SPOTIFY_CLIENT_ID,
         "response_type": "code",
@@ -316,7 +316,7 @@ async def spotify_auth(uid: str):
         "state": uid,
         "show_dialog": "true"
     }
-    
+
     auth_url = f"{SPOTIFY_AUTH_URL}?{urllib.parse.urlencode(params)}"
     return RedirectResponse(url=auth_url)
 
@@ -330,22 +330,22 @@ async def spotify_callback(request: Request, code: str = None, state: str = None
             "authenticated": False,
             "error": f"Authorization failed: {error}"
         })
-    
+
     if not code or not state:
         return templates.TemplateResponse("setup.html", {
             "request": request,
             "authenticated": False,
             "error": "Invalid callback parameters"
         })
-    
+
     uid = state
-    
+
     # Exchange code for tokens
     _require_spotify_credentials()
     auth_header = base64.b64encode(
         f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()
     ).decode()
-    
+
     response = requests.post(
         SPOTIFY_TOKEN_URL,
         headers={
@@ -358,24 +358,24 @@ async def spotify_callback(request: Request, code: str = None, state: str = None
             "redirect_uri": SPOTIFY_REDIRECT_URI,
         },
     )
-    
+
     if response.status_code != 200:
         return templates.TemplateResponse("setup.html", {
             "request": request,
             "authenticated": False,
             "error": "Failed to exchange authorization code"
         })
-    
+
     token_data = response.json()
     expires_at = int(datetime.utcnow().timestamp()) + token_data.get("expires_in", 3600)
-    
+
     store_spotify_tokens(
         uid,
         token_data["access_token"],
         token_data["refresh_token"],
         expires_at
     )
-    
+
     # Redirect to home with uid
     return RedirectResponse(url=f"/?uid={uid}")
 
@@ -416,31 +416,31 @@ async def tool_search_songs(request: Request):
         uid = body.get("uid")
         query = body.get("query", "")
         limit = body.get("limit", 5)
-        
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         if not query:
             return ChatToolResponse(error="Search query is required")
-        
+
         # Check authentication
         if not get_spotify_tokens(uid):
             return ChatToolResponse(error="Please connect your Spotify account first in the app settings.")
-        
+
         tracks = search_tracks(uid, query, limit)
-        
+
         if not tracks:
             return ChatToolResponse(result=f"No songs found for '{query}'")
-        
+
         # Format results
         results = []
         for i, track in enumerate(tracks, 1):
             artists = ", ".join(track.artists)
             duration = f"{track.duration_ms // 60000}:{(track.duration_ms % 60000) // 1000:02d}"
             results.append(f"{i}. **{track.name}** by {artists} ({duration}) - Album: {track.album}")
-        
+
         return ChatToolResponse(result=f"🎵 Found {len(tracks)} songs:\n\n" + "\n".join(results))
-    
+
     except Exception as e:
         return ChatToolResponse(error=f"Search failed: {str(e)}")
 
@@ -459,33 +459,33 @@ async def tool_add_to_playlist(request: Request):
         artist_name = body.get("artist_name", "")
         playlist_name = body.get("playlist_name")
         playlist_id = body.get("playlist_id")
-        
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         if not song_name:
             return ChatToolResponse(error="Song name is required")
-        
+
         # Check authentication
         if not get_spotify_tokens(uid):
             return ChatToolResponse(error="Please connect your Spotify account first in the app settings.")
-        
+
         # Build search query
         search_query = song_name
         if artist_name:
             search_query = f"{song_name} artist:{artist_name}"
-        
+
         # Search for the song
         tracks = search_tracks(uid, search_query, limit=1)
-        
+
         if not tracks:
             return ChatToolResponse(error=f"Could not find song: {song_name}")
-        
+
         track = tracks[0]
-        
+
         # Determine which playlist to use
         target_playlist = None
-        
+
         if playlist_id:
             # Use provided playlist ID
             target_playlist = SpotifyPlaylist(
@@ -515,7 +515,7 @@ async def tool_add_to_playlist(request: Request):
                 )
             else:
                 return ChatToolResponse(error="No playlist specified and no default playlist set. Please specify a playlist name or set a default in app settings.")
-        
+
         # Add track to playlist
         print(f"🎵 Adding track {track.uri} to playlist {target_playlist.id} ({target_playlist.name})")
         result = spotify_api_request(
@@ -524,16 +524,16 @@ async def tool_add_to_playlist(request: Request):
             json_data={"uris": [track.uri]}
         )
         print(f"🎵 Spotify API response: {result}")
-        
+
         if "error" in result:
             return ChatToolResponse(error=f"Failed to add song: {result['error']}")
-        
+
         artists = ", ".join(track.artists)
         print(f"🎵 SUCCESS: Added {track.name} by {artists} to {target_playlist.name}")
         return ChatToolResponse(
             result=f"✅ Added **{track.name}** by {artists} to playlist **{target_playlist.name}**!"
         )
-    
+
     except Exception as e:
         return ChatToolResponse(error=f"Failed to add song: {str(e)}")
 
@@ -550,24 +550,24 @@ async def tool_create_playlist(request: Request):
         name = body.get("name", "")
         description = body.get("description", "Created with Omi")
         public = body.get("public", False)
-        
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         if not name:
             return ChatToolResponse(error="Playlist name is required")
-        
+
         # Check authentication
         if not get_spotify_tokens(uid):
             return ChatToolResponse(error="Please connect your Spotify account first in the app settings.")
-        
+
         # Get user ID
         profile = spotify_api_request(uid, "GET", "/me")
         if "error" in profile:
             return ChatToolResponse(error="Failed to get user profile")
-        
+
         spotify_user_id = profile["id"]
-        
+
         # Create playlist
         result = spotify_api_request(
             uid, "POST",
@@ -578,15 +578,15 @@ async def tool_create_playlist(request: Request):
                 "public": public
             }
         )
-        
+
         if "error" in result:
             return ChatToolResponse(error=f"Failed to create playlist: {result['error']}")
-        
+
         playlist_url = result.get("external_urls", {}).get("spotify", "")
         return ChatToolResponse(
             result=f"✅ Created playlist **{name}**!\n\nOpen in Spotify: {playlist_url}"
         )
-    
+
     except Exception as e:
         return ChatToolResponse(error=f"Failed to create playlist: {str(e)}")
 
@@ -601,27 +601,27 @@ async def tool_get_playlists(request: Request):
         body = await request.json()
         uid = body.get("uid")
         limit = body.get("limit", 10)
-        
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         # Check authentication
         if not get_spotify_tokens(uid):
             return ChatToolResponse(error="Please connect your Spotify account first in the app settings.")
-        
+
         playlists = get_user_playlists(uid, limit)
-        
+
         if not playlists:
             return ChatToolResponse(result="You don't have any playlists yet.")
-        
+
         # Format results
         results = []
         for i, playlist in enumerate(playlists, 1):
             visibility = "🌐" if playlist.public else "🔒"
             results.append(f"{i}. {visibility} **{playlist.name}** ({playlist.tracks_total} tracks)")
-        
+
         return ChatToolResponse(result=f"📋 Your playlists:\n\n" + "\n".join(results))
-    
+
     except Exception as e:
         return ChatToolResponse(error=f"Failed to get playlists: {str(e)}")
 
@@ -635,40 +635,40 @@ async def tool_get_now_playing(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         # Check authentication
         if not get_spotify_tokens(uid):
             return ChatToolResponse(error="Please connect your Spotify account first in the app settings.")
-        
+
         result = spotify_api_request(uid, "GET", "/me/player/currently-playing")
-        
+
         if "error" in result:
             return ChatToolResponse(error=f"Failed to get playback: {result['error']}")
-        
+
         if not result or not result.get("item"):
             return ChatToolResponse(result="🔇 Nothing is currently playing on Spotify.")
-        
+
         track = result["item"]
         is_playing = result.get("is_playing", False)
         progress_ms = result.get("progress_ms", 0)
-        
+
         artists = ", ".join([a["name"] for a in track["artists"]])
         duration_ms = track["duration_ms"]
-        
+
         progress = f"{progress_ms // 60000}:{(progress_ms % 60000) // 1000:02d}"
         duration = f"{duration_ms // 60000}:{(duration_ms % 60000) // 1000:02d}"
-        
+
         status = "▶️ Playing" if is_playing else "⏸️ Paused"
-        
+
         return ChatToolResponse(
             result=f"{status}: **{track['name']}** by {artists}\n"
                    f"Album: {track['album']['name']}\n"
                    f"Progress: {progress} / {duration}"
         )
-    
+
     except Exception as e:
         return ChatToolResponse(error=f"Failed to get current playback: {str(e)}")
 
@@ -683,17 +683,17 @@ async def tool_control_playback(request: Request):
         body = await request.json()
         uid = body.get("uid")
         action = body.get("action", "").lower()
-        
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         if action not in ["play", "pause", "next", "previous", "skip"]:
             return ChatToolResponse(error="Invalid action. Use: play, pause, next, previous")
-        
+
         # Check authentication
         if not get_spotify_tokens(uid):
             return ChatToolResponse(error="Please connect your Spotify account first in the app settings.")
-        
+
         # Map action to endpoint
         endpoint_map = {
             "play": ("/me/player/play", "PUT"),
@@ -702,15 +702,15 @@ async def tool_control_playback(request: Request):
             "skip": ("/me/player/next", "POST"),
             "previous": ("/me/player/previous", "POST"),
         }
-        
+
         endpoint, method = endpoint_map[action]
         result = spotify_api_request(uid, method, endpoint)
-        
+
         if "error" in result:
             if "No active device" in str(result.get("error", "")):
                 return ChatToolResponse(error="No active Spotify device found. Please open Spotify on one of your devices first.")
             return ChatToolResponse(error=f"Playback control failed: {result['error']}")
-        
+
         action_messages = {
             "play": "▶️ Resumed playback",
             "pause": "⏸️ Paused playback",
@@ -718,9 +718,9 @@ async def tool_control_playback(request: Request):
             "skip": "⏭️ Skipped to next track",
             "previous": "⏮️ Went to previous track",
         }
-        
+
         return ChatToolResponse(result=action_messages[action])
-    
+
     except Exception as e:
         return ChatToolResponse(error=f"Playback control failed: {str(e)}")
 
@@ -736,48 +736,48 @@ async def tool_play_song(request: Request):
         uid = body.get("uid")
         song_name = body.get("song_name", "")
         artist_name = body.get("artist_name", "")
-        
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         if not song_name:
             return ChatToolResponse(error="Song name is required")
-        
+
         # Check authentication
         if not get_spotify_tokens(uid):
             return ChatToolResponse(error="Please connect your Spotify account first in the app settings.")
-        
+
         # Build search query
         search_query = song_name
         if artist_name:
             search_query = f"{song_name} artist:{artist_name}"
-        
+
         # Search for the song
         tracks = search_tracks(uid, search_query, limit=1)
-        
+
         if not tracks:
             return ChatToolResponse(error=f"Could not find song: {song_name}")
-        
+
         track = tracks[0]
-        
+
         # Play the track
         result = spotify_api_request(
             uid, "PUT", "/me/player/play",
             json_data={"uris": [track.uri]}
         )
-        
+
         if "error" in result:
             if "No active device" in str(result.get("error", "")):
                 return ChatToolResponse(
                     error="No active Spotify device found. Please open Spotify on one of your devices first."
                 )
             return ChatToolResponse(error=f"Failed to play: {result['error']}")
-        
+
         artists = ", ".join(track.artists)
         return ChatToolResponse(
             result=f"▶️ Now playing: **{track.name}** by {artists}"
         )
-    
+
     except Exception as e:
         return ChatToolResponse(error=f"Failed to play song: {str(e)}")
 
@@ -795,20 +795,20 @@ async def tool_get_recommendations(request: Request):
         seed_artists = body.get("seed_artists", [])
         seed_genres = body.get("seed_genres", [])
         limit = body.get("limit", 5)
-        
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         # Check authentication
         if not get_spotify_tokens(uid):
             return ChatToolResponse(error="Please connect your Spotify account first in the app settings.")
-        
+
         # If no seeds provided, get from recently played
         if not seed_tracks and not seed_artists and not seed_genres:
             recent = spotify_api_request(uid, "GET", "/me/player/recently-played", params={"limit": 5})
             if "error" not in recent and recent.get("items"):
                 seed_tracks = [item["track"]["id"] for item in recent["items"][:5]]
-        
+
         params = {"limit": limit}
         if seed_tracks:
             params["seed_tracks"] = ",".join(seed_tracks[:5])
@@ -816,24 +816,24 @@ async def tool_get_recommendations(request: Request):
             params["seed_artists"] = ",".join(seed_artists[:5])
         if seed_genres:
             params["seed_genres"] = ",".join(seed_genres[:5])
-        
+
         result = spotify_api_request(uid, "GET", "/recommendations", params=params)
-        
+
         if "error" in result:
             return ChatToolResponse(error=f"Failed to get recommendations: {result['error']}")
-        
+
         tracks = result.get("tracks", [])
         if not tracks:
             return ChatToolResponse(result="No recommendations found.")
-        
+
         # Format results
         results = []
         for i, track in enumerate(tracks, 1):
             artists = ", ".join([a["name"] for a in track["artists"]])
             results.append(f"{i}. **{track['name']}** by {artists}")
-        
+
         return ChatToolResponse(result=f"🎧 Recommended songs for you:\n\n" + "\n".join(results))
-    
+
     except Exception as e:
         return ChatToolResponse(error=f"Failed to get recommendations: {str(e)}")
 
@@ -846,7 +846,7 @@ async def tool_get_recommendations(request: Request):
 async def get_omi_tools_manifest():
     """
     Omi Chat Tools Manifest endpoint.
-    
+
     This endpoint returns the chat tools definitions that Omi will fetch
     when the app is created or updated in the Omi App Store.
     """
@@ -1024,4 +1024,3 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
-

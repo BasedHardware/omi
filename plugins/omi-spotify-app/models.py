@@ -154,4 +154,3 @@ class Conversation(BaseModel):
 class EndpointResponse(BaseModel):
     """Standard endpoint response for Omi webhooks."""
     message: str = Field(description="A short message to be sent as notification to the user, if needed.", default="")
-

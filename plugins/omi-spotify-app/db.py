@@ -20,14 +20,14 @@ _redis_client = None
 def _get_redis() -> Optional['redis.Redis']:
     """Get or create Redis connection."""
     global _redis_client
-    
+
     if not REDIS_AVAILABLE:
         return None
-    
+
     redis_url = os.getenv("REDIS_URL") or os.getenv("REDIS_PRIVATE_URL")
     if not redis_url:
         return None
-    
+
     if _redis_client is None:
         try:
             _redis_client = redis.from_url(redis_url, decode_responses=True)
@@ -36,7 +36,7 @@ def _get_redis() -> Optional['redis.Redis']:
         except Exception as e:
             print(f"⚠️ Redis connection failed: {e}, falling back to file storage")
             return None
-    
+
     return _redis_client
 
 
@@ -74,14 +74,14 @@ def _save_json(filepath: str, data: Dict[str, Any]):
 def store_spotify_tokens(uid: str, access_token: str, refresh_token: str, expires_at: int):
     """Store Spotify tokens for a user."""
     r = _get_redis()
-    
+
     token_data = {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "expires_at": expires_at,
         "updated_at": datetime.utcnow().isoformat()
     }
-    
+
     if r:
         # Use Redis
         key = f"spotify:tokens:{uid}"
@@ -98,7 +98,7 @@ def store_spotify_tokens(uid: str, access_token: str, refresh_token: str, expire
 def get_spotify_tokens(uid: str) -> Optional[Dict[str, Any]]:
     """Get Spotify tokens for a user."""
     r = _get_redis()
-    
+
     if r:
         key = f"spotify:tokens:{uid}"
         data = r.get(key)
@@ -113,7 +113,7 @@ def get_spotify_tokens(uid: str) -> Optional[Dict[str, Any]]:
 def delete_spotify_tokens(uid: str):
     """Delete Spotify tokens for a user."""
     r = _get_redis()
-    
+
     if r:
         key = f"spotify:tokens:{uid}"
         r.delete(key)
@@ -141,7 +141,7 @@ def is_token_expired(uid: str) -> bool:
 def store_user_setting(uid: str, key: str, value: Any):
     """Store a setting for a user."""
     r = _get_redis()
-    
+
     if r:
         redis_key = f"spotify:settings:{uid}"
         settings = r.get(redis_key)
@@ -159,7 +159,7 @@ def store_user_setting(uid: str, key: str, value: Any):
 def get_user_setting(uid: str, key: str) -> Optional[Any]:
     """Get a setting for a user."""
     r = _get_redis()
-    
+
     if r:
         redis_key = f"spotify:settings:{uid}"
         settings = r.get(redis_key)
@@ -174,7 +174,7 @@ def get_user_setting(uid: str, key: str) -> Optional[Any]:
 def get_user_settings(uid: str) -> Dict[str, Any]:
     """Get all settings for a user."""
     r = _get_redis()
-    
+
     if r:
         redis_key = f"spotify:settings:{uid}"
         settings = r.get(redis_key)
