@@ -1,7 +1,8 @@
 """Semantic Scholar no-auth chat tools app for Omi."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import re
+from typing import Any, Dict
 from urllib.parse import quote
 
 import httpx
@@ -24,22 +25,99 @@ app = FastAPI(
 )
 
 
-def format_authors(authors: List[Dict[str, Any]]) -> str:
-    names = [a.get("name", "Unknown") for a in authors if a.get("name")]
+_BARE_DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
+
+# URL hosts that carry a paper identifier in their path.
+_IDENTIFIER_URL_MARKERS = (
+    ("doi.org/", "DOI"),
+    ("arxiv.org/abs/", "ARXIV"),
+    ("arxiv.org/pdf/", "ARXIV"),
+)
+
+# External identifier namespaces accepted by the Semantic Scholar Graph API,
+# mapped to their canonical casing.
+_NAMESPACE_CANONICAL = {
+    "doi": "DOI",
+    "arxiv": "ARXIV",
+    "mag": "MAG",
+    "acl": "ACL",
+    "pmid": "PMID",
+    "pmcid": "PMCID",
+    "corpusid": "CorpusId",
+    "dblp": "DBLP",
+    "url": "URL",
+}
+
+
+def _to_int(value: Any) -> int:
+    """Coerce heterogeneous JSON numbers (int, float, numeric string) to int."""
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return int(text)
+        except ValueError:
+            try:
+                return int(float(text))
+            except ValueError:
+                return 0
+    return 0
+
+
+def _paper_sort_key(paper: Any) -> tuple[int, int]:
+    """Normalized (year, citationCount) sort key.
+
+    Graph API payloads may carry years as strings, ints, or None; returning a
+    uniform tuple[int, int] keeps sorted() stable across mixed types.
+    """
+    if not isinstance(paper, dict):
+        return (0, 0)
+    return (_to_int(paper.get("year")), _to_int(paper.get("citationCount")))
+
+
+def format_authors(authors: Any) -> str:
+    if not isinstance(authors, list):
+        return "Unknown"
+    names = [str(a.get("name")) for a in authors if isinstance(a, dict) and a.get("name")]
     return ", ".join(names[:6]) if names else "Unknown"
 
 
 def format_year(year: Any) -> str:
-    if isinstance(year, int):
-        return str(year)
-    return "Unknown"
+    value = _to_int(year)
+    return str(value) if value > 0 else "Unknown"
 
 
 def normalize_identifier(raw: str) -> str:
+    """Normalize a user/agent supplied identifier to the <NAMESPACE>:<id> form.
+
+    Accepts raw DOIs (10.xxxx/...), doi.org and arxiv.org URLs, and namespaced
+    identifiers (doi:, arxiv:, pmid:, corpusid:, ...) in any casing. Anything
+    else, e.g. a bare Semantic Scholar paper ID, is returned unchanged.
+    """
     value = raw.strip()
-    if value.lower().startswith("doi:"):
-        # Preserve DOI namespace expected by Semantic Scholar.
-        value = "DOI:" + value[4:].strip()
+    lower = value.lower()
+
+    for marker, namespace in _IDENTIFIER_URL_MARKERS:
+        index = lower.find(marker)
+        if index != -1:
+            identifier = value[index + len(marker):].strip().rstrip("/")
+            if not identifier:
+                return value
+            if namespace == "ARXIV" and identifier.lower().endswith(".pdf"):
+                identifier = identifier[:-4]
+            return f"{namespace}:{identifier}"
+
+    namespace, separator, rest = value.partition(":")
+    if separator and rest.strip() and namespace.lower() in _NAMESPACE_CANONICAL:
+        return f"{_NAMESPACE_CANONICAL[namespace.lower()]}:{rest.strip()}"
+
+    # A bare DOI must be prefixed for the Graph API to resolve it.
+    if _BARE_DOI_RE.match(value):
+        return f"DOI:{value}"
+
     return value
 
 
@@ -128,7 +206,8 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
 
     try:
         data = await api_get("/paper/search", params)
-        papers = data.get("data", [])
+        payload = data if isinstance(data, dict) else {}
+        papers = [p for p in (payload.get("data") or []) if isinstance(p, dict)]
         if not papers:
             return ChatToolResponse(result="No papers found.")
 
@@ -138,7 +217,7 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
             year = format_year(paper.get("year"))
             authors = format_authors(paper.get("authors", []))
             venue = paper.get("venue") or "Unknown venue"
-            cites = paper.get("citationCount", 0)
+            cites = paper.get("citationCount") or 0
             url = paper.get("url") or ""
             lines.append(
                 f"{i}. {title}\n   Authors: {authors}\n   Year: {year} | Venue: {venue} | Citations: {cites}"
@@ -147,6 +226,8 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
         return ChatToolResponse(result="\n\n".join(lines))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Semantic Scholar API error: {exc.response.status_code}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 
@@ -159,13 +240,15 @@ async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
             f"/paper/{identifier}",
             {"fields": "title,abstract,year,authors,citationCount,referenceCount,url,venue"},
         )
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Paper not found.")
 
         title = data.get("title") or "Untitled"
         year = format_year(data.get("year"))
         authors = format_authors(data.get("authors", []))
         venue = data.get("venue") or "Unknown venue"
-        citations = data.get("citationCount", 0)
-        references = data.get("referenceCount", 0)
+        citations = data.get("citationCount") or 0
+        references = data.get("referenceCount") or 0
         abstract = data.get("abstract") or "No abstract available."
         url = data.get("url") or ""
 
@@ -184,6 +267,8 @@ async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
         if code == 404:
             return ChatToolResponse(error="Paper not found.")
         return ChatToolResponse(error=f"Semantic Scholar API error: {code}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 
@@ -199,22 +284,19 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
             },
         )
 
-        author_name = data.get("name") or req.author_id
-        papers = data.get("papers", [])
+        payload = data if isinstance(data, dict) else {}
+        author_name = payload.get("name") or req.author_id
+        papers = [p for p in (payload.get("papers") or []) if isinstance(p, dict)]
         if not papers:
             return ChatToolResponse(result=f"No papers found for author {author_name}.")
 
-        papers_sorted = sorted(
-            papers,
-            key=lambda p: ((p.get("year") or 0), (p.get("citationCount") or 0)),
-            reverse=True,
-        )[: req.max_results]
+        papers_sorted = sorted(papers, key=_paper_sort_key, reverse=True)[: req.max_results]
 
         lines = [f"Recent papers by {author_name}:"]
         for i, paper in enumerate(papers_sorted, start=1):
             title = paper.get("title") or "Untitled"
             year = format_year(paper.get("year"))
-            cites = paper.get("citationCount", 0)
+            cites = paper.get("citationCount") or 0
             url = paper.get("url") or ""
             lines.append(
                 f"{i}. {title}\n   Year: {year} | Citations: {cites}" + (f"\n   URL: {url}" if url else "")
@@ -226,6 +308,8 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
         if code == 404:
             return ChatToolResponse(error="Author not found.")
         return ChatToolResponse(error=f"Semantic Scholar API error: {code}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 

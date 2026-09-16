@@ -3256,6 +3256,11 @@
     "speechProfileTopicGoal": "Apakah matlamat jangka panjang anda?",
     "speechToTextUnavailableDesc": "Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.",
     "memoryHistoryPartial": "Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.",
+    "memoryHistory": "Sejarah",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Ketik + untuk mula merakam",
-    "processingTakingLonger": "Masih diproses — ini mengambil masa lebih lama daripada biasa."
+    "processingTakingLonger": "Masih diproses — ini mengambil masa lebih lama daripada biasa.",
+    "speechProfileEnrollmentPrompt": "Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat."
 }

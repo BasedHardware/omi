@@ -133,7 +133,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return None
     except Exception as e:
         log(f"Error refreshing token: {e}")
@@ -167,7 +167,7 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
         elif response.status_code == 204:
             return {"success": True}
         else:
-            log(f"Twitter API error: {response.status_code} - {response.text}")
+            log(f"Twitter API error: {response.status_code}")
             return {"error": response.text, "status_code": response.status_code}
 
     except Exception as e:
@@ -1132,7 +1132,7 @@ async def twitter_callback(
             )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
+            log(f"Token exchange failed: {response.status_code}")
             return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
 
         token_response = response.json()

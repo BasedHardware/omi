@@ -2026,6 +2026,15 @@ class AppLocalizationsDa extends AppLocalizations {
       'Noget af mindehistorikken er ikke tilgængeligt. Viser den historik, der er modtaget indtil nu.';
 
   @override
+  String get memoryHistory => 'Historik';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Fortryd';
 
   @override
@@ -9966,4 +9975,8 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Arbejder stadig — det tager længere end normalt.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.';
 }

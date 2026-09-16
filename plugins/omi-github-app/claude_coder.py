@@ -243,7 +243,7 @@ def create_or_update_files_via_api(
             response = requests.post(blob_url, headers=headers, json=blob_data)
 
             if response.status_code != 201:
-                logger.error(f"Failed to create blob for {file_path}: {response.text}")
+                logger.error(f"Failed to create blob for {file_path}: {response.status_code}")
                 continue
 
             blob_sha = response.json()['sha']

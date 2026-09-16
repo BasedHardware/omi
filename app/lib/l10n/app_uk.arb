@@ -3256,6 +3256,11 @@
     "speechProfileTopicGoal": "Яка ваша довгострокова мета?",
     "speechToTextUnavailableDesc": "Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.",
     "memoryHistoryPartial": "Частина історії спогадів недоступна. Показано історію, отриману на цей момент.",
+    "memoryHistory": "Історія",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Натисніть +, щоб почати запис",
-    "processingTakingLonger": "Ще обробляється — це триває довше, ніж зазвичай."
+    "processingTakingLonger": "Ще обробляється — це триває довше, ніж зазвичай.",
+    "speechProfileEnrollmentPrompt": "Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд."
 }

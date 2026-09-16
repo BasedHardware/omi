@@ -3298,6 +3298,11 @@
     "speechProfileTopicGoal": "Apa tujuan jangka panjang Anda?",
     "speechToTextUnavailableDesc": "Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.",
     "memoryHistoryPartial": "Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.",
+    "memoryHistory": "Riwayat",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Ketuk + untuk mulai merekam",
-    "processingTakingLonger": "Masih diproses — ini memakan waktu lebih lama dari biasanya."
+    "processingTakingLonger": "Masih diproses — ini memakan waktu lebih lama dari biasanya.",
+    "speechProfileEnrollmentPrompt": "Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik."
 }

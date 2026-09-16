@@ -3352,6 +3352,11 @@
     "speechProfileTopicGoal": "Mi a hosszú távú célod?",
     "speechToTextUnavailableDesc": "A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.",
     "memoryHistoryPartial": "Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.",
+    "memoryHistory": "Előzmények",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Koppints a + jelre a felvétel indításához",
-    "processingTakingLonger": "Még folyamatban — ez tovább tart a szokásosnál."
+    "processingTakingLonger": "Még folyamatban — ez tovább tart a szokásosnál.",
+    "speechProfileEnrollmentPrompt": "Hogy az Omi tudja, melyik hang a tiéd — beszélj bármiről körülbelül 5 másodpercig."
 }
