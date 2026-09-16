@@ -79,6 +79,10 @@ function presentBool(value: unknown): void {
   if (value === undefined) return;
   if (typeof value !== 'boolean') throw new Error('Omi boolean is malformed');
 }
+function presentNullableInt(value: unknown): void {
+  if (value === undefined || value === null) return;
+  integer(value);
+}
 function presentDefaultInt(value: unknown): void {
   if (value === undefined) return;
   if (value === null) throw new Error('Omi order is malformed');
@@ -421,6 +425,7 @@ function discardedTranscriptSegments(value: unknown): {
       segment.person_id === undefined || segment.person_id === null
         ? undefined
         : text(segment.person_id);
+    presentNullableInt(segment.speaker_id);
     return {
       text: text(segment.text, ''),
       speaker: segment.speaker == null ? 'SPEAKER_00' : text(segment.speaker),

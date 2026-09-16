@@ -560,6 +560,113 @@ test('old conversations name Flutter ConversationListItem fromJson padded GET cl
   ).rejects.toThrow('Omi order is malformed');
 });
 
+test('old conversations name Flutter ConversationListItem fromJson padded GET transcript_segments speaker_id instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    transcript_segments: [
+      {
+        text: 'Hello from the recording',
+        speaker: 'SPEAKER_00',
+        is_user: true,
+        start: 0,
+        end: 2,
+        speaker_id: '1',
+      },
+    ],
+  };
+  const keptExact = await loadConversations(
+    backend([
+      row,
+      {
+        ...row,
+        id: 'json',
+        transcript_segments: [
+          {
+            text: 'Hello from the recording',
+            speaker: 'SPEAKER_00',
+            is_user: true,
+            start: 0,
+            end: 2,
+            speaker_id: 1,
+          },
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptExact.items.map(item => item.id)).toEqual([
+    'located',
+    'json',
+    'named',
+  ]);
+  const keptOmitted = await loadConversations(
+    backend([
+      {
+        ...row,
+        transcript_segments: [
+          {
+            text: 'Hello from the recording',
+            speaker: 'SPEAKER_00',
+            is_user: true,
+            start: 0,
+            end: 2,
+          },
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptOmitted.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptNull = await loadConversations(
+    backend([
+      {
+        ...row,
+        transcript_segments: [
+          {
+            text: 'Hello from the recording',
+            speaker: 'SPEAKER_00',
+            is_user: true,
+            start: 0,
+            end: 2,
+            speaker_id: null,
+          },
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptNull.items.map(item => item.id)).toEqual(['located', 'named']);
+  for (const speaker_id of ['  1  ', '1 ', '  1', '1\n', '\u00851']) {
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            transcript_segments: [
+              {
+                text: 'Hello from the recording',
+                speaker: 'SPEAKER_00',
+                is_user: true,
+                start: 0,
+                end: 2,
+                speaker_id,
+              },
+            ],
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi order is malformed');
+  }
+});
+
 test('old discarded conversations name GET transcript_segments as the list title', async () => {
   const {api} = backend([
     {
