@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: google-calendar-app-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manifest schema object types, datetime parser validations, and calendar event tool error/result flows"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

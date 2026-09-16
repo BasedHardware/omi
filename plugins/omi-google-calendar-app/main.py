@@ -310,6 +310,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/list_events",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "days": {
                             "type": "integer",
@@ -335,6 +336,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/create_event",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "title": {
                             "type": "string",
@@ -381,6 +383,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_event",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "event_id": {
                             "type": "string",
@@ -402,6 +405,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/update_event",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "event_id": {
                             "type": "string",
@@ -443,6 +447,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/delete_event",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "event_id": {
                             "type": "string",
@@ -464,6 +469,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/list_calendars",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {},
                     "required": []
                 },
