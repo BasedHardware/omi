@@ -24,6 +24,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: public-holidays-14151-tests
+    command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
+    triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14151: unmanaged contexts crashed on app.state.http_client and Nager.Date error objects are dicts not lists, so slicing and .get() formatting crashed; exercise the fallback client, payload guards, and formatters through stubs"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]

@@ -23,9 +23,13 @@ MAX_ITEMS = 20
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-        app_instance.state.http_client = client
+    client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+    app_instance.state.http_client = client
+    try:
         yield
+    finally:
+        app_instance.state.http_client = None
+        await client.aclose()
 
 
 app = FastAPI(
@@ -82,27 +86,37 @@ def _normalize_country_code(value: str) -> str:
     return code
 
 
-def _format_list(values: list[str] | None) -> str:
-    if not values:
+def _format_list(values: Any) -> str:
+    if not isinstance(values, list) or not values:
         return "all regions"
-    visible = values[:5]
+    visible = [str(value) for value in values[:5]]
     suffix = "" if len(values) <= 5 else f" +{len(values) - 5} more"
     return ", ".join(visible) + suffix
 
 
-def _format_holiday(holiday: dict[str, Any]) -> str:
+def _format_holiday(holiday: Any) -> str:
+    if not isinstance(holiday, dict):
+        return f"- {holiday}"
     regional = "global" if holiday.get("global") else _format_list(holiday.get("counties"))
-    types = ", ".join(holiday.get("types") or [])
+    raw_types = holiday.get("types")
+    type_items = raw_types if isinstance(raw_types, list) else []
+    types = ", ".join(str(item) for item in type_items)
     type_text = f"; {types}" if types else ""
     local_name = holiday.get("localName")
     name = holiday.get("name")
-    display_name = name if name == local_name or not local_name else f"{name} / {local_name}"
-    return f"- {holiday.get('date')}: {display_name} ({regional}{type_text})"
+    if name and local_name and name != local_name:
+        display_name = f"{name} / {local_name}"
+    else:
+        display_name = name or local_name or "unknown holiday"
+    date = holiday.get("date") or "unknown date"
+    return f"- {date}: {display_name} ({regional}{type_text})"
 
 
-def _format_long_weekend(item: dict[str, Any]) -> str:
+def _format_long_weekend(item: Any) -> str:
+    if not isinstance(item, dict):
+        return f"- {item}"
     raw_bridge_days = item.get("bridgeDays")
-    bridge_days = raw_bridge_days if isinstance(raw_bridge_days, list) else []
+    bridge_days = [str(day) for day in raw_bridge_days] if isinstance(raw_bridge_days, list) else []
     if bridge_days:
         bridge_text = f"; bridge day: {', '.join(bridge_days)}"
     elif item.get("needBridgeDay"):
@@ -113,7 +127,12 @@ def _format_long_weekend(item: dict[str, Any]) -> str:
 
 
 async def _request_json(path: str) -> Any:
-    client: httpx.AsyncClient = app.state.http_client
+    client = getattr(app.state, "http_client", None)
+    if client is None or getattr(client, "is_closed", False):
+        # Unmanaged context (no lifespan run, e.g. tests/serverless): allocate
+        # a fallback client instead of crashing on the missing state attribute.
+        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+        app.state.http_client = client
     response = await client.get(f"{NAGER_BASE_URL}{path}")
     response.raise_for_status()
     if response.status_code == 204 or not response.content:
@@ -214,7 +233,7 @@ async def omi_tools() -> dict[str, Any]:
 async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
     try:
         holidays = await _request_json(f"/PublicHolidays/{request.year}/{request.country_code}")
-        if not holidays:
+        if not isinstance(holidays, list) or not holidays:
             return ChatToolResponse(error=f"no holidays returned for {request.country_code} in {request.year}")
         lines = [f"Public holidays for {request.country_code} in {request.year}:"]
         lines.extend(_format_holiday(item) for item in holidays[: request.limit])
@@ -229,7 +248,7 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
 async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolResponse:
     try:
         holidays = await _request_json(f"/NextPublicHolidays/{request.country_code}")
-        if not holidays:
+        if not isinstance(holidays, list) or not holidays:
             return ChatToolResponse(error=f"no upcoming holidays returned for {request.country_code}")
         lines = [f"Upcoming public holidays for {request.country_code}:"]
         lines.extend(_format_holiday(item) for item in holidays[: request.limit])
@@ -244,7 +263,7 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
 async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
     try:
         weekends = await _request_json(f"/LongWeekend/{request.year}/{request.country_code}")
-        if not weekends:
+        if not isinstance(weekends, list) or not weekends:
             return ChatToolResponse(error=f"no long weekends returned for {request.country_code} in {request.year}")
         lines = [f"Long weekends for {request.country_code} in {request.year}:"]
         lines.extend(_format_long_weekend(item) for item in weekends[: request.limit])
@@ -261,9 +280,14 @@ async def list_supported_countries() -> ChatToolResponse:
         countries = await _request_json("/AvailableCountries")
         if not isinstance(countries, list) or not countries:
             return ChatToolResponse(error="country list request returned no countries")
-        lines = ["Supported countries:"]
-        for item in countries:
-            lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
+        entries = [
+            f"- {item.get('countryCode')}: {item.get('name')}"
+            for item in countries
+            if isinstance(item, dict)
+        ]
+        if not entries:
+            return ChatToolResponse(error="country list request returned no countries")
+        lines = ["Supported countries:", *entries]
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"country list request failed: {exc}")
