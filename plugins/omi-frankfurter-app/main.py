@@ -16,7 +16,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 
-# Updated to canonical v1 API endpoint to prevent 301 Moved Permanently redirects
 FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_TARGET_CURRENCIES = 10
@@ -24,7 +23,6 @@ MAX_TARGET_CURRENCIES = 10
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    # follow_redirects=True ensures resilience against future URL relocations
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=True) as client:
         app_instance.state.http_client = client
         try:
@@ -37,7 +35,7 @@ async def lifespan(app_instance: FastAPI):
 app = FastAPI(
     title="Omi Frankfurter Currency Integration",
     description="Convert currencies and check reference exchange rates from Omi chat tools",
-    version="1.0.1",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
@@ -117,18 +115,17 @@ def _parse_amount(value: str | float | int) -> Decimal:
 
 def _format_decimal(value: Decimal | float | int) -> str:
     dec = Decimal(str(value))
-    # If the rate is smaller than 0.0001, format with up to 8 decimal places so small exchange rates don't display as 0
-    if 0 < abs(dec) < Decimal("0.0001"):
-        number = dec.quantize(Decimal("0.00000001")).normalize()
-    else:
-        number = dec.quantize(Decimal("0.0001")).normalize()
-    return format(number, "f")
+    if dec == 0:
+        return "0"
+    if abs(dec) < Decimal("0.0001"):
+        return format(dec.quantize(Decimal("0.00000001")).normalize(), "f")
+    return format(dec.quantize(Decimal("0.0001")).normalize(), "f")
 
 
 async def _request_json(path: str, params: dict[str, Any] | None = None) -> Any:
     client = getattr(app.state, "http_client", None)
     if client is None or getattr(client, "is_closed", False):
-        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=True)
         app.state.http_client = client
     response = await client.get(f"{FRANKFURTER_BASE_URL}{path}", params=params)
     response.raise_for_status()
