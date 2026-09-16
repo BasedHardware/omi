@@ -90,7 +90,7 @@ def store_dropbox_tokens(
         "account_id": account_id,
         "display_name": display_name,
         "email": email,
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
     r = _get_redis()
@@ -167,7 +167,7 @@ def store_oauth_state(uid: str, state: str):
         states = _load_json(OAUTH_STATE_FILE)
         states[uid] = {
             "state": state,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         _save_json(OAUTH_STATE_FILE, states)
 

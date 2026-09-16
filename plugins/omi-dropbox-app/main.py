@@ -8,10 +8,11 @@ import io
 import os
 import secrets
 import struct
+import time
 import wave
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 import html
@@ -36,7 +37,14 @@ from db import (
     get_user_settings,
     store_user_settings,
 )
-from models import Conversation, EndpointResponse
+from models import (
+    ChatToolResponse,
+    Conversation,
+    EndpointResponse,
+    ListDropboxRequest,
+    ReadDropboxRequest,
+    SearchDropboxRequest,
+)
 from dropbox_client import DropboxClient
 
 load_dotenv()
@@ -59,13 +67,53 @@ app = FastAPI(
 )
 
 # ============== Audio Buffer ==============
-MAX_AUDIO_BUFFER_BYTES = 25 * 1024 * 1024  # 25 MB per user
-AUDIO_BUFFER_TTL_SECONDS = 3600  # 1 hour eviction
+# Maximum accumulated PCM16 audio retained per user (50 MB ~ 26 min at 16kHz mono).
+# Bounds the in-memory buffer so long streams or high client concurrency cannot
+# exhaust server memory.
+MAX_AUDIO_BUFFER_BYTES = 50 * 1024 * 1024
+# Buffers idle longer than this are evicted so abandoned streams cannot linger.
+AUDIO_BUFFER_TTL_SECONDS = 60 * 60
+# Accepted PCM sample-rate range for incoming audio.
+MIN_SAMPLE_RATE = 8000
+MAX_SAMPLE_RATE = 48000
 
 # Store audio chunks by user ID
 audio_buffers: Dict[str, bytes] = defaultdict(bytes)
 audio_sample_rates: Dict[str, int] = {}
-audio_buffer_created: Dict[str, datetime] = {}
+audio_buffer_updated_at: Dict[str, float] = {}
+
+
+def evict_stale_audio_buffers(now: Optional[float] = None) -> int:
+    """Drop per-user buffers idle longer than AUDIO_BUFFER_TTL_SECONDS."""
+    now = time.time() if now is None else now
+    stale_uids = [
+        uid
+        for uid, updated_at in audio_buffer_updated_at.items()
+        if now - updated_at > AUDIO_BUFFER_TTL_SECONDS
+    ]
+    for uid in stale_uids:
+        audio_buffers.pop(uid, None)
+        audio_sample_rates.pop(uid, None)
+        audio_buffer_updated_at.pop(uid, None)
+    return len(stale_uids)
+
+
+def buffer_audio_chunk(uid: str, chunk: bytes, sample_rate: int, now: Optional[float] = None) -> Tuple[bool, int]:
+    """
+    Append a PCM chunk to a user's buffer under MAX_AUDIO_BUFFER_BYTES.
+    Returns (accepted, buffered_bytes); a rejected chunk leaves the prior
+    buffer untouched so accumulation always stays within the bound.
+    """
+    if not chunk:
+        return True, len(audio_buffers.get(uid, b""))
+    now = time.time() if now is None else now
+    current = audio_buffers.get(uid, b"")
+    if len(current) + len(chunk) > MAX_AUDIO_BUFFER_BYTES:
+        return False, len(current)
+    audio_buffers[uid] = current + chunk
+    audio_sample_rates[uid] = sample_rate
+    audio_buffer_updated_at[uid] = now
+    return True, len(audio_buffers[uid])
 
 
 def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
@@ -81,30 +129,12 @@ def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
 
 def get_and_clear_audio(uid: str) -> Optional[bytes]:
     """Get accumulated audio for a user and clear the buffer."""
-    if uid in audio_buffers and audio_buffers[uid]:
-        audio_data = audio_buffers[uid]
-        sample_rate = audio_sample_rates.get(uid, 16000)
-        del audio_buffers[uid]
-        if uid in audio_sample_rates:
-            del audio_sample_rates[uid]
-        if uid in audio_buffer_created:
-            del audio_buffer_created[uid]
+    audio_data = audio_buffers.pop(uid, None)
+    sample_rate = audio_sample_rates.pop(uid, 16000)
+    audio_buffer_updated_at.pop(uid, None)
+    if audio_data:
         return create_wav_file(audio_data, sample_rate)
     return None
-
-
-def _evict_stale_audio_buffers() -> None:
-    """Remove audio buffers that have exceeded TTL."""
-    now = datetime.now(timezone.utc)
-    stale_uids = [
-        uid for uid, created in audio_buffer_created.items()
-        if (now - created).total_seconds() > AUDIO_BUFFER_TTL_SECONDS
-    ]
-    for uid in stale_uids:
-        audio_buffers.pop(uid, None)
-        audio_sample_rates.pop(uid, None)
-        audio_buffer_created.pop(uid, None)
-        print(f"[AUDIO] Evicted stale buffer for uid={uid} (TTL exceeded)")
 
 
 # ============== Helper Functions ==============
@@ -495,8 +525,8 @@ async def auth_callback(
         if not access_token:
             return HTMLResponse("No access token received", status_code=400)
 
-        # Calculate expiration (timezone-aware)
-        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Calculate expiration
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
         # Get user info
         display_name = ""
@@ -659,8 +689,6 @@ async def on_conversation_created(
 
     # Save audio if available
     if save_audio:
-        # Evict stale buffers before reading
-        _evict_stale_audio_buffers()
         audio_wav = get_and_clear_audio(uid)
         if audio_wav:
             print(f"[WEBHOOK] Uploading audio.wav ({len(audio_wav)} bytes)")
@@ -686,6 +714,24 @@ async def on_conversation_created(
 
 
 # ============== Chat Tools ==============
+
+
+async def _tool_request_body(request: Request) -> Tuple[Optional[dict], Optional[ChatToolResponse]]:
+    """
+    Parse a chat tool request body, requiring a JSON object.
+
+    Returns (body, None) on success, or (None, ChatToolResponse) with a clean
+    tool error when the body is missing, malformed JSON, or a non-object
+    payload (array, scalar, or JSON null) — the shapes the Omi chat backend can
+    legitimately send.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return None, ChatToolResponse(error="Request body must be valid JSON")
+    if not isinstance(body, dict):
+        return None, ChatToolResponse(error="Request body must be a JSON object")
+    return body, None
 
 
 @app.get("/.well-known/omi-tools.json")
@@ -748,46 +794,45 @@ async def get_omi_tools_manifest():
     }
 
 
-@app.post("/tools/search")
-async def tool_search_dropbox(request: Request):
+@app.post("/tools/search", response_model=ChatToolResponse)
+async def tool_search_dropbox(request: Request) -> ChatToolResponse:
     """Search for files in Dropbox."""
     try:
-        body = await request.json()
-        if not isinstance(body, dict):
-            return {"error": "request body must be a JSON object"}
-        uid = body.get("uid")
-        raw_query = body.get("query")
-        query = str(raw_query).strip() if raw_query is not None else ""
+        body, parse_error = await _tool_request_body(request)
+        if parse_error is not None:
+            return parse_error
 
-        if not uid:
-            return {"error": "Missing user ID"}
-
-        if not query:
-            return {"error": "Please provide a search query"}
+        req = SearchDropboxRequest.from_payload(body)
+        if not req.uid:
+            return ChatToolResponse(error="Missing user ID")
+        if not req.query:
+            return ChatToolResponse(error="Please provide a search query")
 
         # Get access token
-        access_token = get_valid_access_token(uid)
+        access_token = get_valid_access_token(req.uid)
         if not access_token:
-            return {"error": "Please connect your Dropbox account first in the app settings."}
+            return ChatToolResponse(error="Please connect your Dropbox account first in the app settings.")
 
         # Search Dropbox
         client = DropboxClient(access_token)
-        results, error = client.search_files(query, max_results=10)
+        results, error = client.search_files(req.query, max_results=10)
 
         if error:
-            return {"error": f"Search failed: {error}"}
+            return ChatToolResponse(error=f"Search failed: {error}")
 
         if not results:
-            return {"result": f"No files found matching '{query}'"}
+            return ChatToolResponse(result=f"No files found matching '{req.query}'")
 
         # Format results
-        output = f"**Found {len(results)} file(s) matching '{query}':**\n\n"
+        output = f"**Found {len(results)} file(s) matching '{req.query}':**\n\n"
         for i, item in enumerate(results, 1):
-            name = item["name"]
-            path = item["path"]
-            file_type = "📁" if item["type"] == "folder" else "📄"
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name", "Unknown")
+            path = item.get("path", "")
+            file_type = "📁" if item.get("type") == "folder" else "📄"
             size = item.get("size", 0)
-            size_str = f"{size / 1024:.1f} KB" if size > 0 else ""
+            size_str = f"{size / 1024:.1f} KB" if isinstance(size, (int, float)) and size > 0 else ""
 
             output += f"{i}. {file_type} **{name}**\n"
             output += f"   Path: `{path}`\n"
@@ -795,56 +840,55 @@ async def tool_search_dropbox(request: Request):
                 output += f"   Size: {size_str}\n"
             output += "\n"
 
-        return {"result": output}
+        return ChatToolResponse(result=output)
 
     except Exception as e:
-        return {"error": f"Search error: {str(e)}"}
+        return ChatToolResponse(error=f"Search error: {str(e)}")
 
 
-@app.post("/tools/list")
-async def tool_list_dropbox(request: Request):
+@app.post("/tools/list", response_model=ChatToolResponse)
+async def tool_list_dropbox(request: Request) -> ChatToolResponse:
     """List files in Dropbox folder."""
     try:
-        body = await request.json()
-        if not isinstance(body, dict):
-            return {"error": "request body must be a JSON object"}
-        uid = body.get("uid")
-        raw_folder = body.get("folder")
-        folder = str(raw_folder).strip() if raw_folder is not None else ""
+        body, parse_error = await _tool_request_body(request)
+        if parse_error is not None:
+            return parse_error
 
-        if not uid:
-            return {"error": "Missing user ID"}
+        req = ListDropboxRequest.from_payload(body)
+        if not req.uid:
+            return ChatToolResponse(error="Missing user ID")
 
         # Get access token
-        access_token = get_valid_access_token(uid)
+        access_token = get_valid_access_token(req.uid)
         if not access_token:
-            return {"error": "Please connect your Dropbox account first in the app settings."}
+            return ChatToolResponse(error="Please connect your Dropbox account first in the app settings.")
 
         # Get user settings for default folder
-        settings = get_user_settings(uid)
+        settings = get_user_settings(req.uid)
         default_folder = settings.get("folder_name", "Omi Conversations")
 
-        # Use default folder if none specified
-        if not folder:
-            folder = f"/{default_folder}"
+        # Use default folder if none specified (folder may be omitted, null, or blank)
+        folder = req.folder if req.folder else f"/{default_folder}"
 
         # List folder
         client = DropboxClient(access_token)
         results, error = client.list_folder(folder, limit=20)
 
         if error:
-            return {"error": f"Could not list folder: {error}"}
+            return ChatToolResponse(error=f"Could not list folder: {error}")
 
         if not results:
-            return {"result": f"No files found in `{folder}`"}
+            return ChatToolResponse(result=f"No files found in `{folder}`")
 
         # Format results
         output = f"**Files in `{folder}`:**\n\n"
         for i, item in enumerate(results, 1):
-            name = item["name"]
-            file_type = "📁" if item["type"] == "folder" else "📄"
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name", "Unknown")
+            file_type = "📁" if item.get("type") == "folder" else "📄"
             size = item.get("size", 0)
-            size_str = f" ({size / 1024:.1f} KB)" if size > 0 else ""
+            size_str = f" ({size / 1024:.1f} KB)" if isinstance(size, (int, float)) and size > 0 else ""
             modified = item.get("modified", "")[:10] if item.get("modified") else ""
 
             output += f"{i}. {file_type} **{name}**{size_str}"
@@ -852,47 +896,44 @@ async def tool_list_dropbox(request: Request):
                 output += f" - {modified}"
             output += "\n"
 
-        return {"result": output}
+        return ChatToolResponse(result=output)
 
     except Exception as e:
-        return {"error": f"List error: {str(e)}"}
+        return ChatToolResponse(error=f"List error: {str(e)}")
 
 
-@app.post("/tools/read")
-async def tool_read_dropbox_file(request: Request):
+@app.post("/tools/read", response_model=ChatToolResponse)
+async def tool_read_dropbox_file(request: Request) -> ChatToolResponse:
     """Read and extract text content from a file in Dropbox."""
     try:
-        body = await request.json()
-        if not isinstance(body, dict):
-            return {"error": "request body must be a JSON object"}
-        uid = body.get("uid")
-        raw_path = body.get("path")
-        path = str(raw_path).strip() if raw_path is not None else ""
+        body, parse_error = await _tool_request_body(request)
+        if parse_error is not None:
+            return parse_error
 
-        if not uid:
-            return {"error": "Missing user ID"}
-
-        if not path:
-            return {"error": "Please provide a file path"}
+        req = ReadDropboxRequest.from_payload(body)
+        if not req.uid:
+            return ChatToolResponse(error="Missing user ID")
+        if not req.path:
+            return ChatToolResponse(error="Please provide a file path")
 
         # Get access token
-        access_token = get_valid_access_token(uid)
+        access_token = get_valid_access_token(req.uid)
         if not access_token:
-            return {"error": "Please connect your Dropbox account first in the app settings."}
+            return ChatToolResponse(error="Please connect your Dropbox account first in the app settings.")
 
         # Download file
         client = DropboxClient(access_token)
-        file_bytes, error = client.download_file(path)
+        file_bytes, error = client.download_file(req.path)
 
         if error:
-            return {"error": f"Could not download file: {error}"}
+            return ChatToolResponse(error=f"Could not download file: {error}")
 
         if not file_bytes:
-            return {"error": "File is empty"}
+            return ChatToolResponse(error="File is empty")
 
         # Get file extension
-        file_ext = path.lower().split(".")[-1] if "." in path else ""
-        file_name = path.split("/")[-1]
+        file_ext = req.path.lower().split(".")[-1] if "." in req.path else ""
+        file_name = req.path.split("/")[-1]
 
         # Extract text based on file type
         text_content = ""
@@ -911,11 +952,13 @@ async def tool_read_dropbox_file(request: Request):
                         pages_text.append(f"--- Page {i+1} ---\n{page_text}")
                 text_content = "\n\n".join(pages_text)
                 if not text_content.strip():
-                    return {"error": "Could not extract text from PDF. The PDF may be image-based or scanned."}
+                    return ChatToolResponse(
+                        error="Could not extract text from PDF. The PDF may be image-based or scanned."
+                    )
             except ImportError:
-                return {"error": "PDF reading is not available. Please contact support."}
+                return ChatToolResponse(error="PDF reading is not available. Please contact support.")
             except Exception as e:
-                return {"error": f"Error reading PDF: {str(e)}"}
+                return ChatToolResponse(error=f"Error reading PDF: {str(e)}")
 
         elif file_ext in [
             "txt",
@@ -940,26 +983,28 @@ async def tool_read_dropbox_file(request: Request):
                 try:
                     text_content = file_bytes.decode("latin-1")
                 except Exception:
-                    return {"error": "Could not decode file as text"}
+                    return ChatToolResponse(error="Could not decode file as text")
 
         elif file_ext in ["doc", "docx"]:
-            return {"error": "Word documents (.doc/.docx) are not yet supported. Please convert to PDF or text."}
+            return ChatToolResponse(
+                error="Word documents (.doc/.docx) are not yet supported. Please convert to PDF or text."
+            )
 
         elif file_ext in ["jpg", "jpeg", "png", "gif", "bmp", "webp"]:
-            return {"error": "Image files cannot be read as text. Please use a document format."}
+            return ChatToolResponse(error="Image files cannot be read as text. Please use a document format.")
 
         elif file_ext in ["mp3", "wav", "m4a", "ogg", "flac"]:
-            return {"error": "Audio files cannot be read as text."}
+            return ChatToolResponse(error="Audio files cannot be read as text.")
 
         elif file_ext in ["mp4", "mov", "avi", "mkv", "webm"]:
-            return {"error": "Video files cannot be read as text."}
+            return ChatToolResponse(error="Video files cannot be read as text.")
 
         else:
             # Try to read as text anyway
             try:
                 text_content = file_bytes.decode("utf-8")
             except Exception:
-                return {"error": f"Cannot read .{file_ext} files as text"}
+                return ChatToolResponse(error=f"Cannot read .{file_ext} files as text")
 
         # Truncate if too long (keep under ~15k chars for reasonable response)
         max_chars = 15000
@@ -971,10 +1016,10 @@ async def tool_read_dropbox_file(request: Request):
         # Format output
         output = f"**Contents of `{file_name}`:**\n\n{text_content}"
 
-        return {"result": output}
+        return ChatToolResponse(result=output)
 
     except Exception as e:
-        return {"error": f"Read error: {str(e)}"}
+        return ChatToolResponse(error=f"Read error: {str(e)}")
 
 
 # ============== Audio Streaming Endpoint ==============
@@ -988,31 +1033,33 @@ async def receive_audio(
 ):
     """
     Receive real-time audio bytes from Omi.
-    Accumulates audio until the conversation webhook is triggered.
+    Accumulates audio until the conversation webhook is triggered,
+    bounded per user by MAX_AUDIO_BUFFER_BYTES.
     """
     try:
-        # Validate sample rate (human speech: 8kHz - 48kHz)
-        if sample_rate < 8000 or sample_rate > 48000:
-            return {"status": "error", "message": f"Invalid sample_rate: {sample_rate}. Must be between 8000 and 48000."}
+        uid_clean = uid.strip() if isinstance(uid, str) else ""
+        if not uid_clean:
+            return {"status": "error", "message": "Missing or invalid uid"}
+
+        if not isinstance(sample_rate, int) or isinstance(sample_rate, bool):
+            return {"status": "error", "message": f"Invalid sample_rate: {sample_rate}"}
+        if sample_rate < MIN_SAMPLE_RATE or sample_rate > MAX_SAMPLE_RATE:
+            return {
+                "status": "error",
+                "message": f"Invalid sample_rate: {sample_rate}. Must be between {MIN_SAMPLE_RATE} and {MAX_SAMPLE_RATE}.",
+            }
+
+        evict_stale_audio_buffers()
 
         audio_bytes = await request.body()
 
+        accepted, buffered = buffer_audio_chunk(uid_clean, audio_bytes, sample_rate)
+        if not accepted:
+            print(f"[AUDIO] Buffer ceiling hit for uid={uid_clean} ({buffered + len(audio_bytes)} > {MAX_AUDIO_BUFFER_BYTES})")
+            return {"status": "error", "message": "Audio buffer limit exceeded"}
+
         if audio_bytes:
-            # Evict stale buffers (TTL-based cleanup)
-            _evict_stale_audio_buffers()
-
-            current_size = len(audio_buffers[uid])
-            if current_size + len(audio_bytes) > MAX_AUDIO_BUFFER_BYTES:
-                return {
-                    "status": "error",
-                    "message": f"Audio buffer overflow: {current_size} + {len(audio_bytes)} exceeds {MAX_AUDIO_BUFFER_BYTES} bytes",
-                }
-
-            audio_buffers[uid] += audio_bytes
-            audio_sample_rates[uid] = sample_rate
-            if uid not in audio_buffer_created:
-                audio_buffer_created[uid] = datetime.now(timezone.utc)
-            print(f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, total: {len(audio_buffers[uid])} bytes")
+            print(f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid_clean}, total: {buffered} bytes")
 
         return {"status": "ok"}
     except Exception as e:
