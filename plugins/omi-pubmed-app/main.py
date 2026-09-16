@@ -158,7 +158,15 @@ async def _search_ids(client: httpx.AsyncClient, query: str, retmax: int = 5) ->
     idlist = esearch_result.get("idlist")
     if not isinstance(idlist, list):
         return []
-    return [str(item) for item in idlist]
+    esearch_result["idlist"] = [str(item) for item in idlist]
+    return data.get("esearchresult", {}).get("idlist", [])
+
+
+def _select_related_pmids(links: list, source_pmid: str, max_results: int) -> list[str]:
+    """NCBI's pubmed_pubmed linkset includes the source PMID among the results;
+    exclude it before applying the limit so max_results counts only articles
+    actually related to it."""
+    return [str(x) for x in links if str(x) != str(source_pmid)][:max_results]
 
 
 async def _fetch_summaries(client: httpx.AsyncClient, ids: list[str]) -> dict:
@@ -313,6 +321,7 @@ async def get_pubmed_article(req: GetPubmedArticleRequest):
 async def get_related_pubmed(req: GetRelatedPubmedRequest):
     try:
         pmid = req.pmid
+        max_results = req.max_results
         async with _acquire_client() as client:
             data = await _fetch_json(
                 client,
@@ -326,15 +335,30 @@ async def get_related_pubmed(req: GetRelatedPubmedRequest):
                 },
             )
 
-            linksets = data.get("linksets") if isinstance(data, dict) else None
+            # Guard every nested level NCBI can corrupt before the traversal
+            # below: linksets must be a list of dicts, linksetdbs a list of
+            # dicts, and links a list.
+            if not isinstance(data, dict):
+                data = {}
+            _linksets = data.get("linksets")
+            if not isinstance(_linksets, list) or not _linksets or not isinstance(_linksets[0], dict):
+                data["linksets"] = []
+            else:
+                _dbs = _linksets[0].get("linksetdbs")
+                if not isinstance(_dbs, list):
+                    _linksets[0]["linksetdbs"] = []
+                elif _dbs:
+                    if not isinstance(_dbs[0], dict):
+                        _dbs[0] = {}
+                    if not isinstance(_dbs[0].get("links"), list):
+                        _dbs[0]["links"] = []
+
+            linksets = data.get("linksets", [])
             related = []
-            if isinstance(linksets, list) and linksets:
-                first_linkset = linksets[0]
-                dbs = first_linkset.get("linksetdbs") if isinstance(first_linkset, dict) else None
-                if isinstance(dbs, list) and dbs:
-                    links = dbs[0].get("links") if isinstance(dbs[0], dict) else None
-                    if isinstance(links, list):
-                        related = [str(x) for x in links[: req.max_results]]
+            if linksets:
+                dbs = linksets[0].get("linksetdbs", [])
+                if dbs:
+                    related = _select_related_pmids(dbs[0].get("links", []), pmid, max_results)
 
             if not related:
                 return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
