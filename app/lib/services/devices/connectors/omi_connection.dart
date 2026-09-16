@@ -11,6 +11,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
+import 'package:omi/services/devices/hid_dictation_protocol.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -21,6 +22,9 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
+  static const String dictationServiceUuid = '19b10040-e8f2-537e-4f6c-d104768a1214';
+  static const String dictationControlCharacteristicUuid = '19b10041-e8f2-537e-4f6c-d104768a1214';
+  static const String dictationTextCharacteristicUuid = '19b10042-e8f2-537e-4f6c-d104768a1214';
 
   OmiDeviceConnection(super.device, super.transport);
 
@@ -986,6 +990,7 @@ class OmiDeviceConnection extends DeviceConnection {
     // default like '1.0.2' tricked the backend into recommending Omi_CV1_v3.0.5
     // (the only release whose minimum_firmware_required is 1.0.0) to users
     // whose actual firmware was 3.0.19 — see callers for the empty-check guard.
+
     deviceInfo['modelNumber'] ??= 'Omi Device';
     deviceInfo['firmwareRevision'] ??= '';
     deviceInfo['hardwareRevision'] ??= 'Seeed Xiao BLE Sense';
@@ -993,5 +998,45 @@ class OmiDeviceConnection extends DeviceConnection {
     deviceInfo['hasImageStream'] ??= 'false';
 
     return deviceInfo;
+  }
+  // --- HID dictation prototype (firmware must expose 19b10040) ---
+
+  Future<HidDictationStatus?> performGetHidDictationStatus() async {
+    try {
+      final value = await transport.readCharacteristic(dictationServiceUuid, dictationControlCharacteristicUuid);
+      return HidDictationProtocol.parseStatus(Uint8List.fromList(value));
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error reading dictation status: $e');
+      return null;
+    }
+  }
+
+  Future<bool> performSendHidDictationCommand(int cmd) async {
+    try {
+      await transport.writeCharacteristic(dictationServiceUuid, dictationControlCharacteristicUuid, [cmd]);
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error sending dictation command $cmd: $e');
+      return false;
+    }
+  }
+
+  Future<bool> performSendHidDictationFrame(List<int> frame) async {
+    try {
+      await transport.writeCharacteristic(dictationServiceUuid, dictationTextCharacteristicUuid, frame);
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error sending dictation frame: $e');
+      return false;
+    }
+  }
+
+  Stream<HidDictationStatus> performSubscribeHidDictationStatus() {
+    return transport
+        .getCharacteristicStream(dictationServiceUuid, dictationControlCharacteristicUuid)
+        .where((data) => data is List<int>)
+        .map((data) => HidDictationProtocol.parseStatus(Uint8List.fromList(data as List<int>)))
+        .where((s) => s != null)
+        .cast<HidDictationStatus>();
   }
 }

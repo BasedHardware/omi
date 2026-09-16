@@ -1506,6 +1506,19 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           value: provider.vadGateEnabled,
                           onChanged: provider.onVadGateChanged,
                         ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Pendant HID dictation prototype
+                        _buildExperimentalItem(
+                          title: 'Pendant HID Dictation',
+                          description: 'Hold pendant button to dictate into the focused text field '
+                              '(prototype firmware required; enable in Devices after reconnect)',
+                          icon: FontAwesomeIcons.keyboard,
+                          value: provider.hidDictationEnabled,
+                          onChanged: provider.onHidDictationEnabledChanged,
+                        ),
                       ],
                     ),
                   ),

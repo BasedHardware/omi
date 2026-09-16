@@ -34,6 +34,8 @@ import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
+import 'package:omi/services/capture/pendant_dictation_controller.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -477,6 +479,13 @@ class CaptureController extends ChangeNotifier
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
+  // Experimental: pendant-as-keyboard dictation prototype (developer toggle).
+  final PendantDictationController _dictation = PendantDictationController(
+    resolveConnection: (deviceId) async {
+      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      return connection is OmiDeviceConnection ? connection : null;
+    },
+  );
 
   StreamSubscription? _storageStream;
 
@@ -956,6 +965,15 @@ class CaptureController extends ChangeNotifier
           }
         }
 
+        // Experimental HID dictation prototype: while the developer toggle is
+        // on, pendant press (4) / release (5) delimit one dictation utterance.
+        // The transcript is typed by the pendant into the phone's focused
+        // field over BLE HID; press again to dictate another utterance.
+        if (SharedPreferencesUtil().hidDictationEnabled && (buttonState == 4 || buttonState == 5)) {
+          unawaited(_handleDictationButton(deviceId, buttonState));
+          return;
+        }
+
         // double tap
         if (buttonState == 2) {
           Logger.debug("Double tap detected");
@@ -1055,6 +1073,15 @@ class CaptureController extends ChangeNotifier
     );
   }
 
+  /// Experimental HID dictation prototype button handler (see streamButton).
+  Future<void> _handleDictationButton(String deviceId, int buttonState) async {
+    if (buttonState == 4) {
+      _dictation.startCapture(await _getAudioCodec(deviceId));
+    } else {
+      await _dictation.finishCapture(deviceId);
+    }
+  }
+
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     Logger.debug('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
@@ -1075,6 +1102,12 @@ class CaptureController extends ChangeNotifier
         if (_voiceCommandSession != null && voiceCommandSupported) {
           final payload = _activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
           _commandBytes.add(payload);
+        }
+
+        // Experimental HID dictation prototype: collect the same opus payload
+        // stream while a press-delimited capture is open.
+        if (_dictation.isCapturing && voiceCommandSupported) {
+          _dictation.onAudioPayload(_activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3));
         }
 
         // Local storage syncs. In batch mode the native layer owns writing the

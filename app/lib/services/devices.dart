@@ -29,6 +29,8 @@ class OmiFeatures {
   static const int offlineStorage = 1 << 6;
   static const int ledDimming = 1 << 7;
   static const int micGain = 1 << 8;
+  // Experimental: HID dictation prototype (opt-in, RAM-only enable on firmware).
+  static const int hidDictation = 1 << 9;
 }
 
 abstract class IDeviceServiceSubsciption {
