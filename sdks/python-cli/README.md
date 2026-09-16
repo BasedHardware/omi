@@ -75,6 +75,8 @@ Tables without predefined columns include fields from every row, in first-seen o
 
 > Looking for localized guides? See the [कोंकणींत सुरवात (Konkani Quickstart)](examples/quickstart.kok.md).
 
+> Looking for localized guides? See the [🇰🇬 omi-cli кыргызча тез баштауу колдонмосу (Kyrgyz Quickstart)](examples/quickstart.ky.md), the [Dux celeris Latine scriptus (Latin Quickstart)](examples/quickstart.la.md), the [🇿🇦 Afrikaanse vinnige-begin-gids (Afrikaans Quickstart)](examples/quickstart.af.md), the [Esperanta rapidgvidilo (Esperanto Quickstart)](examples/quickstart.eo.md), or the [🇭🇰 omi-cli 粵語快速上手指南 (Cantonese Quickstart)](examples/quickstart.yue.md).
+
 ## Auth
 
 Two auth methods, both fully wired:
