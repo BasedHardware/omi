@@ -1475,6 +1475,89 @@ test('old memories name Flutter MemoriesPage fromJson invalid GET evidence', asy
   expect(kept.items[0]).not.toHaveProperty('evidence');
 });
 
+test('old memories name Flutter MemoriesPage fromJson padded GET capture_confidence instead of remapping to a memory chip', async () => {
+  const neighbor = omiMemory({
+    id: 'named',
+    content: 'Likes walking.',
+    conversation_id: null,
+  });
+  const row = omiMemory({
+    id: 'fact',
+    content: 'Prefers concise recaps.',
+    conversation_id: null,
+  });
+  const keptExact = await loadMemories(
+    backend([
+      {...row, capture_confidence: '0.9'},
+      {...row, id: 'json', capture_confidence: 0.9},
+      neighbor,
+    ]).api,
+  );
+  expect(keptExact.items.map(item => item.id)).toEqual([
+    'fact',
+    'json',
+    'named',
+  ]);
+  const keptOmitted = await loadMemories(backend([row, neighbor]).api);
+  expect(keptOmitted.items.map(item => item.id)).toEqual(['fact', 'named']);
+  const keptNull = await loadMemories(
+    backend([{...row, capture_confidence: null}, neighbor]).api,
+  );
+  expect(keptNull.items.map(item => item.id)).toEqual(['fact', 'named']);
+  for (const capture_confidence of [
+    '  0.9  ',
+    '0.9 ',
+    '  0.9',
+    '0.9\n',
+    '\u00850.9',
+    ' \t',
+  ]) {
+    await expect(
+      loadMemories(
+        backend([{...row, capture_confidence}, neighbor]).api,
+      ),
+    ).rejects.toThrow('Omi order is malformed');
+  }
+  await expect(
+    loadMemories(
+      backend([{...row, currency: '  1.5  '}, neighbor]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadMemories(
+      backend([{...row, half_life_days: '  7  '}, neighbor]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadMemories(
+      backend([{...row, veracity: '  0.8  '}, neighbor]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadMemories(
+      backend([
+        {
+          ...row,
+          evidence: [
+            {
+              evidence_id: 'ev-1',
+              independence_group: 'g1',
+              capture_confidence: '  0.5  ',
+            },
+          ],
+        },
+        neighbor,
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadMemories(backend([{...row, capture_confidence: 'nope'}]).api),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadMemories(backend([{...row, capture_confidence: ''}]).api),
+  ).rejects.toThrow('Omi order is malformed');
+});
+
 test('names Flutter ActionItemsPage empty GET ids instead of omitting neighboring tasks', async () => {
   const {api} = backend({
     action_items: [

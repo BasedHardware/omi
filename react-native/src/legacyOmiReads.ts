@@ -103,8 +103,11 @@ function presentDefaultDouble(value: unknown): void {
 function presentNullableDouble(value: unknown): void {
   if (value === undefined || value === null) return;
   if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new Error('Omi order is malformed');
+    }
     const parsed = Number(value);
-    if (value.trim() === '' || !Number.isFinite(parsed)) {
+    if (value === '' || !Number.isFinite(parsed)) {
       throw new Error('Omi order is malformed');
     }
     return;
