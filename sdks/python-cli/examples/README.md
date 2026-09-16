@@ -38,6 +38,7 @@
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
 * [`quickstart.ca.md`](quickstart.ca.md) — guia d'inici ràpid per a omi-cli en català (Catalan Quickstart).
+
 * [`quickstart.ha.md`](quickstart.ha.md) — Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart).
 * [`quickstart.mai.md`](quickstart.mai.md) — omi-cli त्वरित मार्गदर्शिका (Maithili Quickstart).
 * [`quickstart.as.md`](quickstart.as.md) — omi-cli ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart).
@@ -90,3 +91,5 @@
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
+
+* [`quickstart.sw.md`](quickstart.sw.md) — mwongozo wa kuanza haraka wa omi-cli kwa Kiswahili (Swahili Quickstart).
