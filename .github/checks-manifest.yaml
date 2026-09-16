@@ -1024,6 +1024,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13156 executes the Slack client and chat handler to prevent unresolved explicit channels from widening search scope"
 
+  - id: hive-create-task-resolution-tests
+    command: ["python3", "plugins/omi-hive-app/test_create_task_resolution.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14187: ambiguous project names and ambiguous/foreign parent tasks must refuse with candidates instead of silently creating in the wrong project or attaching the wrong parent"
+
   - id: slack-segments-tests
     command: ["python3", "plugins/omi-slack-app/test_segments.py"]
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
