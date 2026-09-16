@@ -38,6 +38,27 @@ def log(msg: str):
     sys.stdout.flush()
 
 
+def _coerce_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    """Coerce an optional bounded integer supplied by the Omi tool layer.
+
+    The generated tool schema sends omitted optional values as JSON ``null``
+    and may pass numeric strings.  Booleans and non-integral values are not
+    meaningful here, so they safely use the documented default.
+    """
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        candidate = value
+    elif isinstance(value, str):
+        try:
+            candidate = int(value.strip())
+        except (TypeError, ValueError):
+            return default
+    else:
+        return default
+    return max(minimum, min(candidate, maximum))
+
+
 # Whoop OAuth2 Configuration
 WHOOP_CLIENT_ID = os.getenv("WHOOP_CLIENT_ID", "")
 WHOOP_CLIENT_SECRET = os.getenv("WHOOP_CLIENT_SECRET", "")
@@ -657,8 +678,8 @@ async def tool_get_workouts(request: Request):
         log(f"=== GET_WORKOUTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        days = _coerce_int(body.get("days"), default=7, minimum=1, maximum=30)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")

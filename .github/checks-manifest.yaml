@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open-Meteo app must safely handle partial daily arrays, null unit metrics, and empty forecasts without IndexError or TypeError"
+  - id: whoop-app-workouts-input-tests
+    command: ["python3", "plugins/omi-whoop-app/test_workouts_input_coercion.py"]
+    triggers: ["plugins/omi-whoop-app/main.py", "plugins/omi-whoop-app/test_workouts_input_coercion.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13931: Whoop workout days and max_results must tolerate JSON nulls, numeric strings, malformed values, and out-of-range inputs without TypeError or invalid API limits"
   - id: linear-exact-issue-lookup-tests
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
