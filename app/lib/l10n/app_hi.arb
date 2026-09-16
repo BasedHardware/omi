@@ -3257,6 +3257,11 @@
     "speechProfileTopicGoal": "आपका दीर्घकालिक लक्ष्य क्या है?",
     "speechToTextUnavailableDesc": "अभी बोली को टेक्स्ट में बदलना उपलब्ध नहीं है। अपना इंटरनेट कनेक्शन और डिवाइस की वाक् पहचान सेटिंग जाँचें, फिर दोबारा कोशिश करें।",
     "memoryHistoryPartial": "यादों के इतिहास का कुछ हिस्सा उपलब्ध नहीं है। अब तक प्राप्त इतिहास दिखाया जा रहा है।",
+    "memoryHistory": "इतिहास",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "रिकॉर्डिंग शुरू करने के लिए + टैप करें",
-    "processingTakingLonger": "अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।"
+    "processingTakingLonger": "अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।",
+    "speechProfileEnrollmentPrompt": "ताकि Omi आपकी आवाज़ पहचान सके — किसी भी विषय पर लगभग 5 सेकंड बोलें।"
 }

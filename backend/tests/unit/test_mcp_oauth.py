@@ -34,7 +34,9 @@ class _DocReference:
         self._collection = collection
         self.id = doc_id
 
-    def get(self, transaction=None):
+    # ``**_read_options`` mirrors the real Firestore signature: reads on the MCP
+    # auth path pass retry/timeout to bound their deadline (database/mcp_auth_read.py).
+    def get(self, transaction=None, **_read_options):
         return _DocSnapshot(self, self._collection._docs.get(self.id))
 
     def set(self, data, merge=False):
@@ -56,7 +58,7 @@ class _Query:
         self._field = field
         self._expected = expected
 
-    def stream(self):
+    def stream(self, **_read_options):
         for doc_id, data in self._collection._docs.items():
             if data.get(self._field) == self._expected:
                 yield _DocSnapshot(_DocReference(self._collection, doc_id), data)

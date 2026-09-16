@@ -29,7 +29,7 @@ class ClickUpClient:
         try:
             response = requests.post(
                 "https://api.clickup.com/api/v2/oauth/token",
-                params={
+                data={
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "code": code
@@ -38,17 +38,18 @@ class ClickUpClient:
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"🔍 OAuth Response: {data}", flush=True)
                 
                 return {
                     "access_token": data.get("access_token"),
                     "token_type": data.get("token_type", "Bearer")
                 }
             else:
-                raise Exception(f"Token exchange failed: {response.status_code} - {response.text}")
+                raise Exception(f"Token exchange failed: {response.status_code}")
                 
-        except Exception as e:
-            print(f"❌ Token exchange error: {e}", flush=True)
+        except requests.RequestException as e:
+            print(f"❌ Token exchange error: {type(e).__name__}", flush=True)
+            raise Exception(f"Token exchange request failed: {type(e).__name__}") from e
+        except Exception:
             raise
     
     def get_authorized_user(self, access_token: str) -> dict:
@@ -73,7 +74,7 @@ class ClickUpClient:
                 return {}
                 
         except Exception as e:
-            print(f"❌ Error getting user: {e}", flush=True)
+            print(f"❌ Error getting user: {type(e).__name__}", flush=True)
             return {}
     
     def get_workspaces(self, access_token: str) -> List[Dict]:
@@ -104,7 +105,7 @@ class ClickUpClient:
                 return []
                 
         except Exception as e:
-            print(f"❌ Error getting workspaces: {e}", flush=True)
+            print(f"❌ Error getting workspaces: {type(e).__name__}", flush=True)
             return []
     
     def get_spaces(self, access_token: str, team_id: str) -> List[Dict]:
@@ -136,7 +137,7 @@ class ClickUpClient:
                 return []
                 
         except Exception as e:
-            print(f"❌ Error getting spaces: {e}", flush=True)
+            print(f"❌ Error getting spaces: {type(e).__name__}", flush=True)
             return []
     
     def get_lists(self, access_token: str, space_id: str) -> List[Dict]:
@@ -168,7 +169,7 @@ class ClickUpClient:
                 return []
                 
         except Exception as e:
-            print(f"❌ Error getting lists: {e}", flush=True)
+            print(f"❌ Error getting lists: {type(e).__name__}", flush=True)
             return []
     
     def get_folders(self, access_token: str, space_id: str) -> List[Dict]:
@@ -290,7 +291,7 @@ class ClickUpClient:
                 return []
                 
         except Exception as e:
-            print(f"❌ Error getting members: {e}", flush=True)
+            print(f"❌ Error getting members: {type(e).__name__}", flush=True)
             return []
     
     async def create_task(
@@ -389,17 +390,15 @@ class ClickUpClient:
                     # This tells ClickUp to display the time, not just the date
                     if has_time:
                         task_data["due_date_time"] = True
-                        print(f"📅 Due date with TIME: {due_date} ({timezone if tz else 'system'}) → {due_timestamp}", flush=True)
+                        print(f"📅 Due date with TIME → {due_timestamp}", flush=True)
                     else:
                         task_data["due_date_time"] = False
-                        print(f"📅 Due date (no time): {due_date} ({timezone if tz else 'system'}) → {due_timestamp}", flush=True)
+                        print(f"📅 Due date (no time) → {due_timestamp}", flush=True)
                         
                 except Exception as e:
-                    print(f"⚠️  Could not parse due date '{due_date}': {e}", flush=True)
-                    import traceback
-                    traceback.print_exc()
+                    print(f"⚠️  Could not parse due date: {type(e).__name__}", flush=True)
             
-            print(f"📤 Creating task: {name} in list {list_id}", flush=True)
+            print(f"📤 Creating task in list {list_id} (name_len={len(name)})", flush=True)
             
             response = requests.post(
                 f"{self.base_url}/list/{list_id}/task",
@@ -422,7 +421,7 @@ class ClickUpClient:
                     "list_id": list_id
                 }
             else:
-                error_msg = f"{response.status_code} - {response.text}"
+                error_msg = f"HTTP {response.status_code}"
                 print(f"❌ Error creating task: {error_msg}", flush=True)
                 return {
                     "success": False,
@@ -430,11 +429,9 @@ class ClickUpClient:
                 }
                 
         except Exception as e:
-            print(f"❌ Error creating task: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Error creating task: {type(e).__name__}", flush=True)
             return {
                 "success": False,
-                "error": str(e)
+                "error": type(e).__name__
             }
 

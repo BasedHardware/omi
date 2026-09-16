@@ -120,7 +120,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return None
     except Exception as e:
         log(f"Error refreshing token: {e}")
@@ -147,8 +147,8 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Whoop API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            log(f"Whoop API error: {response.status_code}")
+            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
         log(f"Whoop API request error: {e}")
@@ -657,8 +657,17 @@ async def tool_get_workouts(request: Request):
         log(f"=== GET_WORKOUTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        raw_days = body.get("days")
+        try:
+            days = min(max(1, int(raw_days)), 30) if raw_days is not None else 7
+        except (ValueError, TypeError):
+            days = 7
+
+        raw_max_results = body.get("max_results")
+        try:
+            max_results = min(max(1, int(raw_max_results)), 50) if raw_max_results is not None else 10
+        except (ValueError, TypeError):
+            max_results = 10
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -1087,8 +1096,8 @@ async def whoop_callback(
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            log(f"Token exchange failed: {response.status_code}")
+            return HTMLResponse(content=f"Token exchange failed: {response.status_code}", status_code=400)
 
         token_data = response.json()
         access_token = token_data.get("access_token")

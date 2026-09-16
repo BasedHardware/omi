@@ -31,6 +31,7 @@ from routers import (
     desktop_realtime,
     desktop_screen_crisp,
     desktop_tts_updates,
+    memory_use,
 )
 from utils.http_client import close_all_clients
 from utils.jit_rollout import close_posthog_control_plane
@@ -107,6 +108,15 @@ def _build_app() -> FastAPI:
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[
+            "X-Omi-Memory-As-Of",
+            "X-Omi-Memory-Belief-Enabled",
+            "X-Omi-Memory-Canonical-Lifecycle-Exposed",
+            "X-Omi-Memory-Default-Delete-Supported",
+            "X-Omi-Memory-Device-Scope-Supported",
+            "X-Omi-Memory-Next-Cursor",
+            "X-Omi-List-Truncated",
+        ],
     )
     app.include_router(desktop_core.router)
     app.include_router(auth.router)
@@ -119,6 +129,7 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_realtime.router)
     app.include_router(desktop_screen_crisp.router)
     app.include_router(desktop_tts_updates.router)
+    app.include_router(memory_use.router)
     app.include_router(desktop_deprecated.router)
     app.include_router(metrics.router)
     jit_rollout.validate_jit_rollout_contract(app)

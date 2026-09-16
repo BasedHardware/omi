@@ -761,6 +761,28 @@ class SharedPreferencesUtil {
     saveStringList('cachedMessages', messages);
   }
 
+  /// Last owner-scoped memory projection used for offline/restart rendering.
+  /// Memory.toJson deliberately includes optional temporal fields so a cached
+  /// assessment is never mistaken for a newly computed one after restart.
+  List<Memory> get cachedMemories {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return [];
+    _scopeLegacyUserData(ownerUid);
+    return _decodeCachedList(
+      _userScopedKey('cachedMemories', ownerUid),
+      (json) => Memory.fromJson(json),
+    ).where((memory) => memory.uid == ownerUid).toList();
+  }
+
+  set cachedMemories(List<Memory> value) {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    saveStringList(
+      _userScopedKey('cachedMemories', ownerUid),
+      value.map((memory) => jsonEncode(memory.toJson())).toList(),
+    );
+  }
+
   // Pending memories - memories created offline that need to be synced
   List<Memory> get pendingMemories {
     final ownerUid = uid;
@@ -927,6 +949,7 @@ class SharedPreferencesUtil {
     preferredSummarizationAppId = '';
     calendarEnabled = false;
     _preferences?.remove('cachedMemories');
+    if (ownerUid.isNotEmpty) _preferences?.remove(_userScopedKey('cachedMemories', ownerUid));
   }
 
   String _userScopedKey(String baseKey, String ownerUid) => '$baseKey:$ownerUid';
@@ -947,6 +970,14 @@ class SharedPreferencesUtil {
       preferences.setStringList(pendingKey, {...scopedPending, ...legacyPending}.toList());
     }
     preferences.remove('pendingMemories');
+
+    final memoriesKey = _userScopedKey('cachedMemories', ownerUid);
+    final legacyMemories = preferences.getStringList('cachedMemories');
+    if (legacyMemories != null) {
+      final scopedMemories = preferences.getStringList(memoriesKey) ?? const <String>[];
+      preferences.setStringList(memoriesKey, {...scopedMemories, ...legacyMemories}.toList());
+    }
+    preferences.remove('cachedMemories');
 
     final goalsKey = _userScopedKey('goals_tracker_local_goals', ownerUid);
     final legacyGoals = preferences.getString('goals_tracker_local_goals');

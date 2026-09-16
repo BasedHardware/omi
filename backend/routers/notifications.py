@@ -13,7 +13,7 @@ from utils.apps import (
 )
 from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
-from models.other import FcmTokenResponse, SaveFcmTokenRequest
+from models.other import FcmTokenResponse, SaveFcmTokenRequest, SyncUserTimeZoneRequest
 from models.integrations import IntegrationNotificationResponse
 from utils.notifications import (
     send_notification,
@@ -82,6 +82,16 @@ def save_token(
     token_data['device_key'] = device_key
 
     notification_db.save_token(uid, token_data)
+    return FcmTokenResponse(status='Ok')
+
+
+@router.put('/v1/users/time-zone', response_model=FcmTokenResponse)
+def sync_user_time_zone(
+    data: SyncUserTimeZoneRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> FcmTokenResponse:
+    """Persist the device's IANA timezone without requiring push notification registration."""
+    notification_db.sync_user_time_zone_from_client(uid, data.time_zone)
     return FcmTokenResponse(status='Ok')
 
 

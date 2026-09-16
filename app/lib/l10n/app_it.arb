@@ -3256,6 +3256,11 @@
     "speechProfileTopicGoal": "Qual è il tuo obiettivo a lungo termine?",
     "speechToTextUnavailableDesc": "La trascrizione vocale non è disponibile al momento. Controlla la connessione Internet e le impostazioni di riconoscimento vocale del dispositivo, poi riprova.",
     "memoryHistoryPartial": "Parte della cronologia dei ricordi non è disponibile. Viene mostrata la cronologia ricevuta finora.",
+    "memoryHistory": "Cronologia",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Tocca + per iniziare a registrare",
-    "processingTakingLonger": "Ancora in corso: ci sta mettendo più del solito."
+    "processingTakingLonger": "Ancora in corso: ci sta mettendo più del solito.",
+    "speechProfileEnrollmentPrompt": "Perché Omi sappia qual è la tua voce — parla di qualsiasi cosa per circa 5 secondi."
 }

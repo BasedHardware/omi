@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Union
 
 from utils.llm.gateway_client import is_auto_lane_id
+from utils.llm.vertex_pt_routing import is_prohibited_company_paid_model
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,37 @@ _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
 _byok_profile_name = 'byok'
 _byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
 
+
+def validate_no_prohibited_company_paid_models(
+    profiles: Dict[str, Dict[str, Tuple[str, str]]], pinned: Dict[str, Tuple[str, str]]
+) -> None:
+    """Fail closed when a company-paid profile or pin resolves a Pro/image model (SCA-481).
+
+    Pro-text and image-output Gemini shapes are PayGo-only SKUs with no
+    reservation behind them; managed (company-paid) profiles and pinned
+    features — extraction, proactivity, summarization, every managed feature —
+    must never resolve one. BYOK pays for what it asks, so the byok profile is
+    exempt.
+    """
+    for profile_name, profile in profiles.items():
+        if profile_name == _byok_profile_name:
+            continue
+        for feature, (model, _provider) in profile.items():
+            if is_prohibited_company_paid_model(model):
+                raise RuntimeError(
+                    f'Model QoS profile {profile_name!r} feature {feature!r} resolves prohibited '
+                    f'company-paid model {model!r}; Pro/image-output SKUs cannot serve managed '
+                    'traffic (SCA-481)'
+                )
+    for feature, (model, _provider) in pinned.items():
+        if is_prohibited_company_paid_model(model):
+            raise RuntimeError(
+                f'Pinned feature {feature!r} resolves prohibited company-paid model {model!r}; '
+                'Pro/image-output SKUs cannot serve managed traffic (SCA-481)'
+            )
+
+
+validate_no_prohibited_company_paid_models(MODEL_QOS_PROFILES, _PINNED_FEATURES)
 # Features that can't go through get_llm() (non-ChatOpenAI providers).
 # chat_agent is OpenAI/Luna via get_llm(); the Anthropic Messages path is not a chat lane.
 _ANTHROPIC_ONLY_FEATURES: set[str] = set()
