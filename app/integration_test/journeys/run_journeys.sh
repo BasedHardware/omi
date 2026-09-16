@@ -15,8 +15,9 @@
 #
 # Usage:
 #   bash integration_test/journeys/run_journeys.sh [--lane hermetic|simulator]
-#        [--runs N] [--flutter-tester] [--filter NAME] [--evidence-dir DIR]
+#        [--runs N] [--filter NAME] [--evidence-dir DIR] [--list]
 #        [--api-base URL] [--device UDID]
+#   --list prints the discovered journeys and exits 0 without running anything.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -27,6 +28,7 @@ FILTER=""
 EVIDENCE_DIR=""
 API_BASE=""
 DEVICE=""
+LIST_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     --evidence-dir) EVIDENCE_DIR="$2"; shift 2 ;;
     --api-base) API_BASE="$2"; shift 2 ;;
     --device) DEVICE="$2"; shift 2 ;;
+    --list) LIST_ONLY=true; shift ;;
     *) echo "unknown option: $1" >&2; exit 64 ;;
   esac
 done
@@ -46,17 +49,29 @@ fi
 mkdir -p "$EVIDENCE_DIR"
 readonly EVIDENCE_DIR
 
-JOURNEYS=(
-  j1_seeded_conversation_detail_test.dart
-  j2_chat_send_assistant_reply_test.dart
-  j3_memory_create_edit_reload_test.dart
-  j4_expired_session_recovery_test.dart
-  j5_capture_interruption_reconnect_test.dart
-)
+# Mechanical discovery (SCA-490 / C4): every j<N>_<behavior>_test.dart in
+# this directory is a journey. A new definition joins the suite by existing;
+# there is no handwritten list to forget to update.
+JOURNEYS=()
+for f in integration_test/journeys/j[0-9]_*_test.dart; do
+  [[ -f "$f" ]] || { echo "no journey definitions found under integration_test/journeys/" >&2; exit 66; }
+  JOURNEYS+=("$(basename "$f")")
+done
+
+if $LIST_ONLY; then
+  printf '%s\n' "${JOURNEYS[@]}"
+  exit 0
+fi
 
 if [[ -n "$FILTER" ]]; then
   MATCHING=()
   for j in "${JOURNEYS[@]}"; do [[ "$j" == *"$FILTER"* ]] && MATCHING+=("$j"); done
+  # An empty selection is drift, not success: a filter that matches nothing
+  # must fail (exit 65) rather than execute zero runs and report PASS.
+  if [[ ${#MATCHING[@]} -eq 0 ]]; then
+    echo "selection drift: filter '$FILTER' matched no discovered journey (${JOURNEYS[*]})" >&2
+    exit 65
+  fi
   JOURNEYS=("${MATCHING[@]}")
 fi
 
