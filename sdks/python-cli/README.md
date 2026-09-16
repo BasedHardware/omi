@@ -69,6 +69,8 @@ Tables without predefined columns include fields from every row, in first-seen o
 
 > Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), or the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md).
 
+> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), or the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md).
+
 > 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
 
 > Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md).
