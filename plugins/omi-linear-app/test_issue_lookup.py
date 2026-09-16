@@ -171,6 +171,84 @@ class IssueLookupTests(unittest.TestCase):
         # Unknown state returns None
         self.assertIsNone(module.find_state_by_name('uid', 'team', 'Nonexistent Status'))
 
+    def test_tool_update_issue_status_with_real_resolution(self):
+        # End-to-end through tool_update_issue_status without mocking find_state_by_name
+        module = load_app()
+        trap_states = [
+            SimpleNamespace(id='not-done-id', name='Not Done', type='unstarted', color='#888', position=0),
+            SimpleNamespace(id='shipped-id', name='Shipped', type='completed', color='#888', position=1),
+        ]
+        graphql_calls = []
+
+        def fake_graphql(uid, query, variables=None):
+            graphql_calls.append((query, variables))
+            if 'team(id: $teamId)' in query:
+                return {
+                    'team': {
+                        'states': {
+                            'nodes': [
+                                {'id': s.id, 'name': s.name, 'type': s.type, 'color': s.color, 'position': s.position}
+                                for s in trap_states
+                            ]
+                        }
+                    }
+                }
+            if 'mutation UpdateIssue' in query:
+                return {'issueUpdate': {'success': True, 'issue': {'state': {'name': 'Shipped'}}}}
+            return {'issue': ISSUE}
+
+        module.linear_graphql_request = fake_graphql
+        module.get_linear_tokens = lambda uid: True
+
+        async def json():
+            return {'uid': 'fixture-user', 'issue_identifier': 'ENG-123', 'new_status': 'done'}
+
+        response = asyncio.run(module.tool_update_issue_status(SimpleNamespace(json=json)))
+        self.assertIsNone(response.error)
+        self.assertIn('Shipped', response.result)
+
+        # Verify mutation targeted 'shipped-id', NOT 'not-done-id'
+        update_calls = [c for c in graphql_calls if 'mutation UpdateIssue' in c[0]]
+        self.assertEqual(len(update_calls), 1)
+        self.assertEqual(update_calls[0][1]['input']['stateId'], 'shipped-id')
+
+    def test_tool_update_issue_status_unknown_does_not_mutate(self):
+        module = load_app()
+        trap_states = [
+            SimpleNamespace(id='not-done-id', name='Not Done', type='unstarted', color='#888', position=0),
+            SimpleNamespace(id='shipped-id', name='Shipped', type='completed', color='#888', position=1),
+        ]
+        graphql_calls = []
+
+        def fake_graphql(uid, query, variables=None):
+            graphql_calls.append((query, variables))
+            if 'team(id: $teamId)' in query:
+                return {
+                    'team': {
+                        'states': {
+                            'nodes': [
+                                {'id': s.id, 'name': s.name, 'type': s.type, 'color': s.color, 'position': s.position}
+                                for s in trap_states
+                            ]
+                        }
+                    }
+                }
+            return {'issue': ISSUE}
+
+        module.linear_graphql_request = fake_graphql
+        module.get_linear_tokens = lambda uid: True
+
+        async def json():
+            return {'uid': 'fixture-user', 'issue_identifier': 'ENG-123', 'new_status': 'invalid_xyz'}
+
+        response = asyncio.run(module.tool_update_issue_status(SimpleNamespace(json=json)))
+        self.assertIsNotNone(response.error)
+        self.assertIn("Could not find status 'invalid_xyz'", response.error)
+
+        # No UpdateIssue mutation executed
+        update_calls = [c for c in graphql_calls if 'mutation UpdateIssue' in c[0]]
+        self.assertEqual(len(update_calls), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
