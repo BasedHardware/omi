@@ -90,14 +90,20 @@ async def monitor_session_timeouts():
                                 channels
                             )
                             
-                            # If no channel, use default
+                            # If no channel, use default — but only when the
+                            # user named no channel at all. A
+                            # named-but-unresolved channel must never fall
+                            # back to the default channel.
                             if not channel_id:
-                                channel_id = user.get("selected_channel")
-                                if channel_id:
-                                    for ch in channels:
-                                        if ch["id"] == channel_id:
-                                            channel_name = ch["name"]
-                                            break
+                                if channel_name:
+                                    print(f"⏰ No single channel matches '#{channel_name}'; message not sent", flush=True)
+                                else:
+                                    channel_id = user.get("selected_channel")
+                                    if channel_id:
+                                        for ch in channels:
+                                            if ch["id"] == channel_id:
+                                                channel_name = ch["name"]
+                                                break
                             
                             if channel_id and message and len(message.strip()) >= 3:
                                 print(f"⏰ Sending timeout message to #{channel_name}", flush=True)
@@ -775,8 +781,13 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
+            # If no channel identified, use default — but only when the user
+            # named no channel at all. A named-but-unresolved channel must
+            # never silently fall back to the default channel.
             if not channel_id:
+                if channel_name:
+                    SimpleSessionStorage.reset_session(session_id)
+                    return f"❌ No single channel matches '#{channel_name}'. Please say the full channel name."
                 channel_id = user.get("selected_channel")
                 if channel_id:
                     # Find channel name
@@ -871,8 +882,13 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
+            # If no channel identified, use default — but only when the user
+            # named no channel at all. A named-but-unresolved channel must
+            # never silently fall back to the default channel.
             if not channel_id:
+                if channel_name:
+                    SimpleSessionStorage.reset_session(session_id)
+                    return f"❌ No single channel matches '#{channel_name}'. Please say the full channel name."
                 channel_id = user.get("selected_channel")
                 if channel_id:
                     # Find channel name

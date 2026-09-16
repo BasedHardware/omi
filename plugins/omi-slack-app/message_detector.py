@@ -52,6 +52,37 @@ class MessageDetector:
         
         return content if content else None
     
+    @staticmethod
+    def resolve_channel(name: str, channel_map: dict) -> Tuple[Optional[str], Optional[str], list]:
+        """Resolve a spoken/typed channel name against the workspace channel map.
+
+        Returns (channel_id, channel_name, candidates): an exact
+        (case-insensitive) match or exactly one fuzzy candidate resolves;
+        several fuzzy candidates return (None, spoken_name, candidate_names)
+        so the caller can ask which channel was meant instead of silently
+        picking the first listing. Zero candidates return (None, name, []).
+        """
+        spoken = (name or "").lstrip('#').strip()
+        if not spoken:
+            return None, None, []
+
+        # Exact match (case-insensitive)
+        exact = [(cname, cid) for cname, cid in channel_map.items() if cname.lower() == spoken.lower()]
+        if exact:
+            cname, cid = exact[0]
+            return cid, cname, [cname]
+
+        # Fuzzy match: only resolve when exactly one channel matches
+        fuzzy = [(cname, cid) for cname, cid in channel_map.items()
+                 if spoken.lower() in cname.lower() or cname.lower() in spoken.lower()]
+        if len(fuzzy) == 1:
+            cname, cid = fuzzy[0]
+            return cid, cname, [cname]
+        if len(fuzzy) > 1:
+            return None, spoken, [cname for cname, _ in fuzzy]
+
+        return None, spoken, []
+
     @classmethod
     async def ai_extract_message_and_channel(cls, all_segments_text: str, available_channels: list) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
@@ -142,25 +173,15 @@ MESSAGE: Hello everyone, this is a test message"""
             # Remove # if present
             channel_name = channel_name.lstrip('#')
             
-            # Get channel ID from map (case insensitive)
-            channel_id = None
-            for name, id in channel_map.items():
-                if name.lower() == channel_name.lower():
-                    channel_id = id
-                    channel_name = name  # Use exact name from map
-                    break
+            # Resolve against the workspace: exact name or exactly one fuzzy
+            # candidate. Ambiguous or missing names must not pick a channel.
+            channel_id, channel_name, candidates = MessageDetector.resolve_channel(channel_name, channel_map)
             
             if not channel_id:
-                # Try fuzzy match
-                for name, id in channel_map.items():
-                    if channel_name.lower() in name.lower() or name.lower() in channel_name.lower():
-                        channel_id = id
-                        channel_name = name
-                        print(f"🔍 Fuzzy matched '{channel_name}' to '{name}'", flush=True)
-                        break
-            
-            if not channel_id:
-                print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
+                if candidates:
+                    print(f"⚠️  Channel '{channel_name}' is ambiguous: {', '.join('#' + c for c in candidates)}", flush=True)
+                else:
+                    print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
                 return None, channel_name, message
             
             print(f"✅ Extracted - Channel: #{channel_name}, Message: '{message}'", flush=True)

@@ -1004,6 +1004,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "process_segments called seg.get(\"text\") on every transcript segment, so a non-dict segment crashed the realtime webhook with AttributeError; list_channels also re-requested forever when Slack returned a repeated next_cursor"
 
+  - id: slack-voice-channel-resolution-tests
+    command: ["python3", "plugins/omi-slack-app/test_voice_channel.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14176: voice commands naming a channel must not post to the first fuzzy match — ambiguous names return candidates instead of a channel, and named-but-unresolved channels must never fall back to the user's default channel"
+
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
