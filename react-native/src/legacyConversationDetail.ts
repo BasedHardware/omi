@@ -237,6 +237,11 @@ function locationChrome(value: unknown): {
   const geo = object(value);
   const latitude = finite(geo.latitude);
   const longitude = finite(geo.longitude);
+  presentOptionalFinite(geo.accuracy);
+  presentOptionalFinite(geo.altitude);
+  if (geo.captured_at !== undefined && geo.captured_at !== null) {
+    calendarEventTimeCopy(geo.captured_at);
+  }
   const address =
     geo.address === undefined || geo.address === null
       ? ''
@@ -361,6 +366,9 @@ function conversationPhotos(value: unknown):
   }
   const items = rows.map(raw => {
     const photo = object(raw);
+    if (photo.created_at !== undefined && photo.created_at !== null) {
+      calendarEventTimeCopy(photo.created_at);
+    }
     const discarded =
       photo.discarded === undefined || photo.discarded === null
         ? false
@@ -591,6 +599,31 @@ export async function loadLegacyConversationDetail(
           })(),
         };
   const location = locationChrome(value.geolocation);
+  presentOptionalFinite(value.meeting_duration_s);
+  presentOptionalFinite(value.meeting_dedup_speech_s);
+  if (value.audio_files !== undefined) {
+    if (!Array.isArray(value.audio_files)) {
+      throw new DetailError('invalid');
+    }
+    for (const raw of value.audio_files) {
+      const file = object(raw);
+      presentOptionalFinite(file.duration);
+      if (file.chunk_timestamps === undefined) {
+        continue;
+      }
+      if (!Array.isArray(file.chunk_timestamps)) {
+        throw new DetailError('invalid');
+      }
+      for (const timestamp of file.chunk_timestamps) {
+        presentOptionalFinite(timestamp);
+      }
+    }
+  }
+  if (value.conversation_audio !== undefined && value.conversation_audio !== null) {
+    const audio = object(value.conversation_audio);
+    presentOptionalFinite(audio.duration);
+    presentOptionalFinite(audio.captured_duration);
+  }
   const linkedEvent = calendarEvent(value.calendar_event);
   const photos = conversationPhotos(value.photos);
   const integrationText = externalText(value.external_data);

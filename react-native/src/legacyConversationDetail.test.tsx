@@ -2417,6 +2417,145 @@ test('names Flutter GetGeolocationWidgets padded GET latitude instead of remappi
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('old conversation details name Flutter GeneratedGeolocation fromJson padded GET accuracy instead of remapping to Maps', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        accuracy: '5.5',
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    locationMapsUrl:
+      'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        accuracy: 5.5,
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    locationMapsUrl:
+      'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      meeting_duration_s: '12.5',
+      photos: [
+        {
+          description: 'Whiteboard notes',
+          base64: '',
+          created_at: '2026-09-07T00:00:00.000Z',
+        },
+      ],
+      audio_files: [
+        {
+          id: 'audio-1',
+          uid: 'user-1',
+          conversation_id: fixture.id,
+          duration: '12.5',
+          chunk_timestamps: [0, 1.5],
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: 'A real conversation',
+    photoCount: 1,
+  });
+  for (const accuracy of ['  5.5  ', '5.5 ', '  5.5', '5.5\n', '\u00855.5']) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        geolocation: {
+          latitude: 37.7749,
+          longitude: -122.4194,
+          accuracy,
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        altitude: '  12.5  ',
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        captured_at: '  2026-09-07T00:00:00.000Z  ',
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      meeting_duration_s: '  12.5  ',
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [
+        {
+          description: 'Whiteboard notes',
+          base64: '',
+          created_at: '  2026-09-07T00:00:00.000Z  ',
+        },
+      ],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      audio_files: [
+        {
+          id: 'audio-1',
+          uid: 'user-1',
+          conversation_id: fixture.id,
+          duration: '  12.5  ',
+          chunk_timestamps: [0, 1.5],
+        },
+      ],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('keeps first GET apps_results content and falls back to plugins_results', async () => {
   mockRequest.mockResolvedValue(
     response({
