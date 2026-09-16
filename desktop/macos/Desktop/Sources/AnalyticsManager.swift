@@ -132,6 +132,21 @@ class AnalyticsManager {
   /// it drops a notification for lack of authorization.
   private var notificationDeliveryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
+  /// Capture-attempt outcome seam: nil in production; tests install a scoped
+  /// capture to observe the real event/payload the ambient-capture lifecycle
+  /// emits at `AnalyticsManager`'s PostHog boundary.
+  private var captureAttemptTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setCaptureAttemptTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    captureAttemptTelemetryCaptureForTests = capture
+  }
+
+  private func captureCaptureAttemptTelemetryForTests(_ event: String, properties: [String: Any]) {
+    captureAttemptTelemetryCaptureForTests?(event, properties)
+  }
+
   func setNotificationDeliveryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
   ) {
@@ -452,17 +467,40 @@ class AnalyticsManager {
 
   // MARK: - Recording Events
 
-  func transcriptionStarted() {
+  func transcriptionStarted(attemptId: String? = nil, mode: String? = nil, intent: String? = nil) {
     // Debounce: skip if called within 5 seconds (catches rapid wake/reconnect double-fires)
     if let last = lastTranscriptionStartedAt, Date().timeIntervalSince(last) < 5 {
       return
     }
     lastTranscriptionStartedAt = Date()
-    PostHogManager.shared.transcriptionStarted()
+    PostHogManager.shared.transcriptionStarted(attemptId: attemptId, mode: mode, intent: intent)
   }
 
-  func transcriptionStopped(wordCount: Int) {
-    PostHogManager.shared.transcriptionStopped(wordCount: wordCount)
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil) {
+    PostHogManager.shared.transcriptionStopped(wordCount: wordCount, attemptId: attemptId)
+  }
+
+  /// Terminal outcome of one armed ambient-capture attempt. Observes the
+  /// acceptance registry first so `conversation_accepted` reflects every
+  /// accepted conversation of this attempt observed before emission.
+  func captureAttemptOutcome(
+    _ attempt: inout CaptureAttemptOutcomeState,
+    finalizationReason: TranscriptionFinalizationReason
+  ) {
+    if CaptureAttemptAcceptanceRegistry.consumeAccepted(attempt.attemptId) {
+      attempt.noteConversationAccepted()
+    }
+    let properties = PostHogManager.captureAttemptOutcomeProperties(attempt, finalizationReason: finalizationReason)
+    captureCaptureAttemptTelemetryForTests(PostHogManager.captureAttemptOutcomeEventName, properties: properties)
+    PostHogManager.shared.captureAttemptOutcome(properties: properties)
+  }
+
+  /// Mid-flight process death discovered by next-run crash recovery: only the
+  /// persisted join key is knowable, so the payload is deliberately minimal.
+  func captureAttemptPendingOutcome(attemptId: String) {
+    let properties = PostHogManager.captureAttemptPendingProperties(attemptId: attemptId)
+    captureCaptureAttemptTelemetryForTests(PostHogManager.captureAttemptOutcomeEventName, properties: properties)
+    PostHogManager.shared.captureAttemptOutcome(properties: properties)
   }
 
   func recordingError(
@@ -833,9 +871,17 @@ class AnalyticsManager {
   // Note: The event is named "Memory Created" in analytics for historical reasons,
   // but it actually tracks when a conversation/recording is created, not a "memory".
 
-  func conversationCreated(conversationId: String, source: String, durationSeconds: Int? = nil) {
+  func conversationCreated(
+    conversationId: String,
+    source: String,
+    durationSeconds: Int? = nil,
+    attemptId: String? = nil
+  ) {
+    if let attemptId {
+      CaptureAttemptAcceptanceRegistry.noteAccepted(attemptId)
+    }
     PostHogManager.shared.conversationCreated(
-      conversationId: conversationId, source: source, durationSeconds: durationSeconds)
+      conversationId: conversationId, source: source, durationSeconds: durationSeconds, attemptId: attemptId)
   }
 
   func memoryDeleted(conversationId: String) {

@@ -1,3 +1,0 @@
-{
-  "change": "On-device transcription now closes on a pause in a noisy room instead of waiting out its 10-second window, so spoken commands reach Omi sooner"
-}
