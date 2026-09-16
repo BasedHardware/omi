@@ -6,7 +6,6 @@ Tests resolve_channel and MessageDetector to ensure:
 3. Ambiguous tie between equal top-scoring candidates resolves to (None, None).
 4. Non-matching channels resolve to (None, None).
 """
-import difflib
 import importlib.util
 from pathlib import Path
 import sys
