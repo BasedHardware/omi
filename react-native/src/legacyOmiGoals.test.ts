@@ -189,6 +189,161 @@ test('names Flutter Goal.fromJson padded GET current_value instead of remapping 
   }
 });
 
+test('old goals name Flutter Goal.fromJson padded GET created_at instead of remapping to a progress chip', () => {
+  const neighbor = {
+    id: 'goal-read',
+    title: 'Read 20 books',
+    current: 3,
+    target: 10,
+  };
+  expect(
+    parseOmiGoals(
+      JSON.stringify([
+        {
+          id: 'goal-exact',
+          title: 'Exact clocks',
+          current_value: 3,
+          target_value: 10,
+          created_at: '2026-09-07T00:00:00.000Z',
+          updated_at: '2026-09-07T00:00:00.000Z',
+          max_value: '10',
+          min_value: '0',
+          focus_rank: '1',
+        },
+        {
+          id: 'goal-json',
+          title: 'JSON clocks',
+          current_value: 3,
+          target_value: 10,
+          created_at: '2026-09-07T00:00:00.000Z',
+          updated_at: '2026-09-07T00:00:00.000Z',
+          max_value: 10,
+          min_value: 0,
+          focus_rank: 1,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id: 'goal-exact', title: 'Exact clocks', current: 3, target: 10},
+    {id: 'goal-json', title: 'JSON clocks', current: 3, target: 10},
+    neighbor,
+  ]);
+  expect(
+    parseOmiGoals(
+      JSON.stringify([
+        {
+          id: 'goal-omitted',
+          title: 'Omitted clocks',
+          current_value: 3,
+          target_value: 10,
+        },
+        {
+          id: 'goal-null',
+          title: 'Null clocks',
+          current_value: 3,
+          target_value: 10,
+          created_at: null,
+          updated_at: null,
+          max_value: null,
+          min_value: null,
+          focus_rank: null,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id: 'goal-omitted', title: 'Omitted clocks', current: 3, target: 10},
+    {id: 'goal-null', title: 'Null clocks', current: 3, target: 10},
+    neighbor,
+  ]);
+  for (const created_at of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    '  2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    const rows = parseOmiGoals(
+      JSON.stringify([
+        {
+          id: 'goal-padded',
+          title: 'Padded clocks',
+          current_value: 3,
+          target_value: 10,
+          created_at,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    );
+    expect(rows.find(row => row.id === 'goal-padded')).toBeUndefined();
+    expect(rows.find(row => row.id === 'goal-read')).toEqual(neighbor);
+  }
+  for (const [field, value] of [
+    ['updated_at', '  2026-09-07T00:00:00.000Z  '],
+    ['max_value', '  10  '],
+    ['min_value', '  0  '],
+    ['focus_rank', '  1  '],
+    ['latest_progress_sequence', '  2  '],
+    ['ended_at', '  2026-09-07T00:00:00.000Z  '],
+    ['horizon_at', '  2026-09-07T00:00:00.000Z  '],
+  ] as const) {
+    const rows = parseOmiGoals(
+      JSON.stringify([
+        {
+          id: 'goal-padded',
+          title: 'Padded extras',
+          current_value: 3,
+          target_value: 10,
+          [field]: value,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    );
+    expect(rows.find(row => row.id === 'goal-padded')).toBeUndefined();
+    expect(rows.find(row => row.id === 'goal-read')).toEqual(neighbor);
+  }
+  const metricRows = parseOmiGoals(
+    JSON.stringify([
+      {
+        id: 'goal-padded',
+        title: 'Padded metric',
+        current_value: 3,
+        target_value: 10,
+        metric: {current: '  3  ', target: 10, type: 'scale'},
+      },
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+    ]),
+  );
+  expect(metricRows.find(row => row.id === 'goal-padded')).toBeUndefined();
+  expect(metricRows.find(row => row.id === 'goal-read')).toEqual(neighbor);
+});
+
 test('names Flutter Goal.fromJson empty GET ids instead of omitting the row', () => {
   const rows = parseOmiGoals(
     JSON.stringify([

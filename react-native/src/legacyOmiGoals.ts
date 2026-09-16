@@ -74,6 +74,39 @@ function goalRawNum(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+function paddedKnown(value: unknown): boolean {
+  return typeof value === 'string' && visibleDisplayText(value) !== value;
+}
+
+function skipPaddedExtras(row: Record<string, unknown>): boolean {
+  if (
+    paddedKnown(row.created_at) ||
+    paddedKnown(row.updated_at) ||
+    paddedKnown(row.max_value) ||
+    paddedKnown(row.min_value) ||
+    paddedKnown(row.focus_rank) ||
+    paddedKnown(row.latest_progress_sequence) ||
+    paddedKnown(row.ended_at) ||
+    paddedKnown(row.horizon_at)
+  ) {
+    return true;
+  }
+  if (
+    row.metric === null ||
+    typeof row.metric !== 'object' ||
+    Array.isArray(row.metric)
+  ) {
+    return false;
+  }
+  const metric = row.metric as Record<string, unknown>;
+  return (
+    paddedKnown(metric.current) ||
+    paddedKnown(metric.target) ||
+    paddedKnown(metric.max) ||
+    paddedKnown(metric.min)
+  );
+}
+
 export function parseOmiGoals(body: string): OmiGoal[] {
   const parsed: unknown = JSON.parse(body);
   if (!Array.isArray(parsed)) {
@@ -86,6 +119,9 @@ export function parseOmiGoals(body: string): OmiGoal[] {
       continue;
     }
     const row = raw as Record<string, unknown>;
+    if (skipPaddedExtras(row)) {
+      continue;
+    }
     const id = goalId(row.id);
     if (id === null) {
       continue;
