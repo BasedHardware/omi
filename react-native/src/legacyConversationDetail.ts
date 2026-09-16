@@ -108,6 +108,27 @@ function finite(value: unknown): number {
   }
   return value;
 }
+function presentOptionalFinite(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  finite(value);
+}
+function presentOptionalInteger(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new DetailError('invalid');
+    }
+    finite(value);
+    return;
+  }
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    throw new DetailError('invalid');
+  }
+}
 function array(value: unknown): unknown[] {
   if (!Array.isArray(value)) {
     throw new DetailError('invalid');
@@ -464,6 +485,20 @@ export async function loadLegacyConversationDetail(
       continue;
     }
     const item = raw as Record<string, unknown>;
+    presentOptionalFinite(item.capture_confidence);
+    presentOptionalFinite(item.ownership_confidence);
+    if (item.completed_at !== undefined && item.completed_at !== null) {
+      calendarEventTimeCopy(item.completed_at);
+    }
+    if (item.created_at !== undefined && item.created_at !== null) {
+      calendarEventTimeCopy(item.created_at);
+    }
+    if (item.due_at !== undefined && item.due_at !== null) {
+      calendarEventTimeCopy(item.due_at);
+    }
+    if (item.updated_at !== undefined && item.updated_at !== null) {
+      calendarEventTimeCopy(item.updated_at);
+    }
     if (item.deleted !== undefined) {
       if (typeof item.deleted !== 'boolean') {
         continue;
@@ -482,6 +517,18 @@ export async function loadLegacyConversationDetail(
       description: text(item.description),
       completed: item.completed === undefined ? false : item.completed,
     });
+  }
+  if (Array.isArray(structured.events)) {
+    for (const raw of structured.events) {
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+        continue;
+      }
+      const event = raw as Record<string, unknown>;
+      if (event.start !== undefined && event.start !== null) {
+        calendarEventTimeCopy(event.start);
+      }
+      presentOptionalInteger(event.duration);
+    }
   }
   // Old list responses omit transcripts; even detail can redact locked data.
   // Only an explicit unlocked array establishes an empty or loaded transcript.

@@ -3024,6 +3024,157 @@ test('names Flutter ActionItemsTab empty GET descriptions', async () => {
   ]);
 });
 
+test('old conversation details name Flutter ServerConversation.fromJson padded GET action_items capture_confidence instead of remapping to an action chip', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {
+            description: 'Call Alex',
+            completed: true,
+            capture_confidence: '0.9',
+          },
+        ],
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).actionItems,
+  ).toEqual([{description: 'Call Alex', completed: true}]);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {
+            description: 'Call Alex',
+            completed: true,
+            capture_confidence: 0.9,
+          },
+        ],
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).actionItems,
+  ).toEqual([{description: 'Call Alex', completed: true}]);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        events: [
+          {
+            title: 'Standup',
+            start: '2026-09-07T15:00:00.000Z',
+            duration: '30',
+          },
+        ],
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).title,
+  ).toBe('A real conversation');
+  for (const capture_confidence of [
+    '  0.9  ',
+    '0.9 ',
+    '  0.9',
+    '0.9\n',
+    '\u00850.9',
+  ]) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        structured: {
+          ...fixture.structured,
+          action_items: [
+            {description: 'Call Alex', completed: true, capture_confidence},
+          ],
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {
+            description: 'Call Alex',
+            completed: true,
+            ownership_confidence: '  0.4  ',
+          },
+        ],
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {
+            description: 'Call Alex',
+            completed: true,
+            due_at: '  2026-09-07T15:00:00.000Z  ',
+          },
+        ],
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        events: [
+          {
+            title: 'Standup',
+            start: '  2026-09-07T15:00:00.000Z  ',
+            duration: 30,
+          },
+        ],
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        events: [
+          {
+            title: 'Standup',
+            start: '2026-09-07T15:00:00.000Z',
+            duration: '  30  ',
+          },
+        ],
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('keeps GET action items and drops deleted rows', async () => {
   mockRequest.mockResolvedValue(
     response({
