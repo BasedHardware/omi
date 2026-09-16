@@ -2313,6 +2313,47 @@ def _store_projected_conversation(
     return _store_deterministic_minimum(uid, conversation, plan, client_projection=client_projection)
 
 
+def _flag_off_identified_basic_deny(
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    *,
+    client_projection: Optional[ClientProcessing],
+) -> Optional[FreeTierProcessingPlan]:
+    """Identified-basic deny for flag-off eager desktop enrichment.
+
+    Capture-side deferral (the legacy branch above) already keeps free-tier
+    desktop off managed providers at ingest; first-open (force_process) and
+    manual reprocess are the remaining eager spend. This reuses the S6 policy
+    — the same resolve_free_tier_processing_plan + managed-compute decision
+    the flag-on branch consults — so there is no second pipeline. Only an
+    *identified* basic deny is returned; identification failure and
+    authorization outages fail open to normal processing, matching
+    should_defer_desktop_processing's documented fail-open contract (a
+    Firestore blip must not strip a paid user's enrichment). A request that
+    carries a validated BYOK key for conv_structure's provider is allowed by
+    the same decision_for closure the flag-on path uses.
+    """
+    source = getattr(conversation, 'source', None)
+    source_value = getattr(source, 'value', source)
+    effective_projection = (
+        client_projection if client_projection is not None else getattr(conversation, 'client_processing', None)
+    )
+    plan = resolve_free_tier_processing_plan(
+        uid=uid,
+        source=str(source_value),
+        force_process=True,
+        is_reprocess=True,
+        has_projection=effective_projection is not None,
+        decision_for=_managed_compute_decision_for(uid),
+    )
+    decision = plan.decision
+    if plan.managed_calls_allowed or decision is None:
+        return None
+    if not decision.plan_resolved or decision.plan != 'basic':
+        return None
+    return plan
+
+
 def _stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
     direct = getattr(conversation, 'calendar_meeting_context', None)
     if isinstance(direct, CalendarMeetingContext):
@@ -2626,6 +2667,31 @@ def process_conversation(
         # Do not change this onto the flag-off path — it must stay byte-identical.
         report_persistence(False)
         return deferred
+    # Eager-extraction gate (S14 proactivity half, flag-off): first-open
+    # (force_process) and manual reprocess are the remaining eager managed
+    # spend for desktop conversations. An identified-basic deny lands at the
+    # same deterministic minimum the flag-on branch uses — no second pipeline;
+    # identification failure fails open above it. Non-desktop sources never
+    # reach this branch (the summary flip is a separate, held decision).
+    elif (
+        (force_process or is_reprocess)
+        and hasattr(conversation, 'source')
+        and conversation.source == ConversationSource.desktop
+    ):
+        eager_basic_deny = _flag_off_identified_basic_deny(uid, conversation, client_projection=client_projection)
+        if eager_basic_deny is not None:
+            stored, persisted = _store_deterministic_minimum(
+                uid, conversation, eager_basic_deny, client_projection=client_projection
+            )
+            report_persistence(
+                persisted,
+                derived_effects=(
+                    DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+                    if persisted
+                    else DerivedEffectsDisposition.RUN
+                ),
+            )
+            return stored
 
     _enrich_meeting_context(uid, conversation)
 

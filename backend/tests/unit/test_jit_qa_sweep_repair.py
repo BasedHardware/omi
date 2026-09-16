@@ -98,11 +98,14 @@ class _SnapshotWithPath(_Snapshot):
         self.id = doc_id
 
 
+TODAY = datetime.now(timezone.utc).date().isoformat()
+
+
 class _Db:
-    def __init__(self, attempts=(), attempt_date="2026-09-15"):
+    def __init__(self, attempts=(), attempt_date=None):
         self.store = {}
         self.attempts = tuple(attempts)
-        self.attempt_date = attempt_date
+        self.attempt_date = attempt_date or TODAY
 
     def document(self, path):
         return _Ref(self.store, path)
@@ -165,7 +168,7 @@ def test_repair_joins_gateway_accounting_and_writes_single_receipt():
     db = _Db(
         attempts=[
             {
-                "date": "2026-09-15",
+                "date": TODAY,
                 "user_uid": UID,
                 "feature": "memories",
                 "request_id": "req-1",
@@ -176,7 +179,7 @@ def test_repair_joins_gateway_accounting_and_writes_single_receipt():
                 "jit_run_id": "qa-sweep-34933918999-1",
             },
             {
-                "date": "2026-09-15",
+                "date": TODAY,
                 "user_uid": UID,
                 "feature": "desktop_proactivity",
                 "request_id": "req-2",
@@ -205,7 +208,7 @@ def test_repair_without_a_joinable_sweep_run_fails_closed():
     db = _Db(
         attempts=[
             {
-                "date": "2026-09-15",
+                "date": TODAY,
                 "user_uid": UID,
                 "feature": "memories",
                 "request_id": "req-1",
