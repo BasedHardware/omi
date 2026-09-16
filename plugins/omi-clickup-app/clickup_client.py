@@ -1,6 +1,6 @@
 import os
 import requests
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any, Union
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,6 +13,22 @@ class ClickUpClient:
         self.client_id = os.getenv("CLICKUP_CLIENT_ID")
         self.client_secret = os.getenv("CLICKUP_CLIENT_SECRET")
         self.base_url = "https://api.clickup.com/api/v2"
+
+    @staticmethod
+    def _safe_json(response: Any) -> dict:
+        """
+        Safely extract JSON dictionary from requests.Response.
+        Guards against HTML 502/504 Bad Gateway pages, None, or non-dict payloads.
+        """
+        if response is None:
+            return {}
+        try:
+            data = response.json()
+            if isinstance(data, dict):
+                return data
+            return {"data": data}
+        except Exception:
+            return {}
     
     def get_authorization_url(self, redirect_uri: str, state: str) -> str:
         """Generate ClickUp OAuth authorization URL."""
@@ -37,8 +53,7 @@ class ClickUpClient:
             )
             
             if response.status_code == 200:
-                data = response.json()
-                
+                data = self._safe_json(response)
                 return {
                     "access_token": data.get("access_token"),
                     "token_type": data.get("token_type", "Bearer")
@@ -62,8 +77,10 @@ class ClickUpClient:
             )
             
             if response.status_code == 200:
-                data = response.json()
-                user = data.get("user", {})
+                data = self._safe_json(response)
+                user = data.get("user")
+                if not isinstance(user, dict):
+                    user = {}
                 return {
                     "id": user.get("id"),
                     "username": user.get("username"),
@@ -87,17 +104,20 @@ class ClickUpClient:
             )
             
             if response.status_code == 200:
-                data = response.json()
+                data = self._safe_json(response)
                 teams = data.get("teams", [])
+                if not isinstance(teams, list):
+                    teams = []
                 
                 workspaces = []
                 for team in teams:
-                    workspaces.append({
-                        "id": team.get("id"),
-                        "name": team.get("name"),
-                        "color": team.get("color"),
-                        "avatar": team.get("avatar")
-                    })
+                    if isinstance(team, dict):
+                        workspaces.append({
+                            "id": team.get("id"),
+                            "name": team.get("name"),
+                            "color": team.get("color"),
+                            "avatar": team.get("avatar")
+                        })
                 
                 return workspaces
             else:
@@ -119,17 +139,20 @@ class ClickUpClient:
             )
             
             if response.status_code == 200:
-                data = response.json()
+                data = self._safe_json(response)
                 spaces = data.get("spaces", [])
+                if not isinstance(spaces, list):
+                    spaces = []
                 
                 space_list = []
                 for space in spaces:
-                    space_list.append({
-                        "id": space.get("id"),
-                        "name": space.get("name"),
-                        "private": space.get("private", False),
-                        "color": space.get("color")
-                    })
+                    if isinstance(space, dict):
+                        space_list.append({
+                            "id": space.get("id"),
+                            "name": space.get("name"),
+                            "private": space.get("private", False),
+                            "color": space.get("color")
+                        })
                 
                 return space_list
             else:
@@ -151,17 +174,22 @@ class ClickUpClient:
             )
             
             if response.status_code == 200:
-                data = response.json()
+                data = self._safe_json(response)
                 lists = data.get("lists", [])
+                if not isinstance(lists, list):
+                    lists = []
                 
                 list_data = []
                 for lst in lists:
-                    list_data.append({
-                        "id": lst.get("id"),
-                        "name": lst.get("name"),
-                        "space_id": space_id,
-                        "folder_id": lst.get("folder", {}).get("id") if lst.get("folder") else None
-                    })
+                    if isinstance(lst, dict):
+                        folder = lst.get("folder")
+                        folder_id = folder.get("id") if isinstance(folder, dict) else None
+                        list_data.append({
+                            "id": lst.get("id"),
+                            "name": lst.get("name"),
+                            "space_id": space_id,
+                            "folder_id": folder_id
+                        })
                 
                 return list_data
             else:
@@ -191,7 +219,8 @@ class ClickUpClient:
         if response.status_code != 200:
             raise Exception(f"Error getting folders: {response.status_code} - {response.text}")
 
-        return response.json().get("folders", [])
+        folders = self._safe_json(response).get("folders", [])
+        return folders if isinstance(folders, list) else []
 
     def get_folder_lists(self, access_token: str, folder_id: str) -> List[Dict]:
         """
@@ -209,7 +238,8 @@ class ClickUpClient:
         if response.status_code != 200:
             raise Exception(f"Error getting folder lists: {response.status_code} - {response.text}")
 
-        return response.json().get("lists", [])
+        lists = self._safe_json(response).get("lists", [])
+        return lists if isinstance(lists, list) else []
 
     def get_all_lists(self, access_token: str, team_id: str) -> List[Dict]:
         """
@@ -231,29 +261,37 @@ class ClickUpClient:
         
         # Get lists for each space
         for space in spaces:
+            if not isinstance(space, dict) or not space.get("id"):
+                continue
             # Folderless lists
             lists = self.get_lists(access_token, space["id"])
             for lst in lists:
-                lst["space_name"] = space["name"]
-                all_lists.append(lst)
+                if isinstance(lst, dict):
+                    lst["space_name"] = space.get("name")
+                    all_lists.append(lst)
 
             # Lists inside folders
             try:
-                for folder in self.get_folders(access_token, space["id"]):
+                folders = self.get_folders(access_token, space["id"])
+                for folder in folders:
+                    if not isinstance(folder, dict):
+                        continue
                     folder_lists = folder.get("lists")
-                    if folder_lists is None:
+                    if folder_lists is None and folder.get("id"):
                         folder_lists = self.get_folder_lists(access_token, folder["id"])
-                    for lst in folder_lists:
-                        all_lists.append({
-                            "id": lst.get("id"),
-                            "name": lst.get("name"),
-                            "space_id": space["id"],
-                            "space_name": space["name"],
-                            "folder_id": folder.get("id"),
-                            "folder_name": folder.get("name")
-                        })
+                    if isinstance(folder_lists, list):
+                        for lst in folder_lists:
+                            if isinstance(lst, dict):
+                                all_lists.append({
+                                    "id": lst.get("id"),
+                                    "name": lst.get("name"),
+                                    "space_id": space["id"],
+                                    "space_name": space.get("name"),
+                                    "folder_id": folder.get("id"),
+                                    "folder_name": folder.get("name")
+                                })
             except Exception as e:
-                print(f"❌ Error getting folder lists for space {space['id']}: {e}", flush=True)
+                print(f"❌ Error getting folder lists for space {space.get('id')}: {e}", flush=True)
                 return []
         
         return all_lists
@@ -268,21 +306,27 @@ class ClickUpClient:
             )
             
             if response.status_code == 200:
-                data = response.json()
+                data = self._safe_json(response)
                 team = data.get("team", {})
+                if not isinstance(team, dict):
+                    team = {}
                 members_data = team.get("members", [])
+                if not isinstance(members_data, list):
+                    members_data = []
                 
                 members = []
                 for member in members_data:
-                    user = member.get("user", {})
-                    members.append({
-                        "id": user.get("id"),
-                        "username": user.get("username"),
-                        "email": user.get("email"),
-                        "initials": user.get("initials", ""),
-                        "color": user.get("color"),
-                        "profilePicture": user.get("profilePicture")
-                    })
+                    if isinstance(member, dict):
+                        user = member.get("user", {})
+                        if isinstance(user, dict):
+                            members.append({
+                                "id": user.get("id"),
+                                "username": user.get("username"),
+                                "email": user.get("email"),
+                                "initials": user.get("initials", ""),
+                                "color": user.get("color"),
+                                "profilePicture": user.get("profilePicture")
+                            })
                 
                 print(f"✅ Found {len(members)} workspace members", flush=True)
                 return members
@@ -302,9 +346,9 @@ class ClickUpClient:
         description: Optional[str] = None,
         priority: Optional[int] = None,
         status: Optional[str] = None,
-        due_date: Optional[str] = None,
+        due_date: Optional[Union[str, int, float]] = None,
         timezone: str = "UTC",
-        assignees: Optional[List[str]] = None
+        assignees: Optional[List[Any]] = None
     ) -> Optional[dict]:
         """
         Create a task in ClickUp.
@@ -316,7 +360,8 @@ class ClickUpClient:
             description: Optional task description
             priority: Priority (1=urgent, 2=high, 3=normal, 4=low)
             status: Optional status name
-            due_date: Optional due date in ISO format or Unix timestamp (milliseconds)
+            due_date: Optional due date in ISO format, numeric string, or Unix timestamp (ms)
+            assignees: Optional list of assignee IDs
             
         Returns:
             Task data if successful, None otherwise
@@ -329,7 +374,7 @@ class ClickUpClient:
             
             # Build task data
             task_data = {
-                "name": name
+                "name": str(name) if name is not None else "Untitled Task"
             }
             
             # Add description with "Created via Omi" footer
@@ -338,67 +383,68 @@ class ClickUpClient:
             else:
                 task_data["description"] = "Created via Omi"
             
-            if priority:
+            if priority in [1, 2, 3, 4]:
                 task_data["priority"] = priority
             
             if status:
-                task_data["status"] = status
+                task_data["status"] = str(status)
             
-            if assignees and len(assignees) > 0:
-                # ClickUp expects list of user IDs as integers
-                task_data["assignees"] = [int(user_id) for user_id in assignees if user_id]
-                print(f"👥 Assignees: {assignees}", flush=True)
+            if assignees and isinstance(assignees, (list, tuple)):
+                parsed_assignees = []
+                for uid in assignees:
+                    if uid is None:
+                        continue
+                    try:
+                        parsed_assignees.append(int(uid))
+                    except (ValueError, TypeError):
+                        # Gracefully ignore non-numeric strings or invalid IDs
+                        continue
+                if parsed_assignees:
+                    task_data["assignees"] = parsed_assignees
+                    print(f"👥 Assignees: {parsed_assignees}", flush=True)
             
-            if due_date:
-                # Convert ISO date string to Unix timestamp in milliseconds
-                # ClickUp expects Unix timestamp in milliseconds
-                # IMPORTANT: Also need to set due_date_time=true for time to show!
+            if due_date is not None:
                 from datetime import datetime
                 try:
-                    # Try to use timezone if pytz is available
-                    try:
-                        import pytz
-                        tz = pytz.timezone(timezone)
-                    except (ImportError, Exception):
-                        # Fallback to no timezone (naive datetime)
-                        tz = None
-                    
-                    # Check if time is included in the date string
-                    has_time = 'T' in due_date
-                    
-                    # Try parsing as ISO format
-                    if has_time:
-                        # Full datetime - parse the time component
-                        dt_naive = datetime.fromisoformat(due_date.replace('Z', ''))
-                        if tz:
-                            dt = tz.localize(dt_naive)
-                        else:
-                            dt = dt_naive
-                    else:
-                        # Just date, set time to end of day
-                        dt_naive = datetime.fromisoformat(due_date + 'T23:59:59')
-                        if tz:
-                            dt = tz.localize(dt_naive)
-                        else:
-                            dt = dt_naive
-                    
-                    # Convert to Unix timestamp in milliseconds
-                    due_timestamp = int(dt.timestamp() * 1000)
-                    task_data["due_date"] = due_timestamp
-                    
-                    # CRITICAL: Set due_date_time=true when time component exists
-                    # This tells ClickUp to display the time, not just the date
-                    if has_time:
-                        task_data["due_date_time"] = True
-                        print(f"📅 Due date with TIME → {due_timestamp}", flush=True)
-                    else:
-                        task_data["due_date_time"] = False
-                        print(f"📅 Due date (no time) → {due_timestamp}", flush=True)
+                    due_ts = None
+                    has_time = False
+
+                    # Check if already a number or numeric string
+                    if isinstance(due_date, (int, float)):
+                        due_ts = int(due_date)
+                        has_time = True
+                    elif isinstance(due_date, str) and due_date.strip().isdigit():
+                        due_ts = int(due_date.strip())
+                        has_time = True
+                    elif isinstance(due_date, str):
+                        due_str = due_date.strip()
+                        has_time = ('T' in due_str or ':' in due_str)
                         
+                        try:
+                            import pytz
+                            tz = pytz.timezone(timezone)
+                        except (ImportError, Exception):
+                            tz = None
+
+                        if has_time:
+                            cleaned_str = due_str.replace('Z', '')
+                            dt_naive = datetime.fromisoformat(cleaned_str)
+                            dt = tz.localize(dt_naive) if tz else dt_naive
+                        else:
+                            dt_naive = datetime.fromisoformat(due_str + 'T23:59:59')
+                            dt = tz.localize(dt_naive) if tz else dt_naive
+
+                        due_ts = int(dt.timestamp() * 1000)
+
+                    if due_ts is not None:
+                        task_data["due_date"] = due_ts
+                        task_data["due_date_time"] = has_time
+                        print(f"📅 Due date timestamp → {due_ts} (has_time={has_time})", flush=True)
+
                 except Exception as e:
                     print(f"⚠️  Could not parse due date: {type(e).__name__}", flush=True)
             
-            print(f"📤 Creating task in list {list_id} (name_len={len(name)})", flush=True)
+            print(f"📤 Creating task in list {list_id} (name_len={len(task_data['name'])})", flush=True)
             
             response = requests.post(
                 f"{self.base_url}/list/{list_id}/task",
@@ -407,17 +453,25 @@ class ClickUpClient:
             )
             
             if response.status_code == 200:
-                data = response.json()
-                task = data
+                data = self._safe_json(response)
+                task = data if isinstance(data, dict) else {}
                 
                 print(f"✅ Task created: {task.get('id')}", flush=True)
                 
+                status_field = task.get("status")
+                if isinstance(status_field, dict):
+                    status_name = status_field.get("status")
+                elif isinstance(status_field, str):
+                    status_name = status_field
+                else:
+                    status_name = None
+
                 return {
                     "success": True,
                     "task_id": task.get("id"),
                     "task_name": task.get("name"),
                     "task_url": task.get("url"),
-                    "status": task.get("status", {}).get("status"),
+                    "status": status_name,
                     "list_id": list_id
                 }
             else:
@@ -434,4 +488,3 @@ class ClickUpClient:
                 "success": False,
                 "error": type(e).__name__
             }
-

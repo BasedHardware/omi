@@ -35,13 +35,34 @@ oauth_states = {}
 background_task = None
 
 
+def _extract_segment_texts(segments: Any) -> List[str]:
+    """Safely extract non-empty string texts from transcript segments."""
+    if not isinstance(segments, (list, tuple)):
+        return []
+    extracted = []
+    for seg in segments:
+        if isinstance(seg, dict):
+            text = seg.get("text")
+            if text and isinstance(text, str) and text.strip():
+                extracted.append(text.strip())
+        elif isinstance(seg, str) and seg.strip():
+            extracted.append(seg.strip())
+    return extracted
+
+
 async def monitor_session_timeouts():
-    """Background task that monitors sessions and processes them if idle for 5+ seconds."""
+    """Background task that monitors sessions, handles timeouts, and cleans up old sessions."""
     print("🕐 Timeout monitor started", flush=True)
+    loop_count = 0
     
     while True:
         try:
             await asyncio.sleep(1)  # Check every second
+            loop_count += 1
+            
+            # Periodically clean up old expired sessions every 60s
+            if loop_count % 60 == 0:
+                SimpleSessionStorage.cleanup_old_sessions(max_age_seconds=3600)
             
             from simple_storage import sessions
             
@@ -833,23 +854,23 @@ async def process_segments(
     AI extracts task name, description, list, and priority.
     """
     # Extract text from segments
-    segment_texts = [seg.get("text", "") for seg in segments]
+    segment_texts = _extract_segment_texts(segments)
     full_text = " ".join(segment_texts)
     
-    session_id = session["session_id"]
+    session_id = session.get("session_id", "")
     is_test_session = session_id.startswith("test_session")
     
-    print(f"📊 Session mode: {session['task_mode']}, Count: {session.get('segments_count', 0)}/5", flush=True)
+    print(f"📊 Session mode: {session.get('task_mode', 'idle')}, Count: {session.get('segments_count', 0)}/5", flush=True)
     
     # Check for trigger phrase (but only if not already recording)
-    if task_detector.detect_trigger(full_text) and session["task_mode"] == "idle":
+    if task_detector.detect_trigger(full_text) and session.get("task_mode") == "idle":
         task_content = task_detector.extract_task_content(full_text)
         
         print(f"🎤 TRIGGER! {'[TEST MODE] Processing immediately...' if is_test_session else 'Starting segment collection...'}", flush=True)
         print(f"   Content extracted: {'yes' if task_content else 'no'}", flush=True)
         
         # TEST MODE: Process entire text immediately
-        if is_test_session and len(task_content) > 5:
+        if is_test_session and task_content and len(task_content) > 5:
             print(f"🧪 Test mode: Processing full text immediately...", flush=True)
             
             # Fetch fresh lists and members

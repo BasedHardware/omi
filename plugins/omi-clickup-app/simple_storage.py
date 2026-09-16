@@ -2,8 +2,8 @@
 Simple storage with file persistence - survives server restarts!
 Stores user OAuth tokens, selected workspaces/lists, and session state.
 """
-from typing import Dict, Optional
-from datetime import datetime
+from typing import Dict, Optional, List
+from datetime import datetime, timezone
 import json
 import os
 
@@ -23,6 +23,10 @@ SESSIONS_FILE = os.path.join(STORAGE_DIR, "sessions_data.json")
 # In-memory storage
 users: Dict[str, dict] = {}
 sessions: Dict[str, dict] = {}
+
+def get_now_utc() -> datetime:
+    """Return timezone-aware current UTC time."""
+    return datetime.now(timezone.utc)
 
 # Load from file on startup
 def load_storage():
@@ -74,18 +78,19 @@ class SimpleUserStorage:
         available_workspaces: Optional[list] = None,
         available_lists: Optional[list] = None,
         available_members: Optional[list] = None,
-        timezone: Optional[str] = None
+        timezone_pref: Optional[str] = None
     ):
         """Save or update user data"""
+        now_str = get_now_utc().isoformat()
         if uid not in users:
             users[uid] = {
                 "uid": uid,
-                "created_at": datetime.utcnow().isoformat()
+                "created_at": now_str
             }
         
         users[uid].update({
             "access_token": access_token,
-            "updated_at": datetime.utcnow().isoformat()
+            "updated_at": now_str
         })
         
         if team_id:
@@ -100,8 +105,8 @@ class SimpleUserStorage:
             users[uid]["available_lists"] = available_lists
         if available_members is not None:
             users[uid]["available_members"] = available_members
-        if timezone:
-            users[uid]["timezone"] = timezone
+        if timezone_pref:
+            users[uid]["timezone"] = timezone_pref
         
         save_users()  # Persist to file
         print(f"💾 Saved data for user {uid[:10]}...", flush=True)
@@ -111,20 +116,20 @@ class SimpleUserStorage:
         """Update user's selected default list"""
         if uid in users:
             users[uid]["selected_list"] = selected_list
-            users[uid]["updated_at"] = datetime.utcnow().isoformat()
+            users[uid]["updated_at"] = get_now_utc().isoformat()
             save_users()
             print(f"📝 Updated list for {uid[:10]}... to {selected_list}", flush=True)
             return True
         return False
     
     @staticmethod
-    def update_timezone(uid: str, timezone: str):
+    def update_timezone(uid: str, timezone_pref: str):
         """Update user's timezone preference"""
         if uid in users:
-            users[uid]["timezone"] = timezone
-            users[uid]["updated_at"] = datetime.utcnow().isoformat()
+            users[uid]["timezone"] = timezone_pref
+            users[uid]["updated_at"] = get_now_utc().isoformat()
             save_users()
-            print(f"🌍 Updated timezone for {uid[:10]}... to {timezone}", flush=True)
+            print(f"🌍 Updated timezone for {uid[:10]}... to {timezone_pref}", flush=True)
             return True
         return False
     
@@ -147,7 +152,7 @@ class SimpleUserStorage:
 
 
 class SimpleSessionStorage:
-    """Store session state in memory"""
+    """Store session state in memory with TTL and eviction routines"""
     
     @staticmethod
     def get_or_create_session(session_id: str, uid: str) -> dict:
@@ -160,7 +165,8 @@ class SimpleSessionStorage:
                 "segments_count": 0,
                 "accumulated_text": "",
                 "target_list": None,
-                "created_at": datetime.utcnow().isoformat()
+                "created_at": get_now_utc().isoformat(),
+                "last_segment_at": get_now_utc().isoformat()
             }
             print(f"🆕 Created new session: {session_id}", flush=True)
         return sessions[session_id]
@@ -170,7 +176,7 @@ class SimpleSessionStorage:
         """Update session fields"""
         if session_id in sessions:
             # Always update the last activity timestamp
-            kwargs["last_segment_at"] = datetime.utcnow().isoformat()
+            kwargs["last_segment_at"] = get_now_utc().isoformat()
             sessions[session_id].update(kwargs)
             print(f"💾 Updated session {session_id}: {sorted(kwargs.keys())}", flush=True)
         else:
@@ -188,8 +194,10 @@ class SimpleSessionStorage:
         
         try:
             last_time = datetime.fromisoformat(last_segment)
-            idle_seconds = (datetime.utcnow() - last_time).total_seconds()
-            return idle_seconds
+            if last_time.tzinfo is None:
+                last_time = last_time.replace(tzinfo=timezone.utc)
+            idle_seconds = (get_now_utc() - last_time).total_seconds()
+            return max(0.0, idle_seconds)
         except Exception:
             return None
     
@@ -201,7 +209,50 @@ class SimpleSessionStorage:
                 "task_mode": "idle",
                 "segments_count": 0,
                 "accumulated_text": "",
-                "target_list": None
+                "target_list": None,
+                "last_segment_at": get_now_utc().isoformat()
             })
             print(f"🔄 Reset session {session_id}", flush=True)
 
+    @staticmethod
+    def delete_session(session_id: str) -> bool:
+        """Explicitly evict/remove a session from memory and save."""
+        if session_id in sessions:
+            del sessions[session_id]
+            print(f"🗑️ Deleted session {session_id}", flush=True)
+            return True
+        return False
+
+    @staticmethod
+    def cleanup_old_sessions(max_age_seconds: float = 3600) -> int:
+        """
+        Evict idle sessions that have exceeded max_age_seconds to prevent
+        unbounded memory leaks. Returns count of evicted sessions.
+        """
+        now = get_now_utc()
+        evicted = 0
+        for sid, sess in list(sessions.items()):
+            # Don't evict currently recording or processing sessions unless they are very old (>2h)
+            mode = sess.get("task_mode", "idle")
+            effective_max_age = max_age_seconds if mode == "idle" else max_age_seconds * 2
+            
+            ref_ts = sess.get("last_segment_at") or sess.get("created_at")
+            if not ref_ts:
+                del sessions[sid]
+                evicted += 1
+                continue
+            try:
+                dt = datetime.fromisoformat(ref_ts)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                age = (now - dt).total_seconds()
+                if age > effective_max_age:
+                    del sessions[sid]
+                    evicted += 1
+            except Exception:
+                del sessions[sid]
+                evicted += 1
+        
+        if evicted > 0:
+            print(f"🧹 Cleaned up {evicted} expired session(s)", flush=True)
+        return evicted

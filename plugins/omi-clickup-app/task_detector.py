@@ -6,7 +6,21 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+_openai_client = None
+
+def get_openai_client():
+    """Lazily initialize and return the OpenAI client, or None if key is missing."""
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            try:
+                _openai_client = AsyncOpenAI(api_key=api_key)
+            except Exception as e:
+                print(f"⚠️  Could not initialize AsyncOpenAI: {e}", flush=True)
+                _openai_client = None
+    return _openai_client
 
 
 class TaskDetector:
@@ -112,8 +126,14 @@ class TaskDetector:
                         member_names.append(email_name)
                         member_map[email_name.lower()] = member_id
         
+        ai_client = get_openai_client()
+        if ai_client is None:
+            # Fallback when OpenAI client is not configured
+            task_content = cls.clean_content(all_segments_text)
+            return None, None, task_content or "New Task", None, 3, None, []
+
         try:
-            response = await client.chat.completions.create(
+            response = await ai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {
@@ -386,8 +406,17 @@ CRITICAL RULES:
         
         list_names = [lst["name"] for lst in available_lists]
         
+        spoken_lower = (spoken_list or "").lower().strip()
+        ai_client = get_openai_client()
+        if ai_client is None:
+            # Fallback to deterministic matching
+            for lst in available_lists:
+                if lst.get("name", "").lower() == spoken_lower:
+                    return lst
+            return None
+
         try:
-            response = await client.chat.completions.create(
+            response = await ai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {
