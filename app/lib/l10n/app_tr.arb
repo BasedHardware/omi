@@ -138,6 +138,7 @@
     "offlineSync": "Çevrimdışı Senkronizasyon",
     "autoSync": "Otomatik eşitleme",
     "autoSyncDescription": "Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin",
+    "omiButtonActions": "Omi Düğme İşlemleri",
     "deviceSettings": "Cihaz Ayarları",
     "integrations": "Entegrasyonlar",
     "feedbackBug": "Geri Bildirim / Hata",

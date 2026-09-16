@@ -138,6 +138,7 @@
     "offlineSync": "Đồng bộ Ngoại tuyến",
     "autoSync": "Tự động đồng bộ",
     "autoSyncDescription": "Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối",
+    "omiButtonActions": "Tác vụ nút Omi",
     "deviceSettings": "Cài đặt thiết bị",
     "integrations": "Tích hợp",
     "feedbackBug": "Phản hồi / Báo lỗi",

@@ -138,6 +138,7 @@
     "offlineSync": "Offline synchronisatie",
     "autoSync": "Automatisch synchroniseren",
     "autoSyncDescription": "Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt",
+    "omiButtonActions": "Omi-knopacties",
     "deviceSettings": "Apparaatinstellingen",
     "integrations": "Integraties",
     "feedbackBug": "Feedback / Fout",

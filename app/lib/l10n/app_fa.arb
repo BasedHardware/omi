@@ -557,6 +557,7 @@
     "offlineSync": "همگام‌سازی آفلاین",
     "autoSync": "همگام‌سازی خودکار",
     "autoSyncDescription": "هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند",
+    "omiButtonActions": "عملکردهای دکمه Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

@@ -438,6 +438,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
 
   @override
+  String get omiButtonActions => 'عملکردهای دکمه Omi';
+
+  @override
   String get deviceSettings => 'تنظیمات دستگاه';
 
   @override

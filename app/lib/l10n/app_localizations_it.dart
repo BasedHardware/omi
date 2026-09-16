@@ -440,6 +440,9 @@ class AppLocalizationsIt extends AppLocalizations {
       'Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette';
 
   @override
+  String get omiButtonActions => 'Azioni del pulsante Omi';
+
+  @override
   String get deviceSettings => 'Impostazioni Dispositivo';
 
   @override

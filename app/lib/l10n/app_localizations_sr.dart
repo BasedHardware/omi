@@ -437,6 +437,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get autoSyncDescription => 'Аутоматски синхронизуј офлајн снимке када се уређај повеже';
 
   @override
+  String get omiButtonActions => 'Радње Omi дугмета';
+
+  @override
   String get deviceSettings => 'Подешавања уређаја';
 
   @override

@@ -557,6 +557,7 @@
     "offlineSync": "Offline sinhronizovanje",
     "autoSync": "Automatska sinkronizacija",
     "autoSyncDescription": "Automatski sinkronizuj offline snimke kada se vaš uređaj poveže",
+    "omiButtonActions": "Radnje Omi dugmeta",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

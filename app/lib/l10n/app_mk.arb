@@ -557,6 +557,7 @@
     "offlineSync": "Синхронизирање без интернет",
     "autoSync": "Автоматска синхронизација",
     "autoSyncDescription": "Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот",
+    "omiButtonActions": "Дејства на копчето Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

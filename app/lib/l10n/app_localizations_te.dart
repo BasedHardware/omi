@@ -439,6 +439,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get autoSyncDescription => 'మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి';
 
   @override
+  String get omiButtonActions => 'Omi బటన్ చర్యలు';
+
+  @override
   String get deviceSettings => 'ডివైస్ సెట్టింగ్‌లు';
 
   @override

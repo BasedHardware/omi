@@ -137,6 +137,7 @@
     "offlineSync": "オフライン同期",
     "autoSync": "自動同期",
     "autoSyncDescription": "デバイスの接続時にオフライン録音を自動的に同期します",
+    "omiButtonActions": "Omiボタンの操作",
     "deviceSettings": "デバイス設定",
     "integrations": "連携",
     "feedbackBug": "フィードバック / バグ報告",

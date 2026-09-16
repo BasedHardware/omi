@@ -557,6 +557,7 @@
     "offlineSync": "অফলাইন সিঙ্ক",
     "autoSync": "স্বয়ংক্রিয় সিঙ্ক",
     "autoSyncDescription": "আপনার ডিভাইস সংযুক্ত হলে অফলাইন রেকর্ডিংগুলি স্বয়ংক্রিয়ভাবে সিঙ্ক করুন",
+    "omiButtonActions": "Omi বোতাম অ্যাকশন",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
