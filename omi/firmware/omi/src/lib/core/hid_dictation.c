@@ -256,10 +256,34 @@ static int send_report(const uint8_t report[DICTATION_INPUT_REPORT_LEN])
     return err;
 }
 
-static void release_all_keys(void)
+static int send_zero_report(void)
 {
     uint8_t zero[DICTATION_INPUT_REPORT_LEN] = {0};
-    (void) send_report(zero);
+    return send_report(zero);
+}
+
+static void release_retry_delay(void)
+{
+    k_sleep(K_MSEC(10));
+}
+
+// Bounded retry of the release report; if a key may still be held and no
+// attempt could be queued, fail closed by dropping the link — the HID host
+// releases every key of a disconnected keyboard by specification.
+// key_held must be captured BEFORE any core state mutation that could clear
+// it (abort/cancel), or a physically-held key would look released.
+static void release_all_keys(bool key_held)
+{
+    if (hid_dictation_core_release_all(send_zero_report, release_retry_delay, key_held, 3) != 0) {
+        LOG_ERR("key release could not be queued; failing closed (drop link)");
+        struct bt_conn *conn = conn_ref;
+        if (conn != NULL) {
+            int err = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+            if (err) {
+                LOG_ERR("fail-closed disconnect failed: %d", err);
+            }
+        }
+    }
 }
 
 // Callers hold dictation_lock. Cancels pending work, closes the session,
@@ -277,9 +301,9 @@ static void stop_typing_locked(uint8_t error, uint8_t detail)
             dictation_ctx.last_error = error;
             dictation_ctx.error_detail = detail;
         }
+        bool key_held = dictation_ctx.key_down;   // before abort clears it
         hid_dictation_core_abort(&dictation_ctx); // marks session finished
-        release_all_keys();
-        notify_status();
+        release_all_keys(key_held);
     } else {
         dictation_ctx.last_error = error;
         dictation_ctx.error_detail = detail;
@@ -424,6 +448,9 @@ static ssize_t dictation_text_write(struct bt_conn *conn,
 
     k_mutex_lock(&dictation_lock, K_FOREVER);
 
+    // Capture before feed: a CANCEL/ERROR for the active session clears
+    // key_down in the core while a physical press may still be outstanding.
+    bool key_held = dictation_ctx.key_down;
     enum hid_dictation_feed_result result = hid_dictation_core_feed(&dictation_ctx, (const uint8_t *) buf, len);
 
     switch (result) {
@@ -439,10 +466,15 @@ static ssize_t dictation_text_write(struct bt_conn *conn,
     case HID_DICTATION_FEED_CANCELLED:
         // The core already closed the session and recorded CANCELLED; only
         // make sure no key stays held. stop_typing would overwrite the error.
-        release_all_keys();
+        release_all_keys(key_held);
         break;
     case HID_DICTATION_FEED_ERROR:
-        release_all_keys();
+        release_all_keys(key_held);
+        break;
+    case HID_DICTATION_FEED_REJECTED:
+        // Invalid or foreign frame (e.g. a late cancel for a dead session):
+        // the live session — including any in-flight key press — must not be
+        // disturbed. Report the refusal via status only.
         break;
     }
 

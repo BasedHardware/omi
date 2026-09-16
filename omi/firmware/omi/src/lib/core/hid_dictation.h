@@ -91,6 +91,7 @@ enum hid_dictation_feed_result {
     HID_DICTATION_FEED_COMPLETE = 1,  // final frame validated; typing plan ready
     HID_DICTATION_FEED_CANCELLED = 2, // session cancelled, nothing typed further
     HID_DICTATION_FEED_ERROR = 3,     // ctx->last_error/error_detail set; session aborted
+    HID_DICTATION_FEED_REJECTED = 4,  // frame invalid or foreign; last_error set; active session untouched
 };
 
 enum hid_dictation_key_event {
@@ -128,6 +129,16 @@ bool hid_dictation_char_to_key(uint8_t c, uint8_t *usage, bool *shift);
 // Whole-text variant used for all-or-nothing validation; bad_index = first offender.
 bool hid_dictation_text_supported(const uint8_t *text, uint16_t len, uint16_t *bad_index);
 
+// Bounded retry of the zero (release-all) report via an injected sender.
+// Returns 0 when the release is credible (a send succeeded, or no key was
+// held anyway); -1 when a key may still be held and every attempt failed —
+// the caller must then fail closed (drop the link so the host releases keys).
+typedef int (*hid_dictation_zero_report_sender_t)(void);
+typedef void (*hid_dictation_retry_delay_t)(void);
+int hid_dictation_core_release_all(hid_dictation_zero_report_sender_t send_zero,
+                                   hid_dictation_retry_delay_t delay,
+                                   bool key_held,
+                                   uint8_t attempts);
 // --- Zephyr runtime API (called from transport.c / button.c) ---
 // Only meaningful when CONFIG_OMI_ENABLE_HID_DICTATION=y; the callers guard
 // with #ifdef so builds without the feature stay byte-for-byte stock.

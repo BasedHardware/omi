@@ -252,8 +252,7 @@ hid_dictation_core_feed(struct hid_dictation_ctx *ctx, const uint8_t *frame, uin
 
     if (len < HID_DICTATION_FRAME_HDR_LEN) {
         set_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 0);
-        abort_with_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 0);
-        return HID_DICTATION_FEED_ERROR;
+        return HID_DICTATION_FEED_REJECTED;
     }
 
     uint8_t session = frame[0];
@@ -261,26 +260,28 @@ hid_dictation_core_feed(struct hid_dictation_ctx *ctx, const uint8_t *frame, uin
     uint8_t payload_len = frame[2];
 
     if (payload_len > HID_DICTATION_FRAME_MAX_PAYLOAD || (uint16_t) payload_len + HID_DICTATION_FRAME_HDR_LEN != len) {
-        abort_with_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 0);
-        return HID_DICTATION_FEED_ERROR;
+        set_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 0);
+        return HID_DICTATION_FEED_REJECTED;
     }
     if ((flags & ~(HID_DICTATION_FLAG_FINAL | HID_DICTATION_FLAG_CANCEL)) != 0) {
-        abort_with_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 1);
-        return HID_DICTATION_FEED_ERROR;
+        set_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 1);
+        return HID_DICTATION_FEED_REJECTED;
     }
     bool is_final = (flags & HID_DICTATION_FLAG_FINAL) != 0;
     bool is_cancel = (flags & HID_DICTATION_FLAG_CANCEL) != 0;
     if (is_final && is_cancel) {
-        abort_with_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 1);
-        return HID_DICTATION_FEED_ERROR;
+        set_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 1);
+        return HID_DICTATION_FEED_REJECTED;
     }
 
     if (is_cancel) {
         // Cancel targets the active session: exact id, or 0 = "whatever runs".
+        // A cancel naming any OTHER session is a stale, late cancel from the
+        // phone: it must not disturb the live session in any way.
         if (ctx->active_session != HID_DICTATION_SESSION_NONE && session != HID_DICTATION_SESSION_NONE &&
             session != ctx->active_session) {
-            abort_with_error(ctx, HID_DICTATION_ERR_BUSY, ctx->active_session);
-            return HID_DICTATION_FEED_ERROR;
+            set_error(ctx, HID_DICTATION_ERR_BUSY, session);
+            return HID_DICTATION_FEED_REJECTED;
         }
         uint8_t cancelled = ctx->active_session;
         set_error(ctx, HID_DICTATION_ERR_CANCELLED, cancelled);
@@ -294,18 +295,20 @@ hid_dictation_core_feed(struct hid_dictation_ctx *ctx, const uint8_t *frame, uin
 
     if (ctx->typing_ready) {
         // A validated session is queued for/under typing; no preemption.
-        abort_with_error(ctx, HID_DICTATION_ERR_BUSY, ctx->active_session);
-        return HID_DICTATION_FEED_ERROR;
+        // The frame belongs to neither the typing session nor a new one.
+        set_error(ctx, HID_DICTATION_ERR_BUSY, ctx->active_session);
+        return HID_DICTATION_FEED_REJECTED;
     }
 
     if (session == HID_DICTATION_SESSION_NONE) {
-        abort_with_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 0);
-        return HID_DICTATION_FEED_ERROR;
+        set_error(ctx, HID_DICTATION_ERR_BAD_FRAME, 0);
+        return HID_DICTATION_FEED_REJECTED;
     }
 
     if (!session_open_or_start(ctx, session)) {
-        abort_with_error(ctx, ctx->last_error, ctx->error_detail);
-        return HID_DICTATION_FEED_ERROR;
+        // Foreign or duplicate session: refused without touching whatever
+        // the ctx currently owns (session_open_or_start only set the error).
+        return HID_DICTATION_FEED_REJECTED;
     }
 
     if ((uint32_t) ctx->text_len + payload_len > ctx->max_text_len) {
@@ -365,4 +368,24 @@ enum hid_dictation_key_event hid_dictation_core_next_key(struct hid_dictation_ct
     ctx->key_down = false;
     ctx->pos++;
     return HID_DICTATION_KEY_RELEASE;
+}
+
+int hid_dictation_core_release_all(hid_dictation_zero_report_sender_t send_zero,
+                                   hid_dictation_retry_delay_t delay,
+                                   bool key_held,
+                                   uint8_t attempts)
+{
+    if (attempts == 0) {
+        attempts = 1;
+    }
+    for (uint8_t i = 0; i < attempts; i++) {
+        if (i > 0 && delay != NULL) {
+            delay();
+        }
+        if (send_zero != NULL && send_zero() == 0) {
+            return 0;
+        }
+    }
+    // No key was held: a failed queue attempt cannot leave a stuck key.
+    return key_held ? -1 : 0;
 }

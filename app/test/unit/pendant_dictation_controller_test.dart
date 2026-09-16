@@ -16,6 +16,7 @@ Uint8List statusBytes({
   bool hidActive = true,
   int state = HidDictationProtocol.stateDone,
   int lastError = HidDictationProtocol.errNone,
+  int charsTyped = 0,
 }) {
   final s = Uint8List(10);
   s[0] = 1;
@@ -24,16 +25,21 @@ Uint8List statusBytes({
   s[4] = lastError;
   s[6] = HidDictationProtocol.sessionNone;
   s[7] = session;
+  ByteData.view(s.buffer).setUint16(8, charsTyped, Endian.little);
   return s;
 }
 
 class _FakeTransport implements DeviceTransport {
   final List<(String service, String characteristic, List<int> data)> writes = [];
+  final StreamController<DeviceTransportState> _stateController = StreamController<DeviceTransportState>.broadcast();
+  final List<int> controlCommands = [];
   List<int> featuresBytes = [0, 0, 0, 0];
 
   /// Session whose final frame was written last; poll reads answer with a
   /// terminal status for it once set (mirrors the firmware DONE transition).
   int? lastFinishedSession;
+  int? lastSessionSeen;
+  int sessionChars = 0;
   bool hidActiveInStatus = true;
   bool connected = true;
   bool neverTerminal = false;
@@ -87,6 +93,7 @@ class _FakeTransport implements DeviceTransport {
         hidActive: hidActiveInStatus,
         state: errorForSession != null ? HidDictationProtocol.stateError : HidDictationProtocol.stateDone,
         lastError: errorForSession ?? HidDictationProtocol.errNone,
+        charsTyped: sessionChars,
       );
     }
     return [0];
@@ -95,18 +102,36 @@ class _FakeTransport implements DeviceTransport {
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
     writes.add((serviceUuid, characteristicUuid, data));
-    if (characteristicUuid == OmiDeviceConnection.dictationTextCharacteristicUuid &&
-        data.length >= 3 &&
-        (data[1] & HidDictationProtocol.flagFinal) != 0) {
-      lastFinishedSession = data[0];
+    if (characteristicUuid == OmiDeviceConnection.dictationControlCharacteristicUuid && data.length == 1) {
+      controlCommands.add(data[0]);
+    }
+    if (characteristicUuid == OmiDeviceConnection.dictationTextCharacteristicUuid && data.length >= 3) {
+      if (lastSessionSeen != data[0]) {
+        lastSessionSeen = data[0];
+        sessionChars = 0;
+      }
+      sessionChars += data.length - 3;
+      if ((data[1] & HidDictationProtocol.flagFinal) != 0) {
+        lastFinishedSession = data[0];
+      }
     }
   }
 
   @override
-  Stream<DeviceTransportState> get connectionStateStream => const Stream.empty();
+  Stream<DeviceTransportState> get connectionStateStream => _stateController.stream;
+
+  /// Simulates the SAME transport dropping and auto-reconnecting: emits a
+  /// disconnect event while staying logically connected afterwards.
+  void emitDropAndReconnect() {
+    _stateController.add(DeviceTransportState.disconnected);
+    _stateController.add(DeviceTransportState.connecting);
+    _stateController.add(DeviceTransportState.connected);
+  }
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    await _stateController.close();
+  }
 }
 
 OmiDeviceConnection _connection(_FakeTransport transport) {
@@ -278,6 +303,85 @@ void main() {
 
     expect(haptics, contains(('pendant', 3)));
     expect(controller.state.value.phase, PendantDictationPhase.error);
+  });
+
+  test('same-connection drop+reconnect during transcription voids the utterance', () async {
+    final controller = buildController();
+    transcribeGate = Completer<String>();
+
+    await controller.onButtonEvent('pendant', 1);
+    controller.onAudioPayload([1]);
+    final finishing = controller.onButtonEvent('pendant', 1);
+    await Future.delayed(const Duration(milliseconds: 10));
+    // The SAME transport object drops and comes back while we wait.
+    transport.emitDropAndReconnect();
+    transcribeGate!.complete('stale text over a replacement link');
+    await finishing;
+
+    expect(textWrites(), isEmpty); // epoch changed: never delivered
+    expect(transcribedPayloads, isNotEmpty); // transcription did run
+  });
+
+  test('enable flow writes the command, reconnects, and verifies activation', () async {
+    final controller = buildController();
+    bool reconnected = false;
+
+    final ok = await controller.enableHid(
+      'pendant',
+      reconnect: () async {
+        reconnected = true;
+        transport.hidActiveInStatus = true; // the new GATT table after reconnect
+      },
+    );
+
+    expect(ok, isTrue);
+    expect(reconnected, isTrue);
+    expect(transport.controlCommands, [HidDictationProtocol.cmdEnable]);
+    expect(controller.state.value.phase, PendantDictationPhase.idle);
+    expect(controller.state.value.message, contains('HID active'));
+  });
+
+  test('enable flow reports failure when HID never activates', () async {
+    final controller = buildController();
+
+    final ok = await controller.enableHid(
+      'pendant',
+      reconnect: () async {
+        transport.hidActiveInStatus = false; // never comes up
+      },
+      // Short-circuit the bounded wait.
+    );
+
+    expect(ok, isFalse);
+    expect(controller.state.value.phase, PendantDictationPhase.error);
+  });
+
+  test('stale pipeline never cancels a newer session', () async {
+    transcriptToReturn = 'first';
+    final controller = buildController();
+    transcribeGate = Completer<String>();
+
+    await controller.onButtonEvent('pendant', 1);
+    controller.onAudioPayload([1]);
+    final firstFinish = controller.onButtonEvent('pendant', 1);
+    await Future.delayed(const Duration(milliseconds: 10));
+
+    // User starts a NEW utterance while the first transcription is pending.
+    await controller.onButtonEvent('pendant', 1);
+    controller.onAudioPayload([2]);
+
+    // First pipeline resumes stale: it must not send or cancel anything.
+    transcribeGate!.complete('stale');
+    await firstFinish;
+    expect(textWrites(), isEmpty);
+    expect(transport.writes.any((w) => w.$3.length == 3 && (w.$3[1] & HidDictationProtocol.flagCancel) != 0), isFalse);
+
+    // The new utterance completes normally on session 2 (session 1 unused).
+    transcriptToReturn = 'second';
+    await controller.onButtonEvent('pendant', 1);
+    final frames = textWrites().toList();
+    expect(frames, isNotEmpty);
+    expect(frames.first[0], 1); // the stale pipeline never consumed a session id
   });
 
   test('typing timeout cancels the session on device', () async {

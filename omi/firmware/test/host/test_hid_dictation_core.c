@@ -188,8 +188,8 @@ static void test_duplicate_session_rejected(void)
     }
     CHECK(ctx.last_finished_session == 5);
 
-    // Retrying the same session id must be an explicit duplicate error.
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    // Retrying the same session id is refused without state changes.
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_DUPLICATE_SESSION);
     CHECK(ctx.error_detail == 5);
 }
@@ -202,9 +202,13 @@ static void test_busy_on_foreign_session(void)
     CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ACCEPTED);
 
     n = frame(f, 12, HID_DICTATION_FLAG_FINAL, "tial");
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_BUSY);
     CHECK(ctx.error_detail == 11);
+    CHECK(ctx.active_session == 11); // foreign frame must not disturb it
+    // The live session still completes normally afterwards.
+    n = frame(f, 11, HID_DICTATION_FLAG_FINAL, "tial");
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_COMPLETE);
 }
 
 static void test_cancel(void)
@@ -234,8 +238,12 @@ static void test_cancel_wrong_session_is_busy(void)
     CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ACCEPTED);
 
     n = frame(f, 32, HID_DICTATION_FLAG_CANCEL, NULL);
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_BUSY);
+    CHECK(ctx.active_session == 31); // late cancel must not abort the live one
+    // The live session still completes.
+    n = frame(f, 31, HID_DICTATION_FLAG_FINAL, "xx");
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_COMPLETE);
 }
 
 static void test_bad_frames(void)
@@ -244,30 +252,30 @@ static void test_bad_frames(void)
     uint8_t f[HID_DICTATION_FRAME_HDR_LEN + HID_DICTATION_FRAME_MAX_PAYLOAD];
 
     // Truncated header.
-    CHECK(hid_dictation_core_feed(&ctx, f, 2) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, 2) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_BAD_FRAME);
 
     // len byte disagrees with actual length.
     uint16_t n = frame(f, 41, HID_DICTATION_FLAG_FINAL, "abc");
     f[2] = 9;
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_BAD_FRAME);
 
     // Unknown flag bits.
     n = frame(f, 42, HID_DICTATION_FLAG_FINAL, "abc");
     f[1] |= 0x80;
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_BAD_FRAME);
 
     // FINAL|CANCEL together.
     n = frame(f, 43, HID_DICTATION_FLAG_CANCEL, NULL);
     f[1] |= HID_DICTATION_FLAG_FINAL;
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_BAD_FRAME);
 
     // Data frame with session 0.
     n = frame(f, 0, HID_DICTATION_FLAG_FINAL, "x");
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_BAD_FRAME);
 }
 
@@ -296,9 +304,10 @@ static void test_no_frames_while_typing_ready(void)
     CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_COMPLETE);
 
     n = frame(f, 72, HID_DICTATION_FLAG_FINAL, "b");
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_BUSY);
     CHECK(ctx.error_detail == 71);
+    CHECK(ctx.typing_ready); // the typing session is untouched
 
     // Even a cancel for the typing session is honoured: typing stops.
     n = frame(f, 71, HID_DICTATION_FLAG_CANCEL, NULL);
@@ -317,14 +326,87 @@ static void test_abort_clears_session(void)
     CHECK(ctx.active_session == 0);
     CHECK(!ctx.typing_ready);
 
-    // Abort ends the session like any other: replaying its id is a duplicate.
+    // Abort ends the session like any other: replaying its id is refused.
     n = frame(f, 81, HID_DICTATION_FLAG_FINAL, "ok");
-    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ERROR);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
     CHECK(ctx.last_error == HID_DICTATION_ERR_DUPLICATE_SESSION);
 
     // A new id works after the abort.
     n = frame(f, 82, HID_DICTATION_FLAG_FINAL, "ok");
     CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_COMPLETE);
+}
+
+// A late cancel for a finished session must not disturb the NEXT session.
+static void test_late_cancel_does_not_kill_next_session(void)
+{
+    fresh();
+    uint8_t f[HID_DICTATION_FRAME_HDR_LEN + HID_DICTATION_FRAME_MAX_PAYLOAD];
+    uint16_t n = frame(f, 5, HID_DICTATION_FLAG_FINAL, "one");
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_COMPLETE);
+    uint8_t report[8];
+    while (hid_dictation_core_next_key(&ctx, report) != HID_DICTATION_KEY_DONE) {
+        ;
+    }
+
+    // Session 6 is now mid-flight (receiving).
+    n = frame(f, 6, 0, "two");
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_ACCEPTED);
+
+    // Stale cancel for session 5 arrives late.
+    n = frame(f, 5, HID_DICTATION_FLAG_CANCEL, NULL);
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_REJECTED);
+    CHECK(ctx.active_session == 6);
+    CHECK(ctx.last_error == HID_DICTATION_ERR_BUSY);
+
+    // Session 6 completes normally.
+    n = frame(f, 6, HID_DICTATION_FLAG_FINAL, "two");
+    CHECK(hid_dictation_core_feed(&ctx, f, n) == HID_DICTATION_FEED_COMPLETE);
+    while (hid_dictation_core_next_key(&ctx, report) != HID_DICTATION_KEY_DONE) {
+        ;
+    }
+    CHECK(ctx.last_finished_session == 6);
+}
+
+// Injected-sender tests for the bounded release-all retry policy.
+static int release_send_result;
+static int release_send_calls;
+static int release_sender(void)
+{
+    release_send_calls++;
+    return release_send_result;
+}
+static int release_delay_calls;
+static void release_delay(void)
+{
+    release_delay_calls++;
+}
+
+static void test_release_all_policy(void)
+{
+    release_send_calls = 0;
+    release_delay_calls = 0;
+    release_send_result = 0;
+    CHECK(hid_dictation_core_release_all(release_sender, release_delay, true, 3) == 0);
+    CHECK(release_send_calls == 1);
+
+    // Fails twice, succeeds third: credible release, delays between attempts.
+    release_send_calls = 0;
+    release_delay_calls = 0;
+    int results[] = {0, 0, 0};
+    release_send_result = -1;
+    CHECK(hid_dictation_core_release_all(release_sender, release_delay, true, 3) == -1);
+    CHECK(release_send_calls == 3);
+    CHECK(release_delay_calls == 2);
+
+    // Key held + every attempt failed: caller must fail closed.
+    CHECK(hid_dictation_core_release_all(NULL, NULL, true, 2) == -1);
+
+    // No key held: a failed send cannot strand anything.
+    release_send_calls = 0;
+    release_send_result = -12;
+    CHECK(hid_dictation_core_release_all(release_sender, release_delay, false, 2) == 0);
+    CHECK(release_send_calls == 2);
+    (void) results;
 }
 
 int main(void)
@@ -344,6 +426,8 @@ int main(void)
     test_too_long();
     test_no_frames_while_typing_ready();
     test_abort_clears_session();
+    test_late_cancel_does_not_kill_next_session();
+    test_release_all_policy();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

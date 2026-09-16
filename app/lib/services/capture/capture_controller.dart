@@ -502,6 +502,28 @@ class CaptureController extends ChangeNotifier
   /// User-visible HID dictation state (developer settings status line).
   ValueListenable<PendantDictationUiState> get dictationState => _dictation.state;
 
+  /// Reports a dictation UI status from outside the pipeline (e.g. the
+  /// developer toggle when no pendant is connected).
+  void reportDictationStatus(PendantDictationUiState s) => _dictation.state.value = s;
+
+  /// Real opt-in path for the HID dictation prototype (developer toggle):
+  /// writes the ENABLE command and cycles the BLE link so the pendant can
+  /// add the HID service, then verifies the post-reconnect state. The only
+  /// code path allowed to reconnect for this feature.
+  Future<bool> enableHidDictation(String deviceId) {
+    return _dictation.enableHid(deviceId, reconnect: () async {
+      await ServiceManager.instance().device.disconnectDevice(deviceId);
+    });
+  }
+
+  /// Real opt-out path: cancels any in-flight dictation, writes DISABLE,
+  /// cycles the link, and verifies the HID service is gone.
+  Future<bool> disableHidDictation(String deviceId) {
+    return _dictation.disableHid(deviceId, reconnect: () async {
+      await ServiceManager.instance().device.disconnectDevice(deviceId);
+    });
+  }
+
   StreamSubscription? _storageStream;
 
   get storageStream => _storageStream;
@@ -1574,7 +1596,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void dispose() {
-    _phoneBatchGeolocationPreference.invalidateSession();
+    _dictation.dispose();
     _clearSessionLocation();
     _recordingTelemetry.complete(reason: 'pipeline_closed');
     _bleBytesStream?.cancel();
@@ -2675,6 +2697,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
+    unawaited(_dictation.invalidate(_recordingDevice!.id));
 
     // Write mute state first — before BLE cancel which may fire other events
     await BatteryWidgetService().updateMuteState(true);

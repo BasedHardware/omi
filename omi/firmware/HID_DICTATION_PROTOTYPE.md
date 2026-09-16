@@ -28,10 +28,13 @@ released. Default off — production firmware behavior is unchanged.**
     No Enter/Return is ever sent — you review and send yourself.
 ```
 
-Audio capture, segmentation, and transcription all run through the app's
-existing paths; the pendant only gains a text-injection channel and an (opt-in)
-HID keyboard service. The transcript never travels anywhere except phone →
-pendant → focused field.
+Audio capture and segmentation run through the app's existing paths; the
+pendant only gains a text-injection channel and an (opt-in) HID keyboard
+service. **Transcription is remote:** the utterance audio is uploaded to the
+Omi backend (`/v2/voice-message/transcribe`) and the transcript comes back —
+both traverse Omi's servers exactly like any other voice message. Only the
+final text injection is local (phone → pendant → focused field). Network is
+required.
 
 ## Firmware
 
@@ -43,10 +46,13 @@ pendant → focused field.
 - Opt-in state is **RAM-only**: enable via the app, effective after one
   reconnect; any reboot/power-cycle returns the pendant to stock (also the
   recovery path). Nothing is persisted.
-- While disabled (the default), the GATT table, advertising payload, and
-  disconnect behavior are byte-for-byte stock. The only compiled-in change is
-  the small always-present dictation control service (19B10040 family), which
-  no stock client reads.
+- With the prototype compiled in, the GATT table is NOT identical to stock:
+  the small dictation control service (19B10040 family, encrypted perms) is
+  always present, and the build enables bond storage / service-changed /
+  encrypted HID permissions. With the runtime opt-in OFF (the default) the
+  HID service itself is absent, advertising matches stock, and disconnect
+  behavior is stock-equivalent — but "byte-for-byte" only holds for builds
+  that do not compile the feature in at all (production config).
 - Safety invariants (all enforced in code and tested):
   - printable US ASCII only; anything else is rejected **whole**, before any
     keypress — no transliteration, no truncation, no Enter;
@@ -100,9 +106,16 @@ Outputs in `omi/firmware/v2.9.0/build-hid/`:
 - **J-Link / nrfjprog (dev fixtures):** flash `merged.hex` (and
   `merged_CPUNET.hex` for a blank network core) per
   [`BUILD_AND_OTA_FLASH.md`](BUILD_AND_OTA_FLASH.md).
-- **OTA from a running Omi app:** side-load `dfu_application.zip` via the
-  normal firmware update flow. (Downgrade back to release firmware afterwards
-  the same way — releases have a higher version string.)
+- **OTA over BLE (no J-Link):** the shipped Omi app has **no local-ZIP
+  selection** — its update flow only downloads released firmware from the
+  backend. To push a locally built `dfu_application.zip`, use Nordic's
+  supported iOS MCUboot/SMP path, [nRF Connect Device Manager]
+  (https://github.com/nordicsemi/ios-nrf-connect-device-manager): connect to
+  the pendant (disable the HID prototype or power-cycle first if iOS claims
+  it) → Add file `dfu_application.zip` → Upload. Note the prototype embeds
+  the SAME firmware version as the current release line (3.0.21 unless
+  changed in `omi.conf`) — do not rely on version ordering; return to stock
+  by flashing the release `merged.hex`/OTA image explicitly.
 
 ### Pair
 
@@ -120,7 +133,12 @@ Outputs in `omi/firmware/v2.9.0/build-hid/`:
    reconnect the pendant's GATT table includes the standard HID service and
    its advertisement carries the HID UUID. If iOS shows a pairing prompt,
    accept it (the HID half needs an encrypted link).
-3. Focus a text field (e.g. a new iOS Note), tap the pendant button once,
+3. In the app, Developer settings → Experimental → toggle **Pendant HID
+   Dictation** ON while the pendant is connected: the app writes ENABLE,
+   cycles the link, and verifies — the status line under the toggle shows
+   "HID active on the pendant" (or the failure reason; accept the iOS pairing
+   prompt if it appears and re-toggle).
+4. Focus a text field (e.g. a new iOS Note), tap the pendant button once,
    speak, tap again. The transcript should appear keystroke by keystroke.
 
 ### Test matrix (run on device)
@@ -135,13 +153,14 @@ Outputs in `omi/firmware/v2.9.0/build-hid/`:
 | Reconnect mid-typing | typing stops, nothing retyped after reconnect |
 | Repeated dictations back-to-back | each tap-pair is a fresh session |
 | Double tap / long press while enabled | consumed by dictation; no assistant action |
-| Prototype disabled (default) | pendant behaves exactly like stock firmware |
-| macOS / iPad host (cross-check) | keyboard works on any HID host |
+| Prototype disabled (default) | pendant behaves stock-equivalent (see firmware notes) |
+| macOS / iPad host (cross-check) | UNVERIFIED HYPOTHESIS: standard HID hosts should accept the keyboard; no hardware test has confirmed it |
 
 ### Disable
 
-Toggle off in the app and reconnect the pendant once more (the app writes the
-opt-out; the HID service is removed from the GATT table at that disconnect).
+Toggle **Pendant HID Dictation** OFF in Developer settings (pendant
+connected): the app cancels any in-flight dictation, writes DISABLE, cycles
+the link, and verifies the HID service is gone (status line confirms).
 
 ### Recover (if anything wedges)
 
