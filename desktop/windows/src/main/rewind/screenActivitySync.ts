@@ -17,7 +17,6 @@ import {
   markScreenActivitySyncCandidates,
   setAppMeta
 } from '../ipc/db'
-import { getRewindSettings } from './captureService'
 import {
   buildScreenActivitySyncPayload,
   resolveWindowsClientDeviceId
@@ -81,31 +80,34 @@ async function runSyncTick(): Promise<void> {
 }
 
 async function syncTick(): Promise<void> {
-  const session = getBackendSession()
-  if (!session?.apiBase || !session.token) return
+  try {
+    const session = getBackendSession()
+    if (!session?.apiBase || !session.token) return
 
-  const epoch = getSessionEpoch()
-  const candidates = fetchScreenActivitySyncCandidates(BATCH_SIZE)
-  if (candidates.length === 0) return
+    const epoch = getSessionEpoch()
+    const candidates = fetchScreenActivitySyncCandidates(BATCH_SIZE)
+    if (candidates.length === 0) return
 
-  const payload = buildScreenActivitySyncPayload(candidates, {
-    clientDeviceId: resolveClientDeviceId(),
-    deviceName: hostname(),
-    retentionDays: getRewindSettings().retentionDays
-  })
+    const payload = buildScreenActivitySyncPayload(candidates, {
+      clientDeviceId: resolveClientDeviceId(),
+      deviceName: hostname()
+    })
 
-  const ok = await pushScreenActivityRows(session, payload, epoch)
-  if (!ok) {
-    consecutiveFailures += 1
-    if (timer) {
-      clearInterval(timer)
-      timer = setInterval(() => void runSyncTick(), syncIntervalMs())
+    const ok = await pushScreenActivityRows(session, payload, epoch)
+    if (!ok) {
+      consecutiveFailures += 1
+      if (timer) {
+        clearInterval(timer)
+        timer = setInterval(() => void runSyncTick(), syncIntervalMs())
+      }
+      return
     }
-    return
+    if (getSessionEpoch() !== epoch) return
+    markScreenActivitySyncCandidates(candidates)
+    consecutiveFailures = 0
+  } catch (e) {
+    console.warn('[screen-activity-sync] tick error:', (e as Error).message)
   }
-  if (getSessionEpoch() !== epoch) return
-  markScreenActivitySyncCandidates(candidates)
-  consecutiveFailures = 0
 }
 
 async function withTimeout<T>(

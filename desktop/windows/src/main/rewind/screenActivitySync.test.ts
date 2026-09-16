@@ -38,7 +38,7 @@ describe('screenActivitySync helpers', () => {
     expect(boundedDeviceRetentionSeconds(2)).toBe(2 * 24 * 60 * 60)
   })
 
-  it('builds sync rows with capture eligibility and optional embeddings', () => {
+  it('builds sync rows with optional embeddings', () => {
     const candidates: ScreenActivitySyncCandidate[] = [
       {
         id: 42,
@@ -52,19 +52,20 @@ describe('screenActivitySync helpers', () => {
     ]
     const payload = buildScreenActivitySyncPayload(candidates, {
       clientDeviceId: 'windows_abcd1234',
-      deviceName: 'DESKTOP-TEST',
-      retentionDays: 14
-    })
-    expect(payload.account_generation).toBe(0)
-    expect(payload.deviceRetentionSeconds).toBe(6 * 24 * 60 * 60)
-    expect(payload.rows[0]).toMatchObject({
-      id: 42,
-      appName: 'Code',
-      windowTitle: 'main.ts',
-      captureEligible: true,
-      clientDeviceId: 'windows_abcd1234',
       deviceName: 'DESKTOP-TEST'
     })
+    expect(payload).toEqual({
+      rows: [
+        expect.objectContaining({
+          id: 42,
+          appName: 'Code',
+          windowTitle: 'main.ts',
+          clientDeviceId: 'windows_abcd1234',
+          deviceName: 'DESKTOP-TEST'
+        })
+      ]
+    })
     expect(payload.rows[0].embedding).toBeUndefined()
+    expect(payload.rows[0]).not.toHaveProperty('captureEligible')
   })
 })

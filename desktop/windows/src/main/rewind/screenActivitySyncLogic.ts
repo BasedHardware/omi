@@ -39,10 +39,8 @@ export function buildScreenActivitySyncPayload(
   options: {
     clientDeviceId: string
     deviceName: string
-    accountGeneration?: number
-    retentionDays: number
   }
-): { account_generation: number; deviceRetentionSeconds?: number; rows: Record<string, unknown>[] } {
+): { rows: Record<string, unknown>[] } {
   const rows = candidates.map((c) => {
     const row: Record<string, unknown> = {
       id: c.id,
@@ -51,21 +49,10 @@ export function buildScreenActivitySyncPayload(
       windowTitle: c.windowTitle,
       ocrText: c.ocrText,
       clientDeviceId: options.clientDeviceId,
-      deviceName: options.deviceName,
-      captureEligible: true
+      deviceName: options.deviceName
     }
     if (c.embedding) row.embedding = c.embedding
     return row
   })
-  const payload: {
-    account_generation: number
-    deviceRetentionSeconds?: number
-    rows: Record<string, unknown>[]
-  } = {
-    account_generation: options.accountGeneration ?? 0,
-    rows
-  }
-  const retention = boundedDeviceRetentionSeconds(options.retentionDays)
-  if (retention !== undefined) payload.deviceRetentionSeconds = retention
-  return payload
+  return { rows }
 }
