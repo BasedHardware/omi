@@ -12,10 +12,16 @@ import re
 from typing import Any, Optional
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 
+from models import (
+    ChatToolResponse,
+    GetQuestionRequest,
+    GetTopAnswersRequest,
+    SearchQuestionsRequest,
+)
 
 STACK_API_BASE_URL = "https://api.stackexchange.com/2.3"
 REQUEST_TIMEOUT_SECONDS = 10
@@ -66,11 +72,14 @@ app = FastAPI(
 )
 
 
-class ChatToolResponse(BaseModel):
-    """Response model for Omi chat tool endpoints."""
-
-    result: Optional[str] = None
-    error: Optional[str] = None
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
 
 
 def _safe_limit(limit: Any, default: int = 5) -> int:
@@ -123,7 +132,7 @@ def _clean_text(value: Optional[str]) -> str:
     if not value:
         return ""
 
-    text = unescape(value)
+    text = unescape(str(value))
     text = re.sub(r"<pre[^>]*>|</pre>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<code[^>]*>|</code>", "`", text, flags=re.IGNORECASE)
     text = re.sub(r"</?(p|blockquote|ul|ol|li|h[1-6])[^>]*>", "\n", text, flags=re.IGNORECASE)
@@ -137,7 +146,10 @@ def _clean_text(value: Optional[str]) -> str:
 def _format_date(timestamp: Optional[int]) -> str:
     if not timestamp:
         return "unknown date"
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d")
+    try:
+        return datetime.fromtimestamp(int(timestamp), tz=timezone.utc).strftime("%Y-%m-%d")
+    except (TypeError, ValueError, OSError):
+        return "unknown date"
 
 
 async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
@@ -145,6 +157,8 @@ async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> d
     response = await client.get(f"{STACK_API_BASE_URL}{path}", params=params)
     response.raise_for_status()
     data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("Stack Exchange API returned unexpected non-dict payload")
     if data.get("error_id"):
         raise ValueError(data.get("error_message") or "Stack Exchange API returned an error")
     if data.get("backoff"):
@@ -165,6 +179,8 @@ def _question_url(site: str, question_id: Any) -> str:
 
 
 def _format_question(item: dict[str, Any], index: int, site: str) -> str:
+    if not isinstance(item, dict):
+        return f"{index}. Untitled question"
     title = _clean_text(item.get("title")) or "Untitled question"
     question_id = item.get("question_id")
     score = item.get("score", 0)
@@ -173,7 +189,11 @@ def _format_question(item: dict[str, Any], index: int, site: str) -> str:
     # Stack Exchange distinguishes "has any answer" (is_answered) from
     # "has an accepted answer" (accepted_answer_id). Label only the latter.
     accepted = "accepted" if item.get("accepted_answer_id") else "not accepted"
-    tags = ", ".join(item.get("tags", [])) or "no tags"
+    raw_tags = item.get("tags")
+    if isinstance(raw_tags, list):
+        tags = ", ".join(str(t) for t in raw_tags if t is not None) or "no tags"
+    else:
+        tags = "no tags"
     link = item.get("link") or _question_url(site, question_id)
 
     return (
@@ -185,7 +205,14 @@ def _format_question(item: dict[str, Any], index: int, site: str) -> str:
 
 
 def _format_answer(item: dict[str, Any], index: int) -> str:
-    owner = item.get("owner", {}).get("display_name") or "unknown"
+    if not isinstance(item, dict):
+        return f"{index}. unknown | 0 score\n"
+    owner_dict = item.get("owner")
+    if isinstance(owner_dict, dict):
+        owner = owner_dict.get("display_name") or "unknown"
+    else:
+        owner = "unknown"
+
     score = item.get("score", 0)
     accepted = " | accepted" if item.get("is_accepted") else ""
     body = _clean_text(item.get("body"))
@@ -222,7 +249,7 @@ async def get_omi_tools_manifest():
         "tools": [
             {
                 "name": "search_questions",
-                "description": "Search Stack Overflow or another Stack Exchange site for developer questions. Use this when the user asks how to solve a programming problem or wants related Q&A threads.",
+                "description": "Search Stack Overflow and Stack Exchange questions by query keywords, site, tags, and accepted status.",
                 "endpoint": "/tools/search_questions",
                 "method": "POST",
                 "parameters": {
@@ -230,11 +257,11 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "Free-form search query, such as an error message, API name, or programming problem.",
+                            "description": "Search query terms.",
                         },
                         "tags": {
                             "type": "string",
-                            "description": "Optional comma- or semicolon-separated tags, such as python, react, fastapi.",
+                            "description": "Optional comma-separated or list of tags to filter by (e.g. 'python,fastapi'). Maximum 5 tags.",
                         },
                         "site": {
                             "type": "string",
@@ -307,13 +334,13 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/search_questions", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_questions(payload: dict[str, Any]):
-    query = (payload.get("query") or "").strip()
+async def search_questions(payload: SearchQuestionsRequest):
+    query = (payload.query or "").strip()
     if not query:
         return ChatToolResponse(error="Missing required field: query")
 
-    site = _safe_site(payload.get("site"))
-    limit = _safe_limit(payload.get("limit"))
+    site = _safe_site(payload.site)
+    limit = _safe_limit(payload.limit)
     params: dict[str, Any] = {
         "site": site,
         "q": query,
@@ -321,16 +348,17 @@ async def search_questions(payload: dict[str, Any]):
         "order": "desc",
         "sort": "relevance",
     }
-    tags = _safe_tags(payload.get("tags"))
+    tags = _safe_tags(payload.tags)
     if tags:
         params["tagged"] = tags
-    accepted = _coerce_bool(payload.get("accepted"))
+    accepted = _coerce_bool(payload.accepted)
     if accepted is not None:
         params["accepted"] = "true" if accepted else "false"
 
     try:
         data = await _request_json("/search/advanced", params)
-        items = data.get("items", [])[:limit]
+        raw_items = data.get("items", []) if isinstance(data, dict) else []
+        items = [item for item in raw_items if isinstance(item, dict)][:limit]
         if not items:
             return ChatToolResponse(result=f"No Stack Exchange questions found for '{query}'.")
 
@@ -346,8 +374,8 @@ async def search_questions(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_question", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_question(payload: dict[str, Any]):
-    question_id = payload.get("question_id")
+async def get_question(payload: GetQuestionRequest):
+    question_id = payload.question_id
     if question_id is None:
         return ChatToolResponse(error="Missing required field: question_id")
 
@@ -356,13 +384,14 @@ async def get_question(payload: dict[str, Any]):
     except (TypeError, ValueError):
         return ChatToolResponse(error="question_id must be an integer")
 
-    site = _safe_site(payload.get("site"))
+    site = _safe_site(payload.site)
     try:
         data = await _request_json(
             f"/questions/{question_id}",
             {"site": site, "filter": "withbody", "pagesize": 1},
         )
-        items = data.get("items", [])
+        raw_items = data.get("items", []) if isinstance(data, dict) else []
+        items = [item for item in raw_items if isinstance(item, dict)]
         if not items:
             return ChatToolResponse(error=f"No question found for ID {question_id} on {site}.")
 
@@ -371,7 +400,11 @@ async def get_question(payload: dict[str, Any]):
         body = _clean_text(item.get("body"))
         if len(body) > 1800:
             body = body[:1800].rstrip() + "..."
-        tags = ", ".join(item.get("tags", [])) or "no tags"
+        raw_tags = item.get("tags")
+        if isinstance(raw_tags, list):
+            tags = ", ".join(str(t) for t in raw_tags if t is not None) or "no tags"
+        else:
+            tags = "no tags"
         link = item.get("link") or _question_url(site, question_id)
 
         lines = [
@@ -394,8 +427,8 @@ async def get_question(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_top_answers", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_top_answers(payload: dict[str, Any]):
-    question_id = payload.get("question_id")
+async def get_top_answers(payload: GetTopAnswersRequest):
+    question_id = payload.question_id
     if question_id is None:
         return ChatToolResponse(error="Missing required field: question_id")
 
@@ -404,8 +437,8 @@ async def get_top_answers(payload: dict[str, Any]):
     except (TypeError, ValueError):
         return ChatToolResponse(error="question_id must be an integer")
 
-    site = _safe_site(payload.get("site"))
-    limit = _safe_limit(payload.get("limit"), default=3)
+    site = _safe_site(payload.site)
+    limit = _safe_limit(payload.limit, default=3)
     try:
         data = await _request_json(
             f"/questions/{question_id}/answers",
@@ -417,7 +450,8 @@ async def get_top_answers(payload: dict[str, Any]):
                 "sort": "votes",
             },
         )
-        items = data.get("items", [])[:limit]
+        raw_items = data.get("items", []) if isinstance(data, dict) else []
+        items = [item for item in raw_items if isinstance(item, dict)][:limit]
         if not items:
             return ChatToolResponse(result=f"No answers found for question ID {question_id} on {site}.")
 
