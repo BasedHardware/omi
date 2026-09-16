@@ -229,6 +229,7 @@ class TestStart:
         def fake_up(namespace) -> int:
             seen["instance"] = __import__("os").environ["OMI_LOCAL_INSTANCE"]
             seen["offset"] = __import__("os").environ["OMI_HARNESS_PORT_OFFSET"]
+            seen["provider_mode"] = __import__("os").environ["PROVIDER_MODE"]
             return 0
 
         monkeypatch.setattr("dev_harness.cli.cmd_up", fake_up)
@@ -247,6 +248,7 @@ class TestStart:
         assert started["status"] == "running"
         assert seen["instance"] == lease["harness_instance"]
         assert seen["offset"] == str(lease["port_offset"])
+        assert seen["provider_mode"] == "offline"
         assert started["device"]["udid"] == "DEADBEEF-1234"
 
 

@@ -445,6 +445,10 @@ def _session_env(lease: Mapping[str, Any]) -> dict[str, str]:
     env = dict(os.environ)
     env["OMI_LOCAL_INSTANCE"] = str(lease["harness_instance"])
     env[config.PORT_OFFSET_ENV] = str(lease["port_offset"])
+    # Isolated mobile sessions are the synthetic local lane. Pin offline
+    # providers unless the caller already set a mode — never inherit a
+    # production-family PROVIDER_MODE=real from the parent shell.
+    env.setdefault("PROVIDER_MODE", "offline")
     return env
 
 
@@ -486,8 +490,8 @@ def start(
                     f"android device lane not ready: {detail} — run 'mobile-session doctor --platform android'"
                 )
         else:  # ios-simulator
-            device_type = "com.apple.core.simulator.simdevicetype.iPhone-17-Pro"
-            runtime = "com.apple.core.simulator.simruntime.iOS-26-5"
+            device_type = "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro"
+            runtime = "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
             udid, label = devices.attach_ios_simulator(session_id, device_type, runtime)
             lease = {**lease, "device": {"kind": "simulator", "udid": udid, "label": label, "owner": "session"}}
 
@@ -676,7 +680,7 @@ def build_session_evidence(
     live_source = dict(source or session_evidence.source_identity(root))
     acquired = lease.get("source_at_acquire") or {}
     # Lease lifecycle statuses (seeded/reset) are not evidence states; map
-    # them onto the vocabulary the frozen receipt accepts.
+    # them onto the vocabulary the v1 receipt accepts.
     resolved_state = state or _EVIDENCE_STATE_FOR_LEASE.get(
         str(lease.get("status", "creating")), str(lease.get("status", "creating"))
     )
