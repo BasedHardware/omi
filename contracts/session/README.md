@@ -6,7 +6,7 @@ development-foundation program.
 
 | Contract | Version | Owner | Consumers |
 | --- | --- | --- | --- |
-| [session-evidence-v1.schema.json](session-evidence-v1.schema.json) | 1 (frozen) | C1 session orchestration (`scripts/dev-harness`, SCA-487) | C2 semantic journeys, C3 capture replay, C4 verification integration, C5 device qualification |
+| [session-evidence-v1.schema.json](session-evidence-v1.schema.json) | 1 (proposed; pending C2/C3/C4 consumer review) | C1 session orchestration (`scripts/dev-harness`, SCA-487) | C2 semantic journeys, C3 capture replay, C4 verification integration, C5 device qualification |
 
 ## session-evidence-v1
 
@@ -36,6 +36,7 @@ form of this contract):
 - **Blocked is explicit.** `status.blocked_reason` is required exactly when
   `status.state` is `blocked`.
 
-Change policy: v1 is frozen. Additive changes require consumer tests in every
-affected consumer (C2–C5) and bump `schema_version` after review; do not widen
-v1 in place.
+Change policy: v1 is proposed by C1, not frozen by a single worker. Additive
+changes require consumer tests in every affected consumer (C2–C5) and a bumped
+`schema_version` after coordinator + consumer review; do not widen v1 in place
+until that review lands.

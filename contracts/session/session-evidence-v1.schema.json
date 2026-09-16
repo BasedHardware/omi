@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omi.dev/contracts/session/session-evidence-v1.schema.json",
   "title": "Omi mobile session evidence v1",
-  "description": "Frozen minimal receipt emitted per isolated local mobile session (SCA-487 C1). Consumers: C2 semantic journeys, C3 capture replay, C4 verification integration, C5 device qualification. Additive changes require consumer tests and a bumped schema_version; v1 documents stay closed (additionalProperties: false). No field may ever carry a credential: token, secret, password, or key material must not appear under any key.",
+  "description": "Proposed minimal receipt emitted per isolated local mobile session (SCA-487 C1). Not frozen until C2/C3/C4 consumers review it with the coordinator. Consumers: C2 semantic journeys, C3 capture replay, C4 verification integration, C5 device qualification. Additive changes require consumer tests and a bumped schema_version; v1 documents stay closed (additionalProperties: false). No field may ever carry a credential: token, secret, password, or key material must not appear under any key.",
   "type": "object",
   "additionalProperties": false,
   "required": [

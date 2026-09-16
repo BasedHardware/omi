@@ -37,13 +37,15 @@ provably dead, bumping the lease generation; stop/reset/release only touch
 processes and paths recorded in the session's own manifests (harness ownership
 guards apply underneath).
 
-## Synthetic auth (integration with open PR #11784)
+## Synthetic auth (reuse of open PR #11784 — not merged or closed)
 
-Seeding reuses the local-development sign-in contract from
-[PR #11784](https://github.com/BasedHardware/omi/pull/11784)
+Seeding and the app's `signInWithLocalDevToken` reuse the local-development
+sign-in contract from [PR #11784](https://github.com/BasedHardware/omi/pull/11784)
 (`feat/app+backend local-development sign-in without OAuth`, head
-`9ae7d36e172c9123d4ac6d19815d9b07f5f8dfc4` at the time of writing — still OPEN
-and conflicting with `main`):
+`9ae7d36e172c9123d4ac6d19815d9b07f5f8dfc4` — still OPEN and conflicting with
+`main`). That PR is **not** merged or closed by this program. Its reviewed
+backend router, route-policy row, and client path are copied onto this
+integration branch against current `main`:
 
 - the session backend exposes `POST /v1/auth/local-dev/custom-token`,
   structurally gated by `FIREBASE_AUTH_EMULATOR_HOST` (the endpoint 404s
@@ -51,14 +53,9 @@ and conflicting with `main`):
 - `seed` posts the fixture uid/email to that endpoint and records a receipt
   (`seed.json`) that **never contains the minted token**.
 
-**Integration plan (coordinator action):** this lane consumes the PR's backend
-router + app `signInWithLocalDevToken` path; do not open a competing endpoint.
-Once the PR's commits are integrated into the canonical
-`codex/sca-486-mobile-foundation` branch (or merged upstream), the live
-`seed`/sign-in path is exercised end to end; until then `seed` fails closed
-with a precise reason (backend unreachable / endpoint 404). The contract tests
-in `tests/test_mobile_fixtures.py` pin the request/receipt shape so the
-integration cannot silently drift.
+A loopback HTTP stub is not auth acceptance. Unit tests pin the request/receipt
+shape and the 404-not-403 gate; live `seed` against a session-owned Auth
+emulator is the remaining acceptance for this seam.
 
 ## Fixtures
 
@@ -83,7 +80,8 @@ contract/unit work continues without it.
 
 Every session can emit a `session-evidence-v1` receipt
 (`contracts/session/session-evidence-v1.schema.json`, validated by
-`dev_harness.session_evidence`). The receipt binds source SHA + dirty digest,
+`dev_harness.session_evidence`). v1 is proposed, not frozen, until C2/C3/C4
+review it with the coordinator. The receipt binds source SHA + dirty digest,
 the built artifact hash (required for `ready`/`running` — a stale build cannot
 be reported ready), loopback-only endpoints, fixture version, runner versions,
 real timestamps, status/blocked reason and execution counts. Credential-shaped
