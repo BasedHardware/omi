@@ -132,6 +132,34 @@ class _AuthComponentState extends State<AuthComponent> {
                       ),
                     ),
 
+                    // Local development sign-in. Only rendered for a local_dev
+                    // build: community builds cannot complete a real OAuth flow,
+                    // because provider OAuth clients are bound to the official
+                    // bundle id and a community build is signed with a suffixed
+                    // one. Never shown in a production-family build.
+                    if (provider.isLocalDevProfile) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            provider.onLocalDevSignIn(widget.onSignIn);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          child: const Text(
+                            'Sign in (local dev)',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                          ),
+                        ),
+                      ),
+                    ],
+
                     const SizedBox(height: 24),
 
                     // Privacy policy text (same as welcome page)
