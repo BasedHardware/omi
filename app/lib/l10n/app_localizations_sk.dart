@@ -2047,6 +2047,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryHistoryPartial => 'Časť histórie spomienok nie je dostupná. Zobrazuje sa doteraz prijatá história.';
 
   @override
+  String get memoryHistory => 'História';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Vrátiť späť';
 
   @override

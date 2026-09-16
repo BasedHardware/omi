@@ -92,7 +92,6 @@ async def subscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     if status != "enabled":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    print({'uid': uid, 'target_url': subscriber.target_url})
     store_zapier_subscribes(uid, subscriber.target_url)
     return {}
 
@@ -114,7 +113,6 @@ async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     if status != "enabled":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    print({'uid': uid, 'target_url': subscriber.target_url})
     remove_zapier_subscribes(uid, subscriber.target_url)
     return {}
 
@@ -144,7 +142,6 @@ async def get_trigger_conversation_sample(request: Request, uid: str):
 
     # Get latest from Omi
     ok = get_omi().get_latest_conversation(uid)
-    print(ok)
     if "error" in ok:
         err = ok["error"]
         print(err)
@@ -234,14 +231,12 @@ def zapier_action_conversations(create_conversation: ZapierActionCreateConversat
     )
 
     ok = get_omi().create_conversation(conversation, uid)
-    print(ok)
     if "error" in ok:
         err = ok["error"]
         print(err)
         raise HTTPException(status_code=err["status"] if "status" in err else 500, detail='Can not create memory')
         return
     result = ok["result"]
-    print(result)
 
     return EndpointResponse(message="Your memories are synced with Omi.")
 
@@ -272,7 +267,6 @@ def create_zapier_conversation(uid: str, conversation: Conversation):
         # with graceful error
         if "error" in ok:
             err = ok["error"]
-            print(sub)
             print(err)
 
             continue

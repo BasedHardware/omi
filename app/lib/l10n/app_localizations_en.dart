@@ -2039,6 +2039,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Undo';
 
   @override

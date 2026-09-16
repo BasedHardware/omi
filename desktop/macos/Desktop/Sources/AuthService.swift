@@ -289,9 +289,8 @@ class AuthService {
     // The REST-backed session remains authoritative if the Firebase SDK was
     // unavailable at launch. Only clear an SDK session when one exists.
     do {
-      return try await commitSignedOutSession(
+      return try await commitLightInvalidatedSession(
         attempt: attempt,
-        phase: .needsReauth,
         beforeClearingCredentials: { [self] in
           if let auth = configuredFirebaseAuth() {
             try auth.signOut()
@@ -547,6 +546,8 @@ class AuthService {
       // never proof of a usable session. Keep every authenticated surface gated
       // until a forced refresh succeeds.
       validateRestoredSession(attempt: attempt)
+    } else if preservedReauthOwnerId() != nil {
+      restorePreservedReauthOwner(email: savedEmail)
     } else {
       NSLog("OMI AUTH: No saved auth state found")
       guard
@@ -663,10 +664,7 @@ class AuthService {
           let savedSignedIn = UserDefaults.standard.bool(forKey: .authIsSignedIn)
           log("AUTH_LISTENER: Firebase user nil, savedSignedIn=\(savedSignedIn), currentIsSignedIn=\(self.isSignedIn)")
           if !savedSignedIn {
-            // No saved session either - user is truly signed out
-            log("AUTH_LISTENER: No saved session - setting isSignedIn=false")
-            AuthState.shared.transition(to: .signedOut)
-            AuthState.shared.userEmail = nil
+            await MainActor.run { self.handleFirebaseNilUserWithoutSavedSignedIn() }
           } else {
             log("AUTH_LISTENER: Firebase user nil with saved session — validating REST tokens")
             await self.validateSavedSessionAfterFirebaseNil()

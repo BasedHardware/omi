@@ -51,7 +51,7 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     oauth_ok = get_notion().get_access_token(code)
     if "error" in oauth_ok:
         err = oauth_ok["error"]
-        print(err)
+        print(f"Error: HTTP_{err.get('status')}")
         return response_setup_notion_crm_page(
             request, uid, f"Something went wrong. Please try again! \n (code: 400001)"
         )
@@ -69,7 +69,7 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     databases_ok = get_notion().get_databases_edited_time_desc(access_token)
     if "error" in databases_ok:
         err = databases_ok["error"]
-        print(err)
+        print(f"Error: HTTP_{err.get('status')}")
         return response_setup_notion_crm_page(
             request, uid, f"Something went wrong. Please try again! \n (code: 400003)"
         )
@@ -89,7 +89,6 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
         return
 
     # Save
-    print({'uid': uid, 'api_key': access_token, 'database_id': database_id})
     store_notion_crm_api_key(uid, access_token)
     store_notion_database_id(uid, database_id)
     return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})
@@ -182,6 +181,6 @@ def create_notion_row(notion_api_key: str, database_id: str, conversation: Conve
             'Notion-Version': '2022-06-28',
         },
     )
-    print('create_notion_row:', resp.status_code, resp.json())
+    print('create_notion_row:', resp.status_code)
     # TODO: after, write inside the page the transcript and everything else.
     return resp.status_code == 200
