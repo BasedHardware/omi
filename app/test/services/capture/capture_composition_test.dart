@@ -118,7 +118,8 @@ void main() {
     expect(body, contains('connectivity: dependencies.connectivity'));
     expect(body, contains('preferences: dependencies.preferences'));
     expect(body, contains('bleListeners: dependencies.ble'));
-    expect(body, contains('openSocket: dependencies.openSocket'));
+    expect(body, contains('openConversationSocket'));
+    expect(body, contains('sessionOwner: dependencies.owner'));
     final providerSource = File('lib/providers/capture_provider.dart').readAsStringSync();
     expect(providerSource, contains('super.walService'));
     expect(providerSource, contains('super.phoneMicRecorder'));
@@ -130,6 +131,7 @@ void main() {
     expect(providerSource, contains('super.preferences'));
     expect(providerSource, contains('super.bleListeners'));
     expect(providerSource, contains('super.openSocket'));
+    expect(providerSource, contains('super.sessionOwner'));
   });
 
   test('composeCaptureProvider uses injected connectivity, not ConnectivityService', () {

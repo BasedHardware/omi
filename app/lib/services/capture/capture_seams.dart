@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -54,6 +55,20 @@ typedef CaptureSocketOpen = Future<TranscriptSegmentSocketService?> Function({
   String? source,
   String? clientConversationId,
   CustomSttConfig? customSttConfig,
+});
+
+/// Conversation socket open that includes the production geolocation header.
+/// Spine oracles still type [CaptureSocketOpen] without it; composition wraps
+/// that older callback and the explicit path always supplies geolocation here.
+typedef CaptureConversationSocketOpen = Future<TranscriptSegmentSocketService?> Function({
+  required BleAudioCodec codec,
+  required int sampleRate,
+  required String language,
+  required bool force,
+  String? source,
+  String? clientConversationId,
+  CustomSttConfig? customSttConfig,
+  Geolocation? geolocation,
 });
 
 /// Auth identity boundary for the capture pipeline.
