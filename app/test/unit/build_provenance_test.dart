@@ -2,10 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/build_provenance.dart';
 
 void main() {
-  tearDown(() {
-    BuildProvenance.patchNumberReaderForTesting = null;
-  });
-
   test('fromEnvironment is unknown when dart-defines are omitted', () {
     final provenance = BuildProvenance.fromEnvironment();
     expect(provenance.gitSha, 'unknown');
@@ -14,7 +10,6 @@ void main() {
     expect(provenance.asProperties, {
       'git_sha': 'unknown',
       'build_number': 'unknown',
-      'shorebird_patch': 'none',
     });
   });
 
@@ -27,6 +22,7 @@ void main() {
     expect(provenance.gitSha, 'abc123def-dirty');
     expect(provenance.buildNumber, '992');
     expect(provenance.asProperties['git_sha'], 'abc123def-dirty');
+    expect(provenance.asProperties.containsKey('shorebird_patch'), isFalse);
   });
 
   test('empty SHA or build number become unknown', () {
@@ -44,12 +40,5 @@ void main() {
       BuildProvenance(gitSha: 'unknown', buildNumber: '1', dirty: true).gitSha,
       'unknown',
     );
-  });
-
-  test('shorebirdPatchNumber uses the injected reader', () async {
-    BuildProvenance.patchNumberReaderForTesting = () async => '7';
-    expect(await BuildProvenance.shorebirdPatchNumber(), '7');
-    BuildProvenance.patchNumberReaderForTesting = () async => 'none';
-    expect(await BuildProvenance.shorebirdPatchNumber(), 'none');
   });
 }

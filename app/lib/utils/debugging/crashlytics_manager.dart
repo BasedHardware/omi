@@ -29,19 +29,13 @@ class CrashlyticsManager {
     await applyBuildProvenanceKeys();
   }
 
-  /// Attach git SHA / build number / Shorebird patch so a Crashlytics issue
-  /// resolves to a commit. Safe to call only after [Firebase.initializeApp].
+  /// Attach git SHA / build number so a Crashlytics issue resolves to a
+  /// commit. Safe to call only after [Firebase.initializeApp].
   static Future<void> applyBuildProvenanceKeys() async {
     if (!_deliverable) return;
     final keys = BuildProvenance.fromEnvironment().asProperties;
     for (final entry in keys.entries) {
       await FirebaseCrashlytics.instance.setCustomKey(entry.key, entry.value);
-    }
-    try {
-      final patch = await BuildProvenance.shorebirdPatchNumber();
-      await FirebaseCrashlytics.instance.setCustomKey('shorebird_patch', patch);
-    } catch (_) {
-      await FirebaseCrashlytics.instance.setCustomKey('shorebird_patch', 'unknown');
     }
   }
 

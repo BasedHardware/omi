@@ -1840,14 +1840,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
-  shorebird_code_push:
-    dependency: "direct main"
-    description:
-      name: shorebird_code_push
-      sha256: "32df9946782c6ca95d7065c7f2156df74675e931b816d0dc391a3d8f8917930f"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.7"
   sign_in_with_apple:
     dependency: "direct main"
     description:

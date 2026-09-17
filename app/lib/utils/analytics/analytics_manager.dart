@@ -60,7 +60,7 @@ class AnalyticsManager {
         PlatformService.isAnalyticsSupported,
         adapter.init,
       ).timeout(timeout);
-      await _registerBuildProvenance(adapter, timeout: timeout);
+      _registerBuildProvenance(adapter);
       await _loadGlobalEventProperties(timeout: timeout);
       await _loadPersonPropertyCache();
       _analyticsReady = true;
@@ -70,18 +70,10 @@ class AnalyticsManager {
     } catch (_) {}
   }
 
-  static Future<void> _registerBuildProvenance(AnalyticsAdapter adapter, {required Duration timeout}) async {
+  static void _registerBuildProvenance(AnalyticsAdapter adapter) {
     try {
       adapter.registerSuperProperties(BuildProvenance.fromEnvironment().asProperties);
     } catch (_) {}
-    try {
-      final patch = await BuildProvenance.shorebirdPatchNumber().timeout(timeout);
-      adapter.registerSuperProperties({'shorebird_patch': patch});
-    } catch (_) {
-      try {
-        adapter.registerSuperProperties({'shorebird_patch': 'unknown'});
-      } catch (_) {}
-    }
   }
 
   static Future<void> flushPending({bool force = false}) => _flushQueuedEvents(force: force);

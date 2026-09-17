@@ -595,6 +595,12 @@ def test_codemagic_mobile_app_builds_inject_build_provenance_defines():
     assert "OMI_GIT_SHA" in text
     assert "OMI_BUILD_NUMBER" in text
     assert "OMI_GIT_DIRTY" in text
+    assert "diff --quiet HEAD --" in text
+    assert "git status --porcelain" not in text
+    assert "CM_BUILD_ID" in text
+    assert "diff --name-only HEAD --" in text
+    assert "invalid OMI_GIT_SHA" in text
+    assert "invalid OMI_BUILD_NUMBER" in text
 
     for workflow_id in (
         "ios-internal-auto",

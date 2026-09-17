@@ -12,7 +12,6 @@ void main() {
 
   setUp(() async {
     AnalyticsManager.resetForTesting();
-    BuildProvenance.patchNumberReaderForTesting = () async => 'none';
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
       appName: 'Omi Test',
@@ -26,10 +25,9 @@ void main() {
 
   tearDown(() {
     AnalyticsManager.resetForTesting();
-    BuildProvenance.patchNumberReaderForTesting = null;
   });
 
-  test('init registers git_sha, build_number, and shorebird_patch as super properties', () async {
+  test('init registers git_sha and build_number as super properties', () async {
     final adapter = _RecordingAdapter();
     AnalyticsManager.configure(adapter);
 
@@ -38,7 +36,7 @@ void main() {
     expect(adapter.isInitialized, isTrue);
     expect(adapter.superProperties, containsPair('git_sha', 'unknown'));
     expect(adapter.superProperties, containsPair('build_number', 'unknown'));
-    expect(adapter.superProperties, containsPair('shorebird_patch', 'none'));
+    expect(adapter.superProperties.containsKey('shorebird_patch'), isFalse);
   });
 
   test('Crashlytics provenance keys match the analytics property names', () {
@@ -46,12 +44,10 @@ void main() {
       gitSha: 'deadbeef',
       buildNumber: '1001',
       dirty: false,
-      shorebirdPatch: '3',
     ).asProperties;
-    expect(keys.keys.toList(), ['git_sha', 'build_number', 'shorebird_patch']);
+    expect(keys.keys.toList(), ['git_sha', 'build_number']);
     expect(keys['git_sha'], 'deadbeef');
     expect(keys['build_number'], '1001');
-    expect(keys['shorebird_patch'], '3');
   });
 
   test('CrashlyticsManager.applyBuildProvenanceKeys is a no-op before Firebase', () async {
