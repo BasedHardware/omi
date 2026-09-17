@@ -58,6 +58,168 @@
         "mobile-instrumentation-presence"
       ],
       "correlation": null
+    },
+    {
+      "id": "deviceOnboardingCompleted",
+      "wire_name": "Device Onboarding Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "transcribeLaterRecordingProcessed",
+      "wire_name": "Transcribe Later Recording Processed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "calendarEnabled",
+      "wire_name": "Calendar Enabled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "calendarDisabled",
+      "wire_name": "Calendar Disabled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "calendarSelected",
+      "wire_name": "Calendar Selected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "conversationDisplaySettingsOpened",
+      "wire_name": "Conversation Display Settings Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "developerModeEnabled",
+      "wire_name": "Developer Mode Enabled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "developerModeDisabled",
+      "wire_name": "Developer Mode Disabled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "developerSettingsSaved",
+      "wire_name": "Developer Settings Saved",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "hasWebhookMemoryCreated": {
+          "type": "bool",
+          "wire_name": "has_webhook_memory_created"
+        },
+        "hasWebhookTranscriptReceived": {
+          "type": "bool",
+          "wire_name": "has_webhook_transcript_received"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceResponseToggled",
+      "wire_name": "Voice Response Audio Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "showShortConversationsToggled",
+      "wire_name": "Show Short Conversations Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "showShort": {
+          "type": "bool",
+          "wire_name": "show_short"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
     }
   ]
 }
