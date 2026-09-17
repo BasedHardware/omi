@@ -521,7 +521,22 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// without persisting a second navigation state or emitting entity data.
   func markRouteVisible(_ destination: ChatFirstRoute) {
     guard route == destination else { return }
+    // `@Published` fires on every assignment and `onAppear` can re-fire
+    // without a remount (sheet dismissal, key-window churn): an unchanged
+    // value must not buy a re-render or a second ack write.
+    guard visibleRoute != destination else { return }
     visibleRoute = destination
+    // The bridge's mounted-visibility poll reads `DesktopAutomationStateStore`,
+    // which otherwise learns `visibleRoute` only from `DesktopHomeView`'s next
+    // render pass (`onChange` → `reportAutomationState()`). Until that pass
+    // runs, the poll sleeps in 50 ms steps even though the target is already
+    // on screen. Publish the ack from the moment it becomes true.
+    guard DesktopAutomationLaunchOptions.isEnabled else { return }
+    let routeName = route.stableName
+    _ = DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+      guard snapshot.chatFirstRoute == routeName else { return }
+      snapshot.visibleChatFirstRoute = destination.stableName
+    }
   }
 
   func toggleSidebar() {
