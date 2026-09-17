@@ -3096,6 +3096,109 @@ test('fails closed for malformed GET task export fields', async () => {
   ).rejects.toThrow('Omi text is malformed');
 });
 
+test('old tasks name Flutter ActionItemResponse fromJson type-wrong GET apple_reminder_id instead of remapping to a task chip', async () => {
+  const neighbor = {id: 'named', description: 'Write recap', completed: false};
+  const row = {
+    id: 'exported',
+    description: 'Call Sam',
+    completed: false,
+    apple_reminder_id: 'rem-1',
+    conversation_id: 'conv-1',
+    goal_id: 'goal-1',
+    priority: 'high',
+    recurrence_parent_id: 'parent-1',
+    recurrence_rule: 'FREQ=DAILY',
+    status: 'active',
+    superseded_by: 'task-2',
+    workstream_id: 'ws-1',
+  };
+  const titles = async (actionItems: unknown[]) =>
+    (
+      await loadTasks(backend({action_items: actionItems, has_more: false}).api)
+    ).items.map(item => item.title);
+  expect(await titles([row, neighbor])).toEqual(['Call Sam', 'Write recap']);
+  expect(
+    await titles([
+      {
+        id: 'exported',
+        description: 'Call Sam',
+        completed: false,
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  expect(
+    await titles([
+      {
+        ...row,
+        apple_reminder_id: null,
+        conversation_id: null,
+        goal_id: null,
+        priority: null,
+        recurrence_parent_id: null,
+        recurrence_rule: null,
+        superseded_by: null,
+        workstream_id: null,
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  expect(
+    await titles([
+      {
+        ...row,
+        apple_reminder_id: '',
+        conversation_id: '',
+        goal_id: '',
+        priority: '',
+        recurrence_parent_id: '',
+        recurrence_rule: '',
+        status: '',
+        superseded_by: '',
+        workstream_id: '',
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  expect(
+    await titles([
+      {
+        ...row,
+        apple_reminder_id: '  rem-1  ',
+        conversation_id: ' conv-1 ',
+        goal_id: ' goal-1 ',
+        priority: ' high ',
+        recurrence_parent_id: ' parent-1 ',
+        recurrence_rule: ' FREQ=DAILY ',
+        status: ' active ',
+        superseded_by: ' task-2 ',
+        workstream_id: ' ws-1 ',
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  for (const extra of [1, true, [], {}]) {
+    for (const field of [
+      'apple_reminder_id',
+      'conversation_id',
+      'goal_id',
+      'priority',
+      'recurrence_parent_id',
+      'recurrence_rule',
+      'status',
+      'superseded_by',
+      'workstream_id',
+    ]) {
+      await expect(
+        titles([{...row, [field]: extra}, neighbor]),
+      ).rejects.toThrow('Omi text is malformed');
+    }
+  }
+  await expect(
+    titles([{...row, status: null}, neighbor]),
+  ).rejects.toThrow('Omi text is malformed');
+});
+
 test('old memories use v3 content without manufacturing canonical provenance', async () => {
   const {api, request} = backend(
     [

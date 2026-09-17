@@ -741,6 +741,15 @@ export async function loadOmiTasks(
     );
     presentNullableDouble(row.due_confidence);
     presentNullableDate(row.export_date);
+    presentNullableString(row.apple_reminder_id);
+    presentNullableString(row.conversation_id);
+    presentNullableString(row.goal_id);
+    presentNullableString(row.priority);
+    presentNullableString(row.recurrence_parent_id);
+    presentNullableString(row.recurrence_rule);
+    presentDefaultString(row.status);
+    presentNullableString(row.superseded_by);
+    presentNullableString(row.workstream_id);
     const rawTaskId = row.taskId ?? row.task_id;
     const parsedTaskId =
       rawTaskId === undefined || rawTaskId === null
