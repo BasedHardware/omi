@@ -12,6 +12,7 @@
 #include <zephyr/pm/device_runtime.h>
 #include <zephyr/sys/poweroff.h>
 
+#include "capture_mute.h"
 #include "haptic.h"
 #include "imu.h"
 #include "led.h"
@@ -227,6 +228,11 @@ void check_button_level(struct k_work *work_item)
         LOG_INF("double tap detected\n");
         btn_last_event = event;
         notify_double_tap();
+        /* Offline: the app cannot write mute. Toggle locally so disconnect
+         * does not resume capture, and reconnect can sync the UI. */
+        if (get_current_connection() == NULL) {
+            (void) capture_mute_set(!capture_mute_is_set());
+        }
     }
 
     // Long press, one time event
