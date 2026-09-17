@@ -2050,6 +2050,15 @@ class AppLocalizationsMk extends AppLocalizations {
       'Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.';
 
   @override
+  String get memoryHistory => 'Историја';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Врати';
 
   @override

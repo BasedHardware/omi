@@ -68,6 +68,30 @@ app = FastAPI(
 # Helper Functions
 # ============================================
 
+def _coerce_int(value, default: int, minimum: int, maximum: int) -> int:
+    """
+    Coerce an optional integer tool parameter into [minimum, maximum].
+
+    The Omi backend sends JSON null for optional manifest params the LLM
+    omitted, and body.get(key, default) only applies its default when the
+    key is absent, so handlers must not assume the declared type: None,
+    booleans, and unparseable values fall back to ``default`` while ints
+    and numeric strings are clamped to the documented range.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = int(value.strip())
+        except ValueError:
+            return default
+    else:
+        return default
+    return max(minimum, min(parsed, maximum))
+
+
 def get_valid_access_token(uid: str) -> Optional[str]:
     """
     Get a valid access token, refreshing if necessary.
@@ -117,7 +141,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return None
     except Exception as e:
         log(f"Error refreshing token: {e}")
@@ -155,8 +179,8 @@ def calendar_api_request(uid: str, method: str, endpoint: str, params: dict = No
                 return {"success": True}
             return response.json()
         else:
-            log(f"Calendar API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            log(f"Calendar API error: {response.status_code}")
+            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
         log(f"Calendar API request error: {e}")
@@ -169,6 +193,8 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
     Returns (datetime, is_all_day).
     Handles various formats including natural language.
     """
+    if not isinstance(dt_str, str):
+        raise ValueError(f"Could not parse datetime: {dt_str}")
     dt_str = dt_str.strip().lower()
     now = datetime.now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -486,8 +512,8 @@ async def tool_list_events(request: Request):
         log(f"=== LIST_EVENTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        days = _coerce_int(body.get("days"), default=7, minimum=1, maximum=30)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -531,7 +557,7 @@ async def tool_list_events(request: Request):
             line = f"- **{summary}**\n  {time_str}"
             if location:
                 line += f"\n  Location: {location}"
-            line += f"\n  ID: `{event_id[:20]}...`"
+            line += f"\n  ID: `{event_id}`"
             result_parts.append(line)
 
         return ChatToolResponse(result="\n".join(result_parts))
@@ -557,8 +583,14 @@ async def tool_create_event(request: Request):
         end_str = body.get("end")
         description = body.get("description", "")
         location = body.get("location", "")
-        attendees = body.get("attendees", [])
-        all_day = body.get("all_day", False)
+        attendees = body.get("attendees")
+        if isinstance(attendees, str):
+            attendees = [attendees]
+        if not isinstance(attendees, list):
+            attendees = []
+        attendees = [email.strip() for email in attendees
+                     if isinstance(email, str) and email.strip()]
+        all_day = body.get("all_day") is True
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -615,7 +647,7 @@ async def tool_create_event(request: Request):
             event_data["location"] = location
 
         if attendees:
-            event_data["attendees"] = [{"email": email.strip()} for email in attendees]
+            event_data["attendees"] = [{"email": email} for email in attendees]
 
         log(f"Creating event: {event_data}")
 
@@ -640,6 +672,7 @@ async def tool_create_event(request: Request):
             result_parts.append(f"Attendees: {', '.join(attendees)}")
         if html_link:
             result_parts.append(f"Link: {html_link}")
+        result_parts.append(f"ID: `{event_id}`")
 
         return ChatToolResponse(result="\n".join(result_parts))
 
@@ -1097,8 +1130,8 @@ async def google_callback(
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            log(f"Token exchange failed: {response.status_code}")
+            return HTMLResponse(content=f"Token exchange failed: {response.status_code}", status_code=400)
 
         token_data = response.json()
         access_token = token_data.get("access_token")

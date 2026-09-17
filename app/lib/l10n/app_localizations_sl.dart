@@ -2042,6 +2042,15 @@ class AppLocalizationsSl extends AppLocalizations {
   String get memoryHistoryPartial => 'Del zgodovine spominov ni na voljo. Prikazana je doslej prejeta zgodovina.';
 
   @override
+  String get memoryHistory => 'Zgodovina';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Razveljavi';
 
   @override

@@ -2041,6 +2041,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String get memoryHistoryPartial => 'Osa mälestuste ajaloost pole saadaval. Kuvatakse seni saadud ajalugu.';
 
   @override
+  String get memoryHistory => 'Ajalugu';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Tühista';
 
   @override

@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
@@ -713,6 +714,23 @@ class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
+    time_zone: Optional[str] = None
+
+    @field_validator("time_zone", mode="before")
+    @classmethod
+    def _validate_time_zone(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("time_zone must be a string")
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            ZoneInfo(stripped)
+        except Exception as exc:
+            raise ValueError("time_zone must be a valid IANA timezone") from exc
+        return stripped
 
 
 class GenerateReplyTurn(BaseModel):

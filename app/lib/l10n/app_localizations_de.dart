@@ -2060,6 +2060,15 @@ class AppLocalizationsDe extends AppLocalizations {
       'Ein Teil des Erinnerungsverlaufs ist nicht verfügbar. Der bisher empfangene Verlauf wird angezeigt.';
 
   @override
+  String get memoryHistory => 'Verlauf';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Rückgängig';
 
   @override

@@ -1,4 +1,9 @@
-"""Unit tests for timezone-aware observation timestamps (issue #13194)."""
+from pathlib import Path
+import sys
+
+PLUGIN_DIR = Path(__file__).resolve().parent
+if str(PLUGIN_DIR) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_DIR))
 
 from main import _format_observed_at
 
@@ -22,3 +27,10 @@ def test_negative_offset():
 def test_falls_back_to_raw_time_without_metadata():
     out = _format_observed_at({"time": "2026-09-11T14:00"}, {})
     assert out == "2026-09-11T14:00"
+
+
+if __name__ == "__main__":
+    test_includes_timezone_name_and_offset()
+    test_negative_offset()
+    test_falls_back_to_raw_time_without_metadata()
+    print("All test_observed_at tests passed.")

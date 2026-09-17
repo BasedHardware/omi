@@ -363,6 +363,39 @@ def test_ledger_history_page_reports_partial_provider_window_and_filters_privacy
     assert complete.truncated is False
 
 
+def test_ledger_history_page_sentinel_row_is_not_skipped_by_continuation(service_mod, monkeypatch):
+    """A full 501-row provider window must sign the continuation BEFORE the
+    sentinel row. A cursor after the sentinel would skip that row forever:
+    the next keyset page starts strictly after it."""
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    rows = [_ledger_item(service_mod, f"row-{index:03d}", updated_at=now, user_review=False) for index in range(502)]
+    calls = {}
+
+    def provider(uid, *, limit, **kwargs):
+        calls["start_after"] = kwargs.get("start_after")
+        start = 0
+        if calls["start_after"] is not None:
+            start = int(calls["start_after"][1].split("-")[1]) + 1
+        return iter(rows[start : start + limit])
+
+    monkeypatch.setattr(service_mod, "iter_authoritative_product_memory_items_newest_first", provider)
+
+    first = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page("uid-test", limit=500)
+
+    assert first.truncated is True
+    assert first.scanned_count == 501
+    assert len(first.memories) == 500
+    assert first.next_start_after == (now, "row-499")
+
+    second = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page(
+        "uid-test", limit=500, start_after=first.next_start_after
+    )
+
+    assert calls["start_after"] == (now, "row-499")
+    assert [memory.id for memory in second.memories] == ["row-500", "row-501"]
+    assert second.truncated is False
+
+
 def test_ledger_history_excludes_locked_rows(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     locked = _ledger_item(service_mod, "locked", updated_at=now, user_review=False)
@@ -796,6 +829,41 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
         now=None,
     )
     service._canonical.write.assert_not_called()
+
+
+def test_temporal_product_search_uses_bounded_pages_and_retains_history(service_mod, monkeypatch):
+    """Beta product search reaches dated/superseded rows without full ``read``."""
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    current = _memory(service_mod, 'current', content='coffee current').model_copy(
+        update={'belief_class': 'stable', 'half_life_days': 365.0}
+    )
+    dated = _memory(service_mod, 'dated', content='coffee dated').model_copy(
+        update={'invalid_at': now - timedelta(days=1), 'belief_class': 'stable', 'half_life_days': 365.0}
+    )
+    superseded = _memory(service_mod, 'superseded', content='coffee superseded').model_copy(
+        update={
+            'ledger_status': MemoryItemStatus.superseded,
+            'superseded_by': 'current',
+            'invalid_at': now - timedelta(days=2),
+            'belief_class': 'stable',
+            'half_life_days': 365.0,
+        }
+    )
+    page = service_mod.UniversalMemoryListPage(memories=[current, dated, superseded], next_cursor=None, truncated=False)
+    service = service_mod.MemoryService(db_client=_Db())
+    service.read = MagicMock()
+    service.read_page = MagicMock(return_value=page)
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+
+    result = service.default_product_search(
+        'uid-test', 'coffee', policy=service_mod.MemoryAccessPolicy.for_omi_chat(), now=now, view='history'
+    )
+
+    assert [item['memory_id'] for item in result['items']] == ['dated', 'superseded']
+    assert result['truncated'] is False
+    assert result['has_more'] is False
+    service.read.assert_not_called()
+    service.read_page.assert_called_once()
 
 
 def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):

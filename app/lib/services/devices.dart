@@ -69,6 +69,19 @@ class DeviceService {
 
   DeviceServiceStatus get status => _status;
 
+  /// When iOS reports a stale bond (pairing_lost / CB error 14), automatic reconnect
+  /// loops are blocked until the user forgets the device in Settings and explicitly retries.
+  bool _staleBondRecoveryRequired = false;
+  bool get staleBondRecoveryRequired => _staleBondRecoveryRequired;
+
+  void requireStaleBondRecovery() {
+    _staleBondRecoveryRequired = true;
+  }
+
+  void clearStaleBondRecoveryRequirement() {
+    _staleBondRecoveryRequired = false;
+  }
+
   DateTime? _firstConnectedAt;
 
   /// Runs one follow-up scan when a caller retries while the current scan is
@@ -255,6 +268,11 @@ class DeviceService {
         "ensureConnection $deviceId ${existing?.status} $force",
       );
 
+      if (_staleBondRecoveryRequired) {
+        Logger.debug('ensureConnection blocked: stale iOS BLE bond recovery required');
+        return null;
+      }
+
       // Connected to this device — return it
       if (existing?.status == DeviceConnectionState.connected) {
         return existing;
@@ -328,6 +346,7 @@ class DeviceService {
 
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
+    clearStaleBondRecoveryRequirement();
     await _teardownConnection(deviceId);
 
     _devices.removeWhere((d) => d.id == deviceId);

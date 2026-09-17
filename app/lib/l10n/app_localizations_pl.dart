@@ -2046,6 +2046,15 @@ class AppLocalizationsPl extends AppLocalizations {
       'Część historii wspomnień jest niedostępna. Wyświetlana jest dotychczas otrzymana historia.';
 
   @override
+  String get memoryHistory => 'Historia';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Cofnij';
 
   @override

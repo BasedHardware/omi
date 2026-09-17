@@ -3963,6 +3963,24 @@ abstract class AppLocalizations {
   /// **'Some memory history is unavailable. Showing the history received so far.'**
   String get memoryHistoryPartial;
 
+  /// Filter option for retained memory history
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get memoryHistory;
+
+  /// Button that clears suppression so this memory may be used
+  ///
+  /// In en, this message translates to:
+  /// **'Allow use'**
+  String get memoryAllowUse;
+
+  /// Button that suppresses this memory from future use
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t use'**
+  String get memoryDontUse;
+
   /// Undo button text
   ///
   /// In en, this message translates to:

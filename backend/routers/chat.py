@@ -28,6 +28,7 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
+import database.notifications as notification_db
 from utils.chat_session_target import resolve_chat_target
 import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
@@ -592,6 +593,11 @@ def send_message(
         answered = False
         stream_exhausted = False
         streamed_terminal_error = False
+        chat_tz = None
+        if data.time_zone:
+            chat_tz = await run_blocking(
+                db_executor, notification_db.sync_user_time_zone_from_client, uid, data.time_zone
+            )
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
 
@@ -660,6 +666,7 @@ def send_message(
                 context=data.context,
                 platform=x_app_platform,
                 client_kind=mobile_journey_attempt.client_kind,
+                client_tz=chat_tz,
             ):
                 if chunk:
                     if chunk.startswith('error: '):

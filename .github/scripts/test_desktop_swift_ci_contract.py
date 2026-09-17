@@ -601,9 +601,12 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # drift class. Keying the budget on the event type alone made
         # a re-baselined PR run the full suite against the PR number and
         # false-red at 2013s vs 1800s (run 34369508858). After Xcode 26.6,
-        # PR #13699 measured 2324s (run 34754454417), so the PR lane is 2700s.
+        # PR #13699 measured 2324s (run 34754454417). PR #14213 then
+        # measured 2778s (run 35134593036) on a cache-hit PR lane whose
+        # overrun was one 1500s batch ceiling plus isolation, so the PR
+        # lane is 3000s.
         self.assertIn(
-            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '2700' || '4200' }}",
+            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '3000' || '4200' }}",
             verify_job,
         )
         self.assertIn('OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"', verify_job)

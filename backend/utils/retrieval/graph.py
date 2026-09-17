@@ -53,9 +53,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-async def _current_prompt_metadata(uid: str, platform: Optional[str]) -> tuple[str, str]:
+async def _current_prompt_metadata(
+    uid: str, platform: Optional[str], client_tz: Optional[str] = None
+) -> tuple[str, str]:
     try:
-        tz = await run_blocking(db_executor, get_user_timezone, uid)
+        tz = client_tz or await run_blocking(db_executor, get_user_timezone, uid)
         city = await get_mobile_city(uid, platform)
         return get_current_datetime_block(uid, tz=tz, location=city), tz
     except Exception as error:
@@ -389,6 +391,7 @@ async def execute_chat_stream(
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
     client_kind: Optional[ClientKind] = None,
+    client_tz: Optional[str] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
@@ -404,7 +407,7 @@ async def execute_chat_stream(
     setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
     try:
         async with asyncio.timeout(max(0.0, setup_deadline_at - asyncio.get_running_loop().time())):
-            current_datetime_block, tz = await _current_prompt_metadata(uid, platform)
+            current_datetime_block, tz = await _current_prompt_metadata(uid, platform, client_tz=client_tz)
     except TimeoutError:
         logger.error(
             'chat stream setup timed out route=router uid=%s reason=setup_timeout',
