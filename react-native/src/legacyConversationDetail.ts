@@ -506,6 +506,7 @@ export async function loadLegacyConversationDetail(
   presentNullableString(value.source);
   presentNullableString(value.status);
   presentNullableString(value.visibility);
+  presentUnusedStringListItems(value.suggested_summarization_apps);
   const structured = object(value.structured);
   presentNullableString(structured.category);
   presentNullableString(structured.emoji);

@@ -593,6 +593,48 @@ test('old conversation details name Flutter Conversation.fromGenerated type-wron
   }
 });
 
+test('old conversation details name Flutter Conversation.fromGenerated type-wrong GET suggested_summarization_apps item instead of remapping to a recap chip', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      suggested_summarization_apps: ['notes'],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({...fixture, suggested_summarization_apps: null}),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({...fixture, suggested_summarization_apps: 1}),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({...fixture, suggested_summarization_apps: []}),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  for (const extra of [1, true, []]) {
+    mockRequest.mockResolvedValue(
+      response({...fixture, suggested_summarization_apps: [extra]}),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
 test('old conversation details name Flutter GeneratedProjectedStructure fromJson type-wrong GET category instead of remapping to a recap chip', async () => {
   const processing = {
     transcript_sha256: 'abc',
