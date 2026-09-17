@@ -432,6 +432,7 @@ def test_smoke_without_ready_infrastructure_blocks(
 ) -> None:
     class BlockedReport:
         overall = "blocked"
+        checks = ()
 
         def as_dict(self) -> dict[str, str]:
             return {"overall": "blocked"}
