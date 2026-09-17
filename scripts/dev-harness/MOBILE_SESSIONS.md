@@ -4,6 +4,7 @@ One command owns a uniquely-leased local mobile session end to end:
 
 ```bash
 make mobile-session ARGS="doctor --platform android --platform ios"
+make mobile-session ARGS="acquire --name mytask"        # session lease first (id: oms-mytask)
 make mobile-session ARGS="start oms-mytask"          # services (+ device when the lane is ready)
 make mobile-session ARGS="seed oms-mytask"           # synthetic Auth-emulator user, fixture v1
 make mobile-session ARGS="evidence oms-mytask --artifact app/build/app/outputs/flutter-apk/app-dev-debug.apk"

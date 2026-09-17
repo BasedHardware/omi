@@ -242,3 +242,21 @@ class TestBuilder:
                 status={"state": "running"},
                 timestamps={"created_at": "2026-09-16T00:00:00Z"},
             )
+
+
+def test_source_identity_missing_git_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def missing(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "git")
+
+    monkeypatch.setattr(se.subprocess, "run", missing)
+    with pytest.raises(se.EvidenceError, match="git is not installed"):
+        se.source_identity(tmp_path)
+
+
+def test_source_identity_git_failure_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def failing(*_args: object, **_kwargs: object) -> None:
+        raise se.subprocess.CalledProcessError(128, ["git"], stderr="fatal: not a git repository")
+
+    monkeypatch.setattr(se.subprocess, "run", failing)
+    with pytest.raises(se.EvidenceError, match="git rev-parse"):
+        se.source_identity(tmp_path)

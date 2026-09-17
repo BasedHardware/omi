@@ -85,6 +85,20 @@ class TestDoctor:
         assert check["status"] == "operator-action-needed"
         assert "Developer Mode" in check["remedy"]
 
+    def test_ios_dashed_separator_row_is_not_a_device(self, tmp_path: Path, env: dict) -> None:
+        runner = FakeRunner(
+            {
+                "list devices": (
+                    0,
+                    "Name           Hostname   Identifier                                    State               Model\n"
+                    "----------------------------   --------   -------------------------------------------   ------------------\n"
+                    "David's iPhone 15                         00008130-00060D893AE8001C (UDID)              available (paired)\n",
+                )
+            }
+        )
+        report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(runner), env=env)
+        assert [c["check"] for c in report["checks"]] == ["ios.device.00008130-00060D893AE8001C"]
+
 
 class TestRun:
     def _artifact(self, tmp_path: Path) -> Path:

@@ -593,7 +593,11 @@ def cmd_fast(repo_root: Path, args: argparse.Namespace, *, runner_path: Path | N
 
     evidence_dir = Path(args.evidence_dir) if args.evidence_dir else None
     if evidence_dir is None:
-        evidence_dir = Path(os.environ.get("OMI_VERIFY_EVIDENCE_DIR") or "") or None
+        # Path("") is a truthy Path("."), so an unset/empty env var must become
+        # None before Path() sees it — otherwise receipts misroute to the
+        # process cwd and the lane fail-closes as zero-execution.
+        env_dir = (os.environ.get("OMI_VERIFY_EVIDENCE_DIR") or "").strip()
+        evidence_dir = Path(env_dir) if env_dir else None
     if evidence_dir is None:
         evidence_dir = Path(tempfile.mkdtemp(prefix="mobile_verify_"))
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -767,16 +771,25 @@ def cmd_smoke(repo_root: Path, args: argparse.Namespace) -> int:
         str(evidence_dir),
     ]
     rerun = " ".join(cmd)
-    result = subprocess.run(
-        cmd, cwd=repo_root / "app", capture_output=True, text=True, timeout=args.journey_timeout, check=False
-    )  # noqa: S603
-    (evidence_dir / "smoke.log").write_text(result.stdout + result.stderr, encoding="utf-8")
+    try:
+        result = subprocess.run(
+            cmd, cwd=repo_root / "app", capture_output=True, text=True, timeout=args.journey_timeout, check=False
+        )  # noqa: S603
+        log_text = result.stdout + result.stderr
+        status = result.returncode
+    except subprocess.TimeoutExpired as exc:
+        # Mirror the fast lane: a hung simulator run is blocked (exit 2) with a
+        # receipt, never an unhandled traceback after a full-length run.
+        log_text = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+        status = -1
+    (evidence_dir / "smoke.log").write_text(log_text, encoding="utf-8")
     discovered = discover_journeys(repo_root)
     per_journey = aggregate_receipts(evidence_dir, discovered, 1)
+    failure_class = "timeout" if status == -1 else classify_log_text(log_text[-8000:])
     outcome = (
         "passed"
-        if result.returncode == 0 and all(info["outcome"] == "passed" for info in per_journey.values())
-        else ("blocked" if classify_log_text(result.stdout[-8000:]) in {"compile", "infrastructure"} else "failed")
+        if status == 0 and all(info["outcome"] == "passed" for info in per_journey.values())
+        else ("blocked" if status == -1 or failure_class in {"compile", "infrastructure"} else "failed")
     )
     receipt = build_lane_receipt(
         repo_root,
@@ -786,8 +799,8 @@ def cmd_smoke(repo_root: Path, args: argparse.Namespace) -> int:
         per_journey=per_journey,
         outcome=outcome,
         rerun_command=rerun,
-        failure_class=classify_log_text(result.stdout[-8000:]) or None,
-        failures=[] if outcome == "passed" else [f"runner exit {result.returncode}"],
+        failure_class=failure_class or None,
+        failures=[] if outcome == "passed" else [f"runner exit {status}"],
         started_at=started_at,
     )
     receipt["evidence_dir"] = str(evidence_dir)
