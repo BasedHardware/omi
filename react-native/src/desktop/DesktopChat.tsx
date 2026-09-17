@@ -1,9 +1,12 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
 import {Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
 import X from 'lucide-react-native/icons/x';
+import ArrowUpRight from 'lucide-react-native/icons/arrow-up-right';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {FocusPressable} from '../ui/Pressable';
+import {OmiAvatar} from '../ui/OmiAvatar';
+import {ShippingPressable} from './ShippingPressable';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {ScrollFade, useScrollFade} from './ScrollFade';
 import {desktopTokens as token} from './tokens';
@@ -19,6 +22,7 @@ type Props = {
   liveControl?: React.ReactNode;
   onLoadOlder: () => void;
   onClose: () => void;
+  onSuggest?: (prompt: string) => void;
 };
 export function DesktopChat({
   submission,
@@ -31,6 +35,7 @@ export function DesktopChat({
   liveControl,
   onLoadOlder,
   onClose,
+  onSuggest,
 }: Props) {
   const list = useRef<ScrollView>(null);
   const follow = useRef(true);
@@ -123,16 +128,48 @@ export function DesktopChat({
         </View>
       ) : error ? null : (
         <View style={styles.empty}>
-          <Text style={styles.title}>What’s on your mind?</Text>
-          <Text style={styles.muted}>
+          <OmiAvatar
+            tone="ink"
+            inkColor={token.color.ink}
+            size={72}
+            motion="arrive"
+            reduceMotion={reduceMotion}
+          />
+          <Text accessibilityRole="header" style={styles.title}>
+            What’s on your mind?
+          </Text>
+          <Text style={[styles.muted, styles.emptyCopy]}>
             Ask about a conversation, a task, or something you want to remember.
           </Text>
+          {onSuggest && !busy ? (
+            <View style={styles.suggestions}>
+              {[
+                'Help me think through a decision',
+                'Turn these thoughts into a plan',
+                'Help me prepare for a conversation',
+              ].map(prompt => (
+                <ShippingPressable
+                  key={prompt}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Try: ${prompt}`}
+                  onPress={() => onSuggest(prompt)}
+                  style={styles.suggestion}>
+                  <Text style={styles.suggestionText}>{prompt}</Text>
+                  <ArrowUpRight size={15} color={token.color.inkMuted} />
+                </ShippingPressable>
+              ))}
+            </View>
+          ) : null}
         </View>
       )
     ) : null;
   return (
     <View style={styles.root} accessibilityLabel="Chat with Omi">
       <View style={styles.header}>
+        <View style={styles.headerLabel}>
+          <OmiAvatar tone="ink" inkColor={token.color.inkMuted} size={22} />
+          <Text style={styles.headerTitle}>Conversation</Text>
+        </View>
         {liveControl}
         <FocusPressable
           accessibilityRole="button"
@@ -222,7 +259,17 @@ export function DesktopChat({
   );
 }
 const styles = StyleSheet.create({
-  root: {flex: 1, width: '100%', maxWidth: 860, alignSelf: 'center'},
+  root: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 992,
+    alignSelf: 'center',
+    backgroundColor: token.color.glassStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: token.color.line,
+    overflow: 'hidden',
+  },
   history: {flex: 1},
   messages: {padding: 20, gap: 20, flexGrow: 1},
   empty: {
@@ -232,19 +279,68 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 24,
   },
-  title: {fontSize: 24, color: token.color.ink, fontWeight: '600'},
+  title: {
+    fontSize: 28,
+    letterSpacing: -0.6,
+    color: token.color.ink,
+    fontWeight: '500',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  emptyCopy: {textAlign: 'center', maxWidth: 400},
+  suggestions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 20,
+    alignSelf: 'stretch',
+  },
+  suggestion: {
+    flex: 1,
+    flexBasis: 180,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    minHeight: 76,
+    borderRadius: 14,
+    borderColor: token.color.line,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  suggestionText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 19,
+    color: token.color.inkMuted,
+  },
   muted: {fontSize: 13, lineHeight: 20, color: token.color.inkMuted},
   earlier: {alignSelf: 'center', padding: 10},
   header: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderBottomWidth: 1,
+    borderColor: token.color.line,
   },
+  headerLabel: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10},
+  headerTitle: {fontSize: 13, color: token.color.ink, fontWeight: '500'},
   close: {
     width: 32,
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: token.color.glassQuiet,
   },
-  error: {color: token.color.ink, paddingHorizontal: 24, fontSize: 13},
+  error: {
+    color: token.color.ink,
+    padding: 18,
+    fontSize: 13,
+    lineHeight: 21,
+    borderTopWidth: 1,
+    borderColor: token.color.line,
+  },
 });

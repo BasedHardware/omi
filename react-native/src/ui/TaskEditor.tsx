@@ -1,6 +1,7 @@
 import {FocusPressable as Pressable} from './Pressable';
 import React, {useEffect, useRef, useState} from 'react';
 import {Platform, StyleSheet, Text, TextInput, View} from 'react-native';
+import {desktopTokens as token} from '../desktop/tokens';
 
 export type TaskMutationProps = {
   onTaskToggle?: (id: string) => void;
@@ -17,19 +18,19 @@ export function TaskMutationStatus({
   taskMutationError,
   onRetryTaskMutation,
   onDismissTaskMutation,
-}: TaskMutationProps) {
+  desktop = Platform.OS === 'macos',
+}: TaskMutationProps & {desktop?: boolean}) {
   return (
     <View>
       {!writesAvailable && (
-        <Text
-          style={[styles.copy, Platform.OS === 'macos' && styles.lightText]}>
+        <Text style={[styles.copy, desktop && styles.lightText]}>
           Task editing is unavailable for this connection.
         </Text>
       )}
       {taskMutationError && (
         <Text
           accessibilityRole="alert"
-          style={[styles.copy, Platform.OS === 'macos' && styles.lightText]}>
+          style={[styles.copy, desktop && styles.lightText]}>
           {taskMutationError}
         </Text>
       )}
@@ -39,10 +40,7 @@ export function TaskMutationStatus({
           accessibilityLabel="Retry task change"
           onPress={onRetryTaskMutation}
           style={styles.button}>
-          <Text
-            style={[styles.label, Platform.OS === 'macos' && styles.lightText]}>
-            Retry
-          </Text>
+          <Text style={[styles.label, desktop && styles.lightText]}>Retry</Text>
         </Pressable>
       )}
       {taskMutationError && onDismissTaskMutation && (
@@ -51,8 +49,7 @@ export function TaskMutationStatus({
           accessibilityLabel="Dismiss task change"
           onPress={onDismissTaskMutation}
           style={styles.button}>
-          <Text
-            style={[styles.label, Platform.OS === 'macos' && styles.lightText]}>
+          <Text style={[styles.label, desktop && styles.lightText]}>
             Dismiss
           </Text>
         </Pressable>
@@ -68,6 +65,7 @@ export function TaskEditor({
   failed = false,
   onSave,
   onClose,
+  desktop = Platform.OS === 'macos',
 }: {
   id: string;
   title: string;
@@ -75,6 +73,7 @@ export function TaskEditor({
   failed?: boolean;
   onSave: (id: string, description: string) => void;
   onClose: () => void;
+  desktop?: boolean;
 }) {
   const [description, setDescription] = useState(title);
   const previousTask = useRef({id, title});
@@ -95,7 +94,7 @@ export function TaskEditor({
         multiline
         onChangeText={setDescription}
         value={description}
-        style={[styles.input, Platform.OS === 'macos' && styles.lightInput]}
+        style={[styles.input, desktop && styles.lightInput]}
       />
       <View style={styles.actions}>
         <Pressable
@@ -104,13 +103,12 @@ export function TaskEditor({
           accessibilityState={{disabled, busy: busy && !failed}}
           disabled={disabled}
           onPress={() => onSave(id, description)}
-          style={styles.button}>
-          <Text
-            style={[
-              styles.label,
-              Platform.OS === 'macos' && styles.lightText,
-              disabled && styles.disabled,
-            ]}>
+          style={[
+            styles.button,
+            desktop && styles.saveButton,
+            desktop && disabled && styles.disabled,
+          ]}>
+          <Text style={[styles.label, disabled && !desktop && styles.disabled]}>
             {busy && !failed ? 'Saving…' : 'Save'}
           </Text>
         </Pressable>
@@ -119,10 +117,7 @@ export function TaskEditor({
           accessibilityLabel="Close task editor"
           onPress={onClose}
           style={styles.button}>
-          <Text
-            style={[styles.label, Platform.OS === 'macos' && styles.lightText]}>
-            Close
-          </Text>
+          <Text style={[styles.label, desktop && styles.lightText]}>Close</Text>
         </Pressable>
       </View>
     </View>
@@ -130,8 +125,15 @@ export function TaskEditor({
 }
 
 const styles = StyleSheet.create({
-  lightText: {color: '#292929'},
-  lightInput: {backgroundColor: '#ffffff', color: '#292929'},
+  lightText: {color: token.color.ink},
+  lightInput: {
+    backgroundColor: token.color.glassStrong,
+    color: token.color.ink,
+    borderColor: token.color.lineStrong,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  saveButton: {backgroundColor: token.color.ink, borderRadius: 10},
   editor: {paddingVertical: 12, gap: 8},
   input: {
     borderColor: '#b9b9b9',

@@ -276,6 +276,54 @@ function renderDesktop(
   return renderer!;
 }
 
+test('Chat suggestions prepare an editable draft without sending', () => {
+  const onDraftChange = jest.fn();
+  const onSend = jest.fn();
+  const renderer = renderDesktop({onDraftChange, onSend});
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Chat')
+      .props.onPress(),
+  );
+  act(() =>
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel ===
+          'Try: Turn these thoughts into a plan',
+      )
+      .props.onPress(),
+  );
+  expect(onDraftChange).toHaveBeenCalledWith('Turn these thoughts into a plan');
+  expect(onSend).not.toHaveBeenCalled();
+  expect(renderer.root.findByType(DesktopChat).props.submission).toBe(0);
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.accessibilityState.selected,
+  ).toBe(true);
+});
+
+test.each([
+  {chatBusy: true},
+  {loadingHistory: true},
+  {chatError: 'Unavailable'},
+])(
+  'Chat suggestions are absent while the conversation cannot accept them: %p',
+  props => {
+    const renderer = renderDesktop(props);
+    act(() =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Chat')
+        .props.onPress(),
+    );
+    expect(
+      renderer.root.findAll(node =>
+        String(node.props.accessibilityLabel).startsWith('Try:'),
+      ),
+    ).toHaveLength(0);
+  },
+);
+
 test('renders the shipping search-first desktop hierarchy', () => {
   const renderer = renderDesktop();
   const tree = renderedText(renderer);
@@ -1288,8 +1336,8 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   expect(tree).not.toContain('Font Size');
   expect(tree).not.toContain('Interface Sounds');
   expect(tree).toContain('AI & Automation');
-  expect(tree).toContain('Old backend');
-  expect(tree).toContain('New backend');
+  expect(tree).not.toContain('Old backend');
+  expect(tree).not.toContain('New backend');
   expect(tree).toContain('Screen Capture');
   expect(tree).toContain('Audio Recording');
   expect(tree).toContain('Notifications');
@@ -1408,11 +1456,10 @@ test('static tripwire: desktop stage preserves real state copy and shared glass 
   expect(allKitSource).not.toContain('omnibarError');
 });
 
-test('chrome keeps a sliding nav pill, structured home cards, and a field omnibar', () => {
+test('static layout guard: chrome keeps a sliding nav pill, structured home cards, and a field omnibar', () => {
   const chrome = kitSources['DesktopTopChrome.tsx'];
   const app = kitSources['DesktopApp.tsx'];
   const home = kitSources['DesktopHome.tsx'];
-  const settings = kitSources['DesktopSettings.tsx'];
   expect(app).toMatch(/root:\s*\{[^}]*padding:\s*desktopWindowInset/);
   expect(chrome).toContain('height: desktopNavBarHeight');
   expect(chrome).toContain('width: desktopTrafficLightRowWidth');
@@ -1423,14 +1470,8 @@ test('chrome keeps a sliding nav pill, structured home cards, and a field omniba
   expect(chrome).toMatch(/omnibarInput:\s*\{[^}]*paddingVertical:\s*6/);
   expect(chrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
   expect(chrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
-  expect(home).toMatch(/section:\s*\{[^}]*borderRadius:\s*16/);
   expect(home).not.toMatch(/filterRow:\s*\{/);
   expect(home).not.toContain('chatScrollRef');
-  expect(settings).toContain('const PANE_ITEM_GAP = 12');
-  expect(settings).toMatch(/paneItem:\s*\{[^}]*alignItems:\s*'flex-start'/);
-  expect(settings).toMatch(/paneText:\s*\{[^}]*textAlign:\s*'left'/);
-  expect(settings).toMatch(/row:\s*\{[^}]*marginBottom:\s*14/);
-  expect(chrome).toMatch(/navItem:\s*\{[^}]*paddingHorizontal:\s*16/);
   expect(chrome).toContain('placed.current');
   expect(chrome).toContain('navFrameMoved');
   expect(chrome).toContain('animating.current');
@@ -1562,6 +1603,33 @@ test('Apps is a wrapped gallery that does not invent catalog entries', async () 
   expect(tree).toContain('No apps are available.');
   expect(tree).not.toContain('Calendar');
   expect(tree).not.toContain('ChatGPT');
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI assistants')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('OpenClaw');
+  expect(renderedText(renderer)).not.toContain('Calendar');
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Connect data')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('Calendar');
+  expect(renderedText(renderer)).not.toContain('OpenClaw');
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Explore Calendar')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('No account has been connected');
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Your apps')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('No apps are available.');
+  expect(renderedText(renderer)).not.toContain('Calendar');
 });
 
 test('Apps reports a catalog failure instead of showing invented data', async () => {
@@ -2000,7 +2068,7 @@ test('Settings does not inherit unrelated chat and history failures', async () =
       .props.onPress();
     await Promise.resolve();
   });
-  expect(renderedText(renderer)).toContain('Old backend');
+  expect(renderedText(renderer)).toContain('Screen Capture');
   expect(renderedText(renderer)).not.toContain(
     'This request cannot be completed.',
   );

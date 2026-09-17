@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
+import ListChecks from 'lucide-react-native/icons/list-checks';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import {
   projectionTimestamp,
@@ -16,8 +17,15 @@ import {
   TaskMutationStatus,
   type TaskMutationProps,
 } from '../ui/TaskEditor';
-import {ShippingListInsert} from './ShippingStage';
-import {ConversationRow, EmptyCopy, ReadRow, TaskRow} from './DesktopRows';
+import {ShippingListInsert, ShippingStage} from './ShippingStage';
+import {ConnectionGallery} from './ConnectionGallery';
+import {
+  ConversationRow,
+  DesktopEmptyState,
+  PageHeading,
+  ReadRow,
+  TaskRow,
+} from './DesktopRows';
 import type {DesktopSession} from './desktopChrome';
 import {desktopTokens as token} from './tokens';
 
@@ -77,7 +85,15 @@ export function LibraryPage({
       : 'Nothing captured in this window yet.';
   return (
     <View style={styles.page}>
-      {readError ? (
+      <PageHeading
+        title="Conversations & memories"
+        subtitle={
+          normalized
+            ? `From your loaded history, matching “${query.trim()}”.`
+            : 'The moments worth coming back to.'
+        }
+      />
+      {readError && items.length > 0 ? (
         <Text accessibilityRole="alert" style={styles.rowMeta}>
           {readError}
         </Text>
@@ -143,8 +159,20 @@ export function LibraryPage({
             onContentSizeChange={fade.onContentSizeChange}
             scrollEventThrottle={16}
             contentContainerStyle={styles.listContent}>
-            {items.length === 0 && !readError ? (
-              <EmptyCopy>{emptyCopy}</EmptyCopy>
+            {items.length === 0 ? (
+              <DesktopEmptyState
+                error={!!readError}
+                title={
+                  readError
+                    ? 'History is unavailable'
+                    : outcome === null
+                    ? 'Finding your moments…'
+                    : normalized
+                    ? 'Nothing matches yet'
+                    : 'Your story starts here.'
+                }
+                detail={readError || emptyCopy}
+              />
             ) : (
               items.map(item => (
                 <FocusPressable
@@ -158,7 +186,11 @@ export function LibraryPage({
                       : 'Conversation title unavailable')
                   }`}
                   key={`${item.kind}:${item.id}`}
-                  onPress={() => setSelectedId(`${item.kind}:${item.id}`)}>
+                  onPress={() => setSelectedId(`${item.kind}:${item.id}`)}
+                  style={({pressed}) => [
+                    styles.libraryRow,
+                    pressed && styles.selectedRow,
+                  ]}>
                   {item.kind === 'conversation' ? (
                     <ConversationRow item={item} />
                   ) : (
@@ -227,7 +259,13 @@ export function TasksPage({
       : 'No tasks yet';
   return (
     <View style={styles.page}>
+      <PageHeading
+        title="A little follow-through."
+        subtitle="Your tasks, with room to focus on what’s next."
+        eyebrow="TASKS"
+      />
       <TaskMutationStatus
+        desktop
         writesAvailable={writesAvailable}
         taskMutationError={taskMutationError}
         onRetryTaskMutation={onRetryTaskMutation}
@@ -243,64 +281,78 @@ export function TasksPage({
               (outcome.value.apiContract === 'omi' || item.revision !== null);
             return (
               <ShippingListInsert itemKey={item.id} key={item.id}>
-                <View style={styles.taskActions}>
-                  <FocusPressable
-                    accessibilityRole={
-                      writesAvailable && onTaskToggle ? 'checkbox' : 'text'
-                    }
-                    accessibilityLabel={`${
-                      item.completed ? 'Reopen' : 'Complete'
-                    } task: ${item.title}`}
-                    accessibilityState={{
-                      checked: item.completed,
-                      disabled:
+                <View style={styles.libraryRow}>
+                  <View style={styles.taskActions}>
+                    <FocusPressable
+                      accessibilityRole={
+                        writesAvailable && onTaskToggle ? 'checkbox' : 'text'
+                      }
+                      accessibilityLabel={`${
+                        item.completed ? 'Reopen' : 'Complete'
+                      } task: ${item.title}`}
+                      accessibilityState={{
+                        checked: item.completed,
+                        disabled:
+                          !writesAvailable ||
+                          !onTaskToggle ||
+                          !editable ||
+                          busyTaskId !== null,
+                        busy:
+                          busyTaskId === item.id && taskMutationError === null,
+                      }}
+                      disabled={
                         !writesAvailable ||
                         !onTaskToggle ||
                         !editable ||
-                        busyTaskId !== null,
-                      busy:
-                        busyTaskId === item.id && taskMutationError === null,
-                    }}
-                    disabled={
-                      !writesAvailable ||
-                      !onTaskToggle ||
-                      !editable ||
-                      busyTaskId !== null
-                    }
-                    onPress={() => onTaskToggle?.(item.id)}
-                    style={styles.taskToggle}>
-                    <TaskRow item={item} />
-                  </FocusPressable>
-                  {writesAvailable && onTaskEdit && editable && (
-                    <FocusPressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Edit task: ${item.title}`}
-                      disabled={busyTaskId !== null}
-                      accessibilityState={{disabled: busyTaskId !== null}}
-                      onPress={() => setEditingId(item.id)}
-                      style={styles.taskEdit}>
-                      <Text style={styles.rowMeta}>Edit</Text>
+                        busyTaskId !== null
+                      }
+                      onPress={() => onTaskToggle?.(item.id)}
+                      style={styles.taskToggle}>
+                      <TaskRow item={item} />
                     </FocusPressable>
-                  )}
+                    {writesAvailable && onTaskEdit && editable && (
+                      <FocusPressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit task: ${item.title}`}
+                        disabled={busyTaskId !== null}
+                        accessibilityState={{disabled: busyTaskId !== null}}
+                        onPress={() => setEditingId(item.id)}
+                        style={styles.taskEdit}>
+                        <Text style={styles.rowMeta}>Edit</Text>
+                      </FocusPressable>
+                    )}
+                  </View>
+                  {editingId === item.id &&
+                    writesAvailable &&
+                    onTaskEdit &&
+                    editable && (
+                      <TaskEditor
+                        desktop
+                        id={item.id}
+                        title={item.title}
+                        busy={busyTaskId !== null}
+                        failed={taskMutationError !== null}
+                        onSave={onTaskEdit}
+                        onClose={() => setEditingId(null)}
+                      />
+                    )}
                 </View>
-                {editingId === item.id &&
-                  writesAvailable &&
-                  onTaskEdit &&
-                  editable && (
-                    <TaskEditor
-                      id={item.id}
-                      title={item.title}
-                      busy={busyTaskId !== null}
-                      failed={taskMutationError !== null}
-                      onSave={onTaskEdit}
-                      onClose={() => setEditingId(null)}
-                    />
-                  )}
               </ShippingListInsert>
             );
           })
         ) : (
-          <EmptyCopy>{emptyCopy}</EmptyCopy>
+          <DesktopEmptyState
+            icon={ListChecks}
+            error={outcome?.status === 'error'}
+            title={
+              outcome === null
+                ? 'Gathering your tasks…'
+                : outcome.status === 'error'
+                ? 'Tasks are unavailable'
+                : 'A little room to think.'
+            }
+            detail={emptyCopy}
+          />
         )}
         {taskPagination}
         {outcome?.status === 'success' ? (
@@ -366,6 +418,9 @@ function AppTile({item}: {item: AppTileModel}) {
 }
 
 export function AppsPage({session}: {session: DesktopSession}) {
+  const [section, setSection] = useState<
+    'AI assistants' | 'Connect data' | 'Your apps'
+  >('Your apps');
   const [tiles, setTiles] = useState<AppTileModel[] | null>();
   useEffect(() => {
     if (session !== 'ready') {
@@ -397,23 +452,109 @@ export function AppsPage({session}: {session: DesktopSession}) {
   }, [session]);
   return (
     <View style={styles.page}>
-      <ScrollView contentContainerStyle={styles.appGrid}>
-        {tiles === undefined ? (
-          <EmptyCopy>Loading apps…</EmptyCopy>
-        ) : tiles === null ? (
-          <EmptyCopy>Apps could not be loaded.</EmptyCopy>
-        ) : tiles.length === 0 ? (
-          <EmptyCopy>No apps are available.</EmptyCopy>
-        ) : (
-          tiles.map(item => <AppTile item={item} key={item.id} />)
+      <View accessibilityRole="tablist" style={styles.galleryTabs}>
+        {(['AI assistants', 'Connect data', 'Your apps'] as const).map(
+          label => (
+            <FocusPressable
+              key={label}
+              accessibilityRole="tab"
+              accessibilityLabel={label}
+              accessibilityState={{selected: section === label}}
+              onPress={() => setSection(label)}
+              style={[
+                styles.galleryTab,
+                section === label && styles.galleryTabActive,
+              ]}>
+              <Text style={styles.rowTitle}>{label}</Text>
+            </FocusPressable>
+          ),
         )}
+      </View>
+      <ScrollView contentContainerStyle={styles.galleryContent}>
+        <PageHeading
+          title={
+            section === 'AI assistants'
+              ? 'Find your next collaborator.'
+              : section === 'Connect data'
+              ? 'Bring your world together.'
+              : 'Made for your everyday.'
+          }
+          subtitle={
+            section === 'Your apps'
+              ? 'Your Omi app catalog and connected accounts.'
+              : 'Explore what’s coming to Omi. These integrations are not available yet.'
+          }
+        />
+        <ShippingStage
+          stageKey={section}
+          variant="hub"
+          style={styles.galleryStage}>
+          {section !== 'Your apps' ? (
+            <ConnectionGallery
+              key={section}
+              kind={section === 'AI assistants' ? 'agent' : 'context'}
+            />
+          ) : (
+            <View
+              style={tiles && tiles.length > 0 ? styles.appGrid : undefined}>
+              {tiles === undefined ? (
+                <DesktopEmptyState
+                  icon={Puzzle}
+                  title="Finding your apps…"
+                  detail="Loading apps…"
+                />
+              ) : tiles === null ? (
+                <DesktopEmptyState
+                  icon={Puzzle}
+                  error
+                  title="Your apps are out of reach"
+                  detail="Apps could not be loaded."
+                />
+              ) : tiles.length === 0 ? (
+                <DesktopEmptyState
+                  icon={Puzzle}
+                  title="Your collection starts here."
+                  detail="No apps are available."
+                />
+              ) : (
+                tiles.map(item => <AppTile item={item} key={item.id} />)
+              )}
+            </View>
+          )}
+        </ShippingStage>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: {flex: 1},
+  page: {flex: 1, paddingHorizontal: 24, paddingTop: 8},
+  libraryRow: {
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: token.color.glassStrong,
+    borderWidth: 1,
+    borderColor: token.color.line,
+    marginBottom: 8,
+  },
+  selectedRow: {backgroundColor: token.color.glassSelected},
+  galleryStage: {flexBasis: 'auto', flexGrow: 0, flexShrink: 0},
+  galleryTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 0,
+    paddingVertical: 8,
+  },
+  galleryTab: {paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12},
+  galleryTabActive: {backgroundColor: token.color.glassSelected},
+  galleryContent: {
+    paddingVertical: 24,
+    maxWidth: 1040,
+    width: '100%',
+    alignSelf: 'center',
+  },
   conversationDetail: {gap: 16, padding: 16},
   memoryDetail: {gap: 16},
   memoryBody: {color: token.color.ink, fontSize: 15, lineHeight: 22},
@@ -505,12 +646,15 @@ const styles = StyleSheet.create({
   appSlot: {
     padding: 6,
     width: '50%',
+    maxWidth: 360,
   },
   appCard: {
-    aspectRatio: 1,
-    backgroundColor: token.color.glassQuiet,
-    borderRadius: 16,
-    padding: 12,
+    minHeight: 200,
+    backgroundColor: token.color.glassStrong,
+    borderColor: token.color.line,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 22,
   },
   appIcon: {
     alignItems: 'center',

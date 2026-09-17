@@ -1,6 +1,13 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import type {useRewindCapture} from '../app/useRewindCapture';
 import {Animated, ScrollView, Switch, Text, View} from 'react-native';
+import SettingsIcon from 'lucide-react-native/icons/settings';
+import UserRound from 'lucide-react-native/icons/user-round';
+import AudioLines from 'lucide-react-native/icons/audio-lines';
+import History from 'lucide-react-native/icons/rotate-ccw-clock';
+import ShieldCheck from 'lucide-react-native/icons/shield-check';
+import Sparkles from 'lucide-react-native/icons/sparkles';
+import Info from 'lucide-react-native/icons/info';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopEaseSmoothOut} from './desktopMotion';
 import {
@@ -30,6 +37,7 @@ import {
   type DesktopSettingsPane,
 } from './desktopChrome';
 import {ShippingStage} from './ShippingStage';
+import {PageHeading} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
 
 type Props = {
@@ -45,8 +53,52 @@ type Props = {
 };
 
 const PANE_ITEM_HEIGHT = 40;
-const PANE_ITEM_GAP = 12;
-const PANE_PILL_RADIUS = 14;
+const PANE_ITEM_GAP = 4;
+const PANE_PILL_RADIUS = 10;
+const switchColors = {
+  false: token.color.glassSelected,
+  true: token.color.inkMuted,
+};
+const paneInfo: Record<
+  DesktopSettingsPane,
+  {icon: typeof SettingsIcon; title: string; description: string}
+> = {
+  General: {
+    icon: SettingsIcon,
+    title: 'General',
+    description: 'What Omi can remember, and when. You’re in control.',
+  },
+  'Account & Plan': {
+    icon: UserRound,
+    title: 'Account & plan',
+    description: 'Your Omi account and subscription.',
+  },
+  Transcription: {
+    icon: AudioLines,
+    title: 'Transcription',
+    description: 'Make room for the words that matter.',
+  },
+  Rewind: {
+    icon: History,
+    title: 'Recall',
+    description: 'Choose how screen history stays on this Mac.',
+  },
+  'Alerts & Privacy': {
+    icon: ShieldCheck,
+    title: 'Privacy',
+    description: 'Decide what stays local and what goes to the cloud.',
+  },
+  'AI & Automation': {
+    icon: Sparkles,
+    title: 'AI & automation',
+    description: 'The services behind your conversations with Omi.',
+  },
+  About: {
+    icon: Info,
+    title: 'About Omi',
+    description: 'A little less to remember. A little more room for you.',
+  },
+};
 
 function Row({
   action,
@@ -67,7 +119,7 @@ function Row({
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowMeta}>{copy}</Text>
       </View>
-      {trailing}
+      {trailing ? <View style={styles.rowControl}>{trailing}</View> : null}
       {action !== undefined && actionLabel !== undefined ? (
         <FocusPressable
           accessibilityLabel={actionLabel}
@@ -154,24 +206,37 @@ function SettingsNav({
   }, [index, reduceMotion, translateY]);
   return (
     <View accessibilityRole="tablist" style={styles.sidebar}>
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.panePill, {transform: [{translateY}]}]}
-      />
-      {desktopSettingsPanes.map(label => (
-        <FocusPressable
-          accessibilityLabel={label}
-          accessibilityRole="tab"
-          accessibilityState={{selected: pane === label}}
-          key={label}
-          onPress={() => onChange(label)}
-          style={styles.paneItem}>
-          <Text
-            style={[styles.paneText, pane === label && styles.paneTextActive]}>
-            {label}
-          </Text>
-        </FocusPressable>
-      ))}
+      <Text style={styles.sidebarTitle}>Settings</Text>
+      <View style={styles.panes}>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.panePill, {transform: [{translateY}]}]}
+        />
+        {desktopSettingsPanes.map(label => {
+          const Icon = paneInfo[label].icon;
+          return (
+            <FocusPressable
+              accessibilityLabel={label}
+              accessibilityRole="tab"
+              accessibilityState={{selected: pane === label}}
+              key={label}
+              onPress={() => onChange(label)}
+              style={styles.paneItem}>
+              <Icon
+                size={16}
+                color={pane === label ? token.color.ink : token.color.inkMuted}
+              />
+              <Text
+                style={[
+                  styles.paneText,
+                  pane === label && styles.paneTextActive,
+                ]}>
+                {label === 'Rewind' ? 'Recall' : label}
+              </Text>
+            </FocusPressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -357,7 +422,6 @@ export function DesktopSettings({
 
   const general = (
     <>
-      {advanced}
       <Row
         copy={
           capture?.available
@@ -372,6 +436,8 @@ export function DesktopSettings({
         title="Screen Capture"
         trailing={
           <Switch
+            accessibilityLabel="Screen capture setting"
+            trackColor={switchColors}
             onValueChange={value => {
               if (capture?.available) {
                 if (value) void capture.start();
@@ -427,6 +493,8 @@ export function DesktopSettings({
         title="Notifications"
         trailing={
           <Switch
+            accessibilityLabel="Notifications setting"
+            trackColor={switchColors}
             onValueChange={value => {
               if (value) {
                 runAction(async () => {
@@ -501,6 +569,8 @@ export function DesktopSettings({
         title="Language Mode"
         trailing={
           <Switch
+            accessibilityLabel="Automatic language detection"
+            trackColor={switchColors}
             onValueChange={value => {
               runAction(() => setPref('transcriptionAutoDetect', value));
             }}
@@ -513,6 +583,8 @@ export function DesktopSettings({
         title="Local VAD Gate"
         trailing={
           <Switch
+            accessibilityLabel="Skip silence"
+            trackColor={switchColors}
             onValueChange={value => {
               runAction(() => setPref('vadGate', value));
             }}
@@ -543,6 +615,8 @@ export function DesktopSettings({
         title="Meeting Screenshots"
         trailing={
           <Switch
+            accessibilityLabel="Meeting screenshots"
+            trackColor={switchColors}
             onValueChange={value => {
               runAction(() => setPref('meetingNoteScreenshots', value));
             }}
@@ -639,15 +713,20 @@ export function DesktopSettings({
     <View style={styles.root}>
       <SettingsNav onChange={setPane} pane={pane} />
       <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
+        <PageHeading
+          title={paneInfo[pane].title}
+          subtitle={paneInfo[pane].description}
+        />
         {actionStatus !== null ? (
           <Text
             accessibilityLabel="Settings action status"
+            accessibilityLiveRegion="polite"
             style={styles.status}>
             {actionStatus}
           </Text>
         ) : null}
-        <ShippingStage stageKey={pane} variant="page">
-          {body}
+        <ShippingStage stageKey={pane} variant="page" style={styles.stage}>
+          <View style={styles.group}>{body}</View>
           {pane === 'General' ? deviceContent : null}
         </ShippingStage>
       </ScrollView>
@@ -656,11 +735,34 @@ export function DesktopSettings({
 }
 
 const styles = {
-  root: {flex: 1, flexDirection: 'row' as const},
+  root: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+  },
+  stage: {flexBasis: 'auto' as const, flexGrow: 0, flexShrink: 0, gap: 20},
+  group: {
+    backgroundColor: token.color.glassStrong,
+    borderRadius: 18,
+    overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: token.color.line,
+  },
+  sidebarTitle: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: token.color.inkMuted,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 22,
+  },
+  panes: {position: 'relative' as const},
   sidebar: {
     marginRight: 24,
     position: 'relative' as const,
-    width: 196,
+    width: 182,
+    flexShrink: 0,
   },
   panePill: {
     backgroundColor: token.color.glassSelected,
@@ -672,21 +774,23 @@ const styles = {
     top: 0,
   },
   paneItem: {
-    alignItems: 'flex-start' as const,
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: 10,
     height: PANE_ITEM_HEIGHT,
-    justifyContent: 'center' as const,
+    justifyContent: 'flex-start' as const,
     marginBottom: PANE_ITEM_GAP,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   paneText: {
     color: token.color.inkMuted,
     fontFamily: token.font,
     fontSize: token.type.caption,
-    fontWeight: '600' as const,
+    fontWeight: '500' as const,
     textAlign: 'left' as const,
   },
   paneTextActive: {color: token.color.ink},
-  scroll: {flex: 1},
+  scroll: {flex: 1, minWidth: 0},
   content: {paddingBottom: 32},
   status: {
     color: token.color.inkMuted,
@@ -696,26 +800,28 @@ const styles = {
   },
   row: {
     alignItems: 'center' as const,
-    backgroundColor: token.color.glassQuiet,
-    borderRadius: 16,
     flexDirection: 'row' as const,
-    gap: 12,
-    marginBottom: 14,
-    minHeight: 64,
-    padding: 14,
+    flexWrap: 'wrap' as const,
+    gap: 16,
+    borderBottomWidth: 1,
+    borderColor: token.color.line,
+    minHeight: 90,
+    padding: 20,
   },
-  rowCopy: {flex: 1},
+  rowCopy: {flexGrow: 1, flexShrink: 1, flexBasis: 220},
+  rowControl: {marginLeft: 'auto' as const, maxWidth: '100%' as const},
   rowTitle: {
     color: token.color.ink,
     fontFamily: token.font,
-    fontSize: token.type.title,
+    fontSize: 14,
     fontWeight: '500' as const,
   },
   rowMeta: {
     color: token.color.inkMuted,
     fontFamily: token.font,
     fontSize: token.type.meta,
-    marginTop: 3,
+    lineHeight: 19,
+    marginTop: 5,
   },
   action: {
     backgroundColor: token.color.dark,
@@ -730,14 +836,21 @@ const styles = {
     fontWeight: '600' as const,
   },
   pressed: {opacity: 0.78},
-  segments: {flexDirection: 'row' as const, gap: 6},
+  segments: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: 2,
+    backgroundColor: token.color.glassQuiet,
+    borderRadius: 10,
+    padding: 3,
+  },
   segment: {
     borderRadius: 10,
     minHeight: 28,
     justifyContent: 'center' as const,
     paddingHorizontal: 10,
   },
-  segmentActive: {backgroundColor: token.color.glassSelected},
+  segmentActive: {backgroundColor: token.color.glassStrong},
   segmentText: {
     color: token.color.inkMuted,
     fontFamily: token.font,

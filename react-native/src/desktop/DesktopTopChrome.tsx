@@ -292,6 +292,13 @@ export function DesktopChrome({
                     mode === value ? token.color.ink : token.color.inkMuted
                   }
                 />
+                <Text
+                  style={[
+                    styles.modeText,
+                    mode === value && styles.navTextActive,
+                  ]}>
+                  {value}
+                </Text>
               </FocusPressable>
             );
           })}
@@ -342,13 +349,20 @@ export function DesktopChrome({
               onSend();
             }
           }}
-          style={({pressed}) => [styles.send, pressed && styles.pressed]}>
+          style={({pressed}) => [
+            styles.send,
+            mode === 'Ask' &&
+              !canStop &&
+              (chatBusy || !draft.trim()) &&
+              styles.sendDisabled,
+            pressed && styles.pressed,
+          ]}>
           {canStop ? (
-            <Square size={15} color={token.color.ink} />
+            <Square size={13} color={token.color.white} />
           ) : mode === 'Ask' ? (
-            <ArrowUp size={17} color={token.color.ink} />
+            <ArrowUp size={17} color={token.color.white} />
           ) : (
-            <Search size={16} color={token.color.ink} />
+            <Search size={16} color={token.color.white} />
           )}
         </FocusPressable>
       </View>
@@ -377,16 +391,19 @@ const styles = StyleSheet.create({
   captureLabel: {fontSize: 12, color: token.color.inkMuted},
   modes: {flexDirection: 'row', alignItems: 'center', gap: 2},
   modeButton: {
-    width: 32,
     height: 32,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
   },
+  modeText: {fontSize: 12, color: token.color.inkMuted},
   modeActive: {backgroundColor: token.color.glassSelected},
   chrome: {
-    gap: 10,
-    marginBottom: 8,
+    gap: 14,
+    marginBottom: 4,
   },
   row: {
     alignItems: 'center',
@@ -415,11 +432,11 @@ const styles = StyleSheet.create({
   },
   navItem: {
     height: 40,
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     zIndex: 1,
   },
   navItemFollow: {
-    marginRight: 6,
+    marginRight: 4,
   },
   navHit: {
     alignItems: 'center',
@@ -442,9 +459,13 @@ const styles = StyleSheet.create({
   },
   omnibar: {
     alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: token.color.glassQuiet,
-    borderRadius: 22,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 992,
+    backgroundColor: token.color.glassStrong,
+    borderWidth: 1,
+    borderColor: token.color.line,
+    borderRadius: 14,
     flexDirection: 'row',
     gap: 8,
     height: desktopOmnibarHeight,
@@ -467,7 +488,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     textAlignVertical: 'center',
   },
-  submitHint: {color: token.color.inkMuted, fontSize: 11, paddingHorizontal: 4},
+  submitHint: {
+    color: token.color.inkMuted,
+    fontSize: 11,
+    paddingHorizontal: 4,
+    alignSelf: 'center',
+  },
   notice: {
     color: token.color.inkMuted,
     fontFamily: token.font,
@@ -481,7 +507,10 @@ const styles = StyleSheet.create({
     width: 32,
     justifyContent: 'center',
     paddingHorizontal: 6,
+    borderRadius: 16,
+    backgroundColor: token.color.ink,
   },
+  sendDisabled: {opacity: 0.3},
   sendText: {
     color: token.color.ink,
     fontFamily: token.font,
