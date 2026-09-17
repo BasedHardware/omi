@@ -2,6 +2,7 @@
 """List pending contracts and allow only marker removal from spine originals."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -32,6 +33,87 @@ def allowed(original: str, current: str) -> bool:
     return all(MARKER.fullmatch(line.rstrip("\n")) for line in lines)
 
 
+REVISIONS = "contracts/spine/revisions"
+
+
+def digest(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def revisions(root: Path, registry: dict) -> dict:
+    """Reviewed, append-only exact replacements; never a builder rebaseline flag."""
+    directory = root / REVISIONS
+    existing = set(git("ls-tree", "-r", "--name-only", "HEAD", "--", REVISIONS, root=root).splitlines())
+    present = {str(p.relative_to(root)) for p in directory.glob("*.json")}
+    if existing - present:
+        raise ValueError("Spine revision records cannot be removed")
+    result = {}
+    for path in sorted(present):
+        raw = (root / path).read_text()
+        commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", path, root=root).splitlines()
+        if commits and raw != git("show", f"{commits[-1]}:{path}", root=root):
+            raise ValueError(f"{path}: committed revision record is immutable")
+        record = json.loads(raw)
+        if set(record) != {"path", "owner", "before", "after", "reason"} or not record["reason"].strip():
+            raise ValueError(f"{path}: invalid spine revision record")
+        target = record["path"]
+        if registry.get(target) != record["owner"]:
+            raise ValueError(f"{path}: revision owner differs from registry")
+        revised = git("show", f"{commits[-1]}:{target}", root=root) if commits else (root / target).read_text()
+        result.setdefault(target, []).append((record, revised))
+    return result
+
+
+def revised_original(original: str, records: list) -> str:
+    for (previous, _), (following, _) in zip(records, records[1:]):
+        if previous["after"] != following["before"]:
+            raise ValueError(f"{following['path']}: broken revision chain")
+    # A squash introduces the corrected file and its review records together.
+    # That introducing commit is already the accepted oracle. Absorb only a
+    # prefix ending at its exact digest; later revisions still need exact bytes.
+    absorbed = 0
+    for index, (record, _) in enumerate(records):
+        if record["after"] == digest(original):
+            absorbed = index + 1
+    for record, revised in records[absorbed:]:
+        if digest(revised) != record["after"]:
+            raise ValueError(f"{record['path']}: revised bytes do not match pinned digest")
+        if digest(original) != record["before"]:
+            raise ValueError(f"{record['path']}: broken revision chain")
+        before = [line for line in original.splitlines() if MARKER.fullmatch(line)]
+        after = [line for line in revised.splitlines() if MARKER.fullmatch(line)]
+        if before != after:
+            raise ValueError(f"{record['path']}: revision must preserve pending markers; retire separately")
+        original = revised
+    return original
+
+
+def marker_slots(original: str, current: str) -> set[int] | None:
+    """Identify retained marker occurrences, not just their count/package."""
+    if not allowed(original, current):
+        return None
+    wanted = iter(current.splitlines(keepends=True))
+    next_line = next(wanted, None)
+    kept, slot = set(), 0
+    for line in original.splitlines(keepends=True):
+        marker = bool(MARKER.fullmatch(line.rstrip("\n")))
+        if line == next_line:
+            if marker:
+                kept.add(slot)
+            next_line = next(wanted, None)
+        slot += marker
+    return kept
+
+
+def retirement_allowed(anchors: list[str], base: str, current: str) -> bool:
+    remaining = marker_slots(anchors[-1], current)
+    for anchor in anchors:
+        retired_base = marker_slots(anchor, base)
+        if retired_base is not None:
+            return remaining is not None and remaining <= retired_base
+    return False
+
+
 def check(root: Path = ROOT) -> list[str]:
     errors = []
     registry = json.loads((root / REGISTRY).read_text())
@@ -53,6 +135,7 @@ def check(root: Path = ROOT) -> list[str]:
                   if p.is_file() and p.suffix in (".py", ".dart", ".json") and "__pycache__" not in p.parts}
     for path in discovered - registry.keys():
         errors.append(f"{path}: unregistered spine file")
+    amendments = revisions(root, registry)
     count = 0
     for path, owner in registry.items():
         file = root / path
@@ -63,6 +146,8 @@ def check(root: Path = ROOT) -> list[str]:
         commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", path, root=root).splitlines()
         if commits:
             original = git("show", f"{commits[-1]}:{path}", root=root)
+            anchors = [original] + [text for _, text in amendments.get(path, [])]
+            original = revised_original(original, amendments.get(path, []))
             if not allowed(original, current):
                 errors.append(f"{path}: only pending-marker removal allowed (spine {commits[-1]})")
             # Also enforce monotonic retirement against current main.
@@ -70,7 +155,10 @@ def check(root: Path = ROOT) -> list[str]:
                 base_text = git("show", f"{base}:{path}", root=root)
             except subprocess.CalledProcessError:
                 base_text = original
-            if not allowed(base_text, current):
+            # Corrections preserve ordered marker slots. Retiring another test
+            # cannot pay for restoring a marker already retired on main.
+            monotonic = retirement_allowed(anchors, base_text, current) if amendments.get(path) else allowed(base_text, current)
+            if not monotonic:
                 errors.append(f"{path}: retired markers cannot be restored")
         else:
             try:
