@@ -112,8 +112,18 @@ function optionalString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-function presentPaddedKnown(value: unknown, label: string): void {
-  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+function presentNullableDate(value: unknown, label: string): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
+    throw new Error(`${label} is malformed`);
+  }
+  if (visibleDisplayText(value) !== value) {
+    throw new Error(`${label} is malformed`);
+  }
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (value === '' || !Number.isFinite(parsed)) {
     throw new Error(`${label} is malformed`);
   }
 }
@@ -298,7 +308,7 @@ export function parseCloudProfile(value: unknown, label: string): CloudProfile {
   if (uid === null) {
     throw new Error(`${label} is malformed`);
   }
-  presentPaddedKnown(record.created_at, label);
+  presentNullableDate(record.created_at, label);
   return {
     uid,
     name: optionalString(record.name),
