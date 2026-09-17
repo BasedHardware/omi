@@ -2590,6 +2590,34 @@ test('Settings names a failed daily-summary-settings GET instead of empty succes
   );
 });
 
+test('Settings names Flutter DailySummarySettings fromJson padded GET hour instead of omitting Daily Summary', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/daily-summary-settings') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({enabled: true, hour: '  22  '}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Daily Summary');
+  expect(tree).toContain(
+    desktopReadErrorCopy(
+      new Error('Omi daily summary settings are malformed'),
+    ),
+  );
+  expect(tree).not.toContain('Enabled');
+  expect(tree).not.toContain('10:00 PM');
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain(
+    "Get a personalized summary of your day's conversations delivered as a notification.",
+  );
+});
+
 test('Settings names GET mentor notification frequency without a purple slider', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
@@ -2634,6 +2662,33 @@ test('Settings names a failed mentor notification GET instead of empty success',
   const tree = textOf(renderer);
   expect(tree).toContain('Notification Frequency');
   expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Minimal');
+  expect(tree).not.toContain('Balanced');
+  expect(tree).not.toContain(
+    'Control how often Omi sends you proactive notifications and reminders.',
+  );
+});
+
+test('Settings names Flutter MentorNotificationSettings fromJson padded GET frequency instead of omitting Notification Frequency', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/mentor-notification-settings') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({frequency: '  3  '}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Notification Frequency');
+  expect(tree).toContain(
+    desktopReadErrorCopy(
+      new Error('Omi mentor notification settings are malformed'),
+    ),
+  );
   expect(tree).not.toContain('Minimal');
   expect(tree).not.toContain('Balanced');
   expect(tree).not.toContain(

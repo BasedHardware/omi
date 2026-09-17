@@ -64,5 +64,17 @@ test('loadOmiDailySummarySchedule names resolved GET settings and omits failures
   request.mockResolvedValueOnce({id: 'schedule', status: 404, body: '{}'});
   expect(await loadOmiDailySummarySchedule(backend)).toBeNull();
   request.mockResolvedValueOnce({id: 'schedule', status: 200, body: '['});
-  expect(await loadOmiDailySummarySchedule(backend)).toBeNull();
+  await expect(loadOmiDailySummarySchedule(backend)).rejects.toThrow();
+});
+
+test('old daily-summary-settings name Flutter DailySummarySettings fromJson padded GET hour instead of omitting Daily Summary', async () => {
+  const request = jest.fn(async () => ({
+    id: 'schedule',
+    status: 200,
+    body: JSON.stringify({enabled: true, hour: '  22  '}),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiDailySummarySchedule(backend)).rejects.toThrow(
+    'Omi daily summary settings are malformed',
+  );
 });

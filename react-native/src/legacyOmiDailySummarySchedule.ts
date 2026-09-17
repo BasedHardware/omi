@@ -64,9 +64,5 @@ export async function loadOmiDailySummarySchedule(
   ) {
     return null;
   }
-  try {
-    return parseOmiDailySummarySchedule(response.body);
-  } catch {
-    return null;
-  }
+  return parseOmiDailySummarySchedule(response.body);
 }

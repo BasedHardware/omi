@@ -53,9 +53,5 @@ export async function loadOmiMentorNotificationSettings(
   ) {
     return null;
   }
-  try {
-    return parseOmiMentorNotificationSettings(response.body);
-  } catch {
-    return null;
-  }
+  return parseOmiMentorNotificationSettings(response.body);
 }

@@ -62,5 +62,17 @@ test('loadOmiMentorNotificationSettings names resolved GET frequency and omits f
   request.mockResolvedValueOnce({id: 'mentor', status: 404, body: '{}'});
   expect(await loadOmiMentorNotificationSettings(backend)).toBeNull();
   request.mockResolvedValueOnce({id: 'mentor', status: 200, body: '{'});
-  expect(await loadOmiMentorNotificationSettings(backend)).toBeNull();
+  await expect(loadOmiMentorNotificationSettings(backend)).rejects.toThrow();
+});
+
+test('old mentor notifications name Flutter MentorNotificationSettings fromJson padded GET frequency instead of omitting Notification Frequency', async () => {
+  const request = jest.fn(async () => ({
+    id: 'mentor',
+    status: 200,
+    body: JSON.stringify({frequency: '  3  '}),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiMentorNotificationSettings(backend)).rejects.toThrow(
+    'Omi mentor notification settings are malformed',
+  );
 });
