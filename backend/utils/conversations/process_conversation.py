@@ -2623,7 +2623,10 @@ def process_conversation(
     # #10962 blanket skip that removed summaries for every custom-STT user.
     custom_stt = bool(getattr(conversation, 'uses_custom_stt', False))
     source_token = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
-    if should_skip_omi_paid_postprocessing(
+    # Regular conversations never consult this gate — they are already bounded
+    # by STT credits at listen connect. Keep that contract at the call site so
+    # a stubbed/truthy helper cannot abort memory/task/goal fan-out.
+    if custom_stt and should_skip_omi_paid_postprocessing(
         uid,
         uses_custom_stt=custom_stt,
         source=source_token if isinstance(source_token, str) else None,
