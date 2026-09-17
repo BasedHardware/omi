@@ -9,6 +9,7 @@
   "scripts/dev-harness/tests/spine/test_client_admission.py": "C10",
   "scripts/dev-harness/tests/spine/test_client_compat.py": "C10",
   "scripts/dev-harness/tests/spine/test_client_decoder_process.py": "C10",
+  "scripts/dev-harness/tests/spine/test_client_registered_requests.py": "C10",
   "scripts/dev-harness/tests/spine/test_evidence_freeze.py": "V8",
   "scripts/dev-harness/tests/spine/test_live_conformance.py": "V1",
   "scripts/dev-harness/tests/spine/test_live_negotiation.py": "V1",
