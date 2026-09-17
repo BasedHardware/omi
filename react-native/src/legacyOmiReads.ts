@@ -235,6 +235,21 @@ function presentStructuredSections(value: unknown): void {
     presentNullableString(section.body_markdown);
   }
 }
+function presentAppResults(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    const row = object(item);
+    presentNullableString(row.content);
+  }
+}
+function presentSuggestedSummarizationApps(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    text(item);
+  }
+}
 function presentStructuredEvents(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) throw new Error('Omi list is malformed');
@@ -547,6 +562,9 @@ export async function loadOmiConversations(
     presentActionItems(structured.action_items);
     presentStructuredSections(structured.sections);
     presentStructuredEvents(structured.events);
+    presentAppResults(row.apps_results);
+    presentAppResults(row.plugins_results);
+    presentSuggestedSummarizationApps(row.suggested_summarization_apps);
     presentClientProcessing(row.client_processing);
     const emoji = conversationStructuredEmojiCopy(
       structured.emoji === undefined || structured.emoji === null

@@ -965,6 +965,106 @@ test('old conversations name Flutter ConversationListItem fromJson type-wrong GE
   }
 });
 
+test('old conversations name Flutter ConversationListItem fromJson type-wrong GET apps_results item instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    apps_results: [{content: 'App wrote this recap', app_id: 'notes'}],
+  };
+  const titles = async (rows: unknown[]) =>
+    (await loadConversations(backend(rows).api)).items.map(item => item.title);
+  expect(await titles([row, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([
+      {
+        ...row,
+        apps_results: null,
+        plugins_results: [{content: 'Legacy plugin recap'}],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        apps_results: 1,
+        plugins_results: 1,
+        suggested_summarization_apps: 1,
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        apps_results: [{}],
+        plugins_results: [{}],
+        suggested_summarization_apps: [],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        apps_results: [{content: 'App wrote this recap', app_id: 1}],
+        plugins_results: [{content: 'Legacy plugin recap', plugin_id: 1}],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  for (const extra of [1, true, []]) {
+    await expect(
+      titles([
+        {
+          ...row,
+          apps_results: [extra],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi response is malformed');
+    await expect(
+      titles([
+        {
+          ...row,
+          plugins_results: [extra],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi response is malformed');
+    await expect(
+      titles([
+        {
+          ...row,
+          apps_results: [{content: extra, app_id: 'notes'}],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      titles([
+        {
+          ...row,
+          suggested_summarization_apps: [extra],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+});
+
 test('old conversations name Flutter ConversationListItem fromJson padded GET transcript_segments speaker_id instead of remapping to a conversation chip', async () => {
   const neighbor = {
     ...conversation,
