@@ -98,6 +98,17 @@ function presentDefaultString(value: unknown): void {
   }
   text(value);
 }
+function presentUnusedStringListItems(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const item of value) {
+    text(item);
+  }
+}
 function boolean(value: unknown): boolean {
   if (typeof value !== 'boolean') {
     throw new DetailError('invalid');
@@ -504,6 +515,7 @@ export async function loadLegacyConversationDetail(
     const section = object(raw);
     presentNullableString(section.heading);
     presentNullableString(section.body_markdown);
+    presentUnusedStringListItems(section.source_segment_ids);
     if (
       typeof section.heading !== 'string' ||
       typeof section.body_markdown !== 'string'
@@ -540,6 +552,7 @@ export async function loadLegacyConversationDetail(
     presentNullableString(item.due_certainty);
     presentNullableString(item.owner_name);
     presentNullableString(item.target_task_id);
+    presentUnusedStringListItems(item.source_segment_ids);
     if (item.completed_at !== undefined && item.completed_at !== null) {
       calendarEventTimeCopy(item.completed_at);
     }

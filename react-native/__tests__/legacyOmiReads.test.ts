@@ -1186,6 +1186,131 @@ test('old conversations name Flutter ConversationListItem fromJson type-wrong GE
   }
 });
 
+test('old conversations name Flutter ConversationListItem fromJson type-wrong GET source_segment_ids item instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {
+      title: 'Market street',
+      overview: 'Located recap',
+      action_items: [
+        {
+          description: 'Call Sam',
+          completed: false,
+          source_segment_ids: ['seg-1'],
+        },
+      ],
+      sections: [
+        {
+          heading: 'Notes',
+          body_markdown: 'Full notes',
+          source_segment_ids: ['seg-2'],
+        },
+      ],
+    },
+  };
+  const titles = async (rows: unknown[]) =>
+    (await loadConversations(backend(rows).api)).items.map(item => item.title);
+  expect(await titles([row, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([
+      {
+        ...row,
+        structured: {
+          ...row.structured,
+          action_items: [
+            {description: 'Call Sam', completed: false, source_segment_ids: null},
+          ],
+          sections: [
+            {heading: 'Notes', body_markdown: 'Full notes', source_segment_ids: null},
+          ],
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        structured: {
+          ...row.structured,
+          action_items: [
+            {description: 'Call Sam', completed: false, source_segment_ids: 1},
+          ],
+          sections: [
+            {heading: 'Notes', body_markdown: 'Full notes', source_segment_ids: 1},
+          ],
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        structured: {
+          ...row.structured,
+          action_items: [
+            {description: 'Call Sam', completed: false, source_segment_ids: []},
+          ],
+          sections: [
+            {heading: 'Notes', body_markdown: 'Full notes', source_segment_ids: []},
+          ],
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  for (const extra of [1, true, []]) {
+    await expect(
+      titles([
+        {
+          ...row,
+          structured: {
+            ...row.structured,
+            action_items: [
+              {
+                description: 'Call Sam',
+                completed: false,
+                source_segment_ids: [extra],
+              },
+            ],
+          },
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      titles([
+        {
+          ...row,
+          structured: {
+            ...row.structured,
+            sections: [
+              {
+                heading: 'Notes',
+                body_markdown: 'Full notes',
+                source_segment_ids: [extra],
+              },
+            ],
+          },
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+});
+
 test('old conversations name Flutter ConversationListItem fromJson padded GET transcript_segments speaker_id instead of remapping to a conversation chip', async () => {
   const neighbor = {
     ...conversation,

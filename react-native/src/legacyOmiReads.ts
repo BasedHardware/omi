@@ -224,6 +224,7 @@ function presentActionItems(value: unknown): void {
     presentNullableDate(action.created_at);
     presentNullableDate(action.due_at);
     presentNullableDate(action.updated_at);
+    presentUnusedStringListItems(action.source_segment_ids);
   }
 }
 function presentStructuredSections(value: unknown): void {
@@ -233,6 +234,7 @@ function presentStructuredSections(value: unknown): void {
     const section = object(item);
     presentNullableString(section.heading);
     presentNullableString(section.body_markdown);
+    presentUnusedStringListItems(section.source_segment_ids);
   }
 }
 function presentAppResults(value: unknown): void {
@@ -244,6 +246,9 @@ function presentAppResults(value: unknown): void {
   }
 }
 function presentSuggestedSummarizationApps(value: unknown): void {
+  presentUnusedStringListItems(value);
+}
+function presentUnusedStringListItems(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) return;
   for (const item of value) {

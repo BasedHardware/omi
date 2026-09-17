@@ -496,6 +496,103 @@ test('old conversation details name Flutter Conversation.fromGenerated type-wron
   }
 });
 
+test('old conversation details name Flutter Conversation.fromGenerated type-wrong GET source_segment_ids item instead of remapping to a recap chip', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {
+            description: 'Call Sam',
+            completed: false,
+            source_segment_ids: ['seg-1'],
+          },
+        ],
+        sections: [
+          {
+            heading: 'Notes',
+            body_markdown: 'Full notes',
+            source_segment_ids: ['seg-2'],
+          },
+        ],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {description: 'Call Sam', completed: false, source_segment_ids: 1},
+        ],
+        sections: [
+          {heading: 'Notes', body_markdown: 'Full notes', source_segment_ids: 1},
+        ],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {description: 1, completed: false, source_segment_ids: ['seg-1']},
+        ],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  for (const extra of [1, true, []]) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        structured: {
+          ...fixture.structured,
+          action_items: [
+            {
+              description: 'Call Sam',
+              completed: false,
+              source_segment_ids: [extra],
+            },
+          ],
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        structured: {
+          ...fixture.structured,
+          sections: [
+            {
+              heading: 'Notes',
+              body_markdown: 'Full notes',
+              source_segment_ids: [extra],
+            },
+          ],
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
 test('old conversation details name Flutter GeneratedProjectedStructure fromJson type-wrong GET category instead of remapping to a recap chip', async () => {
   const processing = {
     transcript_sha256: 'abc',
