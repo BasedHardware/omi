@@ -14,6 +14,20 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function text(value: unknown, limit: number): string {
+  if (typeof value !== 'string' || value.length > limit) {
+    throw new FirmwareError();
+  }
+  return value;
+}
+
+function presentNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  text(value, 1_000_000);
+}
+
 function firmwareChangelog(value: unknown): string[] | undefined {
   if (value === undefined || value === null || typeof value === 'string') {
     return undefined;
@@ -70,6 +84,9 @@ export function parseOmiLatestFirmware(
   body: string,
 ): FirmwareLatestDetails | null {
   const record = object(JSON.parse(body));
+  presentNullableString(record.min_app_version);
+  presentNullableString(record.min_app_version_code);
+  presentNullableString(record.zip_url);
   if (record.draft !== undefined && typeof record.draft !== 'boolean') {
     throw new FirmwareError();
   }
@@ -128,9 +145,5 @@ export async function loadOmiLatestFirmware(
   ) {
     return null;
   }
-  try {
-    return parseOmiLatestFirmware(response.body);
-  } catch {
-    return null;
-  }
+  return parseOmiLatestFirmware(response.body);
 }

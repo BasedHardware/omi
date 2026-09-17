@@ -283,6 +283,66 @@ test('fails closed for malformed GET latest firmware', () => {
   ).toThrow();
 });
 
+test('old firmware names Flutter FirmwareUpdate type-wrong GET zip_url instead of remapping to a Latest Version chip', () => {
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({
+        version: '1.3.0',
+        zip_url: 'https://example.test/fw.zip',
+        min_app_version: '1.0.0',
+        min_app_version_code: '100',
+      }),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({
+        version: '1.3.0',
+        zip_url: null,
+        min_app_version: null,
+        min_app_version_code: null,
+      }),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({
+        version: '1.3.0',
+        zip_url: '',
+        min_app_version: '  1.0.0  ',
+        min_app_version_code: '  100  ',
+      }),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  for (const extra of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', zip_url: extra})),
+    ).toThrow('Omi firmware is malformed');
+    expect(() =>
+      parseOmiLatestFirmware(
+        JSON.stringify({version: '1.3.0', min_app_version: extra}),
+      ),
+    ).toThrow('Omi firmware is malformed');
+    expect(() =>
+      parseOmiLatestFirmware(
+        JSON.stringify({version: '1.3.0', min_app_version_code: extra}),
+      ),
+    ).toThrow('Omi firmware is malformed');
+  }
+});
+
 test('loadOmiLatestFirmware names resolved GET version and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'firmware',
@@ -344,4 +404,21 @@ test('loadOmiLatestFirmware names resolved GET version and omits failures', asyn
       manufacturer: 'Based Hardware',
     }),
   ).toBeNull();
+});
+
+test('old firmware names Flutter FirmwareUpdate type-wrong GET zip_url instead of empty latest', async () => {
+  const request = jest.fn(async () => ({
+    id: 'firmware',
+    status: 200,
+    body: JSON.stringify({version: '1.3.0', zip_url: 1}),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(
+    loadOmiLatestFirmware(backend, {
+      model: 'Omi Dev Kit',
+      firmware: '1.2.3',
+      hardware: '1',
+      manufacturer: 'Based Hardware',
+    }),
+  ).rejects.toThrow('Omi firmware is malformed');
 });
