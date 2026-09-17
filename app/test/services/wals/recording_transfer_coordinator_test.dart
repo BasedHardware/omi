@@ -137,6 +137,8 @@ void main() {
 
       final wake = harness.coordinator.wake(WakeTrigger.startup);
       await _settle();
+      expect(harness.drainPasses, 1);
+
       harness.coordinator.setForeground(false);
       harness.backlog.add('wal-after-lock');
       harness.connectivity.add(false);
@@ -145,8 +147,32 @@ void main() {
       await wake;
       await _settle();
 
+      expect(harness.reconcilePasses, 1);
+      expect(harness.discoveryPasses, 1);
       expect(harness.drainPasses, 1);
       expect(harness.drainedWalIds, ['wal-1']);
+      expect(harness.backlog, ['wal-after-lock']);
+    });
+
+    test('a coalesced extra pass is dropped when the screen turns off mid-drain (#5221)', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+      final drainGate = Completer<void>();
+      harness.drainGate = drainGate;
+
+      final wake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      unawaited(harness.coordinator.wake(WakeTrigger.deviceConnected));
+      harness.coordinator.setForeground(false);
+      harness.backlog.add('wal-after-lock');
+      drainGate.complete();
+      await wake;
+      await _settle();
+
+      expect(harness.reconcilePasses, 1);
+      expect(harness.drainPasses, 1);
+      expect(harness.drainedWalIds, ['wal-1']);
+      expect(harness.backlog, ['wal-after-lock']);
     });
 
     test('a transfer pass acquires keep-alive and releases it when the pass ends', () async {
@@ -355,6 +381,9 @@ class _TransferHarness {
     drainPasses++;
     _concurrentDrains++;
     maximumConcurrentDrains = maximumConcurrentDrains < _concurrentDrains ? _concurrentDrains : maximumConcurrentDrains;
+    // Claim the backlog at pass start so a WAL added while this drain is gated
+    // can only appear in drainedWalIds if a second pass starts (#5221).
+    final claimed = List<String>.from(backlog);
     try {
       final gate = drainGate;
       if (gate != null) await gate.future;
@@ -375,8 +404,8 @@ class _TransferHarness {
           needsReconciliation: drainNeedsReconciliation,
         );
       }
-      drainedWalIds.addAll(backlog);
-      backlog.clear();
+      drainedWalIds.addAll(claimed);
+      backlog.removeWhere(claimed.contains);
       walState = 'uploaded';
       return const RecordingTransferDrainResult(attempted: true, failed: false, needsReconciliation: false);
     } finally {

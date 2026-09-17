@@ -12,7 +12,7 @@ off (#5221). Battery-optimization guidance is not the fix.
 - Stop it when that pass completes, `cancelSync()` runs, or the Flutter engine dies.
 - New discovery/drain passes stay foreground-only. An in-flight pass must finish
   after `setForeground(false)`; background connectivity must not queue another
-  whole-WAL drain.
+  whole-WAL drain, and a coalesced extra pass already queued is dropped.
 
 ## Surfaces
 
