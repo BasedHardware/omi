@@ -1,6 +1,6 @@
 import base64
 import os
-from typing import Any, List, Optional
+from typing import Any, List
 
 import requests
 

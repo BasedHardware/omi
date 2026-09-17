@@ -1091,6 +1091,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
 
+  - id: plugin-oauth-hardening-tests
+    command: ["python3", "plugins/oauth/test_oauth_hardening.py"]
+    triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "regression suite for oauth plugin timeouts, exception envelopes, non-JSON error pages, and null-guarded payload building"
+
   - id: hive-update-task-status-tests
     command: ["python3", "plugins/omi-hive-app/test_update_task_status.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
