@@ -159,6 +159,8 @@ env:
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "true"
+  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
+    value: "true"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
   - name: MEMORY_BELIEF_AUTOMATION_PAUSED
@@ -202,6 +204,12 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: MODULATE_API_KEY
+  - name: SONIOX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: SONIOX_API_KEY
+        optional: true
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:

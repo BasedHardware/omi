@@ -99,6 +99,33 @@ class TestDoctor:
         report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(runner), env=env)
         assert [c["check"] for c in report["checks"]] == ["ios.device.00008130-00060D893AE8001C"]
 
+    def test_missing_adb_binary_is_agent_remediable_not_a_traceback(self, tmp_path: Path, env: dict) -> None:
+        """A runner that raises FileNotFoundError (raw subprocess) must not
+        escape device_doctor — #14305 caught it only at the CLI default runner."""
+
+        def missing(_command: list[str] | tuple[str, ...]) -> tuple[int, str]:
+            raise FileNotFoundError(2, "No such file or directory", "adb")
+
+        report = dr.device_doctor(
+            REPO_ROOT, android=dr.AndroidTooling(missing), ios=dr.IosTooling(FakeRunner()), env=env
+        )
+        android = next(c for c in report["checks"] if c["check"] == "android.tooling")
+        assert android["status"] == "agent-remediable"
+        assert "adb" in android["detail"]
+        ios = next(c for c in report["checks"] if c["check"].startswith("ios."))
+        assert ios["check"] == "ios.device.attached"
+
+    def test_missing_xcrun_binary_is_agent_remediable_and_android_still_runs(self, tmp_path: Path, env: dict) -> None:
+        def missing(_command: list[str] | tuple[str, ...]) -> tuple[int, str]:
+            raise FileNotFoundError(2, "No such file or directory", "xcrun")
+
+        android = FakeRunner({"devices -l": (0, "List of devices attached\n\n")})
+        report = dr.device_doctor(REPO_ROOT, android=dr.AndroidTooling(android), ios=dr.IosTooling(missing), env=env)
+        assert report["checks"][0]["check"] == "android.device.attached"
+        ios = next(c for c in report["checks"] if c["check"] == "ios.tooling")
+        assert ios["status"] == "agent-remediable"
+        assert "xcrun" in ios["detail"] or "devicectl" in ios["detail"]
+
 
 class TestRun:
     def _artifact(self, tmp_path: Path) -> Path:

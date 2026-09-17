@@ -14,6 +14,8 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/header_circle_button.dart';
 
 import 'task_categorization.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -205,7 +207,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         if (provider.isSelectionMode) return const SizedBox.shrink();
         return Positioned(
           right: 20,
-          bottom: 100,
+          // Rides on top of the nav bar, so it follows the bar's height and the
+          // system inset the bar reserves rather than a literal tuned to one device.
+          bottom: bottomNavBarClearance(context),
           child: FloatingActionButton(
             heroTag: 'action_items_fab',
             onPressed: () {
@@ -554,10 +558,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const NeverScrollableScrollPhysics(),
-      slivers: const [
-        SliverPadding(padding: EdgeInsets.only(top: 16)),
-        ActionItemsShimmerList(itemCount: 7),
-        SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 16)),
+        const ActionItemsShimmerList(itemCount: 7),
+        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
       ],
     );
   }
@@ -734,8 +738,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
         ],
 
-        // Bottom padding
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        // Bottom padding so the last row scrolls clear of the nav bar
+        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
       ],
     );
   }
@@ -755,34 +759,35 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-                child: Row(
-                  children: [
-                    Text(
-                      context.l10n.goals,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    if (!actionProvider.isSelectionMode) ...[
-                      if (goals.length < 4)
-                        GestureDetector(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            PlatformManager.instance.analytics.track('Add Goal Clicked from Tasks Page');
-                            _showCreateGoalSheet();
-                          },
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withValues(alpha: 0.12),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+                // The row is as tall as its 44pt add button; 6pt comes off each
+                // side so the header keeps the height it had with a 32pt button,
+                // and keeps it when the button is hidden instead of jumping.
+                padding: const EdgeInsets.fromLTRB(4, 6, 0, 2),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: kMinTapTarget),
+                  child: Row(
+                    children: [
+                      Text(
+                        context.l10n.goals,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      if (!actionProvider.isSelectionMode) ...[
+                        if (goals.length < 4)
+                          HeaderCircleButton(
+                            semanticLabel: context.l10n.addGoal,
+                            diameter: 32,
+                            color: Colors.grey.withValues(alpha: 0.12),
+                            icon: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              PlatformManager.instance.analytics.track('Add Goal Clicked from Tasks Page');
+                              _showCreateGoalSheet();
+                            },
                           ),
-                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
               // Goal items
@@ -827,11 +832,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 // Section header — quieter than the page title; reads as a label,
                 // not a heading.
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
                     children: [
                       if (category == TaskCategory.noDeadline)
-                        GestureDetector(
+                        _SectionHeaderTapTarget(
+                          reach: const EdgeInsets.only(right: 24),
                           onTap: () => setState(() => _noDeadlineExpanded = !_noDeadlineExpanded),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -859,33 +865,47 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           ),
                         )
                       else
-                        Text(
-                          title.toUpperCase(),
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.8,
+                        Padding(
+                          padding: _sectionHeaderLinePadding,
+                          child: Text(
+                            title.toUpperCase(),
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.8,
+                            ),
                           ),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
                         if (provider.showCompletedView && orderedItems.isNotEmpty)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => _confirmClearCompleted(provider, orderedItems),
-                                child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
-                              ),
-                            ],
+                          // The count and the ✕ are one control: "clear these N".
+                          _SectionHeaderTapTarget(
+                            semanticLabel: context.l10n.tasksClearCompleted,
+                            reach: const EdgeInsets.only(left: 16),
+                            onTap: () => _confirmClearCompleted(provider, orderedItems),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                                const SizedBox(width: 8),
+                                Icon(Icons.close, size: 14, color: Colors.grey[600]),
+                              ],
+                            ),
                           )
                         else if (orderedItems.isNotEmpty)
-                          Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                          Padding(
+                            padding: _sectionHeaderLinePadding,
+                            child: Text(
+                              '${orderedItems.length}',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            ),
+                          ),
                       ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
-                        GestureDetector(
+                        _SectionHeaderTapTarget(
+                          semanticLabel: context.l10n.tasksClearCompleted,
+                          reach: const EdgeInsets.only(left: 30),
                           onTap: () => _confirmClearCompleted(provider, orderedItems),
                           child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
                         ),
@@ -922,10 +942,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(
               children: [
-                GestureDetector(
+                _SectionHeaderTapTarget(
+                  reach: const EdgeInsets.only(right: 24),
                   onTap: () {
                     setState(() {
                       _overdueExpanded = !_overdueExpanded;
@@ -2110,4 +2131,44 @@ class _DashedCirclePainter extends CustomPainter {
       oldDelegate.strokeWidth != strokeWidth ||
       oldDelegate.dashLength != dashLength ||
       oldDelegate.gapLength != gapLength;
+}
+
+/// Vertical padding of a task section header: the space above the label line
+/// and the sliver of space between it and the first task row.
+const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
+
+/// A tappable part of a task section header.
+///
+/// Section headers are one 12pt line of text, which made the collapse chevrons
+/// ~19pt targets and the "clear completed" ✕ a 14pt one. A task row starts 4pt
+/// below the line, so there is no room to grow a target downwards. Instead the
+/// header's vertical padding moves inside each child ([_sectionHeaderLinePadding])
+/// and the tappable ones own it, plus [reach] of width on the side that faces
+/// the header's Spacer. The child stays where it was on the text line and
+/// nothing in the list moves; the target becomes the header's full 36pt height.
+class _SectionHeaderTapTarget extends StatelessWidget {
+  const _SectionHeaderTapTarget({
+    required this.onTap,
+    required this.child,
+    required this.reach,
+    this.semanticLabel,
+  });
+
+  final VoidCallback onTap;
+  final Widget child;
+  final EdgeInsets reach;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(padding: _sectionHeaderLinePadding + reach, child: child),
+      ),
+    );
+  }
 }

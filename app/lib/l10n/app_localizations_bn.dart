@@ -10000,4 +10000,7 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi যেন আপনার কণ্ঠ চিনতে পারে — যেকোনো বিষয়ে প্রায় ৫ সেকেন্ড কথা বলুন।';
+
+  @override
+  String get home => 'হোম';
 }

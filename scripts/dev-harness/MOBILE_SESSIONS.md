@@ -72,17 +72,23 @@ token is involved at any point.
 `agent-remediable` (remedy command included), or `operator-action-needed`
 (privileged install/license/host capacity), per lane (`backend`, `android`,
 `ios`). Pins: Flutter version comes from `.github/workflows/mobile-app-checks.yml`
-(never "latest"); the backend venv must be Python 3.11; JDK ≥ 21 for the
-Firebase emulators. Capacity: emulator lanes require ≥ 12GiB free on the
+(never "latest"); the backend venv must be Python 3.11 **and** able to import
+`yaml` and `dotenv` (a `.venv` directory is not enough); JDK ≥ 21 for the
+Firebase emulators. `app/.dev.env` with a non-loopback `API_BASE_URL`, or
+`OMI_APP_PROFILE`/`OMI_APP_FLAVOR` other than `local_dev`/`dev`, is
+`operator-action-needed` — the doctor will not rewrite the file. Capacity:
+emulator lanes require ≥ 12GiB free on the
 shared Data/scratch container — below that the check is an operator gate and
 contract/unit work continues without it.
+
+Fresh linked worktree: `make lane-bootstrap` (see `LANE_BOOTSTRAP.md`).
 
 ## Evidence
 
 Every session can emit a `session-evidence-v1` receipt
 (`contracts/session/session-evidence-v1.schema.json`, validated by
-`dev_harness.session_evidence`). v1 is proposed, not frozen, until C2/C3/C4
-review it with the coordinator. The receipt binds source SHA + dirty digest,
+`dev_harness.session_evidence`). v1 is frozen by Spine A/V8; see `contracts/session/README.md` for its
+immutable validation rules and optional live-operation fields. The receipt binds source SHA + dirty digest,
 the built artifact hash (required for `ready`/`running` — a stale build cannot
 be reported ready), loopback-only endpoints, fixture version, runner versions,
 real timestamps, status/blocked reason and execution counts. Credential-shaped
@@ -98,3 +104,9 @@ attach is implemented (`simctl create/boot/shutdown/delete` of a session-owned
 device); live boots were deferred by the same capacity gate. Concurrency
 (two live sessions), physical-device and untethered-signing acceptance remain
 open and are tracked in SCA-487/SCA-491.
+
+## Live session contract
+
+[LIVE_SESSIONS.md](LIVE_SESSIONS.md) defines V1; explicit `live` commands are
+currently an exit-2 skeleton. [PENDING_CONTRACTS.md](PENDING_CONTRACTS.md) explains
+the strict pending acceptance tests. Ordinary commands retain their behavior.

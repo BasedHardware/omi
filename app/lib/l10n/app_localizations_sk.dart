@@ -9986,4 +9986,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek.';
+
+  @override
+  String get home => 'Domov';
 }

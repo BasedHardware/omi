@@ -30,6 +30,7 @@ from utils.llm.providers import get_openai_api_key
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.free_tier_basic_gates import basic_plan_gate_proactivity_enabled
 from utils.managed_compute import Decision, authorize_managed_compute, funding_owner_for_feature
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
@@ -276,7 +277,11 @@ async def _enforce_proactive_plan_gate(uid: str, operation: ProactiveOperation) 
     Mirrors desktop_proxy._enforce_managed_plan_gate: 503 for an authorization
     outage, 402 plan_gated for every other deny. The offline stub path below
     stays reachable only for callers this gate admitted.
+
+    Default off (``BASIC_PLAN_GATE_PROACTIVITY_ENABLED``): no authorize call.
     """
+    if not basic_plan_gate_proactivity_enabled():
+        return
     feature = _OPERATION_GATE_FEATURES[operation.value]
     decision = await run_blocking(
         db_executor,
