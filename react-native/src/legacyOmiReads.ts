@@ -773,6 +773,9 @@ export async function loadOmiTasks(
       provenance: evidence.map(item => {
         const ref = object(item);
         text(ref.id);
+        presentNullableString(ref.device_id);
+        presentNullableString(ref.excerpt_hash);
+        presentNullableString(ref.version);
         presentNullableDouble(ref.start_seconds);
         presentNullableDouble(ref.end_seconds);
         return JSON.stringify(ref);
