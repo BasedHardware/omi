@@ -39,12 +39,28 @@ struct AFMLocalInferenceAdapter: LocalInferenceService {
   /// needs a positive Int; generation on this path fails closed.
   static let unavailableContextWindowFallback = 4096
 
+  /// Inclusive bounds for a reported window. Outside this range we use
+  /// `unavailableContextWindowFallback` so the chunker never subtracts from
+  /// `Int.min` and never treats a bogus size as "fits in one prompt".
+  static let minimumAcceptedContextWindowTokens = 256
+  static let maximumAcceptedContextWindowTokens = 131_072
+
+  static func acceptedContextWindowTokens(_ raw: Int?) -> Int {
+    guard let raw,
+      raw >= minimumAcceptedContextWindowTokens,
+      raw <= maximumAcceptedContextWindowTokens
+    else {
+      return unavailableContextWindowFallback
+    }
+    return raw
+  }
+
   var engineID: LocalInferenceEngineID { .afm }
   var capabilities: LocalInferenceCapabilities {
     LocalInferenceCapabilities(
       structuredOutput: true,
       toolLoop: false,
-      contextWindowTokens: contextWindow.liveContextWindowTokens() ?? Self.unavailableContextWindowFallback
+      contextWindowTokens: Self.acceptedContextWindowTokens(contextWindow.liveContextWindowTokens())
     )
   }
 
@@ -100,19 +116,100 @@ struct AFMLocalInferenceAdapter: LocalInferenceService {
   }
 
   #if canImport(FoundationModels)
+    /// Dual-toolchain: CI pins Xcode 26.6 (GenerationError is current there).
+    /// This Mac is Xcode 27 / Swift 6.4, where GenerationError is deprecated
+    /// and `respond` throws `LanguageModelError` / `SystemLanguageModel.Error` /
+    /// `LanguageModelSession.Error`. `#if compiler(>=6.4)` keeps the 27 types
+    /// off the 26.6 SDK; `obsoleted: 27.0` plus `#available(macOS 27)` keeps
+    /// GenerationError off the 27 warning-as-error compile.
     @available(macOS 26.0, *)
     static func mapFrameworkError(_ error: Error) -> LocalInferenceError {
-      if let generation = error as? LanguageModelSession.GenerationError {
-        return mapGenerationError(generation)
-      }
-      return .engineFailed("session_failed")
+      #if compiler(>=6.4)
+        if #available(macOS 27.0, *) {
+          if let mapped = mapMacOS27FrameworkError(error) {
+            return mapped
+          }
+          return .engineFailed("session_failed")
+        }
+      #endif
+      return mapDeprecatedGenerationError(error)
     }
 
-    @available(macOS 26.0, *)
-    private static func mapGenerationError(_ error: LanguageModelSession.GenerationError) -> LocalInferenceError {
-      switch error {
+    #if compiler(>=6.4)
+      @available(macOS 27.0, *)
+      private static func mapMacOS27FrameworkError(_ error: Error) -> LocalInferenceError? {
+        if let model = error as? LanguageModelError {
+          return mapLanguageModelError(model)
+        }
+        if let system = error as? SystemLanguageModel.Error {
+          return mapSystemLanguageModelError(system)
+        }
+        if let session = error as? LanguageModelSession.Error {
+          return mapSessionError(session)
+        }
+        if error is GeneratedContent.ParsingError {
+          return .invalidResponse("decoding_failure")
+        }
+        return nil
+      }
+
+      @available(macOS 27.0, *)
+      private static func mapLanguageModelError(_ error: LanguageModelError) -> LocalInferenceError {
+        switch error {
+        case .contextSizeExceeded:
+          return .invalidResponse("context_size_exceeded")
+        case .rateLimited:
+          return .engineFailed("rate_limited")
+        case .guardrailViolation:
+          return .invalidResponse("guardrail")
+        case .refusal:
+          return .invalidResponse("refusal")
+        case .unsupportedCapability:
+          return .capabilityUnavailable("unsupported_capability")
+        case .unsupportedTranscriptContent:
+          return .capabilityUnavailable("unsupported_transcript")
+        case .unsupportedGenerationGuide:
+          return .capabilityUnavailable("unsupported_guide")
+        case .unsupportedLanguageOrLocale:
+          return .capabilityUnavailable("unsupported_locale")
+        case .timeout:
+          return .engineFailed("timeout")
+        @unknown default:
+          return .engineFailed("session_failed")
+        }
+      }
+
+      @available(macOS 27.0, *)
+      private static func mapSystemLanguageModelError(_ error: SystemLanguageModel.Error) -> LocalInferenceError {
+        switch error {
+        case .assetsUnavailable:
+          return .engineUnavailable(.afm)
+        @unknown default:
+          return .engineFailed("session_failed")
+        }
+      }
+
+      @available(macOS 27.0, *)
+      private static func mapSessionError(_ error: LanguageModelSession.Error) -> LocalInferenceError {
+        switch error {
+        case .concurrentRequests:
+          return .engineFailed("concurrent_requests")
+        case .transcriptMutationWhileResponding:
+          return .engineFailed("transcript_mutation")
+        @unknown default:
+          return .engineFailed("session_failed")
+        }
+      }
+    #endif
+
+    @available(macOS, introduced: 26.0, obsoleted: 27.0)
+    private static func mapDeprecatedGenerationError(_ error: Error) -> LocalInferenceError {
+      guard let generation = error as? LanguageModelSession.GenerationError else {
+        return .engineFailed("session_failed")
+      }
+      switch generation {
       case .exceededContextWindowSize:
-        return .engineFailed("context_size_exceeded")
+        return .invalidResponse("context_size_exceeded")
       case .assetsUnavailable:
         return .engineUnavailable(.afm)
       case .guardrailViolation:

@@ -3,6 +3,10 @@ import XCTest
 
 @testable import Omi_Computer
 
+#if canImport(FoundationModels)
+  import FoundationModels
+#endif
+
 private struct ProbeSummary: Codable, Sendable, Equatable {
   var title: String
 }
@@ -94,9 +98,52 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(adapter.capabilities.contextWindowTokens, 8192)
   }
 
+  func testOutOfRangeWindowFallsBackWithoutTrapping() {
+    for tokens: Int? in [nil, 0, -1, 255, Int.min, Int.max, 131_073] {
+      let adapter = AFMLocalInferenceAdapter(
+        availability: FixedAvailability(value: .available),
+        session: ScriptedSession(results: []),
+        contextWindow: FixedContextWindow(tokens: tokens)
+      )
+      XCTAssertEqual(
+        adapter.capabilities.contextWindowTokens,
+        AFMLocalInferenceAdapter.unavailableContextWindowFallback,
+        "out-of-range window \(String(describing: tokens)) must fall back"
+      )
+    }
+  }
+
+  func testProductionWindowReadsSystemLanguageModelContextSize() throws {
+    #if canImport(FoundationModels)
+      guard #available(macOS 26.0, *) else {
+        throw XCTSkip("FoundationModels needs macOS 26+")
+      }
+      let adapter = AFMLocalInferenceAdapter()
+      switch SystemLanguageModel.default.availability {
+      case .available:
+        let raw = SystemLanguageModel.default.contextSize
+        XCTAssertEqual(AFMSystemContextWindow().liveContextWindowTokens(), raw)
+        XCTAssertEqual(
+          adapter.capabilities.contextWindowTokens,
+          AFMLocalInferenceAdapter.acceptedContextWindowTokens(raw)
+        )
+      case .unavailable:
+        XCTAssertNil(AFMSystemContextWindow().liveContextWindowTokens())
+        XCTAssertEqual(
+          adapter.capabilities.contextWindowTokens,
+          AFMLocalInferenceAdapter.unavailableContextWindowFallback
+        )
+      @unknown default:
+        break
+      }
+    #else
+      throw XCTSkip("FoundationModels SDK is not present")
+    #endif
+  }
+
   func testParsesEmptyObjectProbeSchema() throws {
     let node = try AFMJSONSchemaBridge.parse(ProbeSchema.emptyObject)
-    guard case .object(let name, let properties) = node else {
+    guard case .object(let name, let properties, _) = node else {
       return XCTFail("empty object schema must parse as an object")
     }
     XCTAssertEqual(name, "probe")
@@ -105,7 +152,7 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
 
   func testParsesRequiredStringTitleProbeSchema() throws {
     let node = try AFMJSONSchemaBridge.parse(ProbeSchema.title)
-    guard case .object(_, let properties) = node else {
+    guard case .object(_, let properties, _) = node else {
       return XCTFail("title probe must parse as an object")
     }
     XCTAssertEqual(properties.count, 1)
@@ -116,7 +163,7 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
 
   func testParsesLocalSummaryDraftSchema() throws {
     let node = try AFMJSONSchemaBridge.parse(LocalSummaryDraft.jsonSchema)
-    guard case .object(let name, let properties) = node else {
+    guard case .object(let name, let properties, _) = node else {
       return XCTFail("draft schema must parse as an object")
     }
     XCTAssertEqual(name, "client_processing_draft")
@@ -131,7 +178,7 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(schemaProperty(properties, "category")?.node, .string)
 
     guard case .array(let sectionItems) = schemaProperty(properties, "sections")?.node,
-      case .object(_, let sectionProperties) = sectionItems
+      case .object(_, let sectionProperties, _) = sectionItems
     else {
       return XCTFail("sections must be an array of objects")
     }
@@ -139,7 +186,7 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(schemaProperty(sectionProperties, "body_markdown")?.isOptional, false)
 
     guard case .array(let eventItems) = schemaProperty(properties, "events")?.node,
-      case .object(_, let eventProperties) = eventItems
+      case .object(_, let eventProperties, _) = eventItems
     else {
       return XCTFail("events must be an array of objects")
     }
@@ -149,7 +196,7 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(schemaProperty(eventProperties, "description")?.isOptional, true)
 
     guard case .array(let actionItems) = schemaProperty(properties, "action_items")?.node,
-      case .object(_, let actionProperties) = actionItems
+      case .object(_, let actionProperties, _) = actionItems
     else {
       return XCTFail("action_items must be an array of objects")
     }
@@ -171,6 +218,8 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
       (#"{"type":"object","additionalProperties":false}"#, "unsupported_keyword:additionalProperties"),
       (#"{"type":"array","items":{"type":"string"}}"#, "root_must_be_object"),
       (#"{"type":"object","properties":{"tags":{"type":"array"}}}"#, "array_missing_items"),
+      (#"{"type":"object","description":1}"#, "description_must_be_string"),
+      (#"{"type":"object","properties":{"title":{"type":"string","description":1}}}"#, "description_must_be_string"),
     ]
     for (json, expected) in cases {
       let schema = LocalInferenceJSONSchema(name: "probe", json: Data(json.utf8))
@@ -180,6 +229,33 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
         }
         XCTAssertTrue(reason.contains(expected), "reason \(reason) should mention \(expected) for \(json)")
       }
+    }
+  }
+
+  func testRootDescriptionIsPreservedOnTheObjectNode() throws {
+    let schema = LocalInferenceJSONSchema(
+      name: "probe",
+      json: Data(#"{"type":"object","description":"A draft","properties":{"title":{"type":"string"}}}"#.utf8)
+    )
+    let node = try AFMJSONSchemaBridge.parse(schema)
+    guard case .object(let name, _, let description) = node else {
+      return XCTFail("root must parse as an object")
+    }
+    XCTAssertEqual(name, "probe")
+    XCTAssertEqual(description, "A draft")
+  }
+
+  func testNestingBeyondTheDepthCapIsCapabilityUnavailable() {
+    var json = #"{"type":"object"}"#
+    for _ in 0...AFMJSONSchemaBridge.maximumNestingDepth {
+      json = #"{"type":"object","properties":{"child":\#(json)}}"#
+    }
+    let schema = LocalInferenceJSONSchema(name: "probe", json: Data(json.utf8))
+    XCTAssertThrowsError(try AFMJSONSchemaBridge.parse(schema)) { error in
+      guard case LocalInferenceError.capabilityUnavailable(let reason) = error else {
+        return XCTFail("expected capabilityUnavailable, got \(error)")
+      }
+      XCTAssertTrue(reason.contains("nesting_too_deep"), "reason \(reason)")
     }
   }
 
@@ -320,13 +396,159 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(session.callCount, 1)
   }
 
-  func testMakeDefaultForcedAFMUsesRuntimeWindowOrFallback() {
-    let runtime = LocalInferenceRuntime.makeDefault(
-      killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: "afm")
-    )
-    let expected =
-      AFMSystemContextWindow().liveContextWindowTokens()
-      ?? AFMLocalInferenceAdapter.unavailableContextWindowFallback
-    XCTAssertEqual(runtime.selectedContextWindowTokens(), expected)
+  func testMakeDefaultForcedAFMUsesSystemLanguageModelContextSize() throws {
+    #if canImport(FoundationModels)
+      guard #available(macOS 26.0, *) else {
+        throw XCTSkip("FoundationModels needs macOS 26+")
+      }
+      let runtime = LocalInferenceRuntime.makeDefault(
+        killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: "afm")
+      )
+      switch SystemLanguageModel.default.availability {
+      case .available:
+        XCTAssertEqual(
+          runtime.selectedContextWindowTokens(),
+          AFMLocalInferenceAdapter.acceptedContextWindowTokens(SystemLanguageModel.default.contextSize)
+        )
+        XCTAssertEqual(
+          AFMSystemContextWindow().liveContextWindowTokens(),
+          SystemLanguageModel.default.contextSize
+        )
+      case .unavailable:
+        XCTAssertEqual(
+          runtime.selectedContextWindowTokens(),
+          AFMLocalInferenceAdapter.unavailableContextWindowFallback
+        )
+      @unknown default:
+        break
+      }
+    #else
+      throw XCTSkip("FoundationModels SDK is not present")
+    #endif
+  }
+
+  func testMacOS27RefusalIsInvalidResponseAndNotRetryable() async throws {
+    #if compiler(>=6.4)
+      #if canImport(FoundationModels)
+        guard #available(macOS 27.0, *) else {
+          throw XCTSkip("LanguageModelError needs macOS 27+")
+        }
+        let refusal = LanguageModelError.refusal(
+          LanguageModelError.Refusal(explanation: "no", debugDescription: "no")
+        )
+        let mapped = AFMLocalInferenceAdapter.mapUnknownError(refusal)
+        XCTAssertEqual(mapped, .invalidResponse("refusal"))
+        XCTAssertFalse(LocalInferenceRuntime.isRetryable(mapped))
+
+        let session = ScriptedSession(results: [.failure(refusal), .success(Data(#"{"title":"retry"}"#.utf8))])
+        let adapter = AFMLocalInferenceAdapter(
+          availability: FixedAvailability(value: .available),
+          session: session,
+          contextWindow: FixedContextWindow(tokens: 8192)
+        )
+        let runtime = LocalInferenceRuntime(
+          engines: [adapter],
+          killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: "afm"),
+          fallback: DesktopLocalInferenceFallbackRecorder(),
+          defaultEngineID: .localServer
+        )
+        let result: LocalInferenceGeneration<ProbeSummary> = await runtime.generateStructuredFailClosed(
+          prompt: "summarize",
+          schema: ProbeSchema.title,
+          minimumInput: DeterministicMinimumInput(
+            transcript: "We decided to ship the local runtime today.",
+            startedAt: Date(timeIntervalSince1970: 1_704_140_040)
+          )
+        )
+        guard case .deterministicMinimum = result else {
+          return XCTFail("refusal must fail closed without retrying")
+        }
+        XCTAssertEqual(session.callCount, 1)
+      #else
+        throw XCTSkip("FoundationModels SDK is not present")
+      #endif
+    #else
+      throw XCTSkip("macOS 27 LanguageModelError is not in this SDK")
+    #endif
+  }
+
+  func testMacOS27NonretryableFrameworkErrorsAreClassified() throws {
+    #if compiler(>=6.4)
+      #if canImport(FoundationModels)
+        guard #available(macOS 27.0, *) else {
+          throw XCTSkip("LanguageModelError needs macOS 27+")
+        }
+        let cases: [(Error, LocalInferenceError)] = [
+          (
+            LanguageModelError.guardrailViolation(
+              LanguageModelError.GuardrailViolation(debugDescription: "g")
+            ),
+            .invalidResponse("guardrail")
+          ),
+          (
+            LanguageModelError.contextSizeExceeded(
+              LanguageModelError.ContextSizeExceeded(contextSize: 8192, tokenCount: 9000, debugDescription: "c")
+            ),
+            .invalidResponse("context_size_exceeded")
+          ),
+          (
+            LanguageModelError.unsupportedGenerationGuide(
+              LanguageModelError.UnsupportedGenerationGuide(schemaName: nil, debugDescription: "g")
+            ),
+            .capabilityUnavailable("unsupported_guide")
+          ),
+          (
+            LanguageModelError.unsupportedLanguageOrLocale(
+              LanguageModelError.UnsupportedLanguageOrLocale(
+                languageCode: Locale.LanguageCode("zz"),
+                debugDescription: "l"
+              )
+            ),
+            .capabilityUnavailable("unsupported_locale")
+          ),
+          (
+            SystemLanguageModel.Error.assetsUnavailable(
+              SystemLanguageModel.Error.AssetsUnavailable(debugDescription: "a")
+            ),
+            .engineUnavailable(.afm)
+          ),
+          (
+            GeneratedContent.ParsingError(rawContent: "{", debugDescription: "p"),
+            .invalidResponse("decoding_failure")
+          ),
+        ]
+        for (error, expected) in cases {
+          let mapped = AFMLocalInferenceAdapter.mapUnknownError(error)
+          XCTAssertEqual(mapped, expected, "\(error) -> \(mapped)")
+          XCTAssertFalse(LocalInferenceRuntime.isRetryable(mapped), "\(expected) must not retry")
+        }
+
+        let retryable: [(Error, LocalInferenceError)] = [
+          (
+            LanguageModelError.rateLimited(
+              LanguageModelError.RateLimited(resetDate: nil, debugDescription: "r")
+            ),
+            .engineFailed("rate_limited")
+          ),
+          (
+            LanguageModelSession.Error.concurrentRequests,
+            .engineFailed("concurrent_requests")
+          ),
+          (
+            LanguageModelError.timeout(LanguageModelError.Timeout(debugDescription: "t")),
+            .engineFailed("timeout")
+          ),
+        ]
+        for (error, expected) in retryable {
+          let mapped = AFMLocalInferenceAdapter.mapUnknownError(error)
+          XCTAssertEqual(mapped, expected, "\(error) -> \(mapped)")
+          XCTAssertTrue(LocalInferenceRuntime.isRetryable(mapped), "\(expected) must remain retryable")
+        }
+      #else
+        throw XCTSkip("FoundationModels SDK is not present")
+      #endif
+    #else
+      throw XCTSkip("macOS 27 LanguageModelError is not in this SDK")
+    #endif
   }
 }

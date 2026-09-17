@@ -3,6 +3,10 @@ import XCTest
 
 @testable import Omi_Computer
 
+#if canImport(FoundationModels)
+  import FoundationModels
+#endif
+
 /// On-device Apple Foundation Models proof. CI has no Apple Intelligence and a
 /// full run is minutes, so this suite skips unless `OMI_AFM_LIVE=1`.
 ///
@@ -35,9 +39,21 @@ final class AFMLocalInferenceLiveTests: XCTestCase {
       killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: "afm")
     )
     let window = try XCTUnwrap(runtime.selectedContextWindowTokens())
-    let liveWindow = try XCTUnwrap(AFMSystemContextWindow().liveContextWindowTokens())
-    XCTAssertEqual(window, liveWindow)
-    print("AFM_LIVE_WINDOW: selected=\(window) systemLanguageModel.contextSize=\(liveWindow)")
+    #if canImport(FoundationModels)
+      guard #available(macOS 26.0, *) else {
+        throw XCTSkip("FoundationModels needs macOS 26+")
+      }
+      XCTAssertEqual(
+        window,
+        AFMLocalInferenceAdapter.acceptedContextWindowTokens(SystemLanguageModel.default.contextSize),
+        "production AFM window must be SystemLanguageModel.default.contextSize after bounds"
+      )
+      print(
+        "AFM_LIVE_WINDOW: selected=\(window) systemLanguageModel.contextSize=\(SystemLanguageModel.default.contextSize)"
+      )
+    #else
+      print("AFM_LIVE_WINDOW: selected=\(window)")
+    #endif
 
     let node = try AFMJSONSchemaBridge.parse(LocalSummaryDraft.jsonSchema)
     print("AFM_LIVE_SCHEMA_REQUIRED: \(requiredPropertyNames(node).joined(separator: ","))")
@@ -105,7 +121,7 @@ final class AFMLocalInferenceLiveTests: XCTestCase {
   }
 
   private func requiredPropertyNames(_ node: AFMJSONSchemaNode) -> [String] {
-    guard case .object(_, let properties) = node else { return [] }
+    guard case .object(_, let properties, _) = node else { return [] }
     return properties.filter { !$0.isOptional }.map(\.name)
   }
 }
