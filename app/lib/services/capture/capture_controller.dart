@@ -87,6 +87,8 @@ class CaptureController extends ChangeNotifier
   final CaptureAuthBoundary? _authOverride;
   final DateTime Function()? _nowOverride;
   final CaptureScheduling? _schedulingOverride;
+  final CaptureBleListeners? _bleListeners;
+  final CaptureSocketOpen? _openSocketOverride;
   final IMicRecorderService? _phoneMicBatchRecorder;
   Geolocation? _sessionGeolocation;
   int _sessionGeolocationGeneration = 0;
@@ -155,26 +157,9 @@ class CaptureController extends ChangeNotifier
   MessageServiceStatusEvent? _terminalTranscriptionFailure;
   MessageServiceStatusEvent? get terminalTranscriptionFailure => _terminalTranscriptionFailure;
 
-  // When custom STT is configured, its polling socket keeps
-  // buffering audio locally and retrying instead of tearing the transcription
-  // socket down on every failure (see PurePollingSocket). Surface that local
-  // state here so the recording UI can show "offline, buffering" instead of
-  // silently showing "Listening" while nothing is actually being transcribed.
-  PurePollingSocket? get _activeCustomSttPollingSocket {
-    final socket = _socket?.socket;
-    if (socket is CompositeTranscriptionSocket) {
-      final primary = socket.primarySocket;
-      return primary is PurePollingSocket ? primary : null;
-    }
-    return socket is PurePollingSocket ? socket : null;
-  }
-
   /// How long the custom STT endpoint has been unreachable, or null if it is
   /// not in use or is currently healthy.
-  Duration? get customSttBufferingDuration {
-    final since = _activeCustomSttPollingSocket?.bufferingSince;
-    return since == null ? null : DateTime.now().difference(since);
-  }
+  Duration? get customSttBufferingDuration => customSttBufferingFor(_socket?.socket);
 
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
@@ -232,6 +217,9 @@ class CaptureController extends ChangeNotifier
     CaptureAuthBoundary? authBoundary,
     DateTime Function()? now,
     CaptureScheduling? scheduling,
+    SharedPreferencesUtil? preferences,
+    CaptureBleListeners? bleListeners,
+    CaptureSocketOpen? openSocket,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ??
             ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
@@ -246,16 +234,17 @@ class CaptureController extends ChangeNotifier
         _connectivity = connectivity ?? CaptureConnectivityBoundary.production(),
         _authOverride = authBoundary,
         _nowOverride = now,
-        _schedulingOverride = scheduling {
+        _schedulingOverride = scheduling,
+        _bleListeners = bleListeners,
+        _openSocketOverride = openSocket {
     _isConnected = _connectivity.initiallyConnected;
-    // Restore a persisted device mute so it survives an app kill/restart. When
-    // the device reconnects, streamDeviceRecording() reads _isPaused as
-    // `wasPaused` and re-applies the mute instead of silently resuming.
-    _isPaused = SharedPreferencesUtil().deviceMuted;
+    _isPaused = (preferences ?? SharedPreferencesUtil()).deviceMuted;
     _connectionStateListener = _connectivity.changes.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
-    BleBridge.instance.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+    (_bleListeners?.addBatchRecordingFinalizedListener ?? BleBridge.instance.addBatchRecordingFinalizedListener)(
+      _onOfflineRecordingFinalized,
+    );
   }
 
   static Future<void> _startAndroidLocationForegroundTask() async {
@@ -812,7 +801,16 @@ class CaptureController extends ChangeNotifier
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
   }) {
-    return ServiceManager.instance().socket.conversation(
+    return _openSocketOverride?.call(
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          clientConversationId: clientConversationId,
+          customSttConfig: customSttConfig,
+        ) ??
+        ServiceManager.instance().socket.conversation(
           codec: codec,
           sampleRate: sampleRate,
           language: language,
@@ -1593,7 +1591,9 @@ class CaptureController extends ChangeNotifier
     _metrics.dispose();
     _autoSyncFallbackTimer?.cancel();
     _peopleRefreshFuture = null; // Clear in-flight tracker
-    BleBridge.instance.removeBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+    (_bleListeners?.removeBatchRecordingFinalizedListener ?? BleBridge.instance.removeBatchRecordingFinalizedListener)(
+      _onOfflineRecordingFinalized,
+    );
 
     super.dispose();
   }

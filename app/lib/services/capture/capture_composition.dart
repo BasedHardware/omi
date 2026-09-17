@@ -1,6 +1,7 @@
+import 'dart:io';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
@@ -10,24 +11,7 @@ import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
-import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
-
-/// Only the BLE listener operations capture owns; adapter wraps existing BleBridge.
-abstract interface class CaptureBleListeners {
-  void addBatchRecordingFinalizedListener(void Function(String) callback);
-  void removeBatchRecordingFinalizedListener(void Function(String) callback);
-}
-
-typedef CaptureSocketOpen = Future<TranscriptSegmentSocketService?> Function({
-  required BleAudioCodec codec,
-  required int sampleRate,
-  required String language,
-  required bool force,
-  String? source,
-  String? clientConversationId,
-  CustomSttConfig? customSttConfig,
-});
 
 /// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
 /// All fields required; supplying some fakes can never select production defaults.
@@ -73,11 +57,35 @@ class CaptureDependencies {
 }
 
 /// Production must use this exact constructor path too. No test-only subclass.
-CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) =>
-    throw UnimplementedError('C1 forward every dependency to CaptureProvider and CaptureController');
+/// Owner/device-lookup stay on [CaptureDependencies] for later cuts; this step
+/// forwards every seam CaptureController already accepts.
+CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => CaptureProvider(
+      walService: dependencies.wal,
+      phoneMicRecorder: dependencies.phoneMic,
+      phoneMicBatchSupported: dependencies.batchSupported,
+      authBoundary: dependencies.auth,
+      connectivity: dependencies.connectivity,
+      now: dependencies.now,
+      scheduling: dependencies.scheduling,
+      preferences: dependencies.preferences,
+      bleListeners: dependencies.ble,
+      openSocket: dependencies.openSocket,
+      conversationLocationCapture: dependencies.location,
+      inProgressConversationLoader: dependencies.refreshConversation,
+      audioCodecLoader: dependencies.codec,
+      microphonePermissionRequester: dependencies.microphonePermission,
+      recordingTelemetry: dependencies.telemetry,
+      localSegmentStore: dependencies.localSegments,
+    );
 
 /// Composition entry signature for main.dart. Builder must resolve defaults
 /// ONLY here, after refusing FLUTTER_TEST; no static/eager default evaluation.
-CaptureProvider composeProductionCaptureProvider(
-        {LocalSegmentStore? localSegmentStore, CaptureExternalActions? externalActions}) =>
-    throw UnimplementedError('C1 production composition root');
+CaptureProvider composeProductionCaptureProvider({
+  LocalSegmentStore? localSegmentStore,
+  CaptureExternalActions? externalActions,
+}) {
+  if (Platform.environment.containsKey('FLUTTER_TEST') || const bool.fromEnvironment('FLUTTER_TEST')) {
+    throw UnsupportedError('composeProductionCaptureProvider refuses FLUTTER_TEST');
+  }
+  throw UnimplementedError('C1 production composition root');
+}
