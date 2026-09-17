@@ -758,9 +758,9 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "get_screen_activity",
         "description": (
-            "Retrieve the user's desktop screen activity (Rewind) — what apps and windows they used and the OCR'd "
-            "on-screen text, ordered by time. Pass summary=true for an aggregated per-app usage breakdown instead "
-            "of raw rows. High-signal context on what the user actually does day to day."
+            "Retrieve synced desktop screen observations (Rewind): apps, windows and OCR text ordered by time. "
+            "Use summary=true for per-app counts and coverage; check coverage.truncated. Counts do not measure "
+            "usage duration or intent. Capture and sync completeness are unknown."
         ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": SCREEN_ACTIVITY_READ_SECURITY,
@@ -772,7 +772,7 @@ MCP_TOOLS: List[Dict[str, Any]] = [
                 "app": {"type": "string", "description": "Filter to a single app name"},
                 "summary": {
                     "type": "boolean",
-                    "description": "Return an aggregated per-app usage summary instead of raw rows",
+                    "description": "Return per-app observation counts and coverage instead of raw rows",
                     "default": False,
                 },
                 "limit": {
