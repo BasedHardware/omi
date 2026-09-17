@@ -30,8 +30,17 @@ Never touches another worktree. Never rewrites a pre-existing `app/.dev.env`.
 
 ## What it does not do
 
-- `uv pip sync` of the full backend lock (llvmlite/scipy/av/pyarrow). Run
-  `make setup-backend` only when the change touches backend code.
+- Install uvicorn / pyright / google.* (needed by `mobile-session start` and
+  `check_backend_typecheck_if_needed`). After bootstrap, PRs that touch
+  `backend/` must run **`make setup-backend`** before `git push` or the
+  typecheck gate fails with a missing pyright. That command uses
+  `uv pip install -r backend/requirements.txt` (index wheels, ~1 min), not
+  `uv pip sync pylock.macos.toml` (hashed sdist+wheel for av/llvmlite/scipy/pyarrow,
+  which stalled ~20 min). Lock-faithful install remains
+  `backend/scripts/sync-python-deps.sh`.
+- The Flutter generated-output pre-push gate needs **`flutter pub get` in `app/`**.
+  This command already runs it; re-run after adding Dart deps. Skipping
+  bootstrap surfaces only as a failed push.
 - `git fetch` / fast-forward of `main` in another worktree.
 
 ## Why yaml + dotenv

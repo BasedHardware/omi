@@ -52,7 +52,7 @@ setup-hooks:
 	@$(BASH) scripts/install-git-hooks.sh
 
 setup-backend:
-	@$(BASH) backend/scripts/sync-python-deps.sh
+	$(BASH) scripts/dev-harness/setup-backend.sh
 
 lane-bootstrap:
 	$(BASH) scripts/dev-harness/bootstrap-lane-worktree.sh

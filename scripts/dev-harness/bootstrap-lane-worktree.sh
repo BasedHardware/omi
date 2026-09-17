@@ -66,8 +66,11 @@ else
   echo "lane-bootstrap: cheap-gate imports (yaml, dotenv) already succeed — skipping pip"
 fi
 
-echo "lane-bootstrap: skipping full backend lock sync (make setup-backend / uv pip sync pylock)."
-echo "lane-bootstrap: run that only when the change touches backend code."
+echo "lane-bootstrap: skipping full backend install (make setup-backend)."
+echo "lane-bootstrap: PRs that touch backend/ need 'make setup-backend' before git push —"
+echo "lane-bootstrap:   otherwise check_backend_typecheck_if_needed fails (pyright missing)."
+echo "lane-bootstrap: the Flutter generated-output gate needs 'flutter pub get' in app/"
+echo "lane-bootstrap:   (this command already ran it; re-run after adding Dart deps)."
 
 if [[ ! -x "$(git rev-parse --git-path hooks)/pre-commit" ]]; then
   bash scripts/install-git-hooks.sh
@@ -114,4 +117,4 @@ fi
 elapsed=$((SECONDS - STARTED))
 echo "lane-bootstrap: done in ${elapsed}s"
 echo "lane-bootstrap: next: bash app/test.sh   # or scripts/pre-push for cheap gates"
-echo "lane-bootstrap: full backend deps remain opt-in: make setup-backend"
+echo "lane-bootstrap: full backend (uvicorn/pyright) remains opt-in: make setup-backend"

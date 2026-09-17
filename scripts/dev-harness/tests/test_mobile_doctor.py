@@ -52,6 +52,7 @@ def _provisioned_runner(tmp_path: Path, *, flutter_version: str | None = "3.44.5
             ("python3.11", "--version"): (0, "Python 3.11.15\n"),
             (str(venv), "--version"): (0, "Python 3.11.15\n"),
             (str(venv), "-c", "import dotenv, yaml"): (0, ""),
+            (str(venv), "-c", md.BACKEND_RUNTIME_PROBE): (0, ""),
             ("/opt/flutter/bin/flutter", "--version"): (0, f"Flutter {flutter_version} • channel stable\n"),
             ("java", "-version"): (0, 'openjdk version "21.0.2" 2024-01-16\n'),
             ("/usr/local/bin/firebase", "--version"): (0, "15.29.0\n"),
@@ -185,6 +186,20 @@ class TestIndividualChecks:
         assert venv_check.status == md.AGENT_REMEDIABLE
         assert "incomplete" in venv_check.detail
         assert "lane-bootstrap" in venv_check.remedy
+        assert report.overall == "degraded"
+
+    def test_missing_uvicorn_names_setup_backend(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        venv = tmp_path / "backend" / ".venv" / "bin" / "python"
+        runner.outputs[(str(venv), "-c", md.BACKEND_RUNTIME_PROBE)] = (
+            1,
+            "ModuleNotFoundError: No module named 'uvicorn'\n",
+        )
+        report = md.run_doctor(tmp_path, runner=runner, env={})
+        runtime = next(c for c in report.checks if c.check == "backend-runtime")
+        assert runtime.status == md.AGENT_REMEDIABLE
+        assert runtime.remedy == "make setup-backend"
+        assert "uvicorn" in runtime.detail
         assert report.overall == "degraded"
 
     def test_remote_dev_env_api_blocks_without_rewriting(self, tmp_path: Path) -> None:

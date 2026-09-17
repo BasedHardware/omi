@@ -33,6 +33,9 @@ LANE_BACKEND = "backend"
 LANE_ANDROID = "android"
 LANE_IOS = "ios"
 
+# mobile-session start + pre-push typecheck. yaml/dotenv alone is the cheap gate.
+BACKEND_RUNTIME_PROBE = "import dotenv, google.auth, pyright, uvicorn, yaml"
+
 # Emulator/app-build lanes need real headroom on the shared Data/scratch
 # container; below this the capacity check is an operator gate (freeing space
 # or approving an install is David's call, never an agent's — see SCA-486
@@ -175,6 +178,31 @@ def _check_backend_venv(repo_root: Path, runner: Runner) -> CheckResult:
             (LANE_BACKEND,),
         )
     return _ok("backend-venv", f"backend/.venv ({out.strip()}); yaml+dotenv import", (LANE_BACKEND,))
+
+
+def _check_backend_runtime(repo_root: Path, runner: Runner) -> CheckResult:
+    venv_python = Path(repo_root) / "backend" / ".venv" / "bin" / "python"
+    if not runner.exists(venv_python):
+        return _agent(
+            "backend-runtime",
+            "backend/.venv missing; mobile-session start and the pre-push typecheck need uvicorn/pyright",
+            "make setup-backend",
+            (LANE_BACKEND,),
+        )
+    probe_code, probe_out = runner.run([str(venv_python), "-c", BACKEND_RUNTIME_PROBE])
+    if probe_code != 0:
+        hint = (probe_out or "").strip().splitlines()[-1] if (probe_out or "").strip() else "import failed"
+        return _agent(
+            "backend-runtime",
+            f"backend/.venv cannot import uvicorn/pyright/google.auth (mobile-session start / typecheck): {hint}",
+            "make setup-backend",
+            (LANE_BACKEND,),
+        )
+    return _ok(
+        "backend-runtime",
+        "backend/.venv imports uvicorn, pyright, yaml, dotenv, google.auth",
+        (LANE_BACKEND,),
+    )
 
 
 def _check_flutter(repo_root: Path, runner: Runner) -> CheckResult:
@@ -541,6 +569,7 @@ def run_doctor(
         _check_git(root, probe),
         _check_python311(root, probe, source),
         _check_backend_venv(root, probe),
+        _check_backend_runtime(root, probe),
         _check_flutter(root, probe),
         _check_java(probe, source),
         _check_firebase_cli(probe),
