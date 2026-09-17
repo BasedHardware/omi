@@ -316,8 +316,8 @@ class DeviceController:
         # FileNotFoundError would also break stop()/release() idempotency.
         try:
             completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=120)
-        except FileNotFoundError as exc:
-            return 127, f"{command[0]} not installed: {exc}"
+        except OSError as exc:
+            return 127, f"{command[0]} not available: {exc}"
         return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
     def android_ready(self, android_home: str) -> tuple[bool, str]:
@@ -853,6 +853,9 @@ def build_parser() -> argparse.ArgumentParser:
     device_sub = device.add_subparsers(dest="device_command", required=True)
 
     dev_doctor = device_sub.add_parser("doctor", help="read-only physical-device readiness report")
+    # Sibling of `mobile-session doctor --json`: accept the flag after the
+    # subcommand as well as `device --json doctor`.
+    dev_doctor.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     dev_doctor.add_argument("--platform", action="append", choices=list(device_lease.PLATFORMS))
 
     dev_register = device_sub.add_parser(
@@ -968,8 +971,8 @@ def _default_device_runner(command: Sequence[str]) -> tuple[int, str]:
     # DeviceRunnerError from the tooling shims — instead of a raw traceback.
     try:
         completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=180)
-    except FileNotFoundError as exc:
-        return 127, f"{command[0]} not installed: {exc}"
+    except OSError as exc:
+        return 127, f"{command[0]} not available: {exc}"
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
 
