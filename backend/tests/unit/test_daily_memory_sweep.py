@@ -308,13 +308,19 @@ class _Ref:
 
 
 class _EmptyCollection:
+    def order_by(self, _field):
+        return self
+
+    def select(self, _fields):
+        return self
+
     def where(self, *args, **kwargs):
         return self
 
     def limit(self, _count):
         return self
 
-    def stream(self):
+    def stream(self, **_kwargs):
         return []
 
 
@@ -2890,17 +2896,10 @@ def test_completed_day_reader_carries_evidence_and_safe_phase_b_transcript(owner
     )
     snapshot.id = 'c'
 
-    class Query(_EmptyCollection):
-        def order_by(self, _field):
-            return self
-
-        def stream(self):
-            return [snapshot]
-
     read = _read_completed_day_conversation_sources(
         'u',
         completed_local_day_window(date(2026, 8, 23), 'UTC'),
-        db_client=SimpleNamespace(collection=lambda _path: Query()),
+        db_client=_ConversationDb([snapshot]),
         max_conversations=8,
         max_summary_characters=1000,
     )
@@ -3477,13 +3476,21 @@ class _LimitedQuery:
         self._snapshots = list(snapshots)
         self.limit_count = None
         self._error = error
+        self.fields = None
+        self.order = []
+        self.full_reads = []
+
+    def select(self, fields):
+        self.fields = fields
+        return self
 
     def where(self, *args, **kwargs):
         if self._error is not None:
             raise self._error
         return self
 
-    def order_by(self, *args, **kwargs):
+    def order_by(self, field):
+        self.order.append(field)
         return self
 
     def limit(self, count):
@@ -3493,9 +3500,19 @@ class _LimitedQuery:
     def stream(self):
         if self._error is not None:
             raise self._error
-        if self.limit_count is None:
-            return list(self._snapshots)
-        return self._snapshots[: self.limit_count]
+        snapshots = sorted(self._snapshots, key=lambda row: (row.to_dict()["started_at"], row.id))
+        result = []
+        for full in snapshots[: self.limit_count]:
+            projected = _Snapshot({key: value for key, value in full.to_dict().items() if key in self.fields})
+            projected.id = full.id
+
+            def get(full=full):
+                self.full_reads.append(full.id)
+                return full
+
+            projected.reference = SimpleNamespace(get=get)
+            result.append(projected)
+        return result
 
 
 class _ConversationDb(_Db):
@@ -3519,6 +3536,7 @@ def _conversation_snapshot(
     status="completed",
     finished=True,
     discarded=False,
+    is_locked=False,
 ):
     payload = {
         "id": conversation_id,
@@ -3528,6 +3546,7 @@ def _conversation_snapshot(
         "structured": {"title": title, "overview": overview, "category": "personal"},
         "transcript_segments": [{"text": transcript, "speaker_id": 0, "is_user": True, "start": 0, "end": 1}],
         "discarded": discarded,
+        "is_locked": is_locked,
     }
     if finished:
         payload["finished_at"] = started + timedelta(minutes=1)
@@ -3608,7 +3627,10 @@ def test_completed_day_reader_truncates_over_count_instead_of_stalling():
     assert first.rows_used == 2
     assert [row.conversation_id for row in first.rows] == ["long", "short"]
     assert [row.conversation_id for row in second.rows] == [row.conversation_id for row in first.rows]
-    assert db.conversation_query.limit_count == 4
+    from utils.memory.daily_memory_sweep import COMPLETED_DAY_ELIGIBILITY_CAP
+
+    assert db.conversation_query.limit_count == COMPLETED_DAY_ELIGIBILITY_CAP + 1
+    assert db.conversation_query.order == ["started_at", "__name__"] * 2
 
 
 def test_completed_day_reader_truncates_over_characters_instead_of_stalling():
@@ -3814,6 +3836,10 @@ def test_completed_day_producer_keeps_processing_row_incomplete(monkeypatch):
         "qa_rate_card_unavailable",
         "model_cost_over_budget",
         "daily_summary_stage_unavailable",
+        "eligibility_scan_over_budget",
+        "source_row_changed",
+        "private_but_snake_case",
+        None,
     ),
 )
 def test_scheduler_source_incomplete_reasons_reach_the_error_string(monkeypatch, reason):
@@ -3844,7 +3870,8 @@ def test_scheduler_source_incomplete_reasons_reach_the_error_string(monkeypatch,
         cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
         cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
     )
-    assert summary.errors == (f"uid=user-1:source_incomplete:2026-08-23:{reason}",)
+    expected = "unknown_reason" if reason in ("private_but_snake_case", None) else reason
+    assert summary.errors == (f"uid=user-1:source_incomplete:2026-08-23:{expected}",)
     assert "fact" not in "".join(summary.errors)
     assert "conversation" not in "".join(summary.errors)
 
@@ -3915,3 +3942,348 @@ def test_scheduler_advances_cursor_for_truncated_over_budget_day(monkeypatch):
     assert source_calls == [True]
     assert second.committed_users == 0
     assert second.errors == ()
+
+
+def _read_test_day(db, *, max_conversations=8):
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    return _read_completed_day_conversation_sources(
+        "user-1",
+        completed_local_day_window(date(2026, 8, 23), "UTC"),
+        db_client=db,
+        max_conversations=max_conversations,
+        max_summary_characters=8_000,
+    )
+
+
+def test_eligibility_observes_processing_row_beyond_full_document_page():
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(
+                f"c-{index:04d}", started=started, status="processing" if index == 400 else "completed"
+            )
+            for index in range(401)
+        ]
+    )
+    result = _read_test_day(db, max_conversations=200)
+    assert result.status == "incomplete"
+    assert result.reason == "row_not_eligible"
+    assert db.conversation_query.full_reads == []
+
+
+def test_eligibility_hard_cap_refuses_overflow_before_full_document_reads():
+    from utils.memory.daily_memory_sweep import COMPLETED_DAY_ELIGIBILITY_CAP
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(f"c-{index:04d}", started=started)
+            for index in range(COMPLETED_DAY_ELIGIBILITY_CAP + 1)
+        ]
+    )
+    result = _read_test_day(db)
+    assert result.status == "incomplete"
+    assert result.reason == "eligibility_scan_over_budget"
+    assert db.conversation_query.limit_count == COMPLETED_DAY_ELIGIBILITY_CAP + 1
+    assert db.conversation_query.full_reads == []
+
+
+def test_eligibility_exact_cap_is_complete_and_full_reads_are_bounded():
+    from utils.memory.daily_memory_sweep import COMPLETED_DAY_ELIGIBILITY_CAP
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(f"c-{index:04d}", started=started)
+            for index in reversed(range(COMPLETED_DAY_ELIGIBILITY_CAP))
+        ]
+    )
+    result = _read_test_day(db)
+    assert result.status == "complete"
+    assert result.rows_seen == COMPLETED_DAY_ELIGIBILITY_CAP
+    assert db.conversation_query.full_reads == [f"c-{index:04d}" for index in range(16)]
+    assert db.conversation_query.order == ["started_at", "__name__"]
+    assert set(db.conversation_query.fields) == {"started_at", "status", "discarded", "is_locked", "finished_at"}
+
+
+def test_exact_selection_page_with_discarded_rows_is_not_truncated():
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [_conversation_snapshot(f"c-{index:04d}", started=started, discarded=index < 8) for index in range(16)]
+    )
+    result = _read_test_day(db)
+    assert result.status == "complete"
+    assert result.rows_seen == result.rows_used == 8
+    assert not result.truncated
+    assert result.reason == ""
+    assert db.conversation_query.full_reads == [f"c-{index:04d}" for index in range(8, 16)]
+
+
+def test_oversize_row_after_selected_row_is_skipped_before_later_fitting_row():
+    from utils.memory.daily_memory_sweep import _select_completed_day_source_rows
+
+    rows = [
+        _day_source("structured", "a" * 100, has_structured_summary=True),
+        _day_source("oversize", "b" * 9_000),
+        _day_source("fits", "c" * 50),
+    ]
+    selected = _select_completed_day_source_rows(rows, max_conversations=8, max_summary_characters=8_000)
+    assert [row.conversation_id for row in selected.rows] == ["fits", "structured"]
+    assert selected.truncated
+    assert selected.truncation_reason == "summary_characters_over_budget"
+
+
+@pytest.fixture
+def window_stage(monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.memory import daily_memory_sweep as sweep
+
+    db = StrictFirestore()
+    control = MemoryControlState(uid="user-1", head_commit_id="head0", account_generation=4, source_generation=7)
+    db.document("users/user-1/memory_state/apply_control").create(control.model_dump(mode="json"))
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+
+    def stage(rows, runner):
+        return sweep._load_or_stage_daily_summary_candidates(
+            "user-1",
+            date(2026, 8, 23),
+            "UTC",
+            control,
+            window,
+            rows,
+            db_client=db,
+            agent_runner=runner,
+            max_candidates=3,
+        )
+
+    return db, stage
+
+
+@pytest.mark.parametrize("mutation", ["late_row", "deleted_row", "enriched_row", "summary_edit"])
+@pytest.mark.parametrize("possible_dispatch", ["returned", "indeterminate"])
+def test_mutated_day_cannot_mint_new_invocation_after_possible_dispatch(
+    window_stage, monkeypatch, mutation, possible_dispatch
+):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
+    from models.daily_sweep_dispatch import SweepDispatchScope
+
+    db, stage = window_stage
+    rows = [_day_source("one", "unstructured"), _day_source("two", "stable")]
+    calls = []
+    create = StrictFirestoreTransaction.create
+
+    def fail_stage(self, ref, payload):
+        if "daily_memory_sweep_daily_summary_staged" in ref.path:
+            raise RuntimeError("stage creation failed")
+        return create(self, ref, payload)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", fail_stage)
+
+    def agent(_uid, selected, _lookup, **_kwargs):
+        SweepDispatchScope.mark_provider_dispatch()
+        calls.append(tuple(selected))
+        if possible_dispatch == "indeterminate":
+            raise RuntimeError("provider outcome unknown")
+        return _agent_output()
+
+    assert stage(rows, agent) is None
+    fences = {key: dict(value) for key, value in db.rows.items() if key[0] == MODEL_INVOCATION_FENCE_COLLECTION}
+    assert len(fences) == 1
+    original = next(iter(fences.values()))
+    assert original["state"] == possible_dispatch
+    if mutation == "late_row":
+        rows.insert(0, _day_source("earlier", "late arriving earlier-started row"))
+    elif mutation == "deleted_row":
+        rows.pop()
+    elif mutation == "enriched_row":
+        rows[0] = _day_source("one", "structured enrichment", has_structured_summary=True)
+    else:
+        rows[0] = _day_source("one", "edited summary")
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", create)
+    assert stage(rows, agent) is None
+    assert len(calls) == 1
+    assert {key: value for key, value in db.rows.items() if key[0] == MODEL_INVOCATION_FENCE_COLLECTION} == fences
+    assert not any("daily_memory_sweep_daily_summary_staged" in key for key in db.rows)
+
+
+def test_unchanged_day_replays_returned_output_after_stage_creation_failure(window_stage, monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
+
+    db, stage = window_stage
+    create = StrictFirestoreTransaction.create
+
+    def fail_stage(self, ref, payload):
+        if "daily_memory_sweep_daily_summary_staged" in ref.path:
+            raise RuntimeError("stage unavailable")
+        return create(self, ref, payload)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", fail_stage)
+    calls = []
+    rows = [_day_source("one", "stable")]
+    agent = lambda *_a, **_kw: calls.append(1) or _agent_output()
+    assert stage(rows, agent) is None
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", create)
+    assert stage(rows, agent) == ((), ())
+    assert calls == [1]
+    fence = next(value for key, value in db.rows.items() if key[0] == MODEL_INVOCATION_FENCE_COLLECTION)
+    staged = next(value for key, value in db.rows.items() if "daily_memory_sweep_daily_summary_staged" in key)
+    assert staged["transcript_digest"] == fence["input_digest"]
+
+
+def test_certified_release_allows_fresh_selection_on_same_window(window_stage, monkeypatch):
+    from utils.llm import memories
+
+    db, stage = window_stage
+    monkeypatch.setattr(memories, "get_prompt_memories", lambda _: ("Test", ""))
+    monkeypatch.setattr(memories, "current_date_for_uid", lambda _: "2026-08-24")
+    monkeypatch.setattr(memories, "get_llm", lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("not prepared")))
+    assert stage([_day_source("old", "old selection")], memories.run_daily_sweep_summary_agent) is None
+    path, before = next((key, value) for key, value in db.rows.items() if key[0] == MODEL_INVOCATION_FENCE_COLLECTION)
+    assert before["state"] == "pre_dispatch_released"
+    calls = []
+
+    def agent(_uid, rows, _lookup, **_kwargs):
+        calls.append(rows)
+        return _agent_output()
+
+    assert stage([_day_source("new", "new selection")], agent) == ((), ())
+    after = db.rows[path]
+    assert after["state"] == "returned"
+    assert after["input_digest"] != before["input_digest"]
+    assert after["claim_id"] != before["claim_id"]
+    assert after["pre_dispatch_releases"] == 1
+    assert calls == [(("new", "new selection"),)]
+
+
+def test_locked_rows_never_enter_provider_summary_or_transcript(monkeypatch):
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(
+                "locked", started=started, title="locked secret", transcript="private", is_locked=True
+            ),
+            _conversation_snapshot("visible", started=started),
+        ]
+    )
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    seen = []
+
+    def agent(_uid, rows, lookup, **_kwargs):
+        seen.append((rows, lookup))
+        return _agent_output()
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=3, max_cost_usd=1),
+        agent_runner=agent,
+    )
+    assert result.complete
+    assert len(seen) == 1
+    assert [key for key, _ in seen[0][0]] == ["visible"]
+    assert set(seen[0][1]) == {"visible"}
+    assert db.conversation_query.full_reads == ["visible"]
+
+
+def test_source_truncation_survives_real_qa_agent_and_receipt(monkeypatch):
+    from utils.llm import memories
+    from utils.memory import daily_memory_sweep as sweep
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb([_conversation_snapshot(f"c-{i}", started=started) for i in range(9)])
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    monkeypatch.setattr(memories, "get_prompt_memories", lambda _: ("Test", ""))
+    monkeypatch.setattr(memories, "current_date_for_uid", lambda _: "2026-08-24")
+    calls = []
+
+    class Model:
+        def _get_request_payload(self, prompt, **kwargs):
+            return {"messages": [{"role": "user", "content": prompt.to_string()}], **kwargs}
+
+        def invoke(self, prompt, **kwargs):
+            calls.append(kwargs)
+            return '{"memories": [], "transcript_requests": [], "folder_assignments": []}'
+
+    monkeypatch.setattr(memories, "get_llm", lambda *_a, **_kw: Model())
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=3, max_cost_usd=1),
+        agent_runner=memories.run_daily_sweep_summary_agent,
+        qa_run_id="source-evidence-test",
+    )
+    assert result.complete
+    evidence = result.model_dispatch_evidence
+    assert evidence["truncated"] is True
+    assert evidence["rows_seen"] == 9 and evidence["rows_used"] == 8
+    assert evidence["truncation_reason"] == "conversation_page_over_budget"
+    assert len(evidence["requests"]) == len(calls) == 1
+    staged = next(value for key, value in db.store.items() if "daily_summary_staged" in key)
+    assert staged["dispatch_evidence"] == evidence
+    sweep.write_qa_sweep_run_receipt(
+        db,
+        run_id="source-evidence-test",
+        summary=sweep.DailySweepSchedulerSummary(model_dispatch_evidence=(evidence,)),
+    )
+    receipt = sweep._qa_sweep_run_ref(db, "source-evidence-test").get().to_dict()
+    assert receipt["model_dispatch_evidence"] == [evidence]
+
+
+@pytest.mark.parametrize("reason", ["private_but_snake_case", "private text", None, {"bad": "reason"}])
+def test_unknown_source_reasons_are_fixed_tokens_in_qa_receipts(reason):
+    from utils.memory import daily_memory_sweep as sweep
+
+    db = _Db()
+    evidence = {"failure_reason": reason, "truncation_reason": reason}
+    sweep.write_qa_sweep_run_receipt(
+        db,
+        run_id="unknown-reason-test",
+        summary=sweep.DailySweepSchedulerSummary(model_dispatch_evidence=(evidence,)),
+    )
+    for value in db.store.values():
+        assert value["model_dispatch_evidence"] == [
+            {"failure_reason": "unknown_reason", "truncation_reason": "unknown_reason"}
+        ]
+
+
+def test_historical_transcript_keyed_fence_blocks_new_window_identity(window_stage):
+    db, stage = window_stage
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+    db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/old-text-derived-id").create(
+        {
+            "uid": "user-1",
+            "window_id": window.window_id,
+            "account_generation": 4,
+            "source_generation": 7,
+            "sweep_generation": 1,
+            "state": "returned",
+            "invocation_id": "old-text-derived-id",
+        }
+    )
+    calls = []
+    assert stage([_day_source("changed", "new text")], lambda *_a, **_kw: calls.append(1) or _agent_output()) is None
+    assert calls == []
+    assert len([key for key in db.rows if key[0] == MODEL_INVOCATION_FENCE_COLLECTION]) == 1
+
+
+def test_onboarding_uses_the_same_locked_content_exclusion():
+    assert (
+        _onboarding_transcript_eligibility(
+            {
+                "status": "completed",
+                "finished_at": datetime(2026, 8, 23, 8, tzinfo=timezone.utc),
+                "finalization_status": "completed",
+                "is_locked": True,
+            }
+        )
+        == "discarded"
+    )

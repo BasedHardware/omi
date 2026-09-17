@@ -4,7 +4,9 @@ This fixture models document-reference ``get(transaction=...)`` plus transaction
 ``create``, ``set``, and ``update``. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
 
-It deliberately does not model queries, deletes, commit/rollback visibility,
+It also supports equality-only, document-id projections with a positive limit,
+proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
+It deliberately does not model other queries, deletes, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
 one of those boundaries needs a hermetic guard.
 
@@ -32,7 +34,9 @@ class UnsupportedFirestoreOperationError(NotImplementedError):
     """Raised for a Firestore operation this narrow fixture does not model."""
 
 
-_SUPPORTED_OPERATIONS = 'document get/create, transaction-bound document get, transaction create/set/update'
+_SUPPORTED_OPERATIONS = (
+    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries'
+)
 
 
 class StrictFirestoreSnapshot:
@@ -75,11 +79,66 @@ class StrictFirestoreCollection:
     def document(self, name: str) -> StrictFirestoreDocument:
         return StrictFirestoreDocument(self._database, (*self._path, name))
 
-    def where(self, *args: Any, **kwargs: Any) -> None:
-        raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+    def where(self, *args: Any, filter: Any = None) -> StrictFirestoreIdQuery:
+        if args or filter is None:
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+        return StrictFirestoreIdQuery(self._database, self._path).where(filter=filter)
 
     def stream(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+
+
+class StrictFirestoreIdQuery:
+    """Narrow existence query; no ordering, content projections, or unbounded scans."""
+
+    def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
+        self._database = database
+        self._path = path
+        self._filters: tuple[tuple[str, Any], ...] = ()
+        self._ids_only = False
+        self._limit: int | None = None
+
+    def _copy(self) -> StrictFirestoreIdQuery:
+        result = StrictFirestoreIdQuery(self._database, self._path)
+        result._filters = self._filters
+        result._ids_only = self._ids_only
+        result._limit = self._limit
+        return result
+
+    def where(self, *, filter: Any) -> StrictFirestoreIdQuery:
+        if filter.op_string != '==':
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+        result = self._copy()
+        result._filters += ((filter.field_path, filter.value),)
+        return result
+
+    def select(self, fields: tuple[str, ...]) -> StrictFirestoreIdQuery:
+        if fields:
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+        result = self._copy()
+        result._ids_only = True
+        return result
+
+    def limit(self, count: int) -> StrictFirestoreIdQuery:
+        if type(count) is not int or count <= 0:
+            raise ValueError('query limit must be a positive integer')
+        result = self._copy()
+        result._limit = count
+        return result
+
+    def stream(self, *, transaction: StrictFirestoreTransaction):
+        if not self._filters or not self._ids_only or self._limit is None:
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+        if transaction._database is not self._database:
+            raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
+        transaction._assert_read_allowed()
+        rows = [
+            StrictFirestoreSnapshot({})
+            for path, value in sorted(self._database.rows.items())
+            if path[:-1] == self._path
+            and all(field in value and value[field] == expected for field, expected in self._filters)
+        ]
+        return iter(rows[: self._limit])
 
 
 class StrictFirestoreTransaction:
