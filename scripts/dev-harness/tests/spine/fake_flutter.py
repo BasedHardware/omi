@@ -54,7 +54,7 @@ for line in sys.stdin:
                      'principal': {'uid': 'fixture-user', 'signed_in': True}, 'route': '/home'}
             result = {'ok': True, 'state': state} if name.endswith('wait_ready') else state
         elif name == 'ext.omi.controls.navigate':
-            result = {'ok': True, 'destination': params['params']['destination']}
+            result = {'ok': True}
         elif name == 'ext.omi.controls.fault':
             emit({'id': request['id'], 'error': {'code': -32602, 'message': 'unknown fault'}})
             continue

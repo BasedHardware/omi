@@ -61,6 +61,9 @@ def rig(tmp_path):
                 'default_auth_uid': 'fixture-user', 'fixture_version': 'v1', 'status': 'seeded',
                 'harness_instance': 'fixture', 'ports': {'backend': 8100, 'auth': 9199, 'firestore': 8185,
                 'redis': 6479}, 'source_at_acquire': {'git_sha': 'a' * 40, 'dirty_digest': 'clean'}}
+            (self.directory / 'seed.json').write_text(json.dumps({
+                'schema_version': 1, 'uid': 'fixture-user', 'fixture_version': 'v1',
+                'provider': 'local_dev', 'seeded_at': '2026-09-17T00:00:00Z'}))
             self.children, self.specs, self.shots = [], [], []
             self.mode = 'ok'
             self.transcript = self.directory / 'transcript.jsonl'
@@ -157,6 +160,8 @@ def test_failed_reload_never_advances_loaded_identity(rig, mode, outcome):
     rig.stamp = replace(rig.stamp, inputs_sha256='f' * 64)
     reply = engine.request('reload', generation=1, timeout_s=0.2)
     assert reply['outcome'] == outcome
+    assert reply['error_code'] == {'reject': 'reload-rejected', 'missing-code': 'malformed-response',
+                                   'die': 'daemon-exited', 'wedge': 'deadline'}[mode]
     assert reply['evidence']['live']['loaded_source'] == before
     assert reply['evidence']['live']['requested_source']['inputs_sha256'] == 'f' * 64
     if mode == 'reject':
@@ -241,6 +246,12 @@ def test_app_started_without_correct_runtime_readiness_is_blocked(rig, mode):
     rig.mode = mode
     engine = rig.engine()
     assert engine.start()['outcome'] == 'blocked'
+    assert len(rig.children) == 1
+    names = [c['params'].get('methodName') for c in rig.calls() if c['method'] == 'app.callServiceExtension']
+    assert 'ext.omi.controls.capabilities' in names
+    assert any(n in names for n in ('ext.omi.controls.state', 'ext.omi.controls.wait_ready'))
+    if mode == 'unready':
+        assert 'ext.omi.controls.wait_ready' in names
 
 
 @pending("V1")
@@ -273,7 +284,7 @@ def test_controls_pass_actual_extension_and_params_and_refuse_arbitrary_rpc(rig)
     engine = rig.engine()
     engine.start()
     reply = engine.request('controls', generation=1, params={'method': 'navigate', 'params': {'destination': 'chat'}})
-    assert reply['result']['destination'] == 'chat'
+    assert reply['result'] == {'ok': True}
     sent = rig.calls()[-1]
     assert sent['method'] == 'app.callServiceExtension'
     assert sent['params']['methodName'] == 'ext.omi.controls.navigate'
@@ -283,7 +294,9 @@ def test_controls_pass_actual_extension_and_params_and_refuse_arbitrary_rpc(rig)
             engine.request('controls', generation=1, params={'method': method, 'params': {}})
         assert error.value.code == 'unsupported-operation'
     failed = engine.request('controls', generation=1, params={'method': 'fault', 'params': {'fault': 'unknown'}})
-    assert failed['outcome'] != 'ok'
+    assert failed['outcome'] == 'rejected'
+    assert rig.calls()[-1]['params'] == {'appId': 'app-fixture',
+        'methodName': 'ext.omi.controls.fault', 'params': {'fault': 'unknown'}}
 
 
 @pending("V1")
@@ -347,7 +360,10 @@ def test_session_lifecycle_tears_down_live_before_other_resources(tmp_path, monk
     root = Path(__file__).resolve().parents[4]
     env = {'OMI_LOCAL_STATE_ROOT': str(tmp_path / 'state')}
     lease = ms.acquire(root, env, name='lifecycle', listeners=lambda p: ())
+    lease['device'] = {'kind': 'simulator', 'udid': 'owned-device', 'owner': 'session'}
+    ms._save_json_atomic(ms.session_dir(root, lease['session_id'], env) / 'lease.json', lease)
     order = []
+    monkeypatch.setattr(ms.DeviceController, 'detach', lambda self, platform, device: order.append('device'))
     def teardown(*args, **kwargs):
         assert ms._load_lease(ms.session_dir(root, lease['session_id'], env) / 'lease.json')['generation'] == 1
         order.append('live')
@@ -357,7 +373,12 @@ def test_session_lifecycle_tears_down_live_before_other_resources(tmp_path, monk
     getattr(ms, operation)(root, lease['session_id'], env, **kwargs)
     assert order and order[0] == 'live'
     if operation in ('stop', 'release'):
+        assert order == ['live', 'services', 'device']
+    elif operation == 'recover':
         assert order == ['live', 'services']
+        assert ms._load_lease(ms.session_dir(root, lease['session_id'], env) / 'lease.json')['generation'] == 2
+    else:
+        assert order == ['live', 'reset']
 
 
 @pending("V1")
@@ -420,6 +441,7 @@ def test_two_sessions_have_independent_process_device_and_build_roots(rig):
     (second_root / 'app' / '.dev.env').write_text('API_BASE_URL=\n')
     second_dir = second_root / 'oms-second'
     second_dir.mkdir()
+    (second_dir / 'seed.json').write_bytes((rig.directory / 'seed.json').read_bytes())
     lease = copy.deepcopy(rig.lease)
     lease.update({'session_id': 'oms-second', 'harness_instance': 'second',
                   'ports': {key: value + 100 for key, value in lease['ports'].items()}})
@@ -436,6 +458,12 @@ def test_two_sessions_have_independent_process_device_and_build_roots(rig):
     assert a.build_dir != b.build_dir
     assert a.device_id != b.device_id
     assert rig.children[0].process.pid != rig.children[1].process.pid
+    duplicate = live.LiveSession(rig.directory.parent, second_dir, load_lease=lambda: lease,
+        source=lambda: rig.stamp, factory=rig.factory, screenshot=rig.screenshot)
+    with pytest.raises(live.LiveError) as busy:
+        duplicate.start()
+    assert busy.value.code == 'worktree-busy'
+    assert len(rig.children) == 2
     first.close()
     assert rig.children[1].process.poll() is None
     assert second.request('reload', generation=1)['outcome'] == 'ok'
