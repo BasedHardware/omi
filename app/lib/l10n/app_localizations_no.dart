@@ -9993,4 +9993,7 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder.';
+
+  @override
+  String get home => 'Hjem';
 }

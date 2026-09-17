@@ -9973,4 +9973,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'ताकि Omi आपकी आवाज़ पहचान सके — किसी भी विषय पर लगभग 5 सेकंड बोलें।';
+
+  @override
+  String get home => 'होम';
 }

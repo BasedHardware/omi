@@ -3262,5 +3262,6 @@
     },
     "tapPlusToStartRecording": "Salvestamise alustamiseks puuduta +",
     "processingTakingLonger": "Ikka käimas — see võtab kauem aega kui tavaliselt.",
-    "speechProfileEnrollmentPrompt": "Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit."
+    "speechProfileEnrollmentPrompt": "Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.",
+    "home": "Avaleht"
 }

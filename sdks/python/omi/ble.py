@@ -41,7 +41,7 @@ async def listen(
     char_uuid: str = AUDIO_DATA_UUID,
     service_uuid: Optional[str] = None,
 ) -> None:
-    """Connect and notify on audio characteristic until cancelled."""
+    """Connect and notify on audio characteristic until cancelled or disconnected."""
 
     async def _handler(_sender, data: bytearray) -> None:
         raw = bytes(data)
@@ -49,7 +49,12 @@ async def listen(
         if inspect.isawaitable(result):
             await result
 
-    async with BleakClient(device_id) as client:
+    disconnected = asyncio.Event()
+
+    def _on_disconnect(_client: BleakClient) -> None:
+        disconnected.set()
+
+    async with BleakClient(device_id, disconnected_callback=_on_disconnect) as client:
         services = getattr(client, "services", None)
         if services is not None and service_uuid:
             service = services.get_service(service_uuid)
@@ -61,8 +66,9 @@ async def listen(
             await client.start_notify(characteristic, _handler)
         else:
             await client.start_notify(char_uuid, _handler)
-        while True:
-            await asyncio.sleep(3600)
+        while not disconnected.is_set():
+            await asyncio.sleep(1)
+    raise ConnectionError(f"Device {device_id} disconnected")
 
 
 async def listen_payload(

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from models.focus_session import FocusSession, FocusStats
+from models.screen_activity import ScreenActivityCoverage
 from models.shared import StatusResponse
 import database.focus_sessions as focus_sessions_db
 import database.screen_activity as screen_activity_db
@@ -100,6 +101,7 @@ class ScreenActivityAppSummary(BaseModel):
 class ScreenActivitySummaryResponse(BaseModel):
     apps: Dict[str, ScreenActivityAppSummary]
     total_screenshots: int
+    coverage: Optional[ScreenActivityCoverage] = None
 
 
 @router.get('/v1/screen-activity', tags=['screen-activity'], response_model=List[ScreenActivityRow])
