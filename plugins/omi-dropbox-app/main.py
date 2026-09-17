@@ -12,7 +12,7 @@ import wave
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, Optional
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -218,6 +218,11 @@ def get_home_page_html(
     if settings is None:
         settings = get_user_settings(uid)
 
+    # uid is reflected into form actions and hrefs below — percent-encode
+    # it so quotes cannot break the attribute and &, #, or .. cannot
+    # corrupt the query (same hardening as the other plugin apps).
+    uid_q = quote(uid or "", safe="")
+
     if connected:
         return f"""
 <!DOCTYPE html>
@@ -253,7 +258,7 @@ def get_home_page_html(
             <span style="color: #666;">{email}</span>
         </div>
 
-        <form class="settings-form" method="POST" action="/settings?uid={uid}">
+        <form class="settings-form" method="POST" action="/settings?uid={uid_q}">
             <div class="form-group">
                 <label for="folder_name">Folder Name</label>
                 <input type="text" id="folder_name" name="folder_name" value="{settings.get('folder_name', 'Omi Conversations')}" placeholder="Omi Conversations">
@@ -282,7 +287,7 @@ def get_home_page_html(
 
             <div class="actions">
                 <button type="submit" class="btn btn-primary">Save Settings</button>
-                <a href="/disconnect?uid={uid}" class="btn btn-danger">Disconnect</a>
+                <a href="/disconnect?uid={uid_q}" class="btn btn-danger">Disconnect</a>
             </div>
         </form>
     </div>
@@ -309,7 +314,7 @@ def get_home_page_html(
     <div class="card">
         <h1>Connect Dropbox</h1>
         <p>Connect your Dropbox account to automatically save your Omi conversations.</p>
-        <a href="/auth/dropbox?uid={uid}" class="btn">Connect Dropbox</a>
+        <a href="/auth/dropbox?uid={uid_q}" class="btn">Connect Dropbox</a>
     </div>
 </body>
 </html>
@@ -471,8 +476,9 @@ async def auth_callback(
             email=email,
         )
 
-        # Redirect to home page
-        return RedirectResponse(url=f"/?uid={uid}")
+        # Redirect to home page (uid is server-verified here, but keep it
+        # percent-encoded so a hostile stored uid cannot corrupt the query)
+        return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
         return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
@@ -482,7 +488,7 @@ async def auth_callback(
 async def disconnect(uid: str = Query(...)):
     """Disconnect Dropbox account."""
     delete_dropbox_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 # ============== Settings Endpoint ==============
@@ -501,7 +507,7 @@ async def update_settings(request: Request, uid: str = Query(...)):
     }
 
     store_user_settings(uid, settings)
-    return RedirectResponse(url=f"/?uid={uid}", status_code=303)
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 # ============== Webhook Endpoint ==============
