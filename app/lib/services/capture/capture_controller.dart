@@ -813,15 +813,15 @@ class CaptureController extends ChangeNotifier
           customSttConfig: customSttConfig,
         ) ??
         ServiceManager.instance().socket.conversation(
-          codec: codec,
-          sampleRate: sampleRate,
-          language: language,
-          force: force,
-          source: source,
-          clientConversationId: clientConversationId,
-          customSttConfig: customSttConfig,
-          geolocation: _sessionGeolocation,
-        );
+              codec: codec,
+              sampleRate: sampleRate,
+              language: language,
+              force: force,
+              source: source,
+              clientConversationId: clientConversationId,
+              customSttConfig: customSttConfig,
+              geolocation: _sessionGeolocation,
+            );
   }
 
   Future<void> _connectTranscriptionSocket({
