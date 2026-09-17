@@ -8,6 +8,8 @@ contention at the receipt/cursor CAS fences. No production project is touched.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import os
 import sys
 import threading
@@ -15,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from unittest.mock import patch
 
 PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "demo-daily-memory-sweep")
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
@@ -36,6 +39,14 @@ from utils.memory.daily_memory_sweep import (  # noqa: E402
     completed_local_day_window,
     run_daily_memory_sweep,
 )
+from scripts.jit_qa_sweep_repair import (
+    collect_provider_outcome_evidence,
+    repair_tombstone,
+    JITQASweepRepairError,
+)  # noqa: E402
+from llm_gateway.gateway import jit_budget  # noqa: E402
+from models.daily_sweep_dispatch import SweepDispatchScope  # noqa: E402
+from models.memory_contracts import MemoryExtractionError  # noqa: E402
 import utils.memory.daily_memory_sweep as daily_sweep  # noqa: E402
 import utils.memory.canonical_memory_adapter as canonical_adapter  # noqa: E402
 
@@ -368,6 +379,163 @@ def main() -> int:
         if len(_collection_ids(db_client, collections.memory_items)) > 1:
             raise AssertionError("overlapping runners duplicated canonical memory")
 
+        # The certified preparation boundary releases transactionally. Competing
+        # processes then contend on the released fence, without the local lock.
+        uid = f"daily-memory-sweep-release-{uuid4().hex}"
+        uids.append(uid)
+        control, packet = _seed(db_client, uid, now)
+        invocation_id = f"pre-dispatch-{uuid4().hex}"
+        identity = {
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "sweep_generation": 0,
+            "window_id": packet.window_id,
+            "now": now,
+        }
+
+        @SweepDispatchScope.certify_pre_dispatch
+        def preparation_failure() -> tuple[dict[str, Any], ...]:
+            raise MemoryExtractionError("daily_sweep_summary_input_budget")
+
+        if (
+            _invoke_model_once(db_client, uid, invocation_id, candidate_builder=preparation_failure, **identity)
+            is not None
+        ):
+            raise AssertionError("pre-dispatch failure returned output")
+        ref = db_client.document(f"{daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}")
+        released = ref.get().to_dict()
+        if released.get("state") != "pre_dispatch_released" or released.get("pre_dispatch_releases") != 1:
+            raise AssertionError("pre-dispatch failure did not release durably")
+        paid_calls_after_release: list[int] = []
+        release_errors: list[Exception] = []
+        release_barrier = threading.Barrier(2)
+
+        def release_worker() -> None:
+            try:
+                release_barrier.wait(timeout=10)
+                _invoke_model_once(
+                    db_client,
+                    uid,
+                    invocation_id,
+                    candidate_builder=lambda: paid_calls_after_release.append(1) or ({"candidate_id": "one"},),
+                    **identity,
+                )
+            except Exception as exc:
+                release_errors.append(exc)
+
+        saved_lock = daily_sweep._MODEL_INVOCATION_LOCK
+        daily_sweep._MODEL_INVOCATION_LOCK = nullcontext()
+        try:
+            workers = [threading.Thread(target=release_worker) for _ in range(2)]
+            for worker in workers:
+                worker.start()
+            for worker in workers:
+                worker.join(timeout=15)
+        finally:
+            daily_sweep._MODEL_INVOCATION_LOCK = saved_lock
+        if release_errors or any(worker.is_alive() for worker in workers) or paid_calls_after_release != [1]:
+            raise AssertionError(
+                f"released claim contention failed: {release_errors}, calls={paid_calls_after_release}"
+            )
+        if ref.get().to_dict().get("state") != "returned":
+            raise AssertionError("reclaimed output did not finalize")
+
+        # Real document cursors must read past a full foreign accounting page.
+        accounting_refs = []
+        accounting_prefix = uuid4().hex
+        try:
+            for index in range(56):
+                accounting_ref = db_client.collection("llm_gateway_attempts").document(
+                    f"{accounting_prefix}-{index:03d}"
+                )
+                accounting_refs.append(accounting_ref)
+                accounting_ref.set(
+                    {
+                        "date": now.date().isoformat(),
+                        "occurred_at": now,
+                        "user_uid": uid if index == 55 else "foreign-emulator-user",
+                        "feature": "memories",
+                        "request_id": f"emulator-request-{index}",
+                        "jit_run_id": "emulator-run",
+                        "outcome": "error",
+                    }
+                )
+            evidence = collect_provider_outcome_evidence(
+                db_client,
+                uid=uid,
+                claimed_at=now - timedelta(minutes=1),
+                now=now + timedelta(hours=1),
+            )
+            if [attempt["request_id"] for attempt in evidence["attempts"]] != ["emulator-request-55"]:
+                raise AssertionError("accounting pagination missed the matching attempt after 55 foreign rows")
+        finally:
+            for accounting_ref in accounting_refs:
+                accounting_ref.delete()
+
+        # Durable JIT reservation + simulated provider dispatch + lost accounting
+        # must never authorize repair by ledger absence, even after lease expiry.
+        lost_invocation_id = f"lost-accounting-{uuid4().hex}"
+        lost_run_id = f"lost-accounting-{uuid4().hex}"
+        reservation_refs = []
+        dispatched = []
+        try:
+
+            def reserved_provider_crash() -> tuple[dict[str, Any], ...]:
+                with patch.object(jit_budget, "_client", return_value=db_client):
+                    reservation = jit_budget.reserve_jit_provider_attempt(
+                        owner_uid=uid,
+                        run_id=lost_run_id,
+                        contract_version="jit-cloud-qa-v1",
+                        max_attempts=1,
+                        max_spend_micro_usd=50_000,
+                        provider="openai",
+                        model="gpt-5.6-luna",
+                        input_tokens=100,
+                        cached_input_tokens=0,
+                        output_tokens=10,
+                        cache_write_tokens=0,
+                    )
+                if reservation is None:
+                    raise AssertionError("emulator provider reservation was rejected")
+                dispatched.append(1)
+                raise RuntimeError("simulated process death after provider; no accounting write")
+
+            if (
+                _invoke_model_once(
+                    db_client, uid, lost_invocation_id, candidate_builder=reserved_provider_crash, **identity
+                )
+                is not None
+            ):
+                raise AssertionError("crashed invocation returned output")
+            reservation_refs = [
+                snapshot.reference
+                for snapshot in db_client.collection("jit_cloud_qa_budgets_v1").stream()
+                if snapshot.to_dict().get("run_id") == lost_run_id
+            ]
+            if dispatched != [1] or len(reservation_refs) != 1:
+                raise AssertionError("lost-accounting scenario did not reserve and dispatch exactly once")
+            try:
+                repair_tombstone(
+                    db_client,
+                    uid=uid,
+                    invocation_id=lost_invocation_id,
+                    repair_authority="emulator:operator",
+                    now=now + timedelta(hours=1),
+                )
+            except JITQASweepRepairError as exc:
+                if "accounting absence is not proof" not in str(exc):
+                    raise
+            else:
+                raise AssertionError("lost provider accounting authorized duplicate dispatch")
+            repair_ref = db_client.document(
+                f"users/{uid}/{daily_sweep.MODEL_INVOCATION_REPAIR_PATH}/{lost_invocation_id}"
+            )
+            if repair_ref.get().exists:
+                raise AssertionError("unsafe absence repair receipt was created")
+        finally:
+            for reservation_ref in reservation_refs:
+                reservation_ref.delete()
+
         # Paid-model/account-wipe race: the real Firestore transaction first
         # claims one durable, top-level invocation identity. The simulated
         # provider then publishes the deletion fence and removes all user
@@ -422,7 +590,7 @@ def main() -> int:
 
         print(
             "PASS: daily memory sweep Firestore emulator retry/interruption proof "
-            "(crash/deletion/generation/paid-wipe)"
+            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/accounting-pagination/lost-accounting-refusal)"
         )
         return 0
     finally:

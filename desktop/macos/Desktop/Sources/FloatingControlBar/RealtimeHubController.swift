@@ -632,6 +632,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let binding = ExternalSurfaceRunBinding(
         ownerID: ownerID,
         sessionID: "owner-boundary-session",
+        surfaceKind: "floating_chat",
         turnID: turnID.rawValue.uuidString.lowercased(),
         runID: "owner-boundary-run",
         attemptID: "owner-boundary-attempt",
