@@ -819,6 +819,8 @@ esac
         )
         self.assertNotIn(check, selected)
         self.assertIn(check, resolve_checks(manifest, ["backend/routers/example.py"], "ci"))
+        self.assertIn(check, resolve_checks(manifest, ["app/lib/pages/chat/page.dart"], "ci"))
+        self.assertIn("app/lib/**/*.dart", check.triggers)
 
         command = command_for_check(
             check,
