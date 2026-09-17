@@ -93,16 +93,12 @@ function parseOmiChatFiles(
   }
   for (const raw of files) {
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-      continue;
+      throw new Error('Omi chat files are malformed');
     }
-    presentNullableDate(
-      (raw as Record<string, unknown>).created_at,
-      'Omi chat message is malformed',
-    );
-    presentNullableString(
-      (raw as Record<string, unknown>).thumb_name,
-      'Omi chat files are malformed',
-    );
+    const row = raw as Record<string, unknown>;
+    presentNullableDate(row.created_at, 'Omi chat message is malformed');
+    presentNullableString(row.thumb_name, 'Omi chat files are malformed');
+    presentNullableString(row.thumbnail, 'Omi chat files are malformed');
   }
   if (files.length === 0 || ids.length === 0) {
     return [];

@@ -800,6 +800,106 @@ test('old chat history name Flutter ServerMessage.fromGenerated type-wrong GET f
   }
 });
 
+test('old chat history name Flutter ServerMessage.fromGenerated type-wrong GET files item instead of remapping to a chat chip', () => {
+  const neighbor = {
+    id: 'neighbor',
+    sender: 'ai',
+    text: 'Neighbor stays.',
+    created_at: '2026-09-07T01:02:04Z',
+    type: 'text',
+  };
+  const file = {
+    id: 'att-notes',
+    name: 'notes.txt',
+    mime_type: 'text/plain',
+    openai_file_id: 'file-abc',
+    created_at: '2026-09-07T00:00:00.000Z',
+  };
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('file-exact'),
+          files: [{...file, thumbnail: 'notes.png', thumb_name: 'notes'}],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'file-exact']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('file-null'),
+          files: [{...file, thumbnail: null, thumb_name: null}],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'file-null']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('file-omitted'),
+          files: [{}],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'file-omitted']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('file-empty'),
+          files: [{...file, thumbnail: '', thumb_name: '  notes  '}],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'file-empty']);
+  for (const extra of [1, true, []]) {
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {...message('file-item-wrong'), files: [extra]},
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat files are malformed');
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {
+            ...message('thumbnail-wrong'),
+            files: [{...file, thumbnail: extra}],
+          },
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat files are malformed');
+  }
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('thumbnail-object'),
+          files: [{...file, thumbnail: {}}],
+        },
+        neighbor,
+      ]),
+      0,
+    ),
+  ).toThrow('Omi chat files are malformed');
+});
+
 test('keeps GET chat files when more than 50', () => {
   const files = Array.from({length: 51}, (_, index) => ({
     id: `att-${index}`,
