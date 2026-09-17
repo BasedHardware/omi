@@ -343,7 +343,7 @@ class ClickUpClient:
         except Exception as e:
             print(f"❌ Error getting members: {type(e).__name__}", flush=True)
             return []
-    
+
     @staticmethod
     def _coerce_assignee_ids(assignees) -> List[int]:
         """
@@ -479,7 +479,7 @@ class ClickUpClient:
             status: Optional status name
             due_date: Optional due date — ISO format ("2025-09-15" or "2025-09-15T17:00:00") or Unix timestamp in milliseconds (int, float, or digit string); unparseable values are ignored
             assignees: Optional user IDs — non-numeric tokens are skipped rather than failing task creation
-            
+
         Returns:
             Task data if successful, None otherwise
         """
@@ -499,17 +499,17 @@ class ClickUpClient:
                 task_data["description"] = f"{description}\n\n--\nCreated via Omi"
             else:
                 task_data["description"] = "Created via Omi"
-            
+
             if priority is not None:
                 priority_value = self._coerce_priority(priority)
                 if priority_value is not None:
                     task_data["priority"] = priority_value
                 else:
                     print("⚠️  Ignoring invalid priority (expected 1-4)", flush=True)
-            
+
             if status:
                 task_data["status"] = status
-            
+
             assignee_ids = self._coerce_assignee_ids(assignees)
             if assignee_ids:
                 # ClickUp expects list of user IDs as integers
@@ -519,7 +519,7 @@ class ClickUpClient:
                 # Values arrived but none resolved to an ID — continue
                 # unassigned rather than aborting task creation.
                 print("⚠️  No usable assignee IDs; creating task unassigned", flush=True)
-            
+
             if due_date:
                 # ClickUp stores due dates as Unix milliseconds. ISO strings
                 # (with or without time) and numeric ms timestamps are
