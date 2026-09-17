@@ -31,6 +31,12 @@ export function MobileChat({
   scrollRef,
   onScroll,
   shouldAnimate,
+  presentation = 'overlay',
+  onExpand,
+  onRemember,
+  savingMemoryId = null,
+  savedMemoryIds = [],
+  memorySaveError = null,
 }: {
   messages: readonly ChatMessage[];
   busy: boolean;
@@ -45,12 +51,18 @@ export function MobileChat({
   scrollRef: React.RefObject<ScrollView | null>;
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   shouldAnimate: (id: string) => boolean;
+  presentation?: 'compact' | 'overlay';
+  onExpand?: () => void;
+  onRemember?: (message: ChatMessage) => void;
+  savingMemoryId?: string | null;
+  savedMemoryIds?: readonly string[];
+  memorySaveError?: string | null;
 }) {
   const reduceMotion = useReduceMotion();
   const resting =
     messages.length === 0 && !busy && !loadingHistory && error === null;
   return (
-    <View style={local.root}>
+    <View style={[local.root, presentation === 'compact' && local.compactRoot]}>
       <View style={local.header}>
         <FocusPressable
           accessibilityRole="button"
@@ -61,10 +73,19 @@ export function MobileChat({
         </FocusPressable>
         <OmiAvatar
           tone="ink"
-          size={36}
+          size={presentation === 'compact' ? 28 : 36}
           motion={busy ? 'breathe' : 'arrive'}
           reduceMotion={reduceMotion}
         />
+        {presentation === 'compact' && onExpand ? (
+          <FocusPressable
+            accessibilityRole="button"
+            accessibilityLabel="Expand response"
+            onPress={onExpand}
+            style={local.expand}>
+            <Text style={local.copy}>Expand</Text>
+          </FocusPressable>
+        ) : null}
       </View>
       <ScrollView
         accessibilityLabel="Chat scroll region"
@@ -119,13 +140,40 @@ export function MobileChat({
           </View>
         )}
         {messages.map(message => (
-          <ChatMessageRow
-            key={message.id}
-            message={message}
-            compact
-            animate={shouldAnimate(message.id)}
-            reduceMotion={reduceMotion}
-          />
+          <React.Fragment key={message.id}>
+            <ChatMessageRow
+              message={message}
+              compact
+              animate={shouldAnimate(message.id)}
+              reduceMotion={reduceMotion}
+            />
+            {message.sender === 'ai' &&
+            message.generationOutcome === 'completed' &&
+            message.text.trim() !== '' &&
+            onRemember ? (
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  savedMemoryIds.includes(message.id)
+                    ? 'Saved to timeline'
+                    : 'Remember response'
+                }
+                disabled={
+                  savingMemoryId === message.id ||
+                  savedMemoryIds.includes(message.id)
+                }
+                onPress={() => onRemember(message)}
+                style={local.remember}>
+                <Text style={local.copy}>
+                  {savingMemoryId === message.id
+                    ? 'Saving…'
+                    : savedMemoryIds.includes(message.id)
+                    ? 'Saved to timeline'
+                    : 'Remember'}
+                </Text>
+              </FocusPressable>
+            ) : null}
+          </React.Fragment>
         ))}
         {busy && !messages.some(isStreamingAssistant) && (
           <ChatThinking reduceMotion={reduceMotion} />
@@ -137,6 +185,11 @@ export function MobileChat({
             </Text>
           </View>
         )}
+        {memorySaveError !== null ? (
+          <Text accessibilityRole="alert" style={local.copy}>
+            {memorySaveError}
+          </Text>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -144,6 +197,15 @@ export function MobileChat({
 
 const local = StyleSheet.create({
   root: {flex: 1, backgroundColor: color.background},
+  compactRoot: {
+    height: 248,
+    maxHeight: 248,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.border,
+    backgroundColor: color.surface,
+    overflow: 'hidden',
+  },
   flex: {flex: 1},
   header: {
     flexDirection: 'row',
@@ -162,7 +224,13 @@ const local = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  expand: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
   content: {flexGrow: 1, padding: 16, gap: 24},
+  remember: {alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center'},
   notice: {alignItems: 'center', gap: 12, padding: 24},
   copy: {color: color.textMuted, fontSize: 14, lineHeight: 21},
   older: {

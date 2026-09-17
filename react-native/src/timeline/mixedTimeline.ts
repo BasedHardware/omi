@@ -18,21 +18,38 @@ export type TimelineRecall = {
   local: boolean;
 };
 
-export type MixedTimelineItem = TimelineConversation | TimelineRecall;
+export type TimelineMemory = {
+  kind: 'memory';
+  id: string;
+  title: string;
+  summary: string;
+  searchableText: string;
+  atMs: number | null;
+  source: 'backend';
+};
+
+export type MixedTimelineItem =
+  | TimelineConversation
+  | TimelineRecall
+  | TimelineMemory;
 
 export type MixedTimelineGroup = {
   label: string;
   items: MixedTimelineItem[];
 };
 
-function compareNewest(left: MixedTimelineItem, right: MixedTimelineItem): number {
+function compareNewest(
+  left: MixedTimelineItem,
+  right: MixedTimelineItem,
+): number {
   const leftTs = left.atMs ?? Number.NEGATIVE_INFINITY;
   const rightTs = right.atMs ?? Number.NEGATIVE_INFINITY;
   if (rightTs !== leftTs) {
     return rightTs - leftTs;
   }
   if (left.kind !== right.kind) {
-    return left.kind === 'conversation' ? -1 : 1;
+    const order = {conversation: 0, memory: 1, recall: 2} as const;
+    return order[left.kind] - order[right.kind];
   }
   return left.id.localeCompare(right.id);
 }
@@ -40,6 +57,7 @@ function compareNewest(left: MixedTimelineItem, right: MixedTimelineItem): numbe
 export function mergeMixedTimeline(input: {
   conversations: readonly TimelineConversation[];
   recall: readonly TimelineRecall[];
+  memories?: readonly TimelineMemory[];
 }): MixedTimelineItem[] {
   const recallById = new Map<string, TimelineRecall>();
   for (const item of input.recall) {
@@ -50,7 +68,15 @@ export function mergeMixedTimeline(input: {
     }
     recallById.set(item.id, existing.local ? existing : item);
   }
-  return [...input.conversations, ...recallById.values()].sort(compareNewest);
+  const memoryById = new Map<string, TimelineMemory>();
+  for (const item of input.memories ?? []) {
+    if (!memoryById.has(item.id)) memoryById.set(item.id, item);
+  }
+  return [
+    ...input.conversations,
+    ...memoryById.values(),
+    ...recallById.values(),
+  ].sort(compareNewest);
 }
 
 export function filterMixedTimeline(

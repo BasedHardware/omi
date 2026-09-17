@@ -145,7 +145,32 @@ const exampleOutcomes: DesktopReadOutcomes = {
       page,
     },
   },
-  memories: { status: "success", value: { items: [], page } },
+  memories: {
+    status: "success",
+    value: {
+      items:
+        example === "empty"
+          ? []
+          : [
+              {
+                kind: "memory" as const,
+                id: "preview-memory-1",
+                title: "The launch review is Friday afternoon.",
+                summary: "The launch review is Friday afternoon.",
+                searchableText: "launch review Friday afternoon",
+                citations: ["preview-conversation-0"],
+                timestamp: Math.floor(Date.parse(exampleToday(11, 2)) / 1000),
+                provenance: {
+                  label: "conversation",
+                  synthesisVersion: "preview",
+                  inputDigest: null,
+                  outputDigest: null,
+                },
+              },
+            ],
+      page,
+    },
+  },
   tasks: {
     status: "success",
     value: {
@@ -198,11 +223,12 @@ function Preview() {
       ? "Example connection error. Check Bluetooth and try again."
       : null
   );
-  const [mode, setMode] = useState<MobileOmnibarMode>("Ask");
+  const [mode, setMode] = useState<MobileOmnibarMode>("Search");
+  const [chatExpanded, setChatExpanded] = useState(chatState === "long");
   const composerRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
-    chatState === "ready" || chatState === "waiting"
+    chatState === "ready" || chatState === "waiting" || chatState === "long"
       ? [
           {
             id: "example-human",
@@ -217,6 +243,10 @@ function Preview() {
             text:
               chatState === "waiting"
                 ? ""
+                : chatState === "long"
+                ? `${"Here is a longer answer grounded in the loaded timeline. ".repeat(
+                    18
+                  )}\n\n1. Gather your notes.\n2. Pick the idea that matters most.\n3. Give it a little time today.`
                 : "Start with one useful next step.\n\n1. Gather your notes.\n2. Pick the idea that matters most.\n3. Give it a little time today.",
             createdAt: 1789641060,
             generationOutcome: chatState === "waiting" ? null : "completed",
@@ -332,8 +362,22 @@ function Preview() {
                     onLoadOlder: noop,
                     onClose: () => {
                       setChatOpen(false);
+                      setChatExpanded(false);
                       setRoute(beforeChat.current);
                     },
+                    presentation:
+                      chatExpanded ||
+                      chatMessages.some(
+                        (message) =>
+                          message.sender === "ai" && message.text.length > 420
+                      )
+                        ? "overlay"
+                        : "compact",
+                    onExpand: () => setChatExpanded(true),
+                    onRemember: () =>
+                      setChatError(
+                        "Preview only — authenticated memory saving is not available here."
+                      ),
                     prompts: [
                       "What should I remember?",
                       "Help me find a next step",
@@ -347,6 +391,12 @@ function Preview() {
                     onScroll: noop,
                   })
                 : undefined,
+              chatOverlay:
+                chatExpanded ||
+                chatMessages.some(
+                  (message) =>
+                    message.sender === "ai" && message.text.length > 420
+                ),
               omnibar: h(MobileOmnibar, {
                 key: "mobile-omnibar",
                 mode,
@@ -394,6 +444,19 @@ function Preview() {
                       summary: item.summary,
                       searchableText: item.searchableText,
                       atMs: Date.parse(item.startedAt ?? item.createdAt),
+                    }))
+                  : [],
+              memories:
+                outcomes?.memories.status === "success"
+                  ? outcomes.memories.value.items.map((item) => ({
+                      kind: "memory" as const,
+                      id: item.id,
+                      title: item.title,
+                      summary: item.summary,
+                      searchableText: item.searchableText,
+                      atMs:
+                        item.timestamp === null ? null : item.timestamp * 1000,
+                      source: "backend" as const,
                     }))
                   : [],
               recall:

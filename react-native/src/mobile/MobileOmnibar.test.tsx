@@ -83,3 +83,37 @@ test('Ask keeps Live beside Send; Search hides it', () => {
   expect(JSON.stringify(tree.toJSON())).not.toContain('Live control');
   act(() => tree.unmount());
 });
+
+test('Search is the default-style inline icon and the transparent dock has no mode row', () => {
+  let tree!: Renderer.ReactTestRenderer;
+  act(() => {
+    tree = Renderer.create(
+      <MobileOmnibar
+        mode="Search"
+        value=""
+        onChange={jest.fn()}
+        onSubmit={jest.fn()}
+        onStop={jest.fn()}
+        onModeChange={jest.fn()}
+        busy={false}
+        canStop={false}
+        inputRef={{current: null}}
+      />,
+    );
+  });
+  const dock = tree.root.findByProps({
+    accessibilityLabel: 'Ask and search dock',
+  });
+  expect(dock.props.style.backgroundColor).toBe('transparent');
+  expect(
+    tree.root.findByProps({accessibilityLabel: 'Search mode'}).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  expect(
+    tree.root.findByProps({accessibilityLabel: 'Ask mode'}).findAllByType(Text),
+  ).toHaveLength(0);
+  expect(tree.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Search loaded data',
+  );
+  act(() => tree.unmount());
+});

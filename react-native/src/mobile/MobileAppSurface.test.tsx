@@ -9,7 +9,6 @@ jest.mock('../ui/OmiAvatar', () => ({
     require('react').createElement('OmiAvatar', props),
 }));
 
-
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const component =
@@ -90,6 +89,17 @@ function buildProps(
         local: true,
       },
     ],
+    memories: [
+      {
+        kind: 'memory',
+        id: 'memory-1',
+        title: 'Launch review is Friday',
+        summary: 'Launch review is Friday',
+        searchableText: 'Launch review Friday',
+        atMs: Date.now() - 30 * 60 * 1000,
+        source: 'backend',
+      },
+    ],
     timelineStatus: 'ready',
     tasks: [{id: 'task-1', title: 'Prepare product demo', completed: false}],
     taskStatus: 'ready',
@@ -141,6 +151,7 @@ describe('MobileAppSurface', () => {
     expect(tree).toContain('Prepare product demo');
     expect(tree).toContain('Product standup');
     expect(tree).toContain('Figma');
+    expect(tree).toContain('Launch review is Friday');
     expect(tree).toContain('Conversation');
     expect(tree).toContain('Recall');
     expect(tree).toContain('Shared bottom dock');
@@ -192,7 +203,19 @@ describe('MobileAppSurface', () => {
       recall: [],
     });
     expect(renderedText(renderer)).toContain('Couldn’t load timeline');
-    expect(renderedText(renderer)).not.toContain("Nothing on your timeline yet");
+    expect(renderedText(renderer)).not.toContain(
+      'Nothing on your timeline yet',
+    );
+  });
+
+  test('partial timeline read failures stay visible without hiding the notice', () => {
+    const renderer = render({
+      timelineNotice: 'Saved memories could not be refreshed.',
+    });
+    expect(renderedText(renderer)).toContain(
+      'Saved memories could not be refreshed.',
+    );
+    expect(renderedText(renderer)).toContain('Product standup');
   });
 
   test('settings lives in the top-right control, not a bottom tab', () => {
@@ -238,8 +261,7 @@ test('task edits wait for authoritative props and preserve a failed draft for re
   act(() => {
     renderer.root
       .find(
-        node =>
-          node.props.accessibilityLabel === 'Edit Prepare product demo',
+        node => node.props.accessibilityLabel === 'Edit Prepare product demo',
       )
       .props.onPress();
   });
@@ -284,6 +306,25 @@ test('the bottom dock stays mounted while chat is open', () => {
   });
   expect(renderedText(renderer)).toContain('Chat overlay');
   expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Ask and search dock'),
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Ask and search dock',
+    ),
+  ).toBeDefined();
+});
+
+test('compact replies stay above the timeline and the viewport has both edge fades', () => {
+  const renderer = render({
+    chatContent: <Text>Short answer</Text>,
+    chatOverlay: false,
+  });
+  expect(
+    renderer.root.findByProps({accessibilityLabel: 'Compact chat response'}),
+  ).toBeDefined();
+  expect(renderedText(renderer)).toContain('Product standup');
+  expect(
+    renderer.root.findByProps({testID: 'timeline-top-fade'}),
+  ).toBeDefined();
+  expect(
+    renderer.root.findByProps({testID: 'timeline-bottom-fade'}),
   ).toBeDefined();
 });

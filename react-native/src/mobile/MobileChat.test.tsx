@@ -116,3 +116,31 @@ test('streaming chat uses one pending response, retains stop and gates older loa
   expect(onSend).not.toHaveBeenCalled();
   act(() => tree.unmount());
 });
+
+test('compact responses expand and expose an explicit remember action', () => {
+  const onExpand = jest.fn();
+  const onRemember = jest.fn();
+  const {tree, control} = setup({
+    presentation: 'compact',
+    onExpand,
+    onRemember,
+    messages: [
+      {
+        id: 'assistant-1',
+        sender: 'ai',
+        text: 'The launch review is Friday afternoon.',
+        createdAt: 1000,
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  expect(control('Compact chat response')).toBeUndefined();
+  expect(control('Expand response')).toBeDefined();
+  act(() => control('Expand response').props.onPress());
+  expect(onExpand).toHaveBeenCalledTimes(1);
+  act(() => control('Remember response').props.onPress());
+  expect(onRemember).toHaveBeenCalledWith(
+    expect.objectContaining({id: 'assistant-1'}),
+  );
+  act(() => tree.unmount());
+});

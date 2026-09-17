@@ -33,9 +33,22 @@ const recall = (
   local,
 });
 
+const memory = (id: string, atMs: number | null) => ({
+  kind: 'memory' as const,
+  id,
+  title: id,
+  summary: `Remember ${id}`,
+  searchableText: `Remember ${id}`,
+  atMs,
+  source: 'backend' as const,
+});
+
 test('interleaves conversations and recall newest first without dropping either source', () => {
   const items = mergeMixedTimeline({
-    conversations: [conversation('talk-late', 300), conversation('talk-early', 100)],
+    conversations: [
+      conversation('talk-late', 300),
+      conversation('talk-early', 100),
+    ],
     recall: [recall('screen-mid', 200), recall('screen-oldest', 50)],
   });
   expect(items.map(item => item.id)).toEqual([
@@ -56,6 +69,19 @@ test('equal timestamps keep conversations ahead of recall, then sort by id', () 
     'conversation:b-talk',
     'recall:a-screen',
     'recall:z-screen',
+  ]);
+});
+
+test('interleaves authenticated memories with conversations and recall', () => {
+  const items = mergeMixedTimeline({
+    conversations: [conversation('conversation', 300)],
+    memories: [memory('memory', 200)],
+    recall: [recall('recall', 100)],
+  });
+  expect(items.map(item => item.kind)).toEqual([
+    'conversation',
+    'memory',
+    'recall',
   ]);
 });
 
@@ -86,7 +112,9 @@ test('search covers loaded titles only', () => {
 
 test('day grouping preserves newest-first order inside each day', () => {
   const items = mergeMixedTimeline({
-    conversations: [conversation('today-talk', Date.parse('2026-09-17T12:00:00Z'))],
+    conversations: [
+      conversation('today-talk', Date.parse('2026-09-17T12:00:00Z')),
+    ],
     recall: [recall('yesterday-screen', Date.parse('2026-09-16T12:00:00Z'))],
   });
   const groups = groupMixedTimeline(

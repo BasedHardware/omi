@@ -29,6 +29,7 @@ import {
 import type {
   MixedTimelineItem,
   TimelineConversation,
+  TimelineMemory,
   TimelineRecall,
 } from '../timeline/mixedTimeline';
 import {
@@ -66,12 +67,14 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
   conversations?: readonly TimelineConversation[];
+  memories?: readonly TimelineMemory[];
   recall?: readonly TimelineRecall[];
   timelineStatus?: MobileProjectionStatus;
   timelineNotice?: string | null;
   onOpenTimelineItem?: (item: MixedTimelineItem) => void;
   omnibar: React.ReactNode;
   chatContent?: React.ReactNode;
+  chatOverlay?: boolean;
   searchQuery?: string;
   onOpenDevice: () => void;
   onOpenSettings?: () => void;
@@ -89,6 +92,7 @@ export function MobileAppSurface({
   activeRoute,
   omnibar,
   chatContent,
+  chatOverlay = true,
   searchQuery = '',
   capture,
   device,
@@ -109,6 +113,7 @@ export function MobileAppSurface({
   onDismissTaskMutation,
   writesAvailable = false,
   conversations = [],
+  memories = [],
   recall = [],
   timelineStatus = 'ready',
   timelineNotice = null,
@@ -156,10 +161,11 @@ export function MobileAppSurface({
     () =>
       buildTimelineItems({
         conversations,
+        memories,
         recall,
         query: searchQuery,
       }),
-    [conversations, recall, searchQuery],
+    [conversations, memories, recall, searchQuery],
   );
 
   const rows = useMemo<HomeRow[]>(() => {
@@ -192,11 +198,7 @@ export function MobileAppSurface({
       next.unshift({kind: 'tasks', key: 'tasks'});
     }
     return next;
-  }, [
-    timelineItems,
-    timelineStatus,
-    nowEpochMilliseconds,
-  ]);
+  }, [timelineItems, timelineStatus, nowEpochMilliseconds]);
 
   const renderRow = useCallback(
     ({item}: {item: HomeRow}) => {
@@ -209,20 +211,22 @@ export function MobileAppSurface({
               openTasks.length === 0 ? (
                 <TimelineStatePanel noun="action items" status="empty" />
               ) : (
-                openTasks.slice(0, 5).map((task, index) => (
-                  <TimelineTaskRow
-                    key={task.id}
-                    onToggle={writesAvailable ? onTaskToggle : undefined}
-                    onEdit={
-                      writesAvailable && onTaskEdit
-                        ? setSelectedTaskId
-                        : undefined
-                    }
-                    busy={busyTaskId !== null}
-                    last={index === openTasks.slice(0, 5).length - 1}
-                    task={task}
-                  />
-                ))
+                openTasks
+                  .slice(0, 5)
+                  .map((task, index) => (
+                    <TimelineTaskRow
+                      key={task.id}
+                      onToggle={writesAvailable ? onTaskToggle : undefined}
+                      onEdit={
+                        writesAvailable && onTaskEdit
+                          ? setSelectedTaskId
+                          : undefined
+                      }
+                      busy={busyTaskId !== null}
+                      last={index === openTasks.slice(0, 5).length - 1}
+                      task={task}
+                    />
+                  ))
               )
             ) : (
               <TimelineStatePanel noun="action items" status={taskStatus} />
@@ -242,30 +246,27 @@ export function MobileAppSurface({
           {item.label === 'Today' ? (
             <>
               {taskFeedback}
-              {taskStatus === 'ready'
-                ? tasks
-                    .filter(task => !task.completed)
-                    .slice(0, 5)
-                    .map(task => (
-                      <TimelineTaskRow
-                        key={task.id}
-                        onToggle={writesAvailable ? onTaskToggle : undefined}
-                        onEdit={
-                          writesAvailable && onTaskEdit
-                            ? setSelectedTaskId
-                            : undefined
-                        }
-                        busy={busyTaskId !== null}
-                        last={false}
-                        task={task}
-                      />
-                    ))
-                : (
-                    <TimelineStatePanel
-                      noun="action items"
-                      status={taskStatus}
+              {taskStatus === 'ready' ? (
+                tasks
+                  .filter(task => !task.completed)
+                  .slice(0, 5)
+                  .map(task => (
+                    <TimelineTaskRow
+                      key={task.id}
+                      onToggle={writesAvailable ? onTaskToggle : undefined}
+                      onEdit={
+                        writesAvailable && onTaskEdit
+                          ? setSelectedTaskId
+                          : undefined
+                      }
+                      busy={busyTaskId !== null}
+                      last={false}
+                      task={task}
                     />
-                  )}
+                  ))
+              ) : (
+                <TimelineStatePanel noun="action items" status={taskStatus} />
+              )}
             </>
           ) : null}
           {item.items.map((event, index) => (
@@ -293,7 +294,7 @@ export function MobileAppSurface({
   );
 
   const overlay =
-    chatContent ||
+    (chatContent && chatOverlay) ||
     activeRoute === 'settings' ||
     (activeRoute === 'apps' && appsContent) ||
     activeRoute === 'tasks' ||
@@ -303,6 +304,13 @@ export function MobileAppSurface({
     chatContent
   ) : activeRoute === 'settings' ? (
     <View accessibilityLabel="Settings stage" style={styles.flex}>
+      <Pressable
+        accessibilityLabel="Back to Home"
+        accessibilityRole="button"
+        onPress={() => onRouteChange('home')}
+        style={styles.backToHome}>
+        <Text style={styles.backCopy}>Home</Text>
+      </Pressable>
       {settingsContent}
     </View>
   ) : activeRoute === 'apps' && appsContent ? (
@@ -400,9 +408,7 @@ export function MobileAppSurface({
               accessibilityRole="button"
               accessibilityState={{selected: activeRoute === 'settings'}}
               onPress={() =>
-                onOpenSettings
-                  ? onOpenSettings()
-                  : onRouteChange('settings')
+                onOpenSettings ? onOpenSettings() : onRouteChange('settings')
               }
               style={styles.roundButton}>
               <Settings color={mobileColor.text} size={20} />
@@ -417,16 +423,56 @@ export function MobileAppSurface({
         {overlay ? (
           <View style={[styles.flex, styles.stage]}>{stage}</View>
         ) : (
-          <FlatList
-            contentContainerStyle={styles.content}
-            data={rows}
-            ListHeaderComponent={
-              <View>{devicePanel ? <View>{devicePanel}</View> : null}</View>
-            }
-            keyExtractor={item => item.key}
-            renderItem={renderRow}
-            showsVerticalScrollIndicator={false}
-          />
+          <View style={styles.contentStage}>
+            {chatContent && !chatOverlay ? (
+              <View
+                accessibilityLabel="Compact chat response"
+                style={styles.compactChat}>
+                {chatContent}
+              </View>
+            ) : null}
+            <FlatList
+              contentContainerStyle={styles.content}
+              data={rows}
+              ListHeaderComponent={
+                <View>
+                  {devicePanel ? <View>{devicePanel}</View> : null}
+                  {timelineNotice ? (
+                    <Text
+                      accessibilityRole="alert"
+                      style={styles.timelineNotice}>
+                      {timelineNotice}
+                    </Text>
+                  ) : null}
+                </View>
+              }
+              keyExtractor={item => item.key}
+              renderItem={renderRow}
+              showsVerticalScrollIndicator={false}
+            />
+            <View
+              testID="timeline-top-fade"
+              pointerEvents="none"
+              style={[styles.edgeFade, styles.edgeFadeTop]}>
+              {[0.84, 0.58, 0.34, 0.16, 0.05].map((opacity, index) => (
+                <View
+                  key={`top-${index}`}
+                  style={[styles.fadeBand, {opacity}]}
+                />
+              ))}
+            </View>
+            <View
+              testID="timeline-bottom-fade"
+              pointerEvents="none"
+              style={[styles.edgeFade, styles.edgeFadeBottom]}>
+              {[0.05, 0.16, 0.34, 0.58, 0.84].map((opacity, index) => (
+                <View
+                  key={`bottom-${index}`}
+                  style={[styles.fadeBand, {opacity}]}
+                />
+              ))}
+            </View>
+          </View>
         )}
         {omnibar}
       </KeyboardAvoidingView>
@@ -437,6 +483,13 @@ export function MobileAppSurface({
 const styles = StyleSheet.create({
   flex: {flex: 1},
   stage: {paddingTop: 4},
+  backToHome: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: mobileSpace.md,
+  },
+  backCopy: {...mobileType.caption, color: mobileColor.textMuted},
   safeArea: {backgroundColor: mobileColor.background, flex: 1},
   topBar: {
     alignItems: 'center',
@@ -485,6 +538,11 @@ const styles = StyleSheet.create({
     color: mobileColor.text,
     padding: mobileSpace.md,
   },
+  timelineNotice: {
+    ...mobileType.caption,
+    color: mobileColor.textMuted,
+    paddingBottom: mobileSpace.sm,
+  },
   roundButton: {
     flexShrink: 0,
     alignItems: 'center',
@@ -500,6 +558,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: mobileSpace.md,
     paddingTop: 8,
   },
+  contentStage: {flex: 1, minHeight: 0, position: 'relative'},
+  compactChat: {
+    maxHeight: 248,
+    paddingHorizontal: mobileSpace.md,
+    paddingTop: mobileSpace.xs,
+    position: 'relative',
+    zIndex: 3,
+  },
+  edgeFade: {
+    flexDirection: 'column',
+    height: 34,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    zIndex: 2,
+  },
+  edgeFadeTop: {top: 0},
+  edgeFadeBottom: {bottom: 0, justifyContent: 'flex-end'},
+  fadeBand: {backgroundColor: mobileColor.background, flex: 1},
   captureChip: {
     alignItems: 'center',
     backgroundColor: mobileColor.surface,

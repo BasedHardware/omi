@@ -138,6 +138,7 @@ export default ({
       preserveSymlinks: true,
     },
     server: {
+      allowedHosts: [".onamp.dev"],
       host: "127.0.0.1",
       ...(proxy === undefined ? {} : { proxy }),
     },

@@ -86,43 +86,19 @@ afterEach(() => {
   act(() => renderers.splice(0).forEach(renderer => renderer.unmount()));
 });
 
-test.each([
-  ['Settings', 'Settings stage'],
-  ['Expand', 'Memories stage'],
-  ['Apps', 'Connectors stage'],
-])(
-  'mobile %s opens its real destination and can return home',
-  async (label, stage) => {
-    const renderer = await renderApp();
-    await act(async () => {
-      if (label === 'Expand') {
-        const expand = renderer.root.findAll(
-          node => node.props.children === 'Expand',
-        )[0];
-        let button = expand.parent;
-        while (button && typeof button.props.onPress !== 'function') {
-          button = button.parent;
-        }
-        button!.props.onPress();
-      } else {
-        control(renderer, label).props.onPress();
-      }
-    });
-    expect(control(renderer, stage)).toBeDefined();
-    await act(async () =>
-      control(
-        renderer,
-        label === 'Expand' ? 'Back to Home' : 'Home',
-      ).props.onPress(),
-    );
-    expect(control(renderer, 'Ask Omi')).toBeDefined();
-  },
-);
+test('mobile settings opens from the top chrome and can return home', async () => {
+  const renderer = await renderApp();
+  await act(async () => control(renderer, 'Settings').props.onPress());
+  expect(control(renderer, 'Settings stage')).toBeDefined();
+  await act(async () => control(renderer, 'Back to Home').props.onPress());
+  expect(control(renderer, 'Search loaded data')).toBeDefined();
+});
 
 test('mobile Ask Omi opens the actual chat and reports a missing backend', async () => {
   const renderer = await renderApp();
   const connections = mockNative.connectDevice.mock.calls.length;
   const disconnections = mockNative.disconnectDevice.mock.calls.length;
+  await act(async () => control(renderer, 'Ask mode').props.onPress());
   const input = control(renderer, 'Ask Omi');
   await act(async () => {
     renderer.root
@@ -133,7 +109,7 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
   expect(control(renderer, 'Chat scroll region')).toBeDefined();
   expect(control(renderer, 'Ask Omi')).toBe(input);
-  expect(JSON.stringify(renderer.toJSON())).toContain('Chat');
+  expect(control(renderer, 'Compact chat response')).toBeDefined();
   await act(async () => control(renderer, 'Close chat').props.onPress());
   expect(control(renderer, 'Open Omi device')).toBeDefined();
   expect(control(renderer, 'Ask Omi').props.value).toBe('Hello Omi');
@@ -142,30 +118,20 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   expect(mockNative.disconnectDevice).toHaveBeenCalledTimes(disconnections);
 });
 
-test('bottom Ask returns to the previous page; Search uses the shared draft without opening chat', async () => {
+test('Search is the default and Ask/Search use one shared draft without tabs', async () => {
   const renderer = await renderApp();
-  await act(async () => control(renderer, 'Conversations').props.onPress());
-  const input = control(renderer, 'Ask Omi');
+  const input = control(renderer, 'Search loaded data');
   await act(async () => input.props.onChangeText('Workspace ideas'));
+  expect(
+    control(renderer, 'Search mode').props.accessibilityState.selected,
+  ).toBe(true);
+  await act(async () => control(renderer, 'Ask mode').props.onPress());
+  expect(control(renderer, 'Ask Omi').props.value).toBe('Workspace ideas');
+  expect(control(renderer, 'Chat scroll region')).toBeUndefined();
   await act(async () => control(renderer, 'Search mode').props.onPress());
   expect(control(renderer, 'Search loaded data').props.value).toBe(
     'Workspace ideas',
   );
-  expect(control(renderer, 'Chat scroll region')).toBeUndefined();
-  expect(control(renderer, 'Search loaded conversations')).toBeUndefined();
-  await act(async () => control(renderer, 'Ask mode').props.onPress());
-  await act(async () => control(renderer, 'Send to Omi').props.onPress());
-  expect(control(renderer, 'Chat scroll region')).toBeDefined();
-  await act(async () => control(renderer, 'Close chat').props.onPress());
-  expect(
-    control(renderer, 'Conversations').props.accessibilityState.selected,
-  ).toBe(true);
-  expect(control(renderer, 'Ask Omi').props.value).toBe('Workspace ideas');
-  await act(async () => control(renderer, 'Search mode').props.onPress());
-  await act(async () =>
-    control(renderer, 'Search loaded data').props.onSubmitEditing(),
-  );
-  expect(control(renderer, 'Search results')).toBeDefined();
   expect(control(renderer, 'Chat scroll region')).toBeUndefined();
 });
 
@@ -246,7 +212,7 @@ test.each([true, false])(
   },
 );
 
-test('Settings remains a selected bottom destination and keeps Apps reachable', async () => {
+test('Settings remains a selected top destination and returns to the one-page timeline', async () => {
   const renderer = await renderApp();
   await act(async () => control(renderer, 'Settings').props.onPress());
   expect(control(renderer, 'Settings stage')).toBeDefined();
@@ -255,11 +221,6 @@ test('Settings remains a selected bottom destination and keeps Apps reachable', 
     true,
   );
   expect(control(renderer, 'Account settings')).toBeDefined();
-  await act(async () => control(renderer, 'Apps').props.onPress());
-  expect(control(renderer, 'Connectors stage')).toBeDefined();
-  expect(control(renderer, 'Apps').props.accessibilityState.selected).toBe(
-    true,
-  );
-  await act(async () => control(renderer, 'Home').props.onPress());
-  expect(control(renderer, 'Ask Omi')).toBeDefined();
+  await act(async () => control(renderer, 'Back to Home').props.onPress());
+  expect(control(renderer, 'Search loaded data')).toBeDefined();
 });

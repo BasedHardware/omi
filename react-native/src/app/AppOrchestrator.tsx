@@ -76,6 +76,7 @@ import {
 import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
 import {MobileChat} from '../mobile/MobileChat';
 import {MobileOmnibar, type MobileOmnibarMode} from '../mobile/MobileOmnibar';
+import {saveTimelineMemory} from '../memoryNoteClient';
 import {
   MobileAppSurface,
   type MobileProjectionStatus,
@@ -145,10 +146,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     resolveInitialRoute(initialRoute),
   );
   const [homeChatOpen, setHomeChatOpen] = useState(false);
-  const [mobileMode, setMobileMode] = useState<MobileOmnibarMode>('Ask');
+  const [mobileMode, setMobileMode] = useState<MobileOmnibarMode>('Search');
+  const [mobileChatExpanded, setMobileChatExpanded] = useState(false);
+  const [memorySavingId, setMemorySavingId] = useState<string | null>(null);
+  const [savedMemoryIds, setSavedMemoryIds] = useState<string[]>([]);
+  const [memorySaveError, setMemorySaveError] = useState<string | null>(null);
   const beforeMobileChat = useRef<{route: Route; mode: MobileOmnibarMode}>({
     route: 'Home',
-    mode: 'Ask',
+    mode: 'Search',
   });
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   // useOnboarding owns the desktop session gate and needs a reads refresh;
@@ -669,6 +674,47 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     }
   };
 
+  const rememberMessage = async (message: ChatMessage) => {
+    if (memorySavingId !== null) return;
+    const backend = omiBackend;
+    const accountEpoch =
+      readOutcomes?.tasks.status === 'success'
+        ? readOutcomes.tasks.value.accountEpoch
+        : null;
+    if (backend === undefined || backend === null || accountEpoch === null) {
+      setMemorySaveError(
+        'Memory saving is unavailable until an authenticated account epoch is loaded.',
+      );
+      return;
+    }
+    setMemorySavingId(message.id);
+    setMemorySaveError(null);
+    try {
+      await saveTimelineMemory(
+        backend,
+        message.text,
+        accountEpoch,
+        `remember:${message.id}`,
+      );
+      setSavedMemoryIds(current =>
+        current.includes(message.id) ? current : [...current, message.id],
+      );
+      try {
+        await refreshReads(false);
+      } catch {
+        setMemorySaveError(
+          'Saved to your account, but the timeline could not refresh yet.',
+        );
+      }
+    } catch (error) {
+      setMemorySaveError(
+        error instanceof Error ? error.message : 'Memory could not be saved.',
+      );
+    } finally {
+      setMemorySavingId(null);
+    }
+  };
+
   const loadOlderMessages = async () => {
     const backend = omiBackend;
     const cursor = olderChatCursor;
@@ -849,11 +895,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     />
   );
   const mobileLiveControl = (
-    <LiveVoiceButton
-      backend={omiBackend}
-      dock
-      provider={liveVoiceProvider}
-    />
+    <LiveVoiceButton backend={omiBackend} dock provider={liveVoiceProvider} />
   );
   const currentItems = reads.slice(0, 2);
 
@@ -1085,6 +1127,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     );
   }
 
+  const mobileChatHasLongResponse = messages.some(
+    message => message.sender === 'ai' && message.text.length > 420,
+  );
+  const mobileChatOverlay = mobileChatExpanded || mobileChatHasLongResponse;
   const mobileChat = homeChatOpen ? (
     <MobileChat
       messages={messages}
@@ -1096,9 +1142,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       onLoadOlder={loadOlderMessages}
       onClose={() => {
         setHomeChatOpen(false);
+        setMobileChatExpanded(false);
         setRoute(beforeMobileChat.current.route);
         setMobileMode(beforeMobileChat.current.mode);
       }}
+      presentation={mobileChatOverlay ? 'overlay' : 'compact'}
+      onExpand={() => setMobileChatExpanded(true)}
+      onRemember={message => {
+        rememberMessage(message).catch(() => undefined);
+      }}
+      savingMemoryId={memorySavingId}
+      savedMemoryIds={savedMemoryIds}
+      memorySaveError={memorySaveError}
       onUsePrompt={prompt => {
         setMobileMode('Ask');
         setDraft(prompt);
@@ -1142,11 +1197,21 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             title: item.title,
             summary: item.summary,
             searchableText: item.searchableText,
-            atMs: Number.isFinite(
-              Date.parse(item.startedAt ?? item.createdAt),
-            )
+            atMs: Number.isFinite(Date.parse(item.startedAt ?? item.createdAt))
               ? Date.parse(item.startedAt ?? item.createdAt)
               : null,
+          }))
+        : [];
+    const timelineMemories =
+      readOutcomes?.memories.status === 'success'
+        ? readOutcomes.memories.value.items.map(item => ({
+            kind: 'memory' as const,
+            id: item.id,
+            title: item.title,
+            summary: item.summary,
+            searchableText: item.searchableText,
+            atMs: item.timestamp === null ? null : item.timestamp * 1000,
+            source: 'backend' as const,
           }))
         : [];
     const projectionStatus: MobileProjectionStatus =
@@ -1172,6 +1237,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         {...taskMutations}
         activeRoute={activeMobileRoute}
         chatContent={mobileChat}
+        chatOverlay={mobileChatOverlay}
         omnibar={
           <MobileOmnibar
             key="mobile-omnibar"
@@ -1200,6 +1266,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               }
               if (!homeChatOpen)
                 beforeMobileChat.current = {route, mode: mobileMode};
+              setMobileChatExpanded(false);
               setRoute('Home');
               setHomeChatOpen(true);
               send().catch(() => undefined);
@@ -1208,6 +1275,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
         searchQuery={mobileMode === 'Search' ? draft : ''}
         conversations={timelineConversations}
+        memories={timelineMemories}
         recall={rewindMoments.items}
         timelineStatus={
           rewindMoments.status === 'error' &&
@@ -1222,7 +1290,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             : 'ready'
         }
         timelineNotice={
-          [rewindMoments.error, rewindMoments.syncError]
+          [
+            rewindMoments.error,
+            rewindMoments.syncError,
+            readOutcomes?.memories.status === 'error'
+              ? readOutcomes.memories.error
+              : null,
+          ]
             .filter(Boolean)
             .join(' ') || null
         }

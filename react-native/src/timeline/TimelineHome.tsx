@@ -5,6 +5,7 @@ import Check from 'lucide-react-native/icons/check';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Monitor from 'lucide-react-native/icons/monitor';
 import Pencil from 'lucide-react-native/icons/pencil';
+import Sparkles from 'lucide-react-native/icons/sparkles';
 import {conversationGroupLabel} from '../desktopReadClient';
 import {
   filterMixedTimeline,
@@ -12,6 +13,7 @@ import {
   mergeMixedTimeline,
   type MixedTimelineItem,
   type TimelineConversation,
+  type TimelineMemory,
   type TimelineRecall,
 } from './mixedTimeline';
 import {
@@ -97,7 +99,8 @@ export const TimelineTaskRow = memo(function TimelineTaskRow({
       <TimelineRail
         last={last}
         marker={
-          <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
+          <View
+            style={[styles.checkbox, task.completed && styles.checkboxDone]}>
             {task.completed && (
               <Check color={mobileColor.background} size={12} />
             )}
@@ -160,14 +163,30 @@ export const TimelineEventRow = memo(function TimelineEventRow({
   onPress?: (item: MixedTimelineItem) => void;
   last?: boolean;
 }) {
-  const kind = item.kind === 'conversation' ? 'Conversation' : 'Recall';
+  const kind =
+    item.kind === 'conversation'
+      ? 'Conversation'
+      : item.kind === 'memory'
+      ? 'Memory'
+      : 'Recall';
   const title =
     item.kind === 'conversation'
       ? item.title || 'Conversation title unavailable'
+      : item.kind === 'memory'
+      ? item.title || 'Memory title unavailable'
       : item.appName;
   const detail =
-    item.kind === 'conversation' ? item.summary : item.windowTitle;
-  const Icon = item.kind === 'conversation' ? MessageCircle : Monitor;
+    item.kind === 'conversation'
+      ? item.summary
+      : item.kind === 'memory'
+      ? item.summary
+      : item.windowTitle;
+  const Icon =
+    item.kind === 'conversation'
+      ? MessageCircle
+      : item.kind === 'memory'
+      ? Sparkles
+      : Monitor;
   return (
     <Pressable
       accessibilityRole="button"
@@ -200,12 +219,14 @@ export const TimelineEventRow = memo(function TimelineEventRow({
 export function buildTimelineItems(input: {
   conversations: readonly TimelineConversation[];
   recall: readonly TimelineRecall[];
+  memories?: readonly TimelineMemory[];
   query: string;
 }): MixedTimelineItem[] {
   return filterMixedTimeline(
     mergeMixedTimeline({
       conversations: input.conversations,
       recall: input.recall,
+      memories: input.memories,
     }),
     input.query,
   );

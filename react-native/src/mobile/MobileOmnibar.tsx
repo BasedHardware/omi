@@ -1,6 +1,7 @@
 import React from 'react';
-import {StyleSheet, Text, TextInput, View} from 'react-native';
+import {StyleSheet, TextInput, View} from 'react-native';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
+import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Search from 'lucide-react-native/icons/search';
 import Square from 'lucide-react-native/icons/square';
 import X from 'lucide-react-native/icons/x';
@@ -43,23 +44,27 @@ export function MobileOmnibar({
   };
   return (
     <View accessibilityLabel="Ask and search dock" style={styles.root}>
-      <View style={styles.modes}>
-        {(['Ask', 'Search'] as const).map(item => (
-          <FocusPressable
-            key={item}
-            accessibilityRole="button"
-            accessibilityLabel={`${item} mode`}
-            accessibilityState={{selected: mode === item}}
-            onPress={() => onModeChange(item)}
-            style={[styles.mode, mode === item && styles.selected]}>
-            <Text
-              style={[styles.modeText, mode === item && styles.selectedText]}>
-              {item}
-            </Text>
-          </FocusPressable>
-        ))}
-      </View>
       <View style={styles.field}>
+        <View style={styles.modes}>
+          {(['Search', 'Ask'] as const).map(item => {
+            const Icon = item === 'Search' ? Search : MessageCircle;
+            return (
+              <FocusPressable
+                key={item}
+                accessibilityRole="button"
+                accessibilityLabel={`${item} mode`}
+                accessibilityHint={`Use ${item.toLowerCase()} mode`}
+                accessibilityState={{selected: mode === item}}
+                onPress={() => onModeChange(item)}
+                style={[styles.mode, mode === item && styles.selected]}>
+                <Icon
+                  color={mode === item ? color.text : color.textMuted}
+                  size={17}
+                />
+              </FocusPressable>
+            );
+          })}
+        </View>
         <TextInput
           ref={inputRef}
           accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search loaded data'}
@@ -114,24 +119,27 @@ const styles = StyleSheet.create({
   root: {
     marginHorizontal: 10,
     marginVertical: 6,
-    padding: 4,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.border,
-    backgroundColor: color.surface,
-    gap: 4,
+    backgroundColor: 'transparent',
+    padding: 0,
   },
-  modes: {flexDirection: 'row', gap: 4},
+  modes: {flexDirection: 'row', gap: 2},
   mode: {
-    minHeight: 44,
-    paddingHorizontal: 18,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 14,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   selected: {backgroundColor: color.surfaceRaised},
-  modeText: {fontSize: 13, color: color.textMuted},
-  selectedText: {color: color.text, fontWeight: '600'},
-  field: {flexDirection: 'row', alignItems: 'center'},
+  field: {
+    backgroundColor: color.surface,
+    borderColor: color.border,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 4,
+  },
   input: {
     flex: 1,
     minWidth: 0,
