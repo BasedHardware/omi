@@ -158,15 +158,15 @@ describe('MobileAppSurface', () => {
       onTaskToggle,
       writesAvailable: true,
     });
-    const apps = renderer.root.find(
-      node => node.props.accessibilityLabel === 'Apps',
+    const tasks = renderer.root.find(
+      node => node.props.accessibilityLabel === 'Tasks',
     );
     const task = renderer.root.find(
       node => node.props.accessibilityLabel === 'Complete Prepare product demo',
     );
-    act(() => apps.props.onPress());
+    act(() => tasks.props.onPress());
     act(() => task.props.onPress());
-    expect(onRouteChange).toHaveBeenCalledWith('apps');
+    expect(onRouteChange).toHaveBeenCalledWith('tasks');
     expect(onTaskToggle).toHaveBeenCalledWith('task-1');
   });
 
@@ -389,7 +389,7 @@ test('the mobile mark respects reduced motion and does not pretend to be a captu
   act(() => renderer.unmount());
 });
 
-test('Home shows open task metadata and opens all tasks without a Tasks tab', () => {
+test('Home shows open task metadata and opens all tasks with the Tasks tab selected', () => {
   const props = buildProps();
   const tasks = [
     {...props.tasks[0], id: 'done', title: 'Already finished', completed: true},
@@ -413,7 +413,7 @@ test('Home shows open task metadata and opens all tasks without a Tasks tab', ()
     tree.root.findAll(
       node =>
         node.props.accessibilityRole === 'tab' &&
-        node.props.accessibilityLabel === 'Tasks',
+        node.props.accessibilityLabel === 'Apps',
     ),
   ).toHaveLength(0);
   act(() =>
@@ -431,12 +431,12 @@ test('Home shows open task metadata and opens all tasks without a Tasks tab', ()
   );
   expect(renderedText(tree)).toContain('Already finished');
   expect(
-    tree.root.findAll(node => node.props.accessibilityLabel === 'Home')[0].props
-      .accessibilityState.selected,
+    tree.root.findAll(node => node.props.accessibilityLabel === 'Tasks')[0]
+      .props.accessibilityState.selected,
   ).toBe(true);
   act(() =>
     tree.root
-      .findAll(node => node.props.accessibilityLabel === 'Back to Home')[0]
+      .findAll(node => node.props.accessibilityLabel === 'Home')[0]
       .props.onPress(),
   );
   expect(props.onRouteChange).toHaveBeenCalledWith('home');
