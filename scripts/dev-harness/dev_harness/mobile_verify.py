@@ -702,111 +702,18 @@ def cmd_fast(repo_root: Path, args: argparse.Namespace, *, runner_path: Path | N
 
 
 def cmd_smoke(repo_root: Path, args: argparse.Namespace) -> int:
-    """Bounded simulator smoke: C1 session infra + simulator-lane journeys.
+    """Bounded iOS-simulator full-app smoke. Fail-closed; never ordinary CI.
 
-    Fail-closed: missing simulator/session infrastructure exits 2 with the
-    exact remedy and is NEVER reported as success. Ordinary CI never invokes
-    this lane (hermetic only); it exists for provisioned local/trusted hosts.
+    Acquires a C1 session and its simulator (unless --session is already
+    started), launches debug/dev/local_dev with OMI_DEV_CONTROLS=1, reads
+    ext.omi.controls, screenshots, writes session-evidence-v1, and releases
+    whatever this run acquired. Android is blocked with the doctor's message.
+    Sign-in is not implemented: signedIn must be false.
     """
-    started_at = utc_now()
-    report = mobile_doctor.run_doctor(repo_root, platforms=("ios-simulator",), min_free_gb=12)
-    if report.overall != "ready":
-        payload = {
-            "outcome": "blocked",
-            "reason": "simulator lane not ready (doctor)",
-            "doctor": report.as_dict(),
-            "remedy": "run: bash scripts/dev-harness/mobile-session.sh doctor --platform ios-simulator",
-        }
-        _emit(payload, as_json=args.json)
-        print("blocked: simulator lane not ready — see remedy above", file=sys.stderr)
-        return EXIT_BLOCKED
-    session_id = args.session
-    if not session_id:
-        payload = {
-            "outcome": "blocked",
-            "reason": "smoke lane requires an explicitly started C1 session (--session oms-<name>)",
-            "remedy": "make mobile-session ARGS=\"start oms-<name>\" then re-run with --session oms-<name>",
-        }
-        _emit(payload, as_json=args.json)
-        return EXIT_BLOCKED
-    cli = repo_root / SESSION_CLI_RELPATH
-    status_result = subprocess.run(  # noqa: S603
-        ["bash", str(cli), "status", session_id, "--json"], capture_output=True, text=True, check=False
-    )
-    if status_result.returncode != 0:
-        _emit(
-            {
-                "outcome": "blocked",
-                "reason": f"session {session_id} not queryable",
-                "doctor": status_result.stderr.strip(),
-            },
-            as_json=args.json,
-        )
-        return EXIT_BLOCKED
-    status_doc = json.loads(status_result.stdout or "{}")
-    device = (status_doc.get("device") or {}).get("udid") or ""
-    api_base = status_doc.get("api_base_url") or ""
-    if not device or not api_base:
-        _emit(
-            {
-                "outcome": "blocked",
-                "reason": f"session {session_id} has no attached simulator or API base",
-                "status": status_doc,
-            },
-            as_json=args.json,
-        )
-        return EXIT_BLOCKED
-    evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path(f"/tmp/mobile-verify-smoke-{session_id}")
-    evidence_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        "bash",
-        str(repo_root / RUNNER_RELPATH),
-        "--lane",
-        "simulator",
-        "--device",
-        device,
-        "--api-base",
-        api_base,
-        "--evidence-dir",
-        str(evidence_dir),
-    ]
-    rerun = " ".join(cmd)
-    try:
-        result = subprocess.run(
-            cmd, cwd=repo_root / "app", capture_output=True, text=True, timeout=args.journey_timeout, check=False
-        )  # noqa: S603
-        log_text = result.stdout + result.stderr
-        status = result.returncode
-    except subprocess.TimeoutExpired as exc:
-        # Mirror the fast lane: a hung simulator run is blocked (exit 2) with a
-        # receipt, never an unhandled traceback after a full-length run.
-        log_text = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-        status = -1
-    (evidence_dir / "smoke.log").write_text(log_text, encoding="utf-8")
-    discovered = discover_journeys(repo_root)
-    per_journey = aggregate_receipts(evidence_dir, discovered, 1)
-    failure_class = "timeout" if status == -1 else classify_log_text(log_text[-8000:])
-    outcome = (
-        "passed"
-        if status == 0 and all(info["outcome"] == "passed" for info in per_journey.values())
-        else ("blocked" if status == -1 or failure_class in {"compile", "infrastructure"} else "failed")
-    )
-    receipt = build_lane_receipt(
-        repo_root,
-        command="smoke",
-        lane="simulator",
-        selection={"selected": list(discovered), "session": session_id, "device": device, "api_base": api_base},
-        per_journey=per_journey,
-        outcome=outcome,
-        rerun_command=rerun,
-        failure_class=failure_class or None,
-        failures=[] if outcome == "passed" else [f"runner exit {status}"],
-        started_at=started_at,
-    )
-    receipt["evidence_dir"] = str(evidence_dir)
-    write_lane_receipt(evidence_dir, receipt)
-    _emit(receipt, as_json=args.json)
-    return {"passed": EXIT_OK, "blocked": EXIT_BLOCKED}.get(outcome, EXIT_TEST_FAILURES)
+    from . import simulator_smoke
+
+    return simulator_smoke.run_smoke(repo_root, args)
+
 
 
 def cmd_physical(repo_root: Path, args: argparse.Namespace) -> int:
@@ -886,8 +793,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_fast.add_argument("--session", help="attach to an existing live session; never cold fallback")
     p_fast.add_argument("--journey-timeout", type=int, default=DEFAULT_JOURNEY_TIMEOUT_S)
 
-    p_smoke = _add("smoke", help="bounded simulator smoke (fail-closed; not for ordinary CI)")
-    p_smoke.add_argument("--session", help="C1 session id with an attached simulator")
+    p_smoke = _add("smoke", help="bounded iOS-simulator full-app smoke (fail-closed; not for ordinary CI)")
+    p_smoke.add_argument("--session", help="reuse an existing C1 session instead of acquiring one")
+    p_smoke.add_argument("--platform", default="ios-simulator", help="ios-simulator (default) or android (blocked)")
     p_smoke.add_argument("--evidence-dir")
     p_smoke.add_argument("--journey-timeout", type=int, default=3600)
 
