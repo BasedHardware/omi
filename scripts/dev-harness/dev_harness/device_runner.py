@@ -154,7 +154,9 @@ class IosTooling:
         devices: list[dict[str, str]] = []
         for line in out.splitlines():
             match = re.search(r"([0-9A-Fa-f-]{16,})\s*(.*)$", line)
-            if match and "Mac" not in line:
+            # devicectl's dashed table-separator row also matches the UDID/UUID
+            # pattern; a real identifier always contains at least one hex digit.
+            if match and "Mac" not in line and any(c in "0123456789abcdefABCDEF" for c in match.group(1)):
                 devices.append({"device_id": match.group(1), "raw": line.strip()})
         return devices
 
