@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 import requests
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from dotenv import load_dotenv
 
 load_dotenv()
