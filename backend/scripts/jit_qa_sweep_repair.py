@@ -4,9 +4,10 @@
 A sweep model invocation that ends ``pending``, ``indeterminate``, or
 ``payload_expired`` is closed forever by design: its provider outcome cannot be
 proven, so an implicit retry could charge the same logical invocation twice.
-This command is the sanctioned operator path.  It proves what the durable
-gateway accounting recorded for the tombstoned window, then writes the one
-explicit repair receipt that reopens exactly one further bounded attempt.
+This command is the sanctioned operator path. Recorded accounting attempts
+can support an explicitly authorized retry. Missing accounting can never prove
+non-dispatch: repair then requires an explicit, attributable operator assertion
+that the claim never dispatched and its worker has terminated.
 
 The command is fail-closed to the isolated QA plane: it refuses to run unless
 the environment selects the named QA database, the QA auth fence, and the
@@ -36,6 +37,7 @@ from utils.memory.daily_memory_sweep import (  # noqa: E402
     MODEL_INVOCATION_FENCE_COLLECTION,
     MODEL_INVOCATION_LEASE,
     MODEL_INVOCATION_REPAIR_MARGIN,
+    NO_DISPATCH_ATTESTATION_CONFIRMATION,
     MODEL_INVOCATION_PATH,
     MODEL_INVOCATION_REPAIR_PATH,
     QA_SWEEP_UID,
@@ -102,12 +104,12 @@ def collect_provider_outcome_evidence(
     claimed_at: datetime,
     now: datetime,
 ) -> dict[str, Any]:
-    """Read the durable gateway accounting window for one invocation claim.
+    """Read best-effort gateway accounting for diagnostics, never absence proof.
 
     Only content-free fields are kept: request identity, outcome, token totals,
     micro-USD cost, and the owning JIT run id.  A missing accounting row is
-    reported as ``no_recorded_attempt`` — never as proof that the provider was
-    not charged.
+    reported as ``accounting_absence_unproven``. Even exhausted pages are not
+    a shared snapshot; delayed writes and dropped events make absence unsafe.
     """
 
     if claimed_at.tzinfo is None or now <= claimed_at + MODEL_INVOCATION_LEASE + EVIDENCE_WINDOW_MARGIN:
@@ -166,16 +168,7 @@ def collect_provider_outcome_evidence(
             jit_run_id = run_id
             break
     if not attempts:
-        return {
-            "provider_outcome": "no_recorded_attempt",
-            "attempts": [],
-            "accounting_read_complete": True,
-            "uid": uid,
-            "feature": "memories",
-            "claimed_at": claimed_at.isoformat(),
-            "window_start": window_start.isoformat(),
-            "window_end": window_end.isoformat(),
-        }
+        return {"provider_outcome": "accounting_absence_unproven", "attempts": []}
     if not jit_run_id:
         raise JITQASweepRepairError(
             "QA sweep repair could not join the tombstoned claim to a sweep run id in gateway accounting"
@@ -216,15 +209,13 @@ def list_tombstones(db_client: Any, *, uid: str = QA_SWEEP_UID) -> list[dict[str
     return rows
 
 
-def _claim_time(db_client: Any, *, uid: str, invocation_id: str) -> datetime:
-    """Read the authoritative claim time from the durable fence."""
-
-    fence_snapshot = db_client.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}").get()
-    fence_payload = fence_snapshot.to_dict() if getattr(fence_snapshot, "exists", False) else None
-    claimed_at = _parse_timestamp((fence_payload or {}).get("claimed_at"))
-    if claimed_at is None:
-        raise JITQASweepRepairError("tombstoned invocation does not record its claim time")
-    return claimed_at
+def _claim_payload(db_client: Any, *, uid: str, invocation_id: str) -> dict[str, Any]:
+    """Read one authoritative claim before collecting diagnostic accounting."""
+    snapshot = db_client.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}").get()
+    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+    if not isinstance(payload, dict) or payload.get("uid") != uid or payload.get("invocation_id") != invocation_id:
+        raise JITQASweepRepairError("tombstoned invocation identity differs or is missing")
+    return payload
 
 
 def repair_tombstone(
@@ -234,18 +225,55 @@ def repair_tombstone(
     repair_authority: str,
     uid: str = QA_SWEEP_UID,
     now: datetime | None = None,
+    attestation_confirmation: str | None = None,
+    attestation_reference: str | None = None,
 ) -> dict[str, Any]:
-    """Prove the provider outcome and write the single repair receipt."""
+    """Write a retry authorization; accounting absence alone never authorizes it."""
 
     invocation_id = validate_invocation_id(invocation_id)
     repaired_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    claimed_at = _claim_time(db_client, uid=uid, invocation_id=invocation_id)
+    fence = _claim_payload(db_client, uid=uid, invocation_id=invocation_id)
+    claimed_at = _parse_timestamp(fence.get("claimed_at"))
+    if claimed_at is None:
+        raise JITQASweepRepairError("tombstoned invocation does not record its claim time")
     evidence = collect_provider_outcome_evidence(
         db_client,
         uid=uid,
         claimed_at=claimed_at,
         now=repaired_now,
     )
+    if attestation_confirmation is not None or attestation_reference is not None:
+        if attestation_confirmation != NO_DISPATCH_ATTESTATION_CONFIRMATION or not attestation_reference:
+            raise JITQASweepRepairError(
+                "explicit no-dispatch/terminated-worker attestation and evidence reference required"
+            )
+        if evidence.get("attempts"):
+            raise JITQASweepRepairError("recorded accounting attempts conflict with no-dispatch attestation")
+        evidence = {
+            "provider_outcome": "operator_attested_no_dispatch",
+            "attempts": [],
+            "confirmation": attestation_confirmation,
+            "evidence_reference": attestation_reference,
+            "attested_by": repair_authority,
+            "attested_at": repaired_now.isoformat(),
+            "claimed_at": claimed_at.isoformat(),
+            "claim_id": fence.get("claim_id"),
+            "claim_identity": {
+                key: fence.get(key)
+                for key in (
+                    "uid",
+                    "invocation_id",
+                    "account_generation",
+                    "source_generation",
+                    "sweep_generation",
+                    "window_id",
+                )
+            },
+        }
+    elif not evidence.get("attempts"):
+        raise JITQASweepRepairError(
+            "accounting absence is not proof of no dispatch; explicit operator attestation required"
+        )
     return repair_daily_sweep_model_invocation(
         db_client,
         uid=uid,
@@ -261,6 +289,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--uid", default=QA_SWEEP_UID)
     parser.add_argument("--authority", help="bounded operator identity recorded on the repair receipt")
     parser.add_argument("--invocation-id")
+    parser.add_argument("--attestation-confirmation", choices=(NO_DISPATCH_ATTESTATION_CONFIRMATION,))
+    parser.add_argument(
+        "--attestation-reference", help="content-free reference to independently reviewed claim evidence"
+    )
     parser.add_argument("command", choices=("list", "repair"))
     return parser
 
@@ -273,6 +305,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise JITQASweepRepairError("QA sweep repair requires the fixed QA UID")
         db_client = _client()
         if args.command == "list":
+            if args.attestation_confirmation or args.attestation_reference:
+                raise JITQASweepRepairError("attestation is only valid for repair")
             print(json.dumps(list_tombstones(db_client, uid=args.uid), default=str, sort_keys=True))
             return 0
         if not args.authority:
@@ -283,6 +317,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             db_client,
             invocation_id=args.invocation_id,
             repair_authority=args.authority,
+            attestation_confirmation=args.attestation_confirmation,
+            attestation_reference=args.attestation_reference,
             uid=args.uid,
         )
         print(json.dumps(receipt, default=str, sort_keys=True))

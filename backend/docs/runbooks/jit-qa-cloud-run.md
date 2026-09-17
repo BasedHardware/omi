@@ -95,20 +95,61 @@ foreign identities, and missing user payloads never release a claim.
 
 The manual operator's `sweep-repair` operation
 (`jit_qa_manual_operator.yml`, confirmation `SWEEP_REPAIR_QA`) remains QA-only.
-`backend/scripts/jit_qa_sweep_repair.py` reads each day in the claim's accounting
-window, paging `llm_gateway_attempts` to exhaustion before declaring absence.
-A failed stream, page-cap exhaustion, malformed matching timestamp, or more
-than four matching attempts refuses repair. It retains only content-free
-accounting fields for the fixed QA UID and `memories` feature.
+`backend/scripts/jit_qa_sweep_repair.py` pages through accounting for diagnostics
+and rejects failed streams, page-cap exhaustion, malformed matching timestamps,
+and more than four matching attempts. These reads are **not an absence proof**:
+`llm_gateway_attempts` is best-effort, asynchronous post-provider accounting,
+and pagination has no shared snapshot. A dropped write or a late insertion
+before the cursor can leave a scan empty after a provider call. An empty scan
+is labeled `accounting_absence_unproven` and never authorizes a retry.
 
-Recorded attempts still require a real owning `jit_run_id`. If there are zero
-matching attempts, repair requires `claimed_at + MODEL_INVOCATION_LEASE + 2
-minutes < now`. The receipt explicitly records
-`provider_outcome: no_recorded_attempt`, `accounting_read_complete: true`, the
-UID/feature, claim time, and complete window bounds, with no `jit_run_id`.
-This is evidence of accounting absence, not an assertion of zero provider
-spend. Both receipt consumption and the workflow artifact validator enforce
-this distinct shape; it does not count as a successful paid sweep proof.
+Recorded attempts require a real owning `jit_run_id` and remain an explicitly
+authorized retry path, not a claim that the original provider never ran.
+Without recorded attempts, the operator must independently establish that the
+exact claim never dispatched **and its worker has terminated**. They must
+supply both `--attestation-confirmation
+ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED` and
+`--attestation-reference <content-free-evidence-reference>`. The workflow exposes
+the same pair as `repair_attestation_confirmation` and
+`repair_attestation_reference`; neither is inferred or defaulted. A reference
+identifies reviewed evidence, not raw logs or prompt content.
+
+The receipt explicitly says `provider_outcome: operator_attested_no_dispatch`.
+It binds the full invocation identity, claim token (null on legacy claims),
+claim time, operator identity, attestation time, assertion, and evidence
+reference. Both issuance and consumption validate that binding and require
+`claimed_at + MODEL_INVOCATION_LEASE + 2 minutes < attested_at`. The tool
+validates the assertion's structure and attribution; it cannot validate its
+truth. It never calls this a reservation-absence proof or a no-spend result.
+An incorrect human attestation can authorize duplicate dispatch. Without
+independently sufficient evidence, leave the invocation indeterminate.
+
+Why reservation absence is not implemented here:
+
+- `llm_gateway/gateway/jit_budget.py` commits a reservation in
+  `jit_cloud_qa_budgets_v1/{sha256(uid + NUL + run_id)}` before the JIT executor
+  calls a provider. Unknown outcomes retain the reservation. It is per owner
+  and run, not request id, and applies only to requests carrying the JIT contract.
+- `gateway/request_context.py::validated_jit_budget_values` accepts entirely
+  absent JIT headers as ordinary traffic. The QA manifest's gateway route and
+  `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false` do not make those headers
+  mandatory at gateway ingress. Production sweeps do not use this QA contract.
+- Existing fences do not persist a JIT run/request namespace before dispatch.
+  `write_qa_sweep_run_receipt` writes the `jit_qa_sweep_runs` document after the
+  scheduler returns, with neither claim ownership nor start/end timestamps.
+  Temporal proximity cannot authoritatively join a legacy fence to a run.
+- A future automatic protocol must persist the exact reservation namespace in
+  the claim, enforce reservation-only dispatch end to end, verify the serving
+  plane's configuration, and atomically close that namespace while proving it
+  has never reserved. A strongly consistent absence read alone still races a
+  delayed worker reserving after the read; lease expiry does not terminate it.
+
+Legacy tombstones, including the QA claims beginning `518f8c2c` and
+`8e479fc9`, are not repairable by accounting/reservation absence. Their honest
+path is the independently evidenced operator attestation above, or remaining
+blocked. No run id is synthesized. Previously issued `no_recorded_attempt`
+receipts are rejected at consumption and by the workflow artifact validator;
+do not delete receipts to bypass the single-repair rule.
 
 Repair writes one receipt transactionally against the unchanged tombstoned
 claim (`pending`, `indeterminate`, `payload_expired`, or

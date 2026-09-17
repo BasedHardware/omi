@@ -147,6 +147,7 @@ MODEL_INVOCATION_FENCE_COLLECTION = "daily_memory_sweep_model_invocation_fences"
 MODEL_INVOCATION_SCHEMA_VERSION = "daily_memory_sweep_model_invocation.v1"
 MAX_PRE_DISPATCH_RELEASES = 3
 MODEL_INVOCATION_REPAIR_MARGIN = timedelta(minutes=2)
+NO_DISPATCH_ATTESTATION_CONFIRMATION = "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED"
 # An explicit operator repair for a tombstoned model invocation.  Pending,
 # indeterminate, and payload-expired fences are closed forever by design; this
 # user-scoped receipt is the one sanctioned way to reopen exactly one retry
@@ -1902,28 +1903,56 @@ def _invoke_model_once(
         return built
 
 
-def valid_no_attempt_evidence(evidence: Mapping[str, Any], *, uid: str, claimed_at: Any, now: datetime) -> bool:
-    """Validate a complete, claim-bound absence proof; absence is not zero spend."""
+def valid_no_dispatch_attestation(
+    evidence: Mapping[str, Any],
+    *,
+    identity: Mapping[str, Any],
+    claimed_at: Any,
+    claim_id: Any,
+    authority: Any,
+    now: datetime,
+) -> bool:
+    """Validate a human assertion, never infer non-dispatch from ledger absence.
+
+    The operator owns the assertion that the old worker has terminated and
+    never dispatched. The reference identifies their independent evidence;
+    this validator checks attribution and claim binding, not that assertion's truth.
+    """
     if (
-        evidence.get("provider_outcome") != "no_recorded_attempt"
+        evidence.get("provider_outcome") != "operator_attested_no_dispatch"
         or evidence.get("attempts") != []
         or "jit_run_id" in evidence
-        or evidence.get("accounting_read_complete") is not True
-        or evidence.get("uid") != uid
-        or evidence.get("feature") != "memories"
+        or evidence.get("confirmation") != NO_DISPATCH_ATTESTATION_CONFIRMATION
+        or any(
+            identity.get(key) is None
+            for key in (
+                "uid",
+                "invocation_id",
+                "account_generation",
+                "source_generation",
+                "sweep_generation",
+                "window_id",
+            )
+        )
+        or evidence.get("claim_identity") != dict(identity)
+        or evidence.get("claim_id") != claim_id
+        or not isinstance(authority, str)
+        or not authority.strip()
+        or len(authority) > 128
+        or evidence.get("attested_by") != authority
+        or not isinstance(evidence.get("evidence_reference"), str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/#@-]{0,255}", evidence["evidence_reference"])
         or not isinstance(claimed_at, datetime)
         or claimed_at.tzinfo is None
-        or now <= claimed_at + MODEL_INVOCATION_LEASE + MODEL_INVOCATION_REPAIR_MARGIN
+        or now.tzinfo is None
     ):
         return False
     try:
-        start = datetime.fromisoformat(evidence["window_start"])
-        end = datetime.fromisoformat(evidence["window_end"])
+        attested_at = datetime.fromisoformat(evidence["attested_at"])
         evidence_claim = datetime.fromisoformat(evidence["claimed_at"])
         return (
             evidence_claim == claimed_at
-            and start == claimed_at - MODEL_INVOCATION_REPAIR_MARGIN
-            and claimed_at + MODEL_INVOCATION_LEASE + MODEL_INVOCATION_REPAIR_MARGIN < end <= now
+            and claimed_at + MODEL_INVOCATION_LEASE + MODEL_INVOCATION_REPAIR_MARGIN < attested_at <= now
         )
     except (KeyError, TypeError, ValueError):
         return False
@@ -1935,7 +1964,7 @@ def _valid_model_invocation_repair(
     fence: Mapping[str, Any],
     now: datetime,
 ) -> bool:
-    """Require an unconsumed identity receipt and claim-bound absence proof."""
+    """Require recorded attempts or an explicit claim-bound operator attestation."""
     if not isinstance(payload, Mapping):
         return False
     if payload.get("schema_version") != MODEL_INVOCATION_REPAIR_SCHEMA_VERSION or payload.get("consumed") is not False:
@@ -1945,10 +1974,19 @@ def _valid_model_invocation_repair(
     evidence = payload.get("provider_outcome_evidence")
     if not isinstance(evidence, Mapping):
         return False
-    if evidence.get("provider_outcome") == "no_recorded_attempt":
-        if payload.get("prior_claim_id") != fence.get("claim_id"):
-            return False
-        return valid_no_attempt_evidence(evidence, uid=identity["uid"], claimed_at=fence.get("claimed_at"), now=now)
+    outcome = evidence.get("provider_outcome")
+    if outcome == "operator_attested_no_dispatch":
+        return valid_no_dispatch_attestation(
+            evidence,
+            identity=identity,
+            claimed_at=fence.get("claimed_at"),
+            claim_id=fence.get("claim_id"),
+            authority=payload.get("repair_authority"),
+            now=now,
+        )
+    # Reject previously issued absence receipts even if somebody appends a run id.
+    if outcome not in {None, "recorded_attempt"}:
+        return False
     return bool(evidence.get("jit_run_id") and evidence.get("attempts"))
 
 
@@ -1968,7 +2006,8 @@ def repair_daily_sweep_model_invocation(
     charge the same logical invocation twice.  This function is the sanctioned
     operator path.  It is fail-closed: the fence must exist in a tombstoned
     state, its lease must have expired, the caller must supply content-free
-    provider accounting evidence, and at most one receipt may ever exist per
+    recorded provider attempts or an explicit operator attestation, and at most
+    one receipt may ever exist per
     invocation.  The next claim consumes the receipt transactionally and
     rewrites the fence as a fresh ``pending`` claim, so exactly one further
     bounded attempt becomes possible — never an automatic second charge.
@@ -1983,13 +2022,15 @@ def repair_daily_sweep_model_invocation(
         raise ValueError("daily sweep invocation repair requires a bounded invocation id")
     evidence = dict(provider_outcome_evidence or {})
     recorded_attempts = evidence.get("attempts")
-    no_attempt = evidence.get("provider_outcome") == "no_recorded_attempt"
-    if not no_attempt and (not isinstance(evidence.get("jit_run_id"), str) or not evidence["jit_run_id"].strip()):
+    attested = evidence.get("provider_outcome") == "operator_attested_no_dispatch"
+    if evidence.get("provider_outcome") not in {None, "recorded_attempt", "operator_attested_no_dispatch"}:
+        raise ValueError("accounting absence is not proof of no dispatch; explicit operator attestation required")
+    if not attested and (not isinstance(evidence.get("jit_run_id"), str) or not evidence["jit_run_id"].strip()):
         raise ValueError("daily sweep invocation repair requires the owning run id in its provider evidence")
     if not isinstance(recorded_attempts, list) or len(recorded_attempts) > 4:
         raise ValueError("daily sweep invocation repair requires a bounded provider attempt page")
-    if not no_attempt and not recorded_attempts:
-        raise ValueError("daily sweep invocation repair requires explicit no_recorded_attempt evidence")
+    if not attested and not recorded_attempts:
+        raise ValueError("daily sweep invocation repair requires recorded attempts or explicit operator attestation")
     for attempt in recorded_attempts:
         if not isinstance(attempt, Mapping) or not isinstance(attempt.get("request_id"), str):
             raise ValueError("daily sweep invocation repair evidence attempts must carry request ids")
@@ -2036,20 +2077,22 @@ def repair_daily_sweep_model_invocation(
         lease_deadline = claimed_at + MODEL_INVOCATION_LEASE if isinstance(claimed_at, datetime) else None
     if lease_deadline is None or lease_deadline.tzinfo is None or lease_deadline > repaired_now:
         raise ValueError("daily sweep invocation repair requires an expired invocation lease")
-    if no_attempt and not valid_no_attempt_evidence(
+    if attested and not valid_no_dispatch_attestation(
         evidence,
-        uid=uid,
+        identity=identity,
         claimed_at=fence_payload.get("claimed_at"),
+        claim_id=fence_payload.get("claim_id"),
+        authority=authority,
         now=repaired_now,
     ):
         raise ValueError(
-            "daily sweep invocation repair requires complete no-attempt evidence and an expired invocation lease plus margin"
+            "daily sweep invocation repair requires valid claim-bound operator attestation after lease plus margin"
         )
     existing_repair = repair_ref.get()
     if getattr(existing_repair, "exists", False):
         raise ValueError("daily sweep invocation already has a repair receipt")
 
-    outcome_summary = "no_recorded_attempt"
+    outcome_summary = "operator_attested_no_dispatch" if attested else "recorded_attempt"
     for attempt in recorded_attempts:
         outcome = attempt.get("outcome")
         if outcome == "success" and attempt.get("total_tokens") not in (None, 0):

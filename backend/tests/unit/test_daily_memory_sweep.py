@@ -1559,20 +1559,15 @@ def test_repair_receipt_requires_accounting_evidence_and_tombstoned_fence(monkey
         db,
         uid="user-1",
         invocation_id="repair-evidence",
-        provider_outcome_evidence={
-            "provider_outcome": "no_recorded_attempt",
-            "attempts": [],
-            "accounting_read_complete": True,
-            "uid": "user-1",
-            "feature": "memories",
-            "claimed_at": claim_at.isoformat(),
-            "window_start": (claim_at - timedelta(minutes=2)).isoformat(),
-            "window_end": (claim_at + timedelta(hours=2)).isoformat(),
-        },
+        provider_outcome_evidence=_operator_attestation(
+            db.store[f"{MODEL_INVOCATION_FENCE_COLLECTION}/repair-evidence"],
+            claim_at + timedelta(hours=2),
+            authority="operator:qa-sweep-9",
+        ),
         repair_authority="operator:qa-sweep-9",
         now=claim_at + timedelta(hours=2),
     )
-    assert receipt["provider_outcome_summary"] == "no_recorded_attempt"
+    assert receipt["provider_outcome_summary"] == "operator_attested_no_dispatch"
     # A consumed or identity-mismatched receipt never reopens a claim.
     db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/repair-evidence"]["consumed"] = True
     assert (
@@ -3295,7 +3290,7 @@ def test_post_dispatch_cannot_replay_certified_error_or_clear_evidence(fenced_su
 
 
 @pytest.mark.parametrize("exhausted", [False, True])
-def test_no_attempt_repair_reopens_once_and_consumes_receipt(fenced_summary, exhausted):
+def test_operator_attestation_reopens_once_and_consumes_receipt(fenced_summary, exhausted):
     db, path, invoke, _ = fenced_summary
     claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
     if exhausted:
@@ -3305,16 +3300,7 @@ def test_no_attempt_repair_reopens_once_and_consumes_receipt(fenced_summary, exh
     else:
         assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("legacy unknown failure")), now=claimed) is None
     repaired = claimed + timedelta(hours=1)
-    evidence = {
-        "provider_outcome": "no_recorded_attempt",
-        "attempts": [],
-        "accounting_read_complete": True,
-        "uid": "user-1",
-        "feature": "memories",
-        "claimed_at": claimed.isoformat(),
-        "window_start": (claimed - timedelta(minutes=2)).isoformat(),
-        "window_end": repaired.isoformat(),
-    }
+    evidence = _operator_attestation(db.rows[path], repaired)
     receipt = repair_daily_sweep_model_invocation(
         db,
         uid="user-1",
@@ -3323,7 +3309,7 @@ def test_no_attempt_repair_reopens_once_and_consumes_receipt(fenced_summary, exh
         repair_authority="operator:test",
         now=repaired,
     )
-    assert receipt["provider_outcome_summary"] == "no_recorded_attempt"
+    assert receipt["provider_outcome_summary"] == "operator_attested_no_dispatch"
     calls = []
     for _ in range(2):
         assert invoke(lambda: calls.append(1) or ({"candidate_id": "ok"},), now=repaired) == ({"candidate_id": "ok"},)
@@ -3331,31 +3317,30 @@ def test_no_attempt_repair_reopens_once_and_consumes_receipt(fenced_summary, exh
     assert db.rows[("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch")]["consumed"] is True
 
 
-@pytest.mark.parametrize("invalid", ["incomplete", "unexpired", "wrong_claim", "invented_run"])
-def test_no_attempt_core_repair_rejects_invalid_evidence(fenced_summary, invalid):
-    db, _path, invoke, _ = fenced_summary
+@pytest.mark.parametrize(
+    "invalid", ["confirmation", "reference", "unexpired", "wrong_claim", "worker", "actor", "identity"]
+)
+def test_core_repair_rejects_invalid_operator_attestation(fenced_summary, invalid):
+    db, path, invoke, _ = fenced_summary
     claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
     assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("unknown")), now=claimed) is None
     repaired = claimed + timedelta(hours=1)
-    evidence = {
-        "provider_outcome": "no_recorded_attempt",
-        "attempts": [],
-        "accounting_read_complete": True,
-        "uid": "user-1",
-        "feature": "memories",
-        "claimed_at": claimed.isoformat(),
-        "window_start": (claimed - timedelta(minutes=2)).isoformat(),
-        "window_end": repaired.isoformat(),
-    }
-    if invalid == "incomplete":
-        evidence["accounting_read_complete"] = False
+    evidence = _operator_attestation(db.rows[path], repaired)
+    if invalid == "confirmation":
+        evidence["confirmation"] = ""
+    elif invalid == "reference":
+        evidence["evidence_reference"] = ""
     elif invalid == "unexpired":
         repaired = claimed + timedelta(minutes=16)
     elif invalid == "wrong_claim":
         evidence["claimed_at"] = (claimed - timedelta(hours=1)).isoformat()
+    elif invalid == "worker":
+        evidence["claim_id"] = "other-worker"
+    elif invalid == "actor":
+        evidence["attested_by"] = "somebody-else"
     else:
-        evidence["jit_run_id"] = "invented"
-    with pytest.raises(ValueError, match="complete no-attempt evidence"):
+        evidence["claim_identity"]["source_generation"] += 1
+    with pytest.raises(ValueError, match="valid claim-bound operator attestation"):
         repair_daily_sweep_model_invocation(
             db,
             uid="user-1",
@@ -3380,7 +3365,16 @@ def test_receipt_consumption_revalidates_no_attempt_shape(fenced_summary):
         "prior_state": "indeterminate",
         "prior_claimed_at": claimed,
         "prior_claim_id": fence["claim_id"],
-        "provider_outcome_evidence": {"provider_outcome": "no_recorded_attempt", "attempts": []},
+        "provider_outcome_evidence": {
+            "provider_outcome": "no_recorded_attempt",
+            "attempts": [],
+            "accounting_read_complete": True,
+            "uid": "user-1",
+            "feature": "memories",
+            "claimed_at": claimed.isoformat(),
+            "window_start": (claimed - timedelta(minutes=2)).isoformat(),
+            "window_end": (claimed + timedelta(hours=1)).isoformat(),
+        },
     }
     assert invoke(lambda: pytest.fail("invalid proof consumed"), now=claimed + timedelta(hours=1)) is None
     assert db.rows[receipt_path]["consumed"] is False
@@ -3408,3 +3402,58 @@ def test_existing_recorded_attempt_receipt_without_claim_token_remains_valid(fen
         "provider_outcome_evidence": {"jit_run_id": "actual-run", "attempts": [{"request_id": "req-1"}]},
     }
     assert invoke(lambda: ({"candidate_id": "ok"},), now=claimed + timedelta(hours=1)) == ({"candidate_id": "ok"},)
+
+
+def _operator_attestation(fence, now, *, authority="operator:test"):
+    return {
+        "provider_outcome": "operator_attested_no_dispatch",
+        "attempts": [],
+        "confirmation": "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED",
+        "evidence_reference": "incident:qa-sweep-reviewed",
+        "attested_by": authority,
+        "attested_at": now.isoformat(),
+        "claimed_at": fence["claimed_at"].isoformat(),
+        "claim_id": fence.get("claim_id"),
+        "claim_identity": {
+            key: fence[key]
+            for key in (
+                "uid",
+                "invocation_id",
+                "account_generation",
+                "source_generation",
+                "sweep_generation",
+                "window_id",
+            )
+        },
+    }
+
+
+def test_successful_builder_cannot_finalize_a_newer_claim(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+
+    def replace_claim():
+        # Only the top-level claim changes: removing finalize's token check
+        # would incorrectly publish A's result under B's durable claim.
+        db.rows[path]["claim_id"] = "claim-b"
+        return ({"candidate_id": "claim-a-output"},)
+
+    assert invoke(replace_claim) is None
+    assert db.rows[path]["claim_id"] == "claim-b"
+    assert db.rows[path]["state"] == "pending"
+    assert "candidate_digest" not in db.rows[path]
+    user = db.rows[("users", "user-1", MODEL_INVOCATION_PATH, "pre-dispatch")]
+    assert user["state"] == "pending" and "candidate_page" not in user
+
+
+def test_generation_close_cannot_mark_a_newer_claim_indeterminate(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+
+    def close_generation_and_replace_claim():
+        db.rows[path]["claim_id"] = "claim-b"
+        db.rows[("users", "user-1", "memory_state", "apply_control")]["source_generation"] += 1
+        return ({"candidate_id": "claim-a-output"},)
+
+    assert invoke(close_generation_and_replace_claim) is None
+    assert db.rows[path]["claim_id"] == "claim-b"
+    assert db.rows[path]["state"] == "pending"
+    assert "indeterminate_at" not in db.rows[path]

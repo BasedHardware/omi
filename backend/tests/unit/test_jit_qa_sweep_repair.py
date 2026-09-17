@@ -250,15 +250,61 @@ def test_repair_without_a_joinable_sweep_run_fails_closed():
         OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:qa-run-1", uid=UID, now=NOW)
 
 
-def test_zero_attempts_expired_lease_records_explicit_absence():
+@pytest.mark.parametrize("reservation_exists", [False, True])
+def test_missing_accounting_never_authorizes_repair(reservation_exists):
     db = _Db()
     _tombstoned_invocation(db.store)
-    receipt = OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:test", uid=UID, now=NOW)
-    assert receipt["provider_outcome_summary"] == "no_recorded_attempt"
-    evidence = db.store[f"users/{UID}/daily_memory_sweep_model_invocation_repairs/inv-1"]["provider_outcome_evidence"]
-    assert evidence["provider_outcome"] == "no_recorded_attempt"
-    assert evidence["accounting_read_complete"] is True
-    assert "jit_run_id" not in evidence
+    if reservation_exists:
+        # Provider consumed after reservation, but its post-provider ledger write
+        # was dropped. A window scan is indistinguishable from no dispatch.
+        db.store["jit_cloud_qa_budgets_v1/opaque-owner-run-key"] = {
+            "owner_uid": UID,
+            "run_id": "actual-run",
+            "reserved_attempts": 1,
+            "active_reservation": {"ordinal": 1},
+        }
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="accounting absence is not proof"):
+        OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:test", uid=UID, now=NOW)
+    assert not any("repairs/" in key for key in db.store)
+
+
+def test_legacy_claim_requires_explicit_attributed_attestation():
+    db = _Db()
+    _tombstoned_invocation(db.store)
+    receipt = OPERATOR.repair_tombstone(
+        db,
+        invocation_id="inv-1",
+        repair_authority="operator:test",
+        uid=UID,
+        now=NOW,
+        attestation_confirmation=OPERATOR.NO_DISPATCH_ATTESTATION_CONFIRMATION,
+        attestation_reference="incident:verified-worker-exit",
+    )
+    assert receipt["provider_outcome_summary"] == "operator_attested_no_dispatch"
+    evidence = receipt["provider_outcome_evidence"]
+    assert evidence["attested_by"] == "operator:test"
+    assert evidence["claim_id"] is None
+    assert evidence["evidence_reference"] == "incident:verified-worker-exit"
+    assert "jit_run_id" not in evidence and "accounting_read_complete" not in evidence
+
+
+@pytest.mark.parametrize(
+    "confirmation,reference",
+    [(None, "incident:1"), ("yes", "incident:1"), (OPERATOR.NO_DISPATCH_ATTESTATION_CONFIRMATION, None)],
+)
+def test_attestation_requires_exact_assertion_and_reference(confirmation, reference):
+    db = _Db()
+    _tombstoned_invocation(db.store)
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="attestation and evidence reference"):
+        OPERATOR.repair_tombstone(
+            db,
+            invocation_id="inv-1",
+            repair_authority="operator:test",
+            uid=UID,
+            now=NOW,
+            attestation_confirmation=confirmation,
+            attestation_reference=reference,
+        )
 
 
 @pytest.mark.parametrize("age", [1, 16, 17])
@@ -331,3 +377,52 @@ def test_accounting_reads_intermediate_days():
     )
     evidence = OPERATOR.collect_provider_outcome_evidence(db, uid=UID, claimed_at=NOW - timedelta(days=2), now=NOW)
     assert evidence["attempts"][0]["request_id"] == "middle"
+
+
+def test_late_accounting_insert_before_cursor_never_becomes_absence_proof(monkeypatch):
+    inserted = []
+    original_stream = _AttemptQuery.stream
+
+    def late_insert(query):
+        if query.offset == 0:
+            yield from original_stream(query)
+            # This page has already been returned; the next query starts after
+            # its cursor and cannot see a newly inserted lower document id.
+            inserted.append({"user_uid": UID, "feature": "memories", "request_id": "late"})
+        else:
+            return
+
+    monkeypatch.setattr(_AttemptQuery, "stream", late_insert)
+    db = _Db(attempts=_foreign_rows(50))
+    _tombstoned_invocation(db.store)
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="accounting absence is not proof"):
+        OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:test", uid=UID, now=NOW)
+    assert inserted
+    assert not any("repairs/" in key for key in db.store)
+
+
+def test_recorded_attempt_conflicts_with_no_dispatch_attestation():
+    db = _Db(
+        attempts=[
+            {
+                "date": TODAY,
+                "user_uid": UID,
+                "feature": "memories",
+                "request_id": "actual-request",
+                "jit_run_id": "actual-run",
+                "occurred_at": NOW - timedelta(minutes=59),
+            }
+        ]
+    )
+    _tombstoned_invocation(db.store)
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="conflict"):
+        OPERATOR.repair_tombstone(
+            db,
+            invocation_id="inv-1",
+            repair_authority="operator:test",
+            uid=UID,
+            now=NOW,
+            attestation_confirmation=OPERATOR.NO_DISPATCH_ATTESTATION_CONFIRMATION,
+            attestation_reference="incident:wrong-assertion",
+        )
+    assert not any("repairs/" in key for key in db.store)

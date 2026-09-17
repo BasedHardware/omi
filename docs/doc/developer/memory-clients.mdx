@@ -134,8 +134,13 @@ explicit operator repair. Failures after dispatch or with an unknown origin
 remain fenced against automatic retry. Account deletion and generation
 boundaries continue to block writes throughout recovery.
 
-The QA repair tool can accept a complete accounting window with zero matching
-attempts only after the claim lease and safety margin expire. That receipt says
-`no_recorded_attempt`; it is not evidence of zero provider spend or a successful
-memory sweep. The operator procedure lives in the backend runbook
+Missing gateway accounting is never proof of no dispatch: the ledger is
+best-effort and written after provider execution. QA repair without recorded
+attempts requires an explicit operator attestation that the exact claim never
+dispatched and its worker has terminated, bound to independently reviewed
+evidence and an expired lease plus margin. The receipt labels this
+`operator_attested_no_dispatch`, not a reservation-absence or no-spend proof.
+Without that evidence the claim remains indeterminate, including legacy
+claims with no persisted provider identifiers. The operator procedure and
+reservation-boundary analysis live in
 `backend/docs/runbooks/jit-qa-cloud-run.md`.

@@ -473,46 +473,77 @@ def test_qa_environment_validation_uses_explicit_mapping_and_fixed_policy():
         OPERATOR.validate_qa_sweep_environment({"OMI_JIT_QA_SWEEP_RUN_ID": RUN_ID})
 
 
-def _absence_repair_receipt():
-    return {
-        "schema_version": OPERATOR.MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
+def _attested_repair_receipt():
+    identity = {
         "uid": OPERATOR.QA_SWEEP_UID,
         "invocation_id": "inv-1",
+        "account_generation": 1,
+        "source_generation": 4,
+        "sweep_generation": 1,
+        "window_id": "window-a",
+    }
+    return {
+        **identity,
+        "schema_version": OPERATOR.MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
         "consumed": False,
+        "repair_authority": "operator:test",
+        "prior_claim_id": "claim-a",
         "prior_claimed_at": "2026-09-17T10:00:00+00:00",
         "repaired_at": "2026-09-17T11:00:00+00:00",
-        "provider_outcome_summary": "no_recorded_attempt",
+        "provider_outcome_summary": "operator_attested_no_dispatch",
         "provider_outcome_evidence": {
-            "provider_outcome": "no_recorded_attempt",
+            "provider_outcome": "operator_attested_no_dispatch",
             "attempts": [],
-            "accounting_read_complete": True,
-            "uid": OPERATOR.QA_SWEEP_UID,
-            "feature": "memories",
+            "confirmation": "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED",
+            "claim_identity": identity,
+            "claim_id": "claim-a",
+            "attested_by": "operator:test",
+            "evidence_reference": "incident:reviewed-evidence",
             "claimed_at": "2026-09-17T10:00:00+00:00",
-            "window_start": "2026-09-17T09:58:00+00:00",
-            "window_end": "2026-09-17T11:00:00+00:00",
+            "attested_at": "2026-09-17T11:00:00+00:00",
         },
     }
 
 
-def test_repair_receipt_accepts_absence_without_invented_run():
-    receipt = _absence_repair_receipt()
-    assert OPERATOR.validate_sweep_repair_receipt(receipt, invocation_id="inv-1") == "no_recorded_attempt"
+def test_repair_receipt_labels_operator_attestation_without_invented_run():
+    assert (
+        OPERATOR.validate_sweep_repair_receipt(_attested_repair_receipt(), invocation_id="inv-1")
+        == "operator_attested_no_dispatch"
+    )
 
 
-@pytest.mark.parametrize("change", ["incomplete", "fake_run", "foreign", "unexpired", "attempt"])
-def test_repair_receipt_rejects_invalid_absence_shape(change):
-    receipt = _absence_repair_receipt()
+@pytest.mark.parametrize("change", ["assertion", "fake_run", "foreign", "unexpired", "attempt", "actor"])
+def test_repair_receipt_rejects_invalid_attestation(change):
+    receipt = _attested_repair_receipt()
     evidence = receipt["provider_outcome_evidence"]
-    if change == "incomplete":
-        evidence["accounting_read_complete"] = False
+    if change == "assertion":
+        evidence["confirmation"] = ""
     elif change == "fake_run":
         evidence["jit_run_id"] = "invented"
     elif change == "foreign":
-        evidence["uid"] = "foreign"
+        evidence["claim_identity"] = {**evidence["claim_identity"], "uid": "foreign"}
     elif change == "unexpired":
         receipt["repaired_at"] = "2026-09-17T10:01:00+00:00"
+    elif change == "actor":
+        evidence["attested_by"] = "other-operator"
     else:
         evidence["attempts"] = [{"request_id": REQUEST_ID}]
-    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="no-attempt proof"):
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="attestation is invalid"):
+        OPERATOR.validate_sweep_repair_receipt(receipt, invocation_id="inv-1")
+
+
+def test_operator_rejects_previously_accepted_accounting_absence_receipt():
+    receipt = _attested_repair_receipt()
+    receipt["provider_outcome_summary"] = "no_recorded_attempt"
+    receipt["provider_outcome_evidence"] = {
+        "provider_outcome": "no_recorded_attempt",
+        "attempts": [],
+        "accounting_read_complete": True,
+        "uid": OPERATOR.QA_SWEEP_UID,
+        "feature": "memories",
+        "claimed_at": "2026-09-17T10:00:00+00:00",
+        "window_start": "2026-09-17T09:58:00+00:00",
+        "window_end": "2026-09-17T11:00:00+00:00",
+    }
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="explicit operator attestation"):
         OPERATOR.validate_sweep_repair_receipt(receipt, invocation_id="inv-1")

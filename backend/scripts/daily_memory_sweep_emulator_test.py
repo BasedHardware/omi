@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from unittest.mock import patch
 
 PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "demo-daily-memory-sweep")
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
@@ -38,7 +39,12 @@ from utils.memory.daily_memory_sweep import (  # noqa: E402
     completed_local_day_window,
     run_daily_memory_sweep,
 )
-from scripts.jit_qa_sweep_repair import collect_provider_outcome_evidence  # noqa: E402
+from scripts.jit_qa_sweep_repair import (
+    collect_provider_outcome_evidence,
+    repair_tombstone,
+    JITQASweepRepairError,
+)  # noqa: E402
+from llm_gateway.gateway import jit_budget  # noqa: E402
 from models.daily_sweep_dispatch import SweepDispatchScope  # noqa: E402
 from models.memory_contracts import MemoryExtractionError  # noqa: E402
 import utils.memory.daily_memory_sweep as daily_sweep  # noqa: E402
@@ -466,6 +472,70 @@ def main() -> int:
             for accounting_ref in accounting_refs:
                 accounting_ref.delete()
 
+        # Durable JIT reservation + simulated provider dispatch + lost accounting
+        # must never authorize repair by ledger absence, even after lease expiry.
+        lost_invocation_id = f"lost-accounting-{uuid4().hex}"
+        lost_run_id = f"lost-accounting-{uuid4().hex}"
+        reservation_refs = []
+        dispatched = []
+        try:
+
+            def reserved_provider_crash() -> tuple[dict[str, Any], ...]:
+                with patch.object(jit_budget, "_client", return_value=db_client):
+                    reservation = jit_budget.reserve_jit_provider_attempt(
+                        owner_uid=uid,
+                        run_id=lost_run_id,
+                        contract_version="jit-cloud-qa-v1",
+                        max_attempts=1,
+                        max_spend_micro_usd=50_000,
+                        provider="openai",
+                        model="gpt-5.6-luna",
+                        input_tokens=100,
+                        cached_input_tokens=0,
+                        output_tokens=10,
+                        cache_write_tokens=0,
+                    )
+                if reservation is None:
+                    raise AssertionError("emulator provider reservation was rejected")
+                dispatched.append(1)
+                raise RuntimeError("simulated process death after provider; no accounting write")
+
+            if (
+                _invoke_model_once(
+                    db_client, uid, lost_invocation_id, candidate_builder=reserved_provider_crash, **identity
+                )
+                is not None
+            ):
+                raise AssertionError("crashed invocation returned output")
+            reservation_refs = [
+                snapshot.reference
+                for snapshot in db_client.collection("jit_cloud_qa_budgets_v1").stream()
+                if snapshot.to_dict().get("run_id") == lost_run_id
+            ]
+            if dispatched != [1] or len(reservation_refs) != 1:
+                raise AssertionError("lost-accounting scenario did not reserve and dispatch exactly once")
+            try:
+                repair_tombstone(
+                    db_client,
+                    uid=uid,
+                    invocation_id=lost_invocation_id,
+                    repair_authority="emulator:operator",
+                    now=now + timedelta(hours=1),
+                )
+            except JITQASweepRepairError as exc:
+                if "accounting absence is not proof" not in str(exc):
+                    raise
+            else:
+                raise AssertionError("lost provider accounting authorized duplicate dispatch")
+            repair_ref = db_client.document(
+                f"users/{uid}/{daily_sweep.MODEL_INVOCATION_REPAIR_PATH}/{lost_invocation_id}"
+            )
+            if repair_ref.get().exists:
+                raise AssertionError("unsafe absence repair receipt was created")
+        finally:
+            for reservation_ref in reservation_refs:
+                reservation_ref.delete()
+
         # Paid-model/account-wipe race: the real Firestore transaction first
         # claims one durable, top-level invocation identity. The simulated
         # provider then publishes the deletion fence and removes all user
@@ -520,7 +590,7 @@ def main() -> int:
 
         print(
             "PASS: daily memory sweep Firestore emulator retry/interruption proof "
-            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/accounting-pagination)"
+            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/accounting-pagination/lost-accounting-refusal)"
         )
         return 0
     finally:

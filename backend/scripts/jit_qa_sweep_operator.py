@@ -31,7 +31,7 @@ if str(BACKEND_DIR) not in sys.path:
 from scripts import jit_qa_cloud_run_contract as qa_contract  # noqa: E402
 from utils.memory.daily_memory_sweep import (
     MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
-    valid_no_attempt_evidence,
+    valid_no_dispatch_attestation,
 )  # noqa: E402
 
 QA_SWEEP_PROJECT = "based-hardware-dev"
@@ -134,21 +134,33 @@ def validate_sweep_repair_receipt(receipt: Mapping[str, Any], *, invocation_id: 
     if not isinstance(evidence, Mapping):
         raise JITQASweepOperatorError("QA sweep repair provider evidence is missing")
     outcome = evidence.get("provider_outcome")
-    if outcome == "no_recorded_attempt":
+    if outcome == "operator_attested_no_dispatch":
         try:
             claimed_at = datetime.fromisoformat(str(receipt.get("prior_claimed_at")))
             repaired_at = datetime.fromisoformat(str(receipt.get("repaired_at")))
         except ValueError as exc:
             raise JITQASweepOperatorError("QA sweep repair claim timestamps are malformed") from exc
-        if receipt.get("provider_outcome_summary") != outcome or not valid_no_attempt_evidence(
+        if receipt.get("provider_outcome_summary") != outcome or not valid_no_dispatch_attestation(
             evidence,
-            uid=QA_SWEEP_UID,
+            identity={
+                key: receipt.get(key)
+                for key in (
+                    "uid",
+                    "invocation_id",
+                    "account_generation",
+                    "source_generation",
+                    "sweep_generation",
+                    "window_id",
+                )
+            },
             claimed_at=claimed_at,
+            claim_id=receipt.get("prior_claim_id"),
+            authority=receipt.get("repair_authority"),
             now=repaired_at,
         ):
-            raise JITQASweepOperatorError("QA sweep repair no-attempt proof is incomplete")
+            raise JITQASweepOperatorError("QA sweep repair operator attestation is invalid")
     elif outcome != "recorded_attempt" or not evidence.get("jit_run_id") or not evidence.get("attempts"):
-        raise JITQASweepOperatorError("QA sweep repair requires recorded attempts or explicit no-attempt proof")
+        raise JITQASweepOperatorError("QA sweep repair requires recorded attempts or explicit operator attestation")
     return str(outcome)
 
 
