@@ -120,7 +120,7 @@ def _coerce_bool(value: Any) -> Optional[bool]:
 
 
 def _clean_text(value: Optional[str]) -> str:
-    if not value:
+    if not value or not isinstance(value, str):
         return ""
 
     text = unescape(value)
@@ -134,17 +134,22 @@ def _clean_text(value: Optional[str]) -> str:
     return text.strip()
 
 
-def _format_date(timestamp: Optional[int]) -> str:
-    if not timestamp:
+def _format_date(timestamp: Any) -> str:
+    if not timestamp or isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
         return "unknown date"
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d")
+    try:
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d")
+    except (OverflowError, OSError, ValueError):
+        return "unknown date"
 
 
 async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     client = await _get_stack_client()
-    response = await client.get(f"{STACK_API_BASE_URL}{path}", params=params)
+    response = await client.get(f"{STACK_API_BASE_URL}{path}", params=params, timeout=REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
     data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("Stack Exchange API returned an unexpected non-dict payload")
     if data.get("error_id"):
         raise ValueError(data.get("error_message") or "Stack Exchange API returned an error")
     if data.get("backoff"):
@@ -164,7 +169,16 @@ def _question_url(site: str, question_id: Any) -> str:
     return f"https://{host}/questions/{question_id}"
 
 
-def _format_question(item: dict[str, Any], index: int, site: str) -> str:
+def _safe_tags_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(tag) for tag in value if tag is not None]
+
+
+def _format_question(item: Any, index: int, site: str) -> str:
+    if not isinstance(item, dict):
+        return f"{index}. Untitled question\n   unknown score | unknown answers | unknown views | not accepted\n   Tags: no tags"
+
     title = _clean_text(item.get("title")) or "Untitled question"
     question_id = item.get("question_id")
     score = item.get("score", 0)
@@ -173,7 +187,7 @@ def _format_question(item: dict[str, Any], index: int, site: str) -> str:
     # Stack Exchange distinguishes "has any answer" (is_answered) from
     # "has an accepted answer" (accepted_answer_id). Label only the latter.
     accepted = "accepted" if item.get("accepted_answer_id") else "not accepted"
-    tags = ", ".join(item.get("tags", [])) or "no tags"
+    tags = ", ".join(_safe_tags_list(item.get("tags"))) or "no tags"
     link = item.get("link") or _question_url(site, question_id)
 
     return (
@@ -184,8 +198,13 @@ def _format_question(item: dict[str, Any], index: int, site: str) -> str:
     )
 
 
-def _format_answer(item: dict[str, Any], index: int) -> str:
-    owner = item.get("owner", {}).get("display_name") or "unknown"
+def _format_answer(item: Any, index: int) -> str:
+    if not isinstance(item, dict):
+        return f"{index}. unknown | unknown score\n(no answer body available)"
+
+    owner_data = item.get("owner")
+    owner = owner_data.get("display_name") if isinstance(owner_data, dict) else None
+    owner = owner or "unknown"
     score = item.get("score", 0)
     accepted = " | accepted" if item.get("is_accepted") else ""
     body = _clean_text(item.get("body"))
@@ -330,7 +349,12 @@ async def search_questions(payload: dict[str, Any]):
 
     try:
         data = await _request_json("/search/advanced", params)
-        items = data.get("items", [])[:limit]
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Stack Exchange search failed: malformed response payload")
+        raw_items = data.get("items")
+        if not isinstance(raw_items, list):
+            return ChatToolResponse(error="Stack Exchange search failed: malformed response payload")
+        items = [item for item in raw_items if isinstance(item, dict)][:limit]
         if not items:
             return ChatToolResponse(result=f"No Stack Exchange questions found for '{query}'.")
 
@@ -362,7 +386,12 @@ async def get_question(payload: dict[str, Any]):
             f"/questions/{question_id}",
             {"site": site, "filter": "withbody", "pagesize": 1},
         )
-        items = data.get("items", [])
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Stack Exchange question request failed: malformed response payload")
+        raw_items = data.get("items")
+        if not isinstance(raw_items, list):
+            return ChatToolResponse(error="Stack Exchange question request failed: malformed response payload")
+        items = [item for item in raw_items if isinstance(item, dict)]
         if not items:
             return ChatToolResponse(error=f"No question found for ID {question_id} on {site}.")
 
@@ -371,7 +400,7 @@ async def get_question(payload: dict[str, Any]):
         body = _clean_text(item.get("body"))
         if len(body) > 1800:
             body = body[:1800].rstrip() + "..."
-        tags = ", ".join(item.get("tags", [])) or "no tags"
+        tags = ", ".join(_safe_tags_list(item.get("tags"))) or "no tags"
         link = item.get("link") or _question_url(site, question_id)
 
         lines = [
@@ -417,7 +446,12 @@ async def get_top_answers(payload: dict[str, Any]):
                 "sort": "votes",
             },
         )
-        items = data.get("items", [])[:limit]
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Stack Exchange answers request failed: malformed response payload")
+        raw_items = data.get("items")
+        if not isinstance(raw_items, list):
+            return ChatToolResponse(error="Stack Exchange answers request failed: malformed response payload")
+        items = [item for item in raw_items if isinstance(item, dict)][:limit]
         if not items:
             return ChatToolResponse(result=f"No answers found for question ID {question_id} on {site}.")
 
