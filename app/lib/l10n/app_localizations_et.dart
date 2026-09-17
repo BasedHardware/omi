@@ -9991,4 +9991,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get home => 'Avaleht';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Baasoleku värskendamine ebaõnnestus.';
 }

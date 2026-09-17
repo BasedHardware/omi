@@ -10010,4 +10010,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get home => 'Ana Sayfa';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Temel durum güncellenemedi.';
 }

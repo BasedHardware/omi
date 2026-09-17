@@ -10018,4 +10018,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get home => 'Головна';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Не вдалося оновити базовий статус.';
 }

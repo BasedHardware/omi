@@ -10829,5 +10829,6 @@
     "tapPlusToStartRecording": "Додирните + да започнете снимање",
     "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
     "speechProfileEnrollmentPrompt": "Да би Omi знао који је глас ваш — причајте о било чему око 5 секунди.",
-    "home": "Почетна"
+    "home": "Почетна",
+    "failedToUpdateBaselineStatus": "Неуспешно ажурирање основног статуса."
 }

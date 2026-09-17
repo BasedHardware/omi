@@ -9829,4 +9829,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get home => '홈';
+
+  @override
+  String get failedToUpdateBaselineStatus => '베이스라인 상태 업데이트에 실패했습니다.';
 }

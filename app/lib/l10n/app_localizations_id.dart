@@ -10008,4 +10008,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get home => 'Beranda';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Gagal memperbarui status baseline.';
 }

@@ -9996,4 +9996,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get home => 'Hjem';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Kunne ikke oppdatere baseline-status.';
 }

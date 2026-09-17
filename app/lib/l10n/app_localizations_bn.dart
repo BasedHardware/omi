@@ -10003,4 +10003,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get home => 'হোম';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'বেসলাইন স্থিতি আপডেট করতে ব্যর্থ হয়েছে।';
 }

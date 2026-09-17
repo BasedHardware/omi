@@ -10012,4 +10012,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get home => 'Почетна';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Неуспешно ажурирање основног статуса.';
 }

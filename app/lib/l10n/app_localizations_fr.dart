@@ -10085,4 +10085,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get home => 'Accueil';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Échec de la mise à jour du statut de référence.';
 }

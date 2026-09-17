@@ -10045,4 +10045,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get home => 'Acasă';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nu s-a putut actualiza starea de referință.';
 }

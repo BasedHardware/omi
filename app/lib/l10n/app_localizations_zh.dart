@@ -9807,4 +9807,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get home => '首页';
+
+  @override
+  String get failedToUpdateBaselineStatus => '无法更新基线状态。';
 }

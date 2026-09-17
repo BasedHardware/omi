@@ -10089,4 +10089,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get home => 'Home';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Hindi na-update ang status ng baseline.';
 }

@@ -10028,4 +10028,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get home => 'Domov';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Posodobitev osnovnega statusa je spodletela.';
 }

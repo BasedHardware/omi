@@ -10010,4 +10010,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get home => 'ہوم';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'بیس لائن کی حالت اپ ڈیٹ نہیں ہو سکی۔';
 }

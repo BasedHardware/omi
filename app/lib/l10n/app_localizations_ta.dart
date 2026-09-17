@@ -10068,4 +10068,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get home => 'முகப்பு';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'அடிப்படை நிலையைப் புதுப்பிக்க முடியவில்லை.';
 }

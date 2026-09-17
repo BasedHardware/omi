@@ -10055,4 +10055,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get home => 'Inici';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'No s\'ha pogut actualitzar l\'estat de la línia de base.';
 }

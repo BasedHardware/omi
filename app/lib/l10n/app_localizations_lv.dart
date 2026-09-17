@@ -10021,4 +10021,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get home => 'Sākums';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Neizdevās atjaunināt bāzes statusu.';
 }

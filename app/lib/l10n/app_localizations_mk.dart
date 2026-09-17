@@ -10051,4 +10051,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get home => 'Почетна';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Неуспешно ажурирање на основниот статус.';
 }

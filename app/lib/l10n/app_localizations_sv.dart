@@ -10002,4 +10002,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get home => 'Hem';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Det gick inte att uppdatera baslinjestatus.';
 }

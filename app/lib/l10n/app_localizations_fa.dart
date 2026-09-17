@@ -9998,4 +9998,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get home => 'خانه';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'به‌روزرسانی وضعیت پایه ناموفق بود.';
 }

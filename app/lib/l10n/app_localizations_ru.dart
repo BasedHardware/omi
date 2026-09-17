@@ -10035,4 +10035,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get home => 'Главная';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Не удалось обновить базовый статус.';
 }

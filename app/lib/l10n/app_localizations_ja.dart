@@ -9826,4 +9826,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get home => 'ホーム';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'ベースライン状態の更新に失敗しました。';
 }

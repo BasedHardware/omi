@@ -3263,5 +3263,6 @@
     "tapPlusToStartRecording": "Atinge + pentru a începe înregistrarea",
     "processingTakingLonger": "Încă se procesează — durează mai mult decât de obicei.",
     "speechProfileEnrollmentPrompt": "Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.",
-    "home": "Acasă"
+    "home": "Acasă",
+    "failedToUpdateBaselineStatus": "Nu s-a putut actualiza starea de referință."
 }

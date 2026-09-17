@@ -3241,5 +3241,6 @@
     "tapPlusToStartRecording": "Toca + per començar a gravar",
     "processingTakingLonger": "Encara en curs: això està trigant més del normal.",
     "speechProfileEnrollmentPrompt": "Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons.",
-    "home": "Inici"
+    "home": "Inici",
+    "failedToUpdateBaselineStatus": "No s'ha pogut actualitzar l'estat de la línia de base."
 }

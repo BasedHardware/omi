@@ -9997,4 +9997,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get home => 'Domů';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nepodařilo se aktualizovat stav výchozí paměti.';
 }

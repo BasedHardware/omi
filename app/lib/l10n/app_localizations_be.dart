@@ -10028,4 +10028,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get home => 'Галоўная';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Не атрымалася абнавіць статус базовай памяці.';
 }

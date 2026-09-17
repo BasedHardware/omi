@@ -10022,4 +10022,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get home => 'Inicio';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Error al actualizar el estado de la línea base.';
 }

@@ -3241,5 +3241,6 @@
     "tapPlusToStartRecording": "Klepnutím na + začnete nahrávat",
     "processingTakingLonger": "Stále probíhá — trvá to déle než obvykle.",
     "speechProfileEnrollmentPrompt": "Aby Omi věděl, který hlas je váš — mluvte asi 5 sekund o čemkoli.",
-    "home": "Domů"
+    "home": "Domů",
+    "failedToUpdateBaselineStatus": "Nepodařilo se aktualizovat stav výchozí paměti."
 }

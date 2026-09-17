@@ -9917,4 +9917,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get home => 'בית';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'עדכון מצב קו הבסיס נכשל.';
 }

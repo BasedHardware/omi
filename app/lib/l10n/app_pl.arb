@@ -3298,5 +3298,6 @@
     "tapPlusToStartRecording": "Dotknij +, aby rozpocząć nagrywanie",
     "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle.",
     "speechProfileEnrollmentPrompt": "Aby Omi wiedziało, który głos jest Twój — mów o czymkolwiek przez około 5 sekund.",
-    "home": "Główna"
+    "home": "Główna",
+    "failedToUpdateBaselineStatus": "Nie udało się zaktualizować statusu linii bazowej."
 }

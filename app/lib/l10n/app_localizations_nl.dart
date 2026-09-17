@@ -10025,4 +10025,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get home => 'Home';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Kan de baseline-status niet bijwerken.';
 }

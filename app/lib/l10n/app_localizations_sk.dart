@@ -9989,4 +9989,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get home => 'Domov';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nepodarilo sa aktualizovať stav základnej pamäte.';
 }

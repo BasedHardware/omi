@@ -10829,5 +10829,6 @@
     "tapPlusToStartRecording": "Націсніце +, каб пачаць запіс",
     "processingTakingLonger": "Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.",
     "speechProfileEnrollmentPrompt": "Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.",
-    "home": "Галоўная"
+    "home": "Галоўная",
+    "failedToUpdateBaselineStatus": "Не атрымалася абнавіць статус базовай памяці."
 }

@@ -10028,4 +10028,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get home => 'Główna';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nie udało się zaktualizować statusu linii bazowej.';
 }

@@ -10039,4 +10039,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get home => 'Kezdőlap';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Az alapállapot frissítése sikertelen.';
 }

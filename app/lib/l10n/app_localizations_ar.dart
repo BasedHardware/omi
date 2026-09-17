@@ -9938,4 +9938,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get home => 'الرئيسية';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'فشل تحديث حالة الخط الأساسي.';
 }

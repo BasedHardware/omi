@@ -9940,4 +9940,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get home => 'หน้าหลัก';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'ไม่สามารถอัปเดตสถานะเส้นฐานได้';
 }

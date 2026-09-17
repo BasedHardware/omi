@@ -10081,4 +10081,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get home => 'Start';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Baseline-Status konnte nicht aktualisiert werden.';
 }

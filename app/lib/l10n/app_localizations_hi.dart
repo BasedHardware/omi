@@ -9976,4 +9976,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get home => 'होम';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'बेसलाइन स्थिति अपडेट करने में विफल।';
 }

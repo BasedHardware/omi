@@ -3263,5 +3263,6 @@
     "tapPlusToStartRecording": "Trykk på + for å starte opptaket",
     "processingTakingLonger": "Jobber fortsatt — dette tar lengre tid enn vanlig.",
     "speechProfileEnrollmentPrompt": "Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder.",
-    "home": "Hjem"
+    "home": "Hjem",
+    "failedToUpdateBaselineStatus": "Kunne ikke oppdatere baseline-status."
 }

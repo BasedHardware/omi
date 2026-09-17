@@ -10024,4 +10024,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get home => 'Utama';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Gagal mengemas kini status garis dasar.';
 }

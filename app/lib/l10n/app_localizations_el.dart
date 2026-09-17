@@ -10068,4 +10068,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get home => 'Αρχική';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Αποτυχία ενημέρωσης της βασικής κατάστασης.';
 }

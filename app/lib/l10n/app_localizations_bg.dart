@@ -10035,4 +10035,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get home => 'Начало';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Неуспешна актуализация на базовия статус.';
 }

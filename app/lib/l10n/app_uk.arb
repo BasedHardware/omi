@@ -3263,5 +3263,6 @@
     "tapPlusToStartRecording": "Натисніть +, щоб почати запис",
     "processingTakingLonger": "Ще обробляється — це триває довше, ніж зазвичай.",
     "speechProfileEnrollmentPrompt": "Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.",
-    "home": "Головна"
+    "home": "Головна",
+    "failedToUpdateBaselineStatus": "Не вдалося оновити базовий статус."
 }

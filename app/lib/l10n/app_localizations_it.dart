@@ -10055,4 +10055,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get home => 'Home';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Impossibile aggiornare lo stato della linea di base.';
 }

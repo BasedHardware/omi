@@ -9999,4 +9999,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get home => 'Koti';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Perustilan päivitys epäonnistui.';
 }

@@ -9993,4 +9993,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get home => 'Trang chủ';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Không thể cập nhật trạng thái đường cơ sở.';
 }

@@ -10007,4 +10007,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get home => 'Início';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Falha ao atualizar o estado da linha de base.';
 }

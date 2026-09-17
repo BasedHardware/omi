@@ -10030,4 +10030,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get home => 'ಮುಖಪುಟ';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'ಬೇಸ್‌ಲೈನ್ ಸ್ಥಿತಿಯನ್ನು ನವೀಕರಿಸಲು ವಿಫಲವಾಗಿದೆ.';
 }

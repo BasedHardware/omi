@@ -10047,4 +10047,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get home => 'హోమ్';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'బేస్‌లైన్ స్థితిని నవీకరించడం విఫలమైంది.';
 }

@@ -10025,4 +10025,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get home => 'Početna';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Neuspelo ažuriranje osnovnog statusa.';
 }

@@ -10007,4 +10007,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get home => 'मुख्यपृष्ठ';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'बेसलाइन स्थिती अद्यतनित करणे अयशस्वी.';
 }

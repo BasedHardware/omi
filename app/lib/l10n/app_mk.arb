@@ -10829,5 +10829,6 @@
     "tapPlusToStartRecording": "Допрете + за да започнете со снимање",
     "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
     "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.",
-    "home": "Почетна"
+    "home": "Почетна",
+    "failedToUpdateBaselineStatus": "Неуспешно ажурирање на основниот статус."
 }

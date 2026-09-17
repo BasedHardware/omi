@@ -3263,5 +3263,6 @@
     "tapPlusToStartRecording": "Tryck på + för att börja spela in",
     "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt.",
     "speechProfileEnrollmentPrompt": "Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder.",
-    "home": "Hem"
+    "home": "Hem",
+    "failedToUpdateBaselineStatus": "Det gick inte att uppdatera baslinjestatus."
 }

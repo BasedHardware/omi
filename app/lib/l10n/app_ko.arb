@@ -3263,5 +3263,6 @@
     "tapPlusToStartRecording": "+를 눌러 녹음 시작",
     "processingTakingLonger": "아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.",
     "speechProfileEnrollmentPrompt": "Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.",
-    "home": "홈"
+    "home": "홈",
+    "failedToUpdateBaselineStatus": "베이스라인 상태 업데이트에 실패했습니다."
 }

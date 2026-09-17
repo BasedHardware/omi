@@ -10017,4 +10017,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get home => 'Pradžia';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nepavyko atnaujinti bazinės būsenos.';
 }

@@ -3263,5 +3263,6 @@
     "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu",
     "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti.",
     "speechProfileEnrollmentPrompt": "Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.",
-    "home": "Sākums"
+    "home": "Sākums",
+    "failedToUpdateBaselineStatus": "Neizdevās atjaunināt bāzes statusu."
 }

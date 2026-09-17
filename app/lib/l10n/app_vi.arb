@@ -3268,5 +3268,6 @@
     "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm",
     "processingTakingLonger": "Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.",
     "speechProfileEnrollmentPrompt": "Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.",
-    "home": "Trang chủ"
+    "home": "Trang chủ",
+    "failedToUpdateBaselineStatus": "Không thể cập nhật trạng thái đường cơ sở."
 }
