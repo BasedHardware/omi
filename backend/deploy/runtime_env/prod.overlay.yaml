@@ -12,6 +12,8 @@ overlay:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'false'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'false'
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -81,6 +83,8 @@ overlay:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'false'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'false'
     config_map:
       entries:
         ACCOUNT_DELETION_HANDLER_URL:
@@ -138,6 +142,10 @@ overlay:
     env:
       MEMORY_BELIEF_MODEL_ENABLED:
         value: 'false'
+      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+        value: 'false'
+      BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+        value: 'false'
       MEMORY_BELIEF_AUTOMATION_PAUSED:
         value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -165,6 +173,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'false'
+          BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
@@ -250,6 +262,8 @@ overlay:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -301,6 +315,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           MEMORY_BELIEF_MODEL_ENABLED:

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -34,6 +35,25 @@ class PlatformManager {
     _instance._deviceIdHash = await _instance._getDeviceIdHash();
     unawaited(AnalyticsManager.init());
     await IntercomManager.instance.initIntercom();
+  }
+
+  /// Synchronous initialization for the local hermetic journey lane
+  /// (SCA-488): no platform plugins, no analytics, no Intercom — only the
+  /// fields request headers read. The full app boot still uses
+  /// [initializeServices]; this seam exists so production HTTP paths can run
+  /// inside a host test without plugin channels.
+  @visibleForTesting
+  static void initializeForLocalHarness({String deviceIdHash = 'journey-device-hash'}) {
+    assert(() {
+      _instance._packageInfo = PackageInfo(
+        appName: 'Omi Journey Harness',
+        packageName: 'dev.omi.journey',
+        version: '0.0.0+journey',
+        buildNumber: '0',
+      );
+      _instance._deviceIdHash = deviceIdHash;
+      return true;
+    }());
   }
 
   Future<String> _getDeviceIdHash() async {

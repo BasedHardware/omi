@@ -34,6 +34,8 @@ outputs:
     value: ${{ steps.changed.outputs.has_app_codegen }}
   has_app_l10n:
     value: ${{ steps.changed.outputs.has_app_l10n }}
+  has_app_journeys:
+    value: ${{ steps.changed.outputs.has_app_journeys }}
   has_app_compile_smoke:
     value: ${{ steps.changed.outputs.has_app_compile_smoke }}
   has_app_dart:

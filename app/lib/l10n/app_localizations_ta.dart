@@ -10065,4 +10065,7 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.';
+
+  @override
+  String get home => 'முகப்பு';
 }

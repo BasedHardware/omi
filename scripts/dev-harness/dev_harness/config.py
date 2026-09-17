@@ -407,6 +407,10 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
+        # Offline strips real provider keys. Default STT_SERVICE_MODELS includes
+        # soniox, and backend startup then fails closed on an empty SONIOX_API_KEY.
+        # Pin a keyless chain so isolated sessions can boot without paid STT.
+        env["STT_SERVICE_MODELS"] = "parakeet"
     return env
 
 
@@ -423,4 +427,5 @@ def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
         env["OMI_LLM_STUB"] = "1"
+        env["STT_SERVICE_MODELS"] = "parakeet"
     return env

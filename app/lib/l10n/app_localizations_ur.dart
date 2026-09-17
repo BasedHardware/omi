@@ -10007,4 +10007,7 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔';
+
+  @override
+  String get home => 'ہوم';
 }

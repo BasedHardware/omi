@@ -10044,4 +10044,7 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.';
+
+  @override
+  String get home => 'హోమ్';
 }
