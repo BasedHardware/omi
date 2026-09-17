@@ -15,7 +15,6 @@ import {
   type MobileOmnibarMode,
 } from "../../react-native/src/mobile/MobileOmnibar";
 import { ProjectionList } from "../../react-native/src/ui/ProjectionList";
-import { LiveVoiceButton } from "../../react-native/src/ui/LiveVoiceButton";
 import {
   DeviceSession,
   homeConnectionStatus,
@@ -342,10 +341,6 @@ function Preview() {
                 : undefined,
               omnibar: h(MobileOmnibar, {
                 key: "mobile-omnibar",
-                voiceControl:
-                  route === "home" || chatOpen
-                    ? h(LiveVoiceButton, { backend: null, compact: true })
-                    : undefined,
                 mode,
                 onModeChange: (next) => {
                   setMode(next);

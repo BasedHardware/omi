@@ -19,7 +19,6 @@ export function MobileOmnibar({
   busy,
   canStop,
   inputRef,
-  voiceControl,
 }: {
   mode: MobileOmnibarMode;
   onModeChange: (mode: MobileOmnibarMode) => void;
@@ -30,7 +29,6 @@ export function MobileOmnibar({
   busy: boolean;
   canStop: boolean;
   inputRef: React.RefObject<TextInput | null>;
-  voiceControl?: React.ReactNode;
 }) {
   const stopping = mode === 'Ask' && canStop;
   const disabled =
@@ -58,7 +56,6 @@ export function MobileOmnibar({
             </Text>
           </FocusPressable>
         ))}
-        {voiceControl && <View style={styles.voice}>{voiceControl}</View>}
       </View>
       <View style={styles.field}>
         <TextInput
@@ -122,7 +119,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   modes: {flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4},
-  voice: {marginLeft: 'auto', flexShrink: 1},
   mode: {
     minHeight: 44,
     paddingHorizontal: 18,
