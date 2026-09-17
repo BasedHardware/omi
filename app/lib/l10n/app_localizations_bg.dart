@@ -10038,4 +10038,16 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Неуспешна актуализация на базовия статус.';
+
+  @override
+  String get unstarConversation => 'Премахни звездата от разговора';
+
+  @override
+  String get moreOptions => 'Още опции';
+
+  @override
+  String get filterByDate => 'Филтриране по дата';
+
+  @override
+  String get memoryGraph => 'Граф на спомените';
 }

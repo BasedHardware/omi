@@ -3241,5 +3241,9 @@
     "home": "Home",
     "failedToUpdateBaselineStatus": "Kan de baseline-status niet bijwerken.",
     "memoryAllowUse": "Gebruik toestaan",
-    "memoryDontUse": "Niet gebruiken"
+    "memoryDontUse": "Niet gebruiken",
+    "unstarConversation": "Ster van gesprek verwijderen",
+    "moreOptions": "Meer opties",
+    "filterByDate": "Filteren op datum",
+    "memoryGraph": "Herinneringengrafiek"
 }

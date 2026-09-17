@@ -10828,5 +10828,9 @@
     "home": "Home",
     "failedToUpdateBaselineStatus": "Hindi na-update ang status ng baseline.",
     "memoryAllowUse": "Payagan ang paggamit",
-    "memoryDontUse": "Huwag gamitin"
+    "memoryDontUse": "Huwag gamitin",
+    "unstarConversation": "Alisin ang bituin sa pag-uusap",
+    "moreOptions": "Higit pang mga opsyon",
+    "filterByDate": "I-filter ayon sa petsa",
+    "memoryGraph": "Graph ng mga alaala"
 }

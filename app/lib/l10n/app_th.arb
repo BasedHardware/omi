@@ -3241,5 +3241,9 @@
     "home": "หน้าหลัก",
     "failedToUpdateBaselineStatus": "ไม่สามารถอัปเดตสถานะเส้นฐานได้",
     "memoryAllowUse": "อนุญาตให้ใช้",
-    "memoryDontUse": "ไม่ต้องใช้"
+    "memoryDontUse": "ไม่ต้องใช้",
+    "unstarConversation": "เอาดาวออกจากบทสนทนา",
+    "moreOptions": "ตัวเลือกเพิ่มเติม",
+    "filterByDate": "กรองตามวันที่",
+    "memoryGraph": "กราฟความทรงจำ"
 }

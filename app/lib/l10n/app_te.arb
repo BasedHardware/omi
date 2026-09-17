@@ -10828,5 +10828,9 @@
     "home": "హోమ్",
     "failedToUpdateBaselineStatus": "బేస్‌లైన్ స్థితిని నవీకరించడం విఫలమైంది.",
     "memoryAllowUse": "ఉపయోగాన్ని అనుమతించు",
-    "memoryDontUse": "ఉపయోగించవద్దు"
+    "memoryDontUse": "ఉపయోగించవద్దు",
+    "unstarConversation": "సంభాషణ నక్షత్రాన్ని తీసివేయండి",
+    "moreOptions": "మరిన్ని ఎంపికలు",
+    "filterByDate": "తేదీ ప్రకారం ఫిల్టర్ చేయండి",
+    "memoryGraph": "జ్ఞాపకాల గ్రాఫ్"
 }

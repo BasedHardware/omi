@@ -10828,5 +10828,9 @@
     "home": "ಮುಖಪುಟ",
     "failedToUpdateBaselineStatus": "ಬೇಸ್‌ಲೈನ್ ಸ್ಥಿತಿಯನ್ನು ನವೀಕರಿಸಲು ವಿಫಲವಾಗಿದೆ.",
     "memoryAllowUse": "ಬಳಕೆಗೆ ಅನುಮತಿಸಿ",
-    "memoryDontUse": "ಬಳಸಬೇಡಿ"
+    "memoryDontUse": "ಬಳಸಬೇಡಿ",
+    "unstarConversation": "ಸಂಭಾಷಣೆಯ ನಕ್ಷತ್ರ ತೆಗೆದುಹಾಕಿ",
+    "moreOptions": "ಹೆಚ್ಚಿನ ಆಯ್ಕೆಗಳು",
+    "filterByDate": "ದಿನಾಂಕದ ಪ್ರಕಾರ ಫಿಲ್ಟರ್ ಮಾಡಿ",
+    "memoryGraph": "ಸ್ಮೃತಿ ಗ್ರಾಫ್"
 }

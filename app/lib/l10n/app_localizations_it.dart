@@ -10058,4 +10058,16 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Impossibile aggiornare lo stato della linea di base.';
+
+  @override
+  String get unstarConversation => 'Rimuovi stella dalla conversazione';
+
+  @override
+  String get moreOptions => 'Altre opzioni';
+
+  @override
+  String get filterByDate => 'Filtra per data';
+
+  @override
+  String get memoryGraph => 'Grafo dei ricordi';
 }

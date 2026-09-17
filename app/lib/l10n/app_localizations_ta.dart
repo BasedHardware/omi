@@ -10071,4 +10071,16 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'அடிப்படை நிலையைப் புதுப்பிக்க முடியவில்லை.';
+
+  @override
+  String get unstarConversation => 'உரையாடல் நட்சத்திரத்தை அகற்று';
+
+  @override
+  String get moreOptions => 'மேலும் விருப்பங்கள்';
+
+  @override
+  String get filterByDate => 'தேதியின்படி வடிகட்டு';
+
+  @override
+  String get memoryGraph => 'நினைவு வரைபடம்';
 }

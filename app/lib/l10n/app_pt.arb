@@ -3276,5 +3276,9 @@
     "home": "Início",
     "failedToUpdateBaselineStatus": "Falha ao atualizar o estado da linha de base.",
     "memoryAllowUse": "Permitir uso",
-    "memoryDontUse": "Não usar"
+    "memoryDontUse": "Não usar",
+    "unstarConversation": "Remover estrela da conversa",
+    "moreOptions": "Mais opções",
+    "filterByDate": "Filtrar por data",
+    "memoryGraph": "Grafo de memórias"
 }

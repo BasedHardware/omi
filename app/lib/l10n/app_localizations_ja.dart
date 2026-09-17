@@ -9829,4 +9829,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'ベースライン状態の更新に失敗しました。';
+
+  @override
+  String get unstarConversation => '会話のスターを解除';
+
+  @override
+  String get moreOptions => 'その他のオプション';
+
+  @override
+  String get filterByDate => '日付で絞り込む';
+
+  @override
+  String get memoryGraph => 'メモリグラフ';
 }

@@ -9994,4 +9994,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Baasoleku värskendamine ebaõnnestus.';
+
+  @override
+  String get unstarConversation => 'Eemalda vestluselt tärn';
+
+  @override
+  String get moreOptions => 'Rohkem valikuid';
+
+  @override
+  String get filterByDate => 'Filtreeri kuupäeva järgi';
+
+  @override
+  String get memoryGraph => 'Mälude graaf';
 }

@@ -10021,4 +10021,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Не вдалося оновити базовий статус.';
+
+  @override
+  String get unstarConversation => 'Зняти позначку з розмови';
+
+  @override
+  String get moreOptions => 'Інші параметри';
+
+  @override
+  String get filterByDate => 'Фільтрувати за датою';
+
+  @override
+  String get memoryGraph => 'Граф спогадів';
 }

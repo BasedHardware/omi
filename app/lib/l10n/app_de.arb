@@ -3241,5 +3241,9 @@
     "home": "Start",
     "failedToUpdateBaselineStatus": "Baseline-Status konnte nicht aktualisiert werden.",
     "memoryAllowUse": "Verwendung erlauben",
-    "memoryDontUse": "Nicht verwenden"
+    "memoryDontUse": "Nicht verwenden",
+    "unstarConversation": "Stern von Unterhaltung entfernen",
+    "moreOptions": "Weitere Optionen",
+    "filterByDate": "Nach Datum filtern",
+    "memoryGraph": "Erinnerungsgraph"
 }

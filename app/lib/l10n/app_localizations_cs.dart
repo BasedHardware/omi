@@ -10000,4 +10000,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Nepodařilo se aktualizovat stav výchozí paměti.';
+
+  @override
+  String get unstarConversation => 'Odebrat hvězdu z konverzace';
+
+  @override
+  String get moreOptions => 'Další možnosti';
+
+  @override
+  String get filterByDate => 'Filtrovat podle data';
+
+  @override
+  String get memoryGraph => 'Graf vzpomínek';
 }

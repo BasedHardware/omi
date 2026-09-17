@@ -10828,5 +10828,9 @@
     "home": "בית",
     "failedToUpdateBaselineStatus": "עדכון מצב קו הבסיס נכשל.",
     "memoryAllowUse": "אפשר שימוש",
-    "memoryDontUse": "אל תשתמש"
+    "memoryDontUse": "אל תשתמש",
+    "unstarConversation": "הסרת כוכב מהשיחה",
+    "moreOptions": "אפשרויות נוספות",
+    "filterByDate": "סינון לפי תאריך",
+    "memoryGraph": "גרף זיכרונות"
 }

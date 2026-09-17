@@ -10002,4 +10002,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Perustilan päivitys epäonnistui.';
+
+  @override
+  String get unstarConversation => 'Poista keskustelun tähti';
+
+  @override
+  String get moreOptions => 'Lisää vaihtoehtoja';
+
+  @override
+  String get filterByDate => 'Suodata päivämäärän mukaan';
+
+  @override
+  String get memoryGraph => 'Muistigraafi';
 }

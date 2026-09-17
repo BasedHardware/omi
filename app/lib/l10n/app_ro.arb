@@ -3241,5 +3241,9 @@
     "home": "Acasă",
     "failedToUpdateBaselineStatus": "Nu s-a putut actualiza starea de referință.",
     "memoryAllowUse": "Permite utilizarea",
-    "memoryDontUse": "Nu utiliza"
+    "memoryDontUse": "Nu utiliza",
+    "unstarConversation": "Elimină steaua conversației",
+    "moreOptions": "Mai multe opțiuni",
+    "filterByDate": "Filtrează după dată",
+    "memoryGraph": "Graful amintirilor"
 }

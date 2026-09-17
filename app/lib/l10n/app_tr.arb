@@ -3276,5 +3276,9 @@
     "home": "Ana Sayfa",
     "failedToUpdateBaselineStatus": "Temel durum güncellenemedi.",
     "memoryAllowUse": "Kullanıma izin ver",
-    "memoryDontUse": "Kullanma"
+    "memoryDontUse": "Kullanma",
+    "unstarConversation": "Konuşmanın yıldızını kaldır",
+    "moreOptions": "Diğer seçenekler",
+    "filterByDate": "Tarihe göre filtrele",
+    "memoryGraph": "Anı grafiği"
 }

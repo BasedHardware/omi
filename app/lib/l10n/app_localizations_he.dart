@@ -9920,4 +9920,16 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'עדכון מצב קו הבסיס נכשל.';
+
+  @override
+  String get unstarConversation => 'הסרת כוכב מהשיחה';
+
+  @override
+  String get moreOptions => 'אפשרויות נוספות';
+
+  @override
+  String get filterByDate => 'סינון לפי תאריך';
+
+  @override
+  String get memoryGraph => 'גרף זיכרונות';
 }

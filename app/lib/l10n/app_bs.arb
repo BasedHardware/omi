@@ -10828,5 +10828,9 @@
     "home": "Početna",
     "failedToUpdateBaselineStatus": "Neuspelo ažuriranje osnovnog statusa.",
     "memoryAllowUse": "Dozvoli korištenje",
-    "memoryDontUse": "Nemoj koristiti"
+    "memoryDontUse": "Nemoj koristiti",
+    "unstarConversation": "Ukloni zvjezdicu s razgovora",
+    "moreOptions": "Više opcija",
+    "filterByDate": "Filtriraj po datumu",
+    "memoryGraph": "Graf sjećanja"
 }

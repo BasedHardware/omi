@@ -3241,5 +3241,9 @@
     "home": "Pradžia",
     "failedToUpdateBaselineStatus": "Nepavyko atnaujinti bazinės būsenos.",
     "memoryAllowUse": "Leisti naudoti",
-    "memoryDontUse": "Nenaudoti"
+    "memoryDontUse": "Nenaudoti",
+    "unstarConversation": "Pašalinti pokalbio žvaigždutę",
+    "moreOptions": "Daugiau parinkčių",
+    "filterByDate": "Filtruoti pagal datą",
+    "memoryGraph": "Prisiminimų grafas"
 }

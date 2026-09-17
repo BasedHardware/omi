@@ -10088,4 +10088,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Échec de la mise à jour du statut de référence.';
+
+  @override
+  String get unstarConversation => 'Retirer la conversation des favoris';
+
+  @override
+  String get moreOptions => 'Plus d’options';
+
+  @override
+  String get filterByDate => 'Filtrer par date';
+
+  @override
+  String get memoryGraph => 'Graphe des souvenirs';
 }

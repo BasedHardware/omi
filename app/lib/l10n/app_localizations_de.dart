@@ -10084,4 +10084,16 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Baseline-Status konnte nicht aktualisiert werden.';
+
+  @override
+  String get unstarConversation => 'Stern von Unterhaltung entfernen';
+
+  @override
+  String get moreOptions => 'Weitere Optionen';
+
+  @override
+  String get filterByDate => 'Nach Datum filtern';
+
+  @override
+  String get memoryGraph => 'Erinnerungsgraph';
 }

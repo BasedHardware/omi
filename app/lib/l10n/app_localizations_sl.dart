@@ -10031,4 +10031,16 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Posodobitev osnovnega statusa je spodletela.';
+
+  @override
+  String get unstarConversation => 'Odstrani zvezdico s pogovora';
+
+  @override
+  String get moreOptions => 'Več možnosti';
+
+  @override
+  String get filterByDate => 'Filtriraj po datumu';
+
+  @override
+  String get memoryGraph => 'Graf spominov';
 }

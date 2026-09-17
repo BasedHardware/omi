@@ -10010,4 +10010,16 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Falha ao atualizar o estado da linha de base.';
+
+  @override
+  String get unstarConversation => 'Remover estrela da conversa';
+
+  @override
+  String get moreOptions => 'Mais opções';
+
+  @override
+  String get filterByDate => 'Filtrar por data';
+
+  @override
+  String get memoryGraph => 'Grafo de memórias';
 }

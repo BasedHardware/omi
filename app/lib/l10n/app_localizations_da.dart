@@ -9985,4 +9985,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Kunne ikke opdatere baseline-status.';
+
+  @override
+  String get unstarConversation => 'Fjern stjerne fra samtale';
+
+  @override
+  String get moreOptions => 'Flere indstillinger';
+
+  @override
+  String get filterByDate => 'Filtrer efter dato';
+
+  @override
+  String get memoryGraph => 'Hukommelsesgraf';
 }

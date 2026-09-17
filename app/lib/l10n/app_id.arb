@@ -3276,5 +3276,9 @@
     "home": "Beranda",
     "failedToUpdateBaselineStatus": "Gagal memperbarui status baseline.",
     "memoryAllowUse": "Izinkan penggunaan",
-    "memoryDontUse": "Jangan gunakan"
+    "memoryDontUse": "Jangan gunakan",
+    "unstarConversation": "Hapus bintang percakapan",
+    "moreOptions": "Opsi lainnya",
+    "filterByDate": "Filter berdasarkan tanggal",
+    "memoryGraph": "Graf memori"
 }

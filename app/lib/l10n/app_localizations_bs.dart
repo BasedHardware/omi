@@ -10028,4 +10028,16 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Neuspelo ažuriranje osnovnog statusa.';
+
+  @override
+  String get unstarConversation => 'Ukloni zvjezdicu s razgovora';
+
+  @override
+  String get moreOptions => 'Više opcija';
+
+  @override
+  String get filterByDate => 'Filtriraj po datumu';
+
+  @override
+  String get memoryGraph => 'Graf sjećanja';
 }

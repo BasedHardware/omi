@@ -9991,4 +9991,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Failed to update baseline status';
+
+  @override
+  String get unstarConversation => 'Unstar conversation';
+
+  @override
+  String get moreOptions => 'More options';
+
+  @override
+  String get filterByDate => 'Filter by date';
+
+  @override
+  String get memoryGraph => 'Memory graph';
 }

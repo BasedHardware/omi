@@ -3241,5 +3241,9 @@
     "home": "Inici",
     "failedToUpdateBaselineStatus": "No s'ha pogut actualitzar l'estat de la línia de base.",
     "memoryAllowUse": "Permet l'ús",
-    "memoryDontUse": "No ho facis servir"
+    "memoryDontUse": "No ho facis servir",
+    "unstarConversation": "Treu l'estrella de la conversa",
+    "moreOptions": "Més opcions",
+    "filterByDate": "Filtra per data",
+    "memoryGraph": "Graf de memòries"
 }

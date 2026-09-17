@@ -10013,4 +10013,16 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Temel durum güncellenemedi.';
+
+  @override
+  String get unstarConversation => 'Konuşmanın yıldızını kaldır';
+
+  @override
+  String get moreOptions => 'Diğer seçenekler';
+
+  @override
+  String get filterByDate => 'Tarihe göre filtrele';
+
+  @override
+  String get memoryGraph => 'Anı grafiği';
 }

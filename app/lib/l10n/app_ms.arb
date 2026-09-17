@@ -3241,5 +3241,9 @@
     "home": "Utama",
     "failedToUpdateBaselineStatus": "Gagal mengemas kini status garis dasar.",
     "memoryAllowUse": "Benarkan penggunaan",
-    "memoryDontUse": "Jangan guna"
+    "memoryDontUse": "Jangan guna",
+    "unstarConversation": "Nyahbintang perbualan",
+    "moreOptions": "Lagi pilihan",
+    "filterByDate": "Tapiskan mengikut tarikh",
+    "memoryGraph": "Graf memori"
 }

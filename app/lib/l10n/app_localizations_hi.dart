@@ -9979,4 +9979,16 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'बेसलाइन स्थिति अपडेट करने में विफल।';
+
+  @override
+  String get unstarConversation => 'बातचीत से स्टार हटाएँ';
+
+  @override
+  String get moreOptions => 'और विकल्प';
+
+  @override
+  String get filterByDate => 'तारीख के अनुसार फ़िल्टर करें';
+
+  @override
+  String get memoryGraph => 'स्मृति ग्राफ़';
 }

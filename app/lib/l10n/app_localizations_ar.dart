@@ -9941,4 +9941,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'فشل تحديث حالة الخط الأساسي.';
+
+  @override
+  String get unstarConversation => 'إلغاء تمييز المحادثة بنجمة';
+
+  @override
+  String get moreOptions => 'المزيد من الخيارات';
+
+  @override
+  String get filterByDate => 'تصفية حسب التاريخ';
+
+  @override
+  String get memoryGraph => 'الرسم البياني للذكريات';
 }

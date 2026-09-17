@@ -3276,5 +3276,9 @@
     "home": "Główna",
     "failedToUpdateBaselineStatus": "Nie udało się zaktualizować statusu linii bazowej.",
     "memoryAllowUse": "Zezwól na użycie",
-    "memoryDontUse": "Nie używaj"
+    "memoryDontUse": "Nie używaj",
+    "unstarConversation": "Usuń gwiazdkę z rozmowy",
+    "moreOptions": "Więcej opcji",
+    "filterByDate": "Filtruj według daty",
+    "memoryGraph": "Graf wspomnień"
 }
