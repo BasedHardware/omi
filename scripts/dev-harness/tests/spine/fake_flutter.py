@@ -46,7 +46,7 @@ for line in sys.stdin:
         name = params['methodName']
         if name == 'ext.omi.controls.capabilities':
             result = {'contract_version': 'semantic-controls/v1',
-                      'capabilities': ['capabilities', 'state', 'wait_ready', 'navigate', 'fault.arm', 'fault.clear']}
+                      'capabilities': ['capabilities', 'state', 'wait_ready', 'navigate', 'fault']}
         elif name in ('ext.omi.controls.state', 'ext.omi.controls.wait_ready'):
             state = {'contract_version': 'semantic-controls/v1',
                      'profile': 'mobileBeta' if mode == 'wrong-runtime' else 'localDev',
@@ -54,7 +54,7 @@ for line in sys.stdin:
                      'principal': {'uid': 'fixture-user', 'signed_in': True}, 'route': '/home'}
             result = {'ok': True, 'state': state} if name.endswith('wait_ready') else state
         elif name == 'ext.omi.controls.navigate':
-            result = {'ok': True, 'destination': params['params']['destination']}
+            result = {'ok': True}
         elif name == 'ext.omi.controls.fault':
             emit({'id': request['id'], 'error': {'code': -32602, 'message': 'unknown fault'}})
             continue
