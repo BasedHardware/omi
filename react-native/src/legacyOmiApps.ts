@@ -69,6 +69,15 @@ function presentNullableDouble(value: unknown): void {
   throw new AppError();
 }
 
+function presentNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
+    throw new AppError();
+  }
+}
+
 function presentReview(value: unknown): void {
   if (value === undefined || value === null) {
     return;
@@ -80,6 +89,10 @@ function presentReview(value: unknown): void {
   presentNullableDate(review.rated_at);
   presentNullableDate(review.responded_at);
   presentNullableDouble(review.score);
+  presentNullableString(review.review);
+  presentNullableString(review.uid);
+  presentNullableString(review.username);
+  presentNullableString(review.response);
 }
 
 function presentReviews(value: unknown): void {
@@ -123,6 +136,24 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   presentDefaultInt(row.usage_count);
   presentReviews(row.reviews);
   presentReview(row.user_review);
+  presentNullableString(row.author);
+  presentNullableString(row.category);
+  presentNullableString(row.chat_prompt);
+  presentNullableString(row.disabled_at);
+  presentNullableString(row.disabled_error);
+  presentNullableString(row.disabled_reason);
+  presentNullableString(row.email);
+  presentNullableString(row.memory_prompt);
+  presentNullableString(row.payment_link);
+  presentNullableString(row.payment_link_id);
+  presentNullableString(row.payment_plan);
+  presentNullableString(row.payment_price_id);
+  presentNullableString(row.payment_product_id);
+  presentNullableString(row.persona_prompt);
+  presentNullableString(row.source_code_url);
+  presentNullableString(row.status);
+  presentNullableString(row.uid);
+  presentNullableString(row.username);
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
   if (row.description === undefined || row.description === null) {
     return image === null ? {name} : {name, image};
