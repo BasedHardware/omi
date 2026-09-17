@@ -18,6 +18,7 @@ jobs:
     outputs:
       has_app_codegen: ${{ steps.changes.outputs.has_app_codegen }}
       has_app_compile_smoke: ${{ steps.changes.outputs.has_app_compile_smoke }}
+      has_app_ios_compile: ${{ steps.changes.outputs.has_app_ios_compile }}
       has_app_journeys: ${{ steps.changes.outputs.has_app_journeys }}
       has_app_dart: ${{ steps.changes.outputs.has_app_dart }}
       has_app_l10n: ${{ steps.changes.outputs.has_app_l10n }}
@@ -477,3 +478,81 @@ jobs:
         # Same target-platform as the APK job so a shared Gradle cache hit
         # does not rebuild every ABI. This job does not wait for the APK.
         run: ./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64
+
+  ios-compile-check:
+    name: iOS Compile Check
+    runs-on: macos-26
+    needs: changes
+    if: needs.changes.outputs.has_app_ios_compile == 'true'
+    # Local cold Xcode time was 334s on an M-series Mac. Hosted macos-26 still
+    # pays Flutter SDK, pub get, build_runner, and CocoaPods on top of that.
+    # Expect ~20-30 min warm / ~35 min cold; 40 is the wedge-guard.
+    timeout-minutes: 40
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Select and assert pinned Xcode
+        run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.5
+          cache: true
+
+      - name: Cache build_runner state
+        uses: actions/cache@v6
+        with:
+          path: app/.dart_tool/build
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v6
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-cocoapods-${{ hashFiles('app/ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cocoapods-
+
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Prepare Flutter dev compile inputs
+        working-directory: app
+        run: |
+          mkdir -p android/app/src/dev/ android/app/src/prod/ ios/Config/Dev ios/Config/Prod
+          cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+          cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+          cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
+          cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
+          cp setup/prebuilt/key.properties android/key.properties
+          cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
+          cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Prod/GoogleService-Info.plist
+          cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist
+          {
+            echo "API_BASE_URL="
+            echo "USE_WEB_AUTH=true"
+            echo "USE_AUTH_CUSTOM_TOKEN=true"
+            echo "STAGING_API_URL="
+          } > .dev.env
+          : > .env
+
+      - name: Generate Flutter code for iOS compile
+        working-directory: app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build Flutter iOS simulator debug
+        working-directory: app
+        # Flavor scheme is `dev` (Debug-dev). omiWatchApp.xcscheme lacks
+        # customLLDBInitFile; Flutter warns, the compile still proceeds.
+        run: flutter build ios --simulator --debug --flavor dev --no-codesign
