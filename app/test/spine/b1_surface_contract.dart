@@ -6,6 +6,9 @@ import 'dart:ui' show SemanticsAction, SemanticsActionEvent, Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/dev_controls/semantic_controls.dart';
+import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import '../support/addressability_widgets.dart';
 
 import '../../integration_test/journeys/support/hermetic_boot.dart';
@@ -18,6 +21,12 @@ Future<Map<String, dynamic>> _wire(String operation, {Map<String, String> params
   final response = await _handlers[method]!(method, {'version': 'semantic-controls/v2', ...params});
   expect(response.isError(), isFalse);
   return jsonDecode(response.result!) as Map<String, dynamic>;
+}
+
+/// Identical keys may be mounted in cached tabs or another route root.
+Finder catalogControl(Finder root, Key key, {required String scope}) {
+  final visible = find.byKey(key, skipOffstage: true);
+  return scope == 'root' ? find.descendant(of: root, matching: visible) : visible;
 }
 
 /// Shared executable done template. Fixtures replace external I/O only; the
@@ -115,7 +124,7 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
     }
     for (final item in catalog.cast<Map<String, dynamic>>()) {
       final value = item['key'] as String;
-      final control = find.byKey(ValueKey<String>(value), skipOffstage: true);
+      final control = catalogControl(root, ValueKey<String>(value), scope: item['scope'] as String);
       expect(control, findsOneWidget, reason: 'catalogued control must be unique and onstage: $value');
       if (item['scope'] == 'root') {
         expect(find.descendant(of: root, matching: control), findsOneWidget);
@@ -125,15 +134,27 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
       expect(AddressKey.valid(value), isTrue);
       final data = tester.getSemantics(control).getSemanticsData();
       expect(data.identifier, value);
-      expect(data.label, item['label_en'], reason: 'English fixture uses the localized human label');
+      expect(item.containsKey('label_en'), isFalse, reason: 'ARB owns labels, not a second English catalog');
+      if (item['row_id'] != null) {
+        final row = find.ancestor(of: control, matching: find.byType(ConversationListItem));
+        expect(row, findsOneWidget);
+        final record = tester.widget<ConversationListItem>(row).conversation;
+        expect(record.id, item['row_id']);
+        expect(value, AddressKey.row('conversations', record.id), reason: 'rendered key derives from id, not index');
+        expect(record.structured.title, isNotEmpty);
+        expect(data.label, record.structured.title);
+      } else {
+        final arb = jsonDecode(File('lib/l10n/app_en.arb').readAsStringSync()) as Map<String, dynamic>;
+        expect(item['label_arb'], isA<String>());
+        expect(arb[item['label_arb']], isA<String>());
+        expect(data.label, arb[item['label_arb']], reason: 'English fixture uses the current localized human label');
+      }
       expect(data.flagsCollection.isEnabled, Tristate.isTrue);
       expect(data.flagsCollection.isButton, item['role'] == 'button');
       expect(data.flagsCollection.isTextField, item['role'] == 'textField');
       expect(data.hasAction(item['action'] == 'setText' ? SemanticsAction.setText : SemanticsAction.tap), isTrue);
     }
     if (id == 'chat') {
-      expect(tester.getSemantics(find.byKey(OmiKeys.chatInput)).getSemanticsData().label, 'Message');
-      expect(tester.getSemantics(find.byKey(OmiKeys.chatSend)).getSemanticsData().label, 'Send message');
       final input = tester.getSemantics(find.byKey(OmiKeys.chatInput));
       tester.binding.performSemanticsAction(SemanticsActionEvent(
         viewId: tester.view.viewId,
@@ -154,7 +175,10 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
         ]));
     expect(scan!.exitCode, 0, reason: '${scan.stdout}\n${scan.stderr}');
     void accessibleTap(Key key) {
-      final node = tester.getSemantics(find.byKey(key));
+      final entries =
+          catalog.cast<Map<String, dynamic>>().where((item) => ValueKey<String>(item['key'] as String) == key);
+      final scope = entries.isEmpty ? 'shell' : entries.single['scope'] as String;
+      final node = tester.getSemantics(catalogControl(root, key, scope: scope));
       tester.binding.performSemanticsAction(SemanticsActionEvent(
         viewId: tester.view.viewId,
         nodeId: node.id,
@@ -168,6 +192,22 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
       accessibleTap(OmiKeys.homeTabConversations);
       await tester.pump(const Duration(seconds: 1));
       expect(api.visibleRoute, 'conversations', reason: 'tab semantics must call the real owner');
+      accessibleTap(const ValueKey<String>('omi.home.tab_apps'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(api.visibleRoute, 'apps');
+      expect(find.byKey(const ValueKey<String>('omi.apps.root')), findsOneWidget);
+      expect(find.byType(AppsPage), findsOneWidget);
+      expect((await _wire('capabilities'))['routes'], contains('apps'));
+      final awayFromApps = api.navigate('home');
+      await tester.pump(const Duration(seconds: 1));
+      await awayFromApps;
+      expect(api.visibleRoute, 'home');
+      expect(find.byType(AppsPage), findsNothing);
+      final reachedById = _wire('navigate', params: {'destination': 'apps'});
+      await tester.pump(const Duration(seconds: 1));
+      expect((await reachedById)['ok'], isTrue);
+      expect(api.visibleRoute, 'apps');
+      expect(find.byType(AppsPage), findsOneWidget);
       final returned = api.navigate('home');
       await tester.pump(const Duration(seconds: 1));
       await returned;
@@ -212,6 +252,13 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
       await returned;
       expect(find.byKey(rootKey, skipOffstage: true), findsOneWidget);
       expect(find.byType(pageType).evaluate().single, same(retainedPage), reason: 'return must preserve tab state');
+    }
+    if (id == 'onboarding') {
+      accessibleTap(const ValueKey<String>('omi.onboarding.local_dev'));
+      await tester.pump(const Duration(seconds: 1));
+      expect((await _wire('state'))['auth'], 'signedIn');
+      expect(api.visibleRoute, 'home');
+      expect(find.byType(HomeContentPage), findsOneWidget);
     }
     await tester.pumpWidget(const SizedBox.shrink());
     expect(api.rootMounted, isFalse, reason: 'disposed scope must invalidate route readiness');
