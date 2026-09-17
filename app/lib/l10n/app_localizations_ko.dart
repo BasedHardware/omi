@@ -9826,4 +9826,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
+
+  @override
+  String get home => '홈';
 }

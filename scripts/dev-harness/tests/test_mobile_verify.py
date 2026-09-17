@@ -359,6 +359,23 @@ def test_fast_infrastructure_failure_blocks_not_fails(tmp_path: Path, capsys: py
     capsys.readouterr()
 
 
+def test_resolve_evidence_dir_empty_is_none() -> None:
+    assert mv.resolve_evidence_dir("") is None
+    assert mv.resolve_evidence_dir("   ") is None
+    assert mv.resolve_evidence_dir(None) is None
+
+
+def test_resolve_evidence_dir_relative_joins_invocation_cwd(tmp_path: Path) -> None:
+    resolved = mv.resolve_evidence_dir("out", cwd=tmp_path)
+    assert resolved == (tmp_path / "out").resolve()
+    assert resolved.is_absolute()
+
+
+def test_resolve_evidence_dir_absolute_is_unchanged(tmp_path: Path) -> None:
+    target = (tmp_path / "abs").resolve()
+    assert mv.resolve_evidence_dir(str(target), cwd=Path("/does/not/matter")) == target
+
+
 def test_fast_default_evidence_dir_is_a_temp_dir_not_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -376,6 +393,62 @@ def test_fast_default_evidence_dir_is_a_temp_dir_not_cwd(
     assert not (tmp_path / "verify-receipt.json").exists()
     assert not list(tmp_path.glob("*.log"))
     capsys.readouterr()
+
+
+def test_fast_relative_evidence_dir_resolves_against_invocation_cwd_not_app(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A relative --evidence-dir must not be interpreted from app/ (the runner cwd).
+
+    cmd_fast cds the journey runner into app/, so Path("out") without resolving
+    writes receipts under app/out while aggregation looks at invocation-cwd/out
+    and every journey fail-closes as zero-execution.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OMI_VERIFY_EVIDENCE_DIR", raising=False)
+    runner = _fake_runner(tmp_path, exit_code=0, receipt_factory="pass")
+    code = mv.cmd_fast(REPO_ROOT, _fast_args("verify-out", all=True, paths=[]), runner_path=runner)
+    assert code == mv.EXIT_OK
+    receipt = tmp_path / "verify-out" / "verify-receipt.json"
+    assert receipt.is_file(), "receipts must land next to the invocation, not under app/"
+    assert json.loads(receipt.read_text(encoding="utf-8"))["outcome"] == "passed"
+    assert not (REPO_ROOT / "app" / "verify-out").exists()
+    capsys.readouterr()
+
+
+def test_fast_relative_env_evidence_dir_resolves_against_invocation_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OMI_VERIFY_EVIDENCE_DIR", "from-env")
+    runner = _fake_runner(tmp_path, exit_code=0, receipt_factory="pass")
+    args = _fast_args(tmp_path, all=True, paths=[])
+    args.evidence_dir = None
+    code = mv.cmd_fast(REPO_ROOT, args, runner_path=runner)
+    assert code == mv.EXIT_OK
+    assert (tmp_path / "from-env" / "verify-receipt.json").is_file()
+    assert not (REPO_ROOT / "app" / "from-env").exists()
+    capsys.readouterr()
+
+
+def test_fast_bare_entrypoint_without_evidence_dir_flag_uses_temp_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The documented `make mobile-verify ARGS="fast --all"` shape: no
+    `--evidence-dir`, no env override. argparse default is None, not "".
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OMI_VERIFY_EVIDENCE_DIR", raising=False)
+    runner = _fake_runner(tmp_path, exit_code=0, receipt_factory="pass")
+    args = _fast_args(tmp_path, all=True, paths=[])
+    args.evidence_dir = None
+    code = mv.cmd_fast(REPO_ROOT, args, runner_path=runner)
+    assert code == mv.EXIT_OK
+    assert not (tmp_path / "verify-receipt.json").exists()
+    assert not list(tmp_path.glob("*.log"))
+    captured = capsys.readouterr()
+    assert "receipt:" in captured.out
+    assert "mobile_verify_" in captured.out
 
 
 def test_fast_compile_failure_blocks(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

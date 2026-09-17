@@ -9988,4 +9988,7 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.';
+
+  @override
+  String get home => 'Avaleht';
 }
