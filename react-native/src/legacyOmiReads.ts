@@ -250,6 +250,15 @@ function presentSuggestedSummarizationApps(value: unknown): void {
     text(item);
   }
 }
+function presentTranslations(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    const row = object(item);
+    presentNullableString(row.lang);
+    presentNullableString(row.text);
+  }
+}
 function presentStructuredEvents(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) throw new Error('Omi list is malformed');
@@ -503,6 +512,7 @@ function discardedTranscriptSegments(value: unknown): {
         ? undefined
         : text(segment.person_id);
     presentNullableInt(segment.speaker_id);
+    presentTranslations(segment.translations);
     return {
       text: text(segment.text, ''),
       speaker: segment.speaker == null ? 'SPEAKER_00' : text(segment.speaker),
