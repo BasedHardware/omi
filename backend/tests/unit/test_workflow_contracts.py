@@ -551,7 +551,9 @@ def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_fr
     assert "run-swift-ci.sh --select-toolchain" in ios
     assert "hashFiles('app/ios/Podfile.lock')" in ios
     assert "GoogleService-Info-Local.plist" in ios
-    assert "flutter build ios --simulator --debug --flavor dev --no-codesign" in ios
+    assert "flutter build ios --simulator --debug --flavor dev --no-codesign -d \"$IOS_SIMULATOR_UDID\"" in ios
+    assert "simctl" in ios
+    assert "IOS_SIMULATOR_UDID" in ios
     assert "${{ secrets." not in ios
     assert "ios-compile-check.yml" not in mobile_checks
 

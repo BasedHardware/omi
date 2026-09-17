@@ -553,8 +553,40 @@ jobs:
         working-directory: app
         run: dart run build_runner build --delete-conflicting-outputs
 
+      # omiWatchApp is a watchOS companion. `flutter build ios --simulator`
+      # without `-d` fails after pod install: "A device ID is required to
+      # build an app with a watchOS companion app." (run 35256673731).
+      - name: Pick an iPhone simulator
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          raw = subprocess.check_output(
+              ["xcrun", "simctl", "list", "devices", "available", "-j"],
+              text=True,
+          )
+          data = json.loads(raw)
+          picked = None
+          for runtime, devices in data.get("devices", {}).items():
+              if "iOS" not in runtime:
+                  continue
+              for device in devices:
+                  if device.get("isAvailable") and "iPhone" in device.get("name", ""):
+                      picked = device
+          if picked is None:
+              print(raw, file=sys.stderr)
+              raise SystemExit("no available iPhone simulator")
+          udid = picked["udid"]
+          print(f"Using simulator {picked['name']} ({udid})")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+              handle.write(f"IOS_SIMULATOR_UDID={udid}\n")
+          PY
+
       - name: Build Flutter iOS simulator debug
         working-directory: app
         # Flavor scheme is `dev` (Debug-dev). omiWatchApp.xcscheme lacks
         # customLLDBInitFile; Flutter warns, the compile still proceeds.
-        run: flutter build ios --simulator --debug --flavor dev --no-codesign
+        run: flutter build ios --simulator --debug --flavor dev --no-codesign -d "$IOS_SIMULATOR_UDID"
