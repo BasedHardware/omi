@@ -3297,5 +3297,6 @@
     },
     "tapPlusToStartRecording": "Kaydı başlatmak için + simgesine dokunun",
     "processingTakingLonger": "Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.",
-    "speechProfileEnrollmentPrompt": "Omi'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun."
+    "speechProfileEnrollmentPrompt": "Omi'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.",
+    "home": "Ana Sayfa"
 }

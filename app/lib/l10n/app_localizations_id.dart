@@ -10005,4 +10005,7 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik.';
+
+  @override
+  String get home => 'Beranda';
 }

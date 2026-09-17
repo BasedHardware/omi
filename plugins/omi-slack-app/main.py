@@ -90,8 +90,12 @@ async def monitor_session_timeouts():
                                 channels
                             )
                             
-                            # If no channel, use default
-                            if not channel_id:
+                            # If no channel was named, use default; a named
+                            # channel that did not resolve must not fall
+                            # through to the default and post there.
+                            if not channel_id and channel_name:
+                                print(f"⏰ Not sending: channel '{channel_name}' not found or ambiguous", flush=True)
+                            elif not channel_id:
                                 channel_id = user.get("selected_channel")
                                 if channel_id:
                                     for ch in channels:
@@ -775,7 +779,11 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
+            # If no channel was named, use default; a named channel that
+            # did not resolve (unknown or ambiguous) must not post to it.
+            if not channel_id and channel_name:
+                SimpleSessionStorage.reset_session(session_id)
+                return f"❌ No single channel matches '#{channel_name}'; say the full channel name"
             if not channel_id:
                 channel_id = user.get("selected_channel")
                 if channel_id:
@@ -871,7 +879,11 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
+            # If no channel was named, use default; a named channel that
+            # did not resolve (unknown or ambiguous) must not post to it.
+            if not channel_id and channel_name:
+                SimpleSessionStorage.reset_session(session_id)
+                return f"❌ No single channel matches '#{channel_name}'; say the full channel name"
             if not channel_id:
                 channel_id = user.get("selected_channel")
                 if channel_id:

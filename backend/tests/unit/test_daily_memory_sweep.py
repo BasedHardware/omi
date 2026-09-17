@@ -1618,6 +1618,43 @@ def test_scheduler_names_incomplete_sources_without_raising(monkeypatch):
     assert summary.model_dispatch_evidence == ({"feature": "memories", "requests": [{"request_id": "req-1"}]},)
 
 
+def test_scheduler_source_incomplete_includes_content_free_reason(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence={
+                "feature": "memories",
+                "failure_reason": "daily_sweep_summary_input_budget",
+                "requests": [],
+            },
+        ),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    assert summary.errors == ("uid=user-1:source_incomplete:2026-08-23:daily_sweep_summary_input_budget",)
+    assert "fact" not in "".join(summary.errors)
+
+
 def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
 
     monkeypatch.setattr(data_export, "get_user_profile", lambda _uid: {})

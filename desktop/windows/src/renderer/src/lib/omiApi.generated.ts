@@ -2838,6 +2838,7 @@ export interface McpScreenActivityRow {
 
 export interface McpScreenActivitySummaryResponse {
   apps?: Record<string, McpScreenActivityAppSummary>;
+  coverage?: ScreenActivityCoverage | null;
   total_screenshots?: number;
 }
 
@@ -3653,6 +3654,15 @@ export interface ScreenActivityAppSummary {
   window_titles?: Array<string>;
 }
 
+export interface ScreenActivityCoverage {
+  capture_completeness?: "unknown";
+  first_observed_at?: string | null;
+  last_observed_at?: string | null;
+  row_limit: number;
+  source?: "synced_screen_activity";
+  truncated: boolean;
+}
+
 export interface ScreenActivityRow {
   appName?: string;
   captureEligible?: boolean;
@@ -3667,6 +3677,7 @@ export interface ScreenActivityRow {
 
 export interface ScreenActivitySummaryResponse {
   apps: Record<string, ScreenActivityAppSummary>;
+  coverage?: ScreenActivityCoverage | null;
   total_screenshots: number;
 }
 
@@ -5411,6 +5422,7 @@ export interface OmiApiSchemas {
   "SaveFcmTokenRequest": SaveFcmTokenRequest;
   "SavePayPalPaymentDetailsRequest": SavePayPalPaymentDetailsRequest;
   "ScreenActivityAppSummary": ScreenActivityAppSummary;
+  "ScreenActivityCoverage": ScreenActivityCoverage;
   "ScreenActivityRow": ScreenActivityRow;
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;

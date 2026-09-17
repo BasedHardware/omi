@@ -601,9 +601,15 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # drift class. Keying the budget on the event type alone made
         # a re-baselined PR run the full suite against the PR number and
         # false-red at 2013s vs 1800s (run 34369508858). After Xcode 26.6,
-        # PR #13699 measured 2324s (run 34754454417), so the PR lane is 2700s.
+        # PR #13699 measured 2324s (run 34754454417). PR #14213 measured
+        # 2778s (run 35134593036). Run 35106014508 (PR #14222) went red
+        # ONLY on this guard with all 836 executed suites green — one
+        # order-dependent batch (exit 1 at 78s) bisected into a green half
+        # (40s), a wedged half that burned its full 1500s batch ceiling,
+        # and ~1020s of isolated singles, 3923s step wall — so the PR lane
+        # admits one legitimate bisect cascade at 4400s.
         self.assertIn(
-            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '2700' || '4200' }}",
+            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '4400' || '4200' }}",
             verify_job,
         )
         self.assertIn('OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"', verify_job)
