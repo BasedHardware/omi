@@ -1,6 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+
+/// [release] untracks and runs the owned cancel once; [CaptureLifetime.close] will not run it again.
+class CaptureOwned {
+  CaptureOwned._(this._release);
+  final Future<void> Function() _release;
+  Future<void> release() => _release();
+}
 
 /// Every timer/subscription/listener created by the capture owner is registered
 /// here immediately, including resources acquired after asynchronous work.
@@ -11,6 +19,11 @@ class CaptureLifetime implements CaptureScheduling {
   final List<FutureOr<void> Function()> _releases = [];
   bool _closed = false;
 
+  @visibleForTesting
+  int get debugTrackedCount => _releases.length;
+
+  void _untrack(FutureOr<void> Function() release) => _releases.remove(release);
+
   void _track(FutureOr<void> Function() release) {
     if (_closed) {
       unawaited(Future.sync(release));
@@ -19,38 +32,83 @@ class CaptureLifetime implements CaptureScheduling {
     _releases.add(release);
   }
 
+  _LifetimeTimer _wrap(Timer inner, FutureOr<void> Function() release) {
+    _track(release);
+    return _LifetimeTimer(inner, () => _untrack(release));
+  }
+
   @override
   Timer once(Duration delay, void Function() callback) {
-    late final Timer timer;
-    timer = _scheduling.once(delay, () {
+    late final FutureOr<void> Function() release;
+    late final Timer inner;
+    inner = _scheduling.once(delay, () {
+      _untrack(release);
       if (_closed) return;
       callback();
     });
-    _track(timer.cancel);
-    return timer;
+    release = inner.cancel;
+    return _wrap(inner, release);
   }
 
   @override
   Timer periodic(Duration interval, void Function(Timer) callback) {
-    late final Timer timer;
-    timer = _scheduling.periodic(interval, (tick) {
+    late final FutureOr<void> Function() release;
+    late final _LifetimeTimer wrapper;
+    late final Timer inner;
+    inner = _scheduling.periodic(interval, (_) {
       if (_closed) return;
-      callback(tick);
+      callback(wrapper);
     });
-    _track(timer.cancel);
-    return timer;
+    release = inner.cancel;
+    wrapper = _wrap(inner, release);
+    return wrapper;
   }
 
-  StreamSubscription<T> listen<T>(Stream<T> stream, void Function(T) onData) {
-    final subscription = stream.listen((value) {
-      if (_closed) return;
-      onData(value);
-    });
-    _track(subscription.cancel);
-    return subscription;
+  StreamSubscription<T> listen<T>(
+    Stream<T> stream,
+    void Function(T) onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool cancelOnError = false,
+  }) {
+    late final FutureOr<void> Function() release;
+    void drop() => _untrack(release);
+    final inner = stream.listen(
+      (value) {
+        if (_closed) return;
+        onData(value);
+      },
+      onError: cancelOnError
+          ? (Object error, StackTrace stack) {
+              drop();
+              _forwardError(onError, error, stack);
+            }
+          : onError,
+      onDone: () {
+        drop();
+        onDone?.call();
+      },
+      cancelOnError: cancelOnError,
+    );
+    release = inner.cancel;
+    _track(release);
+    return _LifetimeSubscription<T>(inner, drop);
   }
 
-  void own(FutureOr<void> Function() cancel) => _track(cancel);
+  CaptureOwned own(FutureOr<void> Function() cancel) {
+    var live = true;
+    late final FutureOr<void> Function() release;
+    release = () {
+      if (!live) return null;
+      live = false;
+      _untrack(release);
+      return cancel();
+    };
+    _track(release);
+    return CaptureOwned._(() async {
+      await Future.sync(release);
+    });
+  }
 
   Future<void> close() async {
     _closed = true;
@@ -66,8 +124,63 @@ class CaptureLifetime implements CaptureScheduling {
         stack ??= caughtStack;
       }
     }
-    if (error != null) {
-      Error.throwWithStackTrace(error, stack!);
-    }
+    if (error != null) Error.throwWithStackTrace(error, stack!);
   }
+}
+
+void _forwardError(Function? onError, Object error, StackTrace stack) {
+  if (onError is void Function(Object, StackTrace)) {
+    onError(error, stack);
+  } else if (onError is void Function(Object)) {
+    onError(error);
+  } else if (onError != null) {
+    onError(error, stack);
+  } else {
+    Zone.current.handleUncaughtError(error, stack);
+  }
+}
+
+class _LifetimeTimer implements Timer {
+  _LifetimeTimer(this._inner, this._drop);
+  final Timer _inner;
+  final void Function() _drop;
+  @override
+  void cancel() {
+    _drop();
+    _inner.cancel();
+  }
+
+  @override
+  bool get isActive => _inner.isActive;
+  @override
+  int get tick => _inner.tick;
+}
+
+class _LifetimeSubscription<T> implements StreamSubscription<T> {
+  _LifetimeSubscription(this._inner, this._drop);
+  final StreamSubscription<T> _inner;
+  final void Function() _drop;
+  @override
+  Future<void> cancel() {
+    _drop();
+    return _inner.cancel();
+  }
+
+  @override
+  void onData(void Function(T)? handleData) => _inner.onData(handleData);
+  @override
+  void onError(Function? handleError) => _inner.onError(handleError);
+  @override
+  void onDone(void Function()? handleDone) => _inner.onDone(() {
+        _drop();
+        handleDone?.call();
+      });
+  @override
+  void pause([Future<void>? resumeSignal]) => _inner.pause(resumeSignal);
+  @override
+  void resume() => _inner.resume();
+  @override
+  bool get isPaused => _inner.isPaused;
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture<E>(futureValue);
 }

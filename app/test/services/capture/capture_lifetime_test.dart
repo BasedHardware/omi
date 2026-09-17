@@ -27,6 +27,7 @@ void main() {
     scheduler.elapse(const Duration(minutes: 1));
     expect(events, isEmpty);
     expect(scheduler.pendingTimers, isEmpty);
+    expect(bag.debugTrackedCount, 0);
   });
 
   test('close invalidates before awaiting a slow cancel so a mid-close once dies', () async {
@@ -59,5 +60,104 @@ void main() {
     await expectLater(bag.close(), throwsA(isA<StateError>().having((e) => e.message, 'message', 'first')));
     expect(ran, [1, 2]);
     await bag.close();
+  });
+
+  test('fired once timers leave the bag', () async {
+    final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
+    final bag = CaptureLifetime(scheduler);
+    var fired = 0;
+    for (var i = 0; i < 8; i++) {
+      bag.once(const Duration(seconds: 1), () => fired++);
+    }
+    expect(bag.debugTrackedCount, 8);
+    scheduler.elapse(const Duration(seconds: 1));
+    expect(fired, 8);
+    expect(bag.debugTrackedCount, 0);
+    await bag.close();
+    expect(bag.debugTrackedCount, 0);
+  });
+
+  test('once untracks before invoking a throwing callback', () {
+    final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
+    final bag = CaptureLifetime(scheduler);
+    bag.once(const Duration(seconds: 1), () => throw StateError('callback'));
+    expect(bag.debugTrackedCount, 1);
+    expect(() => scheduler.elapse(const Duration(seconds: 1)), throwsA(isA<StateError>()));
+    expect(bag.debugTrackedCount, 0);
+  });
+
+  test('caller-side cancel untracks and close does not run it again', () async {
+    final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
+    final bag = CaptureLifetime(scheduler);
+    var ownCancels = 0;
+    final owned = bag.own(() => ownCancels++);
+    final timer = bag.once(const Duration(seconds: 1), () {});
+    expect(bag.debugTrackedCount, 2);
+    timer.cancel();
+    expect(timer.isActive, isFalse);
+    await owned.release();
+    expect(ownCancels, 1);
+    expect(bag.debugTrackedCount, 0);
+    await bag.close();
+    await bag.close();
+    expect(ownCancels, 1);
+    expect(bag.debugTrackedCount, 0);
+  });
+
+  test('a completed stream is untracked', () async {
+    final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+    final stream = StreamController<int>.broadcast(sync: true);
+    final sub = bag.listen(stream.stream, (_) {});
+    expect(bag.debugTrackedCount, 1);
+    await stream.close();
+    expect(bag.debugTrackedCount, 0);
+    await sub.cancel();
+    await bag.close();
+    expect(bag.debugTrackedCount, 0);
+  });
+
+  test('listen forwards onError and cancelOnError untracks', () async {
+    final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+    final forwarded = StreamController<int>.broadcast(sync: true);
+    Object? seen;
+    bag.listen(forwarded.stream, (_) {}, onError: (Object e) => seen = e);
+    forwarded.addError(StateError('forwarded'));
+    expect(seen, isA<StateError>());
+    expect(bag.debugTrackedCount, 1);
+
+    final auto = StreamController<int>.broadcast(sync: true);
+    bag.listen(auto.stream, (_) {}, onError: (Object _) {}, cancelOnError: true);
+    expect(bag.debugTrackedCount, 2);
+    auto.addError(StateError('auto'));
+    expect(bag.debugTrackedCount, 1);
+
+    await forwarded.close();
+    await auto.close();
+    await bag.close();
+  });
+
+  test('close after completed work still drains survivors when one throws', () async {
+    final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
+    final bag = CaptureLifetime(scheduler);
+    var fired = 0;
+    for (var i = 0; i < 3; i++) {
+      bag.once(const Duration(seconds: 1), () => fired++);
+    }
+    scheduler.elapse(const Duration(seconds: 1));
+    expect(fired, 3);
+    bag.once(const Duration(seconds: 1), () {}).cancel();
+    final stream = StreamController<int>.broadcast(sync: true);
+    bag.listen(stream.stream, (_) {});
+    await stream.close();
+    expect(bag.debugTrackedCount, 0);
+
+    var surviving = 0;
+    bag.own(() => throw StateError('cancel failure'));
+    bag.own(() => surviving++);
+    expect(bag.debugTrackedCount, 2);
+    await expectLater(bag.close(), throwsA(isA<StateError>()));
+    expect(surviving, 1);
+    await bag.close();
+    expect(bag.debugTrackedCount, 0);
   });
 }
