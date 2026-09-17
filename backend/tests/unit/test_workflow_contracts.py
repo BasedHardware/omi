@@ -584,3 +584,28 @@ def test_workflow_contracts_static_check_validates_all_sources_when_manifest_cha
 
     assert len(errors) == 1
     assert "bad_contract returns a positional tuple with 3 fields" in errors[0]
+
+
+def test_codemagic_mobile_app_builds_inject_build_provenance_defines():
+    repo = BACKEND_DIR.parent
+    cm = (repo / "codemagic.yaml").read_text(encoding="utf-8")
+    script = repo / "app/scripts/build_provenance_dart_defines.sh"
+    assert script.is_file()
+    text = script.read_text(encoding="utf-8")
+    assert "OMI_GIT_SHA" in text
+    assert "OMI_BUILD_NUMBER" in text
+    assert "OMI_GIT_DIRTY" in text
+
+    for workflow_id in (
+        "ios-internal-auto",
+        "android-internal-auto",
+        "ios-prod-testflight",
+        "android-prod-internal",
+        "ios-prod-patch",
+        "android-prod-patch",
+    ):
+        assert f"  {workflow_id}:" in cm
+
+    assert cm.count("scripts/build_provenance_dart_defines.sh") == 6
+    assert "shorebird patch ios" in cm
+    assert "shorebird patch android" in cm

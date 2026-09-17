@@ -13,6 +13,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/speech_profile_enroll_events.dart';
@@ -59,6 +60,7 @@ class AnalyticsManager {
         PlatformService.isAnalyticsSupported,
         adapter.init,
       ).timeout(timeout);
+      await _registerBuildProvenance(adapter, timeout: timeout);
       await _loadGlobalEventProperties(timeout: timeout);
       await _loadPersonPropertyCache();
       _analyticsReady = true;
@@ -66,6 +68,20 @@ class AnalyticsManager {
       _retryTimer = null;
       _scheduleFlush();
     } catch (_) {}
+  }
+
+  static Future<void> _registerBuildProvenance(AnalyticsAdapter adapter, {required Duration timeout}) async {
+    try {
+      adapter.registerSuperProperties(BuildProvenance.fromEnvironment().asProperties);
+    } catch (_) {}
+    try {
+      final patch = await BuildProvenance.shorebirdPatchNumber().timeout(timeout);
+      adapter.registerSuperProperties({'shorebird_patch': patch});
+    } catch (_) {
+      try {
+        adapter.registerSuperProperties({'shorebird_patch': 'unknown'});
+      } catch (_) {}
+    }
   }
 
   static Future<void> flushPending({bool force = false}) => _flushQueuedEvents(force: force);

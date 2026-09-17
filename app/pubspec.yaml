@@ -48,6 +48,10 @@ dependencies:
   # Analytics and Support
   intercom_flutter: 9.6.22
   posthog_flutter: ^5.24.0
+  # Runtime Shorebird patch number (readCurrentPatch). auto_update is on in
+  # shorebird.yaml; dart-defines still bake the compile SHA, which a patch's
+  # Dart snapshot may share with the store release.
+  shorebird_code_push: ^2.0.4
 
   # Logging
   talker_flutter: 5.0.0
