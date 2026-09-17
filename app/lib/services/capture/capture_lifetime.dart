@@ -18,6 +18,8 @@ class CaptureLifetime implements CaptureScheduling {
   final CaptureScheduling _scheduling;
   final List<FutureOr<void> Function()> _releases = [];
   bool _closed = false;
+  Future<void>? _closing;
+  bool _closeFinished = false;
 
   @visibleForTesting
   int get debugTrackedCount => _releases.length;
@@ -73,26 +75,27 @@ class CaptureLifetime implements CaptureScheduling {
   }) {
     late final FutureOr<void> Function() release;
     void drop() => _untrack(release);
+    bool isClosed() => _closed;
     final inner = stream.listen(
       (value) {
         if (_closed) return;
         onData(value);
       },
-      onError: cancelOnError
-          ? (Object error, StackTrace stack) {
-              drop();
-              _forwardError(onError, error, stack);
-            }
-          : onError,
+      onError: (Object error, StackTrace stack) {
+        if (cancelOnError) drop();
+        if (_closed) return;
+        _forwardError(onError, error, stack);
+      },
       onDone: () {
         drop();
+        if (_closed) return;
         onDone?.call();
       },
       cancelOnError: cancelOnError,
     );
     release = inner.cancel;
     _track(release);
-    return _LifetimeSubscription<T>(inner, drop);
+    return _LifetimeSubscription<T>(inner, drop, isClosed, cancelOnError: cancelOnError);
   }
 
   CaptureOwned own(FutureOr<void> Function() cancel) {
@@ -110,21 +113,30 @@ class CaptureLifetime implements CaptureScheduling {
     });
   }
 
-  Future<void> close() async {
+  Future<void> close() {
     _closed = true;
+    if (_closeFinished) return Future<void>.value();
+    return _closing ??= _drain();
+  }
+
+  Future<void> _drain() async {
     final releases = List<FutureOr<void> Function()>.of(_releases);
     _releases.clear();
     Object? error;
     StackTrace? stack;
-    for (final release in releases) {
-      try {
-        await Future.sync(release);
-      } catch (caught, caughtStack) {
-        error ??= caught;
-        stack ??= caughtStack;
+    try {
+      for (final release in releases) {
+        try {
+          await Future.sync(release);
+        } catch (caught, caughtStack) {
+          error ??= caught;
+          stack ??= caughtStack;
+        }
       }
+      if (error != null) Error.throwWithStackTrace(error, stack!);
+    } finally {
+      _closeFinished = true;
     }
-    if (error != null) Error.throwWithStackTrace(error, stack!);
   }
 }
 
@@ -157,9 +169,11 @@ class _LifetimeTimer implements Timer {
 }
 
 class _LifetimeSubscription<T> implements StreamSubscription<T> {
-  _LifetimeSubscription(this._inner, this._drop);
+  _LifetimeSubscription(this._inner, this._drop, this._isClosed, {this.cancelOnError = false});
   final StreamSubscription<T> _inner;
   final void Function() _drop;
+  final bool Function() _isClosed;
+  final bool cancelOnError;
   @override
   Future<void> cancel() {
     _drop();
@@ -167,12 +181,28 @@ class _LifetimeSubscription<T> implements StreamSubscription<T> {
   }
 
   @override
-  void onData(void Function(T)? handleData) => _inner.onData(handleData);
+  void onData(void Function(T)? handleData) {
+    _inner.onData(handleData == null
+        ? null
+        : (value) {
+            if (_isClosed()) return;
+            handleData(value);
+          });
+  }
+
   @override
-  void onError(Function? handleError) => _inner.onError(handleError);
+  void onError(Function? handleError) {
+    _inner.onError((Object error, StackTrace stack) {
+      if (cancelOnError) _drop();
+      if (_isClosed()) return;
+      _forwardError(handleError, error, stack);
+    });
+  }
+
   @override
   void onDone(void Function()? handleDone) => _inner.onDone(() {
         _drop();
+        if (_isClosed()) return;
         handleDone?.call();
       });
   @override
@@ -182,5 +212,5 @@ class _LifetimeSubscription<T> implements StreamSubscription<T> {
   @override
   bool get isPaused => _inner.isPaused;
   @override
-  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture<E>(futureValue);
+  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture<E>(futureValue).whenComplete(_drop);
 }
