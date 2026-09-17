@@ -327,6 +327,61 @@ test('a completed transcript names a NEXT LINE SPEAKER_00 segment as Speaker 1',
   expect(textOf(renderer)).not.toContain('\u0085');
 });
 
+test('a completed transcript names Flutter TranscriptWidget padded GET SPEAKER_01', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', speaker: '  SPEAKER_01  '},
+    ]),
+  );
+  const padded = await render('session-one');
+  expect(textOf(padded)).toContain('Speaker 1 · Recorded words');
+  expect(textOf(padded)).not.toContain('Speaker 2 · Recorded words');
+  expect(textOf(padded)).not.toContain('SPEAKER_01');
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', speaker: 'SPEAKER_01 '},
+    ]),
+  );
+  const trailing = await render('session-one');
+  expect(textOf(trailing)).toContain('Speaker 1 · Recorded words');
+  expect(textOf(trailing)).not.toContain('Speaker 2 · Recorded words');
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', speaker: 'SPEAKER_01\u0085'},
+    ]),
+  );
+  const nextLine = await render('session-one');
+  expect(textOf(nextLine)).toContain('Speaker 1 · Recorded words');
+  expect(textOf(nextLine)).not.toContain('Speaker 2 · Recorded words');
+  expect(textOf(nextLine)).not.toContain('\u0085');
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', speaker: 'SPEAKER_01'},
+    ]),
+  );
+  const exact = await render('session-one');
+  expect(textOf(exact)).toContain('Speaker 2 · Recorded words');
+  expect(textOf(exact)).not.toContain('Speaker 1 · Recorded words');
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', speaker: '\u0085SPEAKER_01'},
+    ]),
+  );
+  const prefixed = await render('session-one');
+  expect(textOf(prefixed)).toContain('Speaker 2 · Recorded words');
+  expect(textOf(prefixed)).not.toContain('Speaker 1 · Recorded words');
+  expect(textOf(prefixed)).not.toContain('\u0085');
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', speaker: ' \t\n'},
+    ]),
+  );
+  const blank = await render('session-one');
+  expect(textOf(blank)).toContain('Recorded words');
+  expect(textOf(blank)).not.toContain('Speaker 1 · Recorded words');
+  expect(textOf(blank)).not.toContain('Speaker');
+});
+
 test('a completed transcript omits GET clocks when a segment is missing start or end', async () => {
   mockRequest.mockResolvedValue(
     response('session-one', 'completed', '', [

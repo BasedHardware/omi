@@ -269,12 +269,10 @@ export function recordingTranscriptSpeakerCopy(segment: {
   if (typeof segment.speaker !== 'string') {
     return null;
   }
-  const trimmed = visibleDisplayText(segment.speaker);
-  if (trimmed === '') {
+  if (visibleDisplayText(segment.speaker) === '') {
     return null;
   }
-  const labeled = /^SPEAKER_(\d+)$/.exec(trimmed);
-  return labeled !== null ? `Speaker ${Number(labeled[1]) + 1}` : trimmed;
+  return `Speaker ${discardedTranscriptSpeakerId(segment.speaker) + 1}`;
 }
 
 const OMI_SPEAKER_ID = 99;
