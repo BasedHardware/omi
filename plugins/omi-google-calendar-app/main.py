@@ -4,6 +4,7 @@ Google Calendar Integration App for Omi
 This app provides Google Calendar integration through OAuth2 authentication
 and chat tools for managing calendar events.
 """
+import html
 import os
 import sys
 import secrets
@@ -1074,6 +1075,11 @@ async def google_callback(
 ):
     """Handle Google OAuth2 callback."""
     if error:
+        # `error` is an attacker-controlled query param — Google forwards it
+        # verbatim from the authorize request, and this path is reachable with
+        # no consent screen and no stored-state check at all (it returns
+        # before either exists). Unescaped, ?error=<script>… was a reflected
+        # XSS with no interaction beyond visiting the crafted callback link.
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>
@@ -1081,7 +1087,7 @@ async def google_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error)}</p>
                     </div>
                 </div>
             </body>
@@ -1145,6 +1151,13 @@ async def google_callback(
 
         store_google_tokens(uid, access_token, refresh_token or "", expires_at)
 
+        # `uid` is the first segment of `state`, which is minted by
+        # store_oauth_state() from the `uid` query param on /auth/google — an
+        # attacker's own choice of uid survives a real OAuth round trip
+        # (a victim who approves consent completes it for them) and lands
+        # here unescaped, breaking out of the href attribute.
+        safe_uid = html.escape(uid, quote=True)
+
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1160,7 +1173,7 @@ async def google_callback(
                         <p>Your Google Calendar is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="/?uid={safe_uid}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
