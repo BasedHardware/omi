@@ -580,6 +580,7 @@ export async function loadOmiConversations(
     presentAppResults(row.apps_results);
     presentAppResults(row.plugins_results);
     presentSuggestedSummarizationApps(row.suggested_summarization_apps);
+    presentNullableMap(row.external_data);
     presentClientProcessing(row.client_processing);
     const emoji = conversationStructuredEmojiCopy(
       structured.emoji === undefined || structured.emoji === null
