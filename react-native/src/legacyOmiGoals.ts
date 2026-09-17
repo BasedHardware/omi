@@ -107,6 +107,117 @@ function skipPaddedExtras(row: Record<string, unknown>): boolean {
   );
 }
 
+function presentNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  text(value, 1_000_000);
+}
+
+function presentUnusedStringListItems(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const item of value) {
+    text(item, 1_000_000);
+  }
+}
+
+function presentNullableDate(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
+    throw new GoalError();
+  }
+  if (visibleDisplayText(value) !== value) {
+    throw new GoalError();
+  }
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (value === '' || !Number.isFinite(parsed)) {
+    throw new GoalError();
+  }
+}
+
+function presentNullableDouble(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new GoalError();
+    }
+    return;
+  }
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new GoalError();
+    }
+    const parsed = Number(value);
+    if (value === '' || !Number.isFinite(parsed)) {
+      throw new GoalError();
+    }
+    return;
+  }
+  throw new GoalError();
+}
+
+function presentNullableInt(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new GoalError();
+    }
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new GoalError();
+    }
+    return;
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    return;
+  }
+  throw new GoalError();
+}
+
+function presentGeneratedGoalExtras(row: Record<string, unknown>): void {
+  presentNullableString(row.advice);
+  presentNullableString(row.desired_outcome);
+  presentNullableString(row.goal_id);
+  presentNullableString(row.goal_type);
+  presentNullableString(row.source);
+  presentNullableString(row.unit);
+  presentNullableString(row.why_it_matters);
+  presentUnusedStringListItems(row.success_criteria);
+  presentNullableDate(row.created_at);
+  presentNullableDate(row.updated_at);
+  presentNullableDate(row.ended_at);
+  presentNullableDate(row.horizon_at);
+  presentNullableDouble(row.max_value);
+  presentNullableDouble(row.min_value);
+  presentNullableInt(row.focus_rank);
+  presentNullableInt(row.latest_progress_sequence);
+  if (
+    row.metric === undefined ||
+    row.metric === null ||
+    typeof row.metric !== 'object' ||
+    Array.isArray(row.metric)
+  ) {
+    return;
+  }
+  const metric = row.metric as Record<string, unknown>;
+  presentNullableDouble(metric.current);
+  presentNullableDouble(metric.target);
+  presentNullableDouble(metric.max);
+  presentNullableDouble(metric.min);
+  presentNullableString(metric.type);
+  presentNullableString(metric.unit);
+}
+
 export function parseOmiGoals(body: string): OmiGoal[] {
   const parsed: unknown = JSON.parse(body);
   if (!Array.isArray(parsed)) {
@@ -120,6 +231,11 @@ export function parseOmiGoals(body: string): OmiGoal[] {
     }
     const row = raw as Record<string, unknown>;
     if (skipPaddedExtras(row)) {
+      continue;
+    }
+    try {
+      presentGeneratedGoalExtras(row);
+    } catch {
       continue;
     }
     const id = goalId(row.id);

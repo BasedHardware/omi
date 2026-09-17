@@ -562,6 +562,146 @@ test('fails closed for malformed GET goals', () => {
   ).toThrow();
 });
 
+test('old goals name Flutter Goal.fromGenerated type-wrong GET advice instead of remapping to a progress chip', () => {
+  const neighbor = {
+    id: 'goal-read',
+    title: 'Read 20 books',
+    current: 3,
+    target: 10,
+  };
+  const goal = {
+    id: 'goal-exact',
+    title: 'Exact extras',
+    current_value: 3,
+    target_value: 10,
+  };
+  expect(
+    parseOmiGoals(
+      JSON.stringify([
+        {
+          ...goal,
+          advice: 'Keep reading',
+          desired_outcome: 'Finish the series',
+          goal_id: 'goal-exact',
+          goal_type: 'scale',
+          source: 'imported',
+          unit: 'books',
+          why_it_matters: 'Stay sharp',
+          success_criteria: ['done'],
+        },
+        {
+          id: 'goal-omitted',
+          title: 'Omitted extras',
+          current_value: 3,
+          target_value: 10,
+        },
+        {
+          id: 'goal-null',
+          title: 'Null extras',
+          current_value: 3,
+          target_value: 10,
+          advice: null,
+          desired_outcome: null,
+          unit: null,
+          why_it_matters: null,
+          success_criteria: null,
+        },
+        {
+          id: 'goal-empty',
+          title: 'Empty extras',
+          current_value: 3,
+          target_value: 10,
+          advice: '',
+          unit: '',
+          success_criteria: [],
+        },
+        {
+          id: 'goal-empty-item',
+          title: 'Empty unused string',
+          current_value: 3,
+          target_value: 10,
+          success_criteria: [''],
+        },
+        {
+          id: 'goal-parent',
+          title: 'Unused-list parent',
+          current_value: 3,
+          target_value: 10,
+          success_criteria: 1,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id: 'goal-exact', title: 'Exact extras', current: 3, target: 10},
+    {id: 'goal-omitted', title: 'Omitted extras', current: 3, target: 10},
+    {id: 'goal-null', title: 'Null extras', current: 3, target: 10},
+    {id: 'goal-empty', title: 'Empty extras', current: 3, target: 10},
+    {
+      id: 'goal-empty-item',
+      title: 'Empty unused string',
+      current: 3,
+      target: 10,
+    },
+    {
+      id: 'goal-parent',
+      title: 'Unused-list parent',
+      current: 3,
+      target: 10,
+    },
+    neighbor,
+  ]);
+  for (const extra of [
+    {advice: 1},
+    {advice: true},
+    {advice: []},
+    {advice: {}},
+    {desired_outcome: 1},
+    {goal_id: 1},
+    {goal_type: 1},
+    {source: 1},
+    {unit: true},
+    {why_it_matters: []},
+    {success_criteria: [1]},
+    {success_criteria: [true]},
+    {success_criteria: [[]]},
+    {success_criteria: [{}]},
+    {created_at: 1},
+    {created_at: true},
+    {created_at: []},
+    {created_at: {}},
+    {max_value: true},
+    {max_value: []},
+    {max_value: {}},
+    {metric: {current: 0, target: 10, type: 1}},
+  ]) {
+    const rows = parseOmiGoals(
+      JSON.stringify([
+        {
+          id: 'goal-wrong',
+          title: 'Type-wrong extras',
+          current_value: 3,
+          target_value: 10,
+          ...extra,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    );
+    expect(rows.find(row => row.id === 'goal-wrong')).toBeUndefined();
+    expect(rows.find(row => row.id === 'goal-read')).toEqual(neighbor);
+  }
+});
+
 test('loadOmiGoals names resolved GET goals and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'goals',
@@ -636,5 +776,49 @@ test('loadOmiGoals names resolved GET goals and omits failures', async () => {
   request.mockResolvedValueOnce({id: 'goals', status: 404, body: null});
   expect(await loadOmiGoals(backend)).toEqual([]);
   request.mockResolvedValueOnce({id: 'goals', status: 200, body: '{'});
+  expect(await loadOmiGoals(backend)).toEqual([]);
+});
+
+test('old goals name Flutter Goal.fromGenerated type-wrong GET advice instead of remapping load to a progress chip', async () => {
+  const neighbor = {
+    id: 'goal-read',
+    title: 'Read 20 books',
+    current: 3,
+    target: 10,
+  };
+  const request = jest.fn(async () => ({
+    id: 'goals',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'goal-wrong',
+        title: 'Type-wrong extras',
+        current_value: 3,
+        target_value: 10,
+        advice: 1,
+      },
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+    ]),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  expect(await loadOmiGoals(backend)).toEqual([neighbor]);
+  request.mockResolvedValueOnce({
+    id: 'goals',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'goal-wrong',
+        title: 'Type-wrong extras',
+        current_value: 3,
+        target_value: 10,
+        success_criteria: [1],
+      },
+    ]),
+  });
   expect(await loadOmiGoals(backend)).toEqual([]);
 });

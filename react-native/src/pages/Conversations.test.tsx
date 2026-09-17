@@ -3063,6 +3063,67 @@ test('conversation list names Flutter Goal.fromJson padded GET current_value ins
   act(() => renderer.unmount());
 });
 
+test('conversation list names Flutter Goal.fromGenerated type-wrong GET advice instead of remapping to a progress chip', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'goal-wrong',
+            title: 'Type-wrong extras',
+            current_value: 3,
+            target_value: 10,
+            advice: 1,
+          },
+          {
+            id: 'goal-read',
+            title: 'Read 20 books',
+            current_value: 3,
+            target_value: 10,
+            success_criteria: ['done'],
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain('Read 20 books');
+  expect(tree).toContain('3/10');
+  expect(tree).not.toContain('Type-wrong extras');
+  expect(tree).not.toContain('goal-wrong');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('Add');
+  act(() => renderer.unmount());
+});
+
 test('conversation list names a failed GET goals instead of empty success', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/goals/all') {
