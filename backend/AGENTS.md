@@ -4,7 +4,7 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.11 required (Dockerfile pin, not 3.12+). `.python-version` + `uv` lock. Also FFmpeg, Opus (`opuslib`), Redis (optional). Harness typecheck: `make lane-backend` (wheels; not lock-hash identical). Locked env: `make setup-backend`.
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
@@ -12,14 +12,6 @@ cp .env.template .env          # Fill in required values (see .env.template for 
 source .venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
-
-Harness / pre-push typecheck does **not** need the hash-locked pylock sync.
-`make lane-backend` (from the repo root) runs `uv pip install -r backend/requirements.txt`
-into `backend/.venv` — the same pins, index wheels, ~1 minute. It is **not
-lock-hash identical**. `make setup` / `make setup-backend` remain the
-contributor entrypoint and run `uv pip sync pylock.macos.toml` via
-`./scripts/sync-python-deps.sh`. The pylock lists hashed sdist+wheel for
-av/llvmlite/scipy/pyarrow and can stall ~20 minutes compiling those sdists.
 
 **Env stages** (`OMI_ENV_STAGE`): `local` (emulator harness, `.env.local-dev`), `offline` (fake providers, `.env.offline`), `dev` (remote dev GCP, `.env.dev`), `prod` (reference only, `.env.prod`). `load_backend_env()` loads the stage file then `backend/.env` overrides. Templates: `backend/.env.*.template`. Harness: `PROVIDER_MODE=offline make dev-up` or `OMI_ENV_STAGE=offline`; both modes use instance-scoped filesystem storage under the owned harness state root, so GCS-backed uploads work without cloud credentials. Dev skips the startup-only Stripe price validation; plan catalog and checkout calls still require mode-matched Stripe credentials.
 
