@@ -311,7 +311,13 @@ class DeviceController:
 
     @staticmethod
     def _default_runner(command: Sequence[str]) -> tuple[int, str]:
-        completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=120)
+        # A missing binary (e.g. xcrun on a host without Xcode) must surface as
+        # exit 127 + message so callers fail closed with a remedy; an escaping
+        # FileNotFoundError would also break stop()/release() idempotency.
+        try:
+            completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=120)
+        except FileNotFoundError as exc:
+            return 127, f"{command[0]} not installed: {exc}"
         return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
     def android_ready(self, android_home: str) -> tuple[bool, str]:
@@ -877,6 +883,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("release", "release the caller's device lease (idempotent)"),
         ("recover", "take over a provably stale same-host device lease"),
         ("status", "one device's registry + lease state"),
+        ("heartbeat", "refresh the caller's device lease liveness (call during long runs)"),
     ):
         command = device_sub.add_parser(name, help=help_text)
         command.add_argument("--platform", required=True, choices=list(device_lease.PLATFORMS))
@@ -955,16 +962,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     raise AssertionError(f"unhandled command {args.command!r}")
 
 
+def _default_device_runner(command: Sequence[str]) -> tuple[int, str]:
+    # Default device-tooling seam (adb / xcrun devicectl): a missing binary is
+    # exit 127 + message so doctor/run classify it as a remediable failure —
+    # DeviceRunnerError from the tooling shims — instead of a raw traceback.
+    try:
+        completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=180)
+    except FileNotFoundError as exc:
+        return 127, f"{command[0]} not installed: {exc}"
+    return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+
+
 def _dispatch_device(args: argparse.Namespace, repo_root: Path) -> int:
     """C5 physical-device lane (SCA-491). Imported lazily: device_lease and
     device_runner build on this module's ownership primitives, so a module-
     level import would be circular."""
 
     from . import device_lease, device_runner
-
-    def _default_device_runner(command: Sequence[str]) -> tuple[int, str]:
-        completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=180)
-        return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
     try:
         if args.device_command == "doctor":
@@ -1016,6 +1030,9 @@ def _dispatch_device(args: argparse.Namespace, repo_root: Path) -> int:
             return 0
         if args.device_command == "recover":
             _emit(device_lease.recover(repo_root, args.platform, args.device_id), as_json=args.json)
+            return 0
+        if args.device_command == "heartbeat":
+            _emit(device_lease.heartbeat(repo_root, args.platform, args.device_id), as_json=args.json)
             return 0
         if args.device_command == "status":
             _emit(device_lease.status(repo_root, platform=args.platform, device_id=args.device_id), as_json=args.json)

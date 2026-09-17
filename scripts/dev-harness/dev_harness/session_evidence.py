@@ -66,12 +66,20 @@ def schema_path(repo_root: Path) -> Path:
 
 
 def _run_git(repo_root: Path, args: Sequence[str]) -> str:
-    completed = subprocess.run(
-        ["git", "-C", str(repo_root), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    # Identity probing must fail closed as EvidenceError (exit 2 at the CLI),
+    # never an unhandled FileNotFoundError/CalledProcessError traceback.
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise EvidenceError(f"git is not installed: {exc}") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip()[:200]
+        raise EvidenceError(f"git {' '.join(args)} failed (exit {exc.returncode}): {detail}") from exc
     return completed.stdout.strip()
 
 

@@ -331,3 +331,37 @@ class TestListAndCLI:
 
         monkeypatch.setattr("dev_harness.mobile_doctor.run_doctor", lambda *a, **k: Blocked())
         assert ms.main(["doctor", "--json"]) == 2
+
+
+def test_default_device_runner_missing_binary_is_127_not_a_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """adb/xcrun absent must become exit 127 + message so `device doctor` and
+    `device run` classify it as a remediable failure instead of crashing."""
+
+    def missing(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "adb")
+
+    monkeypatch.setattr(ms.subprocess, "run", missing)
+    code, out = ms._default_device_runner(["adb", "devices"])
+    assert code == 127
+    assert "adb" in out
+
+
+def test_device_controller_default_runner_missing_binary_is_127(monkeypatch: pytest.MonkeyPatch) -> None:
+    """xcrun absent (host without Xcode) must not escape detach(): stop/release
+    stay idempotent and attach fails closed as a SessionError."""
+
+    def missing(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "xcrun")
+
+    monkeypatch.setattr(ms.subprocess, "run", missing)
+    code, out = ms.DeviceController._default_runner(["xcrun", "simctl", "list"])
+    assert code == 127
+    assert "xcrun" in out
+
+
+def test_device_heartbeat_cli_is_wired(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """PHYSICAL_DEVICES.md documents `device heartbeat`; the CLI must accept it."""
+
+    monkeypatch.setattr("dev_harness.device_lease.heartbeat", lambda *a, **k: {"ok": True})
+    code = ms.main(["device", "heartbeat", "--platform", "ios", "--device-id", "00008101-TEST"])
+    assert code == 0
