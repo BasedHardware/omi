@@ -116,6 +116,7 @@ class _HomePageProductState extends State<_HomePageProduct> {
       // Check actual system permission state — the SharedPreferences flag may
       // be stale (e.g. user granted via Settings > Permissions, or reinstall).
       final notifGranted = await Permission.notification.isGranted;
+      if (!mounted) return;
       if (notifGranted) {
         SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();
@@ -643,6 +644,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         announcementProvider,
         connectedDevice: deviceProvider.connectedDevice,
       );
+      if (!mounted) return;
 
       // Register callback for device connection to check firmware announcements and device onboarding
       deviceProvider.onDeviceConnected = (BtDevice device) {
