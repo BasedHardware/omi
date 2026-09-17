@@ -146,3 +146,73 @@ def test_squashed_spine_revision_keeps_the_corrected_oracle(tmp_path):
     assert checker.check(tmp_path)  # the old assertion cannot be restored
     file.write_text(revised.replace('offstageAndRetained', 'true'))
     assert checker.check(tmp_path)
+
+
+def scope_repo(root):
+    import json
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(root), *args], text=True, stderr=subprocess.DEVNULL)
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.test')
+    path = 'app/test/spine/example.dart'
+    file = root / path
+    file.parent.mkdir(parents=True)
+    old = "pendingContract('V1');\nexpect(profile, 'localDev');\n"
+    new = old.replace('localDev', 'local_dev')
+    file.write_text(old)
+    (root / checker.REGISTRY).parent.mkdir(parents=True)
+    (root / checker.REGISTRY).write_text(json.dumps({path: 'V1'}))
+    runtime = root / 'app/lib/example.dart'
+    runtime.parent.mkdir(parents=True)
+    runtime.write_text('throw UnimplementedError();\n')
+    (root / checker.SCOPE).write_text(json.dumps({'scaffolding': {
+        'app/lib/example.dart': [checker.digest(runtime.read_text())]}}))
+    git('add', '.')
+    git('commit', '-qm', 'accepted contract')
+    git('branch', 'origin/main')
+    def revise():
+        file.write_text(new)
+        directory = root / checker.REVISIONS
+        directory.mkdir()
+        (directory / '001.json').write_text(json.dumps(dict(path=path, owner='V1', before=checker.digest(old),
+            after=checker.digest(new), reason='wire evidence')))
+    return git, file, runtime, old, new, revise
+
+
+def test_revision_cannot_travel_with_implementation_even_in_separate_commits(tmp_path):
+    git, file, runtime, old, new, revise = scope_repo(tmp_path)
+    runtime.write_text('return 1;\n')
+    file.write_text(old.replace("pendingContract('V1');\n", ''))
+    assert checker.check(tmp_path) == []  # ordinary builder + marker retirement
+    git('add', '.')
+    git('commit', '-qm', 'implementation')
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'self-approved revision in another commit')
+    assert any('mixed with implementation' in error for error in checker.check(tmp_path))
+    runtime.write_text('throw UnimplementedError();\n')
+    assert checker.check(tmp_path) == []  # exact accepted skeleton, no implementation
+    (tmp_path / checker.SCOPE).write_text('{"oracle_paths":["app/lib/example.dart"]}')
+    assert any('immutable' in error for error in checker.check(tmp_path))
+
+
+def test_real_squash_merge_and_child_merge_preserve_corrected_oracle(tmp_path):
+    git, file, runtime, old, new, revise = scope_repo(tmp_path)
+    git('switch', '-qc', 'spine')
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'corrected oracle')
+    git('branch', 'child')
+    git('switch', '-q', 'main')
+    git('merge', '--squash', 'spine')
+    git('commit', '-qm', 'squash accepted spine')
+    git('branch', '-f', 'origin/main', 'HEAD')  # isolated fixture ref, not the real repository
+    assert checker.check(tmp_path) == []
+    git('switch', '-q', 'child')
+    git('merge', '--no-edit', 'main')
+    assert checker.check(tmp_path) == []
+    file.write_text(new.replace("pendingContract('V1');\n", ''))
+    assert checker.check(tmp_path) == []
+    file.write_text(old)
+    assert checker.check(tmp_path)
