@@ -111,6 +111,78 @@ void main() {
       expect(harness.coordinator.nextCooldownAt, isNull);
     });
 
+    test('an in-flight drain finishes after the screen turns off (#5221)', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+      final drainGate = Completer<void>();
+      harness.drainGate = drainGate;
+
+      final wake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      expect(harness.drainPasses, 1);
+
+      harness.coordinator.setForeground(false);
+      drainGate.complete();
+      await wake;
+
+      expect(harness.drainPasses, 1);
+      expect(harness.walState, 'uploaded');
+    });
+
+    test('background connectivity during an in-flight drain does not start another pass (#5221)', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+      final drainGate = Completer<void>();
+      harness.drainGate = drainGate;
+
+      final wake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      harness.coordinator.setForeground(false);
+      harness.backlog.add('wal-after-lock');
+      harness.connectivity.add(false);
+      harness.connectivity.add(true);
+      drainGate.complete();
+      await wake;
+      await _settle();
+
+      expect(harness.drainPasses, 1);
+      expect(harness.drainedWalIds, ['wal-1']);
+    });
+
+    test('a transfer pass acquires keep-alive and releases it when the pass ends', () async {
+      var acquired = 0;
+      var released = 0;
+      final harness = _TransferHarness(
+        onTransferStarted: () async {
+          acquired++;
+        },
+        onTransferFinished: () async {
+          released++;
+        },
+      );
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      expect(acquired, 1);
+      expect(released, 1);
+    });
+
+    test('keep-alive is released when a pass throws', () async {
+      var released = 0;
+      final harness = _TransferHarness(
+        onTransferFinished: () async {
+          released++;
+        },
+      )..drainThrows = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      expect(released, 1);
+      expect(harness.scheduledCooldowns, hasLength(1));
+    });
+
     test('background recovery wakes wait for the foreground before draining', () async {
       final harness = _TransferHarness();
       addTearDown(harness.dispose);
@@ -236,8 +308,13 @@ class _ScheduledCooldown {
 }
 
 class _TransferHarness {
-  _TransferHarness({bool autoUploadEnabled = true, List<String>? backlog, List<String>? drainedWalIds})
-      : _autoUploadEnabled = autoUploadEnabled,
+  _TransferHarness({
+    bool autoUploadEnabled = true,
+    List<String>? backlog,
+    List<String>? drainedWalIds,
+    Future<void> Function()? onTransferStarted,
+    Future<void> Function()? onTransferFinished,
+  })  : _autoUploadEnabled = autoUploadEnabled,
         backlog = backlog ?? <String>['wal-1'],
         drainedWalIds = drainedWalIds ?? <String>[] {
     coordinator = RecordingTransferCoordinator(
@@ -250,6 +327,8 @@ class _TransferHarness {
       initiallyConnected: true,
       clock: () => DateTime.utc(2026, 1, 1),
       scheduleCooldown: (delay, callback) => scheduledCooldowns.add(_ScheduledCooldown(delay, callback)),
+      onTransferStarted: onTransferStarted,
+      onTransferFinished: onTransferFinished,
     );
   }
 
@@ -261,8 +340,10 @@ class _TransferHarness {
   late final RecordingTransferCoordinator coordinator;
 
   Completer<void>? reconcileGate;
+  Completer<void>? drainGate;
   bool reconcileFails = false;
   bool drainFails = false;
+  bool drainThrows = false;
   bool drainNeedsReconciliation = false;
   bool drainContended = false;
   bool uploadedWalAwaitingReconcile = false;
@@ -303,6 +384,11 @@ class _TransferHarness {
     _concurrentDrains++;
     maximumConcurrentDrains = maximumConcurrentDrains < _concurrentDrains ? _concurrentDrains : maximumConcurrentDrains;
     try {
+      final gate = drainGate;
+      if (gate != null) await gate.future;
+      if (drainThrows) {
+        throw StateError('drain pass failed');
+      }
       if (drainContended) {
         return const RecordingTransferDrainResult.contended();
       }
