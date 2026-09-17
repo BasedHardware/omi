@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: shopify-limits-tests
+    command: ["python3", "plugins/omi-shopify-app/test_list_limits.py"]
+    triggers: ["plugins/omi-shopify-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13946 coerce optional limit parameter instead of raw comparison"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
