@@ -39,183 +39,186 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
   addTearDown(disposeAddressabilityFixture);
   await JourneyHermeticBoot.pumpPage(tester, page: shell, providers: providers!);
   final semantics = tester.ensureSemantics();
-  addTearDown(semantics.dispose);
-  if (id != 'onboarding') {
-    await expectLater(api.navigate('onboarding'),
-        throwsA(isA<AddressabilityRefused>().having((e) => e.code, 'code', 'auth-required')));
-  }
-  final navigation = _wire('navigate', params: {
-    'destination': id,
-    if (id == 'conversation_detail') 'record_id': 'seeded-conv-j1-0001',
-  });
-  if (route['reach']['kind'] == 'push' || route['reach']['kind'] == 'sheet') {
-    late Future<void> competing;
-    expect(() => competing = api.navigate('home'), returnsNormally, reason: 'refusals are failed Futures');
-    await expectLater(competing, throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'busy')));
-    expect(api.visibleRoute, isNull, reason: 'no destination is ready during transition');
-  }
-  // Bound frames; waitReady owns the asynchronous condition, not pumpAndSettle
-  // on an app with perpetual capture/shimmer animations.
-  for (var frame = 0; frame < 60; frame++) {
-    await tester.pump(const Duration(milliseconds: 16));
-  }
-  expect((await navigation)['ok'], isTrue);
-  final rootKey = ValueKey<String>(route['root'] as String);
-  final root = find.byKey(rootKey, skipOffstage: true);
-  expect(root, findsOneWidget);
-  expect(find.byKey(rootKey, skipOffstage: false), findsOneWidget);
-  final retainedPage = find.byType(pageType).evaluate().single;
-  final page = find.byType(pageType);
-  expect(page, findsOneWidget, reason: 'must reach the actual production page, not a catalog placeholder');
-  expect(
-      find.ancestor(of: root, matching: page).evaluate().isNotEmpty ||
-          find.descendant(of: root, matching: page).evaluate().isNotEmpty ||
-          root.evaluate().single == page.evaluate().single,
-      isTrue);
-  expect(api.visibleRoute, id);
-  expect(api.rootMounted, isTrue);
-  expect(api.pendingTransitions, 0);
-  final state = await _wire('state');
-  expect(state, api.controls.snapshot(), reason: 'the installed wire must read the production projection');
-  expect((await _wire('capabilities'))['routes'], contains(id));
-  final requiredProvider = route['ready_provider'];
-  if (requiredProvider != null) {
-    expect((state['providers'] as Map)[requiredProvider], 'ready');
-  }
-  expect(state['route'], id);
-  expect((state['readiness'] as Map)['routed'], isTrue);
-  if (id == 'onboarding') {
-    expect(state['auth'], 'signedOut');
-  } else {
-    expect(state['auth'], 'signedIn');
-  }
-  await expectLater(api.navigate('not_a_route'),
-      throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'unknown-route')));
-  final unknownWire = await _handlers['ext.omi.controls.navigate']!(
-      'ext.omi.controls.navigate', {'version': 'semantic-controls/v2', 'destination': 'not_a_route'});
-  expect(unknownWire.isError(), isTrue);
-  expect(api.visibleRoute, id);
-  if (id == 'onboarding') {
-    await expectLater(api.navigate('chat'),
-        throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'auth-required')));
-  }
-  if (id == 'conversation_detail') {
-    await expectLater(api.navigate(id),
-        throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'record-required')));
-    await expectLater(api.navigate(id, recordId: 'foreign-record'),
-        throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'record-unavailable')));
-    expect(api.visibleRoute, id);
-  }
-  final catalog = (jsonDecode(addressableControlsJson) as Map<String, dynamic>)[id] as List;
-  expect(catalog, isNotEmpty);
-  if (id == 'chat') {
-    // Establish the actionable send state before checking its semantics.
-    await tester.enterText(find.byKey(OmiKeys.chatInput), 'fixture input');
-    await tester.pump();
-  }
-  for (final item in catalog.cast<Map<String, dynamic>>()) {
-    final value = item['key'] as String;
-    final control = find.byKey(ValueKey<String>(value), skipOffstage: true);
-    expect(control, findsOneWidget, reason: 'catalogued control must be unique and onstage: $value');
-    if (item['scope'] == 'root') {
-      expect(find.descendant(of: root, matching: control), findsOneWidget);
+  try {
+    if (id != 'onboarding') {
+      await expectLater(api.navigate('onboarding'),
+          throwsA(isA<AddressabilityRefused>().having((e) => e.code, 'code', 'auth-required')));
     }
-    expect(isCatalogInteractive(tester.widget(control), includeDisabled: true), isTrue,
-        reason: 'the catalog key belongs on the actual interactive constructor, not a decorative wrapper');
-    expect(AddressKey.valid(value), isTrue);
-    final data = tester.getSemantics(control).getSemanticsData();
-    expect(data.identifier, value);
-    expect(data.label, item['label_en'], reason: 'English fixture uses the localized human label');
-    expect(data.flagsCollection.isEnabled, Tristate.isTrue);
-    expect(data.flagsCollection.isButton, item['role'] == 'button');
-    expect(data.flagsCollection.isTextField, item['role'] == 'textField');
-    expect(data.hasAction(item['action'] == 'setText' ? SemanticsAction.setText : SemanticsAction.tap), isTrue);
-  }
-  if (id == 'chat') {
-    expect(tester.getSemantics(find.byKey(OmiKeys.chatInput)).getSemanticsData().label, 'Message');
-    expect(tester.getSemantics(find.byKey(OmiKeys.chatSend)).getSemanticsData().label, 'Send message');
-    final input = tester.getSemantics(find.byKey(OmiKeys.chatInput));
-    tester.binding.performSemanticsAction(SemanticsActionEvent(
-      viewId: tester.view.viewId,
-      nodeId: input.id,
-      type: SemanticsAction.setText,
-      arguments: 'accessible input',
-    ));
-    await tester.pump();
-    expect(tester.widget<TextField>(find.byKey(OmiKeys.chatInput)).controller!.text, 'accessible input',
-        reason: 'accessibility action must change the real control, not an agent-only semantics node');
-  }
-  // Catalog declaration/reference check only. Uncatalogued directory debt is
-  // deliberately outside surface acceptance; changed-file no-growth still runs.
-  final scan = await tester.runAsync(() => Process.run('python3', [
-        '../scripts/check_app_addressability.py',
-        '--surface',
-        id,
-      ]));
-  expect(scan!.exitCode, 0, reason: '${scan.stdout}\n${scan.stderr}');
-  void accessibleTap(Key key) {
-    final node = tester.getSemantics(find.byKey(key));
-    tester.binding.performSemanticsAction(SemanticsActionEvent(
-      viewId: tester.view.viewId,
-      nodeId: node.id,
-      type: SemanticsAction.tap,
-    ));
-  }
-
-  if (id == 'home') {
-    expect(tester.getSemantics(find.byKey(OmiKeys.homeTabHome)).getSemanticsData().flagsCollection.isSelected,
-        Tristate.isTrue);
-    accessibleTap(OmiKeys.homeTabConversations);
-    await tester.pump(const Duration(seconds: 1));
-    expect(api.visibleRoute, 'conversations', reason: 'tab semantics must call the real owner');
-    final returned = api.navigate('home');
-    await tester.pump(const Duration(seconds: 1));
-    await returned;
-    expect(find.byType(pageType).evaluate().single, same(retainedPage));
-  }
-  if (id == 'conversations') {
-    accessibleTap(ValueKey<String>((catalog.single as Map)['key'] as String));
-    await tester.pump(const Duration(seconds: 1));
-    expect(api.visibleRoute, 'conversation_detail', reason: 'row semantics must open the actual seeded detail');
-    expect(find.byKey(OmiKeys.conversationDetailRoot), findsOneWidget);
-    expect(find.textContaining('Journey one seeded conversation'), findsWidgets);
-    await tester.binding.handlePopRoute();
-    await tester.pump(const Duration(seconds: 1));
+    final navigation = _wire('navigate', params: {
+      'destination': id,
+      if (id == 'conversation_detail') 'record_id': 'seeded-conv-j1-0001',
+    });
+    if (route['reach']['kind'] == 'push' || route['reach']['kind'] == 'sheet') {
+      late Future<void> competing;
+      expect(() => competing = api.navigate('home'), returnsNormally, reason: 'refusals are failed Futures');
+      await expectLater(competing, throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'busy')));
+      expect(api.visibleRoute, isNull, reason: 'no destination is ready during transition');
+    }
+    // Bound frames; waitReady owns the asynchronous condition, not pumpAndSettle
+    // on an app with perpetual capture/shimmer animations.
+    for (var frame = 0; frame < 60; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect((await navigation)['ok'], isTrue);
+    final rootKey = ValueKey<String>(route['root'] as String);
+    final root = find.byKey(rootKey, skipOffstage: true);
+    expect(root, findsOneWidget);
+    expect(find.byKey(rootKey, skipOffstage: false), findsOneWidget);
+    final retainedPage = find.byType(pageType).evaluate().single;
+    final page = find.byType(pageType);
+    expect(page, findsOneWidget, reason: 'must reach the actual production page, not a catalog placeholder');
+    expect(
+        find.ancestor(of: root, matching: page).evaluate().isNotEmpty ||
+            find.descendant(of: root, matching: page).evaluate().isNotEmpty ||
+            root.evaluate().single == page.evaluate().single,
+        isTrue);
     expect(api.visibleRoute, id);
-  }
-  if (route['reach']['kind'] == 'push' || route['reach']['kind'] == 'sheet') {
-    final closeKey = switch (id) {
-      'settings' => OmiKeys.settingsDone,
-      'devices' => OmiKeys.devicesBack,
-      'conversation_detail' => OmiKeys.conversationDetailBack,
-      _ => null,
-    };
-    if (closeKey == null) {
-      await tester.binding.handlePopRoute();
+    expect(api.rootMounted, isTrue);
+    expect(api.pendingTransitions, 0);
+    final state = await _wire('state');
+    expect(state, api.controls.snapshot(), reason: 'the installed wire must read the production projection');
+    expect((await _wire('capabilities'))['routes'], contains(id));
+    final requiredProvider = route['ready_provider'];
+    if (requiredProvider != null) {
+      expect((state['providers'] as Map)[requiredProvider], 'ready');
+    }
+    expect(state['route'], id);
+    expect((state['readiness'] as Map)['routed'], isTrue);
+    if (id == 'onboarding') {
+      expect(state['auth'], 'signedOut');
     } else {
-      accessibleTap(closeKey);
+      expect(state['auth'], 'signedIn');
     }
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(pageType), findsNothing);
-    expect(api.visibleRoute, isNot(id));
-  } else if (id != 'onboarding') {
-    final next = id == 'home' ? 'conversations' : 'home';
-    final switched = api.navigate(next);
-    await tester.pump(const Duration(seconds: 1));
-    await switched;
-    expect(api.visibleRoute, next);
-    expect(find.byKey(rootKey, skipOffstage: true), findsNothing);
-    expect(find.byKey(rootKey, skipOffstage: false), findsOneWidget, reason: 'visited tabs remain mounted');
-    expect(find.byType(pageType, skipOffstage: false).evaluate().single, same(retainedPage));
-    final returned = api.navigate(id);
-    await tester.pump(const Duration(seconds: 1));
-    await returned;
-    expect(find.byKey(rootKey, skipOffstage: true), findsOneWidget);
-    expect(find.byType(pageType).evaluate().single, same(retainedPage), reason: 'return must preserve tab state');
+    await expectLater(api.navigate('not_a_route'),
+        throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'unknown-route')));
+    final unknownWire = await _handlers['ext.omi.controls.navigate']!(
+        'ext.omi.controls.navigate', {'version': 'semantic-controls/v2', 'destination': 'not_a_route'});
+    expect(unknownWire.isError(), isTrue);
+    expect(api.visibleRoute, id);
+    if (id == 'onboarding') {
+      await expectLater(api.navigate('chat'),
+          throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'auth-required')));
+    }
+    if (id == 'conversation_detail') {
+      await expectLater(api.navigate(id),
+          throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'record-required')));
+      await expectLater(api.navigate(id, recordId: 'foreign-record'),
+          throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'record-unavailable')));
+      expect(api.visibleRoute, id);
+    }
+    final catalog = (jsonDecode(addressableControlsJson) as Map<String, dynamic>)[id] as List;
+    expect(catalog, isNotEmpty);
+    if (id == 'chat') {
+      // Establish the actionable send state before checking its semantics.
+      await tester.enterText(find.byKey(OmiKeys.chatInput), 'fixture input');
+      await tester.pump();
+    }
+    for (final item in catalog.cast<Map<String, dynamic>>()) {
+      final value = item['key'] as String;
+      final control = find.byKey(ValueKey<String>(value), skipOffstage: true);
+      expect(control, findsOneWidget, reason: 'catalogued control must be unique and onstage: $value');
+      if (item['scope'] == 'root') {
+        expect(find.descendant(of: root, matching: control), findsOneWidget);
+      }
+      expect(isCatalogInteractive(tester.widget(control), includeDisabled: true), isTrue,
+          reason: 'the catalog key belongs on the actual interactive constructor, not a decorative wrapper');
+      expect(AddressKey.valid(value), isTrue);
+      final data = tester.getSemantics(control).getSemanticsData();
+      expect(data.identifier, value);
+      expect(data.label, item['label_en'], reason: 'English fixture uses the localized human label');
+      expect(data.flagsCollection.isEnabled, Tristate.isTrue);
+      expect(data.flagsCollection.isButton, item['role'] == 'button');
+      expect(data.flagsCollection.isTextField, item['role'] == 'textField');
+      expect(data.hasAction(item['action'] == 'setText' ? SemanticsAction.setText : SemanticsAction.tap), isTrue);
+    }
+    if (id == 'chat') {
+      expect(tester.getSemantics(find.byKey(OmiKeys.chatInput)).getSemanticsData().label, 'Message');
+      expect(tester.getSemantics(find.byKey(OmiKeys.chatSend)).getSemanticsData().label, 'Send message');
+      final input = tester.getSemantics(find.byKey(OmiKeys.chatInput));
+      tester.binding.performSemanticsAction(SemanticsActionEvent(
+        viewId: tester.view.viewId,
+        nodeId: input.id,
+        type: SemanticsAction.setText,
+        arguments: 'accessible input',
+      ));
+      await tester.pump();
+      expect(tester.widget<TextField>(find.byKey(OmiKeys.chatInput)).controller!.text, 'accessible input',
+          reason: 'accessibility action must change the real control, not an agent-only semantics node');
+    }
+    // Catalog declaration/reference check only. Uncatalogued directory debt is
+    // deliberately outside surface acceptance; changed-file no-growth still runs.
+    final scan = await tester.runAsync(() => Process.run('python3', [
+          '../scripts/check_app_addressability.py',
+          '--surface',
+          id,
+        ]));
+    expect(scan!.exitCode, 0, reason: '${scan.stdout}\n${scan.stderr}');
+    void accessibleTap(Key key) {
+      final node = tester.getSemantics(find.byKey(key));
+      tester.binding.performSemanticsAction(SemanticsActionEvent(
+        viewId: tester.view.viewId,
+        nodeId: node.id,
+        type: SemanticsAction.tap,
+      ));
+    }
+
+    if (id == 'home') {
+      expect(tester.getSemantics(find.byKey(OmiKeys.homeTabHome)).getSemanticsData().flagsCollection.isSelected,
+          Tristate.isTrue);
+      accessibleTap(OmiKeys.homeTabConversations);
+      await tester.pump(const Duration(seconds: 1));
+      expect(api.visibleRoute, 'conversations', reason: 'tab semantics must call the real owner');
+      final returned = api.navigate('home');
+      await tester.pump(const Duration(seconds: 1));
+      await returned;
+      expect(find.byType(pageType).evaluate().single, same(retainedPage));
+    }
+    if (id == 'conversations') {
+      accessibleTap(ValueKey<String>((catalog.single as Map)['key'] as String));
+      await tester.pump(const Duration(seconds: 1));
+      expect(api.visibleRoute, 'conversation_detail', reason: 'row semantics must open the actual seeded detail');
+      expect(find.byKey(OmiKeys.conversationDetailRoot), findsOneWidget);
+      expect(find.textContaining('Journey one seeded conversation'), findsWidgets);
+      await tester.binding.handlePopRoute();
+      await tester.pump(const Duration(seconds: 1));
+      expect(api.visibleRoute, id);
+    }
+    if (route['reach']['kind'] == 'push' || route['reach']['kind'] == 'sheet') {
+      final closeKey = switch (id) {
+        'settings' => OmiKeys.settingsDone,
+        'devices' => OmiKeys.devicesBack,
+        'conversation_detail' => OmiKeys.conversationDetailBack,
+        _ => null,
+      };
+      if (closeKey == null) {
+        await tester.binding.handlePopRoute();
+      } else {
+        accessibleTap(closeKey);
+      }
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(pageType), findsNothing);
+      expect(api.visibleRoute, isNot(id));
+    } else if (id != 'onboarding') {
+      final next = id == 'home' ? 'conversations' : 'home';
+      final switched = api.navigate(next);
+      await tester.pump(const Duration(seconds: 1));
+      await switched;
+      expect(api.visibleRoute, next);
+      expect(find.byKey(rootKey, skipOffstage: true), findsNothing);
+      expect(find.byKey(rootKey, skipOffstage: false), findsOneWidget, reason: 'visited tabs remain mounted');
+      expect(find.byType(pageType, skipOffstage: false).evaluate().single, same(retainedPage));
+      final returned = api.navigate(id);
+      await tester.pump(const Duration(seconds: 1));
+      await returned;
+      expect(find.byKey(rootKey, skipOffstage: true), findsOneWidget);
+      expect(find.byType(pageType).evaluate().single, same(retainedPage), reason: 'return must preserve tab state');
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(api.rootMounted, isFalse, reason: 'disposed scope must invalidate route readiness');
+    final disposed = await _wire('state');
+    expect(disposed['route'], isNull);
+    expect((disposed['readiness'] as Map)['routed'], isFalse);
+  } finally {
+    semantics.dispose();
   }
-  await tester.pumpWidget(const SizedBox.shrink());
-  expect(api.rootMounted, isFalse, reason: 'disposed scope must invalidate route readiness');
-  final disposed = await _wire('state');
-  expect(disposed['route'], isNull);
-  expect((disposed['readiness'] as Map)['routed'], isFalse);
 }

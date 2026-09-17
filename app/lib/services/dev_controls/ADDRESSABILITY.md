@@ -80,7 +80,8 @@ JourneyHermeticBoot uses harness `mobile/v1.json` identity and JourneyFixtureBac
 j1's seeded detail, empty chat/memories/tasks, signed-out onboarding. Surface tests
 exercise registered VM handlers, actual page Types, roots, controls and transitions
 on iOS/Android widget targets. Cached tabs must disappear from onstage finders,
-remain in all-element finders, and retain element identity on return.
+retain element identity offstage and on return. Release semantics handles in
+`finally`; binding invariants precede `addTearDown`. Never delay teardown to hide timers.
 
 ## semantic-controls/v2
 
