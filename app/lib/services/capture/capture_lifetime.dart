@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 
-/// [release] untracks and runs the owned cancel once; [CaptureLifetime.close] will not run it again.
+/// [release] untracks the callback and starts cancel once; [CaptureLifetime.close]
+/// still joins that cancellation until it actually finishes.
 class CaptureOwned {
   CaptureOwned._(this._release);
   final Future<void> Function() _release;
@@ -17,10 +18,21 @@ class CaptureLifetime implements CaptureScheduling {
 
   final CaptureScheduling _scheduling;
   final List<FutureOr<void> Function()> _releases = [];
+  final Set<Future<void>> _inflightCancels = {};
   bool _closed = false;
+  Future<void>? _closing;
+  bool _closeFinished = false;
 
   @visibleForTesting
   int get debugTrackedCount => _releases.length;
+
+  Future<void> _watchCancel(FutureOr<void> work) {
+    final pending = Future<void>.sync(() async {
+      await work;
+    });
+    _inflightCancels.add(pending);
+    return pending.whenComplete(() => _inflightCancels.remove(pending));
+  }
 
   void _untrack(FutureOr<void> Function() release) => _releases.remove(release);
 
@@ -72,27 +84,38 @@ class CaptureLifetime implements CaptureScheduling {
     bool cancelOnError = false,
   }) {
     late final FutureOr<void> Function() release;
-    void drop() => _untrack(release);
+    var live = true;
+    void drop() {
+      live = false;
+      _untrack(release);
+    }
+
+    bool isClosed() => _closed;
     final inner = stream.listen(
       (value) {
         if (_closed) return;
         onData(value);
       },
-      onError: cancelOnError
-          ? (Object error, StackTrace stack) {
-              drop();
-              _forwardError(onError, error, stack);
-            }
-          : onError,
+      onError: (Object error, StackTrace stack) {
+        if (cancelOnError) drop();
+        if (_closed) return;
+        _forwardError(onError, error, stack);
+      },
       onDone: () {
         drop();
+        if (_closed) return;
         onDone?.call();
       },
       cancelOnError: cancelOnError,
     );
-    release = inner.cancel;
+    release = () {
+      if (!live) return null;
+      live = false;
+      _untrack(release);
+      return _watchCancel(inner.cancel());
+    };
     _track(release);
-    return _LifetimeSubscription<T>(inner, drop);
+    return _LifetimeSubscription<T>(inner, drop, isClosed, () => Future.sync(release), cancelOnError: cancelOnError);
   }
 
   CaptureOwned own(FutureOr<void> Function() cancel) {
@@ -102,7 +125,7 @@ class CaptureLifetime implements CaptureScheduling {
       if (!live) return null;
       live = false;
       _untrack(release);
-      return cancel();
+      return _watchCancel(cancel());
     };
     _track(release);
     return CaptureOwned._(() async {
@@ -110,21 +133,40 @@ class CaptureLifetime implements CaptureScheduling {
     });
   }
 
-  Future<void> close() async {
+  Future<void> close() {
     _closed = true;
+    if (_closeFinished) return Future<void>.value();
+    return _closing ??= _drain();
+  }
+
+  Future<void> _drain() async {
     final releases = List<FutureOr<void> Function()>.of(_releases);
     _releases.clear();
     Object? error;
     StackTrace? stack;
-    for (final release in releases) {
-      try {
-        await Future.sync(release);
-      } catch (caught, caughtStack) {
-        error ??= caught;
-        stack ??= caughtStack;
+    try {
+      for (final release in releases) {
+        try {
+          await Future.sync(release);
+        } catch (caught, caughtStack) {
+          error ??= caught;
+          stack ??= caughtStack;
+        }
       }
+      // An unregistered callback is not unfinished teardown: join explicit
+      // cancel/release futures that already left the bag.
+      for (final pending in List<Future<void>>.of(_inflightCancels)) {
+        try {
+          await pending;
+        } catch (caught, caughtStack) {
+          error ??= caught;
+          stack ??= caughtStack;
+        }
+      }
+      if (error != null) Error.throwWithStackTrace(error, stack!);
+    } finally {
+      _closeFinished = true;
     }
-    if (error != null) Error.throwWithStackTrace(error, stack!);
   }
 }
 
@@ -157,22 +199,38 @@ class _LifetimeTimer implements Timer {
 }
 
 class _LifetimeSubscription<T> implements StreamSubscription<T> {
-  _LifetimeSubscription(this._inner, this._drop);
+  _LifetimeSubscription(this._inner, this._drop, this._isClosed, this._cancel, {this.cancelOnError = false});
   final StreamSubscription<T> _inner;
   final void Function() _drop;
+  final bool Function() _isClosed;
+  final Future<void> Function() _cancel;
+  final bool cancelOnError;
   @override
-  Future<void> cancel() {
-    _drop();
-    return _inner.cancel();
+  Future<void> cancel() => _cancel();
+
+  @override
+  void onData(void Function(T)? handleData) {
+    _inner.onData(handleData == null
+        ? null
+        : (value) {
+            if (_isClosed()) return;
+            handleData(value);
+          });
   }
 
   @override
-  void onData(void Function(T)? handleData) => _inner.onData(handleData);
-  @override
-  void onError(Function? handleError) => _inner.onError(handleError);
+  void onError(Function? handleError) {
+    _inner.onError((Object error, StackTrace stack) {
+      if (cancelOnError) _drop();
+      if (_isClosed()) return;
+      _forwardError(handleError, error, stack);
+    });
+  }
+
   @override
   void onDone(void Function()? handleDone) => _inner.onDone(() {
         _drop();
+        if (_isClosed()) return;
         handleDone?.call();
       });
   @override
@@ -182,5 +240,5 @@ class _LifetimeSubscription<T> implements StreamSubscription<T> {
   @override
   bool get isPaused => _inner.isPaused;
   @override
-  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture<E>(futureValue);
+  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture<E>(futureValue).whenComplete(_drop);
 }
