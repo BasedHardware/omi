@@ -572,6 +572,7 @@ export async function loadLegacyConversationDetail(
         continue;
       }
       const event = raw as Record<string, unknown>;
+      presentNullableString(event.description);
       if (event.start !== undefined && event.start !== null) {
         calendarEventTimeCopy(event.start);
       }

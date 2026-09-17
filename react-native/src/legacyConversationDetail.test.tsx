@@ -305,6 +305,110 @@ test('old conversation details name Flutter Conversation.fromGenerated type-wron
   }
 });
 
+test('old conversation details name Flutter Conversation.fromGenerated type-wrong GET events description instead of remapping to a recap chip', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        events: [
+          {
+            title: 'Standup',
+            start: '2026-09-07T15:00:00.000Z',
+            duration: 30,
+            description: 'Notes',
+          },
+        ],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        events: [
+          {
+            title: 'Standup',
+            start: '2026-09-07T15:00:00.000Z',
+            duration: 30,
+            description: null,
+          },
+        ],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        events: [
+          {
+            title: 'Standup',
+            start: '2026-09-07T15:00:00.000Z',
+            duration: 30,
+            description: '',
+          },
+        ],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        events: [
+          {
+            title: 'Standup',
+            start: '2026-09-07T15:00:00.000Z',
+            duration: 30,
+            description: '  Notes  ',
+          },
+        ],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  for (const extra of [1, true, [], {}]) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        structured: {
+          ...fixture.structured,
+          events: [
+            {
+              title: 'Standup',
+              start: '2026-09-07T15:00:00.000Z',
+              duration: 30,
+              description: extra,
+            },
+          ],
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
 test('names GET transcript start/end numeric strings', async () => {
   mockRequest.mockResolvedValue(
     response({
