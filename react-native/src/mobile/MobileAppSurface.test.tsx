@@ -8,6 +8,14 @@ jest.mock('../ui/OmiAvatar', () => ({
   OmiAvatar: (props: object) =>
     require('react').createElement('OmiAvatar', props),
 }));
+jest.mock('react-native-svg', () => ({
+  __esModule: true,
+  default: 'Svg',
+  Defs: 'Defs',
+  LinearGradient: 'LinearGradient',
+  Rect: 'Rect',
+  Stop: 'Stop',
+}));
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');

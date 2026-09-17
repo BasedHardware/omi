@@ -1,6 +1,7 @@
 import React from 'react';
-import {StyleSheet, Text, TextInput, View} from 'react-native';
+import {StyleSheet, TextInput, View} from 'react-native';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
+import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Search from 'lucide-react-native/icons/search';
 import Square from 'lucide-react-native/icons/square';
 import X from 'lucide-react-native/icons/x';
@@ -41,7 +42,7 @@ export function MobileOmnibar({
   };
   return (
     <View accessibilityLabel="Ask and search dock" style={styles.root}>
-      <View style={styles.modes}>
+      <View style={styles.field}>
         {(['Ask', 'Search'] as const).map(item => (
           <FocusPressable
             key={item}
@@ -50,14 +51,19 @@ export function MobileOmnibar({
             accessibilityState={{selected: mode === item}}
             onPress={() => onModeChange(item)}
             style={[styles.mode, mode === item && styles.selected]}>
-            <Text
-              style={[styles.modeText, mode === item && styles.selectedText]}>
-              {item}
-            </Text>
+            {item === 'Ask' ? (
+              <MessageCircle
+                size={19}
+                color={mode === item ? color.text : color.textMuted}
+              />
+            ) : (
+              <Search
+                size={19}
+                color={mode === item ? color.text : color.textMuted}
+              />
+            )}
           </FocusPressable>
         ))}
-      </View>
-      <View style={styles.field}>
         <TextInput
           ref={inputRef}
           accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search loaded data'}
@@ -65,7 +71,7 @@ export function MobileOmnibar({
           onChangeText={onChange}
           onSubmitEditing={submit}
           returnKeyType={mode === 'Ask' ? 'send' : 'search'}
-          placeholder={mode === 'Ask' ? 'Ask anything…' : 'Search loaded data…'}
+          placeholder={mode === 'Ask' ? 'Ask anything…' : 'Search Omi…'}
           placeholderTextColor={color.textSubtle}
           style={styles.input}
         />
@@ -111,29 +117,30 @@ const styles = StyleSheet.create({
   root: {
     marginHorizontal: 10,
     marginVertical: 8,
+    backgroundColor: 'transparent',
+  },
+  field: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 6,
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.border,
-    backgroundColor: color.surface,
-    gap: 4,
+    backgroundColor: 'rgba(26, 26, 26, 0.88)',
   },
-  modes: {flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4},
   mode: {
+    width: 44,
     minHeight: 44,
-    paddingHorizontal: 18,
     borderRadius: 16,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   selected: {backgroundColor: color.surfaceRaised},
-  modeText: {fontSize: 13, color: color.textMuted},
-  selectedText: {color: color.text, fontWeight: '600'},
-  field: {flexDirection: 'row', alignItems: 'center'},
   input: {
     flex: 1,
     minWidth: 0,
     minHeight: 44,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     fontSize: 16,
     color: color.text,
   },
