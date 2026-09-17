@@ -8,10 +8,10 @@
 ///
 /// What it adds over Marionette's tree/tap/enterText primitives is product
 /// semantics: named readiness conditions with bounded polling, the app's real
-/// navigation path, typed actions that call the same production
-/// services/controllers the UI calls, and the privileged seed/reset/fault
-/// controls the seeded journeys need. State is privacy-safe: identity is
-/// uid/email/flags, never tokens or raw credentials.
+/// navigation path, and the privileged seed/reset/fault controls the seeded
+/// journeys need. There is no generic `action` method; UI remains the action
+/// channel. State is privacy-safe: identity is uid/email/flags, never tokens
+/// or raw credentials.
 ///
 /// Eligibility is fail-closed and compile-time-resolvable:
 /// `kDebugMode` excludes profile/release/AOT builds, and
@@ -180,22 +180,22 @@ class SemanticControls {
   /// Capabilities reported to callers: the operation names this surface
   /// supports. Stable strings; append-only.
   static const List<String> capabilities = [
+    'capabilities',
     'state',
     'wait_ready',
     'navigate',
-    'action',
-    'fault.arm',
-    'fault.clear',
-    'capabilities',
+    'fault',
   ];
 
   /// Installs the VM service extensions when (and only when) the current
   /// build is [semanticControlsEligible]. Called from the debug branch of
   /// `main()` next to `MarionetteBinding.ensureInitialized()`; inert elsewhere.
+  /// Marked installed only after every registration returns; a rejected name
+  /// must not leave the surface claiming it is up.
   void installIfEligible({void Function(String, developer.ServiceExtensionHandler)? register}) {
     if (!semanticControlsEligible || _installed) return;
-    _installed = true;
     _registerExtensions(register ?? developer.registerExtension);
+    _installed = true;
   }
 
   bool get installed => _installed;
@@ -203,17 +203,17 @@ class SemanticControls {
   static const JsonEncoder _json = JsonEncoder();
 
   void _registerExtensions(void Function(String, developer.ServiceExtensionHandler) register) {
-    register('omi.controls.capabilities', (method, params) async {
+    register('ext.omi.controls.capabilities', (method, params) async {
       return developer.ServiceExtensionResponse.result(_json.convert({
         'contract_version': semanticControlsVersion,
         'capabilities': capabilities,
         'faults': [for (final f in JourneyFault.values) f.name],
       }));
     });
-    register('omi.controls.state', (method, params) async {
+    register('ext.omi.controls.state', (method, params) async {
       return developer.ServiceExtensionResponse.result(_json.convert(state().toJson()));
     });
-    register('omi.controls.wait_ready', (method, params) async {
+    register('ext.omi.controls.wait_ready', (method, params) async {
       final condition = params['condition'];
       if (condition == null) {
         return developer.ServiceExtensionResponse.error(
@@ -229,7 +229,7 @@ class SemanticControls {
         return developer.ServiceExtensionResponse.error(-32000, e.toString());
       }
     });
-    register('omi.controls.navigate', (method, params) async {
+    register('ext.omi.controls.navigate', (method, params) async {
       final destination = params['destination'];
       if (destination == null) {
         return developer.ServiceExtensionResponse.error(
@@ -242,7 +242,7 @@ class SemanticControls {
           ? developer.ServiceExtensionResponse.result(_json.convert({'ok': true}))
           : developer.ServiceExtensionResponse.error(-32001, 'unknown destination "$destination"');
     });
-    register('omi.controls.fault', (method, params) async {
+    register('ext.omi.controls.fault', (method, params) async {
       final fault = params['fault'];
       final clear = params['clear'] == 'true';
       if (fault == null) {

@@ -16,7 +16,6 @@ void main() {
     return;
   }
   contractTest('B0 executes every real registration and advertises exactly its wire methods', () async {
-    pendingContract('B0');
     F.env = Environment.dev;
     expect(semanticControlsEligible, isTrue);
     final handlers = <String, developer.ServiceExtensionHandler>{};

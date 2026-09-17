@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-unexecuted-control-registration",
+  "violated_contract": "A privileged control surface is only installed if the Dart VM actually accepted every method name. Recording names into a fake registrar, or calling registerExtension with names the SDK rejects (no ext. prefix), leaves the surface marked available while the VM owns nothing. A test that never executes the real registration cannot catch it.",
+  "canonical_prevention": "Register ext.omi.controls.* with dart:developer registerExtension, mark installed only after every registration returns, advertise exactly those five suffixes, and compile an opt-in test that calls the SDK for each name then invokes the capabilities handler.",
+  "canonical_prevention_artifact": [
+    "app/lib/services/dev_controls/semantic_controls.dart",
+    "app/test/spine/b0_registration_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/dev_controls/**",
+    "app/test/spine/b0_registration_test.dart"
+  ],
+  "status": "open"
+}
