@@ -1484,7 +1484,7 @@ def test_repair_receipt_reopens_exactly_one_bounded_invocation_retry(monkeypatch
             db,
             uid="user-1",
             invocation_id=invocation_id,
-            provider_outcome_evidence={"jit_run_id": "qa-sweep-2", "attempts": []},
+            provider_outcome_evidence={"jit_run_id": "qa-sweep-2", "attempts": [{"request_id": "req-2"}]},
             repair_authority="operator:qa-sweep-2",
             now=claim_at + timedelta(minutes=40),
         )
@@ -1529,7 +1529,7 @@ def test_repair_receipt_requires_accounting_evidence_and_tombstoned_fence(monkey
             db,
             uid="user-1",
             invocation_id=invocation_id,
-            provider_outcome_evidence={"jit_run_id": "qa-sweep-1", "attempts": []},
+            provider_outcome_evidence={"jit_run_id": "qa-sweep-1", "attempts": [{"request_id": "req-1"}]},
             repair_authority="operator:qa-sweep-1",
             now=claim_at + timedelta(hours=2),
         )
@@ -1559,11 +1559,15 @@ def test_repair_receipt_requires_accounting_evidence_and_tombstoned_fence(monkey
         db,
         uid="user-1",
         invocation_id="repair-evidence",
-        provider_outcome_evidence={"jit_run_id": "qa-sweep-9", "attempts": []},
+        provider_outcome_evidence=_operator_attestation(
+            db.store[f"{MODEL_INVOCATION_FENCE_COLLECTION}/repair-evidence"],
+            claim_at + timedelta(hours=2),
+            authority="operator:qa-sweep-9",
+        ),
         repair_authority="operator:qa-sweep-9",
         now=claim_at + timedelta(hours=2),
     )
-    assert receipt["provider_outcome_summary"] == "no_recorded_attempt"
+    assert receipt["provider_outcome_summary"] == "operator_attested_no_dispatch"
     # A consumed or identity-mismatched receipt never reopens a claim.
     db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/repair-evidence"]["consumed"] = True
     assert (
@@ -3163,3 +3167,293 @@ def test_completed_day_owner_name_in_about_still_hits_the_owner_gate(monkeypatch
     ]
     event = json.loads(messages[0].split('canonical_memory_decision_path.v1 ', 1)[1])
     assert event['demoted_owner_untrusted'] == 1
+
+
+@pytest.fixture
+def fenced_summary(monkeypatch):
+    """Real agent + real transaction decorator, with strict local persistence."""
+    from contextlib import nullcontext
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.llm import memories
+
+    db = StrictFirestore()
+    control = MemoryControlState(uid="user-1", head_commit_id="head0", account_generation=4, source_generation=7)
+    db.document("users/user-1/memory_state/apply_control").create(control.model_dump(mode="json"))
+    monkeypatch.setattr(memories, "get_prompt_memories", lambda _: ("Test", ""))
+    monkeypatch.setattr(memories, "current_date_for_uid", lambda _: "2026-09-17")
+    monkeypatch.setattr(memories, "track_usage", lambda *_a, **_kw: nullcontext())
+    identity = dict(account_generation=4, source_generation=7, sweep_generation=1, window_id="window-a")
+    fence_path = (MODEL_INVOCATION_FENCE_COLLECTION, "pre-dispatch")
+
+    def fail():
+        memories.run_daily_sweep_summary_agent(
+            "user-1",
+            [("c1", "Test summary")],
+            {},
+            llm=object(),
+            max_input_tokens=1,
+        )
+        raise AssertionError("budget check did not fail")
+
+    def invoke(builder=fail, **kwargs):
+        return _invoke_model_once(db, "user-1", "pre-dispatch", candidate_builder=builder, **identity, **kwargs)
+
+    return db, fence_path, invoke, fail
+
+
+def test_pre_dispatch_failure_releases_with_reason_and_next_run_claims(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+    assert invoke() is None
+    assert db.rows[path]["state"] == "pre_dispatch_released"
+    assert db.rows[path]["pre_dispatch_releases"] == 1
+    assert db.rows[path]["failure_reason"] == "daily_sweep_summary_input_budget"
+    calls = []
+    assert invoke(lambda: calls.append(1) or ({"candidate_id": "ok"},)) == ({"candidate_id": "ok"},)
+    assert calls == [1]
+    assert db.rows[path]["pre_dispatch_releases"] == 1
+
+
+def test_fourth_pre_dispatch_failure_exhausts_release_budget(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+    for _ in range(4):
+        assert invoke() is None
+    assert db.rows[path]["state"] == "pre_dispatch_exhausted"
+    assert db.rows[path]["pre_dispatch_releases"] == 3
+    assert db.rows[path]["blocked_reason"] == "pre_dispatch_release_limit"
+    assert invoke(lambda: pytest.fail("exhausted claim retried")) is None
+
+
+@pytest.mark.parametrize("mutation", ["state", "identity", "claim", "deletion", "generation", "user_deleted"])
+def test_pre_dispatch_release_refuses_changed_fence(fenced_summary, mutation):
+    db, path, invoke, fail = fenced_summary
+
+    def changed():
+        if mutation == "state":
+            db.rows[path]["state"] = "returned"
+        elif mutation == "identity":
+            db.rows[path]["uid"] = "foreign"
+        elif mutation == "claim":
+            db.rows[path]["claim_id"] = "newer-claim"
+        elif mutation == "deletion":
+            db.rows[("account_deletions", "user-1")] = {"wipe_status": "running"}
+        elif mutation == "generation":
+            db.rows[("users", "user-1", "memory_state", "apply_control")]["account_generation"] += 1
+        else:
+            del db.rows[("users", "user-1", MODEL_INVOCATION_PATH, "pre-dispatch")]
+        return fail()
+
+    assert invoke(changed) is None
+    assert db.rows[path]["state"] != "pre_dispatch_released"
+    assert db.rows[path]["pre_dispatch_releases"] == 0
+
+
+def test_forged_pre_dispatch_exception_is_indeterminate(fenced_summary):
+    from models.daily_sweep_dispatch import SweepPreDispatchError
+
+    db, path, invoke, _ = fenced_summary
+    assert invoke(lambda: (_ for _ in ()).throw(SweepPreDispatchError("daily_sweep_summary_input_budget"))) is None
+    assert db.rows[path]["state"] == "indeterminate"
+    assert invoke(lambda: pytest.fail("forged signal reopened")) is None
+
+
+def test_post_dispatch_cannot_replay_certified_error_or_clear_evidence(fenced_summary):
+    from utils.llm.memories import run_daily_sweep_summary_agent
+
+    db, path, invoke, fail = fenced_summary
+    evidence = {}
+    calls = []
+
+    def builder():
+        try:
+            fail()
+        except Exception as certified:
+
+            class Provider:
+                def invoke(self, *_args, **_kwargs):
+                    calls.append(1)
+                    evidence.clear()
+                    raise certified
+
+            run_daily_sweep_summary_agent(
+                "user-1",
+                [("c1", "summary")],
+                {},
+                llm=Provider(),
+                dispatch_evidence=evidence,
+            )
+        return ()
+
+    assert invoke(builder) is None
+    assert calls == [1]
+    assert db.rows[path]["state"] == "indeterminate"
+    assert invoke(lambda: pytest.fail("post-dispatch claim retried")) is None
+
+
+@pytest.mark.parametrize("exhausted", [False, True])
+def test_operator_attestation_reopens_once_and_consumes_receipt(fenced_summary, exhausted):
+    db, path, invoke, _ = fenced_summary
+    claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+    if exhausted:
+        for _ in range(4):
+            assert invoke(now=claimed) is None
+        assert db.rows[path]["state"] == "pre_dispatch_exhausted"
+    else:
+        assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("legacy unknown failure")), now=claimed) is None
+    repaired = claimed + timedelta(hours=1)
+    evidence = _operator_attestation(db.rows[path], repaired)
+    receipt = repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id="pre-dispatch",
+        provider_outcome_evidence=evidence,
+        repair_authority="operator:test",
+        now=repaired,
+    )
+    assert receipt["provider_outcome_summary"] == "operator_attested_no_dispatch"
+    calls = []
+    for _ in range(2):
+        assert invoke(lambda: calls.append(1) or ({"candidate_id": "ok"},), now=repaired) == ({"candidate_id": "ok"},)
+    assert calls == [1]
+    assert db.rows[("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch")]["consumed"] is True
+
+
+@pytest.mark.parametrize(
+    "invalid", ["confirmation", "reference", "unexpired", "wrong_claim", "worker", "actor", "identity"]
+)
+def test_core_repair_rejects_invalid_operator_attestation(fenced_summary, invalid):
+    db, path, invoke, _ = fenced_summary
+    claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+    assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("unknown")), now=claimed) is None
+    repaired = claimed + timedelta(hours=1)
+    evidence = _operator_attestation(db.rows[path], repaired)
+    if invalid == "confirmation":
+        evidence["confirmation"] = ""
+    elif invalid == "reference":
+        evidence["evidence_reference"] = ""
+    elif invalid == "unexpired":
+        repaired = claimed + timedelta(minutes=16)
+    elif invalid == "wrong_claim":
+        evidence["claimed_at"] = (claimed - timedelta(hours=1)).isoformat()
+    elif invalid == "worker":
+        evidence["claim_id"] = "other-worker"
+    elif invalid == "actor":
+        evidence["attested_by"] = "somebody-else"
+    else:
+        evidence["claim_identity"]["source_generation"] += 1
+    with pytest.raises(ValueError, match="valid claim-bound operator attestation"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id="pre-dispatch",
+            provider_outcome_evidence=evidence,
+            repair_authority="operator:test",
+            now=repaired,
+        )
+    assert ("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch") not in db.rows
+
+
+def test_receipt_consumption_revalidates_no_attempt_shape(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+    claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+    assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("unknown")), now=claimed) is None
+    fence = db.rows[path]
+    receipt_path = ("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch")
+    db.rows[receipt_path] = {
+        **fence,
+        "schema_version": "daily_memory_sweep_model_invocation_repair.v1",
+        "consumed": False,
+        "prior_state": "indeterminate",
+        "prior_claimed_at": claimed,
+        "prior_claim_id": fence["claim_id"],
+        "provider_outcome_evidence": {
+            "provider_outcome": "no_recorded_attempt",
+            "attempts": [],
+            "accounting_read_complete": True,
+            "uid": "user-1",
+            "feature": "memories",
+            "claimed_at": claimed.isoformat(),
+            "window_start": (claimed - timedelta(minutes=2)).isoformat(),
+            "window_end": (claimed + timedelta(hours=1)).isoformat(),
+        },
+    }
+    assert invoke(lambda: pytest.fail("invalid proof consumed"), now=claimed + timedelta(hours=1)) is None
+    assert db.rows[receipt_path]["consumed"] is False
+
+
+def test_existing_recorded_attempt_receipt_without_claim_token_remains_valid(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+    claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+    assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("unknown")), now=claimed) is None
+    fence = db.rows[path]
+    db.rows[("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch")] = {
+        **{
+            key: fence[key]
+            for key in (
+                "uid",
+                "invocation_id",
+                "account_generation",
+                "source_generation",
+                "sweep_generation",
+                "window_id",
+            )
+        },
+        "schema_version": "daily_memory_sweep_model_invocation_repair.v1",
+        "consumed": False,
+        "provider_outcome_evidence": {"jit_run_id": "actual-run", "attempts": [{"request_id": "req-1"}]},
+    }
+    assert invoke(lambda: ({"candidate_id": "ok"},), now=claimed + timedelta(hours=1)) == ({"candidate_id": "ok"},)
+
+
+def _operator_attestation(fence, now, *, authority="operator:test"):
+    return {
+        "provider_outcome": "operator_attested_no_dispatch",
+        "attempts": [],
+        "confirmation": "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED",
+        "evidence_reference": "incident:qa-sweep-reviewed",
+        "attested_by": authority,
+        "attested_at": now.isoformat(),
+        "claimed_at": fence["claimed_at"].isoformat(),
+        "claim_id": fence.get("claim_id"),
+        "claim_identity": {
+            key: fence[key]
+            for key in (
+                "uid",
+                "invocation_id",
+                "account_generation",
+                "source_generation",
+                "sweep_generation",
+                "window_id",
+            )
+        },
+    }
+
+
+def test_successful_builder_cannot_finalize_a_newer_claim(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+
+    def replace_claim():
+        # Only the top-level claim changes: removing finalize's token check
+        # would incorrectly publish A's result under B's durable claim.
+        db.rows[path]["claim_id"] = "claim-b"
+        return ({"candidate_id": "claim-a-output"},)
+
+    assert invoke(replace_claim) is None
+    assert db.rows[path]["claim_id"] == "claim-b"
+    assert db.rows[path]["state"] == "pending"
+    assert "candidate_digest" not in db.rows[path]
+    user = db.rows[("users", "user-1", MODEL_INVOCATION_PATH, "pre-dispatch")]
+    assert user["state"] == "pending" and "candidate_page" not in user
+
+
+def test_generation_close_cannot_mark_a_newer_claim_indeterminate(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+
+    def close_generation_and_replace_claim():
+        db.rows[path]["claim_id"] = "claim-b"
+        db.rows[("users", "user-1", "memory_state", "apply_control")]["source_generation"] += 1
+        return ({"candidate_id": "claim-a-output"},)
+
+    assert invoke(close_generation_and_replace_claim) is None
+    assert db.rows[path]["claim_id"] == "claim-b"
+    assert db.rows[path]["state"] == "pending"
+    assert "indeterminate_at" not in db.rows[path]

@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 
 ServerConversation _conversationWithSections() {
@@ -20,8 +21,22 @@ ServerConversation _conversationWithSections() {
   );
 }
 
-Future<void> _pumpSummary(WidgetTester tester, {App? app, AppResponse? response, bool asSliver = false}) async {
+Future<void> _pumpSummary(
+  WidgetTester tester, {
+  App? app,
+  AppResponse? response,
+  bool asSliver = false,
+  bool legacyApp = false,
+}) async {
   final conversation = _conversationWithSections();
+  final selection = response == null
+      ? ConversationSummarySelection.select(conversation)
+      : ConversationSummarySelection(
+          content: response.content,
+          kind: legacyApp || response.appId != null ? ConversationSummaryKind.app : ConversationSummaryKind.overview,
+          appId: response.appId,
+          resultIndex: legacyApp || response.appId != null ? 0 : null,
+        );
   await tester.pumpWidget(
     MaterialApp(
       theme: ThemeData.dark(),
@@ -32,7 +47,7 @@ Future<void> _pumpSummary(WidgetTester tester, {App? app, AppResponse? response,
             ? CustomScrollView(
                 slivers: [
                   AppResultDetailWidget(
-                    appResponse: response ?? AppResponse(conversation.structured.overview, appId: null),
+                    summarySelection: selection,
                     app: app,
                     conversation: conversation,
                     asSliver: true,
@@ -40,7 +55,7 @@ Future<void> _pumpSummary(WidgetTester tester, {App? app, AppResponse? response,
                 ],
               )
             : AppResultDetailWidget(
-                appResponse: response ?? AppResponse(conversation.structured.overview, appId: null),
+                summarySelection: selection,
                 app: app,
                 conversation: conversation,
               ),
@@ -89,6 +104,13 @@ void main() {
 
     testWidgets('an app result whose catalog lookup failed is Unknown App', (tester) async {
       await _pumpSummary(tester, app: null, response: AppResponse('App summary', appId: 'missing-app'));
+
+      expect(find.text('Unknown App'), findsOneWidget);
+      expect(find.text('Summary'), findsNothing);
+    });
+
+    testWidgets('an unattributed legacy app result is still Unknown App', (tester) async {
+      await _pumpSummary(tester, response: AppResponse('Imported app output.'), legacyApp: true);
 
       expect(find.text('Unknown App'), findsOneWidget);
       expect(find.text('Summary'), findsNothing);
