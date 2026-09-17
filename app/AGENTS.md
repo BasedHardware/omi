@@ -98,15 +98,6 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 `bash test.sh` bootstraps missing generated files with an empty `API_BASE_URL` so `test/` stays hermetic. Journey selection/receipts/CI wiring: `scripts/dev-harness/MOBILE_VERIFY.md`.
 
-Hermetic tests must not depend on the host calendar or timezone. Same-day fixtures use `localCalendarDay` (`app/test/support/local_day.dart`) or `conversationLocalDayKey` of the record — never `DateTime.utc` hours that straddle local midnight, and never a date-pinned seed compared against `DateTime.now()`. Pin `ConversationDetailProvider.selectedDate` to the record's local day key. `DateTime.now()` is fine for elapsed-time assertions. The CI second timezone pass is the same command under a forced `TZ`:
-
-```bash
-TZ=Pacific/Kiritimati bash app/test.sh
-TZ=Pacific/Pago_Pago bash app/test.sh
-TZ=Pacific/Kiritimati make mobile-verify ARGS="fast --all"
-TZ=Pacific/Pago_Pago make mobile-verify ARGS="fast --all"
-```
-
 Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manifest, local + CI).
 
 CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
