@@ -26,6 +26,9 @@ class RecordingAdapter implements AnalyticsAdapter {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
+List<List<Object>> emissionPayloads(List<(String, Map<String, Object>)> events) =>
+    events.map((event) => <Object>[event.$1, event.$2]).toList();
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
@@ -71,7 +74,7 @@ void main() {
       typed.emit(event);
     }
     await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events, expected);
+    expect(emissionPayloads(adapter.events), emissionPayloads(expected));
     expect(adapter.superProperties.keys, containsAll(['git_sha', 'build_number']));
     expect(adapter.events.every((e) => !e.$2.containsKey('correlation_id')), isTrue);
   });

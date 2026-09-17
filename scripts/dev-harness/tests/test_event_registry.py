@@ -28,10 +28,10 @@ def test_no_write_only_or_decorative_consumer():
         assert registry.validate(doc)
 
 
-def test_free_text_and_identity_properties_are_rejected():
-    for key, value in [('email', {'type': 'bool'}), ('anything', {'type': 'String'}), ('metadata', {'type': 'Map'}), ('transcript', {'type': 'bool'}), ('deviceAddress', {'type': 'bool'})]:
+def test_free_text_and_identity_values_cannot_use_an_untyped_property():
+    for key, value in [('email', {'type': 'String'}), ('anything', {'type': 'Object'}), ('metadata', {'type': 'Map'}), ('transcript', {'type': 'String'}), ('deviceAddress', {'type': 'String'})]:
         doc = source()
-        doc['events'][0]['properties'][key] = value
+        doc['events'][0]['properties'][key] = {**value, 'wire_name': key}
         assert registry.validate(doc)
 
 
@@ -46,12 +46,35 @@ def test_wire_change_or_removal_cannot_silently_break_old_consumers():
     assert registry.validate(doc, prior=prior)
 
 
-def test_legacy_growth_allowed_but_adopted_and_new_calls_rejected():
+def test_legacy_and_unadopted_new_files_remain_free_but_adopted_calls_fail():
     path = 'app/lib/utils/analytics/analytics_manager.dart'
-    assert not registry.raw_violations(path, 'track("new")', 'track("old")', [])
-    assert registry.raw_violations(path, 'receiver.track("new")', 'old', [path])
-    assert registry.raw_violations('app/lib/new.dart', 'analytics.trackEvent("new")', None, [])
+    assert not registry.raw_violations(path, 'analytics.track("new")', 'analytics.track("old")', [])
+    assert registry.raw_violations(path, 'analytics.track("new")', 'old', [path])
+    assert not registry.raw_violations('app/lib/new.dart', 'analytics.trackEvent("new")', None, [])
     assert not registry.raw_violations('app/lib/new.dart', '// track("comment")', None, [])
     prior = source()
     prior['adopted_files'] = [path]
     assert registry.validate(source(), prior=prior)
+
+
+def test_single_transport_bridge_and_unrelated_methods_are_distinct():
+    bridge = 'AnalyticsManager().track(event.wireName, properties: event.properties);'
+    assert not registry.raw_violations(registry.BRIDGE, bridge, None, [])
+    assert registry.raw_violations(registry.BRIDGE, bridge + bridge, None, [])
+    assert registry.raw_violations(registry.BRIDGE, 'Posthog().capture(eventName: "bad");', None, [])
+    assert not registry.raw_violations('app/lib/camera.dart', 'camera.capture(); counter.track();', None, [])
+    assert not registry.raw_violations('app/lib/camera.dart', 'print("analytics.track(example)");', None, [])
+    assert registry.raw_violations('app/lib/new.dart', 'PlatformManager.instance.analytics.track("new");', None, ['app/lib/new.dart'])
+
+
+def test_dart_parameter_names_do_not_rename_legacy_wire_properties():
+    doc = source()
+    doc['events'][-1]['properties']['enabled']['wire_name'] = 'was_enabled'
+    assert registry.validate(doc) == []
+    code, plan = registry.render(doc)
+    assert '"was_enabled": enabled' in code
+    assert 'was_enabled' in plan
+    doc['events'][-1]['properties']['enabled']['wire_name'] = 'email_notifications_enabled'
+    assert registry.validate(doc) == [], 'a boolean preference is not an email address'
+    doc['events'][-1]['properties']['enabled']['wire_name'] = 'git_sha'
+    assert registry.validate(doc), 'provenance stays SDK-owned'

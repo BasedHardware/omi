@@ -91,7 +91,7 @@ checks:
     lanes: ["local", "ci"]
     reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
   - id: mobile-event-registry
-    command: ["python3", "scripts/check_event_registry.py"]
+    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
     triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"

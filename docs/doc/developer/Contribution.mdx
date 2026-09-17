@@ -85,7 +85,7 @@ For typed mobile analytics, add events and executable consumer references to
 `contracts/analytics/events.json`, then run
 `python3 scripts/check_event_registry.py --write` and commit the generated Dart
 API and tracking plan. Preserve emitted names and properties during migration.
-The raw-call check covers adopted/new files; existing unmigrated files stay
+The raw-call check covers adopted files; new and existing unadopted files stay
 unrestricted. See `app/lib/utils/analytics/registry/REGISTRY.md` for batch tests.
 
 ### Contributing with an AI agent

@@ -12,7 +12,8 @@
       "properties": {},
       "consumers": [
         "mobile-instrumentation-presence"
-      ]
+      ],
+      "correlation": null
     },
     {
       "id": "phoneMicRecordingStarted",
@@ -24,7 +25,8 @@
       "properties": {},
       "consumers": [
         "mobile-instrumentation-presence"
-      ]
+      ],
+      "correlation": null
     },
     {
       "id": "phoneMicRecordingStopped",
@@ -36,7 +38,8 @@
       "properties": {},
       "consumers": [
         "mobile-instrumentation-presence"
-      ]
+      ],
+      "correlation": null
     },
     {
       "id": "transcribeLaterToggled",
@@ -47,12 +50,14 @@
       "intent": null,
       "properties": {
         "enabled": {
-          "type": "bool"
+          "type": "bool",
+          "wire_name": "enabled"
         }
       },
       "consumers": [
         "mobile-instrumentation-presence"
-      ]
+      ],
+      "correlation": null
     }
   ]
 }
