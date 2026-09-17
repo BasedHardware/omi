@@ -10018,4 +10018,7 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.';
+
+  @override
+  String get home => 'Sākums';
 }

@@ -6,6 +6,7 @@ import { X, Clock, Calendar, MessageSquare, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getConversation } from '@/lib/api';
 import type { Conversation } from '@/types/conversation';
+import { selectConversationSummary } from '@/lib/conversationSummarySelection';
 
 interface ConversationPreviewPanelProps {
   conversationIds: string[];
@@ -90,103 +91,106 @@ export function ConversationPreviewPanel({
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
           className={cn(
             'h-full flex-shrink-0 overflow-hidden',
-            'bg-bg-secondary border-l border-white/[0.06]',
+            'border-l border-white/[0.06] bg-bg-secondary',
           )}
         >
-          <div className="w-[420px] h-full flex flex-col">
+          <div className="flex h-full w-[420px] flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between border-b border-white/[0.06] p-4">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-text-primary" />
+                <MessageSquare className="h-4 w-4 text-text-primary" />
                 <span className="text-sm font-medium text-text-primary">
                   Source Conversations
                 </span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-white/[0.08] text-text-primary">
+                <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-xs text-text-primary">
                   {conversationIds.length}
                 </span>
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-white/[0.05] transition-colors"
+                className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-white/[0.05] hover:text-text-primary"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* Conversation List */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div className="flex-1 space-y-2 overflow-y-auto p-3">
               {loading ? (
                 // Loading skeletons
                 [...Array(Math.min(conversationIds.length, 5))].map((_, i) => (
-                  <div key={i} className="p-3 rounded-xl bg-bg-tertiary animate-pulse">
+                  <div key={i} className="animate-pulse rounded-xl bg-bg-tertiary p-3">
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-bg-quaternary rounded" />
+                      <div className="h-8 w-8 rounded bg-bg-quaternary" />
                       <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-bg-quaternary rounded w-3/4" />
-                        <div className="h-3 bg-bg-quaternary rounded w-1/2" />
-                        <div className="h-12 bg-bg-quaternary rounded mt-2" />
+                        <div className="h-4 w-3/4 rounded bg-bg-quaternary" />
+                        <div className="h-3 w-1/2 rounded bg-bg-quaternary" />
+                        <div className="mt-2 h-12 rounded bg-bg-quaternary" />
                       </div>
                     </div>
                   </div>
                 ))
               ) : conversations.length > 0 ? (
-                conversations.map((conversation) => (
-                  <motion.button
-                    key={conversation.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    onClick={() => onOpenFull(conversation.id)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-xl',
-                      'bg-bg-tertiary hover:bg-bg-quaternary',
-                      'border border-transparent hover:border-white/25',
-                      'transition-all duration-150 group',
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      {/* Emoji */}
-                      <span className="text-xl flex-shrink-0">
-                        {conversation.structured.emoji || '💬'}
-                      </span>
+                conversations.map((conversation) => {
+                  const summary = selectConversationSummary(conversation);
+                  return (
+                    <motion.button
+                      key={conversation.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      onClick={() => onOpenFull(conversation.id)}
+                      className={cn(
+                        'w-full rounded-xl p-3 text-left',
+                        'bg-bg-tertiary hover:bg-bg-quaternary',
+                        'border border-transparent hover:border-white/25',
+                        'group transition-all duration-150',
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Emoji */}
+                        <span className="flex-shrink-0 text-xl">
+                          {conversation.structured.emoji || '💬'}
+                        </span>
 
-                      <div className="flex-1 min-w-0">
-                        {/* Title */}
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-medium text-text-primary line-clamp-1 group-hover:text-text-primary transition-colors">
-                            {conversation.structured.title || 'Untitled'}
-                          </h4>
-                          <ExternalLink className="w-3.5 h-3.5 text-text-quaternary group-hover:text-text-primary flex-shrink-0 mt-0.5 transition-colors" />
-                        </div>
+                        <div className="min-w-0 flex-1">
+                          {/* Title */}
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="line-clamp-1 text-sm font-medium text-text-primary transition-colors group-hover:text-text-primary">
+                              {conversation.structured.title || 'Untitled'}
+                            </h4>
+                            <ExternalLink className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-text-quaternary transition-colors group-hover:text-text-primary" />
+                          </div>
 
-                        {/* Time info */}
-                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-text-quaternary">
-                          <span className="flex items-center gap-0.5">
-                            <Clock className="w-2.5 h-2.5" />
-                            {formatTime(conversation.started_at)}
-                          </span>
-                          {conversation.finished_at && (
-                            <span>
-                              ·{' '}
-                              {formatDuration(
-                                conversation.started_at,
-                                conversation.finished_at,
-                              )}
+                          {/* Time info */}
+                          <div className="mt-0.5 flex items-center gap-2 text-[10px] text-text-quaternary">
+                            <span className="flex items-center gap-0.5">
+                              <Clock className="h-2.5 w-2.5" />
+                              {formatTime(conversation.started_at)}
                             </span>
+                            {conversation.finished_at && (
+                              <span>
+                                ·{' '}
+                                {formatDuration(
+                                  conversation.started_at,
+                                  conversation.finished_at,
+                                )}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Summary - selected body, truncated to ~3 lines */}
+                          {summary.content && (
+                            <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-text-tertiary">
+                              {summary.content}
+                            </p>
                           )}
                         </div>
-
-                        {/* Summary - truncated to ~3 lines */}
-                        {conversation.structured.overview && (
-                          <p className="text-xs text-text-tertiary leading-relaxed mt-2 line-clamp-3">
-                            {conversation.structured.overview}
-                          </p>
-                        )}
                       </div>
-                    </div>
-                  </motion.button>
-                ))
+                    </motion.button>
+                  );
+                })
               ) : (
-                <div className="flex items-center justify-center h-32">
+                <div className="flex h-32 items-center justify-center">
                   <p className="text-sm text-text-tertiary">No conversations found</p>
                 </div>
               )}

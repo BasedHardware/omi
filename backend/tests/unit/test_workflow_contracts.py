@@ -412,12 +412,29 @@ def test_backend_static_contract_job_uses_the_pinned_backend_environment():
     assert "python3 -c 'import pytest, yaml'" in pre_deploy
 
 
+def _github_jobs(workflow_text: str) -> dict[str, str]:
+    """Map top-level GitHub Actions job ids to their YAML bodies."""
+    match = re.search(r"^jobs:\n", workflow_text, re.MULTILINE)
+    assert match is not None
+    body = workflow_text[match.end() :]
+    tokens = re.split(r"^(  [A-Za-z0-9_-]+:)\n", body, flags=re.MULTILINE)
+    jobs: dict[str, str] = {}
+    index = 1
+    while index < len(tokens):
+        job_id = tokens[index].strip()[:-1]
+        job_body = tokens[index + 1] if index + 1 < len(tokens) else ""
+        jobs[job_id] = job_body
+        index += 2
+    return jobs
+
+
 def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     repo = BACKEND_DIR.parent
     mobile_checks = (repo / '.github/workflows/mobile-app-checks.yml').read_text(encoding='utf-8')
-    generated = mobile_checks.split('\n  generated-files:\n', 1)[1].split('\n  analyze:\n', 1)[0]
-    android = mobile_checks.split('\n  android-compile-smoke:\n', 1)[1]
-    changes = mobile_checks.split('\n  changes:\n', 1)[1].split('\n  generated-files:\n', 1)[0]
+    jobs = _github_jobs(mobile_checks)
+    generated = jobs["generated-files"]
+    android = jobs["android-compile-smoke"]
+    changes = jobs["changes"]
     resolver = _load_repo_script("pre_push_ci_prediction")
 
     regular_dart = "app/lib/utils/date_formats.dart"
@@ -450,7 +467,68 @@ def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
 
     pinned_version = re.search(r"flutter-version:\s*([^\s#]+)", repo_checks)
     assert pinned_version is not None
-    assert mobile_checks.count(f"flutter-version: {pinned_version.group(1)}") == 3
+    pinned = f"flutter-version: {pinned_version.group(1)}"
+    # Every Flutter-installing job must use the repo pin. A new job that
+    # installs Flutter without this pin (or a mismatched version) fails
+    # because the two counts diverge. The floor is the historical four
+    # (generated-files, analyze-and-test, journeys-hermetic,
+    # android-compile-smoke); android-unit-tests adds one more.
+    action_count = mobile_checks.count("uses: subosito/flutter-action")
+    assert action_count == mobile_checks.count(pinned)
+    assert action_count >= 5
+
+
+def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_parallel():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    jobs = _github_jobs(mobile_checks)
+
+    android = jobs["android-compile-smoke"]
+    unit_tests = jobs["android-unit-tests"]
+
+    assert "name: Android Compile Smoke" in mobile_checks
+    assert "name: Android JVM Unit Tests" in mobile_checks
+    assert "needs: changes" in android
+    assert "needs: changes" in unit_tests
+    assert "needs: android-compile-smoke" not in unit_tests
+    assert "needs: android-unit-tests" not in android
+    assert "has_app_compile_smoke" in android
+    assert "has_app_compile_smoke" in unit_tests
+
+    # PRs and main both stay arm64-only (disk; extra ABIs OOM'd ubuntu-latest).
+    assert "flutter build apk --debug --flavor dev --target-platform android-arm64" in android
+    android_run_lines = {line.strip() for line in android.splitlines()}
+    assert "flutter build apk --debug --flavor dev" not in android_run_lines
+    assert "GITHUB_EVENT_NAME" not in android
+    assert "testDevDebugUnitTest" not in android
+    assert "actions/upload-artifact@v7" in android
+    assert "app-dev-debug-${{ github.event.pull_request.head.sha || github.sha }}" in android
+    assert "app/build/app/outputs/flutter-apk/app-dev-debug.apk" in android
+    assert "retention-days: 5" in android
+    assert "${{ secrets." not in android
+    assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" in android
+
+    assert "./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64" in unit_tests
+    unit_run_lines = {line.strip() for line in unit_tests.splitlines()}
+    assert "flutter build apk --debug --flavor dev --target-platform android-arm64" not in unit_run_lines
+    assert "uses: gradle/actions/setup-gradle@v6" in android
+    assert "uses: gradle/actions/setup-gradle@v6" in unit_tests
+    # Configuration cache broke AGP 8.11.1 + Kotlin 2.2.20 in CI
+    # (run 35207698338): warn mode does not downgrade a cache-state
+    # serialization failure. Savings stay in the Gradle User Home cache
+    # and the parallel JVM job.
+    assert "org.gradle.configuration-cache" not in android
+    assert "org.gradle.configuration-cache" not in unit_tests
+    assert "--config-only" not in android
+    assert "flutter build apk --debug --flavor dev --target-platform android-arm64 --config-only" in unit_tests
+    assert "${{ secrets." not in unit_tests
+    assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" in unit_tests
+    # Fork PRs must keep working: debug keystore is the in-repo prebuilt file.
+    assert "app/setup/prebuilt/debug.keystore" in android
+    assert "app/setup/prebuilt/debug.keystore" in unit_tests
+    assert "dart-tests-kiritimati" not in jobs
+    assert "Pacific/Kiritimati" not in mobile_checks
+    assert "Pacific/Pago_Pago" not in mobile_checks
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():
@@ -579,3 +657,34 @@ def test_workflow_contracts_static_check_validates_all_sources_when_manifest_cha
 
     assert len(errors) == 1
     assert "bad_contract returns a positional tuple with 3 fields" in errors[0]
+
+
+def test_codemagic_mobile_app_builds_inject_build_provenance_defines():
+    repo = BACKEND_DIR.parent
+    cm = (repo / "codemagic.yaml").read_text(encoding="utf-8")
+    script = repo / "app/scripts/build_provenance_dart_defines.sh"
+    assert script.is_file()
+    text = script.read_text(encoding="utf-8")
+    assert "OMI_GIT_SHA" in text
+    assert "OMI_BUILD_NUMBER" in text
+    assert "OMI_GIT_DIRTY" in text
+    assert "diff --quiet HEAD --" in text
+    assert "git status --porcelain" not in text
+    assert "CM_BUILD_ID" in text
+    assert "diff --name-only HEAD --" in text
+    assert "invalid OMI_GIT_SHA" in text
+    assert "invalid OMI_BUILD_NUMBER" in text
+
+    for workflow_id in (
+        "ios-internal-auto",
+        "android-internal-auto",
+        "ios-prod-testflight",
+        "android-prod-internal",
+        "ios-prod-patch",
+        "android-prod-patch",
+    ):
+        assert f"  {workflow_id}:" in cm
+
+    assert cm.count("scripts/build_provenance_dart_defines.sh") == 6
+    assert "shorebird patch ios" in cm
+    assert "shorebird patch android" in cm

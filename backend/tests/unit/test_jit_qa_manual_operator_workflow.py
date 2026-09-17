@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 
 import yaml
+import pytest
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_manual_operator.yml"
 QA_CLOUD_WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_cloud_run.yml"
@@ -463,3 +464,36 @@ def test_seed_bash_step_runs_with_fake_cli_and_cannot_lose_source_sha():
         assert receipt["source_sha"] == "a" * 40
         assert not (operator_dir / "operation.json").exists()
         assert [path.name for path in (operator_dir / "artifacts").iterdir()] == ["operator-receipt.json"]
+
+
+@pytest.mark.parametrize(
+    "confirmation,reference,allowed",
+    [
+        ("", "", True),
+        ("ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED", "incident:reviewed", True),
+        ("", "incident:reviewed", False),
+        ("ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED", "", False),
+        ("no_recorded_attempt", "incident:reviewed", False),
+    ],
+)
+def test_repair_attestation_workflow_admission_requires_explicit_pair(confirmation, reference, allowed):
+    # Exercise local input admission only; stop before any git/network operation.
+    admission = _step("Admit exact source and operation")["run"].split("git fetch --no-tags", 1)[0]
+    result = subprocess.run(
+        ["bash", "-c", admission],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "GITHUB_REF": "refs/heads/main",
+            "SOURCE_SHA": "a" * 40,
+            "OPERATION": "sweep-repair",
+            "CONFIRMATION": "SWEEP_REPAIR_QA",
+            "INVOCATION_ID": "inv-1",
+            "RUN_ID": "",
+            "RESUME_EXECUTION": "",
+            "REPAIR_ATTESTATION_CONFIRMATION": confirmation,
+            "REPAIR_ATTESTATION_REFERENCE": reference,
+        },
+    )
+    assert (result.returncode == 0) is allowed, result.stderr

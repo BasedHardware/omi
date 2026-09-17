@@ -3262,5 +3262,6 @@
     },
     "tapPlusToStartRecording": "แตะ + เพื่อเริ่มบันทึก",
     "processingTakingLonger": "ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ",
-    "speechProfileEnrollmentPrompt": "เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที"
+    "speechProfileEnrollmentPrompt": "เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที",
+    "home": "หน้าหลัก"
 }

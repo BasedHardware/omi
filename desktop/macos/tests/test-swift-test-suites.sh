@@ -276,6 +276,57 @@ case "$derived_serial_scratch" in
   */serial-*.build) ;;
   *) fail "runner did not derive sequential execution from the owner-authority fixture" ;;
 esac
+
+# The two production helper surfaces below mutate the same process-global auth
+# domain without naming RuntimeOwnerAuthorityTestFixture in their callers. A
+# source-only derivation that recognizes only the fixture misses both sides of
+# the #12039 race: MemoryAtlas changes auth_userId while Kernel projection is
+# installing its temporary harness owner.
+cat >"$TMPDIR/tests/OwnerAuthorityAdopterTests.swift" <<'SWIFT'
+import XCTest
+final class OwnerAuthorityAdopterTests: XCTestCase {
+    func testOne() {
+        RewindStorageTestIsolation.signInForTests(userId: "fixture-owner")
+    }
+}
+SWIFT
+: >"$FAKE_XCRUN_SCRATCH_LOG"
+rm -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap"
+if "$RUNNER" >"$TMPDIR/storage-auth-runner.out" 2>"$TMPDIR/storage-auth-runner.err"; then
+  fail "storage auth fixture run unexpectedly succeeded despite AlphaTests failure"
+fi
+storage_auth_scratch="$(awk -F '\t' '$1 == "OwnerAuthorityAdopterTests" {print $2}' \
+  "$FAKE_XCRUN_SCRATCH_LOG")"
+case "$storage_auth_scratch" in
+  */serial-*.build) ;;
+  *) fail "runner did not serialize the hidden Rewind storage auth mutation" ;;
+esac
+if [ -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap" ]; then
+  fail "Rewind storage auth mutation overlapped another suite"
+fi
+
+cat >"$TMPDIR/tests/OwnerAuthorityAdopterTests.swift" <<'SWIFT'
+import XCTest
+final class OwnerAuthorityAdopterTests: XCTestCase {
+    func testOne() async {
+        await RuntimeOwnerIdentity.withAutomationOwnerIfMissing("fixture-owner") {}
+    }
+}
+SWIFT
+: >"$FAKE_XCRUN_SCRATCH_LOG"
+rm -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap"
+if "$RUNNER" >"$TMPDIR/temporary-owner-runner.out" 2>"$TMPDIR/temporary-owner-runner.err"; then
+  fail "temporary-owner fixture run unexpectedly succeeded despite AlphaTests failure"
+fi
+temporary_owner_scratch="$(awk -F '\t' '$1 == "OwnerAuthorityAdopterTests" {print $2}' \
+  "$FAKE_XCRUN_SCRATCH_LOG")"
+case "$temporary_owner_scratch" in
+  */serial-*.build) ;;
+  *) fail "runner did not serialize temporary automation-owner transitions" ;;
+esac
+if [ -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap" ]; then
+  fail "temporary automation-owner transition overlapped another suite"
+fi
 if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass ratcheted skips to SwiftPM"
 fi

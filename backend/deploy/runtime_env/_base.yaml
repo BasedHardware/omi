@@ -81,6 +81,8 @@ environment_shared:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
           category: rollout
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          category: rollout
         WAKE_WORD_ADJUDICATION_ENABLED:
           value: 'true'
           category: rollout
@@ -203,6 +205,8 @@ environment_shared:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
           category: rollout
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          category: rollout
     config_map:
       name: '{env}-omi-backend-config'
       entries:
@@ -248,6 +252,10 @@ environment_shared:
   desktop_backend:
     env:
       MEMORY_BELIEF_MODEL_ENABLED:
+        category: rollout
+      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+        category: rollout
+      BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
         category: rollout
       MEMORY_BELIEF_AUTOMATION_PAUSED:
         value: 'false'
@@ -323,6 +331,10 @@ environment_shared:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            category: rollout
+          BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
             category: rollout
           WAKE_WORD_ADJUDICATION_ENABLED:
             value: 'true'
@@ -505,6 +517,8 @@ environment_shared:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -527,6 +541,8 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
