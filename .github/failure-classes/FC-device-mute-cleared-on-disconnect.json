@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "FC-device-mute-cleared-on-disconnect",
   "violated_contract": "An explicit pause/mute is a privacy boundary owned by the CV1 pendant. Disconnecting Bluetooth must not resume capture, and reconnect must restore the paused UI from device state. Only an explicit unmute may start storing or transmitting audio again.",
-  "canonical_prevention": "Persist mute in NVS (`omi/muted`), expose it on the settings mute characteristic, drop pusher TX and offline storage while muted, write the flag from the app on pause/resume, and resolve reconnect pause from the device bit with a local-pref fallback for firmware that lacks the characteristic.",
+  "canonical_prevention": "Persist mute in NVS under the settings key muted, expose it on the settings mute characteristic, drop pusher TX and offline storage while muted, write the flag from the app on pause/resume, and resolve reconnect pause from the device bit with a local-pref fallback for firmware that lacks the characteristic.",
   "canonical_prevention_artifact": [
     "app/test/unit/device_mute_sync_test.dart",
     "app/test/unit/omi_capture_mute_ble_test.dart",
