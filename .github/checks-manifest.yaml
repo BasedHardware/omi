@@ -1149,6 +1149,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
 
+  - id: twitter-app-tweet-offset-tests
+    command: ["python3", "plugins/omi-twitter-app/test_tweet_offsets.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "extract_tweet_content located the trigger phrase in a stripped, lowercased copy of the transcript but sliced the original text with those offsets, so leading whitespace or newlines shifted the cut ('  Tweet now hello' -> 'ow hello') and the shifted fragment was what reached the AI extraction step and its fallback post; the suite pins that the content after the trigger comes back intact"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

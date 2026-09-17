@@ -48,24 +48,21 @@ class TweetDetector:
     @classmethod
     def extract_tweet_content(cls, text: str) -> Optional[str]:
         """Extract tweet content after trigger phrase."""
-        normalized = cls.normalize_text(text)
-        
-        # Find the trigger phrase
-        trigger_index = -1
-        matched_trigger = None
+        # Match the trigger case-insensitively on the original text so the
+        # offsets index the string we slice. Searching a stripped, lowercased
+        # copy shifted the cut by the leading whitespace ("  Tweet now hello"
+        # came back as "ow hello").
+        trigger_match = None
         for trigger in cls.TRIGGER_PHRASES:
-            idx = normalized.find(trigger)
-            if idx != -1:
-                trigger_index = idx
-                matched_trigger = trigger
+            trigger_match = re.search(re.escape(trigger), text, re.IGNORECASE)
+            if trigger_match:
                 break
         
-        if trigger_index == -1:
+        if not trigger_match:
             return None
         
         # Extract content after trigger
-        start_index = trigger_index + len(matched_trigger)
-        content = text[start_index:].strip()
+        content = text[trigger_match.end():].strip()
         
         # Remove explicit end phrases if present
         for end_phrase in cls.END_PHRASES:
