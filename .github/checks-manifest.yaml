@@ -36,9 +36,9 @@ checks:
     reason: "#13937: the Omi backend sends JSON null for omitted optional tool params and body.get(key, default) only applies defaults to absent keys, so min(None, 30) crashed list_events and sibling handlers trusted untyped optionals; the suite executes the production tool handlers through the calendar_api_request seam"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
-    triggers: ["plugins/omi-hacker-news-app/**"]
+    triggers: ["plugins/omi-hacker-news-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+    reason: "#13211/#14193: escaped literal angle-bracket text must survive cleanup, and discussions/searches must safely handle null comments, non-dict payloads, and pooled connections"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
