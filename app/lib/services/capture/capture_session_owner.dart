@@ -59,6 +59,8 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
   bool isCurrent(CaptureSessionToken token) =>
       !_closed && token.generation == _generation && token.identity == _identity;
 
+  bool _connectIsCurrent(int generation, int epoch) => !_closed && generation == _generation && epoch == _connectEpoch;
+
   void replaceSession(String identity) {
     _identity = identity;
     _generation++;
@@ -100,17 +102,28 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
     () async {
       try {
         final result = await open();
-        final superseded = _closed || generation != _generation || epoch != _connectEpoch;
-        if (superseded) {
+        if (!_connectIsCurrent(generation, epoch)) {
           await close(result);
           if (!completer.isCompleted) completer.complete(null);
           return;
         }
         final previous = _published;
-        _published = _PublishedConnect(result, (dynamic value) => close(value as T));
+        _published = null;
         if (previous != null) {
-          await previous.close(previous.value);
+          try {
+            await previous.close(previous.value);
+          } catch (error, stack) {
+            await close(result);
+            if (!completer.isCompleted) completer.completeError(error, stack);
+            return;
+          }
         }
+        if (!_connectIsCurrent(generation, epoch)) {
+          await close(result);
+          if (!completer.isCompleted) completer.complete(null);
+          return;
+        }
+        _published = _PublishedConnect(result, (dynamic value) => close(value as T));
         if (!completer.isCompleted) completer.complete(result);
       } catch (error, stack) {
         if (!completer.isCompleted) completer.completeError(error, stack);
@@ -146,6 +159,14 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
   }
 
   Future<void> _drainClose() async {
+    final inFlight = _inFlight?.future;
+    if (inFlight != null) {
+      try {
+        await inFlight;
+      } catch (_) {
+        // The connect caller already received the error.
+      }
+    }
     final published = _published;
     _published = null;
     if (published != null) {

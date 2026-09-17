@@ -1873,10 +1873,10 @@ class CaptureController extends ChangeNotifier
       _phoneMic.stop();
       _phoneBatchGeolocationPreference.invalidateSession();
       _endOfflineSession();
-      await _cleanupCurrentState();
-      _phoneMicBatchActive = false;
       _rollCaptureSession('stopped');
       _clearSessionLocation();
+      await _cleanupCurrentState();
+      _phoneMicBatchActive = false;
       updateRecordingState(RecordingState.stop);
       _recordingTelemetry.complete(reason: reason);
       return;
@@ -1894,12 +1894,13 @@ class CaptureController extends ChangeNotifier
       }
       _phoneMicWalActive = false;
     }
+    // Invalidate before native/WAL teardown so in-flight work cannot publish.
+    _rollCaptureSession('stopped');
+    _clearSessionLocation();
     await _cleanupCurrentState(disableNativeBackground: true);
     _micInterrupted = false;
     _phoneMic.stop();
     await _wal.getSyncs().phone.finalizeCurrentSession();
-    _rollCaptureSession('stopped');
-    _clearSessionLocation();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
     _recordingTelemetry.complete(reason: reason);
@@ -2049,10 +2050,10 @@ class CaptureController extends ChangeNotifier
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
-    await _cleanupCurrentState(disableNativeBackground: true);
-    await _wal.getSyncs().phone.finalizeCurrentSession();
     _rollCaptureSession('stopped');
     _clearSessionLocation();
+    await _cleanupCurrentState(disableNativeBackground: true);
+    await _wal.getSyncs().phone.finalizeCurrentSession();
     if (cleanDevice) {
       _updateRecordingDevice(null);
     }
