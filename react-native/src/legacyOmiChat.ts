@@ -13,10 +13,39 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function presentPaddedKnown(value: unknown): void {
-  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
-    throw new Error('Omi chat message is malformed');
+function presentNullableDate(value: unknown, malformed: string): void {
+  if (value === undefined || value === null) {
+    return;
   }
+  if (typeof value !== 'string') {
+    throw new Error(malformed);
+  }
+  if (visibleDisplayText(value) !== value) {
+    throw new Error(malformed);
+  }
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (value === '' || !Number.isFinite(parsed)) {
+    throw new Error(malformed);
+  }
+}
+
+function presentDefaultInt(value: unknown, malformed: string): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new Error(malformed);
+    }
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new Error(malformed);
+    }
+    return;
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    return;
+  }
+  throw new Error(malformed);
 }
 
 function timestampMs(value: unknown): number {
@@ -57,7 +86,10 @@ function parseOmiChatFiles(
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
       continue;
     }
-    presentPaddedKnown((raw as Record<string, unknown>).created_at);
+    presentNullableDate(
+      (raw as Record<string, unknown>).created_at,
+      'Omi chat message is malformed',
+    );
   }
   if (files.length === 0 || ids.length === 0) {
     return [];
@@ -103,12 +135,7 @@ function parseOmiChatMemories(
   }
   return value.map(raw => {
     const row = object(raw);
-    if (
-      typeof row.created_at === 'string' &&
-      visibleDisplayText(row.created_at) !== row.created_at
-    ) {
-      throw new Error('Omi chat memories are malformed');
-    }
+    presentNullableDate(row.created_at, 'Omi chat memories are malformed');
     const structured = object(row.structured);
     if (
       typeof structured.title !== 'string' ||
@@ -823,8 +850,8 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   ) {
     throw new Error('Omi chat message is malformed');
   }
-  presentPaddedKnown(row.rating);
-  presentPaddedKnown(row.journal_revision);
+  presentDefaultInt(row.rating, 'Omi chat message is malformed');
+  presentDefaultInt(row.journal_revision, 'Omi chat message is malformed');
   const memories = parseOmiChatMemories(row.memories);
   const attachments = parseOmiChatFiles(row.files, row.files_id);
   const chart = parseOmiChatChart(row.chart_data);
