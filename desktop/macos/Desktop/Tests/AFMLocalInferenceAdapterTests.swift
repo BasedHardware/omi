@@ -427,15 +427,17 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     #endif
   }
 
-  func testMacOS27RefusalIsInvalidResponseAndNotRetryable() async throws {
-    #if compiler(>=6.4)
-      #if canImport(FoundationModels)
-        guard #available(macOS 27.0, *) else {
-          throw XCTSkip("LanguageModelError needs macOS 27+")
-        }
-        let refusal = LanguageModelError.refusal(
-          LanguageModelError.Refusal(explanation: "no", debugDescription: "no")
+  func testGenerationErrorRefusalIsInvalidResponseAndNotRetryable() async throws {
+    #if canImport(FoundationModels)
+      guard #available(macOS 26.0, *) else {
+        throw XCTSkip("FoundationModels needs macOS 26+")
+      }
+      if #available(macOS 27.0, *) {
+        throw XCTSkip(
+          "LanguageModelError mapping waits on an Xcode pin newer than 26.6; GenerationError is deprecated on this SDK"
         )
+      } else {
+        let refusal = AFMDeprecatedGenerationErrorFixtures.refusal
         let mapped = AFMLocalInferenceAdapter.mapUnknownError(refusal)
         XCTAssertEqual(mapped, .invalidResponse("refusal"))
         XCTAssertFalse(LocalInferenceRuntime.isRetryable(mapped))
@@ -464,91 +466,70 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
           return XCTFail("refusal must fail closed without retrying")
         }
         XCTAssertEqual(session.callCount, 1)
-      #else
-        throw XCTSkip("FoundationModels SDK is not present")
-      #endif
+      }
     #else
-      throw XCTSkip("macOS 27 LanguageModelError is not in this SDK")
+      throw XCTSkip("FoundationModels SDK is not present")
     #endif
   }
 
-  func testMacOS27NonretryableFrameworkErrorsAreClassified() throws {
-    #if compiler(>=6.4)
-      #if canImport(FoundationModels)
-        guard #available(macOS 27.0, *) else {
-          throw XCTSkip("LanguageModelError needs macOS 27+")
-        }
-        let cases: [(Error, LocalInferenceError)] = [
-          (
-            LanguageModelError.guardrailViolation(
-              LanguageModelError.GuardrailViolation(debugDescription: "g")
-            ),
-            .invalidResponse("guardrail")
-          ),
-          (
-            LanguageModelError.contextSizeExceeded(
-              LanguageModelError.ContextSizeExceeded(contextSize: 8192, tokenCount: 9000, debugDescription: "c")
-            ),
-            .invalidResponse("context_size_exceeded")
-          ),
-          (
-            LanguageModelError.unsupportedGenerationGuide(
-              LanguageModelError.UnsupportedGenerationGuide(schemaName: nil, debugDescription: "g")
-            ),
-            .capabilityUnavailable("unsupported_guide")
-          ),
-          (
-            LanguageModelError.unsupportedLanguageOrLocale(
-              LanguageModelError.UnsupportedLanguageOrLocale(
-                languageCode: Locale.LanguageCode("zz"),
-                debugDescription: "l"
-              )
-            ),
-            .capabilityUnavailable("unsupported_locale")
-          ),
-          (
-            SystemLanguageModel.Error.assetsUnavailable(
-              SystemLanguageModel.Error.AssetsUnavailable(debugDescription: "a")
-            ),
-            .engineUnavailable(.afm)
-          ),
-          (
-            GeneratedContent.ParsingError(rawContent: "{", debugDescription: "p"),
-            .invalidResponse("decoding_failure")
-          ),
-        ]
-        for (error, expected) in cases {
+  func testGenerationErrorClassificationAndRetryability() throws {
+    #if canImport(FoundationModels)
+      guard #available(macOS 26.0, *) else {
+        throw XCTSkip("FoundationModels needs macOS 26+")
+      }
+      if #available(macOS 27.0, *) {
+        throw XCTSkip(
+          "LanguageModelError mapping waits on an Xcode pin newer than 26.6; GenerationError is deprecated on this SDK"
+        )
+      } else {
+        for (error, expected) in AFMDeprecatedGenerationErrorFixtures.nonretryable {
           let mapped = AFMLocalInferenceAdapter.mapUnknownError(error)
           XCTAssertEqual(mapped, expected, "\(error) -> \(mapped)")
           XCTAssertFalse(LocalInferenceRuntime.isRetryable(mapped), "\(expected) must not retry")
         }
-
-        let retryable: [(Error, LocalInferenceError)] = [
-          (
-            LanguageModelError.rateLimited(
-              LanguageModelError.RateLimited(resetDate: nil, debugDescription: "r")
-            ),
-            .engineFailed("rate_limited")
-          ),
-          (
-            LanguageModelSession.Error.concurrentRequests,
-            .engineFailed("concurrent_requests")
-          ),
-          (
-            LanguageModelError.timeout(LanguageModelError.Timeout(debugDescription: "t")),
-            .engineFailed("timeout")
-          ),
-        ]
-        for (error, expected) in retryable {
+        for (error, expected) in AFMDeprecatedGenerationErrorFixtures.retryable {
           let mapped = AFMLocalInferenceAdapter.mapUnknownError(error)
           XCTAssertEqual(mapped, expected, "\(error) -> \(mapped)")
           XCTAssertTrue(LocalInferenceRuntime.isRetryable(mapped), "\(expected) must remain retryable")
         }
-      #else
-        throw XCTSkip("FoundationModels SDK is not present")
-      #endif
+      }
     #else
-      throw XCTSkip("macOS 27 LanguageModelError is not in this SDK")
+      throw XCTSkip("FoundationModels SDK is not present")
     #endif
   }
 }
+
+#if canImport(FoundationModels)
+  @available(macOS, introduced: 26.0, obsoleted: 27.0)
+  private enum AFMDeprecatedGenerationErrorFixtures {
+    static let context = LanguageModelSession.GenerationError.Context(debugDescription: "t")
+    static var refusal: LanguageModelSession.GenerationError {
+      .refusal(.init(transcriptEntries: []), context)
+    }
+
+    static var nonretryable: [(Error, LocalInferenceError)] {
+      [
+        (LanguageModelSession.GenerationError.guardrailViolation(context), .invalidResponse("guardrail")),
+        (
+          LanguageModelSession.GenerationError.exceededContextWindowSize(context),
+          .invalidResponse("context_size_exceeded")
+        ),
+        (LanguageModelSession.GenerationError.unsupportedGuide(context), .capabilityUnavailable("unsupported_guide")),
+        (
+          LanguageModelSession.GenerationError.unsupportedLanguageOrLocale(context),
+          .capabilityUnavailable("unsupported_locale")
+        ),
+        (LanguageModelSession.GenerationError.assetsUnavailable(context), .engineUnavailable(.afm)),
+        (LanguageModelSession.GenerationError.decodingFailure(context), .invalidResponse("decoding_failure")),
+        (refusal, .invalidResponse("refusal")),
+      ]
+    }
+
+    static var retryable: [(Error, LocalInferenceError)] {
+      [
+        (LanguageModelSession.GenerationError.rateLimited(context), .engineFailed("rate_limited")),
+        (LanguageModelSession.GenerationError.concurrentRequests(context), .engineFailed("concurrent_requests")),
+      ]
+    }
+  }
+#endif
