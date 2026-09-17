@@ -359,6 +359,25 @@ def test_fast_infrastructure_failure_blocks_not_fails(tmp_path: Path, capsys: py
     capsys.readouterr()
 
 
+def test_fast_default_evidence_dir_is_a_temp_dir_not_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unset/empty OMI_VERIFY_EVIDENCE_DIR must resolve to a temp dir.
+
+    Path("") is a truthy Path("."): without the guard the lane writes logs to
+    the process cwd, the runner's receipts land in app/, and every journey
+    fail-closes as zero-execution even though all tests passed.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OMI_VERIFY_EVIDENCE_DIR", "")
+    runner = _fake_runner(tmp_path, exit_code=0, receipt_factory="pass")
+    code = mv.cmd_fast(REPO_ROOT, _fast_args(""), runner_path=runner)
+    assert code == mv.EXIT_OK
+    assert not (tmp_path / "verify-receipt.json").exists()
+    assert not list(tmp_path.glob("*.log"))
+    capsys.readouterr()
+
+
 def test_fast_compile_failure_blocks(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     runner = _fake_runner(
         tmp_path, exit_code=1, log_line="Error: Couldn't resolve 'package:omi/missing.dart'", receipt_factory="none"
