@@ -468,7 +468,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
     let valid = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
       ))
     let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
     XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
@@ -476,13 +476,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     let stale = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[]}"#
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(stale))
 
     let wrongProtocol = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
+        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
   }
@@ -821,24 +821,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   func testRuntimeRefreshTokenWireRequiresCapturedOwnerToRemainCurrent() {
-    let authorized = AgentRuntimeProcess.refreshTokenWireMessage(
-      token: "owner-a-token",
+    let authorized = AgentRuntimeProcess.modelCredentialsReadyWireMessage(
       expectedOwnerId: "owner-a",
       currentOwnerId: "owner-a"
     )
 
-    XCTAssertEqual(authorized?["type"] as? String, "refresh_token")
-    XCTAssertEqual(authorized?["token"] as? String, "owner-a-token")
+    XCTAssertEqual(authorized?["type"] as? String, "refresh_owner")
+    XCTAssertNil(authorized?["token"])
     XCTAssertEqual(authorized?["ownerId"] as? String, "owner-a")
     XCTAssertNil(
-      AgentRuntimeProcess.refreshTokenWireMessage(
-        token: "owner-a-token",
+      AgentRuntimeProcess.modelCredentialsReadyWireMessage(
         expectedOwnerId: "owner-a",
         currentOwnerId: "owner-b"
       ))
     XCTAssertNil(
-      AgentRuntimeProcess.refreshTokenWireMessage(
-        token: "owner-a-token",
+      AgentRuntimeProcess.modelCredentialsReadyWireMessage(
         expectedOwnerId: "owner-a",
         currentOwnerId: nil
       ))
@@ -1003,9 +1000,6 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(bridgeSource.contains("shouldRequirePiMonoCredentials("))
     XCTAssertTrue(bridgeSource.contains("shouldFetchManagedToken"))
     XCTAssertFalse(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(
-      bridgeSource.contains(
-        "if requiresCredentials {\n      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
     XCTAssertFalse(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
   }
@@ -1335,31 +1329,6 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(env["OmI_bYoK_LEGACY"])
     XCTAssertEqual(env["OMI_AUTH_TOKEN"], "token")
     XCTAssertEqual(env["PATH"], "/usr/bin")
-  }
-
-  func testPiMonoStartupRefreshesAuthTokenAndFiltersByokEnvironment() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-    let whitespaceNormalizedSource = source.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-
-    XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
-    XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
-    XCTAssertTrue(
-      whitespaceNormalizedSource.contains(
-        "let forceRefreshToken = preferredAdapterId == .piMono "
-          + "&& AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup("
-      ))
-    XCTAssertTrue(source.contains("isDesktopLocalProfile: DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(source.contains("getAuthHeader("))
-    XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
-    XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))
-    XCTAssertFalse(
-      source.contains(
-        "log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
-    XCTAssertTrue(source.contains("forwarding \\(byok.values.count) usable user keys"))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {
