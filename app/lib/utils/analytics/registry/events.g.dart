@@ -129,3 +129,22 @@ final class ShowShortConversationsToggled extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"show_short": showShort};
 }
+
+enum TypeExtensionProbeMode {
+  off("off"),
+  headphonesOnly("headphones_only"),
+  always("always");
+  const TypeExtensionProbeMode(this.wireName);
+  final String wireName;
+}
+
+final class TypeExtensionProbe extends RegisteredEvent {
+  const TypeExtensionProbe({required this.enabled, required this.count, required this.mode});
+  final bool enabled;
+  final int count;
+  final TypeExtensionProbeMode mode;
+  @override
+  String get wireName => "Type Extension Probe";
+  @override
+  Map<String, Object> get properties => {"enabled": enabled, "count": count, "mode": mode.wireName};
+}

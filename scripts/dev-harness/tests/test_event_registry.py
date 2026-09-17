@@ -29,10 +29,39 @@ def test_no_write_only_or_decorative_consumer():
 
 
 def test_free_text_and_identity_values_cannot_use_an_untyped_property():
-    for key, value in [('email', {'type': 'String'}), ('anything', {'type': 'Object'}), ('metadata', {'type': 'Map'}), ('transcript', {'type': 'String'}), ('deviceAddress', {'type': 'String'})]:
+    for key, value in [('email', {'type': 'String'}), ('anything', {'type': 'Object'}), ('metadata', {'type': 'Map'}), ('transcript', {'type': 'String'}), ('deviceAddress', {'type': 'String'}), ('duration', {'type': 'double'}), ('payload', {'type': 'num'})]:
         doc = source()
         doc['events'][0]['properties'][key] = {**value, 'wire_name': key}
         assert registry.validate(doc)
+
+
+def test_int_and_closed_enum_are_admitted_and_render_wire_values():
+    doc = source()
+    probe = next(item for item in doc['events'] if item['id'] == 'typeExtensionProbe')
+    assert probe['properties']['count']['type'] == 'int'
+    assert probe['properties']['mode']['values'] == ['off', 'headphones_only', 'always']
+    assert registry.validate(doc) == []
+    code, _plan = registry.render(doc)
+    assert 'final int count;' in code
+    assert 'enum TypeExtensionProbeMode' in code
+    assert 'headphonesOnly("headphones_only")' in code
+    assert '"mode": mode.wireName' in code
+
+
+def test_enum_rejects_open_or_degenerate_sets():
+    doc = source()
+    probe = next(item for item in doc['events'] if item['id'] == 'typeExtensionProbe')
+    probe['properties']['mode']['values'] = ['off']
+    assert registry.validate(doc)
+    probe['properties']['mode']['values'] = ['off', 'Off']
+    assert registry.validate(doc)
+    probe['properties']['mode'] = {'type': 'enum', 'wire_name': 'mode'}
+    assert registry.validate(doc)
+    doc = source()
+    next(item for item in doc['events'] if item['id'] == 'typeExtensionProbe')['properties']['count'] = {
+        'type': 'int', 'wire_name': 'count', 'values': [1, 2]
+    }
+    assert registry.validate(doc)
 
 
 def test_wire_change_or_removal_cannot_silently_break_old_consumers():

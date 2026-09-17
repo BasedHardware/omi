@@ -19,3 +19,4 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | developerSettingsSaved | Developer Settings Saved | has_webhook_memory_created, has_webhook_transcript_received | active | mobile-instrumentation-presence |
 | voiceResponseToggled | Voice Response Audio Toggled | enabled | active | mobile-instrumentation-presence |
 | showShortConversationsToggled | Show Short Conversations Toggled | show_short | active | mobile-instrumentation-presence |
+| typeExtensionProbe | Type Extension Probe | enabled, count, mode | active | c8-type-extension |

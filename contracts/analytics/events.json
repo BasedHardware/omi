@@ -220,6 +220,37 @@
         "mobile-instrumentation-presence"
       ],
       "correlation": null
+    },
+    {
+      "id": "typeExtensionProbe",
+      "wire_name": "Type Extension Probe",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        },
+        "count": {
+          "type": "int",
+          "wire_name": "count"
+        },
+        "mode": {
+          "type": "enum",
+          "wire_name": "mode",
+          "values": [
+            "off",
+            "headphones_only",
+            "always"
+          ]
+        }
+      },
+      "consumers": [
+        "c8-type-extension"
+      ],
+      "correlation": null
     }
   ]
 }
