@@ -72,10 +72,16 @@ token is involved at any point.
 `agent-remediable` (remedy command included), or `operator-action-needed`
 (privileged install/license/host capacity), per lane (`backend`, `android`,
 `ios`). Pins: Flutter version comes from `.github/workflows/mobile-app-checks.yml`
-(never "latest"); the backend venv must be Python 3.11; JDK ≥ 21 for the
-Firebase emulators. Capacity: emulator lanes require ≥ 12GiB free on the
+(never "latest"); the backend venv must be Python 3.11 **and** able to import
+`yaml` and `dotenv` (a `.venv` directory is not enough); JDK ≥ 21 for the
+Firebase emulators. `app/.dev.env` with a non-loopback `API_BASE_URL`, or
+`OMI_APP_PROFILE`/`OMI_APP_FLAVOR` other than `local_dev`/`dev`, is
+`operator-action-needed` — the doctor will not rewrite the file. Capacity:
+emulator lanes require ≥ 12GiB free on the
 shared Data/scratch container — below that the check is an operator gate and
 contract/unit work continues without it.
+
+Fresh linked worktree: `make lane-bootstrap` (see `LANE_BOOTSTRAP.md`).
 
 ## Evidence
 

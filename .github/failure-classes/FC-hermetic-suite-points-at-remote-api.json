@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-hermetic-suite-points-at-remote-api",
+  "violated_contract": "Hermetic app tests and the mobile-session doctor must not send traffic to a non-loopback API. app/test.sh skipped writing .dev.env when generated files already existed, so a leftover remote API_BASE_URL (or OMI_APP_PROFILE other than local_dev) silently survived.",
+  "canonical_prevention": "Always refuse a non-empty non-loopback API_BASE_URL in app/.dev.env and a flavor/profile pairing other than dev + local_dev. Do not rewrite the file. Guard at app/scripts/check_hermetic_test_env.sh (called from app/test.sh even when generated files exist) and at mobile_doctor app-dev-env / app-pairing checks.",
+  "canonical_prevention_artifact": [
+    "app/scripts/check_hermetic_test_env.sh",
+    "app/scripts/check_hermetic_test_env_test.sh",
+    "app/test.sh",
+    "scripts/dev-harness/dev_harness/mobile_doctor.py",
+    "scripts/dev-harness/tests/test_mobile_doctor.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/test.sh",
+    "app/scripts/**",
+    "app/.dev.env",
+    "scripts/dev-harness/dev_harness/mobile_doctor.py"
+  ],
+  "status": "open"
+}
