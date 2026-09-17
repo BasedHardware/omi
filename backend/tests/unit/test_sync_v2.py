@@ -1413,6 +1413,9 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'multi', 'nova-3')
         )
+        sys.modules['utils.stt.pre_recorded'].get_prerecorded_service_chain = MagicMock(
+            return_value=(('deepgram', 'multi', 'nova-3'),)
+        )
         sys.modules['utils.client_device'].resolve_client_device = MagicMock(
             return_value=MagicMock(client_device_id=None, platform=None)
         )
@@ -3160,6 +3163,9 @@ class TestV2EndpointExecution:
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'multi', 'nova-3')
+        )
+        sys.modules['utils.stt.pre_recorded'].get_prerecorded_service_chain = MagicMock(
+            return_value=(('deepgram', 'multi', 'nova-3'),)
         )
         sys.modules['utils.client_device'].resolve_client_device = MagicMock(
             return_value=MagicMock(client_device_id=None, platform=None)

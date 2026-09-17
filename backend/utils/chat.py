@@ -1,7 +1,7 @@
 import base64
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncGenerator, List, Optional, Tuple
+from typing import AsyncGenerator, List, NamedTuple, Optional, Tuple
 
 from fastapi import HTTPException
 
@@ -28,6 +28,7 @@ from utils.stt.pre_recorded import (
     prerecorded,
     prerecorded_from_bytes,
     get_prerecorded_service,
+    get_prerecorded_service_chain,
 )
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -209,39 +210,33 @@ def transcribe_voice_message_segment(
     return _transcribe_voice_message_url(url, path, language)
 
 
-def transcribe_pcm_bytes(
-    audio_bytes: bytes,
-    uid: str,
-    language: str = 'multi',
-    encoding: str = 'linear16',
-    sample_rate: int = 16000,
-    channels: int = 1,
-    keywords: Optional[List[str]] = None,
-) -> Tuple[Optional[str], Optional[str]]:
-    """Transcribe raw PCM audio bytes through the selected pre-recorded STT provider.
+class PcmTranscription(NamedTuple):
+    """One PCM transcription and the provider that actually produced it.
 
-    Skips GCS upload and WAV conversion for maximum speed.
-    Used by desktop PTT batch mode.
+    The provider is reported rather than inferred from selection: the chain can
+    fail over mid-request, and the response has to name the provider whose words
+    the user is about to read.
     """
-    if not language:
-        language = resolve_voice_message_language(uid, None)
 
-    provider, stt_language, stt_model = get_prerecorded_service(language)
+    text: Optional[str]
+    language: Optional[str]
+    provider: Optional[str]
+    model: Optional[str]
+
+
+def _transcribe_pcm_once(
+    audio_bytes: bytes,
+    *,
+    provider: str,
+    stt_language: Optional[str],
+    stt_model: str,
+    encoding: str,
+    sample_rate: int,
+    channels: int,
+    keywords: Optional[List[str]],
+) -> Tuple[Optional[str], Optional[str]]:
+    """Transcribe through one pinned provider, raising a typed terminal failure."""
     is_multi = stt_language == 'multi'
-
-    if encoding == 'linear16':
-        try:
-            if linear16_pcm_is_silent(audio_bytes, sample_rate=sample_rate, channels=channels):
-                return None, stt_language if not is_multi else None
-        except VADAudioDecodeError as error:
-            raise TranscriptionFailure(
-                TranscriptionOutcome.INVALID_INPUT,
-                provider=provider,
-                retryable=False,
-            ) from error
-        except VADProcessingError as error:
-            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
-
     try:
         if is_multi:
             result = prerecorded_from_bytes(
@@ -254,6 +249,7 @@ def transcribe_pcm_bytes(
                 model=stt_model,
                 return_language=True,
                 keywords=keywords,
+                service=provider,
             )
             words, detected_language = result
         else:
@@ -266,6 +262,7 @@ def transcribe_pcm_bytes(
                 language=stt_language,
                 model=stt_model,
                 keywords=keywords,
+                service=provider,
             )
             detected_language = stt_language
     except Exception as error:
@@ -288,6 +285,102 @@ def transcribe_pcm_bytes(
         raise empty_unexpected_failure(provider)
 
     return text, detected_language
+
+
+_PCM_FAILOVER_REASONS = {
+    TranscriptionOutcome.TIMEOUT: 'timeout',
+    TranscriptionOutcome.UPSTREAM_ERROR: 'provider_5xx',
+    TranscriptionOutcome.EMPTY_UNEXPECTED: 'empty_result',
+    TranscriptionOutcome.CONFIG_ERROR: 'config_incomplete',
+}
+
+
+def transcribe_pcm_bytes(
+    audio_bytes: bytes,
+    uid: str,
+    language: str = 'multi',
+    encoding: str = 'linear16',
+    sample_rate: int = 16000,
+    channels: int = 1,
+    keywords: Optional[List[str]] = None,
+) -> PcmTranscription:
+    """Transcribe raw PCM audio bytes through the pre-recorded STT chain.
+
+    Skips GCS upload and WAV conversion for maximum speed. Used by desktop PTT
+    batch mode — the route behind voice typing.
+
+    The whole chain is walked, not only its head. A recoverable failure — an
+    upstream error, a timeout, or an empty result on audio the VAD called
+    speech-positive — hands the same bytes to the next configured provider
+    (cloud Parakeet, then Velma-2), so the client reaches for its on-device
+    model only once every cloud provider has had its turn. Failures no other
+    provider would survive (invalid input, a misconfigured runtime) end the
+    request where they happen rather than spending a second provider call on
+    audio that cannot be transcribed.
+
+    A provider that hangs instead of failing is not failed over here: the
+    client's own deadline ends that turn on its on-device model, which is the
+    tier below this chain either way.
+    """
+    if not language:
+        language = resolve_voice_message_language(uid, None)
+
+    chain = get_prerecorded_service_chain(language)
+    head_provider, head_language, head_model = chain[0]
+
+    if encoding == 'linear16':
+        try:
+            if linear16_pcm_is_silent(audio_bytes, sample_rate=sample_rate, channels=channels):
+                return PcmTranscription(
+                    None,
+                    head_language if head_language != 'multi' else None,
+                    head_provider,
+                    head_model,
+                )
+        except VADAudioDecodeError as error:
+            raise TranscriptionFailure(
+                TranscriptionOutcome.INVALID_INPUT,
+                provider=head_provider,
+                retryable=False,
+            ) from error
+        except VADProcessingError as error:
+            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=head_provider) from error
+
+    for index, (provider, stt_language, stt_model) in enumerate(chain):
+        try:
+            text, detected_language = _transcribe_pcm_once(
+                audio_bytes,
+                provider=provider,
+                stt_language=stt_language,
+                stt_model=stt_model,
+                encoding=encoding,
+                sample_rate=sample_rate,
+                channels=channels,
+                keywords=keywords,
+            )
+        except TranscriptionFailure as failure:
+            remaining = chain[index + 1 :]
+            if not failure.retryable or not remaining:
+                raise
+            next_provider = remaining[0][0]
+            record_fallback(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode=next_provider,
+                reason=_PCM_FAILOVER_REASONS.get(failure.outcome, 'other'),
+                outcome='degraded',
+            )
+            logger.warning(
+                'PCM transcription failing over: outcome=%s from=%s to=%s',
+                failure.outcome.value,
+                failure.provider,
+                next_provider,
+            )
+            continue
+        return PcmTranscription(text, detected_language, provider, stt_model)
+
+    # Unreachable: the last hop has no remaining provider, so it re-raises above.
+    raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
 
 
 def process_voice_message_segment(
