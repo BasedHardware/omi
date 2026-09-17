@@ -64,7 +64,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
       setState(() {
         _isBaseline = !newState;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update baseline status')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToUpdateBaselineStatus)));
     }
   }
 

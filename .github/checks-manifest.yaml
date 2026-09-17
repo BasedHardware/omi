@@ -224,6 +224,11 @@ checks:
     triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
+  - id: debug-apk-size-report-tests
+    command: ["python3", ".github/scripts/test_report_debug_apk_size.py"]
+    triggers: [".github/scripts/report_debug_apk_size.py", ".github/scripts/test_report_debug_apk_size.py", ".github/workflows/mobile-app-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the compile-smoke APK size report must stay a non-gating zip breakdown of the debug APK this job already builds"
   - id: structured-string-sink-registry
     command: ["bash", "scripts/run-structured-string-sinks.sh"]
     triggers: [".github/workflows/**", ".github/actions/**", ".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sinks.sh", ".github/checks-manifest.yaml"]

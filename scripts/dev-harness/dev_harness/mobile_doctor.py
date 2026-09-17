@@ -22,7 +22,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
 READY = "ready"
@@ -32,6 +32,9 @@ OPERATOR = "operator-action-needed"
 LANE_BACKEND = "backend"
 LANE_ANDROID = "android"
 LANE_IOS = "ios"
+
+# mobile-session start + pre-push typecheck. yaml/dotenv alone is the cheap gate.
+BACKEND_RUNTIME_PROBE = "import dotenv, google.auth, pyright, uvicorn, yaml"
 
 # Emulator/app-build lanes need real headroom on the shared Data/scratch
 # container; below this the capacity check is an operator gate (freeing space
@@ -45,6 +48,12 @@ HERMETIC_FLAVOR = "dev"
 _FLUTTER_VERSION_RE = re.compile(r"Flutter\s+(\d+\.\d+\.\d+)", re.MULTILINE)
 _FLUTTER_PIN_RE = re.compile(r"flutter-version:\s*(\d+\.\d+\.\d+)")
 _ANDROID_IMAGE_PREFIX = "system-images;android-"
+# cmdline-tools 23 prints `system-images/android-36/...` instead of the
+# historical semicolon package id, and deprecation warnings on stderr, while
+# still exiting 0. Disk is an oracle either way; a failed inventory is not
+# "engine absent" and a slash-path listing is not "image missing".
+PREFERRED_ANDROID_IMAGE = "system-images;android-36;google_apis;arm64-v8a"
+PREFERRED_ANDROID_IMAGE_DIR = ("system-images", "android-36", "google_apis", "arm64-v8a")
 
 
 class DoctorError(RuntimeError):
@@ -177,6 +186,31 @@ def _check_backend_venv(repo_root: Path, runner: Runner) -> CheckResult:
     return _ok("backend-venv", f"backend/.venv ({out.strip()}); yaml+dotenv import", (LANE_BACKEND,))
 
 
+def _check_backend_runtime(repo_root: Path, runner: Runner) -> CheckResult:
+    venv_python = Path(repo_root) / "backend" / ".venv" / "bin" / "python"
+    if not runner.exists(venv_python):
+        return _agent(
+            "backend-runtime",
+            "backend/.venv missing; mobile-session start and the pre-push typecheck need uvicorn/pyright",
+            "make lane-backend",
+            (LANE_BACKEND,),
+        )
+    probe_code, probe_out = runner.run([str(venv_python), "-c", BACKEND_RUNTIME_PROBE])
+    if probe_code != 0:
+        hint = (probe_out or "").strip().splitlines()[-1] if (probe_out or "").strip() else "import failed"
+        return _agent(
+            "backend-runtime",
+            f"backend/.venv cannot import uvicorn/pyright/google.auth (mobile-session start / typecheck): {hint}",
+            "make lane-backend",
+            (LANE_BACKEND,),
+        )
+    return _ok(
+        "backend-runtime",
+        "backend/.venv imports uvicorn, pyright, yaml, dotenv, google.auth",
+        (LANE_BACKEND,),
+    )
+
+
 def _check_flutter(repo_root: Path, runner: Runner) -> CheckResult:
     pin = flutter_pin(repo_root)
     binary = runner.which("flutter")
@@ -281,6 +315,36 @@ def _android_home(env: Mapping[str, str]) -> str:
         value = env.get(key, "").strip()
         if value:
             return value
+    return ""
+
+
+def installed_android_system_image(
+    home: Path,
+    *,
+    exists: Callable[[Path], bool] | None = None,
+    list_output: str = "",
+) -> str:
+    """Return a semicolon package id if an emulator system image is present.
+
+    Prefer the on-disk tree. ``sdkmanager --list_installed`` on cmdline-tools
+    23 prints slash paths (``system-images/android-36/google_apis/arm64-v8a``)
+    and can miss a fully unpacked image; treating that output as the only
+    oracle reported ``android-image: no system-images package installed``.
+    Parse stdout even when the process is noisy: a slash or semicolon token
+    still proves presence. Callers that got a nonzero exit and an empty
+    result must report *undetermined*, not absence.
+    """
+
+    probe = exists or (lambda path: Path(path).exists())
+    disk = Path(home).joinpath(*PREFERRED_ANDROID_IMAGE_DIR)
+    if probe(disk):
+        return PREFERRED_ANDROID_IMAGE
+    for line in list_output.splitlines():
+        token = line.strip().split()[0] if line.strip() else ""
+        normalized = token.replace("/", ";")
+        if normalized.startswith(_ANDROID_IMAGE_PREFIX):
+            return normalized
+    return ""
 
 
 def _check_android(repo_root: Path, runner: Runner, env: Mapping[str, str]) -> list[CheckResult]:
@@ -327,32 +391,44 @@ def _check_android(repo_root: Path, runner: Runner, env: Mapping[str, str]) -> l
         )
 
     sdkmanager = Path(home) / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+    list_code: int | None = None
+    list_output = ""
     if runner.exists(sdkmanager):
-        code, out = runner.run([str(sdkmanager), "--list_installed"], timeout=60.0)
-        installed = " ".join(out.splitlines()) if code == 0 else ""
-        arm_image = next(
-            (line.split()[0] for line in out.splitlines() if line.strip().startswith(_ANDROID_IMAGE_PREFIX)),
-            "",
-        )
-        if arm_image:
-            results.append(_ok("android-image", f"system image installed: {arm_image}", (LANE_ANDROID,)))
-        else:
-            results.append(
-                _agent(
-                    "android-image",
-                    "no system-images package installed",
-                    f"{sdkmanager} 'system-images;android-36;google_apis;arm64-v8a' — ARM64 image on Apple "
-                    f"Silicon; capacity-gated download (~5-8GiB with caches)",
-                    (LANE_ANDROID,),
-                )
+        list_code, list_output = runner.run([str(sdkmanager), "--list_installed"], timeout=60.0)
+    image = installed_android_system_image(Path(home), exists=runner.exists, list_output=list_output)
+    if image:
+        results.append(_ok("android-image", f"system image installed: {image}", (LANE_ANDROID,)))
+    elif list_code is None:
+        results.append(
+            _agent(
+                "android-image",
+                "cannot determine Android system image: cmdline-tools missing, so no sdkmanager "
+                "(not a finding that the image is absent)",
+                f"Install cmdline-tools under {home} first (see android-emulator remedy)",
+                (LANE_ANDROID,),
             )
-        _ = installed
+        )
+    elif list_code != 0:
+        snippet = " ".join(list_output.split())[:180]
+        results.append(
+            _operator(
+                "android-image",
+                "cannot determine Android system image: "
+                f"sdkmanager --list_installed exited {list_code}"
+                + (f" ({snippet})" if snippet else "")
+                + " (not a finding that the image is absent)",
+                "Inspect sdkmanager / JAVA_HOME; a noisy or failed inventory is not a missing engine. "
+                f"On-disk oracle is {Path(home).joinpath(*PREFERRED_ANDROID_IMAGE_DIR)}",
+                (LANE_ANDROID,),
+            )
+        )
     else:
         results.append(
             _agent(
                 "android-image",
-                "cannot verify: cmdline-tools missing, so no sdkmanager",
-                f"Install cmdline-tools under {home} first (see android-emulator remedy)",
+                "no system-images package installed",
+                f"{sdkmanager} '{PREFERRED_ANDROID_IMAGE}' — ARM64 image on Apple "
+                f"Silicon; capacity-gated download (~5-8GiB with caches)",
                 (LANE_ANDROID,),
             )
         )
@@ -541,6 +617,7 @@ def run_doctor(
         _check_git(root, probe),
         _check_python311(root, probe, source),
         _check_backend_venv(root, probe),
+        _check_backend_runtime(root, probe),
         _check_flutter(root, probe),
         _check_java(probe, source),
         _check_firebase_cli(probe),

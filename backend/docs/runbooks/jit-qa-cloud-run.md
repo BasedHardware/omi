@@ -160,9 +160,11 @@ Repair performs no model calls and no scheduler mutation; `sweep-verify`
 remains the execution path.
 
 An incomplete sweep source is a named blocked outcome, not an opaque failure:
-the scheduler records `uid=<uid>:source_incomplete:<local-date>` and leaves
-the cursor untouched, and the run receipt retains the dispatch evidence of any
-admitted gateway request even when its output never staged.
+the scheduler records `uid=<uid>:source_incomplete:<local-date>:<reason>` and
+leaves the cursor untouched, and the run receipt retains the dispatch evidence
+of any admitted gateway request even when its output never staged. A day that
+is merely over the conversation or character budget is truncated and processed;
+only eligibility incompleteness (a still-processing or unfinished row) stalls.
 
 Verification reads each deployed Cloud Run resource and checks the immutable
 image digest, exact environment and secret bindings, runtime identity, fixed
