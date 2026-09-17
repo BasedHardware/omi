@@ -566,7 +566,6 @@ test('names Flutter DailySummaryCard omitted or JSON-null GET headlines as Your 
           {id: 'sum-omitted', date: '2026-09-10'},
           {id: 'sum-null', date: '2026-09-09', headline: null},
           {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
-          {id: 'sum-number', date: '2026-09-07', headline: 1},
         ],
       }),
     ),
@@ -585,20 +584,146 @@ test('names Flutter DailySummaryCard omitted or JSON-null GET headlines as Your 
   ]);
 });
 
-test('does not omit a neighboring daily summary when stored headline or stats cannot project', () => {
+test('old daily summaries name Flutter DailySummary.fromGenerated type-wrong GET headline instead of remapping to a headline chip', () => {
+  const neighbor = {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'};
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id: 'sum-omitted', date: '2026-09-10'},
+          {
+            id: 'sum-null',
+            date: null,
+            headline: null,
+            overview: null,
+            day_emoji: null,
+          },
+        ],
+      }),
+    ),
+  ).toEqual([
+    {
+      id: 'sum-omitted',
+      date: '2026-09-10',
+      headline: dailySummaryDefaultHeadlineCopy(),
+    },
+    {
+      id: 'sum-null',
+      date: '',
+      headline: dailySummaryDefaultHeadlineCopy(),
+    },
+  ]);
+  for (const headline of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {id: 'sum-headline-number', date: '2026-09-07', headline},
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+  }
+  for (const extra of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {id: extra, date: '2026-09-09', headline: 'Met with the team'},
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: extra,
+              headline: 'Met with the team',
+            },
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+              overview: extra,
+            },
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+              day_emoji: extra,
+            },
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+              action_items: [{description: extra}],
+            },
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+  }
+});
+
+test('does not omit a neighboring daily summary when stored stats cannot project', () => {
   expect(
     parseOmiDailySummaries(
       JSON.stringify({
         summaries: [
           {id: 'sum-kept', headline: 'Met with the team'},
-          {id: 'sum-headline-number', headline: 1},
-          {id: 7, headline: 'Numeric id'},
           {
             id: 'sum-optional',
             headline: 'Shipped the recap',
-            overview: 1,
-            date: 1,
-            day_emoji: 1,
             stats: {total_conversations: '3', total_duration_minutes: 1.5},
           },
           {

@@ -81,6 +81,28 @@ function presentNullableDouble(value: unknown): void {
   throw new DailySummaryError();
 }
 
+function presentNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  text(value, 1_000_000);
+}
+
+function presentObjectListStrings(value: unknown, fields: string[]): void {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const raw of value) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      continue;
+    }
+    const row = raw as Record<string, unknown>;
+    for (const field of fields) {
+      presentNullableString(row[field]);
+    }
+  }
+}
+
 function presentLocations(value: unknown): void {
   if (!Array.isArray(value)) {
     return;
@@ -92,6 +114,9 @@ function presentLocations(value: unknown): void {
     const pin = raw as Record<string, unknown>;
     presentNullableDouble(pin.latitude);
     presentNullableDouble(pin.longitude);
+    presentNullableString(pin.address);
+    presentNullableString(pin.conversation_id);
+    presentNullableString(pin.time);
   }
 }
 
@@ -105,6 +130,9 @@ function presentMemoriesLearned(value: unknown): void {
     }
     const memory = raw as Record<string, unknown>;
     presentNullableDate(memory.captured_at);
+    presentNullableString(memory.category);
+    presentNullableString(memory.content);
+    presentNullableString(memory.memory_id);
   }
 }
 
@@ -129,7 +157,7 @@ function optionalCount(value: unknown): number | undefined {
 }
 
 function optionalWireString(value: unknown, limit: number): string {
-  if (value === undefined || value === null || typeof value !== 'string') {
+  if (value === undefined || value === null) {
     return '';
   }
   return visibleDisplayText(text(value, limit));
@@ -139,14 +167,11 @@ function summaryId(value: unknown): string | null {
   if (value === undefined || value === null) {
     return '';
   }
-  if (typeof value !== 'string') {
-    return null;
-  }
   return text(value, 1_000_000);
 }
 
 function summaryDate(value: unknown): string {
-  if (value === undefined || value === null || typeof value !== 'string') {
+  if (value === undefined || value === null) {
     return '';
   }
   return text(value, 1_000_000);
@@ -155,9 +180,6 @@ function summaryDate(value: unknown): string {
 function headlineCopy(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return dailySummaryDefaultHeadlineCopy();
-  }
-  if (typeof value !== 'string') {
-    return undefined;
   }
   return text(value, 1_000_000);
 }
@@ -225,6 +247,28 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
     presentNullableDate(summary.created_at);
     presentLocations(summary.locations);
     presentMemoriesLearned(summary.memories_learned);
+    presentObjectListStrings(summary.action_items, [
+      'description',
+      'priority',
+      'source_conversation_id',
+    ]);
+    presentObjectListStrings(summary.highlights, [
+      'topic',
+      'emoji',
+      'summary',
+    ]);
+    presentObjectListStrings(summary.decisions_made, [
+      'decision',
+      'conversation_id',
+    ]);
+    presentObjectListStrings(summary.knowledge_nuggets, [
+      'insight',
+      'conversation_id',
+    ]);
+    presentObjectListStrings(summary.unresolved_questions, [
+      'question',
+      'conversation_id',
+    ]);
     const stats = summaryStats(summary.stats);
     items.push({
       id,
