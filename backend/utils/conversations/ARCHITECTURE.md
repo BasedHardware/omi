@@ -10,7 +10,9 @@ and background processing.
   request authentication and response shaping.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
-  named executor lanes.
+  named executor lanes. Custom-STT conversations skip managed-STT credits but
+  still consult `should_skip_omi_paid_postprocessing` before Omi-paid
+  structuring, summary, and memory work (#7690).
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by

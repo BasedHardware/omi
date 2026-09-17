@@ -190,6 +190,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     put(subscription, 'is_trial_paywalled', MagicMock(return_value=False))
     put(subscription, 'should_defer_desktop_processing', MagicMock(return_value=False))
     put(subscription, 'request_has_llm_byok_key', MagicMock(return_value=False))
+    put(subscription, 'should_skip_omi_paid_postprocessing', MagicMock(return_value=False))
 
     byok = ModuleType('utils.byok')
     put(byok, 'get_byok_key', lambda _provider: None)

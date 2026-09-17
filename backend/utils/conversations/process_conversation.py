@@ -98,7 +98,11 @@ from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
-from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.subscription import (
+    is_trial_paywalled,
+    should_defer_desktop_processing,
+    should_skip_omi_paid_postprocessing,
+)
 from utils.free_tier_basic_gates import basic_plan_gate_eager_extraction_enabled
 from utils.free_tier_memory_policy import (
     free_tier_memory_suppression_enabled,
@@ -2604,6 +2608,31 @@ def process_conversation(
         # Return the conversation as-is with no LLM work performed. If it has
         # a status field, mark it processed so the client doesn't show a stuck
         # "processing" state forever.
+        if isinstance(conversation, Conversation):
+            try:
+                conversation.status = ConversationStatus.completed
+            except Exception:
+                pass
+        report_persistence(False)
+        return cast(Conversation, conversation)
+
+    # Custom-STT skips managed-STT credits at listen connect. The LLM work that
+    # follows (structure / summary / memory) still consults the processing
+    # budget so those sessions cannot run uncapped on Omi's bill (#7690).
+    # Paid unlimited plans and LLM BYOK stay allowed — this is not the
+    # #10962 blanket skip that removed summaries for every custom-STT user.
+    custom_stt = bool(getattr(conversation, 'uses_custom_stt', False))
+    source_token = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
+    if should_skip_omi_paid_postprocessing(
+        uid,
+        uses_custom_stt=custom_stt,
+        source=source_token if isinstance(source_token, str) else None,
+    ):
+        logger.info(
+            "custom-STT processing budget exhausted: skipping Omi-paid post-processing uid=%s conv=%s",
+            uid,
+            getattr(conversation, 'id', '?'),
+        )
         if isinstance(conversation, Conversation):
             try:
                 conversation.status = ConversationStatus.completed
