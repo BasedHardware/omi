@@ -32,29 +32,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('HomePage announcement delay is cancelled on dispose', (tester) async {
-    _stubPlugins();
-    setupFirebaseCoreMocks();
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: const FirebaseOptions(
-          apiKey: 'fake',
-          appId: '1:1:ios:fake',
-          messagingSenderId: '1',
-          projectId: 'demo-omi-local',
-        ),
-      );
-    }
-    await tester.runAsync(() async {
-      await JourneyHermeticBoot.start(
-        extraPrefs: {'onboardingCompleted': true, 'permissionsCompleted': true, 'aiConsentGiven': true},
-      );
-      try {
-        await ServiceManager.init();
-      } catch (_) {}
-    });
-    addTearDown(JourneyHermeticBoot.stop);
-
-    await JourneyHermeticBoot.pumpPage(tester, page: const HomePage(), providers: _homeProviders());
+    await _pumpHomePage(tester);
     // pumpPage already ran one frame, which arms the 2s announcement Timer.
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -66,6 +44,48 @@ void main() {
     expect(find.byType(HomePage), findsNothing);
     // Test end is the assertion: Flutter fails if the 2s announcement Timer is still pending.
   });
+
+  testWidgets('HomePage tab prewarm timers are cancelled on dispose', (tester) async {
+    await _pumpHomePage(tester);
+    // initState arms one Timer per non-selected IndexedStack slot (350ms + n*180ms).
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    // Flush Duration.zero work (Upgrader.initialize) without elapsing the 350ms
+    // first prewarm delay. A leftover prewarm Timer still fails _verifyInvariants.
+    await tester.pump(const Duration(milliseconds: 1));
+    // A fifth HomePage Timer that is still pending here fails the same way without
+    // being stored on State. Duration.zero work that fires in this 1ms pump would
+    // not; CaptureLifetime would be required to assert list membership itself.
+    expect(tester.takeException(), isNull);
+    expect(find.byType(HomePage), findsNothing);
+  });
+}
+
+Future<void> _pumpHomePage(WidgetTester tester) async {
+  _stubPlugins();
+  setupFirebaseCoreMocks();
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: 'fake',
+        appId: '1:1:ios:fake',
+        messagingSenderId: '1',
+        projectId: 'demo-omi-local',
+      ),
+    );
+  }
+  await tester.runAsync(() async {
+    await JourneyHermeticBoot.start(
+      extraPrefs: {'onboardingCompleted': true, 'permissionsCompleted': true, 'aiConsentGiven': true},
+    );
+    try {
+      await ServiceManager.init();
+    } catch (_) {}
+  });
+  addTearDown(JourneyHermeticBoot.stop);
+
+  await JourneyHermeticBoot.pumpPage(tester, page: const HomePage(), providers: _homeProviders());
 }
 
 List<SingleChildWidget> _homeProviders() {
