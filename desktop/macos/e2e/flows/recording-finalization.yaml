@@ -13,6 +13,8 @@ covers:
   - desktop/macos/Desktop/Sources/LocalInference/LocalInferenceRuntime.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalInferenceKillSwitches.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalServerInferenceAdapter.swift
+  - desktop/macos/Desktop/Sources/LocalInference/AFMLocalInferenceAdapter.swift
+  - desktop/macos/Desktop/Sources/LocalInference/AFMJSONSchemaBridge.swift
   - desktop/macos/Desktop/Sources/LocalInference/DeterministicConversationMinimum.swift
   # S10 summarizer + stored projection. S11 attaches the stored blob on
   # from-segments; XCTest is the behavioral proof.
