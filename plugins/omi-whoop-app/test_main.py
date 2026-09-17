@@ -129,7 +129,7 @@ class BodyMeasurementsTests(unittest.IsolatedAsyncioTestCase):
         documented path proves the URL, bearer header, and result formatting."""
         calls = []
 
-        def fake_get(url, headers=None, params=None):
+        def fake_get(url, headers=None, params=None, **kwargs):
             calls.append({"url": url, "headers": headers, "params": params})
             if url == MEASUREMENTS_URL:
                 return FakeUpstreamResponse(
@@ -162,7 +162,7 @@ class BodyMeasurementsTests(unittest.IsolatedAsyncioTestCase):
     async def test_empty_error_body_surfaces_http_status(self):
         """A 404 with an empty upstream body must surface 'HTTP 404', never a
         blank 'Failed to get measurements: ' reason."""
-        def fake_get(url, headers=None, params=None):
+        def fake_get(url, headers=None, params=None, **kwargs):
             return FakeUpstreamResponse(404, text="")
 
         with patch.object(
@@ -183,7 +183,7 @@ class WorkoutsNullParamTests(unittest.IsolatedAsyncioTestCase):
         goes out with the documented default window/limit."""
         calls = []
 
-        def fake_get(url, headers=None, params=None):
+        def fake_get(url, headers=None, params=None, **kwargs):
             calls.append({"url": url, "params": params})
             return FakeUpstreamResponse(200, {"records": []})
 
