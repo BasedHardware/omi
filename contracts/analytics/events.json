@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "adopted_files": [],
+  "events": [
+    {
+      "id": "onboardingCompleted",
+      "wire_name": "Onboarding Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ]
+    },
+    {
+      "id": "phoneMicRecordingStarted",
+      "wire_name": "Phone Mic Recording Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ]
+    },
+    {
+      "id": "phoneMicRecordingStopped",
+      "wire_name": "Phone Mic Recording Stopped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ]
+    },
+    {
+      "id": "transcribeLaterToggled",
+      "wire_name": "Transcribe Later Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ]
+    }
+  ]
+}

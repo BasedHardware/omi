@@ -6,5 +6,6 @@
   "scripts/dev-harness/tests/spine/pending.py": "MECHANISM",
   "scripts/dev-harness/tests/spine/test_evidence_freeze.py": "V8",
   "scripts/dev-harness/tests/spine/test_live_session.py": "V1",
-  "scripts/dev-harness/tests/spine/test_live_revision.py": "V1"
+  "scripts/dev-harness/tests/spine/test_live_revision.py": "V1",
+  "app/test/spine/c7_registry_test.dart": "C7"
 }
