@@ -772,11 +772,13 @@ enum ChatTurnFailurePresentation: Equatable {
   case emptyTurnStamp
   /// The turn failed after saying something: show it, then mark the cut.
   case truncatedAnswer
+  case sessionExpired
 
   static func of(_ message: ChatMessage) -> Self {
     guard message.sender == .ai, !message.isStreaming, message.journalStatus == .failed else {
       return .none
     }
+    if message.failureCode == .authentication { return .sessionExpired }
     guard message.text.isEmpty, message.contentBlocks.isEmpty else { return .truncatedAnswer }
     return .emptyTurnStamp
   }

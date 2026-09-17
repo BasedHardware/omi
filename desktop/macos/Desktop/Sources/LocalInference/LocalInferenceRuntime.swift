@@ -30,7 +30,10 @@ struct LocalInferenceRuntime: Sendable {
     configuration: LocalServerInferenceConfiguration = .fromKillSwitchSources()
   ) -> LocalInferenceRuntime {
     LocalInferenceRuntime(
-      engines: [LocalServerInferenceAdapter(configuration: configuration, httpClient: httpClient)],
+      engines: [
+        LocalServerInferenceAdapter(configuration: configuration, httpClient: httpClient),
+        AFMLocalInferenceAdapter(),
+      ],
       killSwitches: killSwitches,
       fallback: DesktopLocalInferenceFallbackRecorder(),
       defaultEngineID: .localServer
@@ -117,7 +120,7 @@ struct LocalInferenceRuntime: Sendable {
     }
     let wanted = selectedEngineID() ?? defaultEngineID
     if wanted == .afm {
-      // S12 lands the AFM adapter. Selecting it today is a closed door, not luna.
+      // AFM is a selection, not a fallback. A missing adapter is a closed door, not luna.
       if let engine = engines.first(where: { $0.engineID == .afm }) {
         return .success(engine)
       }

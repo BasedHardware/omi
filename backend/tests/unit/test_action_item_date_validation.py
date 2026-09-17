@@ -128,6 +128,7 @@ _SYS_MODULE_NAMES = [
     "utils.conversations",
     "utils.conversations.render",
     "utils.conversations.wake_word",
+    "utils.conversations.summary_selection",
     "langchain_core",
     "langchain_core.tools",
     "langchain_core.runnables",
@@ -355,6 +356,10 @@ prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=
 _load_module_from_file(
     "utils.conversations.wake_word",
     BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
+)
+_load_module_from_file(
+    "utils.conversations.summary_selection",
+    BACKEND_DIR / "utils" / "conversations" / "summary_selection.py",
 )
 
 conversation_processing = _load_module_from_file(
