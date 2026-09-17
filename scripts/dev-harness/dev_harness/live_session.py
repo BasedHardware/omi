@@ -1,8 +1,10 @@
 """V1 live Flutter broker. Contract: ../LIVE_SESSIONS.md.
 
-PR1 is fake-backed: tests inject a MachineProcess factory. The CLI does not
-spawn `flutter run` on a device.
+PR1 is fake-backed: tests inject a MachineProcess factory. This PR adds no new
+live-process adapter; the CLI does not spawn `flutter run` on a device.
+stop/reset/recover still reach real service and device lifecycle commands.
 """
+
 from __future__ import annotations
 
 import getpass
@@ -12,6 +14,7 @@ import platform
 import re
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,16 +26,20 @@ from .mobile_session import DEFAULT_APP_IDS, LEASE_FILENAME, SessionError, sessi
 
 OPERATIONS = ("start", "reload", "restart", "screenshot", "logs", "controls", "status", "stop")
 CONTROL_METHODS = ("capabilities", "state", "wait_ready", "navigate", "fault")
-READY_PROFILE = "localDev"  # protected tests; real app reports local_dev
+READY_PROFILE = "local_dev"
 CONTRACT_VERSION = "semantic-controls/v1"
 REQUEST_VERSION = "live-session/v1"
 MAX_REQUEST_BYTES = 1024 * 1024
+MAX_LOG_ENTRIES = 256
+REQUIRED_CAPABILITIES = frozenset({"capabilities", "state", "wait_ready"})
+_URL_RE = re.compile(r"(?i)\b(?:https?|wss?)://[^\s'\"<>]+")
+_CREDENTIAL_ASSIGN_RE = re.compile(
+    r"(?i)\b(api[_-]?key|auth(?:orization|enticat\w*)?|bearer|password|secret|token)\s*[:=]\s*\S+"
+)
 WORKTREE_LOCK = ".omi-live-worktree.lock"
 LIVE_FILENAME = "live.json"
 EMPTY_PARAM_OPS = frozenset({"reload", "restart", "screenshot", "status", "stop"})
 DECODE_OPS = frozenset({"reload", "restart", "screenshot", "logs", "controls", "status", "stop", "verify"})
-MUTATING_OPS = frozenset({"reload", "restart", "screenshot", "controls", "stop"})
-READ_CONTROL_METHODS = frozenset({"capabilities", "state", "wait_ready"})
 SAFE_FLAVORS = frozenset({"dev"})
 SAFE_PROFILES = frozenset({"local_dev"})
 LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1", ""})
@@ -112,6 +119,34 @@ def _env_api_base(repo_root: Path) -> str | None:
         if key.strip() == "API_BASE_URL":
             return value.strip().strip("'\"")
     return ""
+
+
+def _as_rfc3339_utc(stamp: str) -> str:
+    """Keep live timestamps on the evidence regex even if a test clock is fractional."""
+
+    if se.RFC3339_UTC_RE.fullmatch(stamp):
+        return stamp
+    if stamp.endswith("Z") and "T" in stamp:
+        candidate = stamp[:-1].split(".", 1)[0] + "Z"
+        if se.RFC3339_UTC_RE.fullmatch(candidate):
+            return candidate
+    return stamp
+
+
+def sanitize_log_text(text: str) -> str:
+    """Redact URL and credential *shapes* before logs are stored or returned."""
+
+    if not isinstance(text, str):
+        text = str(text)
+
+    def _url(match: re.Match[str]) -> str:
+        parsed = urlparse(match.group(0))
+        host = parsed.hostname or "redacted"
+        scheme = parsed.scheme or "https"
+        port = f":{parsed.port}" if parsed.port else ""
+        return f"{scheme}://{host}{port}/<redacted>"
+
+    return _CREDENTIAL_ASSIGN_RE.sub(r"\1=<redacted>", _URL_RE.sub(_url, text))
 
 
 def _loopback_or_empty(url: str) -> bool:
@@ -328,6 +363,7 @@ class LiveSession:
         factory: Callable[[LaunchSpec], MachineProcess],
         screenshot: Callable[[str, Path], None],
         startup_timeout_s: float = 900,
+        monotonic: Callable[[], float] | None = None,
     ) -> None:
         if not 1 <= float(startup_timeout_s) <= 1800:
             raise LiveError("unsafe-config", "startup_timeout_s must be between 1 and 1800")
@@ -338,7 +374,9 @@ class LiveSession:
         self._factory = factory
         self._screenshot = screenshot
         self._startup_timeout_s = float(startup_timeout_s)
+        self._monotonic = monotonic or time.monotonic
         self._child: MachineProcess | None = None
+        self._child_generation: int | None = None
         self._lock = threading.Lock()
         self._state = "stopped"
         self._app_id: str | None = None
@@ -353,7 +391,10 @@ class LiveSession:
         lease = self._load_lease()
         self._assert_safe_lease(lease)
         self._assert_seed(lease)
+        generation = int(lease.get("generation") or 0)
+        requested = self._source()
         self._claim_worktree(str(lease.get("session_id")))
+        self._child_generation = generation
         device = (lease.get("device") or {}).get("udid") or ""
         spec = LaunchSpec(
             argv=(
@@ -373,23 +414,97 @@ class LiveSession:
             build_dir=self.repo_root / "build",
             device_id=str(device),
         )
-        self._child = self._factory(spec)
+        started_at = se.utc_now()
+        started_mono = self._monotonic()
+        try:
+            self._child = self._factory(spec)
+        except Exception:
+            self._child_generation = None
+            self._release_worktree()
+            raise
         self._state = "starting"
         try:
-            self._drain_until_started(self._startup_timeout_s)
-            ready, _ = self._refresh_readiness(self._startup_timeout_s, wait=True)
-            stamp = self._source()
-            self._loaded = stamp
-            self._loaded_sequence = 1
+            if not self._source_matches(requested):
+                self._state = "blocked"
+                return self._finish(
+                    "start",
+                    "blocked",
+                    requested,
+                    None,
+                    None,
+                    generation=generation,
+                    started_at=started_at,
+                    started_mono=started_mono,
+                    error_code="stale-build",
+                )
+            deadline = self._deadline(self._startup_timeout_s)
+            self._drain_until_started(deadline)
+            if not self._source_matches(requested):
+                self._state = "blocked"
+                return self._finish(
+                    "start",
+                    "blocked",
+                    requested,
+                    None,
+                    None,
+                    generation=generation,
+                    started_at=started_at,
+                    started_mono=started_mono,
+                    error_code="stale-build",
+                )
+            ready, _ = self._refresh_readiness(deadline, wait=True)
+            if not self._source_matches(requested):
+                self._state = "blocked"
+                return self._finish(
+                    "start",
+                    "blocked",
+                    requested,
+                    None,
+                    None,
+                    generation=generation,
+                    started_at=started_at,
+                    started_mono=started_mono,
+                    error_code="stale-build",
+                )
             if not ready:
                 self._state = "blocked"
-                return self._finish("start", "blocked", stamp, stamp, None, error_code="unready")
+                return self._finish(
+                    "start",
+                    "blocked",
+                    requested,
+                    None,
+                    None,
+                    generation=generation,
+                    started_at=started_at,
+                    started_mono=started_mono,
+                    error_code="unready",
+                )
+            self._loaded = requested
+            self._loaded_sequence = 1
             self._state = "ready"
-            return self._finish("start", "ok", stamp, stamp, 0)
+            return self._finish(
+                "start",
+                "ok",
+                requested,
+                requested,
+                0,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+            )
         except TimeoutError:
             self._state = "blocked"
-            stamp = self._source()
-            return self._finish("start", "blocked", stamp, self._loaded, None, error_code="deadline")
+            return self._finish(
+                "start",
+                "blocked",
+                requested,
+                self._loaded,
+                None,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="deadline",
+            )
         except LiveError:
             raise
 
@@ -402,61 +517,111 @@ class LiveSession:
         timeout_s: float = 30,
     ) -> Mapping[str, Any]:
         params = dict(params or {})
+        self._assert_generation(generation)
+        started_at = se.utc_now()
+        started_mono = self._monotonic()
         if operation in ("status", "logs"):
-            return self._status() if operation == "status" else self._logs_reply(params)
-        mutating = operation in MUTATING_OPS and not (
-            operation == "controls" and params.get("method") in READ_CONTROL_METHODS
-        )
+            if operation == "status":
+                return self._status(generation=generation, started_at=started_at, started_mono=started_mono)
+            return self._logs_reply(params, generation=generation, started_at=started_at, started_mono=started_mono)
+        if not self._lock.acquire(blocking=False):
+            raise LiveError("busy", "a live mutation is already in progress")
         previous = self._state
-        if mutating:
-            if not self._lock.acquire(blocking=False):
-                raise LiveError("busy", "a live mutation is already in progress")
-            self._state = "busy"
+        self._state = "busy"
         try:
-            return self._request_locked(operation, generation=generation, params=params, timeout_s=timeout_s)
+            return self._request_locked(
+                operation,
+                generation=generation,
+                params=params,
+                timeout_s=timeout_s,
+                started_at=started_at,
+                started_mono=started_mono,
+            )
         finally:
-            if mutating:
-                if self._state == "busy":
-                    self._state = previous
-                self._lock.release()
+            if self._state == "busy":
+                self._state = previous
+            self._lock.release()
 
     def close(self) -> None:
         if self._closed:
             return
+        child = self._child
+        if child is not None and self._app_id:
+            try:
+                self._rpc("app.stop", {"appId": self._app_id}, deadline=self._monotonic() + 5)
+            except (LiveError, TimeoutError, OSError):
+                pass
+        if child is not None:
+            child.close()
+        self._child = None
+        self._app_id = None
+        self._state = "stopped"
         self._closed = True
-        try:
-            if self._child is not None and self._app_id:
-                try:
-                    reply = self._rpc("app.stop", {"appId": self._app_id}, timeout_s=5)
-                    _ = reply
-                except (LiveError, TimeoutError, OSError):
-                    pass
-                try:
-                    self._child.close()
-                except OSError:
-                    pass
-        finally:
-            self._child = None
-            self._state = "stopped"
-            self._release_worktree()
+        self._release_worktree()
 
     def _request_locked(
-        self, operation: str, *, generation: int, params: Mapping[str, Any], timeout_s: float
+        self,
+        operation: str,
+        *,
+        generation: int,
+        params: Mapping[str, Any],
+        timeout_s: float,
+        started_at: str,
+        started_mono: float,
     ) -> Mapping[str, Any]:
-        lease = self._load_lease()
-        if int(lease.get("generation", 0)) != int(generation):
-            raise LiveError("stale-session", "lease generation moved")
+        self._assert_generation(generation)
         if operation == "stop":
             self.close()
             stamp = self._loaded or self._source()
-            return self._finish("stop", "ok", stamp, self._loaded, 0)
+            return self._finish(
+                "stop",
+                "ok",
+                stamp,
+                self._loaded,
+                0,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+            )
         if operation == "controls":
-            return self._controls(params, timeout_s)
+            return self._controls(
+                params,
+                timeout_s,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+            )
         if operation == "screenshot":
-            return self._take_screenshot(timeout_s)
+            return self._take_screenshot(generation=generation, started_at=started_at, started_mono=started_mono)
         if operation in ("reload", "restart"):
-            return self._reload(full_restart=operation == "restart", timeout_s=timeout_s)
+            return self._reload(
+                full_restart=operation == "restart",
+                timeout_s=timeout_s,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+            )
         raise LiveError("unsupported-operation", f"unsupported live operation {operation!r}")
+
+    def _assert_generation(self, generation: int) -> None:
+        lease = self._load_lease()
+        current = int(lease.get("generation", 0))
+        if int(generation) != current:
+            raise LiveError("stale-session", "lease generation moved")
+        if self._child_generation is not None and int(generation) != int(self._child_generation):
+            raise LiveError("stale-session", "request generation does not match the bound child")
+
+    def _source_matches(self, requested: SourceStamp) -> bool:
+        return self._source().inputs_sha256 == requested.inputs_sha256
+
+    def _deadline(self, timeout_s: float) -> float:
+        return self._monotonic() + float(timeout_s)
+
+    def _remaining(self, deadline: float) -> float:
+        left = deadline - self._monotonic()
+        if left <= 0:
+            raise TimeoutError("machine deadline")
+        return left
 
     def _assert_safe_lease(self, lease: Mapping[str, Any]) -> None:
         owner = lease.get("owner") or {}
@@ -502,10 +667,10 @@ class LiveSession:
             pass
         self._claimed_worktree = False
 
-    def _drain_until_started(self, timeout_s: float) -> None:
+    def _drain_until_started(self, deadline: float) -> None:
         events = []
         while True:
-            message = self._read(timeout_s)
+            message = self._read(deadline)
             if message is None:
                 raise LiveError("daemon-exited", "flutter daemon exited before app.started")
             name = message.get("event")
@@ -518,10 +683,10 @@ class LiveSession:
                         raise LiveError("malformed-response", "app.started without app.start")
                     return
 
-    def _read(self, timeout_s: float) -> dict[str, Any] | None:
+    def _read(self, deadline: float) -> dict[str, Any] | None:
         if self._child is None:
             raise LiveError("unready", "no live child")
-        line = self._child.receive(timeout_s)
+        line = self._child.receive(self._remaining(deadline))
         if line is None:
             return None
         message = _parse_machine(line)
@@ -531,32 +696,51 @@ class LiveSession:
 
     def _record_log(self, message: Mapping[str, Any]) -> None:
         params = message.get("params") or {}
-        self._logs.append({"message": params.get("log", ""), "error": bool(params.get("error"))})
+        self._logs.append(
+            {"message": sanitize_log_text(str(params.get("log", ""))), "error": bool(params.get("error"))}
+        )
+        if len(self._logs) > MAX_LOG_ENTRIES:
+            self._logs = self._logs[-MAX_LOG_ENTRIES:]
 
-    def _rpc(self, method: str, params: Mapping[str, Any], *, timeout_s: float) -> dict[str, Any]:
+    def _rpc(self, method: str, params: Mapping[str, Any], *, deadline: float) -> dict[str, Any]:
         if self._child is None:
             raise LiveError("unready", "no live child")
         self._rpc_id += 1
         rpc_id = self._rpc_id
         self._child.send(json.dumps([{"id": rpc_id, "method": method, "params": dict(params)}]) + "\n")
         while True:
-            message = self._read(timeout_s)
+            message = self._read(deadline)
             if message is None:
                 raise LiveError("daemon-exited", "flutter daemon exited during an operation")
             if message.get("id") == rpc_id:
                 return message
 
-    def _refresh_readiness(self, timeout_s: float, *, wait: bool) -> tuple[bool, dict[str, Any]]:
+    def _validate_capabilities(self, reply: Mapping[str, Any]) -> None:
+        if "error" in reply:
+            raise LiveError("malformed-response", "capabilities negotiation failed")
+        result = reply.get("result")
+        if not isinstance(result, dict):
+            raise LiveError("malformed-response", "capabilities result must be an object")
+        if result.get("contract_version") != CONTRACT_VERSION:
+            raise LiveError("malformed-response", "unsupported controls contract version")
+        capabilities = result.get("capabilities")
+        if not isinstance(capabilities, list):
+            raise LiveError("malformed-response", "capabilities must be a list")
+        missing = REQUIRED_CAPABILITIES.difference(capabilities)
+        if missing:
+            raise LiveError("malformed-response", f"missing required capabilities {sorted(missing)}")
+
+    def _refresh_readiness(self, deadline: float, *, wait: bool) -> tuple[bool, dict[str, Any]]:
         cap = self._rpc(
             "app.callServiceExtension",
             {"appId": self._app_id, "methodName": "ext.omi.controls.capabilities", "params": {}},
-            timeout_s=timeout_s,
+            deadline=deadline,
         )
-        _ = cap
+        self._validate_capabilities(cap)
         state_reply = self._rpc(
             "app.callServiceExtension",
             {"appId": self._app_id, "methodName": "ext.omi.controls.state", "params": {}},
-            timeout_s=timeout_s,
+            deadline=deadline,
         )
         state = state_reply.get("result") or {}
         if wait and not self._is_ready(state):
@@ -567,7 +751,7 @@ class LiveSession:
                     "methodName": "ext.omi.controls.wait_ready",
                     "params": {"condition": "signedIn", "deadline_ms": "15000"},
                 },
-                timeout_s=timeout_s,
+                deadline=deadline,
             )
             result = waited.get("result") or {}
             state = result.get("state") or result
@@ -587,64 +771,180 @@ class LiveSession:
         uid = (state.get("principal") or {}).get("uid")
         return uid == lease.get("default_auth_uid") == seed.get("uid")
 
-    def _reload(self, *, full_restart: bool, timeout_s: float) -> Mapping[str, Any]:
-        before = self._source()
+    def _reload(
+        self,
+        *,
+        full_restart: bool,
+        timeout_s: float,
+        generation: int,
+        started_at: str,
+        started_mono: float,
+    ) -> Mapping[str, Any]:
+        requested = self._source()
         loaded = self._loaded
-        if loaded is not None and before.restart_sha256 != loaded.restart_sha256:
-            return self._finish("reload", "restart-required", before, loaded, None, error_code="restart-required")
+        op = "restart" if full_restart else "reload"
+        if loaded is not None and requested.restart_sha256 != loaded.restart_sha256:
+            return self._finish(
+                "reload",
+                "restart-required",
+                requested,
+                loaded,
+                None,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="restart-required",
+            )
+        deadline = self._deadline(timeout_s)
         try:
             reply = self._rpc(
                 "app.restart",
                 {"appId": self._app_id, "fullRestart": full_restart, "pause": False},
-                timeout_s=timeout_s,
+                deadline=deadline,
             )
         except LiveError as exc:
-            after = self._source()
-            code = "daemon-exited" if exc.code == "daemon-exited" else exc.code
             self._state = "blocked"
             return self._finish(
-                "restart" if full_restart else "reload",
+                op,
                 "blocked",
-                after,
+                requested,
                 loaded,
                 None,
-                error_code=code,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="daemon-exited" if exc.code == "daemon-exited" else exc.code,
             )
         except TimeoutError:
-            after = self._source()
             self._state = "blocked"
             return self._finish(
-                "restart" if full_restart else "reload",
+                op,
                 "blocked",
-                after,
+                requested,
                 loaded,
                 None,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
                 error_code="deadline",
             )
-        after = self._source()
-        op = "restart" if full_restart else "reload"
-        if after.inputs_sha256 != before.inputs_sha256:
+        if not self._source_matches(requested):
             self._state = "blocked"
-            return self._finish(op, "blocked", after, loaded, reply.get("result", {}).get("code") if isinstance(reply.get("result"), dict) else None)
+            daemon_code = reply.get("result", {}).get("code") if isinstance(reply.get("result"), dict) else None
+            return self._finish(
+                op,
+                "blocked",
+                requested,
+                loaded,
+                daemon_code,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="stale-build",
+            )
         if "error" in reply:
             self._state = "blocked"
-            return self._finish(op, "blocked", after, loaded, None, error_code="malformed-response")
+            return self._finish(
+                op,
+                "blocked",
+                requested,
+                loaded,
+                None,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="malformed-response",
+            )
         result = reply.get("result")
         if not isinstance(result, dict) or "code" not in result:
-            return self._finish(op, "blocked", after, loaded, None, error_code="malformed-response")
+            return self._finish(
+                op,
+                "blocked",
+                requested,
+                loaded,
+                None,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="malformed-response",
+            )
         code = result.get("code")
         if code != 0:
-            return self._finish(op, "rejected", after, loaded, code, error_code="reload-rejected")
-        ready, _ = self._refresh_readiness(timeout_s, wait=True)
+            return self._finish(
+                op,
+                "rejected",
+                requested,
+                loaded,
+                code,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="reload-rejected",
+            )
+        try:
+            ready, _ = self._refresh_readiness(deadline, wait=True)
+        except TimeoutError:
+            self._state = "blocked"
+            return self._finish(
+                op,
+                "blocked",
+                requested,
+                loaded,
+                code,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="deadline",
+            )
+        if not self._source_matches(requested):
+            self._state = "blocked"
+            return self._finish(
+                op,
+                "blocked",
+                requested,
+                loaded,
+                code,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="stale-build",
+            )
         if not ready:
             self._state = "blocked"
-            return self._finish(op, "blocked", after, loaded, code, error_code="unready")
-        self._loaded = after
+            return self._finish(
+                op,
+                "blocked",
+                requested,
+                loaded,
+                code,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="unready",
+            )
+        self._loaded = requested
         self._loaded_sequence += 1
         self._state = "ready"
-        return self._finish(op, "ok", after, after, code)
+        return self._finish(
+            op,
+            "ok",
+            requested,
+            requested,
+            code,
+            generation=generation,
+            started_at=started_at,
+            started_mono=started_mono,
+        )
 
-    def _controls(self, params: Mapping[str, Any], timeout_s: float) -> Mapping[str, Any]:
+    def _controls(
+        self,
+        params: Mapping[str, Any],
+        timeout_s: float,
+        *,
+        generation: int,
+        started_at: str,
+        started_mono: float,
+    ) -> Mapping[str, Any]:
         method = params.get("method")
         if method not in CONTROL_METHODS:
             raise LiveError("unsupported-operation", f"unsupported control {method!r}")
@@ -652,7 +952,7 @@ class LiveSession:
         reply = self._rpc(
             "app.callServiceExtension",
             {"appId": self._app_id, "methodName": f"ext.omi.controls.{method}", "params": inner},
-            timeout_s=timeout_s,
+            deadline=self._deadline(timeout_s),
         )
         stamp = self._loaded or self._source()
         if "error" in reply:
@@ -662,32 +962,85 @@ class LiveSession:
                 stamp,
                 self._loaded,
                 None,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
                 error_code="unsupported-operation",
                 result=reply.get("error"),
             )
-        return self._finish("controls", "ok", stamp, self._loaded, 0, result=reply.get("result") or {})
+        return self._finish(
+            "controls",
+            "ok",
+            stamp,
+            self._loaded,
+            0,
+            generation=generation,
+            started_at=started_at,
+            started_mono=started_mono,
+            result=reply.get("result") or {},
+        )
 
-    def _take_screenshot(self, timeout_s: float) -> Mapping[str, Any]:
-        del timeout_s
+    def _take_screenshot(self, *, generation: int, started_at: str, started_mono: float) -> Mapping[str, Any]:
         stamp = self._source()
         if self._loaded is None or stamp.inputs_sha256 != self._loaded.inputs_sha256:
-            return self._finish("screenshot", "blocked", stamp, self._loaded, None, error_code="stale-build")
+            return self._finish(
+                "screenshot",
+                "blocked",
+                stamp,
+                self._loaded,
+                None,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code="stale-build",
+            )
         relative = Path("screenshots") / f"{uuid.uuid4().hex}.png"
         path = self.directory / relative
         lease = self._load_lease()
         device = str((lease.get("device") or {}).get("udid") or "")
         self._screenshot(device, path)
         shot = {"path": str(relative), "sha256": se.file_sha256(path)}
-        return self._finish("screenshot", "ok", stamp, self._loaded, 0, screenshot=shot)
+        return self._finish(
+            "screenshot",
+            "ok",
+            stamp,
+            self._loaded,
+            0,
+            generation=generation,
+            started_at=started_at,
+            started_mono=started_mono,
+            screenshot=shot,
+        )
 
-    def _status(self) -> Mapping[str, Any]:
+    def _status(self, *, generation: int, started_at: str, started_mono: float) -> Mapping[str, Any]:
         stamp = self._loaded or self._source()
-        return self._finish("status", "ok", stamp, self._loaded, 0, result={"state": self._state})
+        return self._finish(
+            "status",
+            "ok",
+            stamp,
+            self._loaded,
+            0,
+            generation=generation,
+            started_at=started_at,
+            started_mono=started_mono,
+            result={"state": self._state},
+        )
 
-    def _logs_reply(self, params: Mapping[str, Any]) -> Mapping[str, Any]:
+    def _logs_reply(
+        self,
+        params: Mapping[str, Any],
+        *,
+        generation: int,
+        started_at: str,
+        started_mono: float,
+    ) -> Mapping[str, Any]:
         cursor = int(params.get("cursor") or 0)
         limit = int(params.get("limit") or 50)
-        entries = self._logs[cursor : cursor + limit]
+        if cursor < 0:
+            cursor = 0
+        if limit < 0:
+            limit = 0
+        entries = self._logs[cursor : cursor + min(limit, MAX_LOG_ENTRIES)]
         stamp = self._loaded or self._source()
         return self._finish(
             "logs",
@@ -695,6 +1048,9 @@ class LiveSession:
             stamp,
             self._loaded,
             0,
+            generation=generation,
+            started_at=started_at,
+            started_mono=started_mono,
             result={"entries": entries, "next_cursor": cursor + len(entries)},
         )
 
@@ -706,16 +1062,18 @@ class LiveSession:
         loaded: SourceStamp | None,
         daemon_code: int | None,
         *,
+        generation: int,
+        started_at: str,
+        started_mono: float,
         error_code: str | None = None,
         result: Mapping[str, Any] | None = None,
         screenshot: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
-        started = se.utc_now()
-        finished = se.utc_now()
-        lease = self._load_lease()
+        finished_at = _as_rfc3339_utc(se.utc_now())
+        elapsed_ms = max(0, round((self._monotonic() - started_mono) * 1000))
         operation_id = f"op-{uuid.uuid4().hex[:12]}"
         live: dict[str, Any] = {
-            "generation": int(lease.get("generation") or 1),
+            "generation": int(generation),
             "operation_id": operation_id,
             "operation": operation,
             "outcome": outcome,
@@ -723,9 +1081,9 @@ class LiveSession:
             "loaded_source": None if loaded is None else _stamp_source(loaded),
             "loaded_sequence": self._loaded_sequence,
             "restart_sha256": (loaded or requested).restart_sha256,
-            "started_at": started,
-            "finished_at": finished,
-            "elapsed_ms": 0,
+            "started_at": _as_rfc3339_utc(started_at),
+            "finished_at": finished_at,
+            "elapsed_ms": elapsed_ms,
         }
         if daemon_code is not None:
             live["daemon_code"] = daemon_code
@@ -735,16 +1093,12 @@ class LiveSession:
         op_path = self.directory / "operations" / operation_id / "evidence.json"
         se.write_evidence(op_path, document)
         se.write_evidence(self.directory / "evidence.json", document)
-        reply: dict[str, Any] = {
+        return {
             "outcome": outcome,
             "result": dict(result or ({"state": self._state} if operation == "status" else {})),
             "evidence": document,
             "error_code": error_code,
         }
-        blob = json.dumps(reply)
-        if "private-vm-auth" in blob:
-            raise LiveError("unsafe-config", "live reply leaked a VM auth URI")
-        return reply
 
     def _attach_live(self, live: Mapping[str, Any]) -> dict[str, Any]:
         path = self.directory / "evidence.json"
@@ -757,7 +1111,9 @@ class LiveSession:
         return document
 
 
-def dispatch(repo_root: Path, session_id: str, operation: str, params: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
+def dispatch(
+    repo_root: Path, session_id: str, operation: str, params: Mapping[str, Any] | None = None
+) -> Mapping[str, Any]:
     del params
     from .mobile_session import _load_lease
 
@@ -765,10 +1121,12 @@ def dispatch(repo_root: Path, session_id: str, operation: str, params: Mapping[s
     _load_lease(directory / LEASE_FILENAME)
     if operation == "start":
         raise LiveNotImplemented(
-            "V1 PR1 does not spawn flutter run on a device; LiveSession is fake-backed in tests"
+            "V1 PR1 adds no new live-process adapter; LiveSession is fake-backed in tests "
+            "and does not spawn flutter run on a device"
         )
     raise LiveNotImplemented(
-        f"no live broker is running for {operation!r} on {session_id}; V1 PR1 does not spawn flutter run"
+        f"no live broker is running for {operation!r} on {session_id}; "
+        "V1 PR1 adds no new live-process adapter and does not spawn flutter run"
     )
 
 
