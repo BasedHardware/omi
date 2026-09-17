@@ -90,18 +90,18 @@ def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _as_number(value: Any) -> Optional[float]:
+def _as_number(value: Any) -> Any:
     """Return value when it is a real JSON number, otherwise None.
 
     Booleans are rejected so a JSON true/false cannot be rendered as 1/0, and
-    the original int/float subtype is preserved so rendering stays identical.
+    the original int/float value is preserved so rendering stays identical.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return value
 
 
-def _numeric_item(items: Any, index: int) -> Optional[float]:
+def _numeric_item(items: Any, index: int) -> Any:
     """Read a numeric list item by position, degrading to None when malformed."""
     return _as_number(_safe_item(items, index))
 
@@ -113,7 +113,7 @@ def _require_dict(payload: Any) -> dict[str, Any]:
     return payload
 
 
-def _json_body(response: httpx.Response) -> dict[str, Any]:
+def _json_body(response: Any) -> dict[str, Any]:
     """Decode an HTTP response body as a JSON object, or raise a clean tool error."""
     try:
         payload = response.json()
