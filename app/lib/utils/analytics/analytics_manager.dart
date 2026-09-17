@@ -13,6 +13,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/speech_profile_enroll_events.dart';
@@ -59,12 +60,19 @@ class AnalyticsManager {
         PlatformService.isAnalyticsSupported,
         adapter.init,
       ).timeout(timeout);
+      _registerBuildProvenance(adapter);
       await _loadGlobalEventProperties(timeout: timeout);
       await _loadPersonPropertyCache();
       _analyticsReady = true;
       _retryTimer?.cancel();
       _retryTimer = null;
       _scheduleFlush();
+    } catch (_) {}
+  }
+
+  static void _registerBuildProvenance(AnalyticsAdapter adapter) {
+    try {
+      adapter.registerSuperProperties(BuildProvenance.fromEnvironment().asProperties);
     } catch (_) {}
   }
 

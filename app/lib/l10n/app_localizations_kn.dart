@@ -10027,4 +10027,7 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ.';
+
+  @override
+  String get home => 'ಮುಖಪುಟ';
 }

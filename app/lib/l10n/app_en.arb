@@ -11845,5 +11845,9 @@
     "speechProfileEnrollmentPrompt": "So Omi knows which voice is yours — talk for about 5 seconds about anything.",
     "@speechProfileEnrollmentPrompt": {
         "description": "First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration."
+    },
+    "home": "Home",
+    "@home": {
+        "description": "Screen-reader label for the Home tab in the bottom navigation bar."
     }
 }

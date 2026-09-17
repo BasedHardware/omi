@@ -10021,4 +10021,7 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat.';
+
+  @override
+  String get home => 'Utama';
 }

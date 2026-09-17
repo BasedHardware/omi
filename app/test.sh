@@ -3,6 +3,7 @@ set -euo pipefail
 
 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/validate_mobile_build_config_test.sh"
 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/mobile_build_wrapper_test.sh"
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/build_provenance_dart_defines_test.sh"
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"

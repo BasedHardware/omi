@@ -10065,4 +10065,7 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Για να ξέρει το Omi ποια φωνή είναι δική σας — μιλήστε για οτιδήποτε για περίπου 5 δευτερόλεπτα.';
+
+  @override
+  String get home => 'Αρχική';
 }

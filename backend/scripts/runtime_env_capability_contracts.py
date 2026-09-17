@@ -50,6 +50,10 @@ SUMMARY_PIPELINE_FLAGS = (
     'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
+    # Same co-host rule: an omitted or disagreeing value on one
+    # process_conversation host would silently keep that host ungated (code
+    # default OFF) while the others deny identified-basic first-open.
+    'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
 )
 
 # The runtime resolves these flags with strip().casefold() against the truthy
@@ -58,6 +62,13 @@ SUMMARY_PIPELINE_FLAGS = (
 # so an empty or misspelled literal cannot pass the contract while behaving
 # like the omitted/False case the contract exists to reject.
 _SUMMARY_FLAG_LITERALS = frozenset({'1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'})
+
+# utils.free_tier_basic_gates lights a gate only on an exact case-insensitive
+# ``true`` with no trimming (the FREE_TIER_* convention). Admission must not
+# accept a spelling the reader treats as off: ``on`` or `` true `` on every
+# host would pass co-host agreement and silently disable the gate.
+_EXACT_BOOLEAN_FLAGS = frozenset({'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'})
+_EXACT_BOOLEAN_LITERALS = frozenset({'true', 'false'})
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -188,6 +199,16 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
             # values for these same flags, so admission must not accept drift
             # (e.g. 'true' vs ' TRUE ') that the co-host gate would reject.
             summary_flag_values[flag][scope] = literal_env[flag]
+            if flag in _EXACT_BOOLEAN_FLAGS:
+                if literal_env[flag] not in _EXACT_BOOLEAN_LITERALS:
+                    errors.append(
+                        ValidationError(
+                            scope,
+                            f"rollout flag {flag} must be exactly 'true' or 'false' "
+                            f'(its reader accepts nothing else), got {literal_env[flag]!r}',
+                        )
+                    )
+                continue
             if literal_env[flag].strip().casefold() not in _SUMMARY_FLAG_LITERALS:
                 errors.append(
                     ValidationError(
