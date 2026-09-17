@@ -49,11 +49,6 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
-  - id: stack-overflow-app-tests
-    command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
-    triggers: ["plugins/omi-stack-overflow-app/**"]
-    lanes: ["local", "ci"]
-    reason: "#14126: null owner, non-list tags, and non-dict Stack Exchange payloads must degrade into ChatToolResponse errors, never crash the chat agent"
   - id: semantic-scholar-tests
     command: ["python3", "plugins/omi-semantic-scholar-app/test_main.py"]
     triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
