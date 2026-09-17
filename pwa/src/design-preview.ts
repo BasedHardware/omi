@@ -140,8 +140,8 @@ const exampleOutcomes: DesktopReadOutcomes = {
               searchableText: title,
               completed: index === 1,
               completedAt: null,
-              dueAt: null,
-              owner: null,
+              dueAt: index === 0 ? Date.parse("2026-09-18T12:00:00Z") : null,
+              owner: index === 0 ? "You" : null,
               source: "desktop",
               provenance: [],
               sortOrder: index,
@@ -342,6 +342,10 @@ function Preview() {
                 : undefined,
               omnibar: h(MobileOmnibar, {
                 key: "mobile-omnibar",
+                voiceControl:
+                  route === "home" || chatOpen
+                    ? h(LiveVoiceButton, { backend: null, compact: true })
+                    : undefined,
                 mode,
                 onModeChange: (next) => {
                   setMode(next);
@@ -425,25 +429,16 @@ function Preview() {
                       ),
                   })
                 : undefined,
-              liveVoiceControl: h(LiveVoiceButton, {
-                backend: null,
-                compact: true,
-              }),
               tasks:
                 outcomes?.tasks.status === "success"
                   ? outcomes.tasks.value.items
                   : [],
               taskStatus: outcomes ? "ready" : "offline",
-              recaps:
+              conversations:
                 outcomes?.conversations.status === "success"
-                  ? outcomes.conversations.value.items.map((item) => ({
-                      id: item.id,
-                      title: item.title,
-                      dateLabel: "Example recap",
-                    }))
+                  ? outcomes.conversations.value.items
                   : [],
-              recapStatus: outcomes ? "ready" : "offline",
-              mindMapStatus: "empty",
+              conversationStatus: outcomes ? "ready" : "offline",
               conversationContent: h(ConversationsPage, {
                 embedded: true,
                 search: {
@@ -470,10 +465,9 @@ function Preview() {
               settingsContent: h(SettingsPage),
               appsContent: h(ConnectorsPage),
               onOpenDevice: () => setDeviceOpen((open) => !open),
-              onOpenCalls: noop,
               onViewTasks: () => setRoute("tasks"),
-              onViewRecaps: () => setRoute("chat"),
-              onExpandMindMap: noop,
+              onViewConversations: () => setRoute("chat"),
+              onViewMemories: noop,
             })
           : h(surface === "mobile-setup" ? Onboarding : DesktopOnboarding, {
               onSignIn: () => setSignedIn(true),

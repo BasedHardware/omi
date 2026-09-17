@@ -88,36 +88,45 @@ afterEach(() => {
 
 test.each([
   ['Settings', 'Settings stage'],
-  ['Expand', 'Memories stage'],
+  ['Saved memories', 'Memories stage'],
   ['Apps', 'Connectors stage'],
 ])(
   'mobile %s opens its real destination and can return home',
   async (label, stage) => {
     const renderer = await renderApp();
     await act(async () => {
-      if (label === 'Expand') {
-        const expand = renderer.root.findAll(
-          node => node.props.children === 'Expand',
-        )[0];
-        let button = expand.parent;
-        while (button && typeof button.props.onPress !== 'function') {
-          button = button.parent;
-        }
-        button!.props.onPress();
-      } else {
-        control(renderer, label).props.onPress();
-      }
+      control(renderer, label).props.onPress();
     });
     expect(control(renderer, stage)).toBeDefined();
     await act(async () =>
       control(
         renderer,
-        label === 'Expand' ? 'Back to Home' : 'Home',
+        label === 'Saved memories' ? 'Back to Home' : 'Home',
       ).props.onPress(),
     );
     expect(control(renderer, 'Ask Omi')).toBeDefined();
   },
 );
+
+test('action items open from Home and return without a bottom Tasks destination', async () => {
+  const renderer = await renderApp();
+  expect(control(renderer, 'Tasks')).toBeUndefined();
+  expect(control(renderer, 'Open calls')).toBeUndefined();
+  expect(
+    renderer.root.findAll(node => node.props.children === 'Talk to Omi').length,
+  ).toBeGreaterThan(0);
+  await act(async () =>
+    control(renderer, 'See all action items').props.onPress(),
+  );
+  expect(control(renderer, 'Back to Home')).toBeDefined();
+  expect(control(renderer, 'Home').props.accessibilityState.selected).toBe(
+    true,
+  );
+  expect(control(renderer, 'Start Live voice')).toBeUndefined();
+  await act(async () => control(renderer, 'Back to Home').props.onPress());
+  expect(control(renderer, 'See all action items')).toBeDefined();
+  expect(control(renderer, 'Start Live voice')).toBeDefined();
+});
 
 test('mobile Ask Omi opens the actual chat and reports a missing backend', async () => {
   const renderer = await renderApp();

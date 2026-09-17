@@ -1126,21 +1126,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   ) {
     const taskItems =
       readOutcomes?.tasks.status === 'success'
-        ? readOutcomes.tasks.value.items.map(task => ({
-            completed: task.completed,
-            id: task.id,
-            title: task.title,
-          }))
+        ? readOutcomes.tasks.value.items
         : [];
-    const recapItems =
+    const conversationItems =
       readOutcomes?.conversations.status === 'success'
-        ? readOutcomes.conversations.value.items.map(item => ({
-            dateLabel: new Date(
-              item.startedAt ?? item.createdAt,
-            ).toLocaleDateString(undefined, {weekday: 'long'}),
-            id: item.id,
-            title: item.title,
-          }))
+        ? readOutcomes.conversations.value.items
         : [];
     const projectionStatus: MobileProjectionStatus =
       readsPhase === 'initial-loading' || readsPhase === 'refreshing'
@@ -1168,6 +1158,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         omnibar={
           <MobileOmnibar
             key="mobile-omnibar"
+            voiceControl={
+              activeMobileRoute === 'home' || homeChatOpen
+                ? mobileLiveControl
+                : undefined
+            }
             mode={mobileMode}
             onModeChange={next => {
               setMobileMode(next);
@@ -1259,7 +1254,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         appsContent={
           <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
         }
-        liveVoiceControl={mobileLiveControl}
         capture={{
           active: nativeSnapshot?.capture === 'recording',
           waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',
@@ -1283,11 +1277,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             />
           ) : null
         }
-        mindMapStatus={
-          readOutcomes?.memories.status === 'error' ? 'error' : projectionStatus
-        }
-        onExpandMindMap={() => setRoute('Memories')}
-        onOpenCalls={() => setRoute('Conversations')}
+        onViewMemories={() => setRoute('Memories')}
         onOpenDevice={() => setDevicePanelOpen(open => !open)}
         onRouteChange={destination => {
           setHomeChatOpen(false);
@@ -1303,16 +1293,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               : 'Home',
           );
         }}
-        onViewRecaps={() => setRoute('Conversations')}
+        onViewConversations={() => setRoute('Conversations')}
         onViewTasks={() => setRoute('Tasks')}
-        recapStatus={
+        conversationStatus={
           readOutcomes?.conversations.status === 'success'
             ? 'ready'
             : readOutcomes?.conversations.status === 'error'
             ? 'error'
             : projectionStatus
         }
-        recaps={recapItems}
+        conversations={conversationItems}
         tasks={taskItems}
         taskStatus={
           readOutcomes?.tasks.status === 'success'

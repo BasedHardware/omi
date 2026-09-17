@@ -63,19 +63,31 @@ function buildProps(
     omnibar: <Text>Shared bottom dock</Text>,
     capture: {active: true, transcript: 'Preparing the product demo'},
     device: {connected: true, label: '100%'},
-    mindMapStatus: 'ready',
-    onExpandMindMap: jest.fn(),
-    onOpenCalls: jest.fn(),
+    onViewMemories: jest.fn(),
     onOpenDevice: jest.fn(),
     onRouteChange: jest.fn(),
     onTaskToggle: jest.fn(),
-    onViewRecaps: jest.fn(),
+    onViewConversations: jest.fn(),
     onViewTasks: jest.fn(),
-    recaps: [
-      {id: 'recap-1', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+    conversations: [
+      {
+        id: 'conversation-1',
+        title: 'Omi gets simpler',
+        summary: 'Make room for the work that matters.',
+        createdAt: '2026-09-17T10:00:00Z',
+        startedAt: null,
+      },
     ],
-    recapStatus: 'ready',
-    tasks: [{id: 'task-1', title: 'Prepare product demo', completed: false}],
+    conversationStatus: 'ready',
+    tasks: [
+      {
+        id: 'task-1',
+        title: 'Prepare product demo',
+        completed: false,
+        dueAt: Date.parse('2026-09-18T12:00:00Z'),
+        owner: 'Sam',
+      },
+    ],
     taskStatus: 'ready',
     ...overrides,
   };
@@ -117,11 +129,13 @@ describe('MobileAppSurface', () => {
   test('renders the shipping mobile hierarchy from real projections', () => {
     const tree = JSON.stringify(render().toJSON());
     expect(tree).toContain('Listening');
-    expect(tree).toContain('Tasks');
+    expect(tree).toContain('Action items');
     expect(tree).toContain('Prepare product demo');
-    expect(tree).toContain('Daily Recaps');
+    expect(tree).toContain('Recent conversations');
     expect(tree).toContain('Omi gets simpler');
-    expect(tree).toContain('Mind Map');
+    expect(tree).toContain('Make room for the work that matters.');
+    expect(tree).not.toContain('Mind Map');
+    expect(tree).not.toContain('Daily Recaps');
     expect(tree).not.toContain('Saved data unavailable');
     expect(tree).not.toContain('Retry');
   });
@@ -239,7 +253,7 @@ test('task edits wait for authoritative props and preserve a failed draft for re
     renderer.update(
       <MobileAppSurface
         {...props}
-        tasks={[{id: 'task-1', title: 'Updated task', completed: true}]}
+        tasks={[{...props.tasks[0], title: 'Updated task', completed: true}]}
       />,
     ),
   );
@@ -354,20 +368,78 @@ test('the mobile composer rejects blank taps and keyboard submits but accepts a 
   act(() => renderer.unmount());
 });
 
-test('the mobile greeting respects reduced motion without navigating or starting capture', () => {
+test('the mobile mark respects reduced motion and does not pretend to be a capture control', () => {
   const props = buildProps({capture: {active: false, transcript: ''}});
   const renderer = render(props);
   const mark = () => renderer.root.findByType('OmiAvatar' as any);
   expect(mark().props.reduceMotion).toBe(true);
-  expect(mark().props.motionKey).toBe('0');
-  act(() =>
-    renderer.root
-      .findAll(node => node.props.accessibilityLabel === 'Say hello to Omi')[0]
-      .props.onPress(),
-  );
-  expect(mark().props.motionKey).toBe('1');
+  expect(mark().props.motion).toBe('breathe');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Say hello to Omi',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open calls',
+    ),
+  ).toHaveLength(0);
   expect(props.onRouteChange).not.toHaveBeenCalled();
   expect(props.onOpenDevice).not.toHaveBeenCalled();
-  expect(renderedText(renderer)).toContain('Capture is paused');
+  expect(renderedText(renderer)).not.toContain('Capture is paused');
   act(() => renderer.unmount());
+});
+
+test('Home shows open task metadata and opens all tasks without a Tasks tab', () => {
+  const props = buildProps();
+  const tasks = [
+    {...props.tasks[0], id: 'done', title: 'Already finished', completed: true},
+    props.tasks[0],
+    {
+      ...props.tasks[0],
+      id: 'no-date',
+      title: 'Unscheduled idea',
+      dueAt: null,
+      owner: null,
+    },
+  ];
+  const tree = render({...props, tasks});
+  const text = renderedText(tree);
+  expect(text).toContain('Due Sep 18 · Sam');
+  expect(text).toContain('Unscheduled idea');
+  expect(text).not.toContain('Already finished');
+  expect(text).not.toContain('No due date');
+  expect(text).not.toContain('Invalid Date');
+  expect(
+    tree.root.findAll(
+      node =>
+        node.props.accessibilityRole === 'tab' &&
+        node.props.accessibilityLabel === 'Tasks',
+    ),
+  ).toHaveLength(0);
+  act(() =>
+    tree.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'See all action items',
+      )[0]
+      .props.onPress(),
+  );
+  expect(props.onViewTasks).toHaveBeenCalledTimes(1);
+  act(() =>
+    tree.update(
+      <MobileAppSurface {...props} tasks={tasks} activeRoute="tasks" />,
+    ),
+  );
+  expect(renderedText(tree)).toContain('Already finished');
+  expect(
+    tree.root.findAll(node => node.props.accessibilityLabel === 'Home')[0].props
+      .accessibilityState.selected,
+  ).toBe(true);
+  act(() =>
+    tree.root
+      .findAll(node => node.props.accessibilityLabel === 'Back to Home')[0]
+      .props.onPress(),
+  );
+  expect(props.onRouteChange).toHaveBeenCalledWith('home');
+  act(() => tree.unmount());
 });

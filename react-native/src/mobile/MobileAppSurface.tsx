@@ -15,16 +15,18 @@ import {
   type TaskMutationProps,
 } from '../ui/TaskEditor';
 import House from 'lucide-react-native/icons/house';
-import ListFilter from 'lucide-react-native/icons/list-filter';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
-import Mic from 'lucide-react-native/icons/mic';
-import Phone from 'lucide-react-native/icons/phone';
+import ChevronLeft from 'lucide-react-native/icons/chevron-left';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
 import Check from 'lucide-react-native/icons/check';
 import Pencil from 'lucide-react-native/icons/pencil';
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {useReduceMotion} from '../app/useReduceMotion';
+import type {
+  ConversationProjection,
+  TaskProjection,
+} from '../desktopReadClient';
 import {
   mobileColor,
   mobileRadius,
@@ -41,17 +43,15 @@ export type MobileProjectionStatus =
 
 export type MobileRoute = 'home' | 'chat' | 'tasks' | 'apps' | 'settings';
 
-export type MobileTask = {
-  id: string;
-  title: string;
-  completed: boolean;
-};
+export type MobileTask = Pick<
+  TaskProjection,
+  'id' | 'title' | 'completed' | 'dueAt' | 'owner'
+>;
 
-export type MobileRecap = {
-  id: string;
-  title: string;
-  dateLabel: string;
-};
+type MobileConversation = Pick<
+  ConversationProjection,
+  'id' | 'title' | 'summary' | 'createdAt' | 'startedAt'
+>;
 
 export type MobileDeviceState = {
   connected: boolean;
@@ -74,28 +74,23 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   settingsContent?: React.ReactNode;
   conversationContent?: React.ReactNode;
   appsContent?: React.ReactNode;
-  liveVoiceControl?: React.ReactNode;
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
-  recaps: readonly MobileRecap[];
-  recapStatus: MobileProjectionStatus;
-  mindMapStatus: MobileProjectionStatus;
+  conversations: readonly MobileConversation[];
+  conversationStatus: MobileProjectionStatus;
   omnibar: React.ReactNode;
   chatContent?: React.ReactNode;
   searchContent?: React.ReactNode;
   onOpenDevice: () => void;
-  onOpenCalls: () => void;
   onRouteChange: (route: MobileRoute) => void;
   onViewTasks: () => void;
-  onViewRecaps: () => void;
-  onExpandMindMap: () => void;
+  onViewConversations: () => void;
+  onViewMemories: () => void;
 };
 
 type DashboardRow =
-  | {kind: 'capture'; key: 'capture'}
   | {kind: 'tasks'; key: 'tasks'}
-  | {kind: 'recaps'; key: 'recaps'}
-  | {kind: 'mind-map'; key: 'mind-map'};
+  | {kind: 'conversations'; key: 'conversations'};
 
 const StatePanel = memo(function StatePanel({
   status,
@@ -157,9 +152,28 @@ const TaskRow = memo(function TaskRow({
         <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
           {task.completed && <Check color={mobileColor.background} size={14} />}
         </View>
-        <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
-          {task.title}
-        </Text>
+        <View style={styles.taskCopy}>
+          <Text
+            style={[styles.taskText, task.completed && styles.taskTextDone]}>
+            {task.title}
+          </Text>
+          {((!task.completed && task.dueAt !== null) || task.owner) && (
+            <Text style={styles.taskMeta}>
+              {[
+                !task.completed && task.dueAt !== null
+                  ? `Due ${new Date(task.dueAt).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      timeZone: 'UTC',
+                    })}`
+                  : null,
+                task.owner,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          )}
+        </View>
       </Pressable>
       {onEdit && (
         <Pressable
@@ -175,13 +189,28 @@ const TaskRow = memo(function TaskRow({
   );
 });
 
-const RecapCard = memo(function RecapCard({recap}: {recap: MobileRecap}) {
+const ConversationRow = memo(function ConversationRow({
+  conversation,
+}: {
+  conversation: MobileConversation;
+}) {
   return (
-    <View style={styles.recapCard}>
-      <Text numberOfLines={3} style={styles.recapTitle}>
-        {recap.title}
-      </Text>
-      <Text style={styles.recapDate}>{recap.dateLabel}</Text>
+    <View style={styles.conversationRow}>
+      <View style={styles.conversationHeading}>
+        <Text numberOfLines={2} style={styles.conversationTitle}>
+          {conversation.title}
+        </Text>
+        <Text style={styles.taskMeta}>
+          {new Date(
+            conversation.startedAt ?? conversation.createdAt,
+          ).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
+        </Text>
+      </View>
+      {conversation.summary !== '' && (
+        <Text numberOfLines={2} style={styles.taskMeta}>
+          {conversation.summary}
+        </Text>
+      )}
     </View>
   );
 });
@@ -189,7 +218,6 @@ const RecapCard = memo(function RecapCard({recap}: {recap: MobileRecap}) {
 const tabItems = [
   {route: 'home' as const, label: 'Home', Icon: House},
   {route: 'chat' as const, label: 'Conversations', Icon: MessageCircle},
-  {route: 'tasks' as const, label: 'Tasks', Icon: ListFilter},
   {route: 'apps' as const, label: 'Apps', Icon: Puzzle},
   {route: 'settings' as const, label: 'Settings', Icon: Settings},
 ];
@@ -201,20 +229,24 @@ function MobileTabBar({
   activeRoute: MobileRoute;
   onRouteChange: (route: MobileRoute) => void;
 }) {
+  const selectedRoute = activeRoute === 'tasks' ? 'home' : activeRoute;
   return (
     <View accessibilityRole="tablist" style={styles.tabBar}>
       {tabItems.map(({route, label, Icon}) => (
         <Pressable
           accessibilityLabel={label}
           accessibilityRole="tab"
-          accessibilityState={{selected: activeRoute === route}}
+          accessibilityState={{selected: selectedRoute === route}}
           key={route}
           onPress={() => onRouteChange(route)}
-          style={[styles.tabButton, activeRoute === route && styles.tabActive]}>
+          style={[
+            styles.tabButton,
+            selectedRoute === route && styles.tabActive,
+          ]}>
           <View style={styles.tabIcon}>
             <Icon
               color={
-                activeRoute === route
+                selectedRoute === route
                   ? mobileColor.text
                   : mobileColor.textSubtle
               }
@@ -224,7 +256,7 @@ function MobileTabBar({
           <Text
             style={[
               styles.tabLabel,
-              activeRoute === route && styles.tabLabelActive,
+              selectedRoute === route && styles.tabLabelActive,
             ]}>
             {label}
           </Text>
@@ -248,6 +280,7 @@ function SectionHeader({
       <Text style={styles.sectionTitle}>{title}</Text>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel={`${actionLabel} ${title.toLowerCase()}`}
         onPress={action}
         style={styles.quietButton}>
         <Text style={styles.quietButtonText}>{actionLabel}</Text>
@@ -269,10 +302,7 @@ export function MobileAppSurface({
   settingsContent,
   conversationContent,
   appsContent,
-  liveVoiceControl,
-  mindMapStatus,
-  onExpandMindMap,
-  onOpenCalls,
+  onViewMemories,
   onOpenDevice,
   onRouteChange,
   onTaskToggle,
@@ -282,17 +312,17 @@ export function MobileAppSurface({
   onRetryTaskMutation,
   onDismissTaskMutation,
   writesAvailable = false,
-  onViewRecaps,
+  onViewConversations,
   onViewTasks,
-  recaps,
-  recapStatus,
+  conversations,
+  conversationStatus,
   tasks,
   taskStatus,
 }: MobileAppSurfaceProps): React.JSX.Element {
   const reduceMotion = useReduceMotion();
-  const [greeting, setGreeting] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
+  const openTasks = tasks.filter(task => !task.completed);
   const taskFeedback = useMemo(
     () => (
       <>
@@ -327,66 +357,29 @@ export function MobileAppSurface({
   );
   const rows = useMemo<DashboardRow[]>(
     () => [
-      {kind: 'capture', key: 'capture'},
       {kind: 'tasks', key: 'tasks'},
-      {kind: 'recaps', key: 'recaps'},
-      {kind: 'mind-map', key: 'mind-map'},
+      {kind: 'conversations', key: 'conversations'},
     ],
     [],
   );
 
   const renderRow = useCallback(
     ({item}: {item: DashboardRow}) => {
-      if (item.kind === 'capture') {
-        return (
-          <View style={styles.captureCard}>
-            <View style={styles.captureHeader}>
-              <View style={styles.listeningBadge}>
-                <Text style={styles.listeningText}>
-                  {capture.active
-                    ? capture.waitingForAudio
-                      ? 'Waiting for audio'
-                      : 'Listening'
-                    : 'Paused'}
-                </Text>
-                <View
-                  style={[
-                    styles.captureDot,
-                    (!capture.active || capture.waitingForAudio) &&
-                      styles.captureDotPaused,
-                  ]}
-                />
-              </View>
-              <View style={styles.microphoneButton}>
-                <Mic color={mobileColor.text} size={18} />
-              </View>
-            </View>
-            <Text numberOfLines={2} style={styles.transcript}>
-              {capture.transcript ||
-                (capture.active
-                  ? capture.waitingForAudio
-                    ? 'Your Omi is connected. Waiting for audio…'
-                    : 'Listening for speech…'
-                  : 'Capture is paused')}
-            </Text>
-          </View>
-        );
-      }
       if (item.kind === 'tasks') {
         return (
           <View style={styles.section}>
             <SectionHeader
               action={onViewTasks}
-              actionLabel="View All"
-              title="Tasks"
+              actionLabel="See all"
+              title="Action items"
             />
             {taskFeedback}
             {taskStatus === 'ready' ? (
-              tasks.length === 0 ? (
+              openTasks.length === 0 ? (
                 <StatePanel noun="tasks" status="empty" />
               ) : (
-                <View style={styles.taskCard}>
-                  {tasks.slice(0, 3).map(task => (
+                <View>
+                  {openTasks.slice(0, 3).map(task => (
                     <TaskRow
                       key={task.id}
                       onToggle={writesAvailable ? onTaskToggle : undefined}
@@ -407,66 +400,43 @@ export function MobileAppSurface({
           </View>
         );
       }
-      if (item.kind === 'recaps') {
-        return (
-          <View style={styles.section}>
-            <SectionHeader
-              action={onViewRecaps}
-              actionLabel="View All"
-              title="Daily Recaps"
-            />
-            {recapStatus === 'ready' ? (
-              recaps.length === 0 ? (
-                <StatePanel noun="recaps" status="empty" />
-              ) : (
-                <FlatList
-                  data={recaps}
-                  horizontal
-                  keyExtractor={recap => recap.id}
-                  renderItem={({item: recap}) => <RecapCard recap={recap} />}
-                  showsHorizontalScrollIndicator={false}
-                />
-              )
-            ) : (
-              <StatePanel noun="recaps" status={recapStatus} />
-            )}
-          </View>
-        );
-      }
       return (
         <View style={styles.section}>
           <SectionHeader
-            action={onExpandMindMap}
-            actionLabel="Expand"
-            title="Mind Map"
+            action={onViewConversations}
+            actionLabel="See all"
+            title="Recent conversations"
           />
-          {mindMapStatus === 'ready' ? (
-            <View accessibilityLabel="Mind map preview" style={styles.mapCard}>
-              <View style={styles.mapNodeLarge} />
-              <View style={[styles.mapNode, styles.mapNodeLeft]} />
-              <View style={[styles.mapNode, styles.mapNodeRight]} />
-              <View style={[styles.mapNode, styles.mapNodeBottom]} />
-            </View>
+          {conversationStatus === 'ready' ? (
+            conversations.length === 0 ? (
+              <StatePanel noun="conversations" status="empty" />
+            ) : (
+              conversations
+                .slice(0, 3)
+                .map(conversation => (
+                  <ConversationRow
+                    key={conversation.id}
+                    conversation={conversation}
+                  />
+                ))
+            )
           ) : (
-            <StatePanel noun="mind map" status={mindMapStatus} />
+            <StatePanel noun="conversations" status={conversationStatus} />
           )}
         </View>
       );
     },
     [
-      capture,
-      mindMapStatus,
-      onExpandMindMap,
       onTaskToggle,
       onTaskEdit,
       writesAvailable,
       busyTaskId,
       taskFeedback,
-      onViewRecaps,
+      onViewConversations,
       onViewTasks,
-      recaps,
-      recapStatus,
-      tasks,
+      conversations,
+      conversationStatus,
+      openTasks,
       taskStatus,
     ],
   );
@@ -477,6 +447,19 @@ export function MobileAppSurface({
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.flex}>
+          {activeRoute === 'tasks' && !chatContent && (
+            <View style={styles.topBar}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Home"
+                onPress={() => onRouteChange('home')}
+                style={styles.backButton}>
+                <ChevronLeft size={20} color={mobileColor.text} />
+                <Text style={styles.quietButtonText}>Home</Text>
+              </Pressable>
+              <Text style={styles.sectionTitle}>Action items</Text>
+            </View>
+          )}
           <View style={[styles.flex, styles.stage]}>
             {chatContent ? (
               chatContent
@@ -530,9 +513,6 @@ export function MobileAppSurface({
               </View>
             )}
           </View>
-          {liveVoiceControl && chatContent && (
-            <View style={styles.liveVoiceRow}>{liveVoiceControl}</View>
-          )}
           {omnibar}
           <MobileTabBar
             activeRoute={activeRoute}
@@ -549,49 +529,32 @@ export function MobileAppSurface({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}>
         <View style={styles.topBar}>
-          <View style={styles.topBarActions}>
-            <Pressable
-              accessibilityLabel="Open Omi device"
-              accessibilityRole="button"
-              accessibilityState={{expanded: devicePanel != null}}
-              onPress={onOpenDevice}
-              style={styles.deviceButton}>
-              <View style={styles.lens} />
-              <View
-                style={[
-                  styles.connectionDot,
-                  !device.connected && styles.connectionDotOffline,
-                ]}
-              />
-              <Text numberOfLines={1} style={styles.deviceLabel}>
-                {device.label}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Open calls"
-              accessibilityRole="button"
-              onPress={onOpenCalls}
-              style={styles.roundButton}>
-              <Phone color={mobileColor.text} size={20} />
-            </Pressable>
-          </View>
-          <Pressable
-            accessibilityLabel="Say hello to Omi"
-            accessibilityRole="button"
-            onPress={() => setGreeting(value => value + 1)}
-            style={styles.greeting}>
+          <View accessibilityLabel="Omi" style={styles.brand}>
             <OmiAvatar
               tone="ink"
-              size={36}
-              motion="arrive"
-              motionKey={String(greeting)}
+              size={28}
+              motion="breathe"
               reduceMotion={reduceMotion}
             />
+            <Text style={styles.brandText}>omi</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Open Omi device"
+            accessibilityRole="button"
+            accessibilityState={{expanded: devicePanel != null}}
+            onPress={onOpenDevice}
+            style={styles.deviceButton}>
+            <View
+              style={[
+                styles.connectionDot,
+                !device.connected && styles.connectionDotOffline,
+              ]}
+            />
+            <Text numberOfLines={1} style={styles.deviceLabel}>
+              {device.label}
+            </Text>
           </Pressable>
         </View>
-        {liveVoiceControl && (
-          <View style={styles.liveVoiceRow}>{liveVoiceControl}</View>
-        )}
         {deviceMessage && (
           <Text accessibilityRole="alert" style={styles.deviceMessage}>
             {deviceMessage}
@@ -602,7 +565,28 @@ export function MobileAppSurface({
             contentContainerStyle={styles.content}
             data={rows}
             ListHeaderComponent={
-              <View>{devicePanel ? <View>{devicePanel}</View> : null}</View>
+              devicePanel || capture.active ? (
+                <View>
+                  {devicePanel}
+                  {capture.active && (
+                    <Text numberOfLines={2} style={styles.captureStatus}>
+                      {capture.waitingForAudio
+                        ? 'Waiting for audio'
+                        : 'Listening'}
+                      {capture.transcript ? ` · ${capture.transcript}` : ''}
+                    </Text>
+                  )}
+                </View>
+              ) : null
+            }
+            ListFooterComponent={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Saved memories"
+                onPress={onViewMemories}
+                style={styles.quietButton}>
+                <Text style={styles.quietButtonText}>Saved memories</Text>
+              </Pressable>
             }
             keyExtractor={item => item.key}
             renderItem={renderRow}
@@ -619,13 +603,14 @@ export function MobileAppSurface({
 const styles = StyleSheet.create({
   flex: {flex: 1},
   stage: {paddingTop: 12},
-  liveVoiceRow: {paddingHorizontal: 16, paddingTop: 8},
   safeArea: {backgroundColor: mobileColor.background, flex: 1},
-  greeting: {
-    height: 48,
-    width: 48,
+  brand: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  brandText: {fontSize: 24, fontWeight: '600', color: mobileColor.text},
+  backButton: {
+    minHeight: 44,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
   },
   topBar: {
     alignItems: 'center',
@@ -639,7 +624,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 24,
     paddingHorizontal: mobileSpace.md,
-    paddingTop: mobileSpace.lg,
+    paddingTop: mobileSpace.sm,
   },
   secondaryEmpty: {
     alignItems: 'center',
@@ -654,7 +639,6 @@ const styles = StyleSheet.create({
     marginTop: mobileSpace.sm,
     textAlign: 'center',
   },
-  topBarActions: {flexDirection: 'row', flexShrink: 1, gap: mobileSpace.sm},
   deviceButton: {
     flexShrink: 1,
     alignItems: 'center',
@@ -662,16 +646,8 @@ const styles = StyleSheet.create({
     borderRadius: mobileRadius.round,
     flexDirection: 'row',
     gap: mobileSpace.sm,
-    minHeight: 48,
+    minHeight: 44,
     paddingHorizontal: mobileSpace.md,
-  },
-  lens: {
-    backgroundColor: '#292b27',
-    borderColor: '#696e63',
-    borderRadius: mobileRadius.round,
-    borderWidth: 2,
-    height: 25,
-    width: 25,
   },
   connectionDot: {
     backgroundColor: mobileColor.connected,
@@ -692,62 +668,18 @@ const styles = StyleSheet.create({
     color: mobileColor.text,
     padding: mobileSpace.md,
   },
-  roundButton: {
-    flexShrink: 0,
-    alignItems: 'center',
-    backgroundColor: mobileColor.surface,
-    borderRadius: mobileRadius.round,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
-  },
-  roundGlyph: {color: mobileColor.text, fontSize: 22},
   content: {
-    gap: mobileSpace.lg,
-    paddingBottom: 24,
+    gap: mobileSpace.sm,
+    paddingBottom: 12,
     paddingHorizontal: mobileSpace.md,
-    paddingTop: mobileSpace.xl,
+    paddingTop: mobileSpace.sm,
   },
-  captureCard: {
-    alignItems: 'stretch',
-    backgroundColor: mobileColor.surface,
-    borderWidth: 1,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.lg,
-    gap: mobileSpace.sm,
-    minHeight: 74,
-    padding: mobileSpace.md,
+  captureStatus: {
+    ...mobileType.caption,
+    color: mobileColor.textMuted,
+    paddingVertical: 8,
   },
-  captureHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  listeningBadge: {
-    alignItems: 'center',
-    borderRadius: mobileRadius.round,
-    flexDirection: 'row',
-    gap: mobileSpace.sm,
-  },
-  listeningText: {...mobileType.caption, color: mobileColor.textMuted},
-  captureDot: {
-    backgroundColor: mobileColor.recording,
-    borderRadius: mobileRadius.round,
-    height: 8,
-    width: 8,
-  },
-  captureDotPaused: {backgroundColor: mobileColor.textSubtle},
-  transcript: {...mobileType.body, color: mobileColor.textMuted},
-  microphoneButton: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surfaceRaised,
-    borderRadius: mobileRadius.round,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  microphoneGlyph: {color: mobileColor.text, fontSize: 13},
-  section: {gap: mobileSpace.sm},
+  section: {gap: 0},
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -768,14 +700,6 @@ const styles = StyleSheet.create({
     paddingVertical: mobileSpace.sm,
   },
   quietButtonText: {...mobileType.caption, color: mobileColor.textMuted},
-  taskCard: {
-    backgroundColor: mobileColor.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.lg,
-    paddingHorizontal: mobileSpace.md,
-    paddingVertical: mobileSpace.sm,
-  },
   taskRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -808,77 +732,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxDone: {backgroundColor: mobileColor.textSubtle},
-  taskText: {fontSize: 15, lineHeight: 22, color: mobileColor.text, flex: 1},
+  taskCopy: {flex: 1, gap: 3},
+  taskText: {fontSize: 15, lineHeight: 22, color: mobileColor.text},
+  taskMeta: {fontSize: 12, lineHeight: 18, color: mobileColor.textMuted},
   taskTextDone: {
     color: mobileColor.textSubtle,
     textDecorationLine: 'line-through',
   },
-  recapCard: {
-    backgroundColor: mobileColor.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.md,
-    minHeight: 136,
-    gap: 20,
-    justifyContent: 'space-between',
-    marginRight: mobileSpace.sm,
-    padding: mobileSpace.md,
-    width: 250,
+  conversationRow: {
+    paddingVertical: 12,
+    gap: 5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: mobileColor.border,
   },
-  recapTitle: {...mobileType.body, color: mobileColor.text},
-  recapDate: {
-    ...mobileType.caption,
-    alignSelf: 'flex-end',
-    backgroundColor: mobileColor.surfaceQuiet,
-    borderRadius: mobileRadius.round,
-    color: mobileColor.textMuted,
-    paddingHorizontal: mobileSpace.md,
-    paddingVertical: mobileSpace.xs,
+  conversationHeading: {flexDirection: 'row', alignItems: 'baseline', gap: 12},
+  conversationTitle: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '500',
+    color: mobileColor.text,
   },
-  mapCard: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surfaceQuiet,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 150,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  mapNodeLarge: {
-    backgroundColor: mobileColor.surfaceRaised,
-    borderColor: mobileColor.border,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 44,
-    width: 44,
-  },
-  mapNode: {
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
-    borderRadius: 11,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 22,
-    position: 'absolute',
-    width: 22,
-  },
-  mapNodeLeft: {left: '24%', top: '32%'},
-  mapNodeRight: {right: '22%', top: '26%'},
-  mapNodeBottom: {bottom: '18%', right: '35%'},
   statePanel: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surface,
-    borderRadius: mobileRadius.md,
-    minHeight: 96,
+    minHeight: 44,
     justifyContent: 'center',
-    padding: mobileSpace.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: mobileColor.border,
+    paddingVertical: 8,
   },
   stateText: {
     ...mobileType.body,
     color: mobileColor.textMuted,
-    textAlign: 'center',
   },
   tabBar: {
     alignItems: 'center',
@@ -905,7 +787,7 @@ const styles = StyleSheet.create({
   },
   tabIcon: {paddingVertical: 4},
   tabActive: {backgroundColor: mobileColor.surfaceRaised},
-  tabLabel: {fontSize: 9, color: mobileColor.textSubtle},
+  tabLabel: {fontSize: 10, color: mobileColor.textSubtle},
   tabLabelActive: {color: mobileColor.text},
   tabGlyph: {color: mobileColor.textSubtle, fontSize: 30},
   tabGlyphActive: {color: mobileColor.text},
