@@ -32,30 +32,32 @@ def test_empty_body_is_unchanged() -> None:
     assert to_plain_text('') == ''
 
 
-@pytest.mark.parametrize((
-    'body',
-    'expected',
-),
-[
-    ('```omi start```', 'omi start'),
-    ('````omi start````', 'omi start'),
-    ('```omi start``` before continuing.', 'omi start before continuing.'),
-    ('Next step:\n```omi start```', 'Next step:\nomi start'),
-    ('   ```XYZ```', 'XYZ'),
-    ('```ABC```\r\nDone.', 'ABC\r\nDone.'),
-])
+@pytest.mark.parametrize(
+    (
+        'body',
+        'expected',
+    ),
+    [
+        ('```omi start```', 'omi start'),
+        ('````omi start````', 'omi start'),
+        ('```omi start``` before continuing.', 'omi start before continuing.'),
+        ('Next step:\n```omi start```', 'Next step:\nomi start'),
+        ('   ```XYZ```', 'XYZ'),
+        ('```ABC```\r\nDone.', 'ABC\r\nDone.'),
+    ],
+)
 def test_keeps_line_initial_code_spans(body: str, expected: str) -> None:
     assert to_plain_text(body) == expected
 
 
 @pytest.mark.parametrize(
     'body',
-[
-    '```\nomi start\n```',
-    '```sh\nomi start\n```',
-    '````sh\nomi start\n````',
-    '```sh\r\nomi start\r\n```',
-],
+    [
+        '```\nomi start\n```',
+        '```sh\nomi start\n```',
+        '````sh\nomi start\n````',
+        '```sh\r\nomi start\r\n```',
+    ],
 )
 def test_still_strips_fenced_code_block_markers(body: str) -> None:
     assert to_plain_text(body) == 'omi start'
