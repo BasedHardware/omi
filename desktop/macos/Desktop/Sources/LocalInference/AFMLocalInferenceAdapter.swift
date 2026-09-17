@@ -20,6 +20,12 @@ protocol AFMStructuredGenerating: Sendable {
   func generateJSON(prompt: String, node: AFMJSONSchemaNode) async throws -> Data
 }
 
+/// Injected window seam. Production reads `SystemLanguageModel.default.contextSize`.
+protocol AFMContextWindowProviding: Sendable {
+  /// Live on-device window, or `nil` when AFM cannot be queried.
+  func liveContextWindowTokens() -> Int?
+}
+
 /// Apple Foundation Models adapter for the local-inference port.
 ///
 /// Dark: `LocalInferenceRuntime.makeDefault` registers this engine but still
@@ -28,31 +34,32 @@ protocol AFMStructuredGenerating: Sendable {
 /// fallback — a failure here becomes the deterministic minimum, never another
 /// engine and never cloud.
 struct AFMLocalInferenceAdapter: LocalInferenceService {
-  /// Token window the chunker reads. Cited from FoundationModels
-  /// `SystemLanguageModel.contextSize`: the public getter on the macOS 26 SDK
-  /// (CI pin Xcode 26.6) returns `4096`, and `ConversationChunkSummarizerTests`
-  /// already treats AFM as a 4096-token shared window. Do not change this
-  /// without re-citing the SDK — a wrong number silently changes chunking.
-  static let contextWindowTokens = 4096
+  /// Fallback only: used when the OS is older than macOS 26 or the on-device
+  /// model cannot be queried. This is **not** the AFM window. The chunker still
+  /// needs a positive Int; generation on this path fails closed.
+  static let unavailableContextWindowFallback = 4096
 
   var engineID: LocalInferenceEngineID { .afm }
   var capabilities: LocalInferenceCapabilities {
     LocalInferenceCapabilities(
       structuredOutput: true,
       toolLoop: false,
-      contextWindowTokens: Self.contextWindowTokens
+      contextWindowTokens: contextWindow.liveContextWindowTokens() ?? Self.unavailableContextWindowFallback
     )
   }
 
   var availability: any AFMAvailabilityChecking
   var session: any AFMStructuredGenerating
+  var contextWindow: any AFMContextWindowProviding
 
   init(
     availability: any AFMAvailabilityChecking = AFMSystemAvailabilityChecker(),
-    session: any AFMStructuredGenerating = AFMSystemSession()
+    session: any AFMStructuredGenerating = AFMSystemSession(),
+    contextWindow: any AFMContextWindowProviding = AFMSystemContextWindow()
   ) {
     self.availability = availability
     self.session = session
+    self.contextWindow = contextWindow
   }
 
   func generateStructured<T: Decodable>(prompt: String, schema: LocalInferenceJSONSchema) async throws -> T {
@@ -127,6 +134,26 @@ struct AFMLocalInferenceAdapter: LocalInferenceService {
       }
     }
   #endif
+}
+
+struct AFMSystemContextWindow: AFMContextWindowProviding {
+  func liveContextWindowTokens() -> Int? {
+    #if canImport(FoundationModels)
+      guard #available(macOS 26.0, *) else {
+        return nil
+      }
+      switch SystemLanguageModel.default.availability {
+      case .available:
+        return SystemLanguageModel.default.contextSize
+      case .unavailable:
+        return nil
+      @unknown default:
+        return nil
+      }
+    #else
+      return nil
+    #endif
+  }
 }
 
 struct AFMSystemAvailabilityChecker: AFMAvailabilityChecking {

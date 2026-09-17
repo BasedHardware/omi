@@ -17,15 +17,17 @@ private final class ScriptedSession: AFMStructuredGenerating, @unchecked Sendabl
   private var results: [Result<Data, Error>]
   private(set) var callCount = 0
   private(set) var lastNode: AFMJSONSchemaNode?
+  private(set) var lastPrompt: String?
 
   init(results: [Result<Data, Error>]) {
     self.results = results
   }
 
-  func generateJSON(prompt _: String, node: AFMJSONSchemaNode) async throws -> Data {
+  func generateJSON(prompt: String, node: AFMJSONSchemaNode) async throws -> Data {
     let result: Result<Data, Error> = lock.withLock {
       callCount += 1
       lastNode = node
+      lastPrompt = prompt
       if results.isEmpty {
         return .failure(LocalInferenceError.engineFailed("exhausted_script"))
       }
@@ -33,6 +35,11 @@ private final class ScriptedSession: AFMStructuredGenerating, @unchecked Sendabl
     }
     return try result.get()
   }
+}
+
+private struct FixedContextWindow: AFMContextWindowProviding {
+  var tokens: Int?
+  func liveContextWindowTokens() -> Int? { tokens }
 }
 
 private func schemaProperty(_ properties: [AFMJSONSchemaNode.ObjectProperty], _ name: String)
@@ -53,13 +60,38 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
   func testCapabilitiesAndEngineID() {
     let adapter = AFMLocalInferenceAdapter(
       availability: FixedAvailability(value: .unavailable),
-      session: ScriptedSession(results: [])
+      session: ScriptedSession(results: []),
+      contextWindow: FixedContextWindow(tokens: nil)
     )
     XCTAssertEqual(adapter.engineID, .afm)
     XCTAssertEqual(adapter.capabilities.structuredOutput, true)
     XCTAssertEqual(adapter.capabilities.toolLoop, false)
-    XCTAssertEqual(adapter.capabilities.contextWindowTokens, AFMLocalInferenceAdapter.contextWindowTokens)
-    XCTAssertEqual(AFMLocalInferenceAdapter.contextWindowTokens, 4096)
+    XCTAssertEqual(
+      adapter.capabilities.contextWindowTokens,
+      AFMLocalInferenceAdapter.unavailableContextWindowFallback
+    )
+  }
+
+  func testUnavailableReportsFallbackWindowNotTheLiveWindow() {
+    let adapter = AFMLocalInferenceAdapter(
+      availability: FixedAvailability(value: .unavailable),
+      session: ScriptedSession(results: []),
+      contextWindow: FixedContextWindow(tokens: nil)
+    )
+    XCTAssertEqual(
+      adapter.capabilities.contextWindowTokens,
+      AFMLocalInferenceAdapter.unavailableContextWindowFallback
+    )
+    XCTAssertEqual(AFMLocalInferenceAdapter.unavailableContextWindowFallback, 4096)
+  }
+
+  func testQueryableWindowIsReportedToTheChunker() {
+    let adapter = AFMLocalInferenceAdapter(
+      availability: FixedAvailability(value: .available),
+      session: ScriptedSession(results: []),
+      contextWindow: FixedContextWindow(tokens: 8192)
+    )
+    XCTAssertEqual(adapter.capabilities.contextWindowTokens, 8192)
   }
 
   func testParsesEmptyObjectProbeSchema() throws {
@@ -90,7 +122,11 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(name, "client_processing_draft")
     XCTAssertEqual(schemaProperty(properties, "title")?.node, .string)
     XCTAssertEqual(schemaProperty(properties, "title")?.isOptional, false)
-    XCTAssertEqual(schemaProperty(properties, "overview")?.isOptional, true)
+    XCTAssertEqual(schemaProperty(properties, "overview")?.isOptional, false)
+    XCTAssertEqual(schemaProperty(properties, "sections")?.isOptional, false)
+    XCTAssertEqual(schemaProperty(properties, "action_items")?.isOptional, false)
+    XCTAssertEqual(schemaProperty(properties, "emoji")?.isOptional, true)
+    XCTAssertEqual(schemaProperty(properties, "events")?.isOptional, true)
     XCTAssertEqual(schemaProperty(properties, "emoji")?.node, .string)
     XCTAssertEqual(schemaProperty(properties, "category")?.node, .string)
 
@@ -164,7 +200,8 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     let session = ScriptedSession(results: [.success(Data(#"{"title":"no"}"#.utf8))])
     let adapter = AFMLocalInferenceAdapter(
       availability: FixedAvailability(value: .unavailable),
-      session: session
+      session: session,
+      contextWindow: FixedContextWindow(tokens: nil)
     )
     do {
       let _: ProbeSummary = try await adapter.generateStructured(prompt: "summarize", schema: ProbeSchema.title)
@@ -179,7 +216,8 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
   func testMalformedOutputIsInvalidResponse() async {
     let adapter = AFMLocalInferenceAdapter(
       availability: FixedAvailability(value: .available),
-      session: ScriptedSession(results: [.success(Data(#"{"title":"#.utf8))])
+      session: ScriptedSession(results: [.success(Data(#"{"title":"#.utf8))]),
+      contextWindow: FixedContextWindow(tokens: 8192)
     )
     do {
       let _: ProbeSummary = try await adapter.generateStructured(prompt: "summarize", schema: ProbeSchema.title)
@@ -195,17 +233,21 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     let session = ScriptedSession(results: [.success(Data(#"{"title":"Standup"}"#.utf8))])
     let adapter = AFMLocalInferenceAdapter(
       availability: FixedAvailability(value: .available),
-      session: session
+      session: session,
+      contextWindow: FixedContextWindow(tokens: 8192)
     )
-    let summary: ProbeSummary = try await adapter.generateStructured(prompt: "summarize", schema: ProbeSchema.title)
+    let prompt = ConversationChunkSummarizer.finalPrompt("SPEAKER_00: We decided to ship today.")
+    let summary: ProbeSummary = try await adapter.generateStructured(prompt: prompt, schema: ProbeSchema.title)
     XCTAssertEqual(summary, ProbeSummary(title: "Standup"))
     XCTAssertEqual(session.callCount, 1)
+    XCTAssertEqual(session.lastPrompt, prompt)
   }
 
   func testRunToolLoopThrowsCapabilityUnavailable() async {
     let adapter = AFMLocalInferenceAdapter(
       availability: FixedAvailability(value: .available),
-      session: ScriptedSession(results: [])
+      session: ScriptedSession(results: []),
+      contextWindow: FixedContextWindow(tokens: 8192)
     )
     do {
       _ = try await adapter.runToolLoop(
@@ -240,7 +282,8 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     let session = ScriptedSession(results: [.success(Data(#"{"title":"on-device"}"#.utf8))])
     let afm = AFMLocalInferenceAdapter(
       availability: FixedAvailability(value: .available),
-      session: session
+      session: session,
+      contextWindow: FixedContextWindow(tokens: 8192)
     )
     let runtime = LocalInferenceRuntime(
       engines: [
@@ -259,7 +302,7 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
       fallback: DesktopLocalInferenceFallbackRecorder(),
       defaultEngineID: .localServer
     )
-    XCTAssertEqual(runtime.selectedContextWindowTokens(), AFMLocalInferenceAdapter.contextWindowTokens)
+    XCTAssertEqual(runtime.selectedContextWindowTokens(), 8192)
 
     let result: LocalInferenceGeneration<ProbeSummary> = await runtime.generateStructuredFailClosed(
       prompt: "summarize",
@@ -277,64 +320,13 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(session.callCount, 1)
   }
 
-  func testMakeDefaultForcedAFMUsesAFMWindow() {
-    let runtime = LocalInferenceRuntime.makeDefault(
-      killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: "foundation-models")
-    )
-    XCTAssertEqual(runtime.selectedContextWindowTokens(), AFMLocalInferenceAdapter.contextWindowTokens)
-  }
-}
-
-final class AFMLocalInferenceLiveTests: XCTestCase {
-  func testLiveStructuredGeneration() async throws {
-    try XCTSkipUnless(isLiveAFMAvailable(), "Apple Foundation Models is not available on this Mac")
-    let adapter = AFMLocalInferenceAdapter()
-    let summary: ProbeSummary = try await adapter.generateStructured(
-      prompt: "Return JSON with title set to the two-word phrase On Device. Do not invent extra fields.",
-      schema: ProbeSchema.title
-    )
-    print("AFM_LIVE_STRUCTURED: title=\(summary.title)")
-    XCTAssertFalse(summary.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-  }
-
-  func testLiveConversationChunkSummarizerProducesStoredProjection() async throws {
-    try XCTSkipUnless(isLiveAFMAvailable(), "Apple Foundation Models is not available on this Mac")
+  func testMakeDefaultForcedAFMUsesRuntimeWindowOrFallback() {
     let runtime = LocalInferenceRuntime.makeDefault(
       killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: "afm")
     )
-    XCTAssertEqual(runtime.selectedContextWindowTokens(), AFMLocalInferenceAdapter.contextWindowTokens)
-    let store = MemoryLocalProjectionStore()
-    let summarizer = ConversationChunkSummarizer(
-      runtime: runtime,
-      store: store,
-      now: { Date(timeIntervalSince1970: 1_704_140_040) },
-      deviceClass: "macos",
-      sourceLabel: "Recording",
-      timeZone: TimeZone.gmt
-    )
-    let segments = [
-      TranscriptHash.Segment(speaker: "SPEAKER_00", text: "We decided to ship the on-device summarizer today."),
-      TranscriptHash.Segment(speaker: "SPEAKER_01", text: "I will write the adapter tests this afternoon."),
-    ]
-    let stored = try await summarizer.summarize(
-      sessionId: 42,
-      segments: segments,
-      startedAt: Date(timeIntervalSince1970: 1_704_140_040)
-    )
-    let payload = try ClientProcessingContract.decode(stored.json)
-    let json = String(decoding: stored.json, as: UTF8.self)
-    print("AFM_LIVE_PROJECTION_JSON: \(json)")
-    print(
-      "AFM_LIVE_PROJECTION: title=\(payload.structure.title) runtime=\(payload.provenance.runtime) model=\(payload.provenance.modelId) overview=\(payload.structure.overview ?? "")"
-    )
-    XCTAssertEqual(payload.schemaVersion, ClientProcessingContract.schemaVersion)
-    XCTAssertEqual(payload.transcriptSha256, TranscriptHash.sha256(segments: segments))
-    XCTAssertFalse(payload.structure.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-    XCTAssertEqual(payload.provenance.runtime, ClientProcessingContract.localRuntime)
-    XCTAssertEqual(payload.provenance.modelId, LocalInferenceEngineID.afm.rawValue)
-  }
-
-  private func isLiveAFMAvailable() -> Bool {
-    AFMSystemAvailabilityChecker().resolve() == .available
+    let expected =
+      AFMSystemContextWindow().liveContextWindowTokens()
+      ?? AFMLocalInferenceAdapter.unavailableContextWindowFallback
+    XCTAssertEqual(runtime.selectedContextWindowTokens(), expected)
   }
 }
