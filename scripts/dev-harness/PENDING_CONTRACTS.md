@@ -33,3 +33,13 @@ A builder removes markers and makes these same tests pass. A mistaken contract
 comes back to the owning spine for a reviewed contract revision/version, not a
 builder rewrite. This mechanism is for the explicitly requested mobile program;
 it is not a general exemption from the repository's regression-test rules.
+
+Spine-only corrections append `contracts/spine/revisions/NNN-description.json`
+with path, owner, before/after SHA256 and review reason, in the same commit as
+exact corrected bytes. The check pins that commit automatically, validates the
+hash chain and forbids editing/deleting committed records. Pending markers must
+stay unchanged in that revision; retire them separately. Builders cannot use
+revision records to accept their implementation: the owning spine and coordinator
+review the changed oracle, just as changes to this checker require review. Git
+cannot authenticate reviewer roles; this explicit review boundary is not a bypass
+flag. Subsequent edits still permit only marker removal against the revised oracle.

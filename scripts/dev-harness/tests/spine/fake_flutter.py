@@ -46,7 +46,7 @@ for line in sys.stdin:
         name = params['methodName']
         if name == 'ext.omi.controls.capabilities':
             result = {'contract_version': 'semantic-controls/v1',
-                      'capabilities': ['capabilities', 'state', 'wait_ready', 'navigate', 'fault.arm', 'fault.clear']}
+                      'capabilities': ['capabilities', 'state', 'wait_ready', 'navigate', 'fault']}
         elif name in ('ext.omi.controls.state', 'ext.omi.controls.wait_ready'):
             state = {'contract_version': 'semantic-controls/v1',
                      'profile': 'mobileBeta' if mode == 'wrong-runtime' else 'localDev',
