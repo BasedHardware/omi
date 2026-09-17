@@ -17,7 +17,11 @@ late callbacks `05c43c014d`, `348d5f31dc`; persistence race `ff90d5988f`.
    requests for the same inventory wave join one future/drain; a subsequent
    request after completion runs again. A newly discovered WAL during a pass is
    a new inventory revision, requiring a serial next pass, not a dropped wake.
-   Preserve userRetry's auto-upload bypass when coalescing; do not disable recovery.
+   `requestRecovery(trigger, inventoryRevision: n)` carries the account-local
+   monotonic WAL discovery revision; same/absent revision joins the current wave,
+   a higher revision queues one serial pass. Discovery owns that number, not UI.
+   Preserve userRetry's auto-upload bypass when coalescing, including a retry
+   arriving during a disabled-auto-upload pass; do not disable recovery.
 2. **FGS.** `CaptureSessionOwner` is the sole start/stop actor, using injected
    effects wrapping ForegroundUtil. Home and capture only update capture/permission
    intent. Location permission alone is not a hold. Preserve BLE/phone keepalive
@@ -69,7 +73,9 @@ late callbacks `05c43c014d`, `348d5f31dc`; persistence race `ff90d5988f`.
    explicit global-read exception, never a wake exception. This lexical scanner
    ignores strings/comments; aliases, dynamic calls and wrappers can evade it;
    unrelated same-named methods can be false positives. It is a tripwire, not
-   behavioral coverage. New rules require spine review, not baseline inflation.
+   behavioral coverage. Protected adoption tripwires additionally require zero
+   exemplar global reads, zero singleton wakes, and no Home/controller FGS acts
+   before C1 is complete. New rules require spine review, not baseline inflation.
 9. **Tests/dispose.** Keep CaptureReplayWorld's WAL/mic/socket fakes; extend its
    production composition path instead of duplicating it. Also retain the
    isolated constructor test with no initialized globals. Each owner has one

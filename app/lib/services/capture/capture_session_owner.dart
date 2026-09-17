@@ -4,7 +4,7 @@ import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 
 /// C1 request surface. Callers never receive the coordinator or its drain.
 abstract interface class CaptureRecoveryRequests {
-  Future<void> requestRecovery(WakeTrigger trigger);
+  Future<void> requestRecovery(WakeTrigger trigger, {int? inventoryRevision});
 }
 
 class CaptureSessionToken {
@@ -44,7 +44,8 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
   bool get foregroundRunning => throw UnimplementedError('C1 settled FGS state');
 
   @override
-  Future<void> requestRecovery(WakeTrigger trigger) => throw UnimplementedError('C1 coalesced recovery request');
+  Future<void> requestRecovery(WakeTrigger trigger, {int? inventoryRevision}) =>
+      throw UnimplementedError('C1 coalesced recovery request');
 
   /// Invalidates synchronously, then drains owned teardown. Idempotent.
   Future<void> close() => throw UnimplementedError('C1 owner teardown');
