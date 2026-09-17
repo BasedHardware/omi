@@ -171,6 +171,14 @@ function presentNullableMap(value: unknown): void {
   object(value);
 }
 
+function presentProactiveNotification(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  const row = object(value);
+  presentUnusedStringListItems(row.scopes);
+}
+
 function presentUnusedStringListItems(value: unknown): void {
   if (value === undefined || value === null) {
     return;
@@ -234,7 +242,7 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   presentNullableString(row.username);
   presentExternalIntegration(row.external_integration);
   presentChatTools(row.chat_tools);
-  presentNullableMap(row.proactive_notification);
+  presentProactiveNotification(row.proactive_notification);
   presentNullableMap(row.twitter);
   presentUnusedStringListItems(row.capabilities);
   presentUnusedStringListItems(row.connected_accounts);
