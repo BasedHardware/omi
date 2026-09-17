@@ -61,6 +61,64 @@ test('old conversations keep GET photo counts and omit empty lists', async () =>
   expect(result.items[1]).not.toHaveProperty('photoCount');
 });
 
+test('old conversations name Flutter ConversationListItem fromJson type-wrong GET photos base64 instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    photos: [{id: 'one', base64: 'abc'}],
+  };
+  const titles = async (rows: unknown[]) =>
+    (await loadConversations(backend(rows).api)).items.map(item => item.title);
+  expect(await titles([row, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([
+      {
+        ...row,
+        photos: [{id: 'one'}],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        photos: [{id: 'one', base64: null}],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        photos: [{id: 'one', base64: ''}],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  for (const extra of [1, true, []]) {
+    await expect(
+      titles([
+        {
+          ...row,
+          photos: [{id: 'one', base64: extra}],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+});
+
 test('old conversations name Flutter ConversationListItem fromJson padded GET latitude instead of remapping to a conversation chip', async () => {
   const neighbor = {
     ...conversation,

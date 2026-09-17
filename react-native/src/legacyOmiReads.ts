@@ -199,6 +199,7 @@ function presentPhotos(value: unknown): void {
   for (const item of value) {
     const photo = object(item);
     presentNullableDate(photo.created_at);
+    presentNullableString(photo.base64);
     presentNullableString(photo.content_type);
     presentNullableString(photo.data_protection_level);
     presentNullableString(photo.description);
