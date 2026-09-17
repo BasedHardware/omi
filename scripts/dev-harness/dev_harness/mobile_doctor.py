@@ -23,6 +23,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from urllib.parse import urlparse
 
 READY = "ready"
 AGENT_REMEDIABLE = "agent-remediable"
@@ -37,6 +38,9 @@ LANE_IOS = "ios"
 # or approving an install is David's call, never an agent's — see SCA-486
 # capacity rules: never delete unrelated assets).
 MIN_FREE_GB_EMULATOR_LANES = 12.0
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+HERMETIC_PROFILE = "local_dev"
+HERMETIC_FLAVOR = "dev"
 
 _FLUTTER_VERSION_RE = re.compile(r"Flutter\s+(\d+\.\d+\.\d+)", re.MULTILINE)
 _FLUTTER_PIN_RE = re.compile(r"flutter-version:\s*(\d+\.\d+\.\d+)")
@@ -150,18 +154,27 @@ def _check_backend_venv(repo_root: Path, runner: Runner) -> CheckResult:
         return _agent(
             "backend-venv",
             "backend/.venv missing; the backend must run on the repo-pinned 3.11 runtime",
-            "python3.11 -m venv backend/.venv && make setup",
+            "make lane-bootstrap  # Python 3.11 venv + cheap-gate packages, not the full pylock",
             (LANE_BACKEND,),
         )
     code, out = runner.run([str(venv_python), "--version"])
-    if code == 0 and "3.11." in out:
-        return _ok("backend-venv", f"backend/.venv ({out.strip()})", (LANE_BACKEND,))
-    return _agent(
-        "backend-venv",
-        f"backend/.venv is not Python 3.11 ({out.strip() or 'unusable'})",
-        "Recreate with: python3.11 -m venv backend/.venv && make setup",
-        (LANE_BACKEND,),
-    )
+    if code != 0 or "3.11." not in out:
+        return _agent(
+            "backend-venv",
+            f"backend/.venv is not Python 3.11 ({out.strip() or 'unusable'})",
+            "Recreate with: make lane-bootstrap",
+            (LANE_BACKEND,),
+        )
+    probe_code, probe_out = runner.run([str(venv_python), "-c", "import dotenv, yaml"])
+    if probe_code != 0:
+        hint = (probe_out or "").strip().splitlines()[-1] if (probe_out or "").strip() else "import failed"
+        return _agent(
+            "backend-venv",
+            f"backend/.venv exists but cannot import yaml and dotenv (incomplete; cheap pre-push gates will fail): {hint}",
+            "make lane-bootstrap  # installs the cheap-gate extras without the full backend lock",
+            (LANE_BACKEND,),
+        )
+    return _ok("backend-venv", f"backend/.venv ({out.strip()}); yaml+dotenv import", (LANE_BACKEND,))
 
 
 def _check_flutter(repo_root: Path, runner: Runner) -> CheckResult:
@@ -412,6 +425,88 @@ def _check_capacity(repo_root: Path, runner: Runner, env: Mapping[str, str], min
     )
 
 
+def parse_dotenv_assignments(path: Path) -> dict[str, str]:
+    """Parse KEY=VALUE lines; last assignment wins. Quotes are stripped."""
+
+    values: dict[str, str] = {}
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return values
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+def is_loopback_api_base(raw: str | None) -> bool:
+    """Empty (unset) or loopback host. LAN and public hosts fail closed."""
+
+    text = (raw or "").strip().strip("\"'")
+    if not text:
+        return True
+    parsed = urlparse(text if "://" in text else f"http://{text}")
+    host = (parsed.hostname or "").lower()
+    return host in LOOPBACK_HOSTS
+
+
+def _check_app_pairing(env: Mapping[str, str]) -> CheckResult:
+    profile = env.get("OMI_APP_PROFILE", "").strip()
+    flavor = env.get("OMI_APP_FLAVOR", "").strip()
+    if profile and profile != HERMETIC_PROFILE:
+        return _operator(
+            "app-pairing",
+            f"OMI_APP_PROFILE={profile!r} is not {HERMETIC_PROFILE}; session/test lanes only allow "
+            f"flavor {HERMETIC_FLAVOR} + profile {HERMETIC_PROFILE}",
+            f"Unset OMI_APP_PROFILE (or set it to {HERMETIC_PROFILE}); the doctor will not rewrite app/.dev.env",
+            (LANE_BACKEND, LANE_ANDROID, LANE_IOS),
+        )
+    if flavor and flavor != HERMETIC_FLAVOR:
+        return _operator(
+            "app-pairing",
+            f"OMI_APP_FLAVOR={flavor!r} is not {HERMETIC_FLAVOR}; session/test lanes only allow "
+            f"flavor {HERMETIC_FLAVOR} + profile {HERMETIC_PROFILE}",
+            f"Unset OMI_APP_FLAVOR (or set it to {HERMETIC_FLAVOR}); the doctor will not rewrite app/.dev.env",
+            (LANE_BACKEND, LANE_ANDROID, LANE_IOS),
+        )
+    return _ok(
+        "app-pairing",
+        f"flavor {HERMETIC_FLAVOR} + profile {HERMETIC_PROFILE} "
+        f"(OMI_APP_FLAVOR={flavor or 'unset'}, OMI_APP_PROFILE={profile or 'unset'})",
+        (LANE_BACKEND, LANE_ANDROID, LANE_IOS),
+    )
+
+
+def _check_app_dev_env(repo_root: Path) -> CheckResult:
+    env_file = Path(repo_root) / "app" / ".dev.env"
+    if not env_file.is_file():
+        return _ok(
+            "app-dev-env",
+            "app/.dev.env absent; hermetic bootstrap will write an empty API_BASE_URL",
+            (LANE_BACKEND, LANE_ANDROID, LANE_IOS),
+        )
+    api = parse_dotenv_assignments(env_file).get("API_BASE_URL", "")
+    if is_loopback_api_base(api):
+        return _ok(
+            "app-dev-env",
+            "app/.dev.env API_BASE_URL is empty or loopback",
+            (LANE_BACKEND, LANE_ANDROID, LANE_IOS),
+        )
+    return _operator(
+        "app-dev-env",
+        f"app/.dev.env API_BASE_URL={api!r} is not loopback; hermetic tests/sessions must not send traffic there",
+        "Point API_BASE_URL at empty or http://127.0.0.1:... yourself; the doctor will not rewrite this file",
+        (LANE_BACKEND, LANE_ANDROID, LANE_IOS),
+    )
+
+
 def _check_egress_env(repo_root: Path, env: Mapping[str, str]) -> CheckResult:
     api = env.get("OMI_LOCAL_API_BASE_URL", "").strip()
     if api and api.startswith("https://"):
@@ -450,6 +545,8 @@ def run_doctor(
         _check_java(probe, source),
         _check_firebase_cli(probe),
         _check_egress_env(root, source),
+        _check_app_pairing(source),
+        _check_app_dev_env(root),
     ]
     checks.extend(_check_datastore(root, probe, source))
     if LANE_ANDROID in wanted_lanes:
