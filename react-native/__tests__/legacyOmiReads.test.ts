@@ -793,6 +793,127 @@ test('old conversations name Flutter ConversationListItem fromJson type-wrong GE
   }
 });
 
+test('old conversations name Flutter ConversationListItem fromJson type-wrong GET language instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    language: 'en',
+    app_id: 'notes',
+    call_id: 'call-1',
+    client_device_id: 'device-1',
+    client_platform: 'ios',
+    data_protection_level: 'standard',
+    meeting_treatment_reason: 'meeting',
+    processing_conversation_id: 'proc-1',
+    processing_memory_id: 'mem-1',
+    processing_state: 'completed',
+  };
+  const keptExact = await loadConversations(backend([row, neighbor]).api);
+  expect(keptExact.items.map(item => item.title)).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  const keptOmitted = await loadConversations(
+    backend([conversation, neighbor]).api,
+  );
+  expect(keptOmitted.items.map(item => item.title)).toEqual([
+    'Real title',
+    'Neighbor walk',
+  ]);
+  const keptNull = await loadConversations(
+    backend([
+      {
+        ...row,
+        language: null,
+        app_id: null,
+        call_id: null,
+        client_device_id: null,
+        client_platform: null,
+        data_protection_level: null,
+        meeting_treatment_reason: null,
+        processing_conversation_id: null,
+        processing_memory_id: null,
+        processing_state: null,
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptNull.items.map(item => item.title)).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  const keptEmpty = await loadConversations(
+    backend([
+      {
+        ...row,
+        language: '',
+        app_id: '',
+        call_id: '',
+        client_device_id: '',
+        client_platform: '',
+        data_protection_level: '',
+        meeting_treatment_reason: '',
+        processing_conversation_id: '',
+        processing_memory_id: '',
+        processing_state: '',
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptEmpty.items.map(item => item.title)).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  const keptPadded = await loadConversations(
+    backend([
+      {
+        ...row,
+        language: '  en  ',
+        app_id: ' notes ',
+        call_id: ' call-1 ',
+        client_device_id: ' device-1 ',
+        client_platform: ' ios ',
+        data_protection_level: ' standard ',
+        meeting_treatment_reason: ' meeting ',
+        processing_conversation_id: ' proc-1 ',
+        processing_memory_id: ' mem-1 ',
+        processing_state: ' completed ',
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptPadded.items.map(item => item.title)).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  for (const extra of [1, true, [], {}]) {
+    for (const field of [
+      'language',
+      'app_id',
+      'call_id',
+      'client_device_id',
+      'client_platform',
+      'data_protection_level',
+      'meeting_treatment_reason',
+      'processing_conversation_id',
+      'processing_memory_id',
+      'processing_state',
+    ]) {
+      await expect(
+        loadConversations(
+          backend([{...row, [field]: extra}, neighbor]).api,
+        ),
+      ).rejects.toThrow('Omi text is malformed');
+    }
+  }
+});
+
 test('old discarded conversations name GET transcript_segments as the list title', async () => {
   const {api} = backend([
     {

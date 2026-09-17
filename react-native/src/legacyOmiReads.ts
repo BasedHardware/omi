@@ -474,6 +474,16 @@ export async function loadOmiConversations(
     if (!isOptionalCaptureTimestamp(row.captured_at_ms)) {
       throw new Error('Omi captured_at_ms is malformed');
     }
+    presentNullableString(row.app_id);
+    presentNullableString(row.call_id);
+    presentNullableString(row.client_device_id);
+    presentNullableString(row.client_platform);
+    presentNullableString(row.data_protection_level);
+    presentNullableString(row.language);
+    presentNullableString(row.meeting_treatment_reason);
+    presentNullableString(row.processing_conversation_id);
+    presentNullableString(row.processing_memory_id);
+    presentNullableString(row.processing_state);
     presentGeolocation(row.geolocation);
     presentNullableDouble(row.meeting_duration_s);
     presentNullableDouble(row.meeting_dedup_speech_s);
