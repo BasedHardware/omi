@@ -4110,6 +4110,129 @@ test('old tasks name Flutter EvidenceRef fromJson type-wrong GET device_id inste
   }
 });
 
+test('old tasks name Flutter EvidenceRef fromJson type-wrong GET kind instead of remapping to a task chip', async () => {
+  const neighbor = {id: 'named', description: 'Write recap', completed: false};
+  const evidence = {
+    kind: 'conversation',
+    id: 'conversation-one',
+    scope: 'canonical',
+    transcript_segment_ids: ['seg-1'],
+  };
+  const titles = async (actionItems: unknown[]) =>
+    (
+      await loadTasks(backend({action_items: actionItems, has_more: false}).api)
+    ).items.map(item => item.title);
+  expect(
+    await titles([
+      {
+        id: 'exported',
+        description: 'Call Sam',
+        completed: false,
+        provenance: [evidence],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  expect(
+    await titles([
+      {
+        id: 'exported',
+        description: 'Call Sam',
+        completed: false,
+        provenance: [{id: 'conversation-one'}],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  expect(
+    await titles([
+      {
+        id: 'exported',
+        description: 'Call Sam',
+        completed: false,
+        provenance: [
+          {
+            ...evidence,
+            kind: null,
+            scope: null,
+            transcript_segment_ids: null,
+          },
+        ],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  expect(
+    await titles([
+      {
+        id: 'exported',
+        description: 'Call Sam',
+        completed: false,
+        provenance: [
+          {
+            ...evidence,
+            transcript_segment_ids: 1,
+          },
+        ],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  expect(
+    await titles([
+      {
+        id: 'exported',
+        description: 'Call Sam',
+        completed: false,
+        provenance: [
+          {
+            ...evidence,
+            kind: '  conversation  ',
+            scope: ' canonical ',
+            transcript_segment_ids: ['  seg-1  '],
+          },
+        ],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Call Sam', 'Write recap']);
+  for (const extra of [1, true, [], {}]) {
+    await expect(
+      titles([
+        {
+          id: 'exported',
+          description: 'Call Sam',
+          completed: false,
+          provenance: [{...evidence, kind: extra}],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      titles([
+        {
+          id: 'exported',
+          description: 'Call Sam',
+          completed: false,
+          provenance: [{...evidence, scope: extra}],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      titles([
+        {
+          id: 'exported',
+          description: 'Call Sam',
+          completed: false,
+          provenance: [{...evidence, transcript_segment_ids: [extra]}],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+});
+
 test('old memories use v3 content without manufacturing canonical provenance', async () => {
   const {api, request} = backend(
     [

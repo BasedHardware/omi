@@ -842,8 +842,11 @@ export async function loadOmiTasks(
         presentNullableString(ref.device_id);
         presentNullableString(ref.excerpt_hash);
         presentNullableString(ref.version);
+        presentNullableString(ref.kind);
+        presentNullableString(ref.scope);
         presentNullableDouble(ref.start_seconds);
         presentNullableDouble(ref.end_seconds);
+        presentUnusedStringListItems(ref.transcript_segment_ids);
         return JSON.stringify(ref);
       }),
       sortOrder: integer(row.sort_order),
