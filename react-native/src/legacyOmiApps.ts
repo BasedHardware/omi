@@ -215,6 +215,7 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   presentNullableString(row.username);
   presentExternalIntegration(row.external_integration);
   presentChatTools(row.chat_tools);
+  presentNullableString(row.image);
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
   if (row.description === undefined || row.description === null) {
     return image === null ? {name} : {name, image};
