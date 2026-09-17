@@ -154,17 +154,19 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     XCTAssertEqual(minted, 0)
   }
 
-  func testRealtimeBYOKIdleCloseIsNeverPlanGated() {
-    let controller = gatedController(decision: .planGated)
-    controller.realtimeBYOKKeyResolver = { _ in "AIza-test-gemini-voice-key" }
-    controller.canUseRealtimeBYOK = { _, _ in true }
-    controller.presenceIdleProvider = { 0 }
-    controller.testingWarmAfterDrain = {}
+  #if DEBUG  // testingWarmAfterDrain is a DEBUG-only seam; release builds have no warm bypass surface
+    func testRealtimeBYOKIdleCloseIsNeverPlanGated() {
+      let controller = gatedController(decision: .planGated)
+      controller.realtimeBYOKKeyResolver = { _ in "AIza-test-gemini-voice-key" }
+      controller.canUseRealtimeBYOK = { _, _ in true }
+      controller.presenceIdleProvider = { 0 }
+      controller.testingWarmAfterDrain = {}
 
-    let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
+      let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
 
-    XCTAssertEqual(result, .started)
-  }
+      XCTAssertEqual(result, .started)
+    }
+  #endif
 
   func testUnusableRealtimeBYOKDoesNotMintWhenPlanGatedAndFailoverExhausted() {
     let key = "AIza-test-gemini-voice-key"
@@ -194,64 +196,70 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     XCTAssertEqual(admitted, [true])
   }
 
-  func testUnusablePrimaryBYOKDoesNotSkipWhenAlternateIsHealthy() {
-    let geminiKey = "AIza-test-gemini-voice-key"
-    let openAIKey = "sk-test-openai-realtime-key"
-    let controller = gatedController(decision: .planGated)
-    let previousProvider = RealtimeOmniSettings.shared.selectedProvider
-    RealtimeOmniSettings.shared.selectedProvider = .geminiFlashLive
-    defer { RealtimeOmniSettings.shared.selectedProvider = previousProvider }
+  #if DEBUG  // testingWarmAfterDrain is a DEBUG-only seam; release builds have no warm bypass surface
+    func testUnusablePrimaryBYOKDoesNotSkipWhenAlternateIsHealthy() {
+      let geminiKey = "AIza-test-gemini-voice-key"
+      let openAIKey = "sk-test-openai-realtime-key"
+      let controller = gatedController(decision: .planGated)
+      let previousProvider = RealtimeOmniSettings.shared.selectedProvider
+      RealtimeOmniSettings.shared.selectedProvider = .geminiFlashLive
+      defer { RealtimeOmniSettings.shared.selectedProvider = previousProvider }
 
-    controller.fallbackProvider = nil
-    controller.realtimeBYOKKeyResolver = { provider in
-      switch provider {
-      case .gemini: return geminiKey
-      case .openai: return openAIKey
+      controller.fallbackProvider = nil
+      controller.realtimeBYOKKeyResolver = { provider in
+        switch provider {
+        case .gemini: return geminiKey
+        case .openai: return openAIKey
+        }
       }
+      controller.canUseRealtimeBYOK = { byokProvider, _ in byokProvider == .openai }
+      controller.prefetchedVoiceContextOwnerScope = controller.currentOwnerScope
+      controller.prefetchedVoiceContextSessionID = "test-session"
+      controller.prefetchedVoiceContextFreshnessIdentity = "fresh"
+      controller.testingWarmAfterDrain = {}
+      var admitted: [Bool] = []
+      controller.warmAdmissionProbe = { admitted.append($0) }
+      var minted = 0
+      controller.managedMintProbe = { minted += 1 }
+
+      XCTAssertEqual(controller.resolvedRealtimeWarmCredential(), .failoverToClientDirect)
+      XCTAssertFalse(controller.shouldSkipAutomaticManagedWarm())
+
+      controller.ensureWarm()
+
+      XCTAssertEqual(admitted, [false])
+      XCTAssertEqual(minted, 0)
+      XCTAssertEqual(controller.fallbackProvider, .openai)
     }
-    controller.canUseRealtimeBYOK = { byokProvider, _ in byokProvider == .openai }
-    controller.prefetchedVoiceContextOwnerScope = controller.currentOwnerScope
-    controller.prefetchedVoiceContextSessionID = "test-session"
-    controller.prefetchedVoiceContextFreshnessIdentity = "fresh"
-    controller.testingWarmAfterDrain = {}
-    var admitted: [Bool] = []
-    controller.warmAdmissionProbe = { admitted.append($0) }
-    var minted = 0
-    controller.managedMintProbe = { minted += 1 }
+  #endif
 
-    XCTAssertEqual(controller.resolvedRealtimeWarmCredential(), .failoverToClientDirect)
-    XCTAssertFalse(controller.shouldSkipAutomaticManagedWarm())
+  #if DEBUG  // testingWarmAfterDrain is a DEBUG-only seam; release builds have no warm bypass surface
+    func testPlanGatedIdleCloseDoesNotScheduleRewarm() {
+      let controller = gatedController(decision: .planGated)
+      var drainStarted = false
+      controller.testingWarmAfterDrain = { drainStarted = true }
 
-    controller.ensureWarm()
+      let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
 
-    XCTAssertEqual(admitted, [false])
-    XCTAssertEqual(minted, 0)
-    XCTAssertEqual(controller.fallbackProvider, .openai)
-  }
+      XCTAssertEqual(result, .deferredPlanGated)
+      XCTAssertFalse(drainStarted)
+    }
+  #endif
 
-  func testPlanGatedIdleCloseDoesNotScheduleRewarm() {
-    let controller = gatedController(decision: .planGated)
-    var drainStarted = false
-    controller.testingWarmAfterDrain = { drainStarted = true }
+  #if DEBUG  // testingWarmAfterDrain is a DEBUG-only seam; release builds have no warm bypass surface
+    func testEntitledIdleCloseSchedulesRewarm() async {
+      let controller = gatedController(decision: .allowManagedProactivity)
+      controller.presenceIdleProvider = { 0 }
+      controller.lifecycleRewarmDelayNanoseconds = 0
+      let rewarmed = expectation(description: "idle close rewarm")
+      controller.testingWarmAfterDrain = { rewarmed.fulfill() }
 
-    let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
+      let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
 
-    XCTAssertEqual(result, .deferredPlanGated)
-    XCTAssertFalse(drainStarted)
-  }
-
-  func testEntitledIdleCloseSchedulesRewarm() async {
-    let controller = gatedController(decision: .allowManagedProactivity)
-    controller.presenceIdleProvider = { 0 }
-    controller.lifecycleRewarmDelayNanoseconds = 0
-    let rewarmed = expectation(description: "idle close rewarm")
-    controller.testingWarmAfterDrain = { rewarmed.fulfill() }
-
-    let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
-
-    XCTAssertEqual(result, .started)
-    await fulfillment(of: [rewarmed], timeout: 1)
-  }
+      XCTAssertEqual(result, .started)
+      await fulfillment(of: [rewarmed], timeout: 1)
+    }
+  #endif
 
   func testOwnerChangeDoesNotCarryPlanGateLatchOntoNextAccount() {
     let owner = OwnerBox(value: "user-a")
@@ -274,19 +282,21 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
   }
 
-  func testDiscardSessionAfterOwnerChangeClearsPlanGateLatch() {
-    let controller = gatedController(decision: .allowManagedProactivity)
-    controller.planGateRetryDelayNanoseconds = 3_600_000_000_000
-    controller.testingWarmAfterDrain = {}
+  #if DEBUG  // testingWarmAfterDrain is a DEBUG-only seam; release builds have no warm bypass surface
+    func testDiscardSessionAfterOwnerChangeClearsPlanGateLatch() {
+      let controller = gatedController(decision: .allowManagedProactivity)
+      controller.planGateRetryDelayNanoseconds = 3_600_000_000_000
+      controller.testingWarmAfterDrain = {}
 
-    controller.noteManagedPlanGateFromWarmFailure(Self.planGatedMintError())
-    XCTAssertTrue(controller.managedPlanGateLatch.serverDenied)
-    XCTAssertNotNil(controller.planGateRetryTask)
+      controller.noteManagedPlanGateFromWarmFailure(Self.planGatedMintError())
+      XCTAssertTrue(controller.managedPlanGateLatch.serverDenied)
+      XCTAssertNotNil(controller.planGateRetryTask)
 
-    controller.discardSessionAfterOwnerChange()
-    XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
-    XCTAssertNil(controller.planGateRetryTask)
-  }
+      controller.discardSessionAfterOwnerChange()
+      XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
+      XCTAssertNil(controller.planGateRetryTask)
+    }
+  #endif
 
   func testServerPlanGatedDenialStopsSubsequentAutomaticWarms() {
     let controller = gatedController(decision: .allowManagedProactivity)
