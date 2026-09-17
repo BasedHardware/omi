@@ -10004,4 +10004,7 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi ला तुमचा आवाज ओळखता यावा म्हणून — कोणत्याही विषयावर सुमारे 5 सेकंद बोला.';
+
+  @override
+  String get home => 'मुख्यपृष्ठ';
 }

@@ -1122,6 +1122,8 @@ actor AgentRuntimeProcess {
       result["ownerId"] as? String == ownerID,
       result["sessionId"] as? String == sessionID,
       result["turnId"] as? String == turnID,
+      let surfaceKind = result["surfaceKind"] as? String,
+      !surfaceKind.isEmpty,
       let runID = result["runId"] as? String,
       !runID.isEmpty,
       let attemptID = result["attemptId"] as? String,
@@ -1129,14 +1131,25 @@ actor AgentRuntimeProcess {
     else {
       throw ExternalSurfaceAuthorityError(code: "malformed_external_surface_begin_result")
     }
-    return ExternalSurfaceRunBinding(
+    let binding = ExternalSurfaceRunBinding(
       ownerID: ownerID,
       sessionID: sessionID,
+      surfaceKind: surfaceKind,
       turnID: turnID,
       runID: runID,
       attemptID: attemptID,
       duplicate: result["duplicate"] as? Bool ?? false
     )
+    await MainActor.run {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+      AgentRuntimeStatusStore.shared.recordAcceptedRun(
+        surface: .externalRun(surfaceKind: binding.surfaceKind, runId: binding.runID),
+        sessionId: binding.sessionID,
+        runId: binding.runID,
+        attemptId: binding.attemptID,
+        statusText: "Running")
+    }
+    return binding
   }
 
   func invokeExternalSurfaceTool(
@@ -1270,7 +1283,7 @@ actor AgentRuntimeProcess {
     else {
       throw ExternalSurfaceAuthorityError(code: "malformed_external_surface_complete_result")
     }
-    return ExternalSurfaceRunCompletion(
+    let completion = ExternalSurfaceRunCompletion(
       runID: binding.runID,
       attemptID: binding.attemptID,
       terminalStatus: confirmedStatus,
@@ -1278,6 +1291,26 @@ actor AgentRuntimeProcess {
       finalTextPersisted: result["finalTextPersisted"] as? Bool ?? false,
       journalMaterialized: result["journalMaterialized"] as? Bool ?? false
     )
+    if let authorizationSnapshot {
+      await MainActor.run {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        let projectionStatus: AgentRunProjectionStatus
+        switch completion.terminalStatus {
+        case .completed: projectionStatus = .succeeded
+        case .failed: projectionStatus = .failed
+        case .cancelled: projectionStatus = .cancelled
+        }
+        AgentRuntimeStatusStore.shared.recordConfirmedTerminalRun(
+          surface: .externalRun(surfaceKind: binding.surfaceKind, runId: binding.runID),
+          sessionId: binding.sessionID,
+          runId: binding.runID,
+          attemptId: binding.attemptID,
+          status: projectionStatus,
+          statusText: ExternalSurfaceRunAnswer.normalized(finalText),
+          errorMessage: projectionStatus == .failed ? errorCode : nil)
+      }
+    }
+    return completion
   }
 
   private func assertCurrentExternalOwner(_ ownerID: String) throws {
@@ -1473,77 +1506,6 @@ actor AgentRuntimeProcess {
       ownerId: ownerId
     )
     message["entries"] = entries.map(\.dictionary)
-    return message
-  }
-
-  static func externalSurfaceRunBeginWireMessage(
-    clientId: String,
-    requestId: String,
-    ownerId: String,
-    sessionId: String,
-    turnId: String,
-    prompt: String,
-    promptIsSynthetic: Bool = false,
-    mode: ExternalSurfaceRunMode
-  ) -> [String: Any] {
-    var message = protocolEnvelope(
-      type: "external_surface_run_begin",
-      clientId: clientId,
-      requestId: requestId,
-      ownerId: ownerId
-    )
-    message["sessionId"] = sessionId
-    message["turnId"] = turnId
-    message["prompt"] = prompt
-    if promptIsSynthetic { message["promptIsSynthetic"] = true }
-    message["mode"] = mode.rawValue
-    return message
-  }
-
-  static func externalSurfaceToolInvokeWireMessage(
-    clientId: String,
-    requestId: String,
-    binding: ExternalSurfaceRunBinding,
-    invocationId: String,
-    toolName: String,
-    input: [String: Any]
-  ) -> [String: Any] {
-    var message = protocolEnvelope(
-      type: "external_surface_tool_invoke",
-      clientId: clientId,
-      requestId: requestId,
-      ownerId: binding.ownerID
-    )
-    message["sessionId"] = binding.sessionID
-    message["runId"] = binding.runID
-    message["attemptId"] = binding.attemptID
-    message["invocationId"] = invocationId
-    message["toolName"] = toolName
-    message["input"] = input
-    return message
-  }
-
-  static func externalSurfaceRunCompleteWireMessage(
-    clientId: String,
-    requestId: String,
-    binding: ExternalSurfaceRunBinding,
-    terminalStatus: ExternalSurfaceRunTerminalStatus,
-    finalText: String?,
-    errorCode: String?
-  ) -> [String: Any] {
-    var message = protocolEnvelope(
-      type: "external_surface_run_complete",
-      clientId: clientId,
-      requestId: requestId,
-      ownerId: binding.ownerID
-    )
-    message["sessionId"] = binding.sessionID
-    message["runId"] = binding.runID
-    message["attemptId"] = binding.attemptID
-    message["terminalStatus"] = terminalStatus.rawValue
-    // Trimmed, not just non-empty; see ExternalSurfaceRunAnswer for why.
-    if let finalText = ExternalSurfaceRunAnswer.normalized(finalText) { message["finalText"] = finalText }
-    if let errorCode, !errorCode.isEmpty { message["errorCode"] = errorCode }
     return message
   }
 

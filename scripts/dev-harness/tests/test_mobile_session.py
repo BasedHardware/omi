@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -368,6 +369,42 @@ def test_device_controller_default_runner_missing_binary_is_127(monkeypatch: pyt
     code, out = ms.DeviceController._default_runner(["xcrun", "simctl", "list"])
     assert code == 127
     assert "xcrun" in out
+
+
+def test_device_doctor_cli_accepts_json_after_the_subcommand() -> None:
+    """Siblings take `--json` after the verb (`doctor --json`); device doctor
+    used to accept it only as `device --json doctor`."""
+    parser = ms.build_parser()
+    after = parser.parse_args(["device", "doctor", "--json"])
+    before = parser.parse_args(["device", "--json", "doctor"])
+    assert after.json is True and before.json is True
+    assert after.device_command == "doctor" and before.device_command == "doctor"
+
+
+def test_device_doctor_stripped_path_is_classified_not_a_traceback() -> None:
+    """Acceptance: `mobile-session device doctor` with adb off PATH exits a
+    classified result (no traceback) so iOS checks still run."""
+    env = {key: value for key, value in os.environ.items() if key not in {"ANDROID_HOME", "ANDROID_SDK_ROOT"}}
+    env["PATH"] = "/usr/bin:/bin"
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "dev_harness.mobile_session", "device", "--json", "doctor"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "Traceback" not in combined, combined[-2000:]
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    statuses = {check["status"] for check in report["checks"]}
+    assert statuses & {"agent-remediable", "operator-action-needed"}
+    android = next(c for c in report["checks"] if c["check"].startswith("android."))
+    assert android["status"] in {"agent-remediable", "operator-action-needed"}
+    assert any(c["check"].startswith("ios.") for c in report["checks"]), "iOS checks must still run after adb fails"
 
 
 def test_device_heartbeat_cli_is_wired(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

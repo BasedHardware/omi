@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
+import 'package:omi/utils/build_provenance.dart';
+
 class CrashlyticsManager {
   static final CrashlyticsManager _instance = CrashlyticsManager._internal();
   static CrashlyticsManager get instance => _instance;
@@ -20,6 +22,20 @@ class CrashlyticsManager {
       await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
     } else {
       await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+    }
+    // Must run after Firebase.initializeApp (main.dart calls this after
+    // _ensureFirebaseApp). applyBuildProvenanceKeys no-ops when no Firebase
+    // app exists so host tests do not throw [core/no-app].
+    await applyBuildProvenanceKeys();
+  }
+
+  /// Attach git SHA / build number so a Crashlytics issue resolves to a
+  /// commit. Safe to call only after [Firebase.initializeApp].
+  static Future<void> applyBuildProvenanceKeys() async {
+    if (!_deliverable) return;
+    final keys = BuildProvenance.fromEnvironment().asProperties;
+    for (final entry in keys.entries) {
+      await FirebaseCrashlytics.instance.setCustomKey(entry.key, entry.value);
     }
   }
 

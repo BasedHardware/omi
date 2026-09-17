@@ -9979,4 +9979,7 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.';
+
+  @override
+  String get home => 'Hjem';
 }

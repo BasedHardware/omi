@@ -73,6 +73,23 @@ make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"
 #   exit 0 + verify-receipt.json outcome=passed, or the exact rerun command on failure
 ```
 
+The hermetic Dart suite and this lane must not depend on the host calendar or
+timezone. The CI second timezone pass is the same commands under a forced `TZ`:
+
+```bash
+TZ=Pacific/Kiritimati bash app/test.sh
+TZ=Pacific/Pago_Pago bash app/test.sh
+TZ=Pacific/Kiritimati make mobile-verify ARGS="fast --all"
+TZ=Pacific/Pago_Pago make mobile-verify ARGS="fast --all"
+```
+
+Do not pass `--evidence-dir` or set `OMI_VERIFY_EVIDENCE_DIR` for the default
+local run: an empty env value is treated as unset and receipts go to a temp
+dir. A relative `--evidence-dir` (or env value) is resolved against the
+invocation working directory and passed to the runner as an absolute path —
+never against `app/`, which is only the runner's cwd. CI may still pass
+`--evidence-dir` to collect the `journey-evidence` artifact.
+
 Deliberately break it once (arm `suppress-assistant-reply` via the journey
 faults) and the lane fails with the missing invariant named — proving the
 oracle rejects wrong behavior, not just accepts right behavior.

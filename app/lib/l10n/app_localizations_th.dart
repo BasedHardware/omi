@@ -9937,4 +9937,7 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที';
+
+  @override
+  String get home => 'หน้าหลัก';
 }

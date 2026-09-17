@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-nested-closure-capture-ownership-mismatch",
+  "violated_contract": "When an inner closure declares `[weak self]`, every enclosing closure that it is nested in must capture `self` with the same ownership. Three desktop call sites (the microphone and system-audio `onAudioChunk` handlers in AppState+Transcription.swift and NWPathMonitor's `pathUpdateHandler` in NetworkReachability.swift) wrote `[weak self]` only on the innermost closure, so the outer escaping closure captured `self` strongly and the weak annotation protected nothing. The CI-pinned Xcode 26.6 accepts this silently; the Swift 6.3 compiler in Xcode 27 rejects it ('weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope), so `main` stopped compiling on any machine that had moved to the newer toolchain while every CI lane stayed green.",
+  "canonical_prevention": "Declare the capture list on the outermost escaping closure and let inner closures inherit or restate it, so the ownership a reader sees is the ownership the object graph has. Treat a toolchain newer than the CI pin as an early warning lane: a diagnostic that only the newer compiler raises is fixed in source, in a form both toolchains accept, rather than deferred until the pin moves.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/ci/xcode-pin.json"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/**"
+  ],
+  "status": "open"
+}
