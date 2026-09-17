@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-element-shape-unchecked-in-model-array",
+  "violated_contract": "A consumer of an array returned by a model or a provider must validate each element's shape and bound the damage to the element that is wrong. One unusable element -- a bare scalar, a string, null, or a field whose type is not what the reader assumes (an array field given as a scalar, a date object given as a string) -- must not invalidate the sibling elements that are well formed, must not raise inside the handler, and must not be silently coerced into a wrong value.",
+  "canonical_prevention": "Parse the array, then per element: require a mapping before reading keys, require each field's type before using it (guarded coercion with an explicit default for numbers), skip only the offending element with a warning that names its type, and keep accumulating the valid ones. Never let a whole-array broad except collapse a partially valid payload into the empty case, because the caller cannot then distinguish 'the model returned nothing' from 'one entry was malformed'.",
+  "canonical_prevention_artifact": [
+    "plugins/iq_rating/main.py",
+    "plugins/iq_rating/test_score_array_parsing.py",
+    "plugins/omi-crossref-app/main.py",
+    "plugins/omi-crossref-app/test_payload_shape.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/**"
+  ],
+  "status": "open"
+}

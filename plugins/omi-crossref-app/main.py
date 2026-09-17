@@ -40,12 +40,52 @@ def clean(text: Any) -> str:
     return value.strip()
 
 
-def extract_year(item: dict[str, Any]) -> str:
+def extract_title(item: Any) -> str:
+    """Read a Crossref title, which is an array on most works but a bare string on some.
+
+    Indexing the raw value truncates a string title to its first character, so the
+    scalar shape has to be handled before any indexing.
+    """
+    if not isinstance(item, dict):
+        return "Untitled"
+    raw = item.get("title")
+    if isinstance(raw, (list, tuple)):
+        raw = raw[0] if raw else None
+    # A title is text. A non-string scalar carries no title, and `clean()` would
+    # otherwise turn it into its own repr.
+    if isinstance(raw, str):
+        title = clean(raw)
+        if title:
+            return title
+    return "Untitled"
+
+
+def extract_year(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
     for key in ("published-print", "published-online", "issued"):
-        date_parts = (item.get(key) or {}).get("date-parts", [])
-        if date_parts and date_parts[0]:
-            return clean(date_parts[0][0])
+        block = item.get(key)
+        if isinstance(block, (str, int, float)):
+            # Some records carry the date directly rather than under date-parts.
+            return _year_text(clean(block))
+        if not isinstance(block, dict):
+            continue
+        date_parts = block.get("date-parts")
+        if isinstance(date_parts, (list, tuple)) and date_parts:
+            first = date_parts[0]
+        else:
+            first = date_parts
+        if isinstance(first, (list, tuple)):
+            first = first[0] if first else None
+        if isinstance(first, (str, int, float)):
+            return _year_text(clean(first))
     return ""
+
+
+def _year_text(value: str) -> str:
+    """A year is the leading 4-digit run; `date-parts` is sometimes a bare string."""
+    match = re.match(r"\s*(\d{4})", value or "")
+    return match.group(1) if match else ""
 
 
 async def crossref_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -184,7 +224,7 @@ async def search_crossref_works(payload: SearchWorksInput):
 
     lines = [f"Top {len(items)} Crossref results for '{query}':"]
     for idx, item in enumerate(items, 1):
-        title = clean((item.get("title") or ["Untitled"])[0])
+        title = extract_title(item)
         doi = clean(item.get("DOI"))
         year = extract_year(item)
         lines.append(f"{idx}. {title} ({year})")
@@ -205,7 +245,7 @@ async def get_crossref_work(payload: GetWorkInput):
     except Exception as exc:
         return ChatToolResponse(error=f"Crossref request failed: {exc}")
     item = payload.get("message", {})
-    title = clean((item.get("title") or ["Untitled"])[0])
+    title = extract_title(item)
     publisher = clean(item.get("publisher"))
     doi_out = clean(item.get("DOI"))
     url = clean(item.get("URL"))
@@ -248,7 +288,7 @@ async def get_crossref_works_by_author(payload: AuthorWorksInput):
 
     lines = [f"Recent works for '{author}':"]
     for idx, item in enumerate(items, 1):
-        title = clean((item.get("title") or ["Untitled"])[0])
+        title = extract_title(item)
         doi = clean(item.get("DOI"))
         year = extract_year(item)
         lines.append(f"{idx}. {title} ({year})")

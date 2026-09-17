@@ -1146,6 +1146,24 @@ checks:
     lanes: ["local", "ci"]
     reason: "get_timeline, get_my_tweets, get_mentions and search_tweets clamped max_results only at 100, so a request for fewer posts than the X endpoint floor (10 for search, 5 for user posts and mentions) was sent as is and rejected with HTTP 400; the suite drives the real handlers against a seam that enforces the documented ranges"
 
+  - id: twitter-app-tweet-offset-tests
+    command: ["python3", "plugins/omi-twitter-app/test_tweet_offsets.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "extract_tweet_content located the trigger phrase in the normalized (lowered and stripped) copy but applied that offset to the original text, so every leading whitespace character moved the slice back into the trigger and prepended its tail to the tweet; the suite drives the real detector, including the webhook's space-joined transcript shape"
+
+  - id: iq-rating-score-array-parsing-tests
+    command: ["python3", "plugins/iq_rating/test_score_array_parsing.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "calculate_iq_with_ai read every element of the model's JSON score array as a mapping and coerced iq with int(), so one non-object element (or an iq of null) raised into a broad except that discarded the whole batch's scores and silently fell back to random scores for every person in it; the suite drives the real function through a patched HTTP seam and asserts a malformed element costs only itself"
+
+  - id: crossref-payload-shape-tests
+    command: ["python3", "plugins/omi-crossref-app/test_payload_shape.py"]
+    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Crossref chat tools read title as an array and issued as a date-parts object every time, so a record with a bare string title was reported as its first character (\"Sleep and Memory\" -> \"S\"), a string date-parts was reported as its first digit (2020 -> 2), and a non-object item or a scalar issued date raised inside the handler; the suite drives the real handlers through a patched crossref_get seam"
+
   - id: ms365-tool-dispatch-tests
     command: ["python3", "plugins/omi-ms365-app/test_tool_dispatch.py"]
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
