@@ -3239,5 +3239,6 @@
     },
     "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten",
     "processingTakingLonger": "Arbeitet noch — das dauert länger als üblich.",
-    "speechProfileEnrollmentPrompt": "Damit Omi weiß, welche Stimme deine ist — sprich etwa 5 Sekunden über irgendetwas."
+    "speechProfileEnrollmentPrompt": "Damit Omi weiß, welche Stimme deine ist — sprich etwa 5 Sekunden über irgendetwas.",
+    "home": "Start"
 }

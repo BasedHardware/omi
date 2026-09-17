@@ -10082,4 +10082,7 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Pour qu’Omi reconnaisse votre voix — parlez de ce que vous voulez pendant environ 5 secondes.';
+
+  @override
+  String get home => 'Accueil';
 }

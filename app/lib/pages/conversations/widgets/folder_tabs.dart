@@ -13,6 +13,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/header_circle_button.dart';
 
 class FolderTabs extends StatefulWidget {
   final List<Folder> folders;
@@ -165,9 +166,12 @@ class _FolderTabsState extends State<FolderTabs> {
     // Extra padding at the end for scroll
     tabs.add(const SizedBox(width: 8));
 
+    // The strip is one touch target tall. Chips still paint at 36pt: each one
+    // pads itself by the difference, and the strip's margin gives the same 8pt
+    // back, so the row occupies the 52pt it always did.
     return Container(
-      height: 36,
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      height: kMinTapTarget,
+      margin: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           // Scrollable folder tabs
@@ -239,8 +243,12 @@ class _FolderTab extends StatelessWidget {
         onTap();
       },
       onLongPress: folder != null ? () => _showContextMenu(context) : null,
+      // Opaque so the transparent band above and below the painted chip is
+      // part of the target.
+      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(vertical: (kMinTapTarget - 36) / 2),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
@@ -275,20 +283,20 @@ class _FolderTab extends StatelessWidget {
 class _AddFolderButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    // 32pt circle in a 44pt target; the margins shrink by the 6pt overhang so
+    // the circle stays 8pt from the chips and 16pt from the screen edge.
     return Container(
-      margin: const EdgeInsets.only(left: 8, right: 16),
-      child: GestureDetector(
+      margin: const EdgeInsets.only(left: 2, right: 10),
+      child: HeaderCircleButton(
+        semanticLabel: context.l10n.newFolder,
+        diameter: 32,
+        color: Colors.grey.withValues(alpha: 0.12),
+        icon: Icon(Icons.add, size: 18, color: Colors.grey[400]),
         onTap: () async {
           HapticFeedback.mediumImpact();
           PlatformManager.instance.analytics.createFolderButtonClicked();
           await showCreateFolderBottomSheet(context);
         },
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
-          child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
-        ),
       ),
     );
   }

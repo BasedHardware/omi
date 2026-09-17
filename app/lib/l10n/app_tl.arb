@@ -10828,5 +10828,6 @@
     },
     "tapPlusToStartRecording": "I-tap ang + para magsimulang mag-record",
     "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
-    "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo."
+    "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
+    "home": "Home"
 }
