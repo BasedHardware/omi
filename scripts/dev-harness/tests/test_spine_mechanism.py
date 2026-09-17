@@ -146,3 +146,213 @@ def test_squashed_spine_revision_keeps_the_corrected_oracle(tmp_path):
     assert checker.check(tmp_path)  # the old assertion cannot be restored
     file.write_text(revised.replace('offstageAndRetained', 'true'))
     assert checker.check(tmp_path)
+
+
+def scope_repo(root, grandfather=False):
+    import json
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(root), *args], text=True, stderr=subprocess.DEVNULL)
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.test')
+    path = 'app/test/spine/example.dart'
+    file = root / path
+    file.parent.mkdir(parents=True)
+    old = "pendingContract('V1');\nexpect(profile, 'localDev');\n"
+    new = old.replace('localDev', 'local_dev')
+    file.write_text(old)
+    (root / checker.REGISTRY).parent.mkdir(parents=True)
+    (root / checker.REGISTRY).write_text(json.dumps({path: 'V1'}))
+    runtime = root / 'app/lib/example.dart'
+    runtime.parent.mkdir(parents=True)
+    runtime.write_text('throw UnimplementedError();\n')
+    policy = {'scaffolding': {'app/lib/example.dart': [checker.digest(runtime.read_text())]}}
+    if grandfather:
+        record = json.dumps(dict(path=path, owner='V1', before=checker.digest(old),
+            after=checker.digest(new), reason='wire evidence'))
+        policy['grandfathered_revisions'] = {checker.REVISIONS + '/001.json': [checker.digest(record)]}
+    (root / checker.SCOPE).write_text(json.dumps(policy))
+    git('add', '.')
+    git('commit', '-qm', 'accepted contract')
+    git('branch', 'origin/main')
+    def revise():
+        file.write_text(new)
+        directory = root / checker.REVISIONS
+        directory.mkdir()
+        (directory / '001.json').write_text(json.dumps(dict(path=path, owner='V1', before=checker.digest(old),
+            after=checker.digest(new), reason='wire evidence')))
+    return git, file, runtime, old, new, revise
+
+
+def test_revision_cannot_travel_with_implementation_even_in_separate_commits(tmp_path):
+    git, file, runtime, old, new, revise = scope_repo(tmp_path)
+    runtime.write_text('return 1;\n')
+    file.write_text(old.replace("pendingContract('V1');\n", ''))
+    assert checker.check(tmp_path) == []  # ordinary builder + marker retirement
+    git('add', '.')
+    git('commit', '-qm', 'implementation')
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'self-approved revision in another commit')
+    assert any('mixed with implementation' in error for error in checker.check(tmp_path))
+    runtime.write_text('throw UnimplementedError();\n')
+    assert checker.check(tmp_path) == []  # exact accepted skeleton, no implementation
+    (tmp_path / checker.SCOPE).write_text('{"oracle_paths":["app/lib/example.dart"]}')
+    assert any('immutable' in error for error in checker.check(tmp_path))
+
+
+def test_real_squash_merge_and_child_merge_preserve_corrected_oracle(tmp_path):
+    git, file, runtime, old, new, revise = scope_repo(tmp_path)
+    git('switch', '-qc', 'spine')
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'corrected oracle')
+    git('branch', 'child')
+    git('switch', '-q', 'main')
+    git('merge', '--squash', 'spine')
+    git('commit', '-qm', 'squash accepted spine')
+    git('branch', '-f', 'origin/main', 'HEAD')  # isolated fixture ref, not the real repository
+    assert checker.check(tmp_path) == []
+    git('switch', '-q', 'child')
+    git('merge', '--no-edit', 'main')
+    assert checker.check(tmp_path) == []
+    file.write_text(new.replace("pendingContract('V1');\n", ''))
+    assert checker.check(tmp_path) == []
+    file.write_text(old)
+    assert checker.check(tmp_path)
+
+
+def test_pinned_legacy_correction_survives_old_parent_merge_without_authorizing_new_revision(tmp_path):
+    import json
+    git, file, runtime, old, new, revise = scope_repo(tmp_path, grandfather=True)
+    git('switch', '-qc', 'child')
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'pinned reviewed correction')
+    git('switch', '-q', 'main')
+    (tmp_path / 'unrelated.md').write_text('new main work')
+    git('add', '.')
+    git('commit', '-qm', 'main retains older oracle')
+    git('branch', '-f', 'origin/main', 'HEAD')  # isolated fixture only
+    git('switch', '-q', 'child')
+    git('merge', '--no-edit', 'main')
+    runtime.write_text('return 1;\n')
+    file.write_text(new.replace("pendingContract('V1');\n", ''))
+    assert checker.check(tmp_path) == []
+    changed = new.replace('local_dev', 'invented')
+    file.write_text(changed)
+    record = dict(path='app/test/spine/example.dart', owner='V1', before=checker.digest(new),
+        after=checker.digest(changed), reason='builder self-authorization')
+    (tmp_path / checker.REVISIONS / '002.json').write_text(json.dumps(record))
+    git('add', '.')
+    git('commit', '-qm', 'new self-approved revision')
+    assert any('mixed with implementation' in error for error in checker.check(tmp_path))
+
+
+def test_merge_parent_order_preserves_digest_and_marker_verdicts(tmp_path):
+    """GitHub's base-first PR merge and the branch have identical oracle bytes."""
+    import json
+    git, file, runtime, old, revised, revise = scope_repo(tmp_path)
+    git('switch', '-qc', 'spine')
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'first correction')
+    final = revised.replace('local_dev', 'verified_local_dev')
+    file.write_text(final)
+    record = dict(path='app/test/spine/example.dart', owner='V1',
+                  before=checker.digest(revised), after=checker.digest(final), reason='second correction')
+    (tmp_path / checker.REVISIONS / '002.json').write_text(json.dumps(record))
+    git('add', '.')
+    git('commit', '-qm', 'second correction')
+    branch = git('rev-parse', 'HEAD').strip()
+    git('switch', '-q', 'main')
+    git('merge', '--squash', 'spine')
+    git('commit', '-qm', 'squashed spine; first record payload differs here')
+    base = git('rev-parse', 'HEAD').strip()
+    git('branch', '-f', 'origin/main', base)  # temporary fixture repo only
+    git('switch', '-q', 'spine')
+    assert checker.check(tmp_path) == []
+    tree = git('rev-parse', 'HEAD^{tree}').strip()
+    for parents in [(branch, base), (base, branch)]:
+        merge = git('commit-tree', tree, '-p', parents[0], '-p', parents[1], '-m', 'synthetic PR merge').strip()
+        git('checkout', '-q', '--detach', merge)
+        assert git('rev-parse', 'HEAD^{tree}').strip() == tree
+        assert checker.check(tmp_path) == []
+        file.write_text(final.replace("pendingContract('V1');\n", ''))
+        assert checker.check(tmp_path) == []
+        file.write_text(final.replace('verified_local_dev', 'wrong'))
+        assert checker.check(tmp_path)  # no matching pinned assertion
+        file.write_text(final.replace("pendingContract('V1');", "// pendingContract('V1');"))
+        assert checker.check(tmp_path)  # comments are not marker retirement
+        file.write_text(final)
+    # Main retires the marker. Restoring it must fail in BOTH merge orders.
+    git('switch', '-q', 'main')
+    file.write_text(final.replace("pendingContract('V1');\n", ''))
+    git('add', '.')
+    git('commit', '-qm', 'builder retires marker')
+    base = git('rev-parse', 'HEAD').strip()
+    git('branch', '-f', 'origin/main', base)
+    git('checkout', '-q', '--detach', branch)
+    assert any('retired markers' in error for error in checker.check(tmp_path))
+    for parents in [(branch, base), (base, branch)]:
+        merge = git('commit-tree', tree, '-p', parents[0], '-p', parents[1], '-m', 'restored marker').strip()
+        git('checkout', '-q', '--detach', merge)
+        assert any('retired markers' in error for error in checker.check(tmp_path))
+
+
+def test_shared_runner_changes_preserve_invocation_not_bytes(tmp_path):
+    import json
+    import pytest
+    git, file, runtime, old, new, revise = scope_repo(tmp_path)
+    # Deliberately NOT a repository runner's name: this is a category rule.
+    runner = tmp_path / 'ci/ordinary-check.sh'
+    runner.parent.mkdir()
+    command = 'tool test suite/oracles'
+    source = '#!/usr/bin/env bash\nset -euo pipefail\n' + command + '\n'
+    runner.write_text(source)
+    declaration = tmp_path / checker.RUNNERS
+    declaration.write_text(json.dumps({'version': 1, 'runners': [
+        {'path': 'ci/ordinary-check.sh', 'invocations': [{'argv': command.split()}]}]}))
+    git('add', '.')
+    git('commit', '-qm', 'spine invocation contract')
+    git('branch', '-f', 'origin/main', 'HEAD')
+    # An unrelated contributor adds a legitimate guard to main.
+    runner.write_text(source.replace(command, 'echo checking prerequisites\n' + command))
+    git('add', '.')
+    git('commit', '-qm', 'ordinary shared runner maintenance')
+    git('branch', '-f', 'origin/main', 'HEAD')
+    assert checker.check(tmp_path) == []
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'oracle-only revision')
+    runner.write_text(runner.read_text() + 'echo done\n')
+    assert checker.check(tmp_path) == []
+    file.write_text(new.replace('local_dev', 'wrong'))
+    assert checker.check(tmp_path)  # legitimate runner changes cannot launder weakening
+    file.write_text(new)
+    valid = runner.read_text()
+    for mutation in [valid.replace(command, '# ' + command),
+                     valid.replace(command, 'if false; then\n' + command + '\nfi'),
+                     valid.replace(command, 'true || ' + command),
+                     valid.replace(command, command + ' --exclude oracles'),
+                     valid.replace(command, 'exit 0\n' + command),
+                     valid.replace(command, 'if true; then\nexit 0\nfi\n' + command),
+                     valid.replace(command, 'cat <<EOF\n' + command + '\nEOF'),
+                     valid.replace(command, 'set -- suite/unit\n' + command),
+                     valid.replace(command, 'tool() {\n true\n}\n' + command),
+                     valid.replace('set -euo pipefail', 'set +e')]:
+        runner.write_text(mutation)
+        assert checker.check(tmp_path), mutation
+    runner.write_text(valid)
+    # A builder cannot turn another implementation path into a shared runner.
+    declaration.write_text('{"runners":[]}')
+    with pytest.raises(ValueError, match='immutable'):
+        checker.check(tmp_path)
+    # Nor may a committed deletion of a revision hide its historical oracle.
+    declaration.write_text(git('show', f'HEAD:{checker.RUNNERS}'))
+    file.write_text(old)
+    (tmp_path / checker.REVISIONS / '001.json').unlink()
+    git('add', '.')
+    git('commit', '-qm', 'malicious removal and assertion rollback')
+    with pytest.raises(ValueError, match='cannot be removed'):
+        checker.check(tmp_path)
