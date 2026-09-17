@@ -14,9 +14,9 @@ requires a namespaced key on **every** matching constructor in that file (or the
 unkeyed baseline cannot grow). Dialog-only buttons are listed separately
 because `checkSurface` uses `skipOffstage: true` / `findsOneWidget`.
 
-Hot files (single-lane): `pages/home/page.dart`, `main.dart`,
-`pages/conversation_detail/page.dart`, `pages/chat/page.dart`,
-`services/capture/capture_controller.dart`.
+Hot files (single-lane): `app/lib/pages/home/page.dart`, `app/lib/main.dart`,
+`app/lib/pages/conversation_detail/page.dart`, `app/lib/pages/chat/page.dart`,
+`app/lib/services/capture/capture_controller.dart`.
 
 ---
 
@@ -217,14 +217,14 @@ enabled.
 
 **Size:** 2 PRs, last in the stack. (1) extract app-bar actions to a non-hot
 file and key back/ask there. (2) remaining on-stage debt. Never pair with
-`home/page.dart`.
+`app/lib/pages/home/page.dart`.
 
 ---
 
 ## 4. memories
 
 **Owners:** `app/lib/pages/memories/page.dart` (`MemoriesPage`), rows in
-`widgets/memory_item.dart`. Not hot. Opened from settings, not a tab.
+`app/lib/pages/memories/widgets/memory_item.dart`. Not hot. Opened from settings, not a tab.
 
 **Reach:** push. `kind: push`, fixture `memories-empty`, `signed_in`,
 `local_dev`, `ready_provider: memories`.
@@ -450,7 +450,7 @@ set.
 5. **onboarding auth** — Google + local-dev; blocked on signed-out `buildShell` (B1 adapter), not on `main` widgets.
 6. **tasks** — extract FAB/row out of the 31-constructor file first.
 7. **home tabs** — `bottom_nav_bar.dart` only; wait for announcement-timer on `main` before pumping `HomePage` in a green surface test.
-8. **conversation_detail** — last; extract app bar out of the hot file; fix Ask/Back labels; never in the same PR as `home/page.dart`.
+8. **conversation_detail** — last; extract app bar out of the hot file; fix Ask/Back labels; never in the same PR as `app/lib/pages/home/page.dart`.
 
 **home/page.dart chat bar** sits with (7) or after it; it is the only home
 control that requires the hot file.
