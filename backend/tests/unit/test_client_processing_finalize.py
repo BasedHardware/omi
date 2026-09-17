@@ -187,6 +187,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_reprocess_transcript_structure',
         'extract_action_items',
         'get_conversation_notes',
+        'validate_structured_source_segment_ids',
         'generate_summary_with_prompt',
         'SummaryProviderError',
     ):
@@ -194,6 +195,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
+    gateway_error_contract = add('utils.llm.gateway_error_contract', AutoMockModule('utils.llm.gateway_error_contract'))
+    gateway_error_contract.conversation_processing_http_exception = lambda error: error
     add('utils.apps', AutoMockModule('utils.apps'))
     add('utils.analytics', AutoMockModule('utils.analytics')).record_usage = MagicMock()
     add('utils.conversations.transcript_chunks', AutoMockModule('utils.conversations.transcript_chunks'))

@@ -1,5 +1,6 @@
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
+import { selectConversationSummary } from '@/lib/conversationSummarySelection';
 
 /**
  * A single tile in the Timeline gallery. Conversations and daily recaps share
@@ -161,7 +162,7 @@ export function conversationSignals(conversation: Conversation): ConversationSig
   }
 
   return {
-    excerpt: (structured.overview ?? '').trim(),
+    excerpt: selectConversationSummary(conversation).content,
     category,
     actionItemCount: structured.action_items?.length ?? 0,
     speakerCount: speakers.size,

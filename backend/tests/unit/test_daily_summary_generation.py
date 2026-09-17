@@ -370,6 +370,30 @@ def test_an_app_result_content_alone_counts_as_summary_content(monkeypatch):
     assert generated_dates == ['2026-08-20']
 
 
+def test_blank_first_app_result_does_not_skip_later_summary_content(monkeypatch):
+    """A blank integration result must not hide usable content from a later result."""
+    generated_dates, _created, _sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
+
+    class _BlankFirstAppResultConvo:
+        transcript_segments = [object()]
+        discarded = False
+        structured = SimpleNamespace(overview='')
+
+        def __init__(self) -> None:
+            self.apps_results = [
+                SimpleNamespace(content='  '),
+                SimpleNamespace(content='A busy day of meetings.'),
+            ]
+
+    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _BlankFirstAppResultConvo())
+    record, created, _declined = notif._generate_and_store_daily_summary(
+        'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
+    )
+
+    assert record is not None and created is True
+    assert generated_dates == ['2026-08-20']
+
+
 def test_action_items_alone_count_as_summary_content(monkeypatch):
     """The renderer also emits ``structured.action_items`` into the prompt body
     (render.py). A day whose conversations have empty overviews, no app
