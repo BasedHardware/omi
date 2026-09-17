@@ -201,6 +201,7 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     let binding = ExternalSurfaceRunBinding(
       ownerID: "owner-1",
       sessionID: "session-1",
+      surfaceKind: "floating_chat",
       turnID: turnID.rawValue.uuidString.lowercased(),
       runID: "run-1",
       attemptID: "attempt-1",
