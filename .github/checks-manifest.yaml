@@ -1046,6 +1046,11 @@ checks:
     lanes: ["local", "ci"]
     reason: "the fuzzy channel match posted to the first workspace channel containing the spoken name (\"dev\" hit whichever of #dev-ops and #frontend-dev was listed first), and a named channel that did not resolve fell through to the user's default channel; resolve_channel accepts one exact or one fuzzy candidate only and process_segments refuses a named channel it could not resolve"
 
+  - id: notion-max-results-limits-tests
+    command: ["python3", "plugins/omi-notion-app/test_max_results_limits.py"]
+    triggers: ["plugins/omi-notion-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13944 the backend forwards null for omitted optional ints; min(None, cap) raised TypeError in all four Notion listing tools"
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]

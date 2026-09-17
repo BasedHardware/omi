@@ -478,7 +478,11 @@ async def tool_search(request: Request):
         uid = body.get("uid")
         query = body.get("query", "")
         filter_type = body.get("filter")
-        max_results = min(body.get("max_results", 10), 20)
+        raw_max_results = body.get("max_results")
+        try:
+            max_results = min(max(1, int(raw_max_results)), 20) if raw_max_results is not None else 10
+        except (ValueError, TypeError):
+            max_results = 10
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -536,7 +540,11 @@ async def tool_list_pages(request: Request):
         log(f"=== LIST_PAGES ===")
 
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 20)
+        raw_max_results = body.get("max_results")
+        try:
+            max_results = min(max(1, int(raw_max_results)), 20) if raw_max_results is not None else 10
+        except (ValueError, TypeError):
+            max_results = 10
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -836,7 +844,11 @@ async def tool_list_databases(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 20)
+        raw_max_results = body.get("max_results")
+        try:
+            max_results = min(max(1, int(raw_max_results)), 20) if raw_max_results is not None else 10
+        except (ValueError, TypeError):
+            max_results = 10
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -878,7 +890,11 @@ async def tool_query_database(request: Request):
         body = await request.json()
         uid = body.get("uid")
         database_id = body.get("database_id")
-        max_results = min(body.get("max_results", 10), 50)
+        raw_max_results = body.get("max_results")
+        try:
+            max_results = min(max(1, int(raw_max_results)), 50) if raw_max_results is not None else 10
+        except (ValueError, TypeError):
+            max_results = 10
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
