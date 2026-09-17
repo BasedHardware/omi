@@ -23,7 +23,6 @@ ServerConversation seed(String id) => ServerConversation(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractWidgets('C3 fixture outage renders error, retry recovers, valid empty alone renders empty', (tester) async {
-    pendingContract('C3');
     final fixture = await tester.runAsync(C3Fixture.start);
     addTearDown(fixture!.close);
     fixture.backend.failNext('GET', '/v1/conversations', status: 503);
@@ -55,7 +54,6 @@ void main() {
 
   for (final status in [402, 422]) {
     contractWidgets('C3 detail $status leaves Processing and does not retry on timer ticks', (tester) async {
-      pendingContract('C3');
       final fixture = await tester.runAsync(C3Fixture.start);
       addTearDown(fixture!.close);
       fixture.backend.failNext('GET', '/v1/conversations/one', status: status);
@@ -77,7 +75,6 @@ void main() {
     });
   }
   contractTest('C3 conversation parser keeps exact valid records around a malformed row', () async {
-    pendingContract('C3');
     final fixture = await C3Fixture.start();
     addTearDown(fixture.close);
     fixture.backend.conversations.addAll([
@@ -95,7 +92,6 @@ void main() {
     expect((missing as ApiFailure<ServerConversation>).problem.kind, ApiProblemKind.notFound);
   });
   contractWidgets('C3 actual conversation page never renders empty hero for a persistent outage', (tester) async {
-    pendingContract('C3');
     final fixture = await tester.runAsync(C3Fixture.start);
     addTearDown(fixture!.close);
     var outage = true;
