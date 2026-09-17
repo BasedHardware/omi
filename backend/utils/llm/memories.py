@@ -9,6 +9,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
 
 from database import users as users_db
+from models.daily_sweep_dispatch import SweepDispatchScope
 from models.memories import Memory, MemoryCategory
 from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
@@ -928,6 +929,7 @@ def _daily_sweep_request_body_bytes(
         return fallback
 
 
+@SweepDispatchScope.certify_pre_dispatch
 def run_daily_sweep_summary_agent(
     uid: str,
     summary_rows: Sequence[tuple[str, str]],
@@ -951,8 +953,9 @@ def run_daily_sweep_summary_agent(
 ) -> DailySweepAgentPassOutput:
     """Run the bounded two-phase daily agent; raises MemoryExtractionError on failure.
 
-    Strict by design: the sweep treats any raise as an indeterminate invocation
-    (source incomplete, no cursor advance) rather than attesting an empty day.
+    Strict by design: failures keep the source incomplete with no cursor advance.
+    Within a fenced claim, the wrapper certifies preparation failures only until
+    the first dispatch latch; later or unknown failures stay indeterminate.
     ``memory_searcher(query) -> Sequence[str]`` is a read-only seam over the
     user's prior memory ledger; absent or failing lookups degrade to an empty
     result block, never to a failed day.  Both phases share one byte-identical
@@ -1049,6 +1052,7 @@ def run_daily_sweep_summary_agent(
             if input_bytes > max_input_tokens:
                 _note_daily_sweep_dispatch_failure(dispatch_evidence, 'daily_sweep_summary_input_budget')
                 raise MemoryExtractionError('daily_sweep_summary_input_budget')
+        SweepDispatchScope.mark_provider_dispatch()
         request_evidence: Dict[str, Any] | None = None
         if dispatch_evidence is not None:
             request_evidence = {
