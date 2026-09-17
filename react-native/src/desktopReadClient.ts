@@ -832,8 +832,7 @@ export function conversationHasFinishClock(conversation: {
   if (conversation.finishedAt !== null) {
     return true;
   }
-  const status = visibleDisplayText(conversation.status);
-  return status === 'completed' || status === 'failed';
+  return conversation.status === 'completed' || conversation.status === 'failed';
 }
 
 export function formatConversationDuration(

@@ -1114,6 +1114,90 @@ test('a zero conversation start time does not invent a duration', () => {
   expect(copy).not.toContain('hr');
 });
 
+test('conversation list names Flutter ConversationListItem padded GET completed instead of remapping to Duration unavailable', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:padded-completed',
+    title: 'Market street',
+    summary: 'A walk.',
+    searchableText: 'Market street\nA walk.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: '  completed  ',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const page = {
+    ...incompletePage,
+    windowStatus: 'complete' as const,
+    complete: true,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  let padded!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    padded = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{status: 'success', value: {items: [item], page}}}
+      />,
+    );
+  });
+  expect(textOf(padded)).toContain('Market street');
+  expect(textOf(padded)).not.toContain('Duration unavailable');
+  act(() => {
+    padded.update(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [{...item, status: 'completed '}],
+            page,
+          },
+        }}
+      />,
+    );
+  });
+  expect(textOf(padded)).not.toContain('Duration unavailable');
+  act(() => {
+    padded.update(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [{...item, status: 'completed\u0085'}],
+            page,
+          },
+        }}
+      />,
+    );
+  });
+  expect(textOf(padded)).not.toContain('Duration unavailable');
+  act(() => {
+    padded.update(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [{...item, status: 'completed'}],
+            page,
+          },
+        }}
+      />,
+    );
+  });
+  expect(textOf(padded)).toContain('Duration unavailable');
+});
+
 test('conversation list and detail omit Flutter ConversationListItem unused capturedAt', () => {
   const older = new Date(2025, 7, 10, 12, 0);
   const item: ConversationProjection = {

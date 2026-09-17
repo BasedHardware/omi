@@ -388,6 +388,42 @@ test('Home currents keep chat last-turn overview off the timestamp meta', () => 
   expect(textOf(renderer)).not.toContain('Duration unavailable');
 });
 
+test('Home and Library rows name Flutter ConversationListItem padded GET completed instead of remapping to Duration unavailable', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:padded-completed',
+    title: 'Market street',
+    summary: 'A walk.',
+    searchableText: 'Market street\nA walk.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: '  completed  ',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  expect(textOf(home)).toContain('Market street');
+  expect(textOf(home)).not.toContain('Duration unavailable');
+  expect(textOf(library)).not.toContain('Duration unavailable');
+  act(() => {
+    home.update(<ReadRow item={{...item, status: 'completed'}} />);
+    library.update(<ConversationRow item={{...item, status: 'completed'}} />);
+  });
+  expect(textOf(home)).toContain('Duration unavailable');
+  expect(textOf(library)).toContain('Duration unavailable');
+});
+
 test('Library rows keep chat last-turn overview off the timestamp meta', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

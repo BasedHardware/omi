@@ -33,6 +33,7 @@ import {
   conversationDayLabel,
   conversationRecapDateLabel,
   conversationListDurationCopy,
+  conversationHasFinishClock,
   conversationTranscriptDurationCopy,
   conversationDetailDurationCopy,
   conversationListNewCopy,
@@ -1142,6 +1143,42 @@ test('conversation list duration prefers GET transcript span over wall clocks', 
       finishedAt: '2026-09-07T12:00:00.000Z',
     }),
   ).toBe('Duration unavailable');
+});
+
+test('conversation finish clock names Flutter ConversationListItem padded GET completed', () => {
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: '  completed  '}),
+  ).toBe(false);
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: 'completed '}),
+  ).toBe(false);
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: 'completed\u0085'}),
+  ).toBe(false);
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: '\u0085completed'}),
+  ).toBe(false);
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: '  failed  '}),
+  ).toBe(false);
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: 'completed'}),
+  ).toBe(true);
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: 'failed'}),
+  ).toBe(true);
+  expect(
+    conversationHasFinishClock({
+      finishedAt: '2026-09-07T12:00:00.000Z',
+      status: '  completed  ',
+    }),
+  ).toBe(true);
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: 'in_progress'}),
+  ).toBe(false);
+  expect(
+    conversationHasFinishClock({finishedAt: null, status: ' \t\n'}),
+  ).toBe(false);
 });
 
 test('conversation transcript duration names Flutter secondsToHumanReadable singular second', () => {
