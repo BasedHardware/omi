@@ -705,10 +705,12 @@ async def process_segments(
         print(f"🎤 TRIGGER! Starting 3-segment collection...", flush=True)
         
         # Start collecting - ALWAYS wait for 2 more segments
+        # extract_tweet_content() deliberately returns None for an
+        # trigger-only segment; store "" so the accumulator stays a string.
         SimpleSessionStorage.update_session(
             session_id,
             tweet_mode="recording",
-            accumulated_text=tweet_content,
+            accumulated_text=tweet_content or "",
             segments_count=1
         )
         
@@ -717,7 +719,9 @@ async def process_segments(
     
     # If in recording mode, collect more segments
     elif session["tweet_mode"] == "recording":
-        accumulated = session.get("accumulated_text", "")
+        # `or ""` also repairs sessions persisted with a null accumulator
+        # by the previous code (the default only applies to absent keys).
+        accumulated = session.get("accumulated_text") or ""
         segments_count = session.get("segments_count", 0)
         
         # Add this segment

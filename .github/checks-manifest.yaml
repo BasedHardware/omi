@@ -29,6 +29,16 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: gcal-uid-reflection-encoding-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_uid_reflection.py"]
+    triggers: ["plugins/omi-google-calendar-app/**"]
+    lanes: ["local", "ci"]
+    reason: "GET /auth/google/callback interpolated the raw error query param into HTML text and GET / reflected the client-controlled uid into href attributes and a hidden input value; both routes are unauthenticated"
+  - id: plugin-twitter-app-trigger-only-accumulator-tests
+    command: ["python3", "plugins/test_trigger_only_segment_accumulator.py"]
+    triggers: ["plugins/omi-twitter-app/**", "plugins/test_trigger_only_segment_accumulator.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14363: a trigger-only segment stored extract_tweet_content's deliberate None as accumulated_text and the next recording segment crashed with TypeError on None += str; the accumulator must stay a string at the write and the read"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
