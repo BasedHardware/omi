@@ -775,3 +775,47 @@ def test_oversized_input_trims_oldest_spine_rows_and_still_dispatches():
     assert len(dispatch["requests"]) == 1
     assert dispatch["requests"][0]["input_bytes"] <= QA_SWEEP_MAX_INPUT_TOKENS
     assert [memory.content for memory in output.memories] == ["Dave kept the newest fact"]
+
+
+@pytest.mark.parametrize("failure_point", ["profile", "client", "serialization"])
+def test_preparation_failures_are_certified_only_inside_claim(monkeypatch, failure_point):
+    from models.daily_sweep_dispatch import SweepDispatchScope, SweepPreDispatchError
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("sensitive details")
+
+    target = {"profile": "get_prompt_memories", "client": "get_llm", "serialization": "_daily_sweep_request_body_bytes"}
+    monkeypatch.setattr(memories_module, target[failure_point], fail)
+    model = None if failure_point == "client" else _ScriptedLlm([])
+    scope = SweepDispatchScope()
+    with scope, pytest.raises(SweepPreDispatchError) as caught:
+        run_daily_sweep_summary_agent("user-1", _ROWS, _TRANSCRIPTS, llm=model)
+    assert scope.proves_pre_dispatch(caught.value)
+    assert caught.value.extractor == "daily_sweep_summary_agent"
+    assert "sensitive" not in str(caught.value)
+
+
+@pytest.mark.parametrize("failure_point", ["provider", "parse", "phase_b_budget"])
+def test_failures_after_first_dispatch_never_certified(failure_point):
+    from models.daily_sweep_dispatch import SweepDispatchScope
+
+    if failure_point == "provider":
+        llm = _ProviderFailureLlm([])
+    elif failure_point == "parse":
+        llm = _ScriptedLlm(["not-json"])
+    else:
+
+        class PhaseBFailure(_ScriptedLlm):
+            def _get_request_payload(self, prompt_value, **kwargs):
+                if self.prompts:
+                    raise MemoryExtractionError("daily_sweep_summary_input_budget")
+                return super()._get_request_payload(prompt_value, **kwargs)
+
+        llm = PhaseBFailure(
+            [_response(transcript_requests=[{"conversation_id": "conversation-1", "reason": "detail"}])]
+        )
+    scope = SweepDispatchScope()
+    with scope, pytest.raises(MemoryExtractionError) as caught:
+        run_daily_sweep_summary_agent("user-1", _ROWS, _TRANSCRIPTS, llm=llm)
+    assert not scope.proves_pre_dispatch(caught.value)
+    assert len(llm.prompts) == 1

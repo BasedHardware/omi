@@ -627,14 +627,21 @@ jobs:
             --invocation-id "$INVOCATION_ID" \
             --authority "operator:gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}:source-${SOURCE_SHA:0:12}" \
             | tee "$operator_dir/artifacts/sweep-repair-receipt.json"
-          python3 - "$INVOCATION_ID" "$SOURCE_SHA" <<'PY' > "$operator_dir/artifacts/operator-receipt.json"
+          PYTHONPATH=backend "$QA_PYTHON" - "$INVOCATION_ID" "$SOURCE_SHA" "$operator_dir/artifacts/sweep-repair-receipt.json" <<'PY' > "$operator_dir/artifacts/operator-receipt.json"
           import json
           import sys
+
+          from scripts.jit_qa_sweep_operator import validate_sweep_repair_receipt
+
+          with open(sys.argv[3]) as source:
+              repair = json.load(source)
+          provider_outcome = validate_sweep_repair_receipt(repair, invocation_id=sys.argv[1])
 
           print(json.dumps({
               "schema_version": "omi.jit.qa.manual.operator.v1",
               "status": "PASS",
               "operation": "sweep-repair",
+              "provider_outcome": provider_outcome,
               "source_sha": sys.argv[2],
               "invocation_id": sys.argv[1],
               "project": "based-hardware-dev",

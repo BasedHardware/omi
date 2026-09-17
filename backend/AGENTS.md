@@ -216,6 +216,8 @@ npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention 
 
 Pre-mock heavy deps before importing the module under test. Use `patch.object(target_module, "func")` not string-based `patch("module.func")` — the string form silently patches the wrong reference if the function was already imported. When modules construct objects at import time, use lazy getters to avoid triggering heavy init in tests.
 
+Daily sweep invocation recovery: only the instrumented summary agent may certify a pre-dispatch failure; never infer safety from an empty mutable dispatch-evidence list. Three durable releases are allowed, then `pre_dispatch_exhausted` requires explicit repair. The QA-only repair absence proof requires an expired lease plus margin and completely paged accounting. Contract and operator steps: `docs/runbooks/jit-qa-cloud-run.md` → Tombstoned sweep model invocations.
+
 ### Memory continuity gauntlet gates
 
 Do not confuse these gates — a green live gauntlet does **not** prove hermetic

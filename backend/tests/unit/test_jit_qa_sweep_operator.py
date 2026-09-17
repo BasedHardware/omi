@@ -471,3 +471,48 @@ def test_qa_environment_validation_uses_explicit_mapping_and_fixed_policy():
     assert OPERATOR.validate_qa_sweep_environment(environment) == RUN_ID
     with pytest.raises(ValueError, match="OMI_ENV_STAGE"):
         OPERATOR.validate_qa_sweep_environment({"OMI_JIT_QA_SWEEP_RUN_ID": RUN_ID})
+
+
+def _absence_repair_receipt():
+    return {
+        "schema_version": OPERATOR.MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
+        "uid": OPERATOR.QA_SWEEP_UID,
+        "invocation_id": "inv-1",
+        "consumed": False,
+        "prior_claimed_at": "2026-09-17T10:00:00+00:00",
+        "repaired_at": "2026-09-17T11:00:00+00:00",
+        "provider_outcome_summary": "no_recorded_attempt",
+        "provider_outcome_evidence": {
+            "provider_outcome": "no_recorded_attempt",
+            "attempts": [],
+            "accounting_read_complete": True,
+            "uid": OPERATOR.QA_SWEEP_UID,
+            "feature": "memories",
+            "claimed_at": "2026-09-17T10:00:00+00:00",
+            "window_start": "2026-09-17T09:58:00+00:00",
+            "window_end": "2026-09-17T11:00:00+00:00",
+        },
+    }
+
+
+def test_repair_receipt_accepts_absence_without_invented_run():
+    receipt = _absence_repair_receipt()
+    assert OPERATOR.validate_sweep_repair_receipt(receipt, invocation_id="inv-1") == "no_recorded_attempt"
+
+
+@pytest.mark.parametrize("change", ["incomplete", "fake_run", "foreign", "unexpired", "attempt"])
+def test_repair_receipt_rejects_invalid_absence_shape(change):
+    receipt = _absence_repair_receipt()
+    evidence = receipt["provider_outcome_evidence"]
+    if change == "incomplete":
+        evidence["accounting_read_complete"] = False
+    elif change == "fake_run":
+        evidence["jit_run_id"] = "invented"
+    elif change == "foreign":
+        evidence["uid"] = "foreign"
+    elif change == "unexpired":
+        receipt["repaired_at"] = "2026-09-17T10:01:00+00:00"
+    else:
+        evidence["attempts"] = [{"request_id": REQUEST_ID}]
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="no-attempt proof"):
+        OPERATOR.validate_sweep_repair_receipt(receipt, invocation_id="inv-1")

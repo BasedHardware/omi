@@ -123,3 +123,19 @@ enrichment, and backfill writers while leaving read-side currency and explicit
 owner corrections available. This is a deployment-wide incident control, not a
 per-user rollout switch. The belief capability header and the automation pause
 are separate controls.
+
+## Daily sweep recovery
+
+A failed daily summary does not attest an empty day or advance the sweep
+cursor. When the backend proves that preparation failed before the first
+provider dispatch, it releases that claim for a later run, at most three
+times. The fourth such failure records `pre_dispatch_exhausted` and requires
+explicit operator repair. Failures after dispatch or with an unknown origin
+remain fenced against automatic retry. Account deletion and generation
+boundaries continue to block writes throughout recovery.
+
+The QA repair tool can accept a complete accounting window with zero matching
+attempts only after the claim lease and safety margin expire. That receipt says
+`no_recorded_attempt`; it is not evidence of zero provider spend or a successful
+memory sweep. The operator procedure lives in the backend runbook
+`backend/docs/runbooks/jit-qa-cloud-run.md`.

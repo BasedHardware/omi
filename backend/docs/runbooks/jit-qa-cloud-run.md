@@ -80,23 +80,43 @@ execution identities only, never customer content.
 
 ## Tombstoned sweep model invocations and the sweep-repair operator
 
-A QA sweep model invocation that ends `pending`, `indeterminate`, or
-`payload_expired` is closed forever by design: its provider outcome cannot be
-proven, so an implicit retry could charge the same logical invocation twice.
+The summary agent certifies failures before its first provider dispatch through
+an invocation-scoped, irreversible dispatch latch. Such failures move `pending`
+to `pre_dispatch_released` transactionally, retaining a content-free
+`failure_reason` and incrementing `pre_dispatch_releases`. A later run can
+claim the same identity without a repair receipt. Three releases are allowed;
+the fourth failure moves to `pre_dispatch_exhausted` with
+`blocked_reason=pre_dispatch_release_limit`. The source remains incomplete and
+the cursor does not advance. Production operators can inspect those fields on
+`daily_memory_sweep_model_invocation_fences/{invocation_id}`; this change does
+not add a production repair CLI. Unknown failures and everything at or after
+first dispatch remain `indeterminate`. Account deletion, generation changes,
+foreign identities, and missing user payloads never release a claim.
+
 The manual operator's `sweep-repair` operation
-(`jit_qa_manual_operator.yml`, confirmation `SWEEP_REPAIR_QA`) is the one
-sanctioned repair path. `backend/scripts/jit_qa_sweep_repair.py` reads the
-tombstoned invocation and its top-level fence, joins the claim window to the
-durable `llm_gateway_attempts` accounting rows for the QA UID and the
-`memories` feature, and writes a single content-free repair receipt under
-`users/{uid}/daily_memory_sweep_model_invocation_repairs/{invocation_id}`.
-The next sweep claim consumes that receipt transactionally and rewrites the
-fence as a fresh `pending` claim, so exactly one further bounded attempt
-becomes possible. At most one repair receipt may ever exist per invocation;
-the repair refuses an unexpired lease, a `returned` fence, a missing
-accounting join to the owning sweep run, and any environment outside the QA
-fence. Repair performs no model calls and no scheduler mutation; the
-`sweep-verify` operation remains the only execution path.
+(`jit_qa_manual_operator.yml`, confirmation `SWEEP_REPAIR_QA`) remains QA-only.
+`backend/scripts/jit_qa_sweep_repair.py` reads each day in the claim's accounting
+window, paging `llm_gateway_attempts` to exhaustion before declaring absence.
+A failed stream, page-cap exhaustion, malformed matching timestamp, or more
+than four matching attempts refuses repair. It retains only content-free
+accounting fields for the fixed QA UID and `memories` feature.
+
+Recorded attempts still require a real owning `jit_run_id`. If there are zero
+matching attempts, repair requires `claimed_at + MODEL_INVOCATION_LEASE + 2
+minutes < now`. The receipt explicitly records
+`provider_outcome: no_recorded_attempt`, `accounting_read_complete: true`, the
+UID/feature, claim time, and complete window bounds, with no `jit_run_id`.
+This is evidence of accounting absence, not an assertion of zero provider
+spend. Both receipt consumption and the workflow artifact validator enforce
+this distinct shape; it does not count as a successful paid sweep proof.
+
+Repair writes one receipt transactionally against the unchanged tombstoned
+claim (`pending`, `indeterminate`, `payload_expired`, or
+`pre_dispatch_exhausted`). The next claim consumes it exactly once. At most
+one receipt may ever exist per invocation. Repair refuses an unexpired lease,
+a `returned` fence, a changed claim, or an environment/UID outside the QA fence.
+Repair performs no model calls and no scheduler mutation; `sweep-verify`
+remains the execution path.
 
 An incomplete sweep source is a named blocked outcome, not an opaque failure:
 the scheduler records `uid=<uid>:source_incomplete:<local-date>` and leaves

@@ -40,7 +40,10 @@ import re
 import threading
 from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
+
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from models.daily_sweep_dispatch import SweepDispatchScope
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +145,8 @@ MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
 # same logical invocation again.
 MODEL_INVOCATION_FENCE_COLLECTION = "daily_memory_sweep_model_invocation_fences"
 MODEL_INVOCATION_SCHEMA_VERSION = "daily_memory_sweep_model_invocation.v1"
+MAX_PRE_DISPATCH_RELEASES = 3
+MODEL_INVOCATION_REPAIR_MARGIN = timedelta(minutes=2)
 # An explicit operator repair for a tombstoned model invocation.  Pending,
 # indeterminate, and payload-expired fences are closed forever by design; this
 # user-scoped receipt is the one sanctioned way to reopen exactly one retry
@@ -1560,7 +1565,8 @@ def _invoke_model_once(
     that deletion, so a worker that loses its payload after a provider call
     cannot recreate the logical invocation and pay twice.  ``pending`` and
     ``indeterminate`` are manual-repair-only states; lease expiry never
-    reopens them.
+    reopens them. Certified preparation failures alone may release the exact
+    pending claim up to MAX_PRE_DISPATCH_RELEASES times.
 
     The optional identity arguments exist solely for old hermetic unit callers
     that predate generation fencing. Every production scheduler path supplies
@@ -1599,6 +1605,8 @@ def _invoke_model_once(
         "sweep_generation": sweep_generation,
         "window_id": window_id,
     }
+
+    claim_id = uuid4().hex
 
     def _identity_matches(payload: Any) -> bool:
         return isinstance(payload, dict) and all(payload.get(key) == value for key, value in identity.items())
@@ -1657,20 +1665,32 @@ def _invoke_model_once(
                 return "blocked", None
             if fence_payload.get("state") == "returned":
                 return "returned", _validated_output(user_payload)
-            # Existing pending, indeterminate, and payload-expired fences are
-            # deliberately closed forever unless an explicit, unconsumed
-            # operator repair receipt reopens exactly one further attempt.
-            repair_snapshot = _read(repair_ref, transaction)
-            repair_payload = repair_snapshot.to_dict() if getattr(repair_snapshot, "exists", False) else None
-            if not _valid_model_invocation_repair(repair_payload, identity):
+            released = fence_payload.get("state") == "pre_dispatch_released"
+            if not released:
+                repair_snapshot = _read(repair_ref, transaction)
+                repair_payload = repair_snapshot.to_dict() if getattr(repair_snapshot, "exists", False) else None
+                if not _valid_model_invocation_repair(repair_payload, identity, fence_payload, claim_now):
+                    return "blocked", None
+                assert isinstance(repair_payload, dict)
+                transaction.set(repair_ref, {**repair_payload, "consumed": True, "consumed_at": claim_now})
+            elif (
+                not isinstance(user_payload, dict)
+                or not _identity_matches(user_payload)
+                or user_payload.get("state") != "pre_dispatch_released"
+                or user_payload.get("claim_id") != fence_payload.get("claim_id")
+                or type(fence_payload.get("pre_dispatch_releases")) is not int
+                or not 1 <= fence_payload["pre_dispatch_releases"] <= MAX_PRE_DISPATCH_RELEASES
+            ):
                 return "blocked", None
-            transaction.set(repair_ref, {"consumed": True, "consumed_at": claim_now}, merge=True)
             repaired_pending = {
                 **identity,
                 "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
                 "state": "pending",
                 "at_most_once_tombstone": True,
                 "claimed_at": claim_now,
+                "claim_id": claim_id,
+                "pre_dispatch_releases": fence_payload.get("pre_dispatch_releases", 0),
+                "failure_reason": fence_payload.get("failure_reason"),
                 "repaired_from_state": fence_payload.get("state"),
             }
             transaction.set(fence_ref, repaired_pending)
@@ -1689,6 +1709,8 @@ def _invoke_model_once(
             "state": "pending",
             "at_most_once_tombstone": True,
             "claimed_at": claim_now,
+            "claim_id": claim_id,
+            "pre_dispatch_releases": 0,
         }
         _create_or_set(transaction, fence_ref, pending)
         transaction.set(
@@ -1711,43 +1733,74 @@ def _invoke_model_once(
         if claim_state != "claimed":
             return None
 
+        dispatch_scope = SweepDispatchScope()
         try:
-            built = tuple(candidate_builder())
+            with dispatch_scope:
+                built = tuple(candidate_builder())
             if any(not isinstance(item, dict) for item in built):
                 raise ValueError("model invocation candidate output is malformed")
-        except Exception:
-            # The fence is top-level and therefore still writable after a
-            # recursive account wipe. Do not recreate the user payload.
-            def mark_indeterminate(transaction: Any) -> bool:
+        except Exception as error:
+            reason = dispatch_scope.pre_dispatch_reason(error)
+            pre_dispatch = reason is not None
+
+            def record_failure(transaction: Any) -> bool:
+                # Complete every read before writes, including the live fences.
+                live = _transaction_fence_open(
+                    transaction,
+                    deletion_ref,
+                    control_ref,
+                    uid=uid,
+                    account_generation=account_generation,
+                    source_generation=source_generation,
+                )
                 snapshot = _read(fence_ref, transaction)
                 payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
-                if not _identity_matches(payload):
-                    return False
-                assert isinstance(payload, dict)
-                if payload.get("state") != "pending":
-                    return False
-                transaction.set(
-                    fence_ref,
-                    {
-                        **identity,
-                        "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
-                        "state": "indeterminate",
-                        "at_most_once_tombstone": True,
-                        "indeterminate_at": claim_now,
-                    },
-                    merge=True,
-                )
                 user_snapshot = _read(invocation_ref, transaction)
-                if getattr(user_snapshot, "exists", False):
-                    transaction.set(
-                        invocation_ref,
-                        {"state": "indeterminate", "at_most_once_tombstone": True, "indeterminate_at": claim_now},
-                        merge=True,
+                user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else None
+                if not isinstance(payload, dict) or not _identity_matches(payload):
+                    return False
+                if payload.get("state") != "pending" or payload.get("claim_id") != claim_id:
+                    return False
+                releases = payload.get("pre_dispatch_releases", 0)
+                if type(releases) is not int or releases < 0:
+                    return False
+                can_release = (
+                    pre_dispatch
+                    and live
+                    and isinstance(user_payload, dict)
+                    and _identity_matches(user_payload)
+                    and user_payload.get("state") == "pending"
+                    and user_payload.get("claim_id") == claim_id
+                )
+                state = "indeterminate"
+                if can_release:
+                    state = (
+                        "pre_dispatch_released" if releases < MAX_PRE_DISPATCH_RELEASES else "pre_dispatch_exhausted"
                     )
+                update = {
+                    "state": state,
+                    "at_most_once_tombstone": state != "pre_dispatch_released",
+                    "failure_at": claim_now,
+                    "pre_dispatch_releases": releases + (1 if state == "pre_dispatch_released" else 0),
+                }
+                if state == "indeterminate":
+                    update["indeterminate_at"] = claim_now
+                if reason is not None:
+                    update["failure_reason"] = reason
+                if state == "pre_dispatch_exhausted":
+                    update["blocked_reason"] = "pre_dispatch_release_limit"
+                transaction.set(fence_ref, {**payload, **update})
+                # Never recreate or overwrite a deleted/foreign user payload.
+                if (
+                    isinstance(user_payload, dict)
+                    and _identity_matches(user_payload)
+                    and user_payload.get("claim_id") == claim_id
+                ):
+                    transaction.set(invocation_ref, {**user_payload, **update})
                 return True
 
             try:
-                run_transaction(mark_indeterminate)
+                run_transaction(record_failure)
             except Exception:
                 pass
             return None
@@ -1783,16 +1836,30 @@ def _invoke_model_once(
             # the deletion marker is briefly unavailable to this transaction.
             if not _identity_matches(fence_payload):
                 return False
-            if not isinstance(fence_payload, dict) or fence_payload.get("state") != "pending":
+            if (
+                not isinstance(fence_payload, dict)
+                or fence_payload.get("state") != "pending"
+                or fence_payload.get("claim_id") != claim_id
+            ):
                 return False
             if not _identity_matches(user_payload):
                 return False
-            if not isinstance(user_payload, dict) or user_payload.get("state") != "pending":
+            if (
+                not isinstance(user_payload, dict)
+                or user_payload.get("state") != "pending"
+                or user_payload.get("claim_id") != claim_id
+            ):
                 return False
             transaction.set(
                 fence_ref,
-                {key: value for key, value in returned_payload.items() if key not in {"candidate_page", "expires_at"}},
-                merge=True,
+                {
+                    **fence_payload,
+                    **{
+                        key: value
+                        for key, value in returned_payload.items()
+                        if key not in {"candidate_page", "expires_at"}
+                    },
+                },
             )
             transaction.set(invocation_ref, returned_payload)
             return True
@@ -1807,18 +1874,21 @@ def _invoke_model_once(
                     payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
                     if not _identity_matches(payload):
                         return False
-                    if not isinstance(payload, dict) or payload.get("state") != "pending":
+                    if (
+                        not isinstance(payload, dict)
+                        or payload.get("state") != "pending"
+                        or payload.get("claim_id") != claim_id
+                    ):
                         return False
                     transaction.set(
                         fence_ref,
                         {
-                            **identity,
+                            **payload,
                             "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
                             "state": "indeterminate",
                             "at_most_once_tombstone": True,
                             "indeterminate_at": claim_now,
                         },
-                        merge=True,
                     )
                     return True
 
@@ -1832,16 +1902,54 @@ def _invoke_model_once(
         return built
 
 
-def _valid_model_invocation_repair(payload: Any, identity: Mapping[str, Any]) -> bool:
-    """Return True only for an unconsumed, identity-matching repair receipt."""
+def valid_no_attempt_evidence(evidence: Mapping[str, Any], *, uid: str, claimed_at: Any, now: datetime) -> bool:
+    """Validate a complete, claim-bound absence proof; absence is not zero spend."""
+    if (
+        evidence.get("provider_outcome") != "no_recorded_attempt"
+        or evidence.get("attempts") != []
+        or "jit_run_id" in evidence
+        or evidence.get("accounting_read_complete") is not True
+        or evidence.get("uid") != uid
+        or evidence.get("feature") != "memories"
+        or not isinstance(claimed_at, datetime)
+        or claimed_at.tzinfo is None
+        or now <= claimed_at + MODEL_INVOCATION_LEASE + MODEL_INVOCATION_REPAIR_MARGIN
+    ):
+        return False
+    try:
+        start = datetime.fromisoformat(evidence["window_start"])
+        end = datetime.fromisoformat(evidence["window_end"])
+        evidence_claim = datetime.fromisoformat(evidence["claimed_at"])
+        return (
+            evidence_claim == claimed_at
+            and start == claimed_at - MODEL_INVOCATION_REPAIR_MARGIN
+            and claimed_at + MODEL_INVOCATION_LEASE + MODEL_INVOCATION_REPAIR_MARGIN < end <= now
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
 
+
+def _valid_model_invocation_repair(
+    payload: Any,
+    identity: Mapping[str, Any],
+    fence: Mapping[str, Any],
+    now: datetime,
+) -> bool:
+    """Require an unconsumed identity receipt and claim-bound absence proof."""
     if not isinstance(payload, Mapping):
         return False
-    if payload.get("schema_version") != MODEL_INVOCATION_REPAIR_SCHEMA_VERSION:
+    if payload.get("schema_version") != MODEL_INVOCATION_REPAIR_SCHEMA_VERSION or payload.get("consumed") is not False:
         return False
-    if payload.get("consumed") is not False:
+    if not all(payload.get(key) == value for key, value in identity.items()):
         return False
-    return all(payload.get(key) == value for key, value in identity.items())
+    evidence = payload.get("provider_outcome_evidence")
+    if not isinstance(evidence, Mapping):
+        return False
+    if evidence.get("provider_outcome") == "no_recorded_attempt":
+        if payload.get("prior_claim_id") != fence.get("claim_id"):
+            return False
+        return valid_no_attempt_evidence(evidence, uid=identity["uid"], claimed_at=fence.get("claimed_at"), now=now)
+    return bool(evidence.get("jit_run_id") and evidence.get("attempts"))
 
 
 def repair_daily_sweep_model_invocation(
@@ -1875,10 +1983,13 @@ def repair_daily_sweep_model_invocation(
         raise ValueError("daily sweep invocation repair requires a bounded invocation id")
     evidence = dict(provider_outcome_evidence or {})
     recorded_attempts = evidence.get("attempts")
-    if not isinstance(evidence.get("jit_run_id"), str) or not evidence["jit_run_id"].strip():
+    no_attempt = evidence.get("provider_outcome") == "no_recorded_attempt"
+    if not no_attempt and (not isinstance(evidence.get("jit_run_id"), str) or not evidence["jit_run_id"].strip()):
         raise ValueError("daily sweep invocation repair requires the owning run id in its provider evidence")
     if not isinstance(recorded_attempts, list) or len(recorded_attempts) > 4:
         raise ValueError("daily sweep invocation repair requires a bounded provider attempt page")
+    if not no_attempt and not recorded_attempts:
+        raise ValueError("daily sweep invocation repair requires explicit no_recorded_attempt evidence")
     for attempt in recorded_attempts:
         if not isinstance(attempt, Mapping) or not isinstance(attempt.get("request_id"), str):
             raise ValueError("daily sweep invocation repair evidence attempts must carry request ids")
@@ -1908,7 +2019,7 @@ def repair_daily_sweep_model_invocation(
     ):
         raise ValueError("daily sweep invocation repair requires a complete fence identity")
     prior_state = fence_payload.get("state")
-    if prior_state not in {"pending", "indeterminate", "payload_expired"}:
+    if prior_state not in {"pending", "indeterminate", "payload_expired", "pre_dispatch_exhausted"}:
         raise ValueError(f"daily sweep invocation in state {prior_state!r} is not repairable")
 
     user_snapshot = _model_invocation_ref(db_client, uid, normalized_invocation_id).get()
@@ -1925,6 +2036,15 @@ def repair_daily_sweep_model_invocation(
         lease_deadline = claimed_at + MODEL_INVOCATION_LEASE if isinstance(claimed_at, datetime) else None
     if lease_deadline is None or lease_deadline.tzinfo is None or lease_deadline > repaired_now:
         raise ValueError("daily sweep invocation repair requires an expired invocation lease")
+    if no_attempt and not valid_no_attempt_evidence(
+        evidence,
+        uid=uid,
+        claimed_at=fence_payload.get("claimed_at"),
+        now=repaired_now,
+    ):
+        raise ValueError(
+            "daily sweep invocation repair requires complete no-attempt evidence and an expired invocation lease plus margin"
+        )
     existing_repair = repair_ref.get()
     if getattr(existing_repair, "exists", False):
         raise ValueError("daily sweep invocation already has a repair receipt")
@@ -1941,21 +2061,28 @@ def repair_daily_sweep_model_invocation(
         "schema_version": MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
         **identity,
         "prior_state": prior_state,
+        "prior_claimed_at": fence_payload.get("claimed_at"),
+        "prior_claim_id": fence_payload.get("claim_id"),
         "repaired_at": repaired_now,
         "repair_authority": authority,
         "provider_outcome_summary": outcome_summary,
         "provider_outcome_evidence": evidence,
         "consumed": False,
     }
-    create = getattr(repair_ref, "create", None)
-    if callable(create):
-        try:
-            create(receipt)
-        except Exception as exc:
-            raise ValueError("daily sweep invocation already has a repair receipt") from exc
-    else:
-        repair_ref.set(receipt)
-    return {key: value for key, value in receipt.items() if key != "provider_outcome_evidence"}
+
+    def write_repair(transaction: Any) -> None:
+        current = fence_ref.get(transaction=transaction)
+        existing = repair_ref.get(transaction=transaction)
+        if not getattr(current, "exists", False) or current.to_dict() != fence_payload:
+            raise ValueError("daily sweep invocation claim changed during repair")
+        if getattr(existing, "exists", False):
+            raise ValueError("daily sweep invocation already has a repair receipt")
+        if fence_payload.get("uid") != uid:
+            raise ValueError("daily sweep invocation repair identity differs")
+        transaction.set(repair_ref, receipt)
+
+    firestore.transactional(write_repair)(db_client.transaction())
+    return receipt
 
 
 def _receipt_id(

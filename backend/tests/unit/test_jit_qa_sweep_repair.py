@@ -62,6 +62,8 @@ class _AttemptQuery:
     def __init__(self, rows, date_value):
         self.rows, self.date_value = rows, date_value
         self.expected_date = None
+        self.count = 50
+        self.offset = 0
 
     def where(self, *args, **kwargs):
         field_filter = kwargs.get("filter")
@@ -70,13 +72,22 @@ class _AttemptQuery:
         self.expected_date = getattr(field_filter, "value", None)
         return self
 
-    def limit(self, _count):
+    def order_by(self, field):
+        assert field == "__name__"
+        return self
+
+    def start_after(self, snapshot):
+        self.offset = int(snapshot.id) + 1
+        return self
+
+    def limit(self, count):
+        self.count = count
         return self
 
     def stream(self):
-        assert self.expected_date == self.date_value
-        for row in self.rows:
-            yield _Snapshot(row)
+        rows = [row for row in self.rows if row.get("date") == self.expected_date]
+        for index in range(self.offset, min(len(rows), self.offset + self.count)):
+            yield _SnapshotWithPath(f"{index:06d}", rows[index])
 
 
 class _InvocationQuery:
@@ -98,7 +109,13 @@ class _SnapshotWithPath(_Snapshot):
         self.id = doc_id
 
 
-TODAY = datetime.now(timezone.utc).date().isoformat()
+NOW = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+TODAY = NOW.date().isoformat()
+
+
+@pytest.fixture(autouse=True)
+def _transactions(monkeypatch):
+    monkeypatch.setattr(OPERATOR.firestore, "transactional", lambda fn: lambda transaction: fn(transaction))
 
 
 class _Db:
@@ -106,6 +123,12 @@ class _Db:
         self.store = {}
         self.attempts = tuple(attempts)
         self.attempt_date = attempt_date or TODAY
+
+    def transaction(self):
+        return self
+
+    def set(self, ref, value):
+        ref.set(value)
 
     def document(self, path):
         return _Ref(self.store, path)
@@ -119,7 +142,7 @@ class _Db:
 
 
 def _tombstoned_invocation(store, *, state="payload_expired", claimed_minutes_ago=60):
-    claimed_at = datetime.now(timezone.utc) - timedelta(minutes=claimed_minutes_ago)
+    claimed_at = NOW - timedelta(minutes=claimed_minutes_ago)
     store[f"users/{UID}/daily_memory_sweep_model_invocations/inv-1"] = {
         "uid": UID,
         "invocation_id": "inv-1",
@@ -157,6 +180,9 @@ def test_list_reports_tombstones_with_repair_state():
     db = _Db()
     _tombstoned_invocation(db.store)
     db.store[f"users/{UID}/daily_memory_sweep_model_invocations/inv-2"] = {"state": "returned"}
+    db.store[f"users/{UID}/daily_memory_sweep_model_invocations/inv-1"]["lease_expires_at"] = datetime.now(
+        timezone.utc
+    ) - timedelta(minutes=1)
     rows = OPERATOR.list_tombstones(db, uid=UID)
     assert [row["invocation_id"] for row in rows] == ["inv-1"]
     assert rows[0]["state"] == "payload_expired"
@@ -175,7 +201,7 @@ def test_repair_joins_gateway_accounting_and_writes_single_receipt():
                 "outcome": "success",
                 "total_tokens": 2730,
                 "estimated_cost_micro_usd": 926,
-                "occurred_at": datetime.now(timezone.utc) - timedelta(minutes=59),
+                "occurred_at": NOW - timedelta(minutes=59),
                 "jit_run_id": "qa-sweep-34933918999-1",
             },
             {
@@ -185,7 +211,7 @@ def test_repair_joins_gateway_accounting_and_writes_single_receipt():
                 "request_id": "req-2",
                 "outcome": "success",
                 "total_tokens": 10,
-                "occurred_at": datetime.now(timezone.utc) - timedelta(minutes=59),
+                "occurred_at": NOW - timedelta(minutes=59),
             },
         ]
     )
@@ -195,6 +221,7 @@ def test_repair_joins_gateway_accounting_and_writes_single_receipt():
         invocation_id="inv-1",
         repair_authority="operator:qa-run-1",
         uid=UID,
+        now=NOW,
     )
     assert receipt["provider_outcome_summary"] == "success_usage_recorded"
     stored = db.store[f"users/{UID}/daily_memory_sweep_model_invocation_repairs/inv-1"]
@@ -214,10 +241,93 @@ def test_repair_without_a_joinable_sweep_run_fails_closed():
                 "request_id": "req-1",
                 "outcome": "error",
                 "total_tokens": 0,
-                "occurred_at": datetime.now(timezone.utc) - timedelta(minutes=59),
+                "occurred_at": NOW - timedelta(minutes=59),
             },
         ]
     )
     _tombstoned_invocation(db.store)
     with pytest.raises(OPERATOR.JITQASweepRepairError, match="sweep run id"):
-        OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:qa-run-1", uid=UID)
+        OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:qa-run-1", uid=UID, now=NOW)
+
+
+def test_zero_attempts_expired_lease_records_explicit_absence():
+    db = _Db()
+    _tombstoned_invocation(db.store)
+    receipt = OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:test", uid=UID, now=NOW)
+    assert receipt["provider_outcome_summary"] == "no_recorded_attempt"
+    evidence = db.store[f"users/{UID}/daily_memory_sweep_model_invocation_repairs/inv-1"]["provider_outcome_evidence"]
+    assert evidence["provider_outcome"] == "no_recorded_attempt"
+    assert evidence["accounting_read_complete"] is True
+    assert "jit_run_id" not in evidence
+
+
+@pytest.mark.parametrize("age", [1, 16, 17])
+def test_zero_attempt_repair_requires_lease_and_margin_expired(age):
+    db = _Db()
+    _tombstoned_invocation(db.store, claimed_minutes_ago=age)
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="expired invocation lease"):
+        OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:test", uid=UID, now=NOW)
+
+
+def _foreign_rows(count):
+    return [{"date": TODAY, "user_uid": "foreign", "feature": "memories"} for _ in range(count)]
+
+
+def test_accounting_pages_past_fifty_foreign_rows_to_matching_attempt():
+    db = _Db(
+        attempts=_foreign_rows(55)
+        + [
+            {
+                "date": TODAY,
+                "user_uid": UID,
+                "feature": "memories",
+                "request_id": "matching",
+                "outcome": "error",
+                "jit_run_id": "actual-run",
+                "occurred_at": NOW - timedelta(minutes=59),
+            }
+        ]
+    )
+    claimed = _tombstoned_invocation(db.store)
+    evidence = OPERATOR.collect_provider_outcome_evidence(db, uid=UID, claimed_at=claimed, now=NOW)
+    assert evidence["jit_run_id"] == "actual-run"
+    assert [a["request_id"] for a in evidence["attempts"]] == ["matching"]
+
+
+def test_incomplete_accounting_page_budget_refuses_absence(monkeypatch):
+    monkeypatch.setattr(OPERATOR, "GATEWAY_ATTEMPT_MAX_PAGES", 1)
+    db = _Db(attempts=_foreign_rows(50))
+    _tombstoned_invocation(db.store)
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="incomplete"):
+        OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:test", uid=UID, now=NOW)
+    assert not any("repairs/" in key for key in db.store)
+
+
+def test_accounting_stream_failure_refuses_absence(monkeypatch):
+    def broken(_self):
+        yield _SnapshotWithPath("000001", {"user_uid": "foreign"})
+        raise RuntimeError("incomplete stream")
+
+    monkeypatch.setattr(_AttemptQuery, "stream", broken)
+    db = _Db()
+    _tombstoned_invocation(db.store)
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="incomplete"):
+        OPERATOR.repair_tombstone(db, invocation_id="inv-1", repair_authority="operator:test", uid=UID, now=NOW)
+
+
+def test_accounting_reads_intermediate_days():
+    occurred = NOW - timedelta(days=1)
+    db = _Db(
+        attempts=[
+            {
+                "date": occurred.date().isoformat(),
+                "user_uid": UID,
+                "feature": "memories",
+                "request_id": "middle",
+                "jit_run_id": "actual-run",
+                "occurred_at": occurred,
+            }
+        ]
+    )
+    evidence = OPERATOR.collect_provider_outcome_evidence(db, uid=UID, claimed_at=NOW - timedelta(days=2), now=NOW)
+    assert evidence["attempts"][0]["request_id"] == "middle"
