@@ -84,6 +84,8 @@ Tables without predefined columns include fields from every row, in first-seen o
 
 > Looking for localized guides? See the [नेपालीमा सुरुवात (Nepali Quickstart)](examples/quickstart.ne.md).
 
+> Looking for localized guides? See the [سنڌي شروعاتي رهنمائي (Sindhi Quickstart)](examples/quickstart.sd.md).
+
 ## Auth
 
 Two auth methods, both fully wired:
