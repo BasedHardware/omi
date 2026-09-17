@@ -39,6 +39,7 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "web/admin/AGENTS.md": (25, 1_500),
     "web/app/AGENTS.md": (55, 2_400),
     "docs/AGENTS.md": (34, 1_309),
+    "scripts/dev-harness/AGENTS.md": (15, 861),
 }
 
 SKIP_PARTS = {"node_modules", ".build", ".git"}

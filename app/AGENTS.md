@@ -82,7 +82,7 @@ Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 co
 ## Test Strategy
 
 ### Test Structure
-- `test/unit/` — Auth, tokens, preferences, audio utils
+- `test/spine/` — [protected contracts](../scripts/dev-harness/PENDING_CONTRACTS.md); `test/unit/` — auth and utilities
 - `test/widgets/` — UI components (shimmer, waveform, transcript)
 - `test/providers/` — State management (capture_provider, device_provider)
 - `test/utils/` — Utility functions (localization helpers)
@@ -96,7 +96,7 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 (cd android && ./gradlew :app:testDevDebugUnitTest)     # Android JVM: JDK 21, SDK 36
 ```
 
-`bash test.sh` bootstraps missing generated files with an empty `API_BASE_URL` so `test/` stays hermetic. Journey selection/receipts/CI wiring: `scripts/dev-harness/MOBILE_VERIFY.md`.
+`test.sh` bootstraps missing inputs with empty `API_BASE_URL`. Journey selection/receipts/CI: `scripts/dev-harness/MOBILE_VERIFY.md`.
 
 Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manifest, local + CI).
 
@@ -108,7 +108,7 @@ CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analy
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
 - Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.
-- Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
+- Coverage: root `AGENTS.md` → Testing.
 
 ## Localization (l10n)
 

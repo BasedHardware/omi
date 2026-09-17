@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""List pending contracts and allow only marker removal from spine originals."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+REGISTRY = "contracts/spine/files.json"
+ROOTS = ("scripts/dev-harness/tests/spine/", "app/test/spine/")
+MARKER = re.compile(r'''^\s*(?:@pending\("([A-Z][A-Z0-9-]*)"\)|pendingContract\('([A-Z][A-Z0-9-]*)'\);)\s*$''')
+
+
+def git(*args: str, root: Path = ROOT) -> str:
+    return subprocess.check_output(["git", "-C", str(root), *args], text=True, stderr=subprocess.DEVNULL)
+
+
+def allowed(original: str, current: str) -> bool:
+    # A subsequence permits deletion only, never insertion/reordering of markers.
+    lines = iter(original.splitlines(keepends=True))
+    for wanted in current.splitlines(keepends=True):
+        for line in lines:
+            if line == wanted:
+                break
+            if not MARKER.fullmatch(line.rstrip("\n")):
+                return False
+        else:
+            return False
+    return all(MARKER.fullmatch(line.rstrip("\n")) for line in lines)
+
+
+def check(root: Path = ROOT) -> list[str]:
+    errors = []
+    registry = json.loads((root / REGISTRY).read_text())
+    if git("rev-parse", "--is-shallow-repository", root=root).strip() == "true":
+        return ["Spine protection needs full history: git fetch --unshallow origin"]
+    base = git("merge-base", "HEAD", "origin/main", root=root).strip()
+    try:
+        previous = json.loads(git("show", f"{base}:{REGISTRY}", root=root))
+    except subprocess.CalledProcessError:
+        previous = {}
+    registry_commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", REGISTRY, root=root).splitlines()
+    if registry_commits:
+        introduced = json.loads(git("show", f"{registry_commits[-1]}:{REGISTRY}", root=root))
+        previous = {**introduced, **previous}
+    for path, owner in previous.items():
+        if registry.get(path) != owner:
+            errors.append(f"{path}: existing registry entry changed/deleted")
+    discovered = {str(p.relative_to(root)) for prefix in ROOTS for p in (root / prefix).rglob("*")
+                  if p.is_file() and p.suffix in (".py", ".dart", ".json") and "__pycache__" not in p.parts}
+    for path in discovered - registry.keys():
+        errors.append(f"{path}: unregistered spine file")
+    count = 0
+    for path, owner in registry.items():
+        file = root / path
+        if not file.is_file():
+            errors.append(f"{path}: protected file missing")
+            continue
+        current = file.read_text()
+        commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", path, root=root).splitlines()
+        if commits:
+            original = git("show", f"{commits[-1]}:{path}", root=root)
+            if not allowed(original, current):
+                errors.append(f"{path}: only pending-marker removal allowed (spine {commits[-1]})")
+            # Also enforce monotonic retirement against current main.
+            try:
+                base_text = git("show", f"{base}:{path}", root=root)
+            except subprocess.CalledProcessError:
+                base_text = original
+            if not allowed(base_text, current):
+                errors.append(f"{path}: retired markers cannot be restored")
+        else:
+            try:
+                git("cat-file", "-e", f"HEAD:{path}", root=root)
+            except subprocess.CalledProcessError:
+                pass  # new spine, not yet committed
+            else:
+                errors.append(f"{path}: introducing commit unavailable; fetch full history")
+        for number, line in enumerate(current.splitlines(), 1):
+            match = MARKER.fullmatch(line)
+            if match:
+                package = next(value for value in match.groups() if value)
+                count += 1
+                print(f"PENDING {package} {path}:{number}")
+                if package != owner:
+                    errors.append(f"{path}:{number}: marker owner {package} != registry {owner}")
+    print(f"Spine contracts: {count} pending markers; {len(registry)} protected files")
+    return errors
+
+
+if __name__ == "__main__":
+    try:
+        problems = check()
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        problems = [str(exc)]
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    raise SystemExit(1 if problems else 0)

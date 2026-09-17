@@ -883,6 +883,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_fast.add_argument("--all", action="store_true", help="run the full hermetic suite")
     p_fast.add_argument("--runs", type=int, default=1)
     p_fast.add_argument("--evidence-dir")
+    p_fast.add_argument("--session", help="attach to an existing live session; never cold fallback")
     p_fast.add_argument("--journey-timeout", type=int, default=DEFAULT_JOURNEY_TIMEOUT_S)
 
     p_smoke = _add("smoke", help="bounded simulator smoke (fail-closed; not for ordinary CI)")
@@ -905,6 +906,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "smoke": cmd_smoke,
         "physical": cmd_physical,
     }
+    if args.command == "fast" and args.session:
+        from . import live_session
+
+        try:
+            return live_session.verify_live(repo_root, args)
+        except live_session.SessionError as exc:
+            print(f"blocked: {exc}", file=sys.stderr)
+            return EXIT_BLOCKED
     return handlers[args.command](repo_root, args)
 
 
