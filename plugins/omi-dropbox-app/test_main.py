@@ -74,6 +74,10 @@ def _build_stubs():
         raise AssertionError("requests.post must be patched inside tests")
 
     requests.post = _offline_post
+    # dropbox_client annotates _download_request -> requests.Response; on
+    # Pythons that evaluate annotations eagerly (pre-3.14) the class body
+    # resolves the attribute at import time, so the stub needs it.
+    requests.Response = type("Response", (), {})
 
     tenacity = ModuleType("tenacity")
     tenacity.retry = _decorator
