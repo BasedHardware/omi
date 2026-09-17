@@ -26,6 +26,16 @@ class JourneyFixtureBackend {
   static const String fixtureBearer = 'synthetic-journey-bearer';
   static const String wrongOwnerBearer = 'synthetic-wrong-owner-session-token';
 
+  /// Stable seed instant for dated journey records.
+  ///
+  /// ConversationDetailProvider.selectedDate defaults to `DateTime.now()`,
+  /// and conversationOrNull rejects a cached record whose local day-key
+  /// differs from selectedDate. Journeys pin the provider to this instant
+  /// (via conversationLocalDayKey) instead of deriving the seed from
+  /// "today" — a same-day pin goes red the next UTC midnight (j1 on
+  /// 2026-09-17 after a 2026-09-16 fixture).
+  static final DateTime seededConversationAt = DateTime.utc(2026, 9, 16, 9, 0, 0);
+
   final HttpServer _server;
   final Set<JourneyFault> _faults = {};
   final Map<String, List<({int status, String body})>> _httpFaults = {};
@@ -54,10 +64,7 @@ class JourneyFixtureBackend {
   static Future<JourneyFixtureBackend> start() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final backend = JourneyFixtureBackend._(server);
-    server.listen(
-      backend._handle,
-      onError: (Object e) => print('FIXTURE SERVER ERROR: $e'),
-    );
+    server.listen(backend._handle, onError: (Object e) => print('FIXTURE SERVER ERROR: $e'));
     return backend;
   }
 
@@ -108,10 +115,7 @@ class JourneyFixtureBackend {
     if (_ownershipRejected(req)) {
       req.response.statusCode = HttpStatus.forbidden;
       req.response.headers.contentType = ContentType.json;
-      req.response.write(jsonEncode({
-        'error': 'ownership',
-        'detail': 'bearer does not own the requested records',
-      }));
+      req.response.write(jsonEncode({'error': 'ownership', 'detail': 'bearer does not own the requested records'}));
       await req.response.close();
       return;
     }
@@ -184,17 +188,13 @@ class JourneyFixtureBackend {
         // ChatPage fetches installed chat apps; the fixture serves none.
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;
-        req.response.write(jsonEncode({
-          'data': [],
-          'pagination': {'total': 0, 'count': 0, 'offset': 0, 'limit': 50},
-          'filters': {
-            'sort': 'popular',
-            'categories': [],
-            'capabilities': [],
-            'languages': [],
-            'deployed_on': [],
-          },
-        }));
+        req.response.write(
+          jsonEncode({
+            'data': [],
+            'pagination': {'total': 0, 'count': 0, 'offset': 0, 'limit': 50},
+            'filters': {'sort': 'popular', 'categories': [], 'capabilities': [], 'languages': [], 'deployed_on': []},
+          }),
+        );
         await req.response.close();
         return;
 
@@ -265,18 +265,19 @@ class JourneyFixtureBackend {
       return;
     }
 
-    final donePayload = base64Encode(utf8.encode(jsonEncode({
-      'id': replyId,
-      'text': '$assistantReplyText [$replyId]',
-      'sender': 'ai',
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-      'type': 'text',
-    })));
+    final donePayload = base64Encode(
+      utf8.encode(
+        jsonEncode({
+          'id': replyId,
+          'text': '$assistantReplyText [$replyId]',
+          'sender': 'ai',
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+          'type': 'text',
+        }),
+      ),
+    );
 
-    final chunks = [
-      'data: $assistantReplyText\n\n',
-      'done: $donePayload\n\n',
-    ];
+    final chunks = ['data: $assistantReplyText\n\n', 'done: $donePayload\n\n'];
     for (final chunk in chunks) {
       req.response.add(utf8.encode(chunk));
       await req.response.flush();

@@ -29,7 +29,7 @@ and exits nonzero on any failing run.
 
 | Id | File | Behavior proved | Negative variant(s) |
 | --- | --- | --- | --- |
-| j1 | `j1_seeded_conversation_detail_test.dart` | seeded record fetched through the real provider path and rendered in the real detail page, exact synthetic identity | wrong-owner session cannot read the seeded record |
+| j1 | `j1_seeded_conversation_detail_test.dart` | seeded record fetched through the real provider path and rendered in the real detail page, exact synthetic identity. Seed timestamp and `ConversationDetailProvider.selectedDate` are both pinned to `JourneyFixtureBackend.seededConversationAt` (never "today") | wrong-owner session cannot read the seeded record |
 | j2 | `j2_chat_send_assistant_reply_test.dart` | send through the real UI button → request reaches the server → distinct assistant-role reply through the real SSE API path → rendered | suppress-send, suppress-assistant-reply, wrong-owner-session |
 | j3 | `j3_memory_create_edit_reload_test.dart` | create + edit through the production provider path; survives reload server-side under the owning uid | drop-memory-save |
 | j4 | `j4_expired_session_recovery_test.dart` | transient failure → local-dev re-mint reaches the real custom-token endpoint; terminal failure → explicit session expiry + blocked requests | production-family profiles never silently re-mint |
