@@ -47,6 +47,33 @@ def stable_suffix(conv_id: Any) -> str:
     return hashlib.sha256(str(conv_id).encode("utf-8")).hexdigest()[:8]
 
 
+def owned_by_other_export(filepath: Path, conv_id: str) -> bool:
+    """Report whether an existing file at filepath belongs to a different conversation.
+
+    The collision map only lives for one run, so a conversation exported in a
+    later invocation can still reuse - and overwrite - a name another export
+    already owns on disk. The exported frontmatter carries the full id, so an
+    existing note can be attributed before it is replaced. A file this script
+    cannot read, or that carries no readable id, is treated as foreign: only a
+    file that positively identifies itself as this conversation may be reused.
+    """
+    if not filepath.exists():
+        return False
+    try:
+        head = filepath.read_text(encoding="utf-8").split("---", 2)
+    except (OSError, UnicodeDecodeError):
+        return True
+    if len(head) < 2:
+        return True
+    for line in head[1].splitlines():
+        if line.startswith("id:"):
+            try:
+                return json.loads(line.split(":", 1)[1].strip()) != conv_id
+            except (ValueError, IndexError):
+                return True
+    return True
+
+
 def conversation_to_markdown(conv: Dict[str, Any]) -> str:
     """Convert a single Omi conversation dictionary into formatted Markdown."""
     conv_id = conv.get("id", "unknown")
@@ -213,12 +240,18 @@ def main() -> None:
 
         filename = f"{date_prefix}_{slug}_{short_id}.md"
         owner = claimed.get(filename)
-        if owner is not None and owner != str(conv_id):
+        # Disambiguate when this run already claimed the name, and when a name
+        # left behind by an earlier invocation is owned by a different id.
+        if (owner is not None and owner != str(conv_id)) or owned_by_other_export(
+            output_dir / filename, str(conv_id)
+        ):
             filename = f"{date_prefix}_{slug}_{short_id}_{stable_suffix(conv_id)}.md"
             # Guard against a digest collision as well: keep probing until the
             # name is either free or owned by this same conversation.
             probe = 1
-            while filename in claimed and claimed[filename] != str(conv_id):
+            while (filename in claimed and claimed[filename] != str(conv_id)) or owned_by_other_export(
+                output_dir / filename, str(conv_id)
+            ):
                 filename = f"{date_prefix}_{slug}_{short_id}_{stable_suffix(conv_id)}_{probe}.md"
                 probe += 1
         claimed[filename] = str(conv_id)

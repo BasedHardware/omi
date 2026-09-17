@@ -12,6 +12,11 @@ on 2026-09-17 with ids sharing an eight-character prefix both resolved to
 while the summary still reported both as exported. Distinct conversations must
 produce distinct files; re-exporting the same conversation id must still target
 the same file so repeat runs stay idempotent.
+
+The same name can also be inherited from an earlier invocation, because the
+collision map only lives for one run. CrossRunOwnershipTests covers that: a name
+another conversation already owns on disk - and a hand-written note carrying no
+id at all - must survive instead of being replaced.
 """
 import importlib.util
 import json
@@ -143,6 +148,54 @@ class CollisionSafeNamingTests(unittest.TestCase):
         self.assertEqual(first, again, "suffix must be stable across runs")
         self.assertNotEqual(first, other, "ids sharing a prefix must get different suffixes")
         self.assertTrue(first.isalnum() and first.islower() or first.isdigit())
+
+
+class CrossRunOwnershipTests(unittest.TestCase):
+    """The collision map lives for one run; on-disk notes must still be protected."""
+
+    def test_later_run_does_not_overwrite_another_conversations_note(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "notes"
+            first = conversation(
+                "12345678-1111-4111-8111-111111111111", "Meeting", "2026-09-17T10:00:00Z", "FIRST body"
+            )
+            second = conversation(
+                "12345678-2222-4222-8222-222222222222", "Meeting", "2026-09-17T11:00:00Z", "SECOND body"
+            )
+            self.assertEqual(run_exporter([first], out).returncode, 0)
+            self.assertEqual(len(list(out.glob("*.md"))), 1)
+            self.assertEqual(run_exporter([second], out).returncode, 0)
+            notes = sorted(out.glob("*.md"))
+            self.assertEqual(len(notes), 2, "a later run must not reuse a name another conversation owns")
+            bodies = "".join(n.read_text(encoding="utf-8") for n in notes)
+            self.assertIn("FIRST body", bodies)
+            self.assertIn("SECOND body", bodies)
+
+    def test_repeated_invocation_reuses_its_own_file(self):
+        payload = [
+            conversation("12345678-1111-4111-8111-111111111111", "Meeting", "2026-09-17T10:00:00Z", "FIRST body")
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "notes"
+            self.assertEqual(run_exporter(payload, out).returncode, 0)
+            first = sorted(p.name for p in out.glob("*.md"))
+            self.assertEqual(run_exporter(payload, out).returncode, 0)
+            self.assertEqual(sorted(p.name for p in out.glob("*.md")), first)
+
+    def test_hand_written_file_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "notes"
+            out.mkdir(parents=True, exist_ok=True)
+            foreign = out / "2026-09-17_meeting_12345678.md"
+            original = "# hand-written note\nnot an export\n"
+            foreign.write_text(original, encoding="utf-8")
+            result = run_exporter(
+                [conversation("12345678-1111-4111-8111-111111111111", "Meeting", "2026-09-17T10:00:00Z", "body")],
+                out,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(foreign.read_text(encoding="utf-8"), original)
+            self.assertEqual(len(list(out.glob("*.md"))), 2)
 
 
 if __name__ == "__main__":

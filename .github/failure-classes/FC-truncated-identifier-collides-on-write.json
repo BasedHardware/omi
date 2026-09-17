@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "id": "FC-truncated-identifier-collides-on-write",
-  "violated_contract": "An output path derived from a truncated identifier must not be assumed unique. Two distinct records whose identifiers share the truncated prefix resolve to the same path, and a plain overwrite write binds the second record to the first one's file: the earlier record is destroyed while the operation still reports every record as written, so the loss is invisible to the caller.",
-  "canonical_prevention": "Key the output path on the full identifier and resolve collisions before writing: track which record owns each candidate name in the current run and disambiguate a name already owned by a different identifier with a stable digest of that identifier, so distinct records always land in distinct files while re-running the same input stays idempotent.",
+  "violated_contract": "An output path derived from a truncated identifier must not be assumed unique. Two distinct records whose identifiers share the truncated prefix resolve to the same path - in the same run or in a later one - and a plain overwrite write binds the second record to the first one's file: the earlier record is destroyed while the operation still reports every record as written, so the loss is invisible to the caller.",
+  "canonical_prevention": "Key the output path on the full identifier and resolve collisions before writing: track which record owns each candidate name in the current run, attribute a name already present on disk by the identifier the file records about itself, and disambiguate any name owned by a different identifier with a stable digest of that identifier, so distinct records always land in distinct files, re-running the same input stays idempotent, and a later run cannot overwrite a file it does not own.",
   "canonical_prevention_artifact": [
     "sdks/python-cli/examples/test_conversations_to_markdown.py"
   ],
