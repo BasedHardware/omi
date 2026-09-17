@@ -72,6 +72,7 @@ import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'widgets/battery_info_widget.dart';
 
@@ -930,6 +931,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               ),
             ),
             GestureDetector(
+              // The mic sits inside the chat bar's own tap target, so a near miss
+              // does not do nothing: it opens text chat instead of voice. Own the
+              // bar's full height and its rounded end, not just the 42pt circle.
+              behavior: HitTestBehavior.opaque,
               onTap: () {
                 HapticFeedback.lightImpact();
                 PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat Voice');
@@ -940,13 +945,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
                 );
               },
-              child: Container(
-                width: 42,
-                height: 42,
-                margin: const EdgeInsets.only(right: 6),
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
+              child: Semantics(
+                button: true,
+                label: context.l10n.voiceMode,
+                child: Container(
+                  height: kHomeChatBarHeight,
+                  padding: const EdgeInsets.only(left: 8, right: 6),
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
+                  ),
+                ),
               ),
             ),
           ],
@@ -959,11 +972,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
+      // The trailing buttons paint 36pt circles inside 44pt touch targets, so the
+      // title gives up the 4pt the last target overhangs by. The circles stay on
+      // the 16pt margin the rest of the screen uses.
+      titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const BatteryInfoWidget(),
+          const Padding(
+            padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+            child: BatteryInfoWidget(),
+          ),
           const SizedBox.shrink(),
           Row(
             children: [
@@ -978,33 +998,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
                   // Show sync icon only on Conversations tab and if there's a paired device OR if there are pending files on device
                   if (homeProvider.selectedIndex == 1 && (device != null || hasPendingOnDevice)) {
-                    return GestureDetector(
+                    return HeaderCircleButton(
+                      semanticLabel: context.l10n.sync,
                       onTap: () {
                         HapticFeedback.mediumImpact();
                         final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
                         Navigator.push(context, MaterialPageRoute(builder: (context) => page));
                       },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: isSyncing
-                              ? Colors.deepPurple.withValues(alpha: 0.2)
-                              : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.cloud_rounded,
-                          size: 18,
-                          color: isSyncing
-                              ? Colors.deepPurpleAccent
-                              : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
-                        ),
+                      color: isSyncing
+                          ? Colors.deepPurple.withValues(alpha: 0.2)
+                          : hasPendingOnDevice
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
+                      icon: Icon(
+                        Icons.cloud_rounded,
+                        size: 18,
+                        color: isSyncing
+                            ? Colors.deepPurpleAccent
+                            : hasPendingOnDevice
+                                ? Colors.orangeAccent
+                                : Colors.white70,
                       ),
                     );
                   }
@@ -1025,45 +1038,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       // Search button - show when no active search, clicking closes search bar
                       if (shouldShowSearchButton)
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: homeProvider.showConvoSearchBar
-                                ? Colors.deepPurple.withValues(alpha: 0.5)
-                                : const Color(0xFF1F1F25),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.search, size: 18, color: Colors.white70),
-                            onPressed: () {
-                              HapticFeedback.mediumImpact();
-                              homeProvider.toggleConvoSearchBar();
-                            },
-                          ),
+                        HeaderCircleButton(
+                          semanticLabel: context.l10n.search,
+                          color: homeProvider.showConvoSearchBar
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          icon: const Icon(Icons.search, size: 18, color: Colors.white70),
+                          onTap: () {
+                            HapticFeedback.mediumImpact();
+                            homeProvider.toggleConvoSearchBar();
+                          },
                         ),
                       // Calendar button - only show when date filter is active
-                      if (convoProvider.selectedStartDate != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple.withValues(alpha: 0.5),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              await showConversationDateRangePicker(context);
-                            },
-                          ),
+                      if (convoProvider.selectedStartDate != null)
+                        HeaderCircleButton(
+                          semanticLabel: context.l10n.filters,
+                          color: Colors.deepPurple.withValues(alpha: 0.5),
+                          icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
+                          onTap: () async {
+                            HapticFeedback.mediumImpact();
+                            await showConversationDateRangePicker(context);
+                          },
                         ),
-                      ],
-                      const SizedBox(width: 8),
                     ],
                   );
                 },
@@ -1078,45 +1074,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   return Row(
                     children: [
                       // Export button
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            PlatformManager.instance.analytics.exportTasksBannerClicked();
-                            Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
-                          },
-                        ),
+                      HeaderCircleButton(
+                        semanticLabel: context.l10n.exportButton,
+                        icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          PlatformManager.instance.analytics.exportTasksBannerClicked();
+                          Navigator.of(
+                            context,
+                          ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
+                        },
                       ),
-                      const SizedBox(width: 8),
                       // Completed toggle
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
+                      HeaderCircleButton(
+                        semanticLabel: context.l10n.completed,
+                        color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
+                        icon: FaIcon(
+                          FontAwesomeIcons.solidCircleCheck,
+                          size: 16,
+                          color: showCompleted ? Colors.white : Colors.white70,
                         ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: FaIcon(
-                            FontAwesomeIcons.solidCircleCheck,
-                            size: 16,
-                            color: showCompleted ? Colors.white : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            actionItemsProvider.toggleShowCompletedView();
-                          },
-                        ),
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          actionItemsProvider.toggleShowCompletedView();
+                        },
                       ),
-                      const SizedBox(width: 8),
                     ],
                   );
                 },
@@ -1125,69 +1107,57 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               Consumer<HomeProvider>(
                 builder: (context, homeProvider, _) {
                   if (homeProvider.selectedIndex != 3) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: PullDownButton(
-                      itemBuilder: (context) => [
-                        PullDownMenuItem(
-                          title: context.l10n.createAnApp,
-                          subtitle: context.l10n.createAndShareYourApp,
-                          iconWidget: const Icon(Icons.apps, size: 18),
-                          onTap: () {
-                            PlatformManager.instance.analytics.pageOpened('Submit App');
-                            routeToPage(context, const AddAppPage());
-                          },
-                        ),
-                        PullDownMenuItem(
-                          title: context.l10n.addMcpServer,
-                          subtitle: context.l10n.connectExternalAiTools,
-                          iconWidget: const Icon(Icons.cable, size: 18),
-                          onTap: () {
-                            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
-                            routeToPage(context, const AddMcpServerPage());
-                          },
-                        ),
-                      ],
-                      buttonBuilder: (context, showMenu) => GestureDetector(
+                  return PullDownButton(
+                    itemBuilder: (context) => [
+                      PullDownMenuItem(
+                        title: context.l10n.createAnApp,
+                        subtitle: context.l10n.createAndShareYourApp,
+                        iconWidget: const Icon(Icons.apps, size: 18),
                         onTap: () {
-                          HapticFeedback.mediumImpact();
-                          showMenu();
+                          PlatformManager.instance.analytics.pageOpened('Submit App');
+                          routeToPage(context, const AddAppPage());
                         },
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                          child: const Icon(Icons.add, size: 18, color: Colors.white70),
-                        ),
                       ),
+                      PullDownMenuItem(
+                        title: context.l10n.addMcpServer,
+                        subtitle: context.l10n.connectExternalAiTools,
+                        iconWidget: const Icon(Icons.cable, size: 18),
+                        onTap: () {
+                          PlatformManager.instance.analytics.pageOpened('Add MCP Server');
+                          routeToPage(context, const AddMcpServerPage());
+                        },
+                      ),
+                    ],
+                    buttonBuilder: (context, showMenu) => HeaderCircleButton(
+                      semanticLabel: context.l10n.createAnApp,
+                      icon: const Icon(Icons.add, size: 18, color: Colors.white70),
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        showMenu();
+                      },
                     ),
                   );
                 },
               ),
               // Settings button - always visible
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    PlatformManager.instance.analytics.pageOpened('Settings');
-                    String language = SharedPreferencesUtil().userPrimaryLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                      }
+              HeaderCircleButton(
+                semanticLabel: context.l10n.settings,
+                icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  PlatformManager.instance.analytics.pageOpened('Settings');
+                  String language = SharedPreferencesUtil().userPrimaryLanguage;
+                  bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                  String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                  SettingsDrawer.show(context);
+                  if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                      hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                      transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                    if (context.mounted) {
+                      context.read<CaptureProvider>().onRecordProfileSettingChanged();
                     }
-                  },
-                ),
+                  }
+                },
               ),
             ],
           ),
