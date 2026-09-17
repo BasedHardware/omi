@@ -14,6 +14,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 import 'task_categorization.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -205,7 +206,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         if (provider.isSelectionMode) return const SizedBox.shrink();
         return Positioned(
           right: 20,
-          bottom: 100,
+          // Rides on top of the nav bar, so it follows the bar's height and the
+          // system inset the bar reserves rather than a literal tuned to one device.
+          bottom: bottomNavBarClearance(context),
           child: FloatingActionButton(
             heroTag: 'action_items_fab',
             onPressed: () {
@@ -554,10 +557,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const NeverScrollableScrollPhysics(),
-      slivers: const [
-        SliverPadding(padding: EdgeInsets.only(top: 16)),
-        ActionItemsShimmerList(itemCount: 7),
-        SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 16)),
+        const ActionItemsShimmerList(itemCount: 7),
+        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
       ],
     );
   }
@@ -734,8 +737,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
         ],
 
-        // Bottom padding
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        // Bottom padding so the last row scrolls clear of the nav bar
+        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
       ],
     );
   }

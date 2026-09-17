@@ -874,9 +874,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 right: 16,
                                 // Derived from the nav row's own geometry so the
                                 // two cannot drift: changing the row's height or
-                                // the inset it reserves moves this with it,
-                                // instead of silently closing the gap.
-                                bottom: kBottomNavBarHeight - kBottomNavChatBarGap + bottomNavBarReservedInset(context),
+                                // the inset it reserves moves this with it.
+                                bottom: bottomNavChatBarOffset(context),
                                 child: Row(
                                   children: [
                                     Expanded(child: _buildChatBar(context)),
@@ -914,7 +913,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             MaterialPageRoute(fullscreenDialog: true, builder: (context) => const ChatPage(isPivotBottom: false)));
       },
       child: Container(
-        height: 62,
+        height: kHomeChatBarHeight,
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(32),
