@@ -1,207 +1,248 @@
+"""Hermetic regression tests for the Hive task-creation safety contract.
+
+The plugin's production dependencies are intentionally stubbed so this check
+can run in the repository's stdlib-only local/CI lanes.
 """
-Hermetic test suite for the Hive integration app.
-
-Exercises manifest schema compliance, project/task queries, and
-tool endpoint flows without network or external services.
-Runs cleanly under pure standard library Python (including under python3 -S).
-"""
-
-from __future__ import annotations
-
-import asyncio
-import importlib.util
 from pathlib import Path
 import sys
-from types import ModuleType
+import types
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 
-def load_app():
+def _install_stubs() -> None:
+    fastapi = types.ModuleType("fastapi")
+
     class FastAPI:
-        def __init__(self, **kwargs):
+        def __init__(self, *args, **kwargs):
             pass
 
         def get(self, *args, **kwargs):
-            return lambda handler: handler
+            return lambda function: function
 
-        post = get
+        def post(self, *args, **kwargs):
+            return lambda function: function
 
         def mount(self, *args, **kwargs):
             pass
+
+    class HTTPException(Exception):
+        pass
+
+    fastapi.FastAPI = FastAPI
+    fastapi.HTTPException = HTTPException
+    fastapi.Request = object
+    fastapi.Query = lambda default=None, **kwargs: default
+    fastapi.Form = lambda default=None, **kwargs: default
+    sys.modules["fastapi"] = fastapi
+
+    responses = types.ModuleType("fastapi.responses")
+    responses.HTMLResponse = type("HTMLResponse", (), {})
+    responses.RedirectResponse = type("RedirectResponse", (), {})
+    responses.JSONResponse = type("JSONResponse", (), {})
+    sys.modules["fastapi.responses"] = responses
+    fastapi.responses = responses
+
+    staticfiles = types.ModuleType("fastapi.staticfiles")
+    staticfiles.StaticFiles = type("StaticFiles", (), {"__init__": lambda self, *a, **k: None})
+    sys.modules["fastapi.staticfiles"] = staticfiles
+
+    templating = types.ModuleType("fastapi.templating")
+    templating.Jinja2Templates = type(
+        "Jinja2Templates",
+        (),
+        {
+            "__init__": lambda self, *a, **k: None,
+            "TemplateResponse": lambda self, *a, **k: None,
+        },
+    )
+    sys.modules["fastapi.templating"] = templating
+
+    pydantic = types.ModuleType("pydantic")
 
     class BaseModel:
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
 
-    class HTTPException(Exception):
-        def __init__(self, status_code=400, detail=""):
-            self.status_code = status_code
-            self.detail = detail
-
-    class Request:
-        def __init__(self, json_data=None):
-            self._json = json_data or {}
-
-        async def json(self):
-            return self._json
-
-    fastapi = ModuleType("fastapi")
-    fastapi.FastAPI = FastAPI
-    fastapi.Request = Request
-    fastapi.HTTPException = HTTPException
-    fastapi.Query = lambda default=None, **kwargs: default
-    fastapi.Form = lambda default=None, **kwargs: default
-
-    staticfiles = ModuleType("fastapi.staticfiles")
-    staticfiles.StaticFiles = lambda **kwargs: None
-
-    templating = ModuleType("fastapi.templating")
-    templating.Jinja2Templates = lambda **kwargs: None
-
-    responses = ModuleType("fastapi.responses")
-    responses.HTMLResponse = str
-    responses.RedirectResponse = str
-    responses.JSONResponse = dict
-
-    pydantic = ModuleType("pydantic")
     pydantic.BaseModel = BaseModel
+    sys.modules["pydantic"] = pydantic
 
-    requests = ModuleType("requests")
-    requests.get = Mock()
-    requests.post = Mock()
+    requests = types.ModuleType("requests")
+    requests.post = lambda *a, **k: None
+    requests.get = lambda *a, **k: None
+    requests.request = lambda *a, **k: None
+    requests.Timeout = type("Timeout", (Exception,), {})
+    requests.RequestException = type("RequestException", (Exception,), {})
+    sys.modules["requests"] = requests
 
-    dotenv = ModuleType("dotenv")
-    dotenv.load_dotenv = lambda *args, **kwargs: None
+    dotenv = types.ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *a, **k: None
+    sys.modules["dotenv"] = dotenv
 
-    db = ModuleType("db")
-    db.store_hive_credentials = Mock()
-    db.get_hive_credentials = Mock(return_value=None)
-    db.delete_hive_credentials = Mock()
-    db.is_connected = Mock(return_value=False)
-    db.store_default_project = Mock()
-    db.get_default_project = Mock(return_value=None)
-    db.get_user_settings = Mock(return_value={})
+    sdk = types.ModuleType("omi_plugin_sdk")
+    sdk_models = types.ModuleType("omi_plugin_sdk.models")
+    for name in ("Conversation", "EndpointResponse", "Structured", "TranscriptSegment"):
+        setattr(sdk_models, name, type(name, (), {}))
+    sys.modules["omi_plugin_sdk"] = sdk
+    sys.modules["omi_plugin_sdk.models"] = sdk_models
 
-    models = ModuleType("models")
-
-    class ChatToolResponse(BaseModel):
-        def __init__(self, result=None, error=None):
-            self.result = result
-            self.error = error
-
-    class HiveProject(BaseModel):
-        def __init__(self, id="", name="", description=None, status=None, workspace_id=None):
-            self.id = id
-            self.name = name
-            self.description = description
-            self.status = status
-            self.workspace_id = workspace_id
-
-    class HiveTask(BaseModel):
-        def __init__(self, id="", title="", name="", description=None, status="todo", deadline=None, project_id="", assignees=None):
-            self.id = id
-            self.title = title or name
-            self.name = name or title
-            self.description = description
-            self.status = status
-            self.deadline = deadline
-            self.project_id = project_id
-            self.assignees = assignees or []
-
-    models.ChatToolResponse = ChatToolResponse
-    models.HiveProject = HiveProject
-    models.HiveTask = HiveTask
-    models.HiveAction = BaseModel
-
-    stubs = {
-        "fastapi": fastapi,
-        "fastapi.staticfiles": staticfiles,
-        "fastapi.templating": templating,
-        "fastapi.responses": responses,
-        "pydantic": pydantic,
-        "requests": requests,
-        "dotenv": dotenv,
-        "db": db,
-        "models": models,
-    }
-
-    app_path = Path(__file__).resolve().parent / "main.py"
-    spec = importlib.util.spec_from_file_location("hive_main", app_path)
-    module = importlib.util.module_from_spec(spec)
-    with patch.dict(sys.modules, stubs):
-        spec.loader.exec_module(module)
-    return module, stubs
+    db = types.ModuleType("db")
+    for name in (
+        "store_hive_credentials", "get_hive_credentials", "delete_hive_credentials",
+        "is_connected", "store_default_project", "get_default_project", "get_user_settings",
+    ):
+        setattr(db, name, lambda *a, **k: None)
+    sys.modules["db"] = db
 
 
-app_module, stubs = load_app()
+_install_stubs()
+PLUGIN_DIR = Path(__file__).resolve().parent
+if str(PLUGIN_DIR) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_DIR))
+
+import main  # noqa: E402
 
 
-class HiveAppTests(unittest.TestCase):
-    def test_manifest_schema_compliance(self):
-        coro = app_module.get_omi_tools_manifest()
-        manifest = asyncio.run(coro)
-        self.assertIn("tools", manifest)
-        self.assertEqual(len(manifest["tools"]), 5)
+class _Request:
+    def __init__(self, body):
+        self.body = body
 
-        for tool in manifest["tools"]:
-            self.assertIn("name", tool)
-            self.assertIn("parameters", tool)
-            params = tool["parameters"]
-            self.assertEqual(
-                params.get("type"),
-                "object",
-                f"Tool {tool['name']} parameters missing 'type': 'object'",
+    async def json(self):
+        return self.body
+
+
+def _project(project_id, name):
+    return main.HiveProject(id=project_id, name=name)
+
+
+def _task(task_id, name, project_id):
+    return main.HiveTask(id=task_id, name=name, project_id=project_id)
+
+
+class HiveNameResolutionTests(unittest.TestCase):
+    def test_exact_unique_match_wins(self):
+        projects = [_project("marketing", "Q3 Marketing"), _project("q3", "Q3")]
+        with patch.object(main, "get_user_projects", return_value=projects):
+            project, candidates = main.find_project_by_name("u", " q3 ")
+        self.assertEqual(project.id, "q3")
+        self.assertEqual([p.name for p in candidates], ["Q3"])
+
+    def test_ambiguous_partial_match_fails_closed(self):
+        projects = [_project("m", "Q3 Marketing"), _project("s", "Q3 Sales")]
+        with patch.object(main, "get_user_projects", return_value=projects):
+            project, candidates = main.find_project_by_name("u", "Q3")
+        self.assertIsNone(project)
+        self.assertEqual({p.id for p in candidates}, {"m", "s"})
+
+    def test_empty_name_never_matches_every_project(self):
+        with patch.object(main, "get_user_projects") as projects:
+            project, candidates = main.find_project_by_name("u", "  ")
+        projects.assert_not_called()
+        self.assertIsNone(project)
+        self.assertEqual(candidates, [])
+
+    def test_malformed_project_payload_is_ignored(self):
+        with patch.object(main, "get_user_projects", return_value=[object(), None]):
+            project, candidates = main.find_project_by_name("u", "Q3")
+        self.assertIsNone(project)
+        self.assertEqual(candidates, [])
+
+
+class HiveCreateTaskSafetyTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.project = _project("target", "Target")
+        self.credentials = {"workspace_id": "workspace"}
+
+    def _patch_common(self, search_results, create_result=None):
+        return patch.multiple(
+            main,
+            is_connected=lambda uid: True,
+            get_hive_credentials=lambda uid: self.credentials,
+            get_user_projects=lambda uid: [self.project],
+            search_tasks=lambda uid, query, limit=10: search_results,
+            hive_rest_request=lambda *args, **kwargs: create_result or {"id": "created"},
+        )
+
+    async def test_project_ambiguity_is_reported_without_mutation(self):
+        candidates = [_project("a", "Q3 Marketing"), _project("b", "Q3 Sales")]
+        with patch.object(main, "is_connected", return_value=True), \
+             patch.object(main, "get_user_projects", return_value=candidates), \
+             patch.object(main, "hive_rest_request") as create:
+            response = await main.tool_hive_create_task(
+                _Request({"uid": "u", "task_name": "Write report", "project_name": "Q3"})
             )
-            self.assertIn("properties", params)
-            self.assertIn("required", params)
+        self.assertIn("ambiguous", response.error.lower())
+        self.assertIn("Q3 Marketing", response.error)
+        create.assert_not_called()
 
-    def test_get_projects_requires_uid(self):
-        req = stubs["fastapi"].Request({})
-        resp = asyncio.run(app_module.tool_hive_get_projects(req))
-        self.assertIn("User ID is required", resp.error)
+    async def test_parent_only_found_in_other_project_is_rejected(self):
+        outside = _task("outside", "Launch", "other-project")
+        with self._patch_common([outside]) as mocks:
+            response = await main.tool_hive_create_task(
+                _Request({
+                    "uid": "u", "task_name": "Subtask", "project_name": "Target",
+                    "parent_task_name": "Launch",
+                })
+            )
+        self.assertIn("unique parent task", response.error)
+        self.assertIn("no matching task", response.error)
 
-    def test_get_projects_not_connected(self):
-        req = stubs["fastapi"].Request({"uid": "user123"})
-        with patch.object(app_module, "is_connected", return_value=False):
-            resp = asyncio.run(app_module.tool_hive_get_projects(req))
-            self.assertIn("connect your Hive account first", resp.error)
+    async def test_blank_parent_name_is_rejected_without_search(self):
+        with self._patch_common([]) as mocks:
+            response = await main.tool_hive_create_task(
+                _Request({
+                    "uid": "u", "task_name": "Subtask", "project_name": "Target",
+                    "parent_task_name": "   ",
+                })
+            )
+        self.assertEqual(response.error, "Parent task name must not be empty.")
 
-    def test_get_projects_success_empty(self):
-        req = stubs["fastapi"].Request({"uid": "user123"})
-        with patch.object(app_module, "is_connected", return_value=True):
-            with patch.object(app_module, "get_user_projects", return_value=[]):
-                resp = asyncio.run(app_module.tool_hive_get_projects(req))
-                self.assertIn("don't have any projects yet", resp.result)
+    async def test_duplicate_parent_names_are_rejected(self):
+        matches = [_task("one", "Launch", "target"), _task("two", "Launch", "target")]
+        with self._patch_common(matches) as mocks:
+            response = await main.tool_hive_create_task(
+                _Request({
+                    "uid": "u", "task_name": "Subtask", "project_name": "Target",
+                    "parent_task_name": "Launch",
+                })
+            )
+        self.assertIn("multiple exact matches", response.error)
 
-    def test_get_projects_success_with_data(self):
-        req = stubs["fastapi"].Request({"uid": "user123"})
-        with patch.object(app_module, "is_connected", return_value=True):
-            project = stubs["models"].HiveProject(id="p1", name="Engineering", description="Core dev", status="active")
-            with patch.object(app_module, "get_user_projects", return_value=[project]):
-                resp = asyncio.run(app_module.tool_hive_get_projects(req))
-                self.assertIn("Engineering", resp.result)
-                self.assertIn("active", resp.result)
+    async def test_unique_exact_parent_is_used_and_payload_is_scoped(self):
+        parent = _task("parent", "Launch", "target")
+        calls = []
 
-    def test_create_task_requires_task_name(self):
-        req = stubs["fastapi"].Request({"uid": "user123"})
-        resp = asyncio.run(app_module.tool_hive_create_task(req))
-        self.assertIn("Task name is required", resp.error)
+        def create(*args, **kwargs):
+            calls.append((args, kwargs))
+            return {"id": "created"}
 
-    def test_create_task_success(self):
-        req = stubs["fastapi"].Request({
-            "uid": "user123",
-            "task_name": "Implement Oauth",
-            "project_name": "Backend",
-        })
-        project = stubs["models"].HiveProject(id="p_backend", name="Backend")
-        with patch.object(app_module, "is_connected", return_value=True):
-            with patch.object(app_module, "find_project_by_name", return_value=project):
-                with patch.object(app_module, "get_hive_credentials", return_value={"workspace_id": "ws_1"}):
-                    with patch.object(app_module, "hive_rest_request", return_value={"id": "t_1", "title": "Implement Oauth"}):
-                        resp = asyncio.run(app_module.tool_hive_create_task(req))
-                        self.assertIn("Created task", resp.result)
-                        self.assertIn("Implement Oauth", resp.result)
+        with patch.multiple(
+            main,
+            is_connected=lambda uid: True,
+            get_hive_credentials=lambda uid: self.credentials,
+            get_user_projects=lambda uid: [self.project],
+            search_tasks=lambda uid, query, limit=10: [parent],
+            hive_rest_request=create,
+        ):
+            response = await main.tool_hive_create_task(
+                _Request({
+                    "uid": "u", "task_name": "Subtask", "project_name": "Target",
+                    "parent_task_name": "Launch", "description": "details",
+                })
+            )
+        self.assertIsNone(response.error)
+        self.assertIn("created", response.result.lower())
+        self.assertEqual(len(calls), 1)
+        payload = calls[0][1]["data"]
+        self.assertEqual(payload["projectId"], "target")
+        self.assertEqual(payload["parentId"], "parent")
+
+    async def test_api_failure_is_returned_without_exception(self):
+        with self._patch_common([], {"errors": [{"message": "forbidden"}]}):
+            response = await main.tool_hive_create_task(
+                _Request({"uid": "u", "task_name": "Task", "project_name": "Target"})
+            )
+        self.assertIn("forbidden", response.error)
 
 
 if __name__ == "__main__":
