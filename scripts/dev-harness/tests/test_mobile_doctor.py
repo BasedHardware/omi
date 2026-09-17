@@ -174,6 +174,85 @@ class TestIndividualChecks:
         assert "system-images;android-36;google_apis;arm64-v8a" in image.remedy
         assert "capacity-gated" in image.remedy
 
+    def test_android_image_slash_path_listing_is_ready(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        sdk = tmp_path / "android-sdk"
+        sdkmanager = sdk / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        runner.paths.update({sdk, sdk / "emulator" / "emulator", sdkmanager, sdk / "platform-tools" / "adb"})
+        runner.outputs[(str(sdkmanager), "--list_installed")] = (
+            0,
+            "  system-images/android-36/google_apis/arm64-v8a         7.0.0             Google APIs ARM 64 v8a System Image\n",
+        )
+        report = md.run_doctor(
+            tmp_path,
+            env={"ANDROID_HOME": str(sdk)},
+            runner=runner,
+            platforms=("android",),
+            skip_capacity=True,
+        )
+        image = next(c for c in report.checks if c.check == "android-image")
+        assert image.status == md.READY
+        assert "system-images;android-36;google_apis;arm64-v8a" in image.detail
+
+    def test_android_image_noisy_sdkmanager_with_slash_path_is_ready(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        sdk = tmp_path / "android-sdk"
+        sdkmanager = sdk / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        runner.paths.update({sdk, sdk / "emulator" / "emulator", sdkmanager, sdk / "platform-tools" / "adb"})
+        runner.outputs[(str(sdkmanager), "--list_installed")] = (
+            1,
+            "WARNING: The SDK Manager CLI tool (sdkmanager) is deprecated.\n"
+            "  system-images/android-36/google_apis/arm64-v8a\n",
+        )
+        report = md.run_doctor(
+            tmp_path,
+            env={"ANDROID_HOME": str(sdk)},
+            runner=runner,
+            platforms=("android",),
+            skip_capacity=True,
+        )
+        image = next(c for c in report.checks if c.check == "android-image")
+        assert image.status == md.READY, image.as_dict()
+
+    def test_android_image_inventory_failure_is_undetermined_not_absent(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        sdk = tmp_path / "android-sdk"
+        sdkmanager = sdk / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        runner.paths.update({sdk, sdk / "emulator" / "emulator", sdkmanager, sdk / "platform-tools" / "adb"})
+        runner.outputs[(str(sdkmanager), "--list_installed")] = (1, "WARNING: The SDK Manager CLI tool is deprecated.\n")
+        report = md.run_doctor(
+            tmp_path,
+            env={"ANDROID_HOME": str(sdk)},
+            runner=runner,
+            platforms=("android",),
+            skip_capacity=True,
+        )
+        image = next(c for c in report.checks if c.check == "android-image")
+        assert image.status == md.OPERATOR
+        assert "cannot determine" in image.detail
+        assert "not a finding that the image is absent" in image.detail
+        assert "no system-images package installed" not in image.detail
+
+    def test_android_image_on_disk_is_ready_even_when_sdkmanager_exits_nonzero(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        sdk = tmp_path / "android-sdk"
+        image_dir = sdk / "system-images" / "android-36" / "google_apis" / "arm64-v8a"
+        sdkmanager = sdk / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        runner.paths.update(
+            {sdk, sdk / "emulator" / "emulator", sdkmanager, sdk / "platform-tools" / "adb", image_dir}
+        )
+        runner.outputs[(str(sdkmanager), "--list_installed")] = (1, "java.lang.RuntimeException: boom\n")
+        report = md.run_doctor(
+            tmp_path,
+            env={"ANDROID_HOME": str(sdk)},
+            runner=runner,
+            platforms=("android",),
+            skip_capacity=True,
+        )
+        image = next(c for c in report.checks if c.check == "android-image")
+        assert image.status == md.READY
+        assert "system-images;android-36;google_apis;arm64-v8a" in image.detail
+
     def test_incomplete_venv_is_not_ready(self, tmp_path: Path) -> None:
         runner = _provisioned_runner(tmp_path)
         venv = tmp_path / "backend" / ".venv" / "bin" / "python"

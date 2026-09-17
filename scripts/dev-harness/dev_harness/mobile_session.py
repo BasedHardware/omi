@@ -321,19 +321,32 @@ class DeviceController:
         return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
     def android_ready(self, android_home: str) -> tuple[bool, str]:
-        emulator = Path(android_home) / "emulator" / "emulator"
-        sdkmanager = Path(android_home) / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        home = Path(android_home or "")
+        emulator = home / "emulator" / "emulator"
         if not emulator.exists():
             return False, f"emulator engine missing at {emulator} (sdkmanager 'emulator' 'cmdline-tools;latest')"
+        sdkmanager = home / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        list_code: int | None = None
+        list_output = ""
         if sdkmanager.exists():
-            code, out = self._runner([str(sdkmanager), "--list_installed"])
-            if code == 0 and not any(line.strip().startswith("system-images;") for line in out.splitlines()):
-                return (
-                    False,
-                    "no Android system image installed "
-                    "(sdkmanager 'system-images;android-36;google_apis;arm64-v8a')",
-                )
-        return True, "android emulator engine present"
+            list_code, list_output = self._runner([str(sdkmanager), "--list_installed"])
+        image = mobile_doctor.installed_android_system_image(home, list_output=list_output)
+        if image:
+            return True, f"android emulator engine present ({image})"
+        disk = home.joinpath(*mobile_doctor.PREFERRED_ANDROID_IMAGE_DIR)
+        if list_code is None:
+            return False, (
+                f"cannot determine Android system image: sdkmanager missing at {sdkmanager} "
+                f"and no on-disk image at {disk}; this is not a finding that the emulator engine is absent"
+            )
+        if list_code != 0:
+            snippet = " ".join(list_output.split())[:180]
+            return False, (
+                f"cannot determine Android system image: sdkmanager --list_installed exited {list_code}"
+                + (f" ({snippet})" if snippet else "")
+                + "; this is not a finding that the emulator engine is absent"
+            )
+        return False, f"no Android system image installed (sdkmanager '{mobile_doctor.PREFERRED_ANDROID_IMAGE}')"
 
     def attach_ios_simulator(self, session_id: str, device_type: str, runtime: str) -> tuple[str, str]:
         name = f"omi-session-{session_id}"
