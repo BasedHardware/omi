@@ -14,6 +14,7 @@ Exposes:
 """
 from __future__ import annotations
 
+import html
 import json
 import logging
 import secrets
@@ -85,7 +86,7 @@ async def auth_callback(
 ) -> HTMLResponse:
     if error:
         return HTMLResponse(
-            f"<h3>Authorization failed</h3><pre>{error}: {error_description}</pre>",
+            f"<h3>Authorization failed</h3><pre>{html.escape(error or '', quote=True)}: {html.escape(error_description or '', quote=True)}</pre>",
             status_code=400,
         )
     if not code or not state:
