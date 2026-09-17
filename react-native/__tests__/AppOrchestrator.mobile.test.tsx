@@ -112,9 +112,7 @@ test('action items open from Home and return without a bottom Tasks destination'
   const renderer = await renderApp();
   expect(control(renderer, 'Tasks')).toBeUndefined();
   expect(control(renderer, 'Open calls')).toBeUndefined();
-  expect(
-    renderer.root.findAll(node => node.props.children === 'Talk to Omi').length,
-  ).toBeGreaterThan(0);
+  expect(control(renderer, 'Start Live voice')).toBeUndefined();
   await act(async () =>
     control(renderer, 'See all action items').props.onPress(),
   );
@@ -125,7 +123,7 @@ test('action items open from Home and return without a bottom Tasks destination'
   expect(control(renderer, 'Start Live voice')).toBeUndefined();
   await act(async () => control(renderer, 'Back to Home').props.onPress());
   expect(control(renderer, 'See all action items')).toBeDefined();
-  expect(control(renderer, 'Start Live voice')).toBeDefined();
+  expect(control(renderer, 'Start Live voice')).toBeUndefined();
 });
 
 test('mobile Ask Omi opens the actual chat and reports a missing backend', async () => {
@@ -141,6 +139,8 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   });
   await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
   expect(control(renderer, 'Chat scroll region')).toBeDefined();
+  expect(control(renderer, 'Start Live voice')).toBeUndefined();
+  expect(control(renderer, 'Open calls')).toBeUndefined();
   expect(control(renderer, 'Ask Omi')).toBe(input);
   expect(JSON.stringify(renderer.toJSON())).toContain('Chat');
   await act(async () => control(renderer, 'Close chat').props.onPress());

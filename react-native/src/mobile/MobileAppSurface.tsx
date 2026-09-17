@@ -679,7 +679,15 @@ const styles = StyleSheet.create({
     color: mobileColor.textMuted,
     paddingVertical: 8,
   },
-  section: {gap: 0},
+  section: {
+    gap: 0,
+    backgroundColor: mobileColor.surface,
+    borderColor: mobileColor.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: mobileRadius.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -687,6 +695,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   sectionTitle: {
+    flexShrink: 1,
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '600',

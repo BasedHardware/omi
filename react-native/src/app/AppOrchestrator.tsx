@@ -846,13 +846,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       provider={liveVoiceProvider}
     />
   );
-  const mobileLiveControl = (
-    <LiveVoiceButton
-      backend={omiBackend}
-      compact
-      provider={liveVoiceProvider}
-    />
-  );
   const currentItems = reads.slice(0, 2);
 
   const OnboardingSurface = macDesktop ? DesktopOnboarding : Onboarding;
@@ -1158,11 +1151,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         omnibar={
           <MobileOmnibar
             key="mobile-omnibar"
-            voiceControl={
-              activeMobileRoute === 'home' || homeChatOpen
-                ? mobileLiveControl
-                : undefined
-            }
             mode={mobileMode}
             onModeChange={next => {
               setMobileMode(next);
@@ -1718,9 +1706,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 )}
               </View>
             </Animated.View>
-            {route === 'Home' && homeChatOpen && (
-              <View style={styles.liveVoiceDock}>{mobileLiveControl}</View>
-            )}
             {route === 'Home' && homeChatOpen && composer}
           </KeyboardAvoidingView>
         </View>
