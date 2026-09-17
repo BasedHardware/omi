@@ -47,8 +47,8 @@ QA_SWEEP_MAX_PROVIDER_CALLS = 1
 # Keep these equal to the deployed memories route's QA request contract.  The
 # checked-in gpt-5.6-luna card prices 12,288 input + 256 output tokens at under
 # the $0.05 cap; the gateway's durable attempt row is the usage/cost authority.
-QA_SWEEP_MAX_INPUT_TOKENS = 12_288
-QA_SWEEP_MAX_OUTPUT_TOKENS = 256
+QA_SWEEP_MAX_INPUT_TOKENS = 16_384
+QA_SWEEP_MAX_OUTPUT_TOKENS = 2_048
 QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
 QA_SWEEP_ACCOUNTING_READ_RETRIES = 2
 QA_SWEEP_ACCOUNTING_RETRY_DELAY_SECONDS = 1.0
