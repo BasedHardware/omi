@@ -2,6 +2,15 @@ import Foundation
 import OmiSupport
 import VoiceTurnDomain
 
+/// Connect-path authorization for a warm realtime session. The plan gate and
+/// `ensureWarm` share this so a stored-but-unusable voice key cannot skip the
+/// gate and then fall through to a managed mint.
+enum RealtimeWarmCredential: Equatable {
+  case clientDirect(key: String)
+  case unusableBYOK(key: String, fingerprint: String)
+  case none
+}
+
 /// Recovery for the two *expected* warm-session lifecycle closes: provider
 /// idle teardowns (presence-gated re-warm) and provider session rotation.
 extension RealtimeHubController {
@@ -77,9 +86,12 @@ extension RealtimeHubController {
   /// as Voice Model: `isByokActive` is false so the subscription decision is
   /// `.planGated`, but `selectedRealtimeBYOKKey(chosenForVoice:)` is non-nil and
   /// the hub connects client-direct at our $0. Warming is governed by that
-  /// realtime key: if this session would use the user's own voice key, never skip.
+  /// realtime key: exempt only when this session will actually connect
+  /// client-direct. A stored key that `canUseBYOK` rejects falls through to
+  /// managed mint on the connect path — the same `resolvedRealtimeWarmCredential`
+  /// decision, so a known-bad key is not an exemption.
   func shouldSkipAutomaticManagedWarm() -> Bool {
-    if resolvedRealtimeBYOKKey() != nil { return false }
+    if case .clientDirect = resolvedRealtimeWarmCredential() { return false }
     let decision = entitlementDecision()
     let skip = managedPlanGateLatch.shouldSkipAutomaticManagedWork(
       decision: decision,
@@ -106,6 +118,17 @@ extension RealtimeHubController {
       chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider))
   }
 
+  /// Authorization the connect path will make: a stored voice key is not enough.
+  /// Known-bad fingerprints (`canUseBYOK` false) are `.unusableBYOK` and mint.
+  func resolvedRealtimeWarmCredential() -> RealtimeWarmCredential {
+    guard let key = resolvedRealtimeBYOKKey() else { return .none }
+    let fingerprint = APIKeyService.byokFingerprint(key)
+    if canUseRealtimeBYOK(effectiveProvider.byokProvider, fingerprint) {
+      return .clientDirect(key: key)
+    }
+    return .unusableBYOK(key: key, fingerprint: fingerprint)
+  }
+
   /// Launch / re-entrant `PushToTalkManager.setup`: not a key press, so the plan
   /// gate still applies, but an existing away deferral must not block an entitled
   /// user the way a passive `ensureWarm()` would.
@@ -117,6 +140,10 @@ extension RealtimeHubController {
   func resetManagedPlanGateForOwnerChange() {
     planGateRetryTask?.cancel()
     planGateRetryTask = nil
+    entitlementRefreshGeneration &+= 1
+    entitlementRefreshTask?.cancel()
+    entitlementRefreshTask = nil
+    entitlementRefreshInFlight = false
     managedPlanGateLatch.reset()
     didLogPlanGateSkip = false
   }
@@ -186,11 +213,18 @@ extension RealtimeHubController {
   private func requestEntitlementRefresh() {
     guard let refreshEntitlement, !entitlementRefreshInFlight else { return }
     entitlementRefreshInFlight = true
-    Task { [weak self] in
+    entitlementRefreshGeneration &+= 1
+    let generation = entitlementRefreshGeneration
+    let ownerAtStart = managedPlanGateOwnerID()
+    entitlementRefreshTask = Task { [weak self] in
       await refreshEntitlement()
       await MainActor.run {
         guard let self else { return }
+        self.planGateRefreshDidFinish?()
+        guard self.entitlementRefreshGeneration == generation else { return }
         self.entitlementRefreshInFlight = false
+        self.entitlementRefreshTask = nil
+        guard !Task.isCancelled, self.managedPlanGateOwnerID() == ownerAtStart else { return }
         self.completeEntitlementRefresh()
       }
     }

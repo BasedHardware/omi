@@ -224,15 +224,18 @@ returns an authorized command.
 
 Automatic / idle / launch warming of a **managed** (ephemeral) session consults
 `SubscriptionEntitlement.decision` via `ManagedPlanGateLatch` (shared with
-LiveNotes). Identified basic without a **realtime** BYOK key skips keep-warm;
-unknown plans fail open. Warming is governed by
-`selectedRealtimeBYOKKey(chosenForVoice:)`, not text-lane
-`APIKeyService.isByokActive` — a basic user can hold a Gemini voice key while
-the selected text provider is OpenRouter or unset. `ensureWarm(userInitiated:
-true)` (PTT) still attempts. Launch uses `prepareAutomaticWarm()` so an existing
-away deferral cannot block an entitled re-entrant `setup`. A typed server
-`plan_gated` denial latches automatic retries for ten minutes (one bounded
-re-drive) or until the decision becomes allow / the owner changes.
+LiveNotes). Identified basic without a **usable** realtime BYOK key skips
+keep-warm; a stored voice key whose fingerprint `canUseBYOK` rejects is not an
+exemption — that path falls through to managed mint, which the gate must skip.
+Unknown plans fail open. Warming is governed by
+`resolvedRealtimeWarmCredential()` (Voice Model key + credential health), not
+text-lane `APIKeyService.isByokActive`. `ensureWarm(userInitiated: true)` (PTT)
+still attempts. Launch uses `PushToTalkManager.warmHubOnLaunchIfNeeded` →
+`prepareAutomaticWarm()` so an existing away deferral cannot block an entitled
+re-entrant `setup`. A typed server `plan_gated` denial latches automatic retries
+for ten minutes (one bounded re-drive) or until the decision becomes allow / the
+owner changes. Entitlement refresh is owner-fenced: a late completion for A
+must not re-drive B.
 
 ## Verification
 

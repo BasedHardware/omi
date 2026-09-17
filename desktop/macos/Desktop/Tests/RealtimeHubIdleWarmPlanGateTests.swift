@@ -65,7 +65,7 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     var admitted: [Bool] = []
     controller.warmAdmissionProbe = { admitted.append($0) }
 
-    controller.prepareAutomaticWarm()
+    PushToTalkManager.warmHubOnLaunchIfNeeded(localProfileEnabled: false, hub: controller)
 
     XCTAssertEqual(admitted, [])
   }
@@ -75,7 +75,7 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     var admitted: [Bool] = []
     controller.warmAdmissionProbe = { admitted.append($0) }
 
-    controller.prepareAutomaticWarm()
+    PushToTalkManager.warmHubOnLaunchIfNeeded(localProfileEnabled: false, hub: controller)
 
     XCTAssertEqual(admitted, [false])
   }
@@ -89,7 +89,7 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     var admitted: [Bool] = []
     controller.warmAdmissionProbe = { admitted.append($0) }
 
-    controller.prepareAutomaticWarm()
+    PushToTalkManager.warmHubOnLaunchIfNeeded(localProfileEnabled: false, hub: controller)
 
     XCTAssertEqual(admitted, [false])
     XCTAssertFalse(controller.warmDeferredForUserAway)
@@ -102,33 +102,96 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     var admitted: [Bool] = []
     controller.warmAdmissionProbe = { admitted.append($0) }
 
-    controller.prepareAutomaticWarm()
+    PushToTalkManager.warmHubOnLaunchIfNeeded(localProfileEnabled: false, hub: controller)
 
     XCTAssertEqual(admitted, [])
     XCTAssertFalse(controller.warmDeferredForUserAway)
   }
 
+  func testSetupCallsiteUsesLaunchWarmHelperNotEnsureWarm() throws {
+    let testFile = URL(fileURLWithPath: #filePath)
+    // omi-test-quality: source-inspection -- static contract: PushToTalkManager.setup must call warmHubOnLaunchIfNeeded, not ensureWarm
+    let source = try String(
+      contentsOf:
+        testFile
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources/FloatingControlBar/PushToTalkManager.swift"),
+      encoding: .utf8)
+    guard
+      let start = source.range(of: "func setup(barState: FloatingControlBarState)"),
+      let end = source.range(of: "log(\"PushToTalkManager: setup complete")
+    else {
+      XCTFail("could not locate PushToTalkManager.setup")
+      return
+    }
+    let setup = String(source[start.lowerBound..<end.lowerBound])
+    XCTAssertTrue(
+      setup.contains("warmHubOnLaunchIfNeeded"),
+      "setup must go through the launch helper so an away deferral is cleared without userInitiated")
+    XCTAssertFalse(
+      setup.contains("ensureWarm("),
+      "setup must not call ensureWarm directly; reverting that bypasses the plan gate or the deferral clear")
+  }
+
   func testRealtimeBYOKAutomaticWarmIsNeverPlanGated() {
     let controller = gatedController(decision: .planGated)
     controller.realtimeBYOKKeyResolver = { "AIza-test-gemini-voice-key" }
+    controller.canUseRealtimeBYOK = { _, _ in true }
     var admitted: [Bool] = []
     controller.warmAdmissionProbe = { admitted.append($0) }
+    var minted = 0
+    controller.managedMintProbe = { minted += 1 }
 
     controller.ensureWarm()
-    controller.prepareAutomaticWarm()
+    PushToTalkManager.warmHubOnLaunchIfNeeded(localProfileEnabled: false, hub: controller)
 
     XCTAssertEqual(admitted, [false, false])
+    if case .clientDirect = controller.resolvedRealtimeWarmCredential() {
+    } else {
+      XCTFail("usable voice BYOK must authorize client-direct")
+    }
+    XCTAssertEqual(minted, 0)
   }
 
   func testRealtimeBYOKIdleCloseIsNeverPlanGated() {
     let controller = gatedController(decision: .planGated)
     controller.realtimeBYOKKeyResolver = { "AIza-test-gemini-voice-key" }
+    controller.canUseRealtimeBYOK = { _, _ in true }
     controller.presenceIdleProvider = { 0 }
     controller.testingWarmAfterDrain = {}
 
     let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
 
     XCTAssertEqual(result, .started)
+  }
+
+  func testUnusableRealtimeBYOKDoesNotMintWhenPlanGatedAndFailoverExhausted() {
+    let key = "AIza-test-gemini-voice-key"
+    let controller = gatedController(decision: .planGated)
+    controller.realtimeBYOKKeyResolver = { key }
+    controller.canUseRealtimeBYOK = { _, _ in false }
+    controller.fallbackProvider = .openai
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+    var minted = 0
+    controller.managedMintProbe = { minted += 1 }
+
+    let fingerprint = APIKeyService.byokFingerprint(key)
+    XCTAssertEqual(
+      controller.resolvedRealtimeWarmCredential(),
+      .unusableBYOK(key: key, fingerprint: fingerprint))
+    XCTAssertTrue(controller.shouldSkipAutomaticManagedWarm())
+
+    controller.ensureWarm()
+    PushToTalkManager.warmHubOnLaunchIfNeeded(localProfileEnabled: false, hub: controller)
+
+    XCTAssertEqual(admitted, [])
+    XCTAssertEqual(minted, 0)
+    XCTAssertNil(controller.session)
+
+    controller.ensureWarm(userInitiated: true)
+    XCTAssertEqual(admitted, [true])
   }
 
   func testPlanGatedIdleCloseDoesNotScheduleRewarm() {
@@ -259,6 +322,44 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     await fulfillment(of: [rewarmed], timeout: 1)
   }
 
+  func testEntitlementRefreshCompletionIsDroppedAfterOwnerChange() async {
+    let owner = OwnerBox(value: "user-a")
+    let controller = gatedController(decisionProvider: {
+      owner.value == "user-a" ? .planGated : .allowManagedProactivity
+    })
+    controller.managedPlanGateOwnerID = { owner.value }
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+    var minted = 0
+    controller.managedMintProbe = { minted += 1 }
+
+    let refreshStarted = expectation(description: "refresh started")
+    let refreshFinished = expectation(description: "refresh finished")
+    let gate = RefreshGate()
+    controller.refreshEntitlement = {
+      await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+        Task { @MainActor in
+          gate.continuation = cont
+          refreshStarted.fulfill()
+        }
+      }
+    }
+    controller.planGateRefreshDidFinish = { refreshFinished.fulfill() }
+
+    controller.ensureWarm()
+    await fulfillment(of: [refreshStarted], timeout: 1)
+    XCTAssertTrue(controller.entitlementRefreshInFlight)
+
+    owner.value = "user-b"
+    controller.resetManagedPlanGateForOwnerChange()
+    XCTAssertFalse(controller.entitlementRefreshInFlight)
+
+    gate.continuation?.resume()
+    await fulfillment(of: [refreshFinished], timeout: 1)
+    XCTAssertEqual(admitted, [])
+    XCTAssertEqual(minted, 0)
+  }
+
   func testLatchClearsAfterBoundedLifetime() {
     var now = Date(timeIntervalSince1970: 1_800_000_000)
     let controller = gatedController(decision: .allowManagedProactivity)
@@ -386,4 +487,8 @@ private final class OwnerBox: @unchecked Sendable {
   init(value: String?) {
     self.value = value
   }
+}
+
+private final class RefreshGate: @unchecked Sendable {
+  var continuation: CheckedContinuation<Void, Never>?
 }

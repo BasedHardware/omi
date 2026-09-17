@@ -77,37 +77,36 @@ extension RealtimeHubController {
 
     // Offered for a provider the user picked themselves, withheld from one reached by
     // failover or by `.auto` resolving there — see RealtimeHubSettings.isVoiceModelChoice.
-    if let key = resolvedRealtimeBYOKKey() {
-      let fingerprint = APIKeyService.byokFingerprint(key)
-      guard
-        CredentialHealthManager.shared.canUseBYOK(
-          provider: provider.byokProvider, fingerprint: fingerprint)
-      else {
-        log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
-        if failoverToAlternateProvider(reason: "auth") {
-          return
-        } else if AuthService.shared.isSignedIn {
-          guard case .authenticated = ownerScope else { return }
-          mintAndConnect(provider: provider, ownerScope: ownerScope)
-        } else {
-          CredentialHealthManager.shared.recordProviderFailure(
-            .providerAuthFailed(provider: provider, mode: .byok),
-            provider: provider,
-            authMode: .byok,
-            fingerprint: fingerprint,
-            context: "realtime_byok_blocked")
-        }
-        return
-      }
+    // Shared with `shouldSkipAutomaticManagedWarm`: only `.clientDirect` is a BYOK
+    // exemption. `.unusableBYOK` is the known-bad fingerprint path and mints.
+    switch resolvedRealtimeWarmCredential() {
+    case .clientDirect(let key):
       startSession(provider: provider, auth: .byokKey(key), ownerScope: ownerScope)
-    } else if AuthService.shared.isSignedIn {
-      guard case .authenticated = ownerScope else {
-        log("RealtimeHub: signed-in state has no stable owner identity — hub unavailable")
+    case .unusableBYOK(_, let fingerprint):
+      log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
+      if failoverToAlternateProvider(reason: "auth") {
         return
+      } else if AuthService.shared.isSignedIn {
+        guard case .authenticated = ownerScope else { return }
+        mintAndConnect(provider: provider, ownerScope: ownerScope)
+      } else {
+        CredentialHealthManager.shared.recordProviderFailure(
+          .providerAuthFailed(provider: provider, mode: .byok),
+          provider: provider,
+          authMode: .byok,
+          fingerprint: fingerprint,
+          context: "realtime_byok_blocked")
       }
-      mintAndConnect(provider: provider, ownerScope: ownerScope)
-    } else {
-      log("RealtimeHub: no BYOK key and not signed in — hub unavailable (cascade).")
+    case .none:
+      if AuthService.shared.isSignedIn {
+        guard case .authenticated = ownerScope else {
+          log("RealtimeHub: signed-in state has no stable owner identity — hub unavailable")
+          return
+        }
+        mintAndConnect(provider: provider, ownerScope: ownerScope)
+      } else {
+        log("RealtimeHub: no BYOK key and not signed in — hub unavailable (cascade).")
+      }
     }
   }
 
@@ -433,6 +432,7 @@ extension RealtimeHubController {
     provider: RealtimeHubProvider,
     ownerScope: RealtimeHubOwnerScope
   ) {
+    managedMintProbe?()
     guard case .authenticated(let ownerID) = ownerScope,
       isOwnerScopeCurrent(ownerScope),
       let mintGeneration = beginMint(ownerScope: ownerScope)

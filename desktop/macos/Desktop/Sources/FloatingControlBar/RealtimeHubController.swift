@@ -380,11 +380,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var entitlementRefreshInFlight = false
   /// Test/automation observation after presence + plan admission, before mint.
   var warmAdmissionProbe: ((Bool) -> Void)?
+  /// Fires at the start of a managed ephemeral mint. Tests pin that a plan-gated
+  /// automatic warm with an unusable voice key never reaches this.
+  var managedMintProbe: (() -> Void)?
   /// Owner identity for the plan-gate latch. Defaults to the runtime owner so
   /// a fail-open `.allow` on A cannot suppress B.
   var managedPlanGateOwnerID: () -> String? = { RuntimeOwnerIdentity.currentOwnerId() }
   /// Realtime BYOK key this warm would actually use. Tests pin it.
   var realtimeBYOKKeyResolver: (() -> String?)?
+  /// Same `canUseBYOK` the connect path consults. Tests pin known-bad keys.
+  var canUseRealtimeBYOK: (BYOKProvider, String) -> Bool = { provider, fingerprint in
+    CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint)
+  }
+  var entitlementRefreshTask: Task<Void, Never>?
+  var entitlementRefreshGeneration: UInt64 = 0
+  /// Fires when an entitlement-refresh task reaches completion on the main
+  /// actor, including late completions whose generation is stale.
+  var planGateRefreshDidFinish: (() -> Void)?
   /// One bounded re-drive after a typed server denial. `nil` disables (tests).
   var planGateRetryDelayNanoseconds: UInt64? = UInt64(
     ManagedPlanGateLatch.defaultLifetime * 1_000_000_000)

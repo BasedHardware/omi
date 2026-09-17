@@ -421,10 +421,20 @@ class PushToTalkManager: ObservableObject {
     // Hermetic local harness has no Firebase SDK and no live realtime providers.
     // Launch is not a key press: plan-gated accounts must not mint a managed
     // session just because the app started. PTT still uses `userInitiated: true`.
-    if !DesktopLocalProfile.isEnabled {
-      RealtimeHubController.shared.prepareAutomaticWarm()
-    }
+    Self.warmHubOnLaunchIfNeeded(
+      localProfileEnabled: DesktopLocalProfile.isEnabled)
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
+  }
+
+  /// Launch keep-warm. Not a key press: the plan gate still applies. Tests pin
+  /// this symbol at the `setup` callsite so a revert to `ensureWarm()` fails.
+  static func warmHubOnLaunchIfNeeded(
+    localProfileEnabled: Bool,
+    hub: RealtimeHubController = .shared
+  ) {
+    if !localProfileEnabled {
+      hub.prepareAutomaticWarm()
+    }
   }
 
   func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
