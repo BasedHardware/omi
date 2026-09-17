@@ -396,8 +396,10 @@ class TaskDetectorAssigneeTests(unittest.TestCase):
         choice = Mock()
         choice.message = message
         response.choices = [choice]
+        client = Mock()
+        client.chat.completions.create = AsyncMock(return_value=response)
         with patch.object(
-            task_detector.client.chat.completions, "create", new=AsyncMock(return_value=response)
+            task_detector, "get_openai_client", return_value=client
         ):
             return asyncio.run(
                 task_detector.TaskDetector.ai_extract_task_details(

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 import requests
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
@@ -414,32 +415,45 @@ class ClickUpClient:
         return value if 1 <= value <= 4 else None
 
     @staticmethod
-    def _coerce_due_date_ms(due_date) -> Optional[int]:
+    def _coerce_due_date_ms(due_date, tz) -> Tuple[Optional[int], bool]:
         """
-        Return the Unix-milliseconds timestamp when due_date is already a
-        numeric timestamp (int, float, or digit string) — the form ClickUp
-        stores natively and the ISO parser in create_task cannot handle
-        ('T' in due_date raised TypeError on ints, silently dropping the
-        date). Returns None for everything else so the caller falls through
-        to ISO string parsing. Never raises.
+        Coerce a raw due date into (Unix milliseconds timestamp, has_time).
+
+        Accepts ISO strings with or without a time component and numeric
+        millisecond timestamps (int, float, digit string) — the form ClickUp
+        stores natively. A numeric input denotes an exact instant, so it
+        reports has_time=True. Returns (None, False) for values that carry no
+        interpretable date; malformed ISO strings still raise for the caller
+        to log. Never raises on wrong-typed input alone.
         """
         # bool is an int subclass but never a timestamp
         if due_date is None or isinstance(due_date, bool):
-            return None
+            return None, False
 
         if isinstance(due_date, (int, float)):
             timestamp = int(due_date)
-            return timestamp if timestamp > 0 else None
+            return (timestamp, True) if timestamp > 0 else (None, False)
 
         if not isinstance(due_date, str):
-            return None
+            return None, False
 
         token = due_date.strip()
-        if not token or not token.isdigit():
-            return None
+        if not token:
+            return None, False
 
-        timestamp = int(token)
-        return timestamp if timestamp > 0 else None
+        if token.isdigit():
+            timestamp = int(token)
+            return (timestamp, True) if timestamp > 0 else (None, False)
+
+        # ISO format: 'T' separates a full datetime from a bare date
+        has_time = 'T' in token
+        if has_time:
+            dt_naive = datetime.fromisoformat(token.replace('Z', ''))
+        else:
+            # Just a date — set time to end of day
+            dt_naive = datetime.fromisoformat(token + 'T23:59:59')
+        dt = tz.localize(dt_naive) if tz else dt_naive
+        return int(dt.timestamp() * 1000), has_time
 
     async def create_task(
         self,
@@ -506,73 +520,30 @@ class ClickUpClient:
                 # unassigned rather than aborting task creation.
                 print("⚠️  No usable assignee IDs; creating task unassigned", flush=True)
             
-            # A numeric due_date (int, float, or digit string) is already a
-            # Unix-millisecond timestamp — ClickUp's native due-date form — so
-            # it is stored directly; only ISO strings reach the parser below.
-            due_timestamp = self._coerce_due_date_ms(due_date)
-            if due_timestamp is not None:
-                task_data["due_date"] = due_timestamp
-                # Numeric timestamps denote an exact instant.
-                task_data["due_date_time"] = True
-                print(f"📅 Due date timestamp → {due_timestamp}", flush=True)
-            elif due_date:
-                # Convert ISO date string to Unix timestamp in milliseconds
-                # ClickUp expects Unix timestamp in milliseconds
-                # IMPORTANT: Also need to set due_date_time=true for time to show!
-                from datetime import datetime
+            if due_date:
+                # ClickUp stores due dates as Unix milliseconds. ISO strings
+                # (with or without time) and numeric ms timestamps are
+                # accepted; anything else is dropped with a warning instead of
+                # failing task creation.
                 try:
-                    task_data["priority"] = int(priority)
-                except (ValueError, TypeError):
-                    pass
+                    import pytz
+                    tz = pytz.timezone(timezone)
+                except (ImportError, Exception):
+                    tz = None
 
-            if status:
-                task_data["status"] = str(status)
-
-            if assignees:
-                # ClickUp expects list of user IDs as integers
-                valid_assignees = []
-                for user_id in assignees:
-                    try:
-                        if user_id is not None and str(user_id).strip():
-                            valid_assignees.append(int(user_id))
-                    except (ValueError, TypeError):
-                        continue
-                if valid_assignees:
-                    task_data["assignees"] = valid_assignees
-                    print(f"👥 Assignees: {valid_assignees}", flush=True)
-
-            if due_date is not None:
                 try:
-                    if isinstance(due_date, (int, float)):
-                        task_data["due_date"] = int(due_date)
-                        task_data["due_date_time"] = True
-                    elif isinstance(due_date, str) and due_date.strip():
-                        due_str = due_date.strip()
-                        if due_str.isdigit():
-                            task_data["due_date"] = int(due_str)
-                            task_data["due_date_time"] = True
-                        else:
-                            from datetime import datetime
-                            try:
-                                import pytz
-                                tz = pytz.timezone(timezone)
-                            except (ImportError, Exception):
-                                tz = None
-
-                            has_time = 'T' in due_str
-                            if has_time:
-                                dt_naive = datetime.fromisoformat(due_str.replace('Z', ''))
-                                dt = tz.localize(dt_naive) if tz else dt_naive
-                            else:
-                                dt_naive = datetime.fromisoformat(due_str + 'T23:59:59')
-                                dt = tz.localize(dt_naive) if tz else dt_naive
-
-                            due_timestamp = int(dt.timestamp() * 1000)
-                            task_data["due_date"] = due_timestamp
-                            task_data["due_date_time"] = has_time
-                            print(f"📅 Due date set: {due_timestamp} (has_time={has_time})", flush=True)
+                    due_timestamp, has_time = self._coerce_due_date_ms(due_date, tz)
                 except Exception as e:
-                    print(f"⚠️  Could not parse due date: {type(e).__name__}", flush=True)
+                    print(f"⚠️  Could not parse due date '{due_date}': {e}", flush=True)
+                    due_timestamp, has_time = None, False
+
+                if due_timestamp is not None:
+                    task_data["due_date"] = due_timestamp
+                    # CRITICAL: due_date_time=true tells ClickUp to display the
+                    # time, not just the date
+                    task_data["due_date_time"] = has_time
+                else:
+                    print(f"⚠️  Ignoring invalid due date {due_date!r}", flush=True)
 
             print(f"📤 Creating task in list {list_id} (name_len={len(task_data['name'])})", flush=True)
 
