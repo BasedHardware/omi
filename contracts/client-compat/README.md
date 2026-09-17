@@ -2,15 +2,19 @@
 
 Design: [CLIENT_COMPAT.md](../../scripts/dev-harness/CLIENT_COMPAT.md).
 `catalog.json` currently has no captured release. Strict pending C10 tests expose
-that absence; candidate-source.json is provenance research, not coverage.
+that absence; candidate-source.json is provenance research, not coverage. The
+engine/synthetic PR may land first; owner-gated capture is a separate PR.
 
 App core adds immutable `releases/<capture-id>/` bundles with these catalog fields:
 
 - id, build (integer), platforms (`ios`, `android`), resolved 40-character commit;
-- distribution: kind=`distributed`, receipt_url (store/distribution receipt);
+- distribution: kind=`distributed`, receipt_url and a hash-pinned attestation path;
+  its JSON binds version=1, commit/build/platforms, provider (app-store-connect,
+  google-play or codemagic), artifact_id, provider receipt_url, reviewer and exact
+  `https://github.com/BasedHardware/omi/pull/<n>#pullrequestreview-<n>` review_url;
 - source_files: repository path → SHA256 of exact released Git blob;
 - files: catalog-relative repository path → SHA256 of every frozen input;
-- projection, cases, decoder: paths present in files. Projection is OpenAPI 3.1
+- projection, cases, decoder, decoder_equivalence: paths present in files. Projection is OpenAPI 3.1
   reduced to the requests/fields actually used. Cases use the schema below.
 
 An id names a capture bundle, not just a build. Widen coverage by appending a new
@@ -23,8 +27,9 @@ checkout is shallow today); repo-checks already has full history. CI validates
 hashes and Git provenance; backend replay invokes pinned Dart with
 the absolute frozen entrypoint path. Stdin JSON has status, headers, body_base64;
 stdout is the observation object. Nonzero exit, malformed output or a 10-second
-deadline is a failed replay, never empty data. A receipt URL records reviewed evidence, not automated proof
-that the store distributed a build. Do not claim otherwise.
+deadline is a failed replay, never empty data. The pinned attestation records owner-reviewed evidence, not automated proof
+that the store distributed a build. Decoder equivalence receipt fields and vector
+classes are specified in CLIENT_COMPAT.md. Do not claim otherwise.
 
 Case JSON entries have id, platform, request `{method,path,query,headers,body}`,
 decoder, observations, status. Query and headers are ordered lists of string

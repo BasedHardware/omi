@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = 'contracts/client-compat/catalog.json'
@@ -38,8 +39,61 @@ def supported(release, policy):
 
 
 def compare_projection(projection, head):
-    # Only adopted consumer paths/properties enter base. Head-only endpoints never constrain it.
-    return [str(issue) for issue in load_comparator()(projection, head).check()]
+    # Resolve only captured paths and their closure; unused endpoints stay unrestricted.
+    def refs(document, value, pointer, seen):
+        if isinstance(value, dict):
+            if '$ref' in value:
+                ref = value['$ref']
+                if not isinstance(ref, str) or not ref.startswith('#/'):
+                    raise ValueError(f'{pointer}: external/invalid $ref {ref!r}')
+                if ref not in seen:
+                    seen.add(ref)
+                    target = document
+                    try:
+                        for part in ref[2:].split('/'):
+                            target = target[part.replace('~1', '/').replace('~0', '~')]
+                    except (KeyError, TypeError):
+                        raise ValueError(f'{pointer}: unresolved $ref {ref}') from None
+                    refs(document, target, ref, seen)
+            for key, child in value.items():
+                refs(document, child, pointer + '/' + key, seen)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                refs(document, child, pointer + '/' + str(index), seen)
+    try:
+        for name in projection.get('paths', {}):
+            refs(projection, projection['paths'][name], name, set())
+            refs(head, head.get('paths', {}).get(name, {}), name, set())
+        return [str(issue) for issue in load_comparator()(projection, head).check()]
+    except ValueError as exc:
+        return [f'{exc}; include the transitive local reference closure when capturing the projection']
+
+
+def validate_distribution(row, root):
+    distribution = row['distribution']
+    if distribution['kind'] != 'distributed':
+        raise ValueError('build tag is not distribution proof')
+    path = distribution.get('attestation')
+    if not path or path not in row['files']:
+        raise ValueError('distribution needs a hash-pinned owner attestation, not just receipt_url')
+    raw = safe_file(root, path).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != row['files'][path]:
+        raise ValueError('distribution attestation hash mismatch')
+    proof = json.loads(raw)
+    for key in ('commit', 'build', 'platforms'):
+        if proof.get(key) != row[key]:
+            raise ValueError(f'distribution attestation {key} does not match capture')
+    hosts = {'app-store-connect': 'appstoreconnect.apple.com', 'google-play': 'play.google.com',
+             'codemagic': 'codemagic.io'}
+    url = urlsplit(proof.get('receipt_url', ''))
+    if (proof.get('version') != 1 or proof.get('provider') not in hosts or url.scheme != 'https'
+            or url.hostname != hosts.get(proof.get('provider')) or url.username or url.password
+            or url.port not in (None, 443) or url.path in ('', '/') or not proof.get('artifact_id')
+            or distribution.get('receipt_url') != proof.get('receipt_url')):
+        raise ValueError('distribution needs the provider artifact receipt URL/id')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]{0,38}', proof.get('reviewer', '')) or not re.fullmatch(
+            r'https://github.com/BasedHardware/omi/pull/[0-9]+#pullrequestreview-[0-9]+', proof.get('review_url', '')):
+        raise ValueError('distribution needs a named release owner and exact admission review')
 
 
 def validate_case(case, schema):
@@ -71,6 +125,18 @@ def validate_case(case, schema):
             raise ValueError('credentials/device identity must use the synthetic placeholder')
 
 
+def validate_candidate_queries(commit, cases):
+    candidates = json.loads((ROOT / 'contracts/client-compat/candidate-source.json').read_text())['candidates']
+    candidate = next((row for row in candidates if row['commit'] == commit), None)
+    if candidate is None:
+        return  # Other builds need their own source-capture review; no HEAD-shaped assumptions.
+    defaults = candidate['default_queries']
+    for path in {case['request']['path'] for case in cases}:
+        if path in defaults and not any(case['request']['path'] == path
+                                       and case['request']['query'] == defaults[path] for case in cases):
+            raise ValueError(f'{path}: missing source-pinned default request for build candidate; recapture from released source')
+
+
 def validate_catalog(catalog, policy, root=ROOT, prior=None):
     errors = []
     if set(policy['minimum_build']) != {'ios', 'android'}:
@@ -98,8 +164,7 @@ def validate_catalog(catalog, policy, root=ROOT, prior=None):
                 raise ValueError('invalid build/platforms')
             if not re.fullmatch(r'[0-9a-f]{40}', row['commit']):
                 raise ValueError('resolved immutable commit required')
-            if row['distribution']['kind'] != 'distributed' or not re.fullmatch(r'https://\S+', row['distribution']['receipt_url']):
-                raise ValueError('build tag is not distribution proof; attach the release receipt')
+            validate_distribution(row, root)
             for name, digest in row['files'].items():
                 if hashlib.sha256(safe_file(root, name).read_bytes()).hexdigest() != digest:
                     raise ValueError(f'{name}: fixture hash mismatch; restore released bytes')
@@ -120,6 +185,7 @@ def validate_catalog(catalog, policy, root=ROOT, prior=None):
             schema = json.loads((ROOT / 'contracts/client-compat/case.schema.json').read_text())
             for case in cases:
                 validate_case(case, schema)
+            validate_candidate_queries(row['commit'], cases)
             projection = json.loads(safe_file(root, row['projection']).read_text())
             if not projection.get('paths'):
                 raise ValueError('empty consumer projection')

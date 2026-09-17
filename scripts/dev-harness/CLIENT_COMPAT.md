@@ -1,13 +1,14 @@
 # C10: released-client replay
 
-App core owns capture/decoders; CI and release owns admission/wiring. First builder
-PR: two most recent **confirmed distributed build identities**, four GETs:
-/v1/conversations, /v3/memories, /v2/messages, /v1/action-items. A marketing version
-alone is insufficient (543+992 and 543+990 differ). Local mobile-cm tags are build
-inputs, not store-distribution evidence; candidate-source.json records them
-honestly. Replace candidates with store/Codemagic distribution receipts before
-adoption. The spine ships no invented released fixture; the completion test stays
-strict pending until two release rows and all eight endpoint cases exist.
+App core owns capture/decoders; CI/release owns admission/wiring. PR1 implements
+the replay engine with synthetic fixtures, preserving an empty released catalog.
+Retire engine markers only; the real-capture bootstrap remains pending. PR2 needs
+owner-supplied distribution evidence for two builds and four GETs: conversations,
+memories, messages and action-items. Tags are build inputs, not distribution proof;
+candidate-source.json is explicitly unverified. An arbitrary HTTPS URL is not
+admission: require a hash-pinned distribution attestation binding commit, build,
+platforms, provider artifact URL and a release owner's PR review. CI checks that
+binding, not store authenticity; the owner supplies/reviews the actual receipt.
 
 Anchor each fixture to the tag's resolved commit and hashes of request code,
 handwritten wrapper/decoder, generated DTO and originating OpenAPI slice. Current
@@ -16,50 +17,50 @@ docs/api-reference/app-client-openapi.json, exported from real FastAPI routes.
 That source is useful provenance, not the oracle: these releases' conversation
 list calls ServerConversation.fromJson, while memories/messages/action items use
 generated wrappers. Freeze the actual called decoder closure and parser, including
-enum/date/default coercion helpers. If isolating a handwritten decoder requires
-extraction glue, prove its boundary vectors against the original released decoder
-once during capture; preserve that receipt. Never regenerate it from head.
+enum/date/default coercion helpers. ServerConversation imports Flutter: do not run that file with standalone Dart.
+Extract only its pure decoding closure, preserving defaults/coercions. Admission
+requires a pinned equivalence receipt: the original decoder in a hermetic Flutter
+test at the release SDK and the extraction consume identical missing/null/type/
+enum/date/default vectors and produce identical observations or failures. Record
+source/vector/decoder hashes and SDK version. The row's decoder_equivalence points
+to a pinned JSON receipt: source_files, decoder_sha256, flutter_sdk, command and
+vectors[{case,input,original,extracted}]; each outcome is {ok,value}, with bounded
+error classification in value on failure. The protected admission oracle checks
+all seven vector classes and both outcomes. No proof means no admission.
 
 Each row is an immutable capture bundle; widen a build’s coverage by appending
 a new bundle for that commit/build, never rewriting one. Its inputs are: source-files with
 commit/path/SHA256, consumer OpenAPI projection, synthetic request vectors,
-expected observations and a standalone Dart decoder entrypoint. Requests retain
-method, path, repeated/empty query values, header names and body encoding; replace
-auth values with harness-only credentials. Responses distinguish missing from
+expected observations and a standalone Dart decoder entrypoint. Requests retain method, path, repeated/empty query values, header names and body
+encoding; replace auth with harness-only credentials. Pin captured default vectors
+and compare cases to them, not just endpoint names. Candidates 990/992 messages
+send app_id='' and dropdown_selected=false, with no limit/offset. Hash handwritten
+conversation/memory/message wrappers and transitive decoder helpers too. Responses distinguish missing from
 null, required from optional, arrays from objects, number coercion, enum policy,
 status/content-type and pagination. Keep only fields the released client reads,
 not every server model property. Additive unknown fields and missing truly
 optional fields pass; required removal, incompatible response types and tighter request acceptance fail. Fixtures
 contain synthetic text only, no copied accounts, credentials or production traffic.
 
-Capture has two proofs: source extraction from immutable release blobs, plus
-hermetic request/response observations exercising those decoders. Journey
-fixture_backend.dart helps enumerate request vectors but is not backend truth.
+Capture needs immutable-source provenance and hermetic decoder observations;
+journey fixtures enumerate vectors but do not prove backend compatibility.
 Replay requests through real routers in backend/testing/e2e/conftest.py's existing
 fake-Firestore/Redis/storage app. Use its network guard and synthetic auth dependency;
 never load the app through default production wiring. Capture returned HTTP bytes,
 then run the frozen decoder, asserting nonempty sentinel ids and semantic values.
 A fake server returning fixtures is not acceptance. The protected integration
 contract checks active cases traverse real routes and decodes their exact bytes.
-The separate bootstrap test retains the first two builds/four endpoints historically. Shared
-fixtures do not prove live-session sign-in: backend principal, anonymous app and
-signed-in app remain distinct; C10 tests authenticated and rejected requests
-without designing token delivery.
+The bootstrap stays pending until admitted captures exist. Synthetic success is
+engine evidence only; neither it nor backend auth proves live-session sign-in.
 
-Later small batches add users/profile, auth (headers/401/refresh contract, not
-Firebase internals), POST chat and listen. For SSE freeze actual line parsing:
-these clients recognize data:/think: with __CRLF__, and base64 done:/message:
-records, plus legacy error forms; this is not generic JSON SSE. Split UTF-8 and
-frame delimiters at every byte boundary, retain terminal ordering and require a
-terminal outcome. WebSocket fixtures cover path/query/headers, auth rejection,
-accepted handshake and first typed messages/close code, not live STT/BLE/audio.
-Do not mark these families protected before their decoder/replay cases land.
+Later batches cover users/profile, auth, POST chat and listen. SSE freezes the
+client's data:/think:/base64 done:/message: parser, split UTF-8/frame boundaries
+and terminal ordering. Socket cases cover handshake/auth/first messages/close,
+not live STT. These families remain unprotected until replay cases land.
 
 Server-owned support-policy.json defaults to no minimum. Retain every adopted
 build until both platforms' explicit minimum build passes it; no rolling N-window
-or calendar expiry. Bootstrap coverage is only two builds, not a claim that older
-clients are unsupported. The existing dismissible MyUpgrader store prompt is not
-a server minimum; firmware minimum_app_version is unrelated. Retirement needs a
+or calendar expiry. Dismissible MyUpgrader is not server enforcement. Retirement needs a
 server enforcement rollout receipt (policy revision, platform minima, rejection
 proof for the old client), reviewed by backend/release owners. Keep immutable
 fixtures archived after retirement; stop executing them only when that receipt
@@ -67,22 +68,17 @@ validates; zero supported cases reports out-of-scope, not compatibility. Raising
 the minimum is a product/server decision, never an automatic escape hatch.
 
 The active stdlib catalog check is in repo-checks.yml's manifest local/ci lane.
-It compares adopted consumer projections using the existing directional OpenAPI
-checker and rejects mutated fixtures. It does not constrain unadopted backend
+Projections include the transitive local $ref closure. Missing/external refs fail
+with their pointer and recapture instruction, never a traceback. The directional
+OpenAPI checker compares only adopted consumer projections. It does not constrain unadopted backend
 files/endpoints. OpenAPI Contract already re-exports real head routes and checks
 committed spec freshness; retain it. Builder replay runs in the existing Backend
 Hermetic E2E job, reusing its environment and adding a manifest-owned command,
 not a new workflow/job or second backend install. CI/release wires the same
 run_registered_replay entrypoint and pinned standalone Dart decoder once release
-fixtures are admitted; admission fails if replay is absent. Keep one Dart process
-per unique decoder hash, share identical shapes across builds, target <30 seconds
-incremental warm time for eight cases; measure before widening coverage.
+fixtures are admitted; admission fails if replay is absent. Use the real pinned Dart process in decoder acceptance; an execute stub proves
+only IPC. Share identical decoder shapes; measure runtime before widening.
 
-Failure names release/platform, method/path, request or response JSON pointer (or
-stream frame), old required shape, observed value/type and exact replay command.
-Backend authors preserve the used shape/add an optional field, version a genuinely
-incompatible endpoint, or use the separately reviewed server support policy.
-Never edit an old fixture to agree with head. New unused endpoints and legacy
-uncaptured shapes remain unrestricted. Schema comparison cannot prove semantic
-meaning; sentinel observations and real-router replay complement it. This is not
-a full historical client VM, store rollout verifier or production traffic recorder.
+Failures name release/platform, endpoint and offending pointer. Preserve the used
+shape, version the endpoint, or obtain separately reviewed server retirement;
+never edit old fixtures to match head. Uncaptured shapes remain unrestricted.

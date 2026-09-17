@@ -113,9 +113,26 @@ def test_fixture_bytes_and_released_source_are_pinned(tmp_path):
            'files': {paths[name]: hashlib.sha256(body.encode()).hexdigest() for name, body in files.items()},
            'source_files': {'AGENTS.md': hashlib.sha256(source).hexdigest()},
            'projection': paths['projection.json'], 'cases': paths['cases.json'], 'decoder': paths['decoder.dart']}
+    proof_path = str((directory / 'distribution.json').relative_to(tmp_path))
+    proof = {'version': 1, 'commit': sha, 'build': 1, 'platforms': ['ios'],
+             'provider': 'codemagic', 'artifact_id': 'synthetic-unit-fixture',
+             'receipt_url': 'https://codemagic.io/app/synthetic/build/unit-fixture',
+             'reviewer': 'synthetic-owner',
+             'review_url': 'https://github.com/BasedHardware/omi/pull/1#pullrequestreview-1'}
+    raw = json.dumps(proof).encode()
+    (tmp_path / proof_path).write_bytes(raw)
+    row['distribution'] = {'kind': 'distributed', 'receipt_url': proof['receipt_url'], 'attestation': proof_path}
+    row['files'][proof_path] = hashlib.sha256(raw).hexdigest()
     doc = {'releases': [row]}
     policy = json.loads((ROOT / catalog.POLICY).read_text())
     assert catalog.validate_catalog(doc, policy, tmp_path) == []
+    for key, value in [('build', 2), ('commit', '0' * 40), ('platforms', ['android'])]:
+        wrong = copy.deepcopy(doc)
+        wrong['releases'][0][key] = value
+        assert any('attestation' in e for e in catalog.validate_catalog(wrong, policy, tmp_path))
+    wrong = copy.deepcopy(doc)
+    wrong['releases'][0]['distribution'] = {'kind': 'distributed', 'receipt_url': 'https://example.invalid'}
+    assert any('attestation' in e for e in catalog.validate_catalog(wrong, policy, tmp_path))
     widened = copy.deepcopy(doc)
     extra = copy.deepcopy(row)
     extra['id'] = 'synthetic-second-capture'
@@ -140,3 +157,18 @@ def test_retired_shapes_do_not_constrain_head_but_one_supported_platform_does(tm
     assert catalog.check_against_head(doc, policy, tmp_path, incompatible) == []
     policy['minimum_build']['android'] = None
     assert catalog.check_against_head(doc, policy, tmp_path, incompatible)
+
+
+def test_projection_keeps_transitive_refs_and_reports_missing_closure():
+    shape = projection()
+    response = shape['paths']['/v1/conversations']['get']['responses']['200']['content']['application/json']
+    original = response['schema']
+    response['schema'] = {'$ref': '#/components/schemas/Response'}
+    shape['components'] = {'schemas': {'Response': {'$ref': '#/components/schemas/Actual'}, 'Actual': original}}
+    assert catalog.compare_projection(shape, copy.deepcopy(shape)) == []
+    missing = copy.deepcopy(shape)
+    del missing['components']['schemas']['Actual']
+    errors = catalog.compare_projection(missing, shape)
+    assert any('unresolved $ref #/components/schemas/Actual' in error and 'closure' in error for error in errors)
+    shape['paths']['/unused'] = {'get': {'$ref': '#/missing-unused'}}
+    assert catalog.compare_projection(projection(), shape) == []
