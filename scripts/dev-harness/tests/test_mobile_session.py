@@ -206,6 +206,30 @@ class TestSeedResetStop:
         ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
         assert calls == [("ios-simulator", "AAA-BBB-CCC")]
 
+    def test_failed_simulator_teardown_leaves_the_lease_unreleased(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="sim-keep", platform_name="ios-simulator", listeners=_no_listeners)
+        monkeypatch.setattr("dev_harness.cli.cmd_down", lambda namespace: 0)
+
+        class FakeDevices:
+            def detach(self, platform_name: str, device_id: str) -> None:
+                raise ms.SessionError("simulator was not proven dead and will not be deleted")
+
+        directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
+        data = json.loads((directory / "lease.json").read_text("utf-8"))
+        data["status"] = "running"
+        data["device"] = {"kind": "simulator", "udid": "AAA-BBB-CCC", "label": "iPhone", "owner": "session"}
+        (directory / "lease.json").write_text(json.dumps(data), "utf-8")
+        with pytest.raises(ms.SessionError, match="not proven dead"):
+            ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        kept = json.loads((directory / "lease.json").read_text("utf-8"))
+        assert kept["status"] == "running"
+        assert kept["device"]["udid"] == "AAA-BBB-CCC"
+        with pytest.raises(ms.SessionError, match="not proven dead"):
+            ms.release(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        assert (directory / "lease.json").is_file()
+
 
 class TestStart:
     def test_start_android_fails_closed_when_the_lane_is_not_ready(self, tmp_path: Path, env: dict) -> None:
@@ -429,6 +453,69 @@ def test_device_controller_default_runner_missing_binary_is_127(monkeypatch: pyt
     code, out = ms.DeviceController._default_runner(["xcrun", "simctl", "list"])
     assert code == 127
     assert "xcrun" in out
+
+
+def _simctl_list_json(udid: str, state: str | None) -> str:
+    devices: list[dict[str, str]] = [] if state is None else [{"udid": udid, "state": state, "name": "omi-session"}]
+    return json.dumps({"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-26-5": devices}})
+
+
+class ScriptedSimctl:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+        self.shutdown = (0, "")
+        self.delete = (0, "")
+        self.list_payloads: list[str] = []
+
+    def __call__(self, command: list[str] | tuple[str, ...]) -> tuple[int, str]:
+        argv = [str(part) for part in command]
+        self.calls.append(argv)
+        if "shutdown" in argv:
+            return self.shutdown
+        if "delete" in argv:
+            return self.delete
+        if "list" in argv:
+            if self.list_payloads:
+                return 0, self.list_payloads.pop(0)
+            return 0, _simctl_list_json("DEAD-BEEF", None)
+        return 0, ""
+
+
+def test_detach_confirms_shutdown_before_delete() -> None:
+    scripted = ScriptedSimctl()
+    scripted.list_payloads = [_simctl_list_json("DEAD-BEEF", "Shutdown"), _simctl_list_json("DEAD-BEEF", None)]
+    ms.DeviceController(runner=scripted).detach("ios-simulator", "DEAD-BEEF")
+    verbs = [argv[argv.index("simctl") + 1] for argv in scripted.calls if "simctl" in argv]
+    assert verbs[:2] == ["shutdown", "list"]
+    assert "delete" in verbs
+    assert verbs[-1] == "list"
+
+
+def test_detach_does_not_delete_a_simulator_still_booted() -> None:
+    scripted = ScriptedSimctl()
+    scripted.shutdown = (1, "Unable to shutdown device in current state: Booted")
+    scripted.list_payloads = [_simctl_list_json("DEAD-BEEF", "Booted")]
+    with pytest.raises(ms.SessionError, match="not proven dead"):
+        ms.DeviceController(runner=scripted).detach("ios-simulator", "DEAD-BEEF")
+    assert not any("delete" in argv for argv in scripted.calls)
+
+
+def test_boot_failure_does_not_ignore_a_failed_delete() -> None:
+    calls: list[list[str]] = []
+
+    def runner(command):
+        argv = [str(part) for part in command]
+        calls.append(argv)
+        if "create" in argv:
+            return 0, "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\n"
+        if "boot" in argv:
+            return 1, "Unable to boot device"
+        if "delete" in argv:
+            return 1, "delete failed: device busy"
+        return 0, ""
+
+    with pytest.raises(ms.SessionError, match="delete also failed"):
+        ms.DeviceController(runner=runner).attach_ios_simulator("oms-bootfail", "iPhone", "iOS-26-5")
 
 
 def test_device_heartbeat_cli_is_wired(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -95,8 +95,7 @@ def normalize_session_platform(platform_name: str) -> str:
     mapped = SESSION_PLATFORM_ALIASES.get(platform_name)
     if mapped is None:
         raise SessionError(
-            f"platform must be one of {PLATFORMS} (ios is an alias for ios-simulator), "
-            f"got {platform_name!r}"
+            f"platform must be one of {PLATFORMS} (ios is an alias for ios-simulator), " f"got {platform_name!r}"
         )
     return mapped
 
@@ -379,16 +378,64 @@ class DeviceController:
             raise SessionError(f"simctl create failed for session simulator: {out.strip() or code}")
         code, out = self._runner(["xcrun", "simctl", "boot", udid])
         if code != 0 and "already booted" not in out.lower():
-            self._runner(["xcrun", "simctl", "delete", udid])
+            dcode, dout = self._runner(["xcrun", "simctl", "delete", udid])
+            if dcode != 0:
+                raise SessionError(
+                    f"simctl boot failed for {udid}: {out.strip()}; "
+                    f"delete also failed ({dout.strip() or dcode}); device may still exist"
+                )
             raise SessionError(f"simctl boot failed for {udid}: {out.strip()}")
         return udid, f"{device_type} ({runtime})"
 
+    def _simctl_device(self, udid: str) -> dict[str, Any] | None:
+        code, out = self._runner(["xcrun", "simctl", "list", "devices", "-j"])
+        if code != 0:
+            raise SessionError(f"simctl list failed: {out.strip() or code}")
+        try:
+            payload = json.loads(out)
+        except json.JSONDecodeError as exc:
+            raise SessionError("simctl list did not return JSON") from exc
+        for devices in (payload.get("devices") or {}).values():
+            if not isinstance(devices, list):
+                continue
+            for device in devices:
+                if isinstance(device, Mapping) and str(device.get("udid")) == udid:
+                    return dict(device)
+        return None
+
+    def _confirm_simulator_shutdown(self, udid: str) -> None:
+        record = self._simctl_device(udid)
+        if record is None:
+            return
+        state = str(record.get("state") or "")
+        if state.lower() == "shutdown":
+            return
+        raise SessionError(f"simulator {udid} is not proven dead (state={state!r}); not deleting")
+
     def detach(self, platform_name: str, device_id: str) -> None:
-        if platform_name == "ios-simulator":
-            self._runner(["xcrun", "simctl", "shutdown", device_id])
-            self._runner(["xcrun", "simctl", "delete", device_id])
-        # android: AVD-based emulators stop with the session services; the AVD
-        # template stays for reuse and is owned by the session's lease record.
+        if platform_name != "ios-simulator":
+            # android: AVD-based emulators stop with the session services; the AVD
+            # template stays for reuse and is owned by the session's lease record.
+            return
+        code, out = self._runner(["xcrun", "simctl", "shutdown", device_id])
+        text = (out or "").lower()
+        already_gone = any(token in text for token in ("invalid device", "could not find", "not found"))
+        already_down = "current state: shutdown" in text or "already shutdown" in text
+        if code != 0 and not already_gone and not already_down:
+            raise SessionError(
+                f"simctl shutdown failed for {device_id}: {out.strip() or code}; "
+                "simulator was not proven dead and will not be deleted"
+            )
+        if already_gone:
+            return
+        self._confirm_simulator_shutdown(device_id)
+        code, out = self._runner(["xcrun", "simctl", "delete", device_id])
+        text = (out or "").lower()
+        if code != 0 and not any(token in text for token in ("invalid device", "could not find", "not found")):
+            raise SessionError(f"simctl delete failed for {device_id}: {out.strip() or code}")
+        leftover = self._simctl_device(device_id)
+        if leftover is not None:
+            raise SessionError(f"simulator {device_id} still listed after delete (state={leftover.get('state')!r})")
 
 
 # ---------------------------------------------------------------------------
@@ -899,7 +946,9 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--no-device", action="store_true", help="services only; skip the device lease")
 
     live = sub.add_parser("live", help="V1 live Flutter broker (pending implementation)")
-    live.add_argument("operation", choices=("start", "reload", "restart", "screenshot", "logs", "controls", "status", "stop"))
+    live.add_argument(
+        "operation", choices=("start", "reload", "restart", "screenshot", "logs", "controls", "status", "stop")
+    )
     live.add_argument("session_id")
     live.add_argument("--params", type=json.loads, default={}, help="operation-specific JSON object")
     live.add_argument("--json", action="store_true")
@@ -1002,9 +1051,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _emit(lease, as_json=args.json)
             return 0
         if args.command == "start":
-            lease = start(
-                repo_root, args.session_id, attach_device=not args.no_device, json_stdout=args.json
-            )
+            lease = start(repo_root, args.session_id, attach_device=not args.no_device, json_stdout=args.json)
             _emit(lease, as_json=args.json)
             return 0
         if args.command == "seed":
