@@ -335,7 +335,7 @@ CRITICAL RULES:
                                     assignee_ids.append(str(member_id))
                                     print(f"👤 Fuzzy matched assignee: {name} → {member.get('username')}", flush=True)
                                     break
-            
+
             # Handle unknown list
             if not list_name or list_name.upper() == "UNKNOWN":
                 print(f"⚠️  No list identified in command", flush=True)
