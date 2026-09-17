@@ -5453,6 +5453,48 @@ test('Settings names malformed usage period GET instead of empty success', async
   expect(tree).not.toContain('No Activity Yet');
 });
 
+test('Settings names Flutter developer_mode_provider fromJson GET url instead of omitting Webhooks', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          memory_created: true,
+          realtime_transcript: false,
+          audio_bytes: true,
+          day_summary: true,
+        }),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhook/memory_created') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({url: 'https://example.test/conversation'}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhook/audio_bytes') {
+      return {id: request.id, status: 200, body: '[]'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Webhooks');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi webhook URL is malformed')),
+  );
+  expect(tree).not.toContain('https://example.test/conversation');
+  expect(tree).not.toContain('Conversation Events');
+});
+
 test('Settings names Flutter Person.fromGenerated padded GET created_at instead of omitting People', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

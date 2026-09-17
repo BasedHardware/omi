@@ -175,13 +175,26 @@ test('loadOmiWebhookUrls names GET rows and omits failures', async () => {
           status: 404,
           body: null,
         },
+      }),
+    ),
+  ).toEqual(new Map());
+});
+
+test('old webhooks name Flutter developer_mode_provider fromJson GET url instead of omitting Webhooks', async () => {
+  await expect(
+    loadOmiWebhookUrls(
+      backendWith({
+        '/v1/users/developer/webhook/memory_created': {
+          status: 200,
+          body: JSON.stringify({url: 'https://example.test/conversation'}),
+        },
         '/v1/users/developer/webhook/audio_bytes': {
           status: 200,
           body: '[]',
         },
       }),
     ),
-  ).toEqual(new Map());
+  ).rejects.toThrow('Omi webhook URL is malformed');
 });
 
 test('mergeWebhookUrl prefers sibling GET url over status url', () => {

@@ -79,12 +79,8 @@ async function loadOmiWebhookUrl(
   ) {
     return null;
   }
-  try {
-    const parsed = parseOmiWebhookUrl(response.body, type);
-    return parsed === null ? null : [type, parsed];
-  } catch {
-    return null;
-  }
+  const parsed = parseOmiWebhookUrl(response.body, type);
+  return parsed === null ? null : [type, parsed];
 }
 
 export async function loadOmiWebhookUrls(
