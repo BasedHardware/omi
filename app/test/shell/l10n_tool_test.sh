@@ -183,6 +183,125 @@ else
 fi
 
 echo
+echo "l10n tool (ICU apostrophe / use-escaping):"
+
+# Flutter gen-l10n only treats apostrophes as ICU quotes when use-escaping is true.
+# This repo's l10n.yaml does not set it (default false). A parser that always quotes
+# would treat "What's New in {version}" as having no placeholder and wrongly refuse
+# a matching translation, and check would flag every locale that still uses {version}.
+
+apos="$work/apos"
+mkdir -p "$apos"
+python3 - "$apos" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+for loc in ("en", "fr", "de"):
+    (root / f"app_{loc}.arb").write_text(
+        json.dumps({"@@locale": loc, "hello": "Hello"}, indent=4, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+PY
+
+printf '%s\n' '{"de":"Was ist neu in {version}","fr":"Nouveautés de {version}"}' >"$work/tr-apos.json"
+if python3 "$L10N" --arb-dir "$apos" add whatsNewInVersion --en "What's New in {version}" \
+  --placeholders '{"version":{"type":"String"}}' --description "Changelog heading" \
+  --translations "$work/tr-apos.json" >"$work/apos-add.out" 2>"$work/apos-add.err"; then
+  python3 - "$apos" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+en = json.loads((root / "app_en.arb").read_text())
+fr = json.loads((root / "app_fr.arb").read_text())
+assert en["whatsNewInVersion"] == "What's New in {version}"
+assert "version" in en["@whatsNewInVersion"]["placeholders"]
+assert fr["whatsNewInVersion"] == "Nouveautés de {version}"
+PY
+  pass "add accepts What's New in {version} when use-escaping is off (repo default)"
+else
+  fail "add refused apostrophe-before-placeholder English: $(cat "$work/apos-add.err")"
+fi
+
+if python3 "$L10N" --arb-dir "$apos" check >"$work/apos-check.out" 2>"$work/apos-check.err"; then
+  pass "check accepts apostrophe-before-placeholder when locales match English"
+else
+  fail "check false-positive on apostrophe-before-placeholder: $(cat "$work/apos-check.err")"
+fi
+
+printf '%s\n' '{"de":"Was ist neu","fr":"Nouveautés"}' >"$work/tr-apos-miss.json"
+cp "$apos/app_en.arb" "$work/apos-en.after-whats"
+if python3 "$L10N" --arb-dir "$apos" add missingVersion --en "What's New in {version}" \
+  --translations "$work/tr-apos-miss.json" >"$work/apos-miss.out" 2>"$work/apos-miss.err"; then
+  fail "add accepted a translation that dropped {version} after an English apostrophe"
+else
+  grep -q "ICU placeholders" "$work/apos-miss.err" \
+    && pass "add still refuses a missing {version} after an English apostrophe" \
+    || fail "missing-{version} error text: $(cat "$work/apos-miss.err")"
+  cmp -s "$apos/app_en.arb" "$work/apos-en.after-whats" \
+    || fail "add wrote files after missing-{version} refusal"
+fi
+
+printf '%s\n' '{"de":"Angezeigt als '\''{name}'\''","fr":"Affiché comme '\''{name}'\''"}' >"$work/tr-quoted-ph.json"
+if python3 "$L10N" --arb-dir "$apos" add shownAsName --en "Shown as '{name}'" \
+  --placeholders '{"name":{"type":"String"}}' --description "Quoted placeholder, escaping off" \
+  --translations "$work/tr-quoted-ph.json" >"$work/apos-quoted.out" 2>"$work/apos-quoted.err"; then
+  pass "add treats '{name}' as a real placeholder when use-escaping is off"
+else
+  fail "add refused two-apostrophes-around-placeholder with escaping off: $(cat "$work/apos-quoted.err")"
+fi
+
+esc="$work/esc"
+mkdir -p "$esc"
+printf '%s\n' "use-escaping: true" >"$esc/l10n.yaml"
+python3 - "$esc" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+for loc in ("en", "fr", "de"):
+    (root / f"app_{loc}.arb").write_text(
+        json.dumps({"@@locale": loc, "hello": "Hello"}, indent=4, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+PY
+
+# With escaping on, the apostrophe in What's quotes through {version}, so English
+# has no placeholder. A translation that still uses {version} must be refused.
+printf '%s\n' '{"de":"Was ist neu in {version}","fr":"Nouveautés de {version}"}' >"$work/tr-esc-whats.json"
+if python3 "$L10N" --arb-dir "$esc" add whatsNewInVersion --en "What's New in {version}" \
+  --translations "$work/tr-esc-whats.json" >"$work/esc-whats.out" 2>"$work/esc-whats.err"; then
+  fail "add accepted {version} in a translation of What's New… with use-escaping true"
+else
+  grep -q "ICU placeholders" "$work/esc-whats.err" \
+    && pass "add refuses {version} against What's New… when use-escaping is true" \
+    || fail "use-escaping true What's New error text: $(cat "$work/esc-whats.err")"
+fi
+
+# Two apostrophes around a placeholder: '{name}' is quoted away when escaping is on.
+printf '%s\n' '{"de":"Angezeigt als {name}","fr":"Affiché comme {name}"}' >"$work/tr-esc-unquoted.json"
+if python3 "$L10N" --arb-dir "$esc" add shownAsName --en "Shown as '{name}'" \
+  --translations "$work/tr-esc-unquoted.json" >"$work/esc-unquoted.out" 2>"$work/esc-unquoted.err"; then
+  fail "add accepted an unquoted {name} against '{name}' with use-escaping true"
+else
+  grep -q "ICU placeholders" "$work/esc-unquoted.err" \
+    && pass "add refuses unquoted {name} against '{name}' when use-escaping is true" \
+    || fail "use-escaping true '{name}' error text: $(cat "$work/esc-unquoted.err")"
+fi
+
+printf '%s\n' '{"de":"Angezeigt als '\''{name}'\''","fr":"Affiché comme '\''{name}'\''"}' >"$work/tr-esc-quoted.json"
+if python3 "$L10N" --arb-dir "$esc" add shownAsName --en "Shown as '{name}'" \
+  --translations "$work/tr-esc-quoted.json" >"$work/esc-quoted.out" 2>"$work/esc-quoted.err"; then
+  pass "add accepts matching quoted '{name}' when use-escaping is true (placeholder is literal)"
+else
+  fail "add refused matching quoted '{name}' with use-escaping true: $(cat "$work/esc-quoted.err")"
+fi
+
+if python3 "$L10N" --arb-dir "$esc" check >"$work/esc-check.out" 2>"$work/esc-check.err"; then
+  pass "check follows use-escaping: true from the fixture l10n.yaml"
+else
+  fail "check failed on use-escaping true fixture: $(cat "$work/esc-check.err")"
+fi
+
+echo
 echo "l10n tool (byte-exact add on copies of two real ARB files):"
 
 real="$work/real"

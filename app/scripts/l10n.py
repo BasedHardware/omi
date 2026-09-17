@@ -106,33 +106,37 @@ def _skip_quoted(cur: _Cursor) -> str:
     return cur.text[start : cur.i]
 
 
-def parse_icu(message: str) -> list[Any]:
+def parse_icu(message: str, use_escaping: bool = False) -> list[Any]:
     """Parse an ICU message into a structure that ignores literal text.
 
     A simple ``{name}`` becomes ``("ph", name)``. ``{name, plural, =1{...} other{...}}``
     becomes ``("plural", name, ((selector, nested), ...))``. Parse failures raise
     ``L10nError``.
+
+    Apostrophes are ICU quotes only when ``use_escaping`` is true, matching Flutter
+    gen-l10n's ``use-escaping`` (default false). With escaping off, ``What's New in
+    {version}`` still has a ``version`` placeholder.
     """
-    return _parse_message(_Cursor(message), stop_on_brace=False)
+    return _parse_message(_Cursor(message), stop_on_brace=False, use_escaping=use_escaping)
 
 
-def _parse_message(cur: _Cursor, stop_on_brace: bool) -> list[Any]:
+def _parse_message(cur: _Cursor, stop_on_brace: bool, use_escaping: bool) -> list[Any]:
     nodes: list[Any] = []
     while not cur.eof():
         ch = cur.peek()
         if stop_on_brace and ch == "}":
             break
-        if ch == "'":
+        if ch == "'" and use_escaping:
             _skip_quoted(cur)
             continue
         if ch == "{":
-            nodes.append(_parse_argument(cur))
+            nodes.append(_parse_argument(cur, use_escaping))
             continue
         cur.i += 1
     return nodes
 
 
-def _parse_argument(cur: _Cursor) -> Any:
+def _parse_argument(cur: _Cursor, use_escaping: bool) -> Any:
     if cur.peek() != "{":
         raise L10nError(f"expected '{{' in ICU message at index {cur.i}")
     cur.i += 1
@@ -152,7 +156,7 @@ def _parse_argument(cur: _Cursor) -> Any:
         if cur.peek() == ",":
             cur.i += 1
             _skip_ws(cur)
-        options = _parse_options(cur)
+        options = _parse_options(cur, use_escaping)
         if cur.peek() != "}":
             raise L10nError(f"unclosed ICU {kind} '{{{name}'")
         cur.i += 1
@@ -160,8 +164,8 @@ def _parse_argument(cur: _Cursor) -> Any:
     # {name, number} / {name, date, ...} — consume until matching close
     while not cur.eof() and cur.peek() != "}":
         if cur.peek() == "{":
-            _parse_argument(cur)
-        elif cur.peek() == "'":
+            _parse_argument(cur, use_escaping)
+        elif cur.peek() == "'" and use_escaping:
             _skip_quoted(cur)
         else:
             cur.i += 1
@@ -171,7 +175,7 @@ def _parse_argument(cur: _Cursor) -> Any:
     return ("typed", name, kind)
 
 
-def _parse_options(cur: _Cursor) -> list[tuple[str, tuple[Any, ...]]]:
+def _parse_options(cur: _Cursor, use_escaping: bool) -> list[tuple[str, tuple[Any, ...]]]:
     options: list[tuple[str, tuple[Any, ...]]] = []
     while not cur.eof() and cur.peek() != "}":
         _skip_ws(cur)
@@ -182,7 +186,7 @@ def _parse_options(cur: _Cursor) -> list[tuple[str, tuple[Any, ...]]]:
         if cur.peek() != "{":
             raise L10nError(f"ICU plural/select selector {selector!r} is missing a body")
         cur.i += 1
-        body = _parse_message(cur, stop_on_brace=True)
+        body = _parse_message(cur, stop_on_brace=True, use_escaping=use_escaping)
         if cur.peek() != "}":
             raise L10nError(f"unclosed ICU selector body for {selector!r}")
         cur.i += 1
@@ -221,20 +225,20 @@ def _skip_ws(cur: _Cursor) -> None:
         cur.i += 1
 
 
-def icu_structure(message: str) -> tuple[Any, ...]:
+def icu_structure(message: str, use_escaping: bool = False) -> tuple[Any, ...]:
     try:
-        return tuple(parse_icu(message))
+        return tuple(parse_icu(message, use_escaping=use_escaping))
     except L10nError:
         # Fall back to placeholder names so a parse failure still refuses a mismatch.
-        return tuple(("ph", name) for name in placeholder_names_fallback(message))
+        return tuple(("ph", name) for name in placeholder_names_fallback(message, use_escaping=use_escaping))
 
 
-def placeholder_names_fallback(message: str) -> list[str]:
+def placeholder_names_fallback(message: str, use_escaping: bool = False) -> list[str]:
     names: list[str] = []
     cur = _Cursor(message)
     while not cur.eof():
         ch = cur.peek()
-        if ch == "'":
+        if ch == "'" and use_escaping:
             _skip_quoted(cur)
             continue
         if ch == "{":
@@ -248,7 +252,7 @@ def placeholder_names_fallback(message: str) -> list[str]:
     return names
 
 
-def placeholder_names(message: str) -> set[str]:
+def placeholder_names(message: str, use_escaping: bool = False) -> set[str]:
     names: set[str] = set()
 
     def walk(nodes: list[Any] | tuple[Any, ...]) -> None:
@@ -263,14 +267,14 @@ def placeholder_names(message: str) -> set[str]:
                     walk(body)
 
     try:
-        walk(parse_icu(message))
+        walk(parse_icu(message, use_escaping=use_escaping))
     except L10nError:
-        names.update(placeholder_names_fallback(message))
+        names.update(placeholder_names_fallback(message, use_escaping=use_escaping))
     return names
 
 
-def require_same_icu(english: str, translated: str, locale: str, key: str) -> None:
-    if icu_structure(english) != icu_structure(translated):
+def require_same_icu(english: str, translated: str, locale: str, key: str, use_escaping: bool = False) -> None:
+    if icu_structure(english, use_escaping=use_escaping) != icu_structure(translated, use_escaping=use_escaping):
         raise L10nError(
             f"locale {locale}: {key!r} ICU placeholders/plural/select structure does not match English\n"
             f"  en: {english}\n"
@@ -278,9 +282,11 @@ def require_same_icu(english: str, translated: str, locale: str, key: str) -> No
         )
 
 
-def require_placeholder_subset(english: str, translated: str, locale: str, key: str) -> None:
-    en_names = placeholder_names(english)
-    tr_names = placeholder_names(translated)
+def require_placeholder_subset(
+    english: str, translated: str, locale: str, key: str, use_escaping: bool = False
+) -> None:
+    en_names = placeholder_names(english, use_escaping=use_escaping)
+    tr_names = placeholder_names(translated, use_escaping=use_escaping)
     unknown = tr_names - en_names
     if unknown:
         raise L10nError(
@@ -291,7 +297,7 @@ def require_placeholder_subset(english: str, translated: str, locale: str, key: 
 # --- ARB mutation ----------------------------------------------------------
 
 
-def parse_placeholders_flag(raw: str | None, english: str) -> dict[str, Any] | None:
+def parse_placeholders_flag(raw: str | None, english: str, use_escaping: bool = False) -> dict[str, Any] | None:
     if raw is None:
         return None
     try:
@@ -303,7 +309,7 @@ def parse_placeholders_flag(raw: str | None, english: str) -> dict[str, Any] | N
     if any(not isinstance(k, str) or not isinstance(v, dict) for k, v in data.items()):
         raise L10nError("--placeholders values must be JSON objects keyed by placeholder name")
     declared = set(data)
-    used = placeholder_names(english)
+    used = placeholder_names(english, use_escaping=use_escaping)
     missing = used - declared
     extra = declared - used
     if missing or extra:
@@ -468,12 +474,12 @@ def restore_texts(originals: dict[Path, str]) -> None:
         path.write_text(text, encoding="utf-8")
 
 
-def validate_new_values(translations: dict[str, str], key: str) -> None:
+def validate_new_values(translations: dict[str, str], key: str, use_escaping: bool = False) -> None:
     english = translations["en"]
     for locale, value in translations.items():
         if locale == "en":
             continue
-        require_same_icu(english, value, locale, key)
+        require_same_icu(english, value, locale, key, use_escaping=use_escaping)
 
 
 # --- codegen ---------------------------------------------------------------
@@ -651,6 +657,31 @@ def codegen_freshness(app_dir: Path, arb_dir: Path) -> None:
 # --- commands --------------------------------------------------------------
 
 
+_USE_ESCAPING_TRUE = {"true", "yes", "1", "on"}
+
+
+def read_use_escaping(app_dir: Path) -> bool:
+    """Match Flutter gen-l10n: ICU apostrophe quoting applies only if use-escaping is true.
+
+    Missing l10n.yaml or missing key → False (Flutter default, and this repo's
+    ``app/l10n.yaml``).
+    """
+    path = app_dir / "l10n.yaml"
+    if not path.is_file():
+        return False
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line.startswith("use-escaping"):
+            continue
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        if key.strip() != "use-escaping":
+            continue
+        return value.strip().strip("'\"").lower() in _USE_ESCAPING_TRUE
+    return False
+
+
 def resolve_dirs(args: argparse.Namespace) -> tuple[Path, Path]:
     if args.arb_dir:
         arb_dir = Path(args.arb_dir).resolve()
@@ -716,10 +747,11 @@ def cmd_add(args: argparse.Namespace) -> int:
     arb_dir, app_dir = resolve_dirs(args)
     by_locale = discover_arb_files(arb_dir)
     loaded = load_all_arbs(by_locale)
-    placeholders = parse_placeholders_flag(args.placeholders, args.en)
+    use_escaping = read_use_escaping(app_dir)
+    placeholders = parse_placeholders_flag(args.placeholders, args.en, use_escaping=use_escaping)
     meta = metadata_for(args.description, placeholders)
     translations = load_translations_file(Path(args.translations), set(by_locale), args.en)
-    validate_new_values(translations, args.key)
+    validate_new_values(translations, args.key, use_escaping=use_escaping)
     updated = apply_add(loaded, args.key, translations, meta)
     do_codegen = is_flutter_app(app_dir)
     status = mutate_and_write(by_locale, updated, app_dir, arb_dir, args.key, do_codegen)
@@ -750,7 +782,12 @@ def cmd_set(args: argparse.Namespace) -> int:
             )
         translations["en"] = english
     update_meta = args.description is not None or args.placeholders is not None
-    placeholders = parse_placeholders_flag(args.placeholders, english) if args.placeholders is not None else None
+    use_escaping = read_use_escaping(app_dir)
+    placeholders = (
+        parse_placeholders_flag(args.placeholders, english, use_escaping=use_escaping)
+        if args.placeholders is not None
+        else None
+    )
     if args.placeholders is None and update_meta:
         existing = loaded["en"].get(f"@{args.key}")
         if isinstance(existing, dict) and isinstance(existing.get("placeholders"), dict):
@@ -761,7 +798,7 @@ def cmd_set(args: argparse.Namespace) -> int:
         if isinstance(existing, dict) and isinstance(existing.get("description"), str):
             description = existing["description"]
     meta = metadata_for(description, placeholders) if update_meta else None
-    validate_new_values(translations, args.key)
+    validate_new_values(translations, args.key, use_escaping=use_escaping)
     updated = apply_set(loaded, args.key, translations, meta, update_meta)
     if not update_meta and values_and_meta_identical(loaded, args.key, translations, loaded["en"].get(f"@{args.key}") if isinstance(loaded["en"].get(f"@{args.key}"), dict) else None):
         print(f"already up to date: {args.key}")
@@ -799,6 +836,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     by_locale = discover_arb_files(arb_dir)
     loaded = load_all_arbs(by_locale)
     template_keys = message_keys(loaded["en"])
+    use_escaping = read_use_escaping(app_dir)
     errors: list[str] = []
     for locale, data in sorted(loaded.items()):
         keys = message_keys(data)
@@ -819,7 +857,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             if not isinstance(value, str):
                 continue
             try:
-                require_placeholder_subset(english, value, locale, key)
+                require_placeholder_subset(english, value, locale, key, use_escaping=use_escaping)
             except L10nError as exc:
                 errors.append(str(exc))
     if errors:
