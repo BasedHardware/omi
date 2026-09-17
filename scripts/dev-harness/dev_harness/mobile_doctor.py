@@ -22,7 +22,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 READY = "ready"
 AGENT_REMEDIABLE = "agent-remediable"
@@ -47,6 +47,10 @@ MIN_FREE_GB_EMULATOR_LANES = 12.0
 _FLUTTER_VERSION_RE = re.compile(r"Flutter\s+(\d+\.\d+\.\d+)", re.MULTILINE)
 _FLUTTER_PIN_RE = re.compile(r"flutter-version:\s*(\d+\.\d+\.\d+)")
 _ANDROID_IMAGE_PREFIX = "system-images;android-"
+# cmdline-tools 23+ prints `system-images/android-36/...` instead of the
+# historical semicolon package id. Disk is authoritative either way.
+PREFERRED_ANDROID_IMAGE = "system-images;android-36;google_apis;arm64-v8a"
+PREFERRED_ANDROID_IMAGE_DIR = ("system-images", "android-36", "google_apis", "arm64-v8a")
 
 
 class DoctorError(RuntimeError):
@@ -269,6 +273,32 @@ def _check_datastore(repo_root: Path, runner: Runner, env: Mapping[str, str]) ->
     return results
 
 
+def installed_android_system_image(
+    home: Path,
+    *,
+    exists: Callable[[Path], bool] | None = None,
+    list_output: str = "",
+) -> str:
+    """Return a semicolon package id if an emulator system image is present.
+
+    Prefer the on-disk tree. ``sdkmanager --list_installed`` on cmdline-tools
+    23 prints slash paths (``system-images/android-36/google_apis/arm64-v8a``)
+    and can miss a fully unpacked image; treating that output as the only
+    oracle reported ``android-image: no system-images package installed``.
+    """
+
+    probe = exists or (lambda path: Path(path).exists())
+    disk = Path(home).joinpath(*PREFERRED_ANDROID_IMAGE_DIR)
+    if probe(disk):
+        return PREFERRED_ANDROID_IMAGE
+    for line in list_output.splitlines():
+        token = line.strip().split()[0] if line.strip() else ""
+        normalized = token.replace("/", ";")
+        if normalized.startswith(_ANDROID_IMAGE_PREFIX):
+            return normalized
+    return ""
+
+
 def _android_home(env: Mapping[str, str]) -> str:
     for key in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
         value = env.get(key, "").strip()
@@ -320,26 +350,23 @@ def _check_android(repo_root: Path, runner: Runner, env: Mapping[str, str]) -> l
         )
 
     sdkmanager = Path(home) / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+    list_output = ""
     if runner.exists(sdkmanager):
         code, out = runner.run([str(sdkmanager), "--list_installed"], timeout=60.0)
-        installed = " ".join(out.splitlines()) if code == 0 else ""
-        arm_image = next(
-            (line.split()[0] for line in out.splitlines() if line.strip().startswith(_ANDROID_IMAGE_PREFIX)),
-            "",
-        )
-        if arm_image:
-            results.append(_ok("android-image", f"system image installed: {arm_image}", (LANE_ANDROID,)))
-        else:
-            results.append(
-                _agent(
-                    "android-image",
-                    "no system-images package installed",
-                    f"{sdkmanager} 'system-images;android-36;google_apis;arm64-v8a' — ARM64 image on Apple "
-                    f"Silicon; capacity-gated download (~5-8GiB with caches)",
-                    (LANE_ANDROID,),
-                )
+        list_output = out if code == 0 else ""
+    image = installed_android_system_image(Path(home), exists=runner.exists, list_output=list_output)
+    if image:
+        results.append(_ok("android-image", f"system image installed: {image}", (LANE_ANDROID,)))
+    elif runner.exists(sdkmanager):
+        results.append(
+            _agent(
+                "android-image",
+                "no system-images package installed",
+                f"{sdkmanager} '{PREFERRED_ANDROID_IMAGE}' — ARM64 image on Apple "
+                f"Silicon; capacity-gated download (~5-8GiB with caches)",
+                (LANE_ANDROID,),
             )
-        _ = installed
+        )
     else:
         results.append(
             _agent(
