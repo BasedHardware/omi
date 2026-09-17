@@ -54,9 +54,7 @@ def collect_conversation_audio_timestamps(uid: str, conversation: Any) -> List[f
     if not conversation_id:
         return []
     chunks = list_audio_chunks(uid, conversation_id)
-    return sorted(
-        float(chunk['timestamp']) for chunk in chunks if chunk.get('timestamp') is not None
-    )
+    return sorted(float(chunk['timestamp']) for chunk in chunks if chunk.get('timestamp') is not None)
 
 
 def _resolve_stt_language(uid: str, language_code: str | None, conversation: Any) -> tuple[str, bool, List[str]]:

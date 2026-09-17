@@ -816,9 +816,7 @@ def reprocess_conversation_transcription(
         language_code = conversation.language or 'en'
 
     try:
-        conversation.transcript_segments = transcribe_stored_conversation_audio(
-            uid, conversation, language_code
-        )
+        conversation.transcript_segments = transcribe_stored_conversation_audio(uid, conversation, language_code)
     except StoredAudioUnavailableError:
         raise HTTPException(status_code=400, detail='No stored audio available to retranscribe')
     except StoredAudioEmptyTranscriptError:
