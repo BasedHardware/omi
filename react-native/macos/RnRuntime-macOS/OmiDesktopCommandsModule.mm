@@ -1,10 +1,24 @@
 #import "OmiDesktopCommandsModule.h"
 
+#import <AppKit/AppKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <UserNotifications/UserNotifications.h>
 
 NSString *const OmiDesktopSearchCommandNotification = @"OmiDesktopSearchCommandNotification";
+
+static void OmiOpenPermissionSettings(NSString *pane, RCTPromiseResolveBlock resolve,
+                                     RCTPromiseRejectBlock reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSURL *url = [NSURL URLWithString:[@"x-apple.systempreferences:" stringByAppendingString:pane]];
+    if ([NSWorkspace.sharedWorkspace openURL:url]) {
+      // Opening a pane is not a grant. React observes permissionStatus on return.
+      resolve(@"denied");
+    } else {
+      reject(@"OMI_SETTINGS_UNAVAILABLE", @"Could not open System Settings", nil);
+    }
+  });
+}
 
 static NSString *OmiDesktopDefaultsKey(NSString *preference) {
   static NSDictionary<NSString *, NSString *> *keys;
@@ -152,11 +166,21 @@ RCT_REMAP_METHOD(requestPermission,
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   if ([kind isEqualToString:@"screen"]) {
-    BOOL granted = CGRequestScreenCaptureAccess();
-    resolve(granted ? @"granted" : @"denied");
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()) {
+        resolve(@"granted");
+      } else {
+        OmiOpenPermissionSettings(@"com.apple.preference.security?Privacy_ScreenCapture", resolve, reject);
+      }
+    });
     return;
   }
   if ([kind isEqualToString:@"microphone"]) {
+    AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
+    if (status == AVAuthorizationStatusDenied || status == AVAuthorizationStatusRestricted) {
+      OmiOpenPermissionSettings(@"com.apple.preference.security?Privacy_Microphone", resolve, reject);
+      return;
+    }
     [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL granted) {
       resolve(granted ? @"granted" : @"denied");
     }];
@@ -164,10 +188,21 @@ RCT_REMAP_METHOD(requestPermission,
   }
   if ([kind isEqualToString:@"notifications"]) {
     [UNUserNotificationCenter.currentNotificationCenter
-        requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound |
-                                         UNAuthorizationOptionBadge)
-                      completionHandler:^(BOOL granted, NSError *__unused error) {
-      resolve(granted ? @"granted" : @"denied");
+        getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *settings) {
+      if (settings.authorizationStatus == UNAuthorizationStatusDenied) {
+        OmiOpenPermissionSettings(@"com.apple.preference.notifications", resolve, reject);
+        return;
+      }
+      [UNUserNotificationCenter.currentNotificationCenter
+          requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound |
+                                           UNAuthorizationOptionBadge)
+                        completionHandler:^(BOOL granted, NSError *error) {
+        if (error) {
+          reject(@"OMI_PERMISSION_FAILED", @"Could not request notifications", nil);
+        } else {
+          resolve(granted ? @"granted" : @"denied");
+        }
+      }];
     }];
     return;
   }

@@ -1,12 +1,18 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {
   Animated,
+  AppState,
   Linking,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import Check from 'lucide-react-native/icons/check';
+import ShieldCheck from 'lucide-react-native/icons/shield-check';
+import Monitor from 'lucide-react-native/icons/monitor';
+import Mic from 'lucide-react-native/icons/mic';
+import Bell from 'lucide-react-native/icons/bell';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {
   DESKTOP_VALUE_CLAIMS,
@@ -19,40 +25,81 @@ import {
   previousDesktopStep,
   type DesktopOnboardingStep,
 } from '../app/onboardingFlow';
-import {runShippingTiming, stepMotionDuration} from './desktopMotion';
 import {
   loadPermissionStatus,
   requestDesktopPermission,
   type PermissionKind,
   type PermissionState,
 } from '../desktopSettingsClient';
-import {
-  HARNESS_GROUPS,
-  ONBOARDING_HARNESSES,
-  type HarnessState,
-} from '../app/onboardingHarnesses';
 import {Button} from '../ui/Button';
+import {FocusPressable} from '../ui/Pressable';
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {PermissionRow} from '../ui/PermissionRow';
 import type {Onboarding} from '../ui/Onboarding';
+import {ConnectionGallery} from './ConnectionGallery';
+import {DesktopWindow} from './DesktopWindow';
+import {ShippingStage} from './ShippingStage';
 import {desktopTokens as token} from './tokens';
 
 type Props = React.ComponentProps<typeof Onboarding>;
-const permissions: {kind: PermissionKind; title: string}[] = [
+const permissions: {
+  kind: PermissionKind;
+  title: string;
+  description: string;
+  icon: typeof Monitor;
+  instructions: string[];
+}[] = [
   {
     kind: 'screen',
-    title: "I would like to see your screen, so I know what you're working on.",
+    title: 'Screen',
+    description: 'Remember what you’re working on.',
+    icon: Monitor,
+    instructions: [
+      'Open Privacy & Security → Screen Recording in System Settings.',
+      'Switch on Omi. If macOS asks you to quit and reopen, reopen Omi to finish.',
+    ],
   },
   {
     kind: 'microphone',
-    title:
-      'I would like to use your microphone, so I can hear what you talk about.',
+    title: 'Microphone',
+    description: 'Turn conversations into memories.',
+    icon: Mic,
+    instructions: [
+      'Choose Allow in the macOS permission prompt.',
+      'Already said no? Open Privacy & Security → Microphone in System Settings and switch on Omi.',
+    ],
   },
   {
     kind: 'notifications',
-    title: 'I would like to notify you when something needs you.',
+    title: 'Notifications',
+    description: 'A nudge when something needs you.',
+    icon: Bell,
+    instructions: [
+      'Choose Allow in the macOS notification prompt.',
+      'Already said no? Open Notifications → Omi in System Settings and turn on Allow Notifications.',
+    ],
   },
 ];
+const titles: Record<DesktopOnboardingStep, string> = {
+  welcome: 'A little less to remember.',
+  value: "Here's what I do.",
+  signIn: 'Make yourself at home.',
+  permissions: 'Now the permissions.',
+  harnesses: 'Meet your next collaborators.',
+  data: 'Your world, connected.',
+  tutorial: 'Everything has its place.',
+  finish: 'Ready when you are.',
+};
+const stepLabels: Record<DesktopOnboardingStep, string> = {
+  welcome: 'Welcome',
+  value: 'Meet Omi',
+  signIn: 'Your account',
+  permissions: 'Permissions',
+  harnesses: 'AI assistants',
+  data: 'Connect data',
+  tutorial: 'A quick look',
+  finish: 'Get started',
+};
 
 export function DesktopOnboarding({
   error,
@@ -67,99 +114,108 @@ export function DesktopOnboarding({
   const [step, setStep] = useState<DesktopOnboardingStep>('welcome');
   const [statuses, setStatuses] = useState<
     Record<PermissionKind, PermissionState>
-  >({screen: 'unknown', microphone: 'unknown', notifications: 'unknown'});
+  >({
+    screen: 'unknown',
+    microphone: 'unknown',
+    notifications: 'unknown',
+  });
   const [pending, setPending] = useState<PermissionKind | null>(null);
+  const [guidance, setGuidance] = useState<PermissionKind | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [harnessStates, setHarnessStates] = useState<
-    Record<string, HarnessState>
-  >({});
+  const [greeting, setGreeting] = useState(0);
   const operation = useRef(0);
   const signedIn = useRef(setupRequired);
+  const scroll = useRef<ScrollView>(null);
   const reduceMotion = useReduceMotion();
-  const stepOpacity = useRef(new Animated.Value(1)).current;
-  const stepY = useRef(new Animated.Value(0)).current;
-  const firstStep = useRef(true);
-
-  useEffect(() => {
-    if (firstStep.current) {
-      firstStep.current = false;
-      return;
-    }
-    const duration = stepMotionDuration(reduceMotion);
-    if (duration === 0) {
-      stepOpacity.setValue(1);
-      stepY.setValue(0);
-      return;
-    }
-    stepOpacity.setValue(0.92);
-    stepY.setValue(8);
-    const animation = Animated.parallel(
-      [
-        runShippingTiming(stepOpacity, 1, duration, false),
-        runShippingTiming(stepY, 0, duration, false),
-      ].filter((item): item is Animated.CompositeAnimation => item !== null),
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [reduceMotion, step, stepOpacity, stepY]);
 
   useEffect(() => {
     if (signedIn.current && !setupRequired) {
       operation.current++;
       setStep('welcome');
       setPending(null);
+      setGuidance(null);
       setLocalError(null);
-      setHarnessStates({});
       setStatuses({
         screen: 'unknown',
         microphone: 'unknown',
         notifications: 'unknown',
       });
     } else if (setupRequired && step === 'signIn') {
-      const next = nextDesktopStep('signIn', true);
-      if (next != null) {
-        setStep(next);
-      }
+      setStep('permissions');
     }
     signedIn.current = setupRequired;
   }, [setupRequired, step]);
 
   useEffect(() => {
     const lifetime = operation;
-    const current = ++lifetime.current;
+    lifetime.current++;
     setPending(null);
+    setGuidance(null);
     setLocalError(null);
-    if (step === 'permissions' && setupRequired) {
-      loadPermissionStatus()
-        .then(value => {
-          if (operation.current === current) {
-            setStatuses(value);
-          }
-        })
-        .catch(() => {
-          if (operation.current === current) {
-            setLocalError(
-              'Could not check permissions. You can continue and manage them in Settings.',
-            );
-          }
-        });
+    scroll.current?.scrollTo({y: 0, animated: false});
+    let active = true;
+    let checking = false;
+    async function refresh() {
+      if (checking) {
+        return;
+      }
+      checking = true;
+      const current = lifetime.current;
+      try {
+        const value = await loadPermissionStatus();
+        if (active && current === lifetime.current) {
+          setStatuses(value);
+        }
+      } catch {
+        if (active && current === lifetime.current) {
+          setLocalError(
+            'Could not check permissions. You can continue and manage them in Settings.',
+          );
+        }
+      } finally {
+        checking = false;
+      }
     }
+    if (step !== 'permissions' || !setupRequired) {
+      return () => {
+        active = false;
+        lifetime.current++;
+      };
+    }
+    void refresh();
+    // macOS may grant while Settings is frontmost. Observe return AND poll;
+    // neither can advance the step or start capture on the user's behalf.
+    const timer = setInterval(refresh, 1500);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        void refresh();
+      }
+    });
     return () => {
+      active = false;
       lifetime.current++;
+      clearInterval(timer);
+      subscription.remove();
     };
   }, [step, setupRequired]);
 
   async function request(kind: PermissionKind) {
-    if (pending !== null || !setupRequired) {
+    if (pending !== null || !setupRequired || statuses[kind] === 'granted') {
       return;
     }
     const current = ++operation.current;
     setPending(kind);
+    setGuidance(kind);
     setLocalError(null);
     try {
       const result = await requestDesktopPermission(kind);
       if (operation.current === current) {
         setStatuses(previous => ({...previous, [kind]: result}));
+        if (result === 'unknown') {
+          setLocalError(
+            'Permission controls are available in the native Mac app. You can continue here.',
+          );
+        }
       }
     } catch {
       if (operation.current === current) {
@@ -169,6 +225,8 @@ export function DesktopOnboarding({
       }
     } finally {
       if (operation.current === current) {
+        // A poll begun during the OS prompt must not overwrite its newer result.
+        operation.current++;
         setPending(null);
       }
     }
@@ -182,414 +240,611 @@ export function DesktopOnboarding({
       }
     });
   }
-
   function advance() {
     const next = nextDesktopStep(step, setupRequired);
-    if (next != null) {
-      setLocalError(null);
+    if (next !== null) {
       setStep(next);
     }
   }
-
-  function goBack() {
-    const previous = previousDesktopStep(step, setupRequired);
-    if (previous != null) {
-      setLocalError(null);
-      setStep(previous);
-    }
-  }
-
+  const back = previousDesktopStep(step, setupRequired);
   const progress = desktopProgressSteps(setupRequired);
   const progressIndex = progress.indexOf(step);
-  const title = {
-    welcome: 'Welcome to Omi',
-    value: "Here's what I do.",
-    signIn: 'Which account is this?',
-    permissions: 'Now the permissions.',
-    harnesses: 'Connect harnesses',
-    tutorial: 'A quick look around',
-    finish: 'Ready when you are',
-  }[step];
-  const listCard = step === 'permissions' || step === 'harnesses';
-  const action = (label: string, onPress: () => void, disabled = false) => (
-    <Button
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      style={[styles.button, listCard && styles.buttonList]}
-      labelStyle={styles.buttonLabel}>
-      {label}
-    </Button>
+  const welcome = step === 'welcome';
+  const guide = step === 'permissions' && setupRequired ? guidance : null;
+  const guideGranted = guide !== null && statuses[guide] === 'granted';
+  const guidePermission = permissions.find(item => item.kind === guide);
+  const allGranted = permissions.every(
+    ({kind}) => statuses[kind] === 'granted',
   );
+  const primaryLabel = welcome
+    ? 'Get started'
+    : step === 'signIn'
+    ? signingIn
+      ? 'Signing in…'
+      : 'Sign in'
+    : step === 'finish'
+    ? completingSetup
+      ? 'Saving…'
+      : 'Agree and continue'
+    : 'Continue';
+  const primaryDisabled =
+    step === 'signIn'
+      ? signingIn
+      : step === 'finish'
+      ? completingSetup || !onCompleteSetup
+      : false;
+  const primary = () => {
+    if (step === 'signIn') {
+      onSignIn();
+    } else if (step === 'finish') {
+      onCompleteSetup?.(false);
+    } else {
+      advance();
+    }
+  };
 
   return (
-    <ScrollView
-      accessibilityLabel="First-run onboarding"
-      contentContainerStyle={[styles.surface, listCard && styles.surfaceList]}>
-      <View style={[styles.card, listCard && styles.cardList]}>
-        {listCard ? (
-          <View style={styles.speaker}>
-            <OmiAvatar
-              identity="omi"
-              size={72}
-              tone="ink"
-              inkColor={token.color.ink}
-              animate={!reduceMotion}
-              reduceMotion={reduceMotion}
-            />
-            <View style={styles.speakerCopy}>
-              {progressIndex >= 0 ? (
-                <Text style={styles.meta}>
-                  Step {progressIndex + 1} of {progress.length}
+    <View accessibilityLabel="First-run onboarding" style={styles.surface}>
+      <DesktopWindow presentation={guide ? 'permission-guide' : 'onboarding'} />
+      {guide ? (
+        <>
+          <ScrollView contentContainerStyle={styles.guide}>
+            <View style={styles.guideHeading}>
+              <OmiAvatar
+                identity="omi"
+                size={52}
+                tone="ink"
+                inkColor={token.color.ink}
+                motion={
+                  guideGranted ? 'success' : localError ? undefined : 'breathe'
+                }
+                motionKey={guide}
+                reduceMotion={reduceMotion}
+              />
+              <View style={[styles.heading, styles.flex]}>
+                <Text style={styles.eyebrow}>A little help from Omi</Text>
+                <Text accessibilityRole="header" style={styles.guideTitle}>
+                  {guideGranted
+                    ? 'You’re all set.'
+                    : guide === 'screen'
+                    ? 'Screen Recording'
+                    : guidePermission?.title}
                 </Text>
-              ) : null}
-              <Text
-                accessibilityRole="header"
-                style={[styles.title, styles.titleList]}>
-                {title}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <>
-            <OmiAvatar
-              identity="omi"
-              size={80}
-              tone="ink"
-              inkColor={token.color.ink}
-              animate={!reduceMotion}
-              reduceMotion={reduceMotion}
-            />
-            {progressIndex >= 0 ? (
-              <Text style={styles.meta}>
-                Step {progressIndex + 1} of {progress.length}
-              </Text>
-            ) : null}
-            <Text accessibilityRole="header" style={styles.title}>
-              {title}
-            </Text>
-          </>
-        )}
-        <Animated.View
-          style={[
-            styles.step,
-            listCard && styles.stepList,
-            {opacity: stepOpacity, transform: [{translateY: stepY}]},
-          ]}>
-          {step === 'welcome' ? (
-            <>
-              <Text style={styles.copy}>
-                I keep you caught up on what you see and say.
-              </Text>
-              {action('Get started', () => setStep('value'))}
-            </>
-          ) : null}
-          {step === 'value' ? (
-            <>
-              <Text style={styles.copy}>
-                Three things I take in, and one place they go.
-              </Text>
-              {DESKTOP_VALUE_CLAIMS.map(claim => (
-                <Text key={claim} style={styles.copy}>
-                  {claim}
-                </Text>
-              ))}
-              <Text style={styles.copy}>
-                Cloud AI services transcribe audio and use your messages to
-                generate replies. Signing in or granting permission does not
-                start recording.
-              </Text>
-              <View style={styles.links}>
-                <Button
-                  variant="ghost"
-                  labelStyle={styles.copy}
-                  accessibilityRole="link"
-                  onPress={() => link(PRIVACY_URL)}>
-                  Privacy policy
-                </Button>
-                <Button
-                  variant="ghost"
-                  labelStyle={styles.copy}
-                  accessibilityRole="link"
-                  onPress={() => link(TERMS_URL)}>
-                  Terms of service
-                </Button>
               </View>
-              {action('Continue', advance)}
-            </>
-          ) : null}
-          {step === 'signIn' ? (
-            <>
-              <Text style={styles.copy}>
-                It all lands in your Omi account. Sign in to the account where
-                your conversations and memories belong.
-              </Text>
-              {action(
-                signingIn ? 'Signing in…' : 'Sign in',
-                onSignIn,
-                signingIn,
+            </View>
+            <ShippingStage
+              stageKey={guideGranted ? 'granted' : guide}
+              variant="hub"
+              style={styles.stage}>
+              {guideGranted ? (
+                <Text style={styles.guideCopy}>
+                  macOS confirmed this permission. Nothing has started
+                  recording.
+                </Text>
+              ) : (
+                guidePermission?.instructions.map((instruction, index) => (
+                  <View key={instruction} style={styles.instruction}>
+                    <Text style={styles.instructionNumber}>{index + 1}</Text>
+                    <Text style={[styles.guideCopy, styles.flex]}>
+                      {instruction}
+                    </Text>
+                  </View>
+                ))
               )}
-              {signingIn && onCancelSignIn ? (
-                <Button
-                  variant="ghost"
-                  labelStyle={styles.copy}
-                  accessibilityLabel="Cancel sign in"
-                  onPress={onCancelSignIn}>
-                  Cancel sign in
-                </Button>
+              <View accessibilityLiveRegion="polite" style={styles.guideStatus}>
+                {guideGranted ? (
+                  <Check size={15} color={token.color.ink} />
+                ) : (
+                  <View style={styles.waitingDot} />
+                )}
+                <Text style={styles.small}>
+                  {guideGranted
+                    ? 'Permission granted'
+                    : localError
+                    ? 'Not enabled yet'
+                    : 'Checking macOS permission…'}
+                </Text>
+              </View>
+              {localError ? (
+                <Text accessibilityRole="alert" style={styles.error}>
+                  {localError}
+                </Text>
               ) : null}
-            </>
-          ) : null}
-          {step === 'permissions' && setupRequired ? (
-            <>
-              <Text style={styles.aside}>
-                Click one when you’re ready. Nothing is asked until you do.
-              </Text>
-              {permissions.map(({kind, title: permissionTitle}) => {
-                const granted = statuses[kind] === 'granted';
-                const status =
-                  pending === kind
-                    ? 'Asking…'
-                    : granted
-                    ? 'Granted'
-                    : statuses[kind] === 'denied'
-                    ? 'Open Settings'
-                    : 'Allow';
-                return (
-                  <PermissionRow
-                    key={kind}
-                    disabled={pending !== null}
-                    granted={granted}
-                    light
-                    onPress={() => {
-                      request(kind);
-                    }}
-                    status={status}
-                    title={permissionTitle}
-                  />
-                );
-              })}
-              {action("I'll do these later", advance)}
-            </>
-          ) : null}
-          {step === 'harnesses' && setupRequired ? (
-            <>
-              <Text style={styles.aside}>
-                Optional. Connect the surfaces Omi can read and the agents that
-                can act for you.
-              </Text>
-              {HARNESS_GROUPS.map(group => (
-                <View key={group.kind} style={styles.harnessGroup}>
-                  <Text style={styles.harnessGroupTitle}>{group.title}</Text>
-                  {ONBOARDING_HARNESSES.filter(
-                    harness => harness.kind === group.kind,
-                  ).map((harness, index, rows) => {
-                    const state = harnessStates[harness.id] ?? 'idle';
-                    return (
-                      <View
-                        key={harness.id}
-                        style={[
-                          styles.harness,
-                          index < rows.length - 1 && styles.harnessRule,
-                        ]}>
-                        <View style={styles.harnessMark}>
-                          <Text style={styles.harnessMarkLabel}>
-                            {harness.mark}
-                          </Text>
-                        </View>
-                        <View style={styles.harnessCopy}>
-                          <Text style={styles.permissionTitle}>
-                            {harness.name}
-                          </Text>
-                          <Text style={styles.harnessDetail}>
-                            {harness.detail}
-                          </Text>
-                        </View>
-                        {state === 'on' ? (
-                          <Text style={styles.harnessOn}>✓ on</Text>
-                        ) : (
-                          <Button
-                            accessibilityLabel={`Connect ${harness.name}`}
-                            disabled={state === 'connecting'}
-                            onPress={() => {
-                              setHarnessStates(previous => ({
-                                ...previous,
-                                [harness.id]: 'connecting',
-                              }));
-                              setTimeout(() => {
-                                setHarnessStates(previous => ({
-                                  ...previous,
-                                  [harness.id]: 'on',
-                                }));
-                              }, 240);
-                            }}
-                            variant="ghost"
-                            labelStyle={styles.harnessConnect}>
-                            {state === 'connecting' ? '…' : 'Connect'}
-                          </Button>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              ))}
-              {action('Continue', advance)}
-            </>
-          ) : null}
-          {step === 'tutorial' && setupRequired ? (
-            <>
-              <Text style={styles.copy}>
-                A few minutes. You’ll open Home, review conversations and tasks,
-                travel back through Recall, and finish with Chat answering a
-                question about your day.
-              </Text>
-              {action('Show me', advance)}
-              {action('Not now', advance)}
-            </>
-          ) : null}
-          {step === 'finish' && setupRequired ? (
-            <>
-              <Text style={styles.copy}>
-                I live here. Home can read conversations, memories, and tasks
-                from your account. By continuing, you agree to the Terms of
-                service and acknowledge the Privacy policy described earlier. No
-                capture starts automatically.
-              </Text>
-              {action(
-                completingSetup ? 'Saving…' : 'Agree and continue',
-                () => onCompleteSetup?.(false),
-                completingSetup || !onCompleteSetup,
-              )}
-            </>
-          ) : null}
-          {error || localError ? (
-            <Text accessibilityRole="alert" style={styles.copy}>
-              {error || localError}
-            </Text>
-          ) : null}
-          {previousDesktopStep(step, setupRequired) != null && !signingIn ? (
-            <Button variant="ghost" labelStyle={styles.copy} onPress={goBack}>
-              Back
-            </Button>
-          ) : null}
-          {setupRequired && onSignOut ? (
+            </ShippingStage>
+          </ScrollView>
+          <View style={styles.guideFooter}>
             <Button
               variant="ghost"
-              labelStyle={styles.copy}
-              disabled={completingSetup}
-              onPress={onSignOut}>
-              Sign out
+              style={styles.guideBack}
+              labelStyle={styles.small}
+              onPress={() => setGuidance(null)}>
+              Back to setup
             </Button>
-          ) : null}
-        </Animated.View>
-      </View>
-    </ScrollView>
+          </View>
+        </>
+      ) : (
+        <>
+          <ScrollView
+            ref={scroll}
+            contentContainerStyle={[
+              styles.content,
+              welcome && styles.welcomeContent,
+            ]}>
+            <View style={[styles.page, welcome && styles.welcomePage]}>
+              <View style={[styles.heading, !welcome && styles.compactHeading]}>
+                <FocusPressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Say hello to Omi"
+                  onPress={() => setGreeting(value => value + 1)}>
+                  <OmiAvatar
+                    identity="omi"
+                    size={welcome ? 104 : 52}
+                    tone="ink"
+                    inkColor={token.color.ink}
+                    motion={
+                      signingIn || completingSetup
+                        ? 'breathe'
+                        : welcome
+                        ? 'arrive'
+                        : 'gather'
+                    }
+                    motionKey={`${step}:${greeting}`}
+                    reduceMotion={reduceMotion}
+                  />
+                </FocusPressable>
+                <View style={[styles.heading, !welcome && styles.flex]}>
+                  <Text style={styles.eyebrow}>
+                    {welcome
+                      ? 'Welcome to Omi'
+                      : `Step ${progressIndex + 1} of ${progress.length}  /  ${
+                          stepLabels[step]
+                        }`}
+                  </Text>
+                  <Text
+                    accessibilityRole="header"
+                    style={[styles.title, welcome && styles.welcomeTitle]}>
+                    {titles[step]}
+                  </Text>
+                </View>
+              </View>
+              <ShippingStage stageKey={step} variant="hub" style={styles.stage}>
+                {welcome ? (
+                  <Text style={[styles.copy, styles.welcomeCopy]}>
+                    A place for what you see, say, and think.{'\n'}A little more
+                    room for what comes next.
+                  </Text>
+                ) : null}
+                {step === 'value' ? (
+                  <>
+                    <Text style={styles.copy}>
+                      Less keeping track. More being here.
+                    </Text>
+                    <View style={styles.featureList}>
+                      {DESKTOP_VALUE_CLAIMS.map((claim, index) => (
+                        <View key={claim} style={styles.feature}>
+                          <Text style={styles.featureNumber}>0{index + 1}</Text>
+                          <Text style={styles.featureText}>{claim}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <Text style={styles.small}>
+                      Cloud AI services transcribe audio and use your messages
+                      to generate replies. Signing in or granting permission
+                      does not start recording.
+                    </Text>
+                    <View style={styles.links}>
+                      <Button
+                        variant="ghost"
+                        labelStyle={styles.small}
+                        accessibilityRole="link"
+                        onPress={() => link(PRIVACY_URL)}>
+                        Privacy policy
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        labelStyle={styles.small}
+                        accessibilityRole="link"
+                        onPress={() => link(TERMS_URL)}>
+                        Terms of service
+                      </Button>
+                    </View>
+                  </>
+                ) : null}
+                {step === 'signIn' ? (
+                  <>
+                    <Text style={styles.copy}>
+                      Your conversations, memories, and ideas belong together.
+                      Sign in to the Omi account you call yours.
+                    </Text>
+                    <View style={styles.note}>
+                      <ShieldCheck size={22} color={token.color.inkMuted} />
+                      <Text style={[styles.small, styles.flex]}>
+                        Your existing memories stay with your account. Nothing
+                        starts recording when you sign in.
+                      </Text>
+                    </View>
+                    {signingIn && onCancelSignIn ? (
+                      <Button
+                        variant="ghost"
+                        labelStyle={styles.small}
+                        onPress={onCancelSignIn}>
+                        Cancel sign in
+                      </Button>
+                    ) : null}
+                  </>
+                ) : null}
+                {step === 'permissions' && setupRequired ? (
+                  <>
+                    <Text style={styles.copy}>
+                      A little access, on your terms. Choose what you’d like Omi
+                      to remember.
+                    </Text>
+                    <View style={styles.permissionList}>
+                      {permissions.map(
+                        (
+                          {kind, title, description, icon: PermissionIcon},
+                          index,
+                        ) => (
+                          <React.Fragment key={kind}>
+                            {index > 0 ? (
+                              <View style={styles.permissionDivider} />
+                            ) : null}
+                            <PermissionRow
+                              light
+                              grouped
+                              title={title}
+                              description={description}
+                              icon={
+                                <PermissionIcon
+                                  size={21}
+                                  color={token.color.inkMuted}
+                                />
+                              }
+                              granted={statuses[kind] === 'granted'}
+                              disabled={
+                                pending !== null || statuses[kind] === 'granted'
+                              }
+                              status={
+                                pending === kind
+                                  ? 'Asking…'
+                                  : statuses[kind] === 'granted'
+                                  ? 'Granted'
+                                  : statuses[kind] === 'denied'
+                                  ? 'Open Settings'
+                                  : 'Allow'
+                              }
+                              onPress={() => {
+                                void request(kind);
+                              }}
+                            />
+                          </React.Fragment>
+                        ),
+                      )}
+                    </View>
+                    <Text style={styles.small}>
+                      {allGranted
+                        ? 'All set. Continue whenever you’re ready.'
+                        : 'If macOS opens System Settings, I’ll stay nearby to guide you. You can come back or skip at any time.'}
+                    </Text>
+                    <Text style={styles.small}>
+                      Permission is not recording. Capture stays off until you
+                      start it.
+                    </Text>
+                  </>
+                ) : null}
+                {step === 'harnesses' && setupRequired ? (
+                  <>
+                    <Text style={styles.copy}>
+                      A gallery of AI assistants for your everyday work.
+                    </Text>
+                    <ConnectionGallery kind="agent" />
+                  </>
+                ) : null}
+                {step === 'data' && setupRequired ? (
+                  <>
+                    <Text style={styles.copy}>
+                      Your notes, plans, and ideas. Explore the sources coming
+                      to Omi.
+                    </Text>
+                    <ConnectionGallery kind="context" />
+                  </>
+                ) : null}
+                {step === 'tutorial' && setupRequired ? (
+                  <>
+                    <Text style={styles.copy}>
+                      A quick look around your new space.
+                    </Text>
+                    <View style={styles.featureList}>
+                      {[
+                        [
+                          'Home',
+                          'Your conversations, memories, and tasks, brought together.',
+                        ],
+                        [
+                          'Recall',
+                          'Find a moment in your screen history after you enable capture.',
+                        ],
+                        ['Chat', 'Ask Omi a question about your day.'],
+                      ].map(([name, detail]) => (
+                        <View key={name} style={styles.feature}>
+                          <Text style={styles.featureName}>{name}</Text>
+                          <Text style={[styles.small, styles.flex]}>
+                            {detail}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+                {step === 'finish' && setupRequired ? (
+                  <>
+                    <Text style={styles.copy}>
+                      A calmer place for your day starts here.
+                    </Text>
+                    <View style={styles.note}>
+                      <ShieldCheck size={22} color={token.color.inkMuted} />
+                      <Text style={[styles.small, styles.flex]}>
+                        No capture starts automatically. You choose what Omi can
+                        remember.
+                      </Text>
+                    </View>
+                    <Text style={styles.small}>
+                      By continuing, you agree to the Terms of service and
+                      acknowledge the Privacy policy described earlier.
+                    </Text>
+                  </>
+                ) : null}
+                {error || localError ? (
+                  <Text accessibilityRole="alert" style={styles.error}>
+                    {error || localError}
+                  </Text>
+                ) : null}
+              </ShippingStage>
+            </View>
+          </ScrollView>
+          <View style={styles.footer}>
+            <View style={!welcome && styles.flex}>
+              {back !== null && !signingIn ? (
+                <Button
+                  variant="ghost"
+                  style={styles.back}
+                  labelStyle={styles.small}
+                  disabled={completingSetup}
+                  onPress={() => setStep(back)}>
+                  Back
+                </Button>
+              ) : null}
+            </View>
+            {step === 'permissions' && !allGranted ? (
+              <Button
+                accessibilityLabel="I'll do these later"
+                variant="ghost"
+                labelStyle={styles.small}
+                onPress={advance}>
+                I'll do these later
+              </Button>
+            ) : null}
+            <Button
+              accessibilityLabel={primaryLabel}
+              disabled={primaryDisabled}
+              onPress={primary}
+              style={styles.primary}
+              labelStyle={styles.primaryText}>
+              {primaryLabel}
+            </Button>
+          </View>
+          <View style={styles.bottomBar}>
+            <OnboardingProgress
+              index={progressIndex}
+              count={progress.length}
+              reduceMotion={reduceMotion}
+            />
+            {setupRequired && onSignOut ? (
+              <Button
+                variant="ghost"
+                style={styles.signOut}
+                labelStyle={styles.small}
+                disabled={completingSetup}
+                onPress={onSignOut}>
+                Sign out
+              </Button>
+            ) : null}
+          </View>
+        </>
+      )}
+    </View>
   );
 }
+
+function OnboardingProgress({
+  index,
+  count,
+  reduceMotion,
+}: {
+  index: number;
+  count: number;
+  reduceMotion: boolean;
+}) {
+  const position = useRef(new Animated.Value(Math.max(0, index) * 14)).current;
+  useEffect(() => {
+    const toValue = Math.max(0, index) * 14;
+    if (reduceMotion) {
+      position.setValue(toValue);
+      return;
+    }
+    const animation = Animated.timing(position, {
+      toValue,
+      duration: 250,
+      useNativeDriver: false,
+      isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [index, position, reduceMotion]);
+  return (
+    <View
+      accessibilityLabel={
+        index < 0 ? 'Welcome' : `Step ${index + 1} of ${count}`
+      }
+      style={styles.dots}>
+      {Array.from({length: count}, (_, dot) => (
+        <View key={dot} style={styles.dotSlot}>
+          <View style={styles.dot} />
+        </View>
+      ))}
+      <Animated.View
+        style={[
+          styles.dotActive,
+          {opacity: index < 0 ? 0 : 1, transform: [{translateX: position}]},
+        ]}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  surface: {
+  surface: {flex: 1, backgroundColor: 'transparent'},
+  content: {
     flexGrow: 1,
+    paddingHorizontal: 40,
+    paddingTop: 52,
+    paddingBottom: 24,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
   },
-  surfaceList: {
-    alignItems: 'stretch',
-    justifyContent: 'flex-start',
-    paddingHorizontal: 36,
-    paddingVertical: 34,
-  },
-  card: {width: '100%', maxWidth: 488, alignItems: 'center', gap: 18},
-  cardList: {maxWidth: 560, alignItems: 'stretch', gap: 16},
-  speaker: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 16,
-  },
-  speakerCopy: {flex: 1, gap: 4},
-  step: {width: '100%', alignItems: 'center', gap: 18},
-  stepList: {alignItems: 'stretch', gap: 8},
-  title: {
-    fontSize: 30,
-    letterSpacing: -0.81,
-    lineHeight: 36,
-    fontWeight: '600',
-    color: token.color.ink,
-    textAlign: 'center',
-  },
-  titleList: {fontSize: 27, textAlign: 'left'},
-  copy: {
-    fontSize: 17,
-    letterSpacing: -0.17,
-    lineHeight: 26,
-    color: token.color.inkMuted,
-    textAlign: 'center',
-  },
-  aside: {
-    color: token.color.inkMuted,
-    fontSize: 17,
-    letterSpacing: -0.17,
-    lineHeight: 26,
-    marginBottom: 6,
-    textAlign: 'left',
-  },
-  meta: {fontSize: 12, color: token.color.inkMuted},
-  links: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center'},
-  permissionTitle: {
-    color: token.color.ink,
-    fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: -0.15,
-  },
-  harnessGroup: {
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(0,0,0,0.045)',
-    borderColor: 'rgba(0,0,0,0.08)',
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-    paddingHorizontal: 14,
-  },
-  harnessGroupTitle: {
-    color: token.color.ink,
-    fontSize: 13,
-    fontWeight: '600',
+  page: {width: '100%', maxWidth: 680, gap: 16},
+  heading: {gap: 12},
+  compactHeading: {flexDirection: 'row', alignItems: 'center', gap: 20},
+  eyebrow: {
+    fontSize: 11,
     letterSpacing: 0.2,
-    paddingTop: 10,
-    paddingBottom: 4,
-  },
-  harness: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 8,
-  },
-  harnessRule: {
-    borderBottomColor: 'rgba(0,0,0,0.08)',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  harnessMark: {
-    alignItems: 'center',
-    backgroundColor: token.color.ink,
-    borderRadius: 7,
-    height: 26,
-    justifyContent: 'center',
-    width: 26,
-  },
-  harnessMarkLabel: {
-    color: token.color.white,
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  harnessCopy: {flex: 1, gap: 1},
-  harnessDetail: {
+    fontWeight: '600',
     color: token.color.inkMuted,
-    fontSize: 12,
-    lineHeight: 16,
   },
-  harnessOn: {color: token.color.inkMuted, fontSize: 12},
-  harnessConnect: {color: token.color.ink, fontSize: 13, fontWeight: '600'},
-  button: {backgroundColor: token.color.dark},
-  buttonList: {alignSelf: 'flex-start'},
-  buttonLabel: {color: token.color.white},
+  title: {
+    fontSize: 29,
+    lineHeight: 35,
+    fontWeight: '600',
+    letterSpacing: -0.9,
+    color: token.color.ink,
+  },
+  stage: {flexBasis: 'auto', flexGrow: 0, flexShrink: 0, gap: 18},
+  copy: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: token.color.inkMuted,
+    maxWidth: 600,
+  },
+  small: {fontSize: 13, lineHeight: 21, color: token.color.inkMuted},
+  flex: {flex: 1},
+  featureList: {gap: 8},
+  feature: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: token.color.line,
+  },
+  featureNumber: {fontSize: 12, color: token.color.inkFaint},
+  featureText: {fontSize: 16, lineHeight: 24, color: token.color.ink, flex: 1},
+  featureName: {fontSize: 19, color: token.color.ink, width: 84},
+  note: {
+    flexDirection: 'row',
+    gap: 14,
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 14,
+    backgroundColor: token.color.glassQuiet,
+  },
+  permissionList: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: token.color.line,
+    backgroundColor: token.color.glassQuiet,
+  },
+  permissionDivider: {
+    height: 1,
+    marginLeft: 60,
+    backgroundColor: token.color.line,
+  },
+  links: {flexDirection: 'row', flexWrap: 'wrap', gap: 12},
+  footer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 40,
+    paddingTop: 12,
+    paddingBottom: 8,
+    justifyContent: 'flex-end',
+  },
+  primary: {
+    height: 40,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    backgroundColor: token.color.ink,
+  },
+  primaryText: {color: token.color.white, fontSize: 14},
+  back: {alignSelf: 'flex-start'},
+  signOut: {marginLeft: 'auto'},
+  error: {color: '#a0392e', fontSize: 14, lineHeight: 22},
+  welcomeContent: {justifyContent: 'center'},
+  welcomePage: {maxWidth: 600, alignItems: 'stretch', paddingVertical: 24},
+  welcomeTitle: {fontSize: 40, lineHeight: 46, letterSpacing: -1.4},
+  welcomeCopy: {alignSelf: 'flex-start'},
+  bottomBar: {
+    paddingHorizontal: 40,
+    paddingBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 40,
+  },
+  dots: {flexDirection: 'row', position: 'relative'},
+  dotSlot: {width: 14, height: 6, alignItems: 'center'},
+  dot: {
+    height: 5,
+    width: 5,
+    borderRadius: 3,
+    backgroundColor: token.color.lineStrong,
+  },
+  dotActive: {
+    backgroundColor: token.color.ink,
+    width: 14,
+    height: 5,
+    borderRadius: 3,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  guide: {flexGrow: 1, padding: 28, paddingTop: 60, gap: 28},
+  guideHeading: {flexDirection: 'row', gap: 14, alignItems: 'center'},
+  instruction: {flexDirection: 'row', gap: 12, alignItems: 'flex-start'},
+  instructionNumber: {
+    fontSize: 11,
+    lineHeight: 24,
+    width: 24,
+    textAlign: 'center',
+    borderRadius: 12,
+    overflow: 'hidden',
+    color: token.color.inkMuted,
+    backgroundColor: token.color.glassStrong,
+  },
+  guideFooter: {paddingHorizontal: 28, paddingBottom: 24, paddingTop: 8},
+  guideTitle: {
+    fontSize: 23,
+    lineHeight: 29,
+    fontWeight: '600',
+    color: token.color.ink,
+    letterSpacing: -0.7,
+  },
+  guideCopy: {fontSize: 14, lineHeight: 22, color: token.color.inkMuted},
+  guideStatus: {flexDirection: 'row', gap: 8, alignItems: 'center'},
+  waitingDot: {
+    height: 5,
+    width: 5,
+    borderRadius: 3,
+    backgroundColor: token.color.inkMuted,
+  },
+  guideBack: {alignSelf: 'flex-start', marginTop: 'auto'},
 });

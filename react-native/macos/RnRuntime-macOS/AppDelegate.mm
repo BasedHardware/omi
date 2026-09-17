@@ -2,14 +2,54 @@
 #import "OmiDesktopCommandsModule.h"
 #import "OmiGlassPanelView.h"
 
+#import <CoreGraphics/CoreGraphics.h>
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
+#import <React/RCTViewManager.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <objc/runtime.h>
 
 static const CGFloat OmiWindowInset = 12.0;
 static const CGFloat OmiTrafficLightSpacing = 8.0;
 static const CGFloat OmiChromeRowHeight = 52.0;
+static NSString *const OmiWindowPresentationChanged = @"OmiWindowPresentationChanged";
+
+// An inert React marker changes the existing window, never reparents React
+// children into another surface. Removing the screen restores the app window.
+@interface OmiDesktopWindowView : RCTView
+@property (nonatomic, copy) NSString *presentation;
+@property (nonatomic, weak) NSWindow *owningWindow;
+@end
+
+@implementation OmiDesktopWindowView
+- (void)setPresentation:(NSString *)presentation
+{
+  _presentation = [presentation copy];
+  if (self.window != nil) {
+    [NSNotificationCenter.defaultCenter postNotificationName:OmiWindowPresentationChanged
+        object:self.window userInfo:@{@"presentation": _presentation ?: @"app"}];
+  }
+}
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  if (self.owningWindow != nil && self.owningWindow != self.window) {
+    [NSNotificationCenter.defaultCenter postNotificationName:OmiWindowPresentationChanged
+        object:self.owningWindow userInfo:@{@"presentation": @"app"}];
+  }
+  self.owningWindow = self.window;
+  [self setPresentation:self.presentation];
+}
+@end
+
+@interface OmiDesktopWindowManager : RCTViewManager
+@end
+@implementation OmiDesktopWindowManager
+RCT_EXPORT_MODULE(OmiDesktopWindow)
+RCT_EXPORT_VIEW_PROPERTY(presentation, NSString)
+- (NSView *)view { return [[OmiDesktopWindowView alloc] initWithFrame:NSZeroRect]; }
++ (BOOL)requiresMainQueueSetup { return YES; }
+@end
 
 @interface OmiTitlebarPassthroughView : NSView
 @end
@@ -158,9 +198,29 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   }
   self.dependencyProvider = [RCTAppDependencyProvider new];
 
+  self.omiWindowFrames = [NSMutableDictionary new];
+  self.omiWindowPresentation = @"app";
+  __weak AppDelegate *weakSelf = self;
+  self.omiWindowPresentationObserver =
+      [NSNotificationCenter.defaultCenter addObserverForName:OmiWindowPresentationChanged
+          object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+    if (note.object == weakSelf.window) {
+      [weakSelf applyOmiWindowPresentation:note.userInfo[@"presentation"]];
+    }
+  }];
+  self.omiWorkspaceObserver =
+      [NSWorkspace.sharedWorkspace.notificationCenter
+          addObserverForName:NSWorkspaceDidActivateApplicationNotification
+          object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
+    [weakSelf dressOmiWindow];
+    if ([weakSelf.omiWindowPresentation isEqualToString:@"permission-guide"] &&
+        [NSWorkspace.sharedWorkspace.frontmostApplication.bundleIdentifier
+            isEqualToString:@"com.apple.systempreferences"]) {
+      [weakSelf positionOmiPermissionGuide];
+    }
+  }];
   [super applicationDidFinishLaunching:notification];
   [self dressOmiWindow];
-  __weak AppDelegate *weakSelf = self;
   self.omiWindowUpdateObserver =
       [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidUpdateNotification
                                                        object:self.window
@@ -174,6 +234,13 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
 
 - (void)applicationWillTerminate:(NSNotification *)notification
 {
+  [self.omiGuidePlacementTimer invalidate];
+  if (self.omiWindowPresentationObserver != nil) {
+    [NSNotificationCenter.defaultCenter removeObserver:self.omiWindowPresentationObserver];
+  }
+  if (self.omiWorkspaceObserver != nil) {
+    [NSWorkspace.sharedWorkspace.notificationCenter removeObserver:self.omiWorkspaceObserver];
+  }
   if (self.omiWindowUpdateObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiWindowUpdateObserver];
     self.omiWindowUpdateObserver = nil;
@@ -183,6 +250,115 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
     self.omiWindowDragMonitor = nil;
   }
   [super applicationWillTerminate:notification];
+}
+
+- (void)applyOmiWindowPresentation:(NSString *)presentation
+{
+  if (![presentation isEqualToString:@"app"] &&
+      ![presentation isEqualToString:@"onboarding"] &&
+      ![presentation isEqualToString:@"permission-guide"]) {
+    return;
+  }
+  if ([self.omiWindowPresentation isEqualToString:presentation] || self.window == nil) {
+    return;
+  }
+  NSString *previous = self.omiWindowPresentation;
+  self.omiWindowFrames[previous] = [NSValue valueWithRect:self.window.frame];
+  self.omiWindowPresentation = presentation;
+  [self.omiGuidePlacementTimer invalidate];
+  self.omiGuidePlacementTimer = nil;
+  self.omiGuideFitsBesideSettings = NO;
+  [self dressOmiWindow];
+  NSValue *saved = self.omiWindowFrames[presentation];
+  if (saved != nil) {
+    [self.window setFrame:saved.rectValue display:YES];
+  } else {
+    [self.window setContentSize:[presentation isEqualToString:@"permission-guide"]
+        ? NSMakeSize(380, 480) : NSMakeSize(720, 700)];
+    [self.window center];
+  }
+  // Grant polling only updates React content. Only an explicit return changes
+  // out of guide mode and brings Omi back; never steal focus from a TCC prompt.
+  if ([presentation isEqualToString:@"permission-guide"]) {
+    [self positionOmiPermissionGuide];
+    __weak AppDelegate *weakSelf = self;
+    self.omiGuidePlacementTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES
+        block:^(__unused NSTimer *timer) {
+      if ([NSWorkspace.sharedWorkspace.frontmostApplication.bundleIdentifier
+          isEqualToString:@"com.apple.systempreferences"] && !weakSelf.window.miniaturized) {
+        [weakSelf positionOmiPermissionGuide];
+      }
+    }];
+  } else if ([previous isEqualToString:@"permission-guide"]) {
+    [NSApp activateIgnoringOtherApps:YES];
+    [self.window makeKeyAndOrderFront:nil];
+  }
+}
+
+- (void)positionOmiPermissionGuide
+{
+  NSWindow *window = self.window;
+  NSScreen *screen = window.screen ?: NSScreen.mainScreen;
+  NSRect settingsFrame = NSZeroRect;
+  NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(
+      kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID));
+  // Bounds and PID only: no screenshot, OCR, window titles, or Accessibility
+  // permission. This is words-only guidance, never an arrow to an unmeasured switch.
+  for (NSRunningApplication *app in [NSRunningApplication
+      runningApplicationsWithBundleIdentifier:@"com.apple.systempreferences"]) {
+    for (NSDictionary *info in windows) {
+      if ([info[(id)kCGWindowOwnerPID] intValue] != app.processIdentifier ||
+          [info[(id)kCGWindowLayer] intValue] != 0) {
+        continue;
+      }
+      CGRect bounds;
+      if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)
+              info[(id)kCGWindowBounds], &bounds) || bounds.size.width < 300) {
+        continue;
+      }
+      // Quartz is top-left relative to the primary display; AppKit is bottom-left.
+      CGFloat primaryTop = NSMaxY(NSScreen.screens.firstObject.frame);
+      settingsFrame = NSMakeRect(bounds.origin.x, primaryTop - CGRectGetMaxY(bounds),
+          bounds.size.width, bounds.size.height);
+      for (NSScreen *candidate in NSScreen.screens) {
+        if (NSPointInRect(NSMakePoint(NSMidX(settingsFrame), NSMidY(settingsFrame)), candidate.frame)) {
+          screen = candidate;
+          break;
+        }
+      }
+      break;
+    }
+  }
+  if (screen == nil) { return; }
+  NSRect visible = NSInsetRect(screen.visibleFrame, 16, 16);
+  NSRect frame = window.frame;
+  frame.size.width = MIN(frame.size.width, NSWidth(visible));
+  frame.size.height = MIN(frame.size.height, NSHeight(visible));
+  CGFloat right = NSMaxX(settingsFrame) + 16;
+  CGFloat left = NSMinX(settingsFrame) - NSWidth(frame) - 16;
+  BOOL fitsRight = right >= NSMinX(visible) && right + NSWidth(frame) <= NSMaxX(visible);
+  BOOL fitsLeft = left >= NSMinX(visible) && left + NSWidth(frame) <= NSMaxX(visible);
+  BOOL beside = !NSIsEmptyRect(settingsFrame) && (fitsRight || fitsLeft);
+  self.omiGuideFitsBesideSettings = beside;
+  if (beside) {
+    frame.origin.x = fitsRight ? right : left;
+    frame.origin.y = NSMidY(settingsFrame) - NSHeight(frame) / 2;
+    frame.origin.y = MAX(NSMinY(visible), MIN(frame.origin.y, NSMaxY(visible) - NSHeight(frame)));
+  } else {
+    frame.origin = NSMakePoint(NSMaxX(visible) - NSWidth(frame), NSMinY(visible));
+  }
+  if (!NSEqualRects(window.frame, frame)) {
+    [window setFrame:frame display:YES];
+  }
+  // If there is no room beside Settings, leave the guide behind it rather than
+  // cover its controls. The user can return to Omi from the Dock or Cmd-Tab.
+  if ([NSWorkspace.sharedWorkspace.frontmostApplication.bundleIdentifier
+      isEqualToString:@"com.apple.systempreferences"]) {
+    window.level = beside ? NSFloatingWindowLevel : NSNormalWindowLevel;
+    if (!beside) {
+      [window orderBack:nil];
+    }
+  }
 }
 
 - (void)installOmiWindowGlass:(NSWindow *)window
@@ -240,7 +416,7 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
   rootView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
   rootView.backgroundColor = NSColor.clearColor;
-  window.hasShadow = NO;
+  window.hasShadow = YES;
   window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
       NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable |
       NSWindowStyleMaskFullSizeContentView;
@@ -250,9 +426,19 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   window.toolbar = nil;
   window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
   window.movableByWindowBackground = NO;
-  window.level = NSNormalWindowLevel;
+  BOOL guide = [self.omiWindowPresentation isEqualToString:@"permission-guide"];
+  NSRunningApplication *front = NSWorkspace.sharedWorkspace.frontmostApplication;
+  NSWindowLevel level = guide && (front.processIdentifier == NSProcessInfo.processInfo.processIdentifier ||
+      (self.omiGuideFitsBesideSettings &&
+          [front.bundleIdentifier isEqualToString:@"com.apple.systempreferences"]))
+      ? NSFloatingWindowLevel : NSNormalWindowLevel;
+  if (window.level != level) {
+    window.level = level;
+  }
   window.hidesOnDeactivate = NO;
-  window.contentMinSize = NSMakeSize(800.0, 680.0);
+  window.contentMinSize = guide ? NSMakeSize(340, 420) :
+      [self.omiWindowPresentation isEqualToString:@"onboarding"] ?
+          NSMakeSize(640, 620) : NSMakeSize(800, 680);
   if (!self.omiWindowGeometryApplied) {
     [window setContentSize:NSMakeSize(900.0, 700.0)];
     [window center];

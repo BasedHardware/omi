@@ -154,7 +154,12 @@ async function openChat(renderer: ReactTestRenderer.ReactTestRenderer) {
   );
 }
 async function reachAgreement(renderer: ReactTestRenderer.ReactTestRenderer) {
-  for (const label of ["I'll do these later", 'Continue', 'Not now']) {
+  for (const label of [
+    "I'll do these later",
+    'Continue',
+    'Continue',
+    'Continue',
+  ]) {
     await act(async () =>
       renderer.root
         .find(node => node.props.accessibilityLabel === label)

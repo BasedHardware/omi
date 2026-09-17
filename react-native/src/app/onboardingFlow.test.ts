@@ -32,6 +32,7 @@ test('desktop itinerary matches Context for Claude and drops sign-in after resto
     'signIn',
     'permissions',
     'harnesses',
+    'data',
     'tutorial',
     'finish',
   ]);
@@ -40,12 +41,16 @@ test('desktop itinerary matches Context for Claude and drops sign-in after resto
     'value',
     'permissions',
     'harnesses',
+    'data',
     'tutorial',
     'finish',
   ]);
   expect(nextDesktopStep('signIn', true)).toBe('permissions');
   expect(previousDesktopStep('permissions', true)).toBeNull();
   expect(previousDesktopStep('value', false)).toBe('welcome');
+  expect(nextDesktopStep('harnesses', true)).toBe('data');
+  expect(previousDesktopStep('data', true)).toBe('harnesses');
+  expect(previousDesktopStep('tutorial', true)).toBe('data');
   expect(desktopProgressSteps(false)).toEqual(desktopProgressSteps(true));
-  expect(desktopProgressSteps(true)).toHaveLength(6);
+  expect(desktopProgressSteps(true)).toHaveLength(7);
 });

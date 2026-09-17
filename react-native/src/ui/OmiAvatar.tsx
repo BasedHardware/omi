@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useMemo, useRef} from 'react';
 import {Animated, Easing, View} from 'react-native';
 import {styles} from './styles';
 
@@ -76,6 +76,52 @@ function markDotOpacity(phase: Animated.Value, index: number) {
   });
 }
 
+export type OmiMarkMotion = 'arrive' | 'gather' | 'breathe' | 'success';
+const motionDuration: Record<OmiMarkMotion, number> = {
+  arrive: 900,
+  gather: 900,
+  breathe: 8000,
+  success: 900,
+};
+
+/** Adapted from main's omiOrb.ts: canonical ring, 2.2-unit breath and 34-unit
+ * success scatter. One-shot gestures return exactly to rest; no pretend meter. */
+export function omiMarkMotionPose(
+  motion: OmiMarkMotion,
+  index: number,
+  phase: number,
+) {
+  const center = omiMarkDotCenter(index);
+  const dx = center.x - omiMarkGeometry.centre;
+  const dy = center.y - omiMarkGeometry.centre;
+  const radius = Math.hypot(dx, dy);
+  let spread = 1;
+  let scale = 1;
+  let opacity = 1;
+  if (motion === 'arrive') {
+    const t = Math.max(0, Math.min(1, (phase - index * 0.045) / 0.685));
+    const placed = 1 - Math.pow(1 - t, 3);
+    spread = 0.3 + 0.7 * placed;
+    scale = 0.6 + 0.4 * placed;
+    opacity = 0.15 + 0.85 * placed;
+  } else if (motion === 'gather') {
+    const envelope = Math.sin(Math.PI * phase);
+    // Inward first, then an overshoot before returning to the ring.
+    spread = 1 - 0.6 * Math.sin(2 * Math.PI * phase) * envelope;
+    scale = 1 + 0.12 * envelope;
+  } else if (motion === 'success') {
+    const burst = Math.sin(Math.PI * phase);
+    spread = 1 + (34 * burst) / radius;
+    scale = 1 + 0.16 * burst;
+  } else {
+    const breath = 0.5 - 0.5 * Math.cos(2 * Math.PI * (phase + index / 24));
+    spread = 1 + (2.2 * breath) / radius;
+    scale = 1 + 0.056 * breath;
+    opacity = 0.75 + 0.25 * breath;
+  }
+  return {x: dx * (spread - 1), y: dy * (spread - 1), scale, opacity};
+}
+
 function OmiAvatar({
   animate = false,
   identity = 'omi',
@@ -83,6 +129,8 @@ function OmiAvatar({
   size = AVATAR_BASE,
   tone = 'identity',
   inkColor = OMI_MARK_INK,
+  motion,
+  motionKey,
 }: {
   animate?: boolean;
   identity?: string;
@@ -90,16 +138,50 @@ function OmiAvatar({
   size?: number;
   tone?: 'identity' | 'ink';
   inkColor?: string;
+  motion?: OmiMarkMotion;
+  motionKey?: string;
 }) {
   const smileProgress = useRef(new Animated.Value(0)).current;
   const cometPhase = useRef(new Animated.Value(0)).current;
+  const gesture = useRef(
+    new Animated.Value(motion && !reduceMotion ? 0 : 1),
+  ).current;
   const unit = size / AVATAR_BASE;
   const mark = tone === 'ink';
+  const poses = useMemo(
+    () =>
+      motion
+        ? Array.from({length: MARK_DOT_COUNT}, (_, index) =>
+            MARK_PHASE_SAMPLES.map(phase =>
+              omiMarkMotionPose(motion, index, phase),
+            ),
+          )
+        : null,
+    [motion],
+  );
+
+  useEffect(() => {
+    if (!mark || !motion || reduceMotion) {
+      gesture.setValue(1);
+      return;
+    }
+    gesture.setValue(0);
+    const timing = Animated.timing(gesture, {
+      toValue: 1,
+      duration: motionDuration[motion],
+      easing: Easing.linear,
+      useNativeDriver: false,
+      isInteraction: false,
+    });
+    const animation = motion === 'breathe' ? Animated.loop(timing) : timing;
+    animation.start();
+    return () => animation.stop();
+  }, [gesture, mark, motion, motionKey, reduceMotion]);
 
   useEffect(() => {
     smileProgress.setValue(0);
     cometPhase.setValue(0);
-    if (!animate || reduceMotion) {
+    if (!animate || reduceMotion || (mark && motion)) {
       return;
     }
     if (mark) {
@@ -132,19 +214,29 @@ function OmiAvatar({
     );
     animation.start();
     return () => animation.stop();
-  }, [animate, cometPhase, mark, reduceMotion, smileProgress]);
+  }, [animate, cometPhase, mark, motion, reduceMotion, smileProgress]);
 
   if (mark) {
     const markScale = size / omiMarkGeometry.canvas;
     const markDiameter = omiMarkGeometry.dotRadius * 2 * markScale;
-    const pulsing = animate && !reduceMotion;
+    const pulsing = animate && !reduceMotion && !motion;
     return (
       <View
+        testID="omi-dot-mark"
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
         style={{height: size, position: 'relative', width: size}}>
         {Array.from({length: MARK_DOT_COUNT}, (_, index) => {
           const center = omiMarkDotCenter(index);
+          const path = !reduceMotion ? poses?.[index] : null;
+          const value = (key: 'x' | 'y' | 'scale' | 'opacity') =>
+            gesture.interpolate({
+              inputRange: MARK_PHASE_SAMPLES,
+              outputRange: path!.map(
+                pose =>
+                  pose[key] * (key === 'x' || key === 'y' ? markScale : 1),
+              ),
+            });
           return (
             <Animated.View
               key={index}
@@ -153,10 +245,21 @@ function OmiAvatar({
                 borderRadius: markDiameter / 2,
                 height: markDiameter,
                 left: center.x * markScale - markDiameter / 2,
-                opacity: pulsing ? markDotOpacity(cometPhase, index) : 1,
+                opacity: path
+                  ? value('opacity')
+                  : pulsing
+                  ? markDotOpacity(cometPhase, index)
+                  : 1,
                 position: 'absolute',
                 top: center.y * markScale - markDiameter / 2,
                 width: markDiameter,
+                transform: path
+                  ? [
+                      {translateX: value('x')},
+                      {translateY: value('y')},
+                      {scale: value('scale')},
+                    ]
+                  : undefined,
               }}
             />
           );

@@ -18,6 +18,7 @@ export const desktopOnboardingSteps = [
   'signIn',
   'permissions',
   'harnesses',
+  'data',
   'tutorial',
   'finish',
 ] as const;
@@ -77,10 +78,15 @@ export function previousDesktopStep(
   switch (step) {
     case 'welcome':
     case 'permissions':
-    case 'harnesses':
-    case 'tutorial':
-    case 'finish':
       return null;
+    case 'harnesses':
+      return 'permissions';
+    case 'data':
+      return 'harnesses';
+    case 'tutorial':
+      return 'data';
+    case 'finish':
+      return 'tutorial';
     case 'value':
       return 'welcome';
     case 'signIn':
