@@ -217,6 +217,8 @@ async def search_articles(payload: dict[str, Any]):
 
         lines = [f"Wikipedia search results for '{query}':"]
         for index, item in enumerate(results, start=1):
+            if not isinstance(item, dict):
+                continue
             title = item.get("title") or "Untitled"
             snippet = _clean_snippet(item.get("snippet"))
             lines.append(f"\n{index}. {title}")
@@ -281,7 +283,13 @@ async def get_random_article(payload: dict[str, Any]):
         if not random_items:
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 
-        title = random_items[0].get("title")
+        title = None
+        for item in random_items:
+            if isinstance(item, dict):
+                title = item.get("title")
+                if title:
+                    break
+
         if not title:
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 

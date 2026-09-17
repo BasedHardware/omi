@@ -251,6 +251,43 @@ class WikipediaEndpointAsyncTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(res.error)
             self.assertIn("No random Wikipedia article was returned", res.result)
 
+    async def test_search_articles_non_dict_items(self):
+        mock_data = {
+            "query": {
+                "search": [
+                    None,
+                    "malformed_item",
+                    {"title": "Valid Article", "snippet": "A good snippet"},
+                    123,
+                ]
+            }
+        }
+        with patch.object(app, "_request_json", AsyncMock(return_value=mock_data)):
+            res = await app.search_articles({"query": "valid test"})
+            self.assertIsNone(res.error)
+            self.assertIn("Valid Article", res.result)
+            self.assertIn("A good snippet", res.result)
+
+    async def test_get_random_article_non_dict_items(self):
+        mock_random = {
+            "query": {
+                "random": [
+                    None,
+                    "invalid",
+                    {"id": 1234, "title": "Recovered Random Title"},
+                ]
+            }
+        }
+        mock_summary = {
+            "title": "Recovered Random Title",
+            "extract": "Summary for recovered random article.",
+        }
+        with patch.object(app, "_request_json", AsyncMock(side_effect=[mock_random, mock_summary])):
+            res = await app.get_random_article({})
+            self.assertIsNone(res.error)
+            self.assertIn("Random Wikipedia article:", res.result)
+            self.assertIn("Recovered Random Title", res.result)
+
 
 if __name__ == "__main__":
     unittest.main()
