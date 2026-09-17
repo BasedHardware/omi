@@ -171,7 +171,9 @@ function Preview() {
       ? "Example connection error. Check Bluetooth and try again."
       : null
   );
-  const [mode, setMode] = useState<MobileOmnibarMode>("Ask");
+  const [mode, setMode] = useState<MobileOmnibarMode>(
+    chatState ? "Ask" : "Search"
+  );
   const composerRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(

@@ -144,10 +144,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     resolveInitialRoute(initialRoute),
   );
   const [homeChatOpen, setHomeChatOpen] = useState(false);
-  const [mobileMode, setMobileMode] = useState<MobileOmnibarMode>('Ask');
+  const [mobileMode, setMobileMode] = useState<MobileOmnibarMode>('Search');
   const beforeMobileChat = useRef<{route: Route; mode: MobileOmnibarMode}>({
     route: 'Home',
-    mode: 'Ask',
+    mode: 'Search',
   });
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   // useOnboarding owns the desktop session gate and needs a reads refresh;

@@ -1,5 +1,5 @@
 import {FocusPressable as Pressable} from '../ui/Pressable';
-import React, {memo, useCallback, useMemo, useState} from 'react';
+import React, {memo, useCallback, useId, useMemo, useState} from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import Svg, {Defs, LinearGradient, Rect, Stop} from 'react-native-svg';
 import {
   TaskEditor,
   TaskMutationStatus,
@@ -33,6 +34,40 @@ import {
   mobileSpace,
   mobileType,
 } from './mobileTokens';
+
+function ContentEdges({children}: {children: React.ReactNode}) {
+  const id = useId();
+  return (
+    <View style={styles.flex}>
+      {children}
+      {(['top', 'bottom'] as const).map(edge => (
+        <Svg
+          key={edge}
+          pointerEvents="none"
+          accessible={false}
+          width="100%"
+          height={24}
+          style={[styles.edgeFade, {[edge]: 0}]}>
+          <Defs>
+            <LinearGradient id={`${id}-${edge}`} x1="0" y1="0" x2="0" y2="1">
+              <Stop
+                offset="0"
+                stopColor={mobileColor.background}
+                stopOpacity={edge === 'top' ? 1 : 0}
+              />
+              <Stop
+                offset="1"
+                stopColor={mobileColor.background}
+                stopOpacity={edge === 'top' ? 0 : 1}
+              />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill={`url(#${id}-${edge})`} />
+        </Svg>
+      ))}
+    </View>
+  );
+}
 
 export type MobileProjectionStatus =
   | 'ready'
@@ -459,57 +494,59 @@ export function MobileAppSurface({
             </View>
           )}
           <View style={[styles.flex, styles.stage]}>
-            {chatContent ? (
-              chatContent
-            ) : activeRoute === 'settings' ? (
-              <View accessibilityLabel="Settings stage" style={styles.flex}>
-                {settingsContent}
-              </View>
-            ) : activeRoute === 'apps' && appsContent ? (
-              <View accessibilityLabel="Connectors stage" style={styles.flex}>
-                {appsContent}
-              </View>
-            ) : activeRoute === 'tasks' ? (
-              taskStatus === 'ready' ? (
-                <FlatList
-                  contentContainerStyle={styles.secondaryList}
-                  data={tasks}
-                  keyExtractor={task => task.id}
-                  ListFooterComponent={<>{taskPagination}</>}
-                  ListHeaderComponent={taskFeedback}
-                  ListEmptyComponent={
-                    <StatePanel noun="tasks" status="empty" />
-                  }
-                  renderItem={({item}) => (
-                    <TaskRow
-                      onToggle={writesAvailable ? onTaskToggle : undefined}
-                      onEdit={
-                        writesAvailable && onTaskEdit
-                          ? setSelectedTaskId
-                          : undefined
-                      }
-                      busy={busyTaskId !== null}
-                      task={item}
-                    />
-                  )}
-                />
-              ) : (
-                <View style={[styles.secondaryList, styles.flex]}>
-                  <StatePanel noun="tasks" status={taskStatus} />
-                  {taskPagination}
+            <ContentEdges>
+              {chatContent ? (
+                chatContent
+              ) : activeRoute === 'settings' ? (
+                <View accessibilityLabel="Settings stage" style={styles.flex}>
+                  {settingsContent}
                 </View>
-              )
-            ) : activeRoute === 'chat' ? (
-              conversationContent ?? (
-                <StatePanel noun="conversations" status="error" />
-              )
-            ) : (
-              <View style={styles.secondaryEmpty}>
-                <Text style={styles.secondaryPrompt}>
-                  No apps connected yet
-                </Text>
-              </View>
-            )}
+              ) : activeRoute === 'apps' && appsContent ? (
+                <View accessibilityLabel="Connectors stage" style={styles.flex}>
+                  {appsContent}
+                </View>
+              ) : activeRoute === 'tasks' ? (
+                taskStatus === 'ready' ? (
+                  <FlatList
+                    contentContainerStyle={styles.secondaryList}
+                    data={tasks}
+                    keyExtractor={task => task.id}
+                    ListFooterComponent={<>{taskPagination}</>}
+                    ListHeaderComponent={taskFeedback}
+                    ListEmptyComponent={
+                      <StatePanel noun="tasks" status="empty" />
+                    }
+                    renderItem={({item}) => (
+                      <TaskRow
+                        onToggle={writesAvailable ? onTaskToggle : undefined}
+                        onEdit={
+                          writesAvailable && onTaskEdit
+                            ? setSelectedTaskId
+                            : undefined
+                        }
+                        busy={busyTaskId !== null}
+                        task={item}
+                      />
+                    )}
+                  />
+                ) : (
+                  <View style={[styles.secondaryList, styles.flex]}>
+                    <StatePanel noun="tasks" status={taskStatus} />
+                    {taskPagination}
+                  </View>
+                )
+              ) : activeRoute === 'chat' ? (
+                conversationContent ?? (
+                  <StatePanel noun="conversations" status="error" />
+                )
+              ) : (
+                <View style={styles.secondaryEmpty}>
+                  <Text style={styles.secondaryPrompt}>
+                    No apps connected yet
+                  </Text>
+                </View>
+              )}
+            </ContentEdges>
           </View>
           {omnibar}
           <MobileTabBar
@@ -558,30 +595,32 @@ export function MobileAppSurface({
             {deviceMessage}
           </Text>
         )}
-        {searchContent ?? (
-          <FlatList
-            contentContainerStyle={styles.content}
-            data={rows}
-            ListHeaderComponent={
-              devicePanel || capture.active ? (
-                <View>
-                  {devicePanel}
-                  {capture.active && (
-                    <Text numberOfLines={2} style={styles.captureStatus}>
-                      {capture.waitingForAudio
-                        ? 'Waiting for audio'
-                        : 'Listening'}
-                      {capture.transcript ? ` · ${capture.transcript}` : ''}
-                    </Text>
-                  )}
-                </View>
-              ) : null
-            }
-            keyExtractor={item => item.key}
-            renderItem={renderRow}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
+        <ContentEdges>
+          {searchContent ?? (
+            <FlatList
+              contentContainerStyle={styles.content}
+              data={rows}
+              ListHeaderComponent={
+                devicePanel || capture.active ? (
+                  <View>
+                    {devicePanel}
+                    {capture.active && (
+                      <Text numberOfLines={2} style={styles.captureStatus}>
+                        {capture.waitingForAudio
+                          ? 'Waiting for audio'
+                          : 'Listening'}
+                        {capture.transcript ? ` · ${capture.transcript}` : ''}
+                      </Text>
+                    )}
+                  </View>
+                ) : null
+              }
+              keyExtractor={item => item.key}
+              renderItem={renderRow}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </ContentEdges>
         {omnibar}
         <MobileTabBar activeRoute={activeRoute} onRouteChange={onRouteChange} />
       </KeyboardAvoidingView>
@@ -591,6 +630,7 @@ export function MobileAppSurface({
 
 const styles = StyleSheet.create({
   flex: {flex: 1},
+  edgeFade: {position: 'absolute', left: 0},
   stage: {paddingTop: 12},
   safeArea: {backgroundColor: mobileColor.background, flex: 1},
   brand: {flexDirection: 'row', alignItems: 'center', gap: 8},
