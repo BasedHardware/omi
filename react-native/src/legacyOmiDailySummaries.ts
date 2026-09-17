@@ -46,10 +46,39 @@ export type OmiDailySummary = {
   proactiveMoments?: number;
 };
 
-function presentPaddedKnown(value: unknown): void {
-  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+function presentNullableDate(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
     throw new DailySummaryError();
   }
+  if (visibleDisplayText(value) !== value) {
+    throw new DailySummaryError();
+  }
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (value === '' || !Number.isFinite(parsed)) {
+    throw new DailySummaryError();
+  }
+}
+
+function presentNullableDouble(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new DailySummaryError();
+    }
+    if (value === '' || !Number.isFinite(Number(value))) {
+      throw new DailySummaryError();
+    }
+    return;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return;
+  }
+  throw new DailySummaryError();
 }
 
 function presentLocations(value: unknown): void {
@@ -61,8 +90,8 @@ function presentLocations(value: unknown): void {
       continue;
     }
     const pin = raw as Record<string, unknown>;
-    presentPaddedKnown(pin.latitude);
-    presentPaddedKnown(pin.longitude);
+    presentNullableDouble(pin.latitude);
+    presentNullableDouble(pin.longitude);
   }
 }
 
@@ -75,7 +104,7 @@ function presentMemoriesLearned(value: unknown): void {
       continue;
     }
     const memory = raw as Record<string, unknown>;
-    presentPaddedKnown(memory.captured_at);
+    presentNullableDate(memory.captured_at);
   }
 }
 
@@ -193,7 +222,7 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
     const date = summaryDate(summary.date);
     const dayEmoji = optionalWireString(summary.day_emoji, 1_000_000);
     const overview = optionalWireString(summary.overview, 1_000_000);
-    presentPaddedKnown(summary.created_at);
+    presentNullableDate(summary.created_at);
     presentLocations(summary.locations);
     presentMemoriesLearned(summary.memories_learned);
     const stats = summaryStats(summary.stats);

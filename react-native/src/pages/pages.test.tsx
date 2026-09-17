@@ -2537,6 +2537,38 @@ test('Settings names a failed daily summaries GET instead of empty success', asy
   expect(tree).not.toContain('Regenerate');
 });
 
+test('Settings names Flutter DailySummary.fromGenerated type-wrong GET created_at instead of remapping to a headline chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+              created_at: 1,
+            },
+            {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'},
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Fair Use');
+  expect(tree).not.toContain('Daily summary');
+  expect(tree).not.toContain('Met with the team');
+  expect(tree).not.toContain('Neighbor recap');
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('Regenerate');
+});
+
 test('Settings names GET daily-summary-settings without a picker or Flutter defaults', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
