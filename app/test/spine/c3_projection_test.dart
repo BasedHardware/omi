@@ -106,18 +106,15 @@ void main() {
     recordFallback(
         const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded),
         emit: (name, fields) => emitted.add((name, fields)));
-    expect(emitted, [
-      (
-        'fallback_triggered',
-        {
-          'component': 'other',
-          'area': 'other',
-          'from': 'none',
-          'to': 'none',
-          'reason': 'other',
-          'outcome': 'degraded',
-        }
-      )
-    ]);
+    expect(emitted, hasLength(1));
+    expect(emitted.single.$1, 'fallback_triggered');
+    expect(emitted.single.$2, {
+      'component': 'other',
+      'area': 'other',
+      'from': 'none',
+      'to': 'none',
+      'reason': 'other',
+      'outcome': 'degraded',
+    });
   });
 }
