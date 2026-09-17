@@ -988,120 +988,120 @@ class CaptureController extends ChangeNotifier
       await _getBleButtonListener(
         deviceId,
         onButtonReceived: (List<int> value) {
-        final snapshot = List<int>.from(value);
-        if (snapshot.isEmpty || snapshot.length < 4) return;
-        var buttonState = ByteData.view(
-          Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-        ).getUint32(0);
-        Logger.debug("device button $buttonState");
+          final snapshot = List<int>.from(value);
+          if (snapshot.isEmpty || snapshot.length < 4) return;
+          var buttonState = ByteData.view(
+            Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
+          ).getUint32(0);
+          Logger.debug("device button $buttonState");
 
-        // Intercept for interactive device onboarding
-        if (deviceOnboardingProvider?.isOnboardingActive == true) {
-          deviceOnboardingProvider!.onButtonEvent(buttonState);
-          // For step 1 (ask question), let single-tap fall through to normal voice command handling
-          if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
-            // Fall through to normal single-tap handling below
-          } else {
+          // Intercept for interactive device onboarding
+          if (deviceOnboardingProvider?.isOnboardingActive == true) {
+            deviceOnboardingProvider!.onButtonEvent(buttonState);
+            // For step 1 (ask question), let single-tap fall through to normal voice command handling
+            if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
+              // Fall through to normal single-tap handling below
+            } else {
+              return;
+            }
+          }
+
+          // double tap
+          if (buttonState == 2) {
+            Logger.debug("Double tap detected");
+
+            // Guard: ignore if already processing a button event
+            if (_isProcessingButtonEvent) {
+              Logger.debug("Double tap: already processing, ignoring");
+              return;
+            }
+
+            int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+
+            if (doubleTapAction == 1) {
+              // Pause/resume recording
+              Logger.debug("Double tap: toggling pause/mute");
+              _isProcessingButtonEvent = true;
+              if (_isPaused) {
+                PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+                resumeDeviceRecording().then((_) {
+                  _isProcessingButtonEvent = false;
+                }).catchError((e) {
+                  Logger.debug("Error resuming device recording: $e");
+                  _isProcessingButtonEvent = false;
+                });
+              } else {
+                PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+                pauseDeviceRecording().then((_) {
+                  _isProcessingButtonEvent = false;
+                }).catchError((e) {
+                  Logger.debug("Error pausing device recording: $e");
+                  _isProcessingButtonEvent = false;
+                });
+              }
+            } else if (doubleTapAction == 2) {
+              // Star ongoing conversation (doesn't end it)
+              Logger.debug("Double tap: marking conversation for starring");
+              if (!_starOngoingConversation) {
+                markConversationForStarring();
+                PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+                // Haptic feedback to confirm
+                HapticFeedback.mediumImpact();
+              } else {
+                // Toggle off if already marked
+                unmarkConversationForStarring();
+                PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+                HapticFeedback.lightImpact();
+              }
+            } else {
+              // End conversation and process (default)
+              Logger.debug("Double tap: processing conversation");
+              PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+              forceProcessingCurrentConversation();
+            }
             return;
           }
-        }
 
-        // double tap
-        if (buttonState == 2) {
-          Logger.debug("Double tap detected");
-
-          // Guard: ignore if already processing a button event
-          if (_isProcessingButtonEvent) {
-            Logger.debug("Double tap: already processing, ignoring");
+          // Single tap (buttonState == 1) - toggle voice question mode
+          // Tap once to start, tap again to end
+          if (buttonState == 1) {
+            debugPrint("Single tap detected");
+            if (_voiceCommandSession == null) {
+              // Start voice question session (new toggle mode)
+              debugPrint("Starting voice question session (toggle mode)");
+              // Cut off any in-flight voice playback from a prior reply so the
+              // new recording starts clean.
+              if (OmiVoicePlaybackService.instance.isSpeaking) {
+                OmiVoicePlaybackService.instance.interrupt();
+              }
+              _voiceCommandSession = DateTime.now();
+              _commandBytes = [];
+              _startVoiceCommandTimeout(deviceId);
+              _playSpeakerHaptic(deviceId, 1);
+            } else {
+              // End on second tap
+              debugPrint("Ending voice question session (toggle mode)");
+              _endVoiceCommandSession(deviceId);
+            }
             return;
           }
 
-          int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
-
-          if (doubleTapAction == 1) {
-            // Pause/resume recording
-            Logger.debug("Double tap: toggling pause/mute");
-            _isProcessingButtonEvent = true;
-            if (_isPaused) {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error resuming device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            } else {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error pausing device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            }
-          } else if (doubleTapAction == 2) {
-            // Star ongoing conversation (doesn't end it)
-            Logger.debug("Double tap: marking conversation for starring");
-            if (!_starOngoingConversation) {
-              markConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-              // Haptic feedback to confirm
-              HapticFeedback.mediumImpact();
-            } else {
-              // Toggle off if already marked
-              unmarkConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-              HapticFeedback.lightImpact();
-            }
-          } else {
-            // End conversation and process (default)
-            Logger.debug("Double tap: processing conversation");
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
-            forceProcessingCurrentConversation();
-          }
-          return;
-        }
-
-        // Single tap (buttonState == 1) - toggle voice question mode
-        // Tap once to start, tap again to end
-        if (buttonState == 1) {
-          debugPrint("Single tap detected");
-          if (_voiceCommandSession == null) {
-            // Start voice question session (new toggle mode)
-            debugPrint("Starting voice question session (toggle mode)");
-            // Cut off any in-flight voice playback from a prior reply so the
-            // new recording starts clean.
-            if (OmiVoicePlaybackService.instance.isSpeaking) {
-              OmiVoicePlaybackService.instance.interrupt();
-            }
+          // Legacy support: start long press (for voice commands) - older firmware
+          if (buttonState == 3 && _voiceCommandSession == null) {
+            debugPrint("Legacy: Long press start detected");
             _voiceCommandSession = DateTime.now();
             _commandBytes = [];
             _startVoiceCommandTimeout(deviceId);
             _playSpeakerHaptic(deviceId, 1);
-          } else {
-            // End on second tap
-            debugPrint("Ending voice question session (toggle mode)");
+          }
+
+          // Legacy support: release (end voice command) - older firmware
+          // End on release if a voice command session is active
+          if (buttonState == 5 && _voiceCommandSession != null) {
+            debugPrint("Legacy: Release detected - ending voice command");
             _endVoiceCommandSession(deviceId);
           }
-          return;
-        }
-
-        // Legacy support: start long press (for voice commands) - older firmware
-        if (buttonState == 3 && _voiceCommandSession == null) {
-          debugPrint("Legacy: Long press start detected");
-          _voiceCommandSession = DateTime.now();
-          _commandBytes = [];
-          _startVoiceCommandTimeout(deviceId);
-          _playSpeakerHaptic(deviceId, 1);
-        }
-
-        // Legacy support: release (end voice command) - older firmware
-        // End on release if a voice command session is active
-        if (buttonState == 5 && _voiceCommandSession != null) {
-          debugPrint("Legacy: Release detected - ending voice command");
-          _endVoiceCommandSession(deviceId);
-        }
-      },
+        },
       ),
     );
   }
@@ -1491,26 +1491,26 @@ class CaptureController extends ChangeNotifier
     _blePhotoStream = lifetime.takeSubscription(
       _blePhotoStream,
       await connection.performGetImageListener(
-      onImageReceived: (orientedImage) async {
-        final rotatedImageBytes = rotateImage(orientedImage);
-        final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-        final String base64Image = base64Encode(rotatedImageBytes);
+        onImageReceived: (orientedImage) async {
+          final rotatedImageBytes = rotateImage(orientedImage);
+          final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
+          final String base64Image = base64Encode(rotatedImageBytes);
 
-        // Add placeholder to UI for immediate feedback
-        photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
-        photos = List.from(photos);
-        _segmentsPhotosVersion++;
-        notifyListeners();
-        await emitBase64ImageChunks(
-          base64Image,
-          id: tempId,
-          emit: (payload) async {
-            if (_socket?.state == SocketServiceState.connected) {
-              _socket?.send(payload);
-            }
-          },
-        );
-      },
+          // Add placeholder to UI for immediate feedback
+          photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
+          photos = List.from(photos);
+          _segmentsPhotosVersion++;
+          notifyListeners();
+          await emitBase64ImageChunks(
+            base64Image,
+            id: tempId,
+            emit: (payload) async {
+              if (_socket?.state == SocketServiceState.connected) {
+                _socket?.send(payload);
+              }
+            },
+          );
+        },
       ),
     );
     notifyListeners();
