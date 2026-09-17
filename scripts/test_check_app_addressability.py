@@ -77,14 +77,14 @@ class AddressabilityCheckTests(unittest.TestCase):
             self.assertEqual(debt(f'{name}({args})', {}), [name])
         self.assertEqual((check.ROOT / check.INTERACTIVE_GENERATED).read_text(), generated)
 
-    def test_only_changed_files_are_held_to_debt_and_baseline_cannot_increase(self):
+    def test_legacy_growth_passes_but_adopted_debt_and_adoption_cannot_regress(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = 'app/lib/widgets/old.dart'
             (root / path).parent.mkdir(parents=True)
             (root / path).write_text('TextField(); TextField();')
             catalog = dict(routes=[], keys={'input': 'omi.chat.input'}, fixtures={}, controls={}, interactive_widgets=check.INTERACTIVE)
-            for filename, value in [(check.CATALOG, catalog), (check.BASELINE, {path: 1})]:
+            for filename, value in [(check.CATALOG, catalog), (check.BASELINE, {path: 1}), (check.ADOPTED, [])]:
                 (root / filename).parent.mkdir(parents=True, exist_ok=True)
                 (root / filename).write_text(json.dumps(value))
             (root / check.GENERATED).parent.mkdir(parents=True)
@@ -93,7 +93,9 @@ class AddressabilityCheckTests(unittest.TestCase):
             (root / check.INTERACTIVE_GENERATED).write_text(check.generated_interactive(catalog))
             changes = root / 'changes'
             changes.write_text('unrelated.dart')
+            prior_adopted = []
             def base(_ref, filename):
+                if filename == check.ADOPTED: return json.dumps(prior_adopted)
                 if filename == check.CATALOG: return json.dumps(catalog)
                 if filename == check.BASELINE: return json.dumps({path: 1})
                 return 'TextField();'
@@ -103,11 +105,17 @@ class AddressabilityCheckTests(unittest.TestCase):
                  contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(check.main(), 0)
                 changes.write_text(path)
+                self.assertEqual(check.main(), 0)  # ordinary legacy growth is allowed
+                (root / check.ADOPTED).write_text(json.dumps([path]))
                 self.assertEqual(check.main(), 1)
+                prior_adopted.append(path)
                 (root / path).write_text("TextField(key: ValueKey('omi.chat.input'));")
                 self.assertEqual(check.main(), 0)
                 (root / check.BASELINE).write_text(json.dumps({path: 2}))
                 self.assertEqual(check.main(), 1)
+                (root / check.BASELINE).write_text(json.dumps({path: 1}))
+                (root / check.ADOPTED).write_text('[]')
+                self.assertEqual(check.main(), 1)  # adoption cannot be undone
 
     def test_default_scan_ignores_incoming_main_changes_but_includes_untracked_helpers(self):
         import subprocess
@@ -121,6 +129,7 @@ class AddressabilityCheckTests(unittest.TestCase):
             catalog = dict(routes=[], keys={}, fixtures={}, controls={}, interactive_widgets=check.INTERACTIVE)
             path = 'app/lib/pages/old.dart'
             for filename, content in [(check.CATALOG, json.dumps(catalog)), (check.BASELINE, json.dumps({path: 1})),
+                                      (check.ADOPTED, '[]'),
                                       (check.GENERATED, check.generated(catalog)),
                                       (check.INTERACTIVE_GENERATED, check.generated_interactive(catalog)),
                                       (path, 'TextField();')]:
@@ -140,6 +149,8 @@ class AddressabilityCheckTests(unittest.TestCase):
             with patch.object(check, 'ROOT', root), patch('sys.argv', ['check']), \
                  contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(check.main(), 0)
+                helper.write_text('IconButton(onPressed: () {});')
+                self.assertEqual(check.main(), 1)  # a brand-new file starts without key debt
                 helper.write_text('// omi-route: missing\nclass MissingPage extends StatelessWidget {}')
                 self.assertEqual(check.main(), 1)
 

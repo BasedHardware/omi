@@ -111,7 +111,7 @@ flags hydrated and active route's required provider ready. waitReady polls fresh
 state, rejects unknown predicates/nonpositive/>30s deadlines, and times out typed.
 Capabilities list actual extensions, versions, implemented routes and predicates.
 Guard remains debug + local_dev + OMI_DEV_CONTROLS=1; existing guard tests govern.
-B1 alone does not enable V1 live journey attachment.
+V1 live journeys remain unsupported.
 
 ## Honest enforcement
 
@@ -121,10 +121,12 @@ must declare `// omi-route: id` beside their class and register it; changed-file
 checks catch undeclared registry IDs, **not unmarked new screens**. Review catches
 omitted declarations. No whole-tree source walk on ordinary contributor diffs.
 
-Changed files retain min(baseline, base-source) unkeyed debt limits; baseline stays
-unchanged. Constructor/callback names come from the same catalog as widget tests.
-Static callback presence conservatively counts disabled callbacks; runtime checks
-can include disabled controls. Aliases/custom wrappers escape; per-file debt swaps
-can escape. No analyzer dependency. `--surface` checks only catalog declarations/
+Ratchet follows PENDING_CONTRACTS.md: list adopted files in
+`app/contracts/addressability/adopted-files.json` after catalog/widget acceptance.
+Only adopted files/new files enforce min(baseline, base-source) debt limits.
+Constructor/callback names come from the same catalog as widget tests.
+Static scans count disabled callbacks; runtime may include disabled controls.
+Aliases/custom wrappers escape; per-file debt swaps
+can escape. `--surface` checks only catalog declarations/
 references; widget contracts prove placement, semantics and reachability. It never
 zeroes directory debt. Complete both platform scenarios before retiring a marker.

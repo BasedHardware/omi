@@ -12,6 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = 'app/contracts/addressability/catalog.json'
 BASELINE = 'app/contracts/addressability/unkeyed-baseline.json'
+ADOPTED = 'app/contracts/addressability/adopted-files.json'
 GENERATED = 'app/lib/services/dev_controls/addressability_catalog.dart'
 # One constructor/callback vocabulary generates the runtime predicate too.
 INTERACTIVE = json.loads((ROOT / CATALOG).read_text())['interactive_widgets']
@@ -238,19 +239,25 @@ def main():
     for path, expected in [(GENERATED, generated(catalog)), (INTERACTIVE_GENERATED, generated_interactive(catalog))]:
         if (ROOT / path).read_text() != expected:
             errors.append(f'{path}: run python3 scripts/check_app_addressability.py --generate')
+    adopted = set(json.loads((ROOT / ADOPTED).read_text()))
+    old_adopted = set(json.loads(read_base(args.base, ADOPTED) or '[]'))
+    if not old_adopted <= adopted:
+        errors.append(f'{ADOPTED}: adopted files cannot be removed')
     baseline = json.loads((ROOT / BASELINE).read_text())
     old = read_base(args.base, BASELINE)
     if old:
         old = json.loads(old)
         for p, count in baseline.items():
-            if count > old.get(p, 0):
+            if p in adopted and count > old.get(p, 0):
                 errors.append(f'{p}: baseline cannot grow')
     for path in ([] if args.surface else changed):
         if path not in sources:
             continue
+        base_source = read_base(args.base, path)
+        if base_source is not None and path not in adopted:
+            continue
         count = len(debt(sources[path], catalog['keys']))
         limit = baseline.get(path, 0)
-        base_source = read_base(args.base, path)
         if base_source is not None:
             limit = min(limit, len(debt(base_source, catalog['keys'])))
         if count > limit:
