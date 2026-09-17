@@ -655,13 +655,7 @@ class AnalyticsManager {
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
     track(
       'Device Connected',
-      properties: {
-        ...device.toJson(),
-        'type': device.type.name,
-        'device_vendor': vendor,
-        'hardware_family': hardwareFamily,
-        ..._deviceIdentityProperties(device),
-      },
+      properties: _deviceConnectionEventProperties(device),
     );
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
@@ -672,13 +666,7 @@ class AnalyticsManager {
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
     track(
       'Device Paired',
-      properties: {
-        ...device.toJson(),
-        'type': device.type.name,
-        'device_vendor': device.type.analyticsVendor,
-        'hardware_family': hardwareFamily,
-        ..._deviceIdentityProperties(device),
-      },
+      properties: _deviceConnectionEventProperties(device),
     );
     _setUserPropertiesBatch({
       'has_paired_device': true,
@@ -706,6 +694,16 @@ class AnalyticsManager {
   }
 
   static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
+
+  /// Closed Device Connected / Device Paired properties. Persistence fields
+  /// from [BtDevice.toJson] (raw id, name, serial, locator, RSSI) stay off
+  /// the analytics channel; hashed identity is the join key.
+  static Map<String, Object> _deviceConnectionEventProperties(BtDevice device) => {
+        'type': device.type.name,
+        'device_vendor': device.type.analyticsVendor,
+        'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
+        ..._deviceIdentityProperties(device),
+      };
 
   static Map<String, Object> _deviceIdentityProperties(BtDevice device) {
     final serial = device.serialNumber?.trim();
