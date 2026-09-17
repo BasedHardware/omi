@@ -58,10 +58,6 @@ async def list_upcoming(
     limit = _safe_int(limit, MAX_UPCOMING_EVENTS, max_value=MAX_UPCOMING_EVENTS)
     start = datetime.now(timezone.utc)
     end = start + timedelta(days=days)
-    try:
-        limit = max(1, min(int(limit), MAX_EVENTS))
-    except (ValueError, TypeError):
-        limit = MAX_EVENTS
     async with GraphClient(user_id) as g:
         events = await g.get_all(
             "/me/calendarView",

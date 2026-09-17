@@ -199,9 +199,15 @@ def tool_args(body: dict[str, Any]) -> dict[str, Any]:
     """Return the tool parameters from an Omi chat tool request body.
 
     Omi posts the parameters flat at the top level of the JSON body together
-    with the envelope keys above, not nested under an ``args`` object.
+    with the envelope keys above, not nested under an ``args`` object. A
+    client that still nests them under ``args`` gets them merged — flat keys
+    win, they are the documented shape.
     """
-    return {key: value for key, value in body.items() if key not in _ENVELOPE_KEYS}
+    params = {key: value for key, value in body.items() if key not in _ENVELOPE_KEYS}
+    nested = params.pop("args", None)
+    if isinstance(nested, dict):
+        params = {**nested, **params}
+    return params
 
 
 @app.post("/tools/{tool_name}")
