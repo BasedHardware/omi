@@ -88,6 +88,20 @@ function presentNullableString(value: unknown): void {
   text(value, 1_000_000);
 }
 
+function presentUnusedStringListItems(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new DailySummaryError();
+    }
+  }
+}
+
 function presentObjectListStrings(value: unknown, fields: string[]): void {
   if (!Array.isArray(value)) {
     return;
@@ -97,6 +111,19 @@ function presentObjectListStrings(value: unknown, fields: string[]): void {
     for (const field of fields) {
       presentNullableString(row[field]);
     }
+  }
+}
+
+function presentHighlights(value: unknown): void {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const raw of value) {
+    const row = object(raw);
+    presentNullableString(row.topic);
+    presentNullableString(row.emoji);
+    presentNullableString(row.summary);
+    presentUnusedStringListItems(row.conversation_ids);
   }
 }
 
@@ -243,11 +270,7 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
       'priority',
       'source_conversation_id',
     ]);
-    presentObjectListStrings(summary.highlights, [
-      'topic',
-      'emoji',
-      'summary',
-    ]);
+    presentHighlights(summary.highlights);
     presentObjectListStrings(summary.decisions_made, [
       'decision',
       'conversation_id',

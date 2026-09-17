@@ -823,6 +823,117 @@ test('old daily summaries name Flutter DailySummary.fromGenerated type-wrong GET
   }
 });
 
+test('old daily summaries name Flutter DailySummary.fromGenerated type-wrong GET conversation_ids item instead of remapping to a headline chip', () => {
+  const neighbor = {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'};
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            highlights: [{topic: 'Team', conversation_ids: ['conv-1']}],
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            highlights: [{topic: 'Team'}],
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            highlights: [{topic: 'Team', conversation_ids: null}],
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            highlights: [{topic: 'Team', conversation_ids: 1}],
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            highlights: [{topic: 'Team', conversation_ids: []}],
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  for (const extra of [1, true, []]) {
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+              highlights: [{topic: 'Team', conversation_ids: [extra]}],
+            },
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+  }
+});
+
 test('does not omit a neighboring daily summary when stored stats cannot project', () => {
   expect(
     parseOmiDailySummaries(
@@ -1047,6 +1158,26 @@ test('old daily summaries name Flutter DailySummary.fromGenerated type-wrong GET
           date: '2026-09-09',
           headline: 'Met with the team',
           action_items: [1],
+        },
+        {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'},
+      ],
+    }),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  expect(await loadOmiDailySummaries(backend)).toEqual([]);
+});
+
+test('old daily summaries name Flutter DailySummary.fromGenerated type-wrong GET conversation_ids item instead of omitting Daily Recaps', async () => {
+  const request = jest.fn(async () => ({
+    id: 'summaries',
+    status: 200,
+    body: JSON.stringify({
+      summaries: [
+        {
+          id: 'sum-1',
+          date: '2026-09-09',
+          headline: 'Met with the team',
+          highlights: [{topic: 'Team', conversation_ids: [1]}],
         },
         {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'},
       ],
