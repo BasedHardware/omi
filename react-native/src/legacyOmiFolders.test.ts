@@ -347,6 +347,52 @@ test('old folders name Flutter Folder.fromGenerated type-wrong GET description i
   }
 });
 
+test('old folders name Flutter Folder.fromGenerated type-wrong GET color instead of remapping to a folder chip', () => {
+  const neighbor = {id: 'folder-kept', name: 'Neighbor', color: '#6B7280'};
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work', color: '#3b82f6'},
+        neighbor,
+      ]),
+    ),
+  ).toEqual([
+    {id: 'folder-work', name: 'Work', color: '#3B82F6'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work', color: null},
+        neighbor,
+      ]),
+    ),
+  ).toEqual([{id: 'folder-work', name: 'Work'}, neighbor]);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work', color: ''},
+        neighbor,
+      ]),
+    ),
+  ).toEqual([{id: 'folder-work', name: 'Work', color: '#6B7280'}, neighbor]);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work', color: '  #3b82f6  '},
+        neighbor,
+      ]),
+    ),
+  ).toEqual([{id: 'folder-work', name: 'Work', color: '#6B7280'}, neighbor]);
+  for (const color of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiFolders(
+        JSON.stringify([{id: 'folder-work', name: 'Work', color}, neighbor]),
+      ),
+    ).toThrow('Omi folders are malformed');
+  }
+});
+
 test('parses GET omitted folder color as Flutter #6B7280', () => {
   expect(
     parseOmiFolders(
@@ -650,6 +696,30 @@ test('old folders name Flutter Folder.fromGenerated type-wrong GET description i
         id: 'folder-work',
         name: 'Neighbor',
         description: 1,
+      },
+    ]),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiFolderNames(backend)).rejects.toThrow(
+    'Omi folders are malformed',
+  );
+  await expect(loadOmiFolder(backend, 'folder-work')).rejects.toThrow(
+    'Omi folders are malformed',
+  );
+  await expect(loadOmiFolderName(backend, 'folder-work')).rejects.toThrow(
+    'Omi folders are malformed',
+  );
+});
+
+test('old folders name Flutter Folder.fromGenerated type-wrong GET color instead of empty folder chips', async () => {
+  const request = jest.fn(async () => ({
+    id: 'folders',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'folder-work',
+        name: 'Neighbor',
+        color: 1,
       },
     ]),
   }));

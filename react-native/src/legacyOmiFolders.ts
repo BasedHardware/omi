@@ -158,6 +158,7 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     presentNullableDate(folder.updated_at);
     presentDefaultInt(folder.conversation_count);
     presentDefaultInt(folder.order);
+    presentNullableString(folder.color);
     presentNullableString(folder.description);
     presentNullableString(folder.category_mapping);
     folders.push({
