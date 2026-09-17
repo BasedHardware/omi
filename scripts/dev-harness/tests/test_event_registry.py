@@ -69,12 +69,13 @@ def test_single_transport_bridge_and_unrelated_methods_are_distinct():
 
 def test_dart_parameter_names_do_not_rename_legacy_wire_properties():
     doc = source()
-    doc['events'][-1]['properties']['enabled']['wire_name'] = 'was_enabled'
+    event = next(item for item in doc['events'] if item['id'] == 'transcribeLaterToggled')
+    event['properties']['enabled']['wire_name'] = 'was_enabled'
     assert registry.validate(doc) == []
     code, plan = registry.render(doc)
     assert '"was_enabled": enabled' in code
     assert 'was_enabled' in plan
-    doc['events'][-1]['properties']['enabled']['wire_name'] = 'email_notifications_enabled'
+    event['properties']['enabled']['wire_name'] = 'email_notifications_enabled'
     assert registry.validate(doc) == [], 'a boolean preference is not an email address'
-    doc['events'][-1]['properties']['enabled']['wire_name'] = 'git_sha'
+    event['properties']['enabled']['wire_name'] = 'git_sha'
     assert registry.validate(doc), 'provenance stays SDK-owned'
