@@ -157,7 +157,7 @@ export function LiveVoiceButton({
     ? mobileColor.text
     : desktopTokens.color.ink;
   const on = phase === 'live';
-  const label = active ? 'End Live' : 'Live';
+  const label = active ? 'End Live' : compact ? 'Talk to Omi' : 'Live';
   return (
     <View style={[styles.root, compact && styles.rootCompact]}>
       <FocusPressable
@@ -207,10 +207,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   buttonCompact: {
-    backgroundColor: mobileColor.surface,
+    backgroundColor: 'transparent',
     borderRadius: 18,
-    minHeight: 48,
-    paddingHorizontal: 14,
+    minHeight: 44,
+    paddingHorizontal: 10,
   },
   buttonOn: {backgroundColor: '#e5484d'},
   pressed: {opacity: 0.6},
