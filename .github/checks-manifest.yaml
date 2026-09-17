@@ -792,6 +792,11 @@ checks:
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/fast-dev-bundle.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-fast-dev-bundle.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a bundle built without Contents/Resources/pi-mono-extension accepted every chat turn and failed all of them (pi-mono exited 1 on `Unknown provider \"omi\"`); the fast lane reused it because the source fingerprint still matched, so packaging must verify the installed payload and not just its inputs"
+  - id: desktop-build-source-identity
+    command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13126: a healthy named bundle could be signed, authenticated, and routed correctly while exposing no source receipt, so verification from a reused E2E pool slot could not prove which revision actually ran"
   - id: desktop-signed-artifact-smoke
     command: ["bash", "desktop/macos/tests/test-signed-artifact-smoke.sh"]
     triggers: ["desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]
