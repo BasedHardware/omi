@@ -154,33 +154,63 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (trimmed.isEmpty) return;
 
     if (appId == null) {
-      final oldOverview = conversation.structured.overview;
+      final editedConversation = conversation;
+      final editedStructured = editedConversation.structured;
+      final oldOverview = editedStructured.overview;
+      final oldSections = List<Section>.from(editedStructured.sections);
       if (trimmed == oldOverview) return;
 
-      conversation.structured.overview = trimmed;
+      editedStructured.overview = trimmed;
+      // The first-party summary PATCH replaces the compatibility overview and
+      // clears generated sections on the server. Keep the local projection in
+      // the same state while the request is in flight.
+      editedStructured.sections = [];
       notifyListeners();
 
-      final success = await updateConversationSummary(conversation.id, null, trimmed);
-      if (!success && !_isDisposed) {
-        conversation.structured.overview = oldOverview;
-        notifyListeners();
+      final success = await persistSummaryEdit(editedConversation.id, null, trimmed);
+      if (!success && !_isDisposed && identical(conversationOrNull, editedConversation)) {
+        // A refresh or a newer edit may have replaced this state while the
+        // request was pending. Roll back only the exact optimistic snapshot
+        // that this request still owns.
+        if (identical(editedConversation.structured, editedStructured) &&
+            editedStructured.overview == trimmed &&
+            editedStructured.sections.isEmpty) {
+          editedStructured.overview = oldOverview;
+          editedStructured.sections = oldSections;
+          notifyListeners();
+        }
       }
       return;
     }
 
-    final index = conversation.appResults.indexWhere((r) => r.appId == appId);
+    final editedConversation = conversation;
+    final index = editedConversation.appResults.indexWhere((r) => r.appId == appId);
     if (index < 0) return;
-    final oldContent = conversation.appResults[index].content;
+    final editedResult = editedConversation.appResults[index];
+    final oldContent = editedResult.content;
     if (trimmed == oldContent) return;
 
-    conversation.appResults[index].content = trimmed;
+    editedResult.content = trimmed;
     notifyListeners();
 
-    final success = await updateConversationSummary(conversation.id, appId, trimmed);
-    if (!success && !_isDisposed) {
-      conversation.appResults[index].content = oldContent;
-      notifyListeners();
+    final success = await persistSummaryEdit(editedConversation.id, appId, trimmed);
+    if (!success && !_isDisposed && identical(conversationOrNull, editedConversation)) {
+      // See the first-party branch above: never roll back over a refreshed
+      // conversation, replaced result, or newer edit.
+      if (index < editedConversation.appResults.length &&
+          identical(editedConversation.appResults[index], editedResult) &&
+          editedResult.content == trimmed) {
+        editedResult.content = oldContent;
+        notifyListeners();
+      }
     }
+  }
+
+  /// The persistence seam keeps optimistic summary state testable without
+  /// sending a request. Production delegates to the summary PATCH endpoint.
+  @visibleForTesting
+  Future<bool> persistSummaryEdit(String conversationId, String? appId, String content) {
+    return updateConversationSummary(conversationId, appId, content);
   }
 
   /// Save an edit against the same summary identity used for display. Legacy

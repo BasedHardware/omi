@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,7 +16,11 @@ import 'package:omi/providers/conversation_provider.dart';
 ServerConversation _conversation({List<AppResponse> appResults = const []}) {
   final structured = Structured('Sprint sync', 'Short compatibility paragraph.', emoji: '🧠');
   structured.sections = [
-    const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday'),
+    const wire.GeneratedSection(
+      heading: 'Decisions',
+      bodyMarkdown: 'Ship the beta on Friday',
+      sourceSegmentIds: ['segment-1'],
+    ),
   ];
   return ServerConversation(
     id: 'conv-1',
@@ -26,6 +32,28 @@ ServerConversation _conversation({List<AppResponse> appResults = const []}) {
 
 ConversationDetailProvider _providerFor(ServerConversation conversation) {
   final provider = ConversationDetailProvider();
+  addTearDown(provider.dispose);
+  provider.selectedDate = conversationLocalDayKey(conversation.createdAt);
+  provider.setCachedConversation(conversation);
+  return provider;
+}
+
+class _PersistingProvider extends ConversationDetailProvider {
+  _PersistingProvider(this.handler);
+
+  final Future<bool> Function(String conversationId, String? appId, String content) handler;
+
+  @override
+  Future<bool> persistSummaryEdit(String conversationId, String? appId, String content) {
+    return handler(conversationId, appId, content);
+  }
+}
+
+ConversationDetailProvider _providerWithPersistence(
+  ServerConversation conversation,
+  Future<bool> Function(String conversationId, String? appId, String content) handler,
+) {
+  final provider = _PersistingProvider(handler);
   addTearDown(provider.dispose);
   provider.selectedDate = conversationLocalDayKey(conversation.createdAt);
   provider.setCachedConversation(conversation);
@@ -101,5 +129,112 @@ void main() {
     await provider.saveEditingSummarySelection(selection, 'Edited summary');
 
     expect(conversation.appResults[0].content, 'Refreshed app summary');
+  });
+
+  test('a successful first-party edit clears sections and preserves unrelated state', () async {
+    final conversation = _conversation();
+    final action = ActionItem('Follow up', completed: false);
+    final event = Event('Review', DateTime.utc(2026, 7, 2), 30);
+    conversation.structured.actionItems = [action];
+    conversation.structured.events = [event];
+    var persistCalls = 0;
+    String? persistedConversationId;
+    String? persistedAppId;
+    String? persistedContent;
+    final provider = _providerWithPersistence(conversation, (conversationId, appId, content) async {
+      persistCalls++;
+      persistedConversationId = conversationId;
+      persistedAppId = appId;
+      persistedContent = content;
+      return true;
+    });
+    final selection = provider.getSummarySelection();
+
+    await provider.saveEditingSummarySelection(selection, 'Edited overview');
+
+    expect(conversation.structured.overview, 'Edited overview');
+    expect(conversation.structured.sections, isEmpty);
+    expect(conversation.structured.actionItems.single, same(action));
+    expect(conversation.structured.events.single, same(event));
+    expect(persistCalls, 1);
+    expect(persistedConversationId, 'conv-1');
+    expect(persistedAppId, isNull);
+    expect(persistedContent, 'Edited overview');
+  });
+
+  test('a failed first-party edit restores the previous overview and sections', () async {
+    final conversation = _conversation();
+    final oldOverview = conversation.structured.overview;
+    final oldSections = List<Section>.from(conversation.structured.sections);
+    final provider = _providerWithPersistence(conversation, (conversationId, appId, content) async => false);
+    final selection = provider.getSummarySelection();
+
+    await provider.saveEditingSummarySelection(selection, 'Edited overview');
+
+    expect(conversation.structured.overview, oldOverview);
+    expect(conversation.structured.sections, orderedEquals(oldSections));
+  });
+
+  test('app edits preserve first-party sections and unrelated state', () async {
+    final conversation = _conversation(appResults: [AppResponse('App original', appId: 'app-1')]);
+    final action = ActionItem('Follow up', completed: false);
+    final event = Event('Review', DateTime.utc(2026, 7, 2), 30);
+    conversation.structured.actionItems = [action];
+    conversation.structured.events = [event];
+    final oldSections = List<Section>.from(conversation.structured.sections);
+    var persistCalls = 0;
+    String? persistedConversationId;
+    String? persistedAppId;
+    String? persistedContent;
+    final provider = _providerWithPersistence(conversation, (conversationId, appId, content) async {
+      persistCalls++;
+      persistedConversationId = conversationId;
+      persistedAppId = appId;
+      persistedContent = content;
+      return true;
+    });
+    final selection = provider.getSummarySelection();
+
+    await provider.saveEditingSummarySelection(selection, 'Edited app summary');
+
+    expect(conversation.appResults.single.content, 'Edited app summary');
+    expect(conversation.structured.sections, orderedEquals(oldSections));
+    expect(conversation.structured.actionItems.single, same(action));
+    expect(conversation.structured.events.single, same(event));
+    expect(persistCalls, 1);
+    expect(persistedConversationId, 'conv-1');
+    expect(persistedAppId, 'app-1');
+    expect(persistedContent, 'Edited app summary');
+  });
+
+  test('a failed edit does not roll back over a refreshed conversation', () async {
+    final conversation = _conversation();
+    final completion = Completer<bool>();
+    final provider = _providerWithPersistence(conversation, (conversationId, appId, content) => completion.future);
+    final selection = provider.getSummarySelection();
+    final saveFuture = provider.saveEditingSummarySelection(selection, 'Edited overview');
+
+    final refreshed = _conversation();
+    refreshed.structured.overview = 'Refreshed overview';
+    provider.setCachedConversation(refreshed);
+    completion.complete(false);
+    await saveFuture;
+
+    expect(refreshed.structured.overview, 'Refreshed overview');
+    expect(refreshed.structured.sections, isNotEmpty);
+  });
+
+  test('a failed edit does not roll back over a newer edit on the same conversation', () async {
+    final conversation = _conversation();
+    final completion = Completer<bool>();
+    final provider = _providerWithPersistence(conversation, (conversationId, appId, content) => completion.future);
+    final selection = provider.getSummarySelection();
+    final saveFuture = provider.saveEditingSummarySelection(selection, 'First edit');
+
+    conversation.structured.overview = 'Newer edit';
+    completion.complete(false);
+    await saveFuture;
+
+    expect(conversation.structured.overview, 'Newer edit');
   });
 }
