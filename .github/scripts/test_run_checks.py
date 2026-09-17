@@ -889,8 +889,7 @@ cat > "{python}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
-  [[ "$2" == "import yaml" ]]
-  exit
+  exit 0
 fi
 printf '%s\\n' "$@" > "{root / 'guard-args.txt'}"
 PYTHON
@@ -967,8 +966,7 @@ cat > "{python}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
-  [[ "$2" == "import yaml" ]]
-  exit
+  exit 0
 fi
 printf '%s\\n' "$@" > "{root / 'compose-args.txt'}"
 PYTHON

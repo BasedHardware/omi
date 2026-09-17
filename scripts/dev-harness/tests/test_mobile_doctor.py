@@ -51,6 +51,7 @@ def _provisioned_runner(tmp_path: Path, *, flutter_version: str | None = "3.44.5
             ("git", "-C", str(tmp_path), "rev-parse", "--is-inside-work-tree"): (0, "true\n"),
             ("python3.11", "--version"): (0, "Python 3.11.15\n"),
             (str(venv), "--version"): (0, "Python 3.11.15\n"),
+            (str(venv), "-c", "import dotenv, yaml"): (0, ""),
             ("/opt/flutter/bin/flutter", "--version"): (0, f"Flutter {flutter_version} • channel stable\n"),
             ("java", "-version"): (0, 'openjdk version "21.0.2" 2024-01-16\n'),
             ("/usr/local/bin/firebase", "--version"): (0, "15.29.0\n"),
@@ -171,6 +172,63 @@ class TestIndividualChecks:
         assert image.status == md.AGENT_REMEDIABLE
         assert "system-images;android-36;google_apis;arm64-v8a" in image.remedy
         assert "capacity-gated" in image.remedy
+
+    def test_incomplete_venv_is_not_ready(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        venv = tmp_path / "backend" / ".venv" / "bin" / "python"
+        runner.outputs[(str(venv), "-c", "import dotenv, yaml")] = (
+            1,
+            "ModuleNotFoundError: No module named 'yaml'\n",
+        )
+        report = md.run_doctor(tmp_path, runner=runner, env={})
+        venv_check = next(c for c in report.checks if c.check == "backend-venv")
+        assert venv_check.status == md.AGENT_REMEDIABLE
+        assert "incomplete" in venv_check.detail
+        assert "lane-bootstrap" in venv_check.remedy
+        assert report.overall == "degraded"
+
+    def test_remote_dev_env_api_blocks_without_rewriting(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        env_file = tmp_path / "app" / ".dev.env"
+        env_file.parent.mkdir(parents=True)
+        env_file.write_text("API_BASE_URL=https://api.omi.me/\n", encoding="utf-8")
+        report = md.run_doctor(tmp_path, runner=runner, env={})
+        check = next(c for c in report.checks if c.check == "app-dev-env")
+        assert check.status == md.OPERATOR
+        assert "will not rewrite" in check.remedy
+        assert env_file.read_text(encoding="utf-8") == "API_BASE_URL=https://api.omi.me/\n"
+        assert report.overall == "blocked"
+
+    def test_loopback_dev_env_api_is_ready(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        env_file = tmp_path / "app" / ".dev.env"
+        env_file.parent.mkdir(parents=True)
+        env_file.write_text("API_BASE_URL=http://127.0.0.1:8000/\n", encoding="utf-8")
+        report = md.run_doctor(tmp_path, runner=runner, env={})
+        check = next(c for c in report.checks if c.check == "app-dev-env")
+        assert check.status == md.READY
+
+    def test_mobile_beta_profile_blocks(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        report = md.run_doctor(tmp_path, runner=runner, env={"OMI_APP_PROFILE": "mobile_beta"})
+        check = next(c for c in report.checks if c.check == "app-pairing")
+        assert check.status == md.OPERATOR
+        assert "local_dev" in check.detail
+        assert report.overall == "blocked"
+
+
+class TestLoopbackApiBase:
+    def test_empty_and_loopback_are_ok(self) -> None:
+        assert md.is_loopback_api_base("")
+        assert md.is_loopback_api_base("   ")
+        assert md.is_loopback_api_base("http://127.0.0.1:8000/")
+        assert md.is_loopback_api_base("http://localhost")
+        assert md.is_loopback_api_base("http://[::1]/")
+
+    def test_remote_and_lan_are_refused(self) -> None:
+        assert not md.is_loopback_api_base("https://api.omi.me/")
+        assert not md.is_loopback_api_base("https://api.omiapi.com/")
+        assert not md.is_loopback_api_base("http://192.168.1.212:8000/")
 
 
 class TestFlutterPin:
