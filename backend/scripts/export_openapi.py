@@ -301,6 +301,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'POST',
+        '/v1/conversations/{conversation_id}/reprocess-transcription',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
         '/v1/conversations/from-segments',
     ): 'Firebase-authenticated app-client alias; public docs expose the Developer API key route only.',
 }

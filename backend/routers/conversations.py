@@ -67,6 +67,12 @@ from utils.conversations.process_conversation import (
     run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
+from utils.conversations.reprocess_transcription import (
+    StoredAudioEmptyTranscriptError,
+    StoredAudioTranscriptionFailedError,
+    StoredAudioUnavailableError,
+    transcribe_stored_conversation_audio,
+)
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
@@ -755,6 +761,56 @@ def reprocess_conversation(
     )
 
     return processed_conversation
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/reprocess-transcription',
+    response_model=Conversation,
+    responses={
+        400: {'description': 'No stored audio is available, or STT produced no speech'},
+        404: {'description': 'The conversation does not exist'},
+        502: {'description': 'The transcription provider failed'},
+    },
+    tags=['conversations'],
+)
+def reprocess_conversation_transcription(
+    conversation_id: str,
+    language_code: Optional[str] = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+):
+    """Re-run prerecorded STT on stored audio, then the existing enrichment pipeline.
+
+    Unlike ``POST .../reprocess``, which only regenerates the summary from the
+    current transcript, this replaces transcript segments from stored audio and
+    then calls ``process_conversation`` with the same reprocess flags.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = deserialize_conversation(conversation)
+    if not language_code:
+        language_code = conversation.language or 'en'
+
+    try:
+        conversation.transcript_segments = transcribe_stored_conversation_audio(
+            uid, conversation, language_code
+        )
+    except StoredAudioUnavailableError:
+        raise HTTPException(status_code=400, detail='No stored audio available to retranscribe')
+    except StoredAudioEmptyTranscriptError:
+        raise HTTPException(status_code=400, detail='Transcription produced no speech')
+    except StoredAudioTranscriptionFailedError:
+        raise HTTPException(status_code=502, detail='Transcription provider failed')
+
+    return process_conversation(
+        uid,
+        language_code,
+        conversation,
+        force_process=True,
+        is_reprocess=True,
+        bypass_jit_first_open=True,
+        app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
+    )
 
 
 def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
