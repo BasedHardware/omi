@@ -1,7 +1,7 @@
 // Development-only component review. This does not mount the authenticated
 // orchestrator or persist setup. Vite's production entry remains index.html.
-import React, { useEffect, useState } from "react";
-import { AppRegistry, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { AppRegistry, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { DesktopOnboarding } from "../../react-native/src/desktop/DesktopOnboarding";
 import { DesktopApp } from "../../react-native/src/desktop/DesktopApp";
@@ -9,6 +9,15 @@ import { Onboarding } from "../../react-native/src/ui/Onboarding";
 import { ConversationsPage } from "../../react-native/src/pages/Conversations";
 import { SettingsPage } from "../../react-native/src/pages/Settings";
 import { ConnectorsPage } from "../../react-native/src/pages/Connectors";
+import { MobileChat } from "../../react-native/src/mobile/MobileChat";
+import { Composer } from "../../react-native/src/ui/Composer";
+import { LiveVoiceButton } from "../../react-native/src/ui/LiveVoiceButton";
+import {
+  DeviceSession,
+  homeConnectionStatus,
+} from "../../react-native/src/app/DeviceSession";
+import type { PlatformNativeSnapshot } from "../../react-native/src/omiNative";
+import type { ChatMessage } from "../../react-native/src/chatClient";
 import { omiBackend } from "../../react-native/src/omiNative.web";
 import type {
   DesktopReadOutcomes,
@@ -25,6 +34,40 @@ const h = React.createElement;
 const noop = () => undefined;
 const surface = new URLSearchParams(location.search).get("surface") ?? "setup";
 const example = new URLSearchParams(location.search).get("data");
+const chatState = new URLSearchParams(location.search).get("chat");
+const deviceState = new URLSearchParams(location.search).get("device");
+const previewDevice: PlatformNativeSnapshot = {
+  bluetooth: "poweredOn",
+  phase:
+    deviceState === "connecting"
+      ? "connecting"
+      : deviceState === "error"
+      ? "disconnected"
+      : "connected",
+  connectedDeviceId: deviceState === "error" ? null : "example-omi",
+  devices: [
+    {
+      id: "example-omi",
+      name: "Example Omi",
+      connected: deviceState !== "connecting" && deviceState !== "error",
+      battery: 73,
+      information: { model: "Example device", firmware: "1.2.3" },
+    },
+  ],
+  capture:
+    deviceState === "waiting" || deviceState === "listening"
+      ? "recording"
+      : "idle",
+  audioStatus:
+    deviceState === "waiting"
+      ? "waiting"
+      : deviceState === "listening"
+      ? "active"
+      : undefined,
+  lastEvent: "",
+  microphone: "unknown",
+  notifications: "unknown",
+};
 const page: ReadPageState = {
   windowStatus: "complete",
   complete: true,
@@ -108,6 +151,50 @@ function Preview() {
   const [signedIn, setSignedIn] = useState(false);
   const [complete, setComplete] = useState(false);
   const [draft, setDraft] = useState("");
+  const [chatOpen, setChatOpen] = useState(chatState !== null);
+  const [chatBusy, setChatBusy] = useState(chatState === "waiting");
+  const [chatError, setChatError] = useState<string | null>(
+    chatState === "error"
+      ? "Example error: your message could not be sent. Try again."
+      : null
+  );
+  const [deviceOpen, setDeviceOpen] = useState(deviceState !== null);
+  const [deviceNote, setDeviceNote] = useState<string | null>(
+    deviceState === "error"
+      ? "Example connection error. Check Bluetooth and try again."
+      : null
+  );
+  const [composerFocused, setComposerFocused] = useState(false);
+  const composerRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
+    chatState === "ready" || chatState === "waiting"
+      ? [
+          {
+            id: "example-human",
+            sender: "human",
+            text: "Help me turn these ideas into a plan.",
+            createdAt: 1789641000,
+            generationOutcome: null,
+          },
+          {
+            id: "example-ai",
+            sender: "ai",
+            text:
+              chatState === "waiting"
+                ? ""
+                : "Start with one useful next step.\n\n1. Gather your notes.\n2. Pick the idea that matters most.\n3. Give it a little time today.",
+            createdAt: 1789641060,
+            generationOutcome: chatState === "waiting" ? null : "completed",
+            generationId: "example-generation",
+          },
+        ]
+      : []
+  );
+  const previewSend = () => {
+    setChatOpen(true);
+    setChatError("Preview only — messages are not sent.");
+  };
   const [route, setRoute] = useState<MobileRoute>("home");
   const [outcomes, setOutcomes] = useState<DesktopReadOutcomes | null>(
     example === "example" || example === "empty" ? exampleOutcomes : null
@@ -172,7 +259,7 @@ function Preview() {
             : "COMPONENT PREVIEW · "
         }${
           surface.startsWith("mobile")
-            ? "Mobile browser preview · Not a native device"
+            ? "Mobile browser preview · Simulated controls · Nothing sent or recorded"
             : "Glass is approximated in the browser · Native windows require macOS"
         }`
       ),
@@ -206,13 +293,89 @@ function Preview() {
               onSend: noop,
               onStop: noop,
             })
+          : surface.startsWith("mobile") && chatOpen
+          ? h(MobileChat, {
+              messages: chatMessages,
+              busy: chatBusy,
+              error: chatError,
+              loadingHistory: chatState === "loading",
+              hasOlder: false,
+              loadingOlder: false,
+              onLoadOlder: noop,
+              onClose: () => setChatOpen(false),
+              prompts: ["What should I remember?", "Help me find a next step"],
+              onUsePrompt: (prompt) => {
+                setDraft(prompt);
+                composerRef.current?.focus();
+              },
+              shouldAnimate: () => false,
+              scrollRef,
+              onScroll: noop,
+              liveVoiceControl: h(LiveVoiceButton, {
+                backend: null,
+                compact: true,
+              }),
+              composer: h(Composer, {
+                compact: true,
+                activeGenerationId: chatBusy ? "example-generation" : null,
+                chatBusy,
+                composerFocused,
+                composerMaxWidth: 430,
+                composerRef,
+                draft,
+                onDraftChange: setDraft,
+                onFocusChange: setComposerFocused,
+                onSend: previewSend,
+                onStop: () => {
+                  setChatBusy(false);
+                  setChatMessages((current) =>
+                    current.map((message) =>
+                      message.sender === "ai"
+                        ? { ...message, generationOutcome: "cancelled" }
+                        : message
+                    )
+                  );
+                },
+              }),
+            })
           : surface === "mobile" || (surface === "mobile-setup" && complete)
           ? h(MobileAppSurface, {
               ...taskActions,
               activeRoute: route,
               onRouteChange: setRoute,
-              capture: { active: false, transcript: "" },
-              device: { connected: false, label: "Connect Omi" },
+              capture: {
+                active:
+                  deviceState !== null && previewDevice.capture === "recording",
+                waitingForAudio: deviceState === "waiting",
+                transcript: "",
+              },
+              device: {
+                connected:
+                  deviceState !== null && previewDevice.phase === "connected",
+                label: deviceState
+                  ? homeConnectionStatus(previewDevice).label
+                  : "Connect Omi",
+              },
+              devicePanel: deviceOpen
+                ? h(DeviceSession, {
+                    variant: "compact",
+                    nativeSnapshot: deviceState ? previewDevice : null,
+                    deviceBusy: deviceState === "connecting",
+                    deviceScanMessage: deviceNote,
+                    onScan: () =>
+                      setDeviceNote(
+                        "Preview only — Bluetooth scanning is not started."
+                      ),
+                    onToggle: () =>
+                      setDeviceNote(
+                        "Preview only — no device connection is changed."
+                      ),
+                  })
+                : undefined,
+              liveVoiceControl: h(LiveVoiceButton, {
+                backend: null,
+                compact: true,
+              }),
               tasks:
                 outcomes?.tasks.status === "success"
                   ? outcomes.tasks.value.items
@@ -240,9 +403,9 @@ function Preview() {
               appsContent: h(ConnectorsPage),
               askValue: draft,
               onAskChange: setDraft,
-              onAskSubmit: noop,
+              onAskSubmit: previewSend,
               onOpenSettings: () => setRoute("settings"),
-              onOpenDevice: noop,
+              onOpenDevice: () => setDeviceOpen((open) => !open),
               onOpenCalls: noop,
               onViewTasks: () => setRoute("tasks"),
               onViewRecaps: () => setRoute("chat"),

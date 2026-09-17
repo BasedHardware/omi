@@ -615,7 +615,6 @@ export function MobileAppSurface({
               style={styles.roundButton}>
               <Phone color={mobileColor.text} size={20} />
             </Pressable>
-            {liveVoiceControl}
           </View>
           <Pressable
             accessibilityLabel="Open settings"
@@ -625,6 +624,9 @@ export function MobileAppSurface({
             <Settings color={mobileColor.text} size={20} />
           </Pressable>
         </View>
+        {liveVoiceControl && (
+          <View style={styles.liveVoiceRow}>{liveVoiceControl}</View>
+        )}
         {deviceMessage && (
           <Text accessibilityRole="alert" style={styles.deviceMessage}>
             {deviceMessage}
@@ -692,6 +694,7 @@ export function MobileAppSurface({
 
 const styles = StyleSheet.create({
   flex: {flex: 1},
+  liveVoiceRow: {paddingHorizontal: 16, paddingTop: 8},
   safeArea: {backgroundColor: mobileColor.background, flex: 1},
   homeHeading: {
     flexDirection: 'row',

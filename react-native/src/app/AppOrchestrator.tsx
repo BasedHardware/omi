@@ -73,6 +73,7 @@ import {
   type LiveVoiceProvider,
 } from '../desktopSettingsClient';
 import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
+import {MobileChat} from '../mobile/MobileChat';
 import {
   MobileAppSurface,
   type MobileProjectionStatus,
@@ -1073,6 +1074,43 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           signingIn={signingIn}
         />
       </PageShell>
+    );
+  }
+
+  if (
+    !macDesktop &&
+    compact &&
+    onboardingRequired === false &&
+    route === 'Home' &&
+    homeChatOpen
+  ) {
+    return (
+      <MobileChat
+        messages={messages}
+        busy={chatBusy}
+        error={chatError}
+        loadingHistory={!chatHistorySettled}
+        hasOlder={hasOlderChat && olderChatCursor !== null}
+        loadingOlder={loadingOlderChat}
+        onLoadOlder={loadOlderMessages}
+        onClose={() => setHomeChatOpen(false)}
+        onUsePrompt={prompt => {
+          setDraft(prompt);
+          composerRef.current?.focus();
+        }}
+        prompts={quickPrompts}
+        composer={composer}
+        liveVoiceControl={mobileLiveControl}
+        scrollRef={chatScrollRef}
+        shouldAnimate={shouldAnimateChatMessage}
+        onScroll={event => {
+          const {contentOffset, contentSize, layoutMeasurement} =
+            event.nativeEvent;
+          shouldFollowChat.current =
+            contentOffset.y + layoutMeasurement.height >=
+            contentSize.height - 40;
+        }}
+      />
     );
   }
 

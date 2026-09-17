@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {DeviceSession, homeConnectionStatus} from './DeviceSession';
+import {DeviceControls} from './DeviceControls';
 import type {PlatformNativeSnapshot} from '../omiNative';
 
 jest.mock('../omiNative', () => ({
@@ -91,6 +92,25 @@ test.each(['affordance', 'compact', 'overview'] as const)(
         .props.onPress();
     });
     expect(onToggle).toHaveBeenCalledWith('omi-test', true);
+    await act(async () => {
+      renderer.update(
+        <DeviceSession
+          nativeSnapshot={snapshot}
+          deviceBusy
+          deviceScanMessage={null}
+          variant={variant}
+          onScan={() => {}}
+          onToggle={onToggle}
+        />,
+      );
+    });
+    expect(JSON.stringify(renderer.toJSON())).toContain('Please wait…');
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('Scanning…');
+    expect(
+      renderer.root.findAllByProps({
+        accessibilityLabel: 'Scan for Omi devices',
+      })[0].props.disabled,
+    ).toBe(true);
     await act(async () => renderer.unmount());
   },
 );
@@ -231,3 +251,45 @@ test.each(['compact', 'overview', 'affordance'] as const)(
     await act(async () => renderer.unmount());
   },
 );
+
+test('mobile details disclosure keeps device control state mounted without connection actions', () => {
+  const onToggle = jest.fn(),
+    onScan = jest.fn();
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    tree = ReactTestRenderer.create(
+      <DeviceSession
+        variant="compact"
+        deviceBusy={false}
+        deviceScanMessage={null}
+        onToggle={onToggle}
+        onScan={onScan}
+        nativeSnapshot={{
+          bluetooth: 'poweredOn',
+          phase: 'connected',
+          capture: 'idle',
+          connectedDeviceId: 'omi',
+          devices: [{id: 'omi', name: 'Omi', connected: true}],
+          lastEvent: '',
+          microphone: 'unknown',
+          notifications: 'unknown',
+        }}
+      />,
+    );
+  });
+  const details = () =>
+    tree.root.findAllByProps({accessibilityLabel: 'Device details'})[0];
+  const information = () =>
+    tree.root.findAllByProps({accessibilityLabel: 'Device information'})[0];
+  const controls = tree.root.findByType(DeviceControls);
+  expect(details().props.accessibilityState.expanded).toBe(false);
+  expect(information().props.accessibilityElementsHidden).toBe(true);
+  act(() => details().props.onPress());
+  expect(details().props.accessibilityState.expanded).toBe(true);
+  act(() => details().props.onPress());
+  expect(tree.root.findByType(DeviceControls)).toBe(controls);
+  expect(information().props.accessibilityElementsHidden).toBe(true);
+  expect(onToggle).not.toHaveBeenCalled();
+  expect(onScan).not.toHaveBeenCalled();
+  act(() => tree.unmount());
+});

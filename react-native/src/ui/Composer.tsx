@@ -1,10 +1,11 @@
 import React from 'react';
-import {TextInput, View} from 'react-native';
+import {StyleSheet, TextInput, View} from 'react-native';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Square from 'lucide-react-native/icons/square';
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
+import {mobileColor} from '../mobile/mobileTokens';
 
 export function Composer({
   activeGenerationId,
@@ -36,6 +37,7 @@ export function Composer({
       <View
         style={[
           styles.composer,
+          compact && local.composer,
           composerFocused && styles.composerFocused,
           {maxWidth: composerMaxWidth},
         ]}>
@@ -48,11 +50,11 @@ export function Composer({
           placeholder="Ask anything..."
           placeholderTextColor="#888888"
           ref={composerRef}
-          style={styles.composerInput}
+          style={[styles.composerInput, compact && local.input]}
           value={draft}
         />
         <View style={styles.composerActions}>
-          <View style={styles.actionSpacer} />
+          {!compact && <View style={styles.actionSpacer} />}
           <FocusPressable
             accessibilityLabel={
               activeGenerationId !== null
@@ -94,3 +96,15 @@ export function Composer({
     </View>
   );
 }
+
+const local = StyleSheet.create({
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    borderRadius: 22,
+    backgroundColor: mobileColor.surface,
+    borderColor: mobileColor.border,
+    padding: 6,
+  },
+  input: {flex: 1, minWidth: 0, maxHeight: 120, fontSize: 16, lineHeight: 23},
+});

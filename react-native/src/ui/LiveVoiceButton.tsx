@@ -159,7 +159,7 @@ export function LiveVoiceButton({
   const on = phase === 'live';
   const label = active ? 'End Live' : 'Live';
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, compact && styles.rootCompact]}>
       <FocusPressable
         accessibilityLabel={active ? 'End Live voice' : 'Start Live voice'}
         accessibilityRole="button"
@@ -191,6 +191,12 @@ export function LiveVoiceButton({
 
 const styles = StyleSheet.create({
   root: {alignItems: 'flex-start', gap: 4},
+  rootCompact: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 12,
+  },
   button: {
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.06)',
@@ -203,7 +209,7 @@ const styles = StyleSheet.create({
   buttonCompact: {
     backgroundColor: mobileColor.surface,
     borderRadius: 18,
-    minHeight: 40,
+    minHeight: 48,
     paddingHorizontal: 14,
   },
   buttonOn: {backgroundColor: '#e5484d'},

@@ -1,5 +1,5 @@
-import React from 'react';
-import {Text, View} from 'react-native';
+import React, {useState} from 'react';
+import {Platform, StyleSheet, Text, View} from 'react-native';
 import {
   isBluetoothScanAvailable,
   type PlatformNativeSnapshot,
@@ -9,6 +9,8 @@ import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {bluetoothStatusLabel} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
+import ChevronDown from 'lucide-react-native/icons/chevron-down';
+import {mobileColor as color} from '../mobile/mobileTokens';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
 
@@ -87,6 +89,8 @@ export function DeviceSession({
   onToggle: (id: string, connected: boolean) => void;
   variant: DeviceSessionVariant;
 }): React.JSX.Element {
+  const mobile = variant === 'compact' && Platform.OS !== 'macos';
+  const [detailsId, setDetailsId] = useState<string | null>(null);
   const connectedLabel =
     nativeSnapshot?.capture === 'recording' &&
     nativeSnapshot.audioStatus === 'waiting'
@@ -108,8 +112,11 @@ export function DeviceSession({
 
   const remembered =
     rememberedDevice && onForgetRemembered ? (
-      <View accessibilityLabel="Remembered Omi device" style={styles.deviceRow}>
-        <View style={styles.homeDeviceRowLead}>
+      <View
+        accessibilityLabel="Remembered Omi device"
+        style={[styles.deviceRow, mobile && local.remembered]}>
+        <View
+          style={[styles.homeDeviceRowLead, mobile && local.rememberedName]}>
           <Text numberOfLines={1} style={[styles.deviceName, {flexShrink: 1}]}>
             {rememberedDevice.name}
           </Text>
@@ -120,7 +127,7 @@ export function DeviceSession({
             accessibilityLabel={`Reconnect ${rememberedDevice.name}`}
             disabled={deviceBusy || rememberedBusy}
             onPress={() => onToggle(rememberedDevice.id, false)}
-            style={styles.scanButton}>
+            style={[styles.scanButton, mobile && local.action]}>
             <Text style={styles.scanButtonText}>Reconnect</Text>
           </FocusPressable>
         )}
@@ -129,7 +136,7 @@ export function DeviceSession({
           accessibilityLabel={`Forget ${rememberedDevice.name}`}
           disabled={deviceBusy || rememberedBusy}
           onPress={onForgetRemembered}
-          style={styles.scanButton}>
+          style={[styles.scanButton, mobile && local.action]}>
           <Text style={styles.scanButtonText}>Forget</Text>
         </FocusPressable>
       </View>
@@ -189,7 +196,7 @@ export function DeviceSession({
               pressed && styles.pressed,
             ]}>
             <Text style={styles.macHomeDeviceChipText}>
-              {deviceBusy ? 'Scanning…' : 'Devices'}
+              {deviceBusy ? 'Please wait…' : 'Devices'}
             </Text>
           </FocusPressable>
         </View>
@@ -202,7 +209,7 @@ export function DeviceSession({
   }
 
   const header = (
-    <View style={styles.deviceHeader}>
+    <View style={[styles.deviceHeader, mobile && local.header]}>
       {variant === 'compact' ? (
         <View style={styles.homeDeviceHeading}>
           <View
@@ -211,7 +218,7 @@ export function DeviceSession({
               {backgroundColor: bluetoothStatusColor},
             ]}
           />
-          <View>
+          <View style={mobile && local.lead}>
             <Text style={[styles.sectionLabel, styles.homeSectionLabel]}>
               Devices
             </Text>
@@ -240,6 +247,7 @@ export function DeviceSession({
         style={({pressed}) => [
           styles.scanButton,
           variant === 'compact' && styles.homeScanButton,
+          mobile && local.action,
           pressed && styles.pressed,
         ]}>
         <Text
@@ -247,7 +255,7 @@ export function DeviceSession({
             styles.scanButtonText,
             variant === 'compact' && styles.homeScanButtonText,
           ]}>
-          {deviceBusy ? 'Scanning…' : 'Scan'}
+          {deviceBusy ? 'Please wait…' : 'Scan'}
         </Text>
       </FocusPressable>
     </View>
@@ -269,6 +277,7 @@ export function DeviceSession({
       style={({pressed}) => [
         styles.deviceRow,
         variant === 'compact' && styles.homeDeviceRow,
+        mobile && local.device,
         pressed && styles.pressed,
       ]}>
       {variant === 'compact' ? (
@@ -279,13 +288,17 @@ export function DeviceSession({
               device.connected && styles.homeDeviceRowDotConnected,
             ]}
           />
-          <View>
+          <View style={mobile && local.lead}>
             <Text style={styles.deviceName}>{device.name}</Text>
             <Text style={styles.deviceMeta}>
               {device.connecting
-                ? 'Connecting…'
+                ? mobile && !deviceBusy
+                  ? 'Connecting… · Tap to cancel'
+                  : 'Connecting…'
                 : device.connected
-                ? connectedLabel
+                ? mobile && !deviceBusy
+                  ? `${connectedLabel} · Tap to disconnect`
+                  : connectedLabel
                 : device.rssi === undefined
                 ? 'Signal unavailable'
                 : `${device.rssi} dBm`}
@@ -316,7 +329,13 @@ export function DeviceSession({
     device => device.connected && !device.connecting,
   );
   const information = connected ? (
-    <View accessibilityLabel="Device information">
+    <View
+      accessibilityLabel="Device information"
+      accessibilityElementsHidden={mobile && detailsId !== connected.id}
+      importantForAccessibility={
+        mobile && detailsId !== connected.id ? 'no-hide-descendants' : 'auto'
+      }
+      style={mobile && detailsId !== connected.id ? local.hidden : undefined}>
       <DeviceControls key={connected.id} device={connected} busy={deviceBusy} />
       {(
         [
@@ -342,10 +361,31 @@ export function DeviceSession({
       <View
         accessibilityLabel="Home devices"
         style={[styles.homeSection, styles.homeDevicesSection]}>
-        <View style={styles.homeDeviceCard}>
+        <View style={[styles.homeDeviceCard, mobile && local.card]}>
           {header}
           {remembered}
           {rows}
+          {mobile && connected && (
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel="Device details"
+              accessibilityState={{expanded: detailsId === connected.id}}
+              onPress={() =>
+                setDetailsId(current =>
+                  current === connected.id ? null : connected.id,
+                )
+              }
+              style={local.disclosure}>
+              <Text style={local.disclosureText}>
+                Device details & controls
+              </Text>
+              <ChevronDown
+                color={color.textMuted}
+                size={18}
+                style={detailsId === connected.id ? local.expanded : undefined}
+              />
+            </FocusPressable>
+          )}
           {information}
           {hintRow}
         </View>
@@ -363,3 +403,34 @@ export function DeviceSession({
     </>
   );
 }
+
+const local = StyleSheet.create({
+  card: {
+    backgroundColor: color.surface,
+    borderColor: color.border,
+    borderRadius: 22,
+    padding: 16,
+    gap: 12,
+  },
+  header: {gap: 12},
+  lead: {flex: 1},
+  action: {minHeight: 44, alignItems: 'center'},
+  device: {
+    backgroundColor: color.surfaceQuiet,
+    borderColor: color.border,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  remembered: {flexWrap: 'wrap', gap: 8, paddingVertical: 12},
+  rememberedName: {flexBasis: '100%'},
+  disclosure: {
+    minHeight: 48,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  disclosureText: {color: color.textMuted, fontSize: 14, flexShrink: 1},
+  expanded: {transform: [{rotate: '180deg'}]},
+  hidden: {display: 'none'},
+});
