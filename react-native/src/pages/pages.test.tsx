@@ -2731,6 +2731,29 @@ test('Settings names GET custom vocabulary without add/delete or Flutter false d
   );
 });
 
+test('Settings names Flutter TranscriptionPreferences fromJson type-wrong GET custom_stt_since instead of remapping to a language chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/transcription-preferences') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          vocabulary: ['Based Hardware'],
+          single_language_mode: true,
+          custom_stt_since: 1,
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).not.toContain('Based Hardware');
+  expect(tree).not.toContain('Detect 10+ languages');
+  expect(tree).not.toContain('Off');
+});
+
 test('Settings names a failed transcription-preferences GET instead of empty success', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

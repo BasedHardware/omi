@@ -14,8 +14,18 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function presentPaddedKnown(value: unknown): void {
-  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+function presentNullableDate(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
+    throw new TranscriptionPreferencesError();
+  }
+  if (visibleDisplayText(value) !== value) {
+    throw new TranscriptionPreferencesError();
+  }
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (value === '' || !Number.isFinite(parsed)) {
     throw new TranscriptionPreferencesError();
   }
 }
@@ -43,7 +53,7 @@ export function parseOmiTranscriptionPreferences(
   body: string,
 ): OmiTranscriptionPreferences {
   const record = object(JSON.parse(body));
-  presentPaddedKnown(record.custom_stt_since);
+  presentNullableDate(record.custom_stt_since);
   if (
     record.single_language_mode !== undefined &&
     typeof record.single_language_mode !== 'boolean'

@@ -98,6 +98,51 @@ test('old transcription preferences name Flutter TranscriptionPreferences fromJs
   }
 });
 
+test('old transcription preferences name Flutter TranscriptionPreferences fromJson type-wrong GET custom_stt_since instead of remapping to a language chip', () => {
+  expect(
+    parseOmiTranscriptionPreferences(
+      JSON.stringify({
+        vocabulary: ['Omi'],
+        single_language_mode: true,
+        custom_stt_since: '2026-09-07T00:00:00.000Z',
+      }),
+    ),
+  ).toEqual({
+    singleLanguageMode: true,
+    vocabulary: ['Omi'],
+  });
+  expect(
+    parseOmiTranscriptionPreferences(
+      JSON.stringify({
+        vocabulary: ['Omi'],
+        single_language_mode: true,
+        custom_stt_since: null,
+      }),
+    ),
+  ).toEqual({
+    singleLanguageMode: true,
+    vocabulary: ['Omi'],
+  });
+  for (const custom_stt_since of [
+    '',
+    'not-a-date',
+    1,
+    true,
+    [],
+    {},
+  ]) {
+    expect(() =>
+      parseOmiTranscriptionPreferences(
+        JSON.stringify({
+          vocabulary: ['Omi'],
+          single_language_mode: true,
+          custom_stt_since,
+        }),
+      ),
+    ).toThrow('Omi transcription preferences are malformed');
+  }
+});
+
 test('fails closed for malformed GET transcription preferences', () => {
   expect(() => parseOmiTranscriptionPreferences(JSON.stringify([]))).toThrow();
   expect(() =>
@@ -138,5 +183,15 @@ test('loadOmiTranscriptionPreferences names resolved GET preferences and omits f
   request.mockResolvedValueOnce({id: 'prefs', status: 404, body: '{}'});
   expect(await loadOmiTranscriptionPreferences(backend)).toBeNull();
   request.mockResolvedValueOnce({id: 'prefs', status: 200, body: '['});
+  expect(await loadOmiTranscriptionPreferences(backend)).toBeNull();
+  request.mockResolvedValueOnce({
+    id: 'prefs',
+    status: 200,
+    body: JSON.stringify({
+      vocabulary: ['Omi'],
+      single_language_mode: true,
+      custom_stt_since: 1,
+    }),
+  });
   expect(await loadOmiTranscriptionPreferences(backend)).toBeNull();
 });
