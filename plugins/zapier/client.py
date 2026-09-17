@@ -2,10 +2,11 @@ import os
 
 import requests
 
-from typing import Any, List
+from typing import Any
 
 from models import ExternalIntegrationCreateConversation, Conversation
 
+# Fallback to direct package import when running outside parent package context (e.g. test harness)
 try:
     from .models import ZapierCreateConversation
 except (ImportError, ValueError):

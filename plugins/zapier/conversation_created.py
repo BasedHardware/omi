@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List
 
 from fastapi import HTTPException, Request, APIRouter, Form
 from fastapi.responses import HTMLResponse
@@ -12,6 +12,7 @@ from db import (
     remove_zapier_subscribes,
 )
 from models import Conversation, ExternalIntegrationCreateConversation, EndpointResponse
+# Fallback to direct package import when running outside parent package context (e.g. test harness)
 try:
     from .client import get_zapier, get_omi
     from .models import ZapierSubcribeModel, ZapierCreateConversation, ZapierActionCreateConversation

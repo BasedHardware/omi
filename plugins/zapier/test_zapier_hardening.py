@@ -597,6 +597,13 @@ class ConversationPayloadHardeningTests(unittest.TestCase):
             self.assertEqual(res, {})
             mock_create.assert_not_called()
 
+    def test_type_annotations_evaluate_cleanly_on_all_runtimes(self):
+        """Verify type annotations in conversation_created resolve without NameError on all Python versions."""
+        import typing
+        hints = typing.get_type_hints(_build_zapier_conversation_payload)
+        self.assertIn("conversation", hints)
+        self.assertIn("return", hints)
+
 
 if __name__ == "__main__":
     unittest.main()
