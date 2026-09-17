@@ -9,16 +9,13 @@ Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
 - **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.env`, Firebase project `based-hardware-prod`
 - **raybanDat**: camera-capable iOS target with the same iOS development identity; `scripts/rayban_dat.sh` excludes mcumgr only for that transaction, then restores the default graph.
 
-### Generated Files (never edit manually)
-| Generator | Source | Output | Command |
-|-----------|--------|--------|---------|
-| envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (obfuscated secrets) | `flutter pub run build_runner build` |
-| json_serializable | `@JsonSerializable` models | `*.g.dart` (fromJson/toJson) | `flutter pub run build_runner build` |
-| pigeon | `lib/pigeon_interfaces.dart` | `lib/gen/pigeon_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
-| flutter_gen | `pubspec.yaml` assets/fonts | `lib/gen/assets.gen.dart`, `lib/gen/fonts.gen.dart` | `flutter pub run build_runner build` |
-| flutter_localizations | `lib/l10n/*.arb` | `lib/gen_l10n/app_localizations*.dart` | `flutter gen-l10n` |
+### Version string
+`pubspec.yaml` (`1.0.543+992`) is the local marketing+build placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest TestFlight/App Store (or Play) version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only when stores have no history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER` (Codemagic's `BUILD_NUMBER`, else `"local"`). Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
 
-Never edit generated `.g.dart`/`.gen.dart` files. Regenerate using the table above after source changes; resolve build_runner conflicts with `--delete-conflicting-outputs`.
+### Generated Files (never edit)
+envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
+
+Never edit generated `.g.dart`/`.gen.dart` files. Regenerate using the commands above after source changes; resolve build_runner conflicts with `--delete-conflicting-outputs`.
 
 ### Setup Sequence
 ```bash
@@ -114,12 +111,9 @@ CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analy
 
 ## Localization (l10n)
 
-- All user-facing strings must use `context.l10n.keyName`
-- 49 locales: English (template) + 48 translations in `lib/l10n/` — never trust a remembered count; enumerate with `ls lib/l10n/app_*.arb`.
-- Template: `lib/l10n/app_en.arb`
-- Add keys via `jq` (never read full ARB — they're large). Use skill `add-a-new-localization-key-l10n-arb`
-- Translate all locales — use skill `omi-add-missing-language-keys-l10n` for real translations
-- Regenerate after changes: `flutter gen-l10n`; done only when it emits zero "untranslated message(s)" warnings. To get the exact missing-key list, temporarily add `untranslated-messages-file: /tmp/untranslated.json` to `l10n.yaml` and re-run.
+- All user-facing strings use `context.l10n.keyName`. Template: `lib/l10n/app_en.arb`. Never hardcode a locale count; `python3 scripts/l10n.py template` lists every locale the tree has.
+- Add/change/remove a key with `scripts/l10n.py` (`add`/`set`/`remove`). Do not edit ARB files by hand or with `jq`. The caller supplies translations (no network); the tool writes every locale, runs `flutter gen-l10n`, formats generated Dart, and refuses a partial or placeholder-mismatched change.
+- `python3 scripts/l10n.py check` is the fast consistency gate (parse, key-set, placeholders, generated freshness). Ready for a pre-push hook; not wired in this package.
 
 ## Auth & Security
 

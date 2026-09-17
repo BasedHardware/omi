@@ -41,6 +41,7 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
+import 'conversation_summary_selection.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
@@ -142,9 +143,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       }
     } else if (selectedTab == ConversationTab.summary) {
       // Count matches in app summaries
-      final summarizedApp = provider.getSummarizedApp();
-      if (summarizedApp != null && summarizedApp.content.trim().isNotEmpty) {
-        final appContent = summarizedApp.content.trim().decodeString.toLowerCase();
+      final summarySelection = provider.getSummarySelection();
+      if (summarySelection.content.isNotEmpty) {
+        final appContent = summarySelection.content.decodeString.toLowerCase();
         final query = _searchQuery.toLowerCase();
         int index = 0;
         while ((index = appContent.indexOf(query, index)) != -1) {
@@ -382,13 +383,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         _copyContent(context, provider.conversation.getTranscript(generate: true));
         break;
       case 'copy_summary':
-        // Use app-generated summary if available, otherwise fall back to structured summary
         final conversation = provider.conversation;
-        final summaryContent =
-            conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-                ? conversation.appResults[0].content.trim()
-                : conversation.structured.toString();
-        _copyContent(context, summaryContent);
+        _copyContent(context, ConversationSummarySelection.select(conversation).content);
         break;
       case 'download_audio':
         await _downloadAudio(context, provider);
@@ -1366,9 +1362,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                           },
                           onEditStarted: (_) => PlatformManager.instance.analytics.editSummaryStarted(),
                           onEditCancelled: (_) => PlatformManager.instance.analytics.editSummaryCancelled(),
-                          onSaveSummary: (appId, newContent) {
+                          onSaveSummarySelection: (selection, newContent) {
                             PlatformManager.instance.analytics.editSummarySaved();
-                            context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
+                            context
+                                .read<ConversationDetailProvider>()
+                                .saveEditingSummarySelection(selection, newContent);
                           },
                         ),
                   const SliverToBoxAdapter(child: GetGeolocationWidgets()),

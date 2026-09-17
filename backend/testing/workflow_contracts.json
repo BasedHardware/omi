@@ -765,6 +765,28 @@
         "unmapped backend production paths cannot be hidden by adding one direct test",
         "desktop-only pushes do not require a backend virtual environment"
       ]
+    },
+    {
+      "id": "daily_memory_sweep_admission",
+      "risk": "high",
+      "sources": [
+        "backend/utils/memory/daily_memory_sweep.py",
+        "backend/modal/daily_memory_sweep_job.py",
+        "backend/scripts/jit_qa_sweep_repair.py"
+      ],
+      "tests": [
+        "tests/unit/test_daily_memory_sweep.py",
+        "tests/unit/test_daily_memory_sweep_job.py",
+        "tests/unit/test_daily_sweep_summary_agent.py",
+        "tests/unit/test_jit_qa_sweep_repair.py"
+      ],
+      "checks": [
+        "no_large_tuple_results"
+      ],
+      "invariants": [
+        "FC-daily-memory-sweep-fence: common admission binds one invocation per owner/window/generation before dispatch",
+        "claim-bound skip consumes the existing attestation without authorizing another dispatch"
+      ]
     }
   ]
 }

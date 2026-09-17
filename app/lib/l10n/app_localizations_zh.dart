@@ -241,7 +241,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchConversations => '搜索对话...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '已选择 $count 项';
   }
 
@@ -2003,10 +2003,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistory => '历史';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => '允许使用';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => '不使用';
 
   @override
   String get undo => '撤销';
@@ -9807,4 +9807,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get home => '首页';
+
+  @override
+  String get failedToUpdateBaselineStatus => '无法更新基线状态。';
 }
