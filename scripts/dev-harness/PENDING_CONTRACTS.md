@@ -7,6 +7,8 @@ Both existing owner suites discover these directories. This command is also
 in the local/CI checks manifest. No separate test runner or ceremony.
 
 Python: put `@pending("V1")` on each test, imported from `.pending`.
+Either quote style is recognized; builder markers must be standalone literals.
+Active MECHANISM-owned tests may exercise dynamic calls to the marker API.
 It is pytest `xfail(strict=True)`: the body executes, expected assertion or
 skeleton failure is visible, unexpected success fails. Fixture/runtime errors
 are not expected failures. Parametrized cases are individually strict.

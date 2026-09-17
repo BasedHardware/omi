@@ -23,6 +23,41 @@ def test_marker_removal_is_the_only_permitted_diff():
     assert not checker.allowed(dart, dart.replace('body', 'empty'))
 
 
+def test_quote_styles_share_listing_owner_and_marker_only_removal():
+    for line in ('@pending("V1")', "@pending('V1')", "pendingContract('C1');", 'pendingContract("C1");'):
+        match = checker.MARKER.fullmatch(line)
+        assert match is not None
+        assert next(value for value in match.groups() if value) == ('V1' if line.startswith('@') else 'C1')
+        original = line + '\nassert actual() == 42\n'
+        assert checker.allowed(original, 'assert actual() == 42\n')
+        assert not checker.allowed(original, 'assert actual() == 0\n')
+        assert not checker.allowed('assert actual() == 42\n', original)
+    for line in ('@pending("V1\')', '@pending("V1") # comment', 'pendingContract(package);'):
+        assert checker.MARKER.fullmatch(line) is None
+
+
+def test_dynamic_marker_calls_are_only_for_active_mechanism_self_tests(tmp_path):
+    import json
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True)
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.test')
+    registry = {'app/test/spine/self.dart': 'MECHANISM', 'app/test/spine/builder.dart': 'B1'}
+    for path in registry:
+        file = tmp_path / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text('pendingContract(package);\n')
+    file = tmp_path / checker.REGISTRY
+    file.parent.mkdir(parents=True)
+    file.write_text(json.dumps(registry))
+    git('add', '.')
+    git('commit', '-qm', 'fixture')
+    git('branch', 'origin/main')
+    errors = checker.check(tmp_path)
+    assert errors == ['app/test/spine/builder.dart:1: pending markers must be a complete standalone literal call']
+
+
 def test_pytest_runs_pending_and_xpass_is_red(tmp_path):
     helper = ROOT / 'scripts/dev-harness/tests/spine'
     path = tmp_path / 'test_pending.py'
