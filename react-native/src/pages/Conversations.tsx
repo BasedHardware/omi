@@ -85,6 +85,7 @@ const ConversationRow = memo(function ConversationRow({
 });
 
 export function ConversationsPage({
+  search,
   outcome,
   loading,
   embedded = false,
@@ -93,6 +94,7 @@ export function ConversationsPage({
   loadingMore = false,
   notice = null,
 }: {
+  search?: {value: string; onChange: (value: string) => void};
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
   embedded?: boolean;
@@ -114,7 +116,9 @@ export function ConversationsPage({
     [outcome],
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [localQuery, setLocalQuery] = useState('');
+  const query = search?.value ?? localQuery;
+  const setQuery = search?.onChange ?? setLocalQuery;
   const [starredOnly, setStarredOnly] = useState(false);
   const nowEpochMilliseconds = useRef(Date.now()).current;
   const selected = conversations.find(item => item.id === selectedId) ?? null;
@@ -178,39 +182,41 @@ export function ConversationsPage({
             styles.conversationDiscovery,
             embedded && mobileStyles.discovery,
           ]}>
-          <View
-            style={[
-              styles.conversationSearchBox,
-              embedded && mobileStyles.search,
-            ]}>
-            <Search accessible={false} color="#777777" size={17} />
-            <TextInput
-              accessibilityLabel="Search loaded conversations"
-              onChangeText={setQuery}
-              placeholder={
-                embedded
-                  ? 'Search loaded conversations…'
-                  : 'Search loaded conversations'
-              }
-              placeholderTextColor={
-                embedded ? mobileColor.textSubtle : '#666666'
-              }
+          {!search && (
+            <View
               style={[
-                styles.memorySearchInput,
-                embedded && mobileStyles.searchInput,
-              ]}
-              value={query}
-            />
-            {embedded && query.length > 0 && (
-              <FocusPressable
-                accessibilityRole="button"
-                accessibilityLabel="Clear conversation search"
-                onPress={() => setQuery('')}
-                style={mobileStyles.clear}>
-                <X size={18} color={mobileColor.textMuted} />
-              </FocusPressable>
-            )}
-          </View>
+                styles.conversationSearchBox,
+                embedded && mobileStyles.search,
+              ]}>
+              <Search accessible={false} color="#777777" size={17} />
+              <TextInput
+                accessibilityLabel="Search loaded conversations"
+                onChangeText={setQuery}
+                placeholder={
+                  embedded
+                    ? 'Search loaded conversations…'
+                    : 'Search loaded conversations'
+                }
+                placeholderTextColor={
+                  embedded ? mobileColor.textSubtle : '#666666'
+                }
+                style={[
+                  styles.memorySearchInput,
+                  embedded && mobileStyles.searchInput,
+                ]}
+                value={query}
+              />
+              {embedded && query.length > 0 && (
+                <FocusPressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear conversation search"
+                  onPress={() => setQuery('')}
+                  style={mobileStyles.clear}>
+                  <X size={18} color={mobileColor.textMuted} />
+                </FocusPressable>
+              )}
+            </View>
+          )}
           <View style={embedded && mobileStyles.filters}>
             {embedded && (
               <FocusPressable

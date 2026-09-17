@@ -6,7 +6,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -15,7 +14,6 @@ import {
   TaskMutationStatus,
   type TaskMutationProps,
 } from '../ui/TaskEditor';
-import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import House from 'lucide-react-native/icons/house';
 import ListFilter from 'lucide-react-native/icons/list-filter';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
@@ -82,10 +80,9 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   recaps: readonly MobileRecap[];
   recapStatus: MobileProjectionStatus;
   mindMapStatus: MobileProjectionStatus;
-  askValue: string;
-  onAskChange: (value: string) => void;
-  onAskSubmit: () => void;
-  onOpenSettings: () => void;
+  omnibar: React.ReactNode;
+  chatContent?: React.ReactNode;
+  searchContent?: React.ReactNode;
   onOpenDevice: () => void;
   onOpenCalls: () => void;
   onRouteChange: (route: MobileRoute) => void;
@@ -213,12 +210,8 @@ function MobileTabBar({
           accessibilityState={{selected: activeRoute === route}}
           key={route}
           onPress={() => onRouteChange(route)}
-          style={styles.tabButton}>
-          <View
-            style={[
-              styles.tabIcon,
-              activeRoute === route && styles.tabIconActive,
-            ]}>
+          style={[styles.tabButton, activeRoute === route && styles.tabActive]}>
+          <View style={styles.tabIcon}>
             <Icon
               color={
                 activeRoute === route
@@ -266,7 +259,9 @@ function SectionHeader({
 export function MobileAppSurface({
   taskPagination,
   activeRoute,
-  askValue,
+  omnibar,
+  chatContent,
+  searchContent,
   capture,
   device,
   deviceMessage,
@@ -276,12 +271,9 @@ export function MobileAppSurface({
   appsContent,
   liveVoiceControl,
   mindMapStatus,
-  onAskChange,
-  onAskSubmit,
   onExpandMindMap,
   onOpenCalls,
   onOpenDevice,
-  onOpenSettings,
   onRouteChange,
   onTaskToggle,
   onTaskEdit,
@@ -299,12 +291,6 @@ export function MobileAppSurface({
 }: MobileAppSurfaceProps): React.JSX.Element {
   const reduceMotion = useReduceMotion();
   const [greeting, setGreeting] = useState(0);
-  const canAsk = askValue.trim().length > 0;
-  const submitAsk = () => {
-    if (canAsk) {
-      onAskSubmit();
-    }
-  };
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(
@@ -485,47 +471,16 @@ export function MobileAppSurface({
     ],
   );
 
-  if (activeRoute !== 'home') {
-    const title =
-      activeRoute === 'chat'
-        ? 'Conversations'
-        : activeRoute === 'tasks'
-        ? 'Tasks'
-        : activeRoute === 'settings'
-        ? 'Settings'
-        : 'Apps';
+  if (activeRoute !== 'home' || chatContent) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.flex}>
-          <View style={styles.secondaryHeader}>
-            <View style={styles.pageHeading}>
-              <Text accessibilityRole="header" style={styles.secondaryTitle}>
-                {title}
-              </Text>
-              <Text style={styles.pageSubtitle}>
-                {activeRoute === 'chat'
-                  ? 'A place for what you want to remember.'
-                  : activeRoute === 'tasks'
-                  ? 'A little follow-through.'
-                  : activeRoute === 'apps'
-                  ? 'Make Omi your own.'
-                  : 'Your Omi, your way.'}
-              </Text>
-            </View>
-            {activeRoute !== 'settings' && (
-              <Pressable
-                accessibilityLabel="Open settings"
-                accessibilityRole="button"
-                onPress={onOpenSettings}
-                style={styles.roundButton}>
-                <Settings color={mobileColor.text} size={20} />
-              </Pressable>
-            )}
-          </View>
-          <View style={styles.flex}>
-            {activeRoute === 'settings' ? (
+          <View style={[styles.flex, styles.stage]}>
+            {chatContent ? (
+              chatContent
+            ) : activeRoute === 'settings' ? (
               <View accessibilityLabel="Settings stage" style={styles.flex}>
                 {settingsContent}
               </View>
@@ -575,6 +530,10 @@ export function MobileAppSurface({
               </View>
             )}
           </View>
+          {liveVoiceControl && chatContent && (
+            <View style={styles.liveVoiceRow}>{liveVoiceControl}</View>
+          )}
+          {omnibar}
           <MobileTabBar
             activeRoute={activeRoute}
             onRouteChange={onRouteChange}
@@ -617,11 +576,17 @@ export function MobileAppSurface({
             </Pressable>
           </View>
           <Pressable
-            accessibilityLabel="Open settings"
+            accessibilityLabel="Say hello to Omi"
             accessibilityRole="button"
-            onPress={onOpenSettings}
-            style={styles.roundButton}>
-            <Settings color={mobileColor.text} size={20} />
+            onPress={() => setGreeting(value => value + 1)}
+            style={styles.greeting}>
+            <OmiAvatar
+              tone="ink"
+              size={36}
+              motion="arrive"
+              motionKey={String(greeting)}
+              reduceMotion={reduceMotion}
+            />
           </Pressable>
         </View>
         {liveVoiceControl && (
@@ -632,60 +597,19 @@ export function MobileAppSurface({
             {deviceMessage}
           </Text>
         )}
-        <FlatList
-          contentContainerStyle={styles.content}
-          data={rows}
-          ListHeaderComponent={
-            <View>
-              <View style={styles.homeHeading}>
-                <View style={styles.pageHeading}>
-                  <Text style={styles.homeEyebrow}>YOUR PERSONAL CONTEXT</Text>
-                  <Text accessibilityRole="header" style={styles.homeTitle}>
-                    A little space for your day.
-                  </Text>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Say hello to Omi"
-                  onPress={() => setGreeting(value => value + 1)}
-                  style={styles.greeting}>
-                  <OmiAvatar
-                    tone="ink"
-                    size={60}
-                    motion="arrive"
-                    motionKey={String(greeting)}
-                    reduceMotion={reduceMotion}
-                  />
-                </Pressable>
-              </View>
-              {devicePanel ? <View>{devicePanel}</View> : null}
-            </View>
-          }
-          keyExtractor={item => item.key}
-          renderItem={renderRow}
-          showsVerticalScrollIndicator={false}
-        />
-        <View style={styles.askDock}>
-          <TextInput
-            accessibilityLabel="Ask Omi"
-            onChangeText={onAskChange}
-            onSubmitEditing={submitAsk}
-            placeholder="Ask about your day…"
-            placeholderTextColor={mobileColor.textSubtle}
-            returnKeyType="send"
-            style={styles.askInput}
-            value={askValue}
+        {searchContent ?? (
+          <FlatList
+            contentContainerStyle={styles.content}
+            data={rows}
+            ListHeaderComponent={
+              <View>{devicePanel ? <View>{devicePanel}</View> : null}</View>
+            }
+            keyExtractor={item => item.key}
+            renderItem={renderRow}
+            showsVerticalScrollIndicator={false}
           />
-          <Pressable
-            accessibilityLabel="Send to Omi"
-            accessibilityRole="button"
-            accessibilityState={{disabled: !canAsk}}
-            disabled={!canAsk}
-            onPress={submitAsk}
-            style={[styles.askButton, !canAsk && styles.askButtonDisabled]}>
-            <ArrowUp color={mobileColor.background} size={18} />
-          </Pressable>
-        </View>
+        )}
+        {omnibar}
         <MobileTabBar activeRoute={activeRoute} onRouteChange={onRouteChange} />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -694,34 +618,14 @@ export function MobileAppSurface({
 
 const styles = StyleSheet.create({
   flex: {flex: 1},
+  stage: {paddingTop: 12},
   liveVoiceRow: {paddingHorizontal: 16, paddingTop: 8},
   safeArea: {backgroundColor: mobileColor.background, flex: 1},
-  homeHeading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    paddingBottom: 4,
-  },
-  pageHeading: {flex: 1, gap: 8},
-  pageSubtitle: {fontSize: 14, lineHeight: 20, color: mobileColor.textMuted},
   greeting: {
-    height: 64,
-    width: 64,
+    height: 48,
+    width: 48,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  homeEyebrow: {
-    fontSize: 10,
-    letterSpacing: 1.5,
-    color: mobileColor.textSubtle,
-    fontWeight: '600',
-  },
-  homeTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-    letterSpacing: -0.8,
-    color: mobileColor.text,
-    maxWidth: 280,
   },
   topBar: {
     alignItems: 'center',
@@ -730,20 +634,6 @@ const styles = StyleSheet.create({
     gap: mobileSpace.sm,
     paddingHorizontal: mobileSpace.md,
     paddingTop: mobileSpace.sm,
-  },
-  secondaryHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: mobileSpace.md,
-    gap: 16,
-  },
-  secondaryTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '600',
-    letterSpacing: -0.7,
-    color: mobileColor.text,
   },
   secondaryList: {
     flexGrow: 1,
@@ -763,19 +653,6 @@ const styles = StyleSheet.create({
     color: mobileColor.textMuted,
     marginTop: mobileSpace.sm,
     textAlign: 'center',
-  },
-  secondaryAskDock: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.round,
-    borderWidth: StyleSheet.hairlineWidth,
-    bottom: 76,
-    flexDirection: 'row',
-    left: mobileSpace.md,
-    padding: mobileSpace.sm,
-    position: 'absolute',
-    right: mobileSpace.md,
   },
   topBarActions: {flexDirection: 'row', flexShrink: 1, gap: mobileSpace.sm},
   deviceButton: {
@@ -1003,36 +880,6 @@ const styles = StyleSheet.create({
     color: mobileColor.textMuted,
     textAlign: 'center',
   },
-  askDock: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.round,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    marginHorizontal: mobileSpace.md,
-    marginTop: 8,
-    marginBottom: 8,
-    padding: 6,
-  },
-  askInput: {
-    ...mobileType.body,
-    color: mobileColor.text,
-    flex: 1,
-    minWidth: 0,
-    minHeight: 44,
-    paddingHorizontal: mobileSpace.md,
-  },
-  askButton: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.accent,
-    borderRadius: mobileRadius.round,
-    height: 46,
-    justifyContent: 'center',
-    width: 46,
-  },
-  askButtonDisabled: {opacity: 0.35},
-  askGlyph: {color: mobileColor.background, fontSize: 14},
   tabBar: {
     alignItems: 'center',
     backgroundColor: mobileColor.surfaceQuiet,
@@ -1045,6 +892,8 @@ const styles = StyleSheet.create({
     minHeight: 68,
     flexShrink: 0,
     justifyContent: 'space-around',
+    padding: 4,
+    gap: 2,
   },
   tabButton: {
     alignItems: 'center',
@@ -1052,9 +901,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 60,
     gap: 3,
+    borderRadius: 18,
   },
-  tabIcon: {paddingVertical: 4, paddingHorizontal: 12, borderRadius: 12},
-  tabIconActive: {backgroundColor: mobileColor.surfaceRaised},
+  tabIcon: {paddingVertical: 4},
+  tabActive: {backgroundColor: mobileColor.surfaceRaised},
   tabLabel: {fontSize: 9, color: mobileColor.textSubtle},
   tabLabelActive: {color: mobileColor.text},
   tabGlyph: {color: mobileColor.textSubtle, fontSize: 30},

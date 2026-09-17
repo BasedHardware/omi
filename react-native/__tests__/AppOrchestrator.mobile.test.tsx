@@ -87,7 +87,7 @@ afterEach(() => {
 });
 
 test.each([
-  ['Open settings', 'Settings stage'],
+  ['Settings', 'Settings stage'],
   ['Expand', 'Memories stage'],
   ['Apps', 'Connectors stage'],
 ])(
@@ -123,6 +123,7 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   const renderer = await renderApp();
   const connections = mockNative.connectDevice.mock.calls.length;
   const disconnections = mockNative.disconnectDevice.mock.calls.length;
+  const input = control(renderer, 'Ask Omi');
   await act(async () => {
     renderer.root
       .findAllByType(TextInput)
@@ -131,12 +132,41 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   });
   await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
   expect(control(renderer, 'Chat scroll region')).toBeDefined();
+  expect(control(renderer, 'Ask Omi')).toBe(input);
   expect(JSON.stringify(renderer.toJSON())).toContain('Chat');
-  await act(async () => control(renderer, 'Back to Home').props.onPress());
+  await act(async () => control(renderer, 'Close chat').props.onPress());
   expect(control(renderer, 'Open Omi device')).toBeDefined();
   expect(control(renderer, 'Ask Omi').props.value).toBe('Hello Omi');
+  expect(control(renderer, 'Ask Omi')).toBe(input);
   expect(mockNative.connectDevice).toHaveBeenCalledTimes(connections);
   expect(mockNative.disconnectDevice).toHaveBeenCalledTimes(disconnections);
+});
+
+test('bottom Ask returns to the previous page; Search uses the shared draft without opening chat', async () => {
+  const renderer = await renderApp();
+  await act(async () => control(renderer, 'Conversations').props.onPress());
+  const input = control(renderer, 'Ask Omi');
+  await act(async () => input.props.onChangeText('Workspace ideas'));
+  await act(async () => control(renderer, 'Search mode').props.onPress());
+  expect(control(renderer, 'Search loaded data').props.value).toBe(
+    'Workspace ideas',
+  );
+  expect(control(renderer, 'Chat scroll region')).toBeUndefined();
+  expect(control(renderer, 'Search loaded conversations')).toBeUndefined();
+  await act(async () => control(renderer, 'Ask mode').props.onPress());
+  await act(async () => control(renderer, 'Send to Omi').props.onPress());
+  expect(control(renderer, 'Chat scroll region')).toBeDefined();
+  await act(async () => control(renderer, 'Close chat').props.onPress());
+  expect(
+    control(renderer, 'Conversations').props.accessibilityState.selected,
+  ).toBe(true);
+  expect(control(renderer, 'Ask Omi').props.value).toBe('Workspace ideas');
+  await act(async () => control(renderer, 'Search mode').props.onPress());
+  await act(async () =>
+    control(renderer, 'Search loaded data').props.onSubmitEditing(),
+  );
+  expect(control(renderer, 'Search results')).toBeDefined();
+  expect(control(renderer, 'Chat scroll region')).toBeUndefined();
 });
 
 test('mobile device panel exposes the existing scan and connection controls', async () => {

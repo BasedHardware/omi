@@ -74,6 +74,7 @@ import {
 } from '../desktopSettingsClient';
 import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
 import {MobileChat} from '../mobile/MobileChat';
+import {MobileOmnibar, type MobileOmnibarMode} from '../mobile/MobileOmnibar';
 import {
   MobileAppSurface,
   type MobileProjectionStatus,
@@ -143,6 +144,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     resolveInitialRoute(initialRoute),
   );
   const [homeChatOpen, setHomeChatOpen] = useState(false);
+  const [mobileMode, setMobileMode] = useState<MobileOmnibarMode>('Ask');
+  const beforeMobileChat = useRef<{route: Route; mode: MobileOmnibarMode}>({
+    route: 'Home',
+    mode: 'Ask',
+  });
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   // useOnboarding owns the desktop session gate and needs a reads refresh;
   // useDesktopReads must stay idle until that gate is ready. A latest-ref
@@ -1077,48 +1083,41 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     );
   }
 
-  if (
-    !macDesktop &&
-    compact &&
-    onboardingRequired === false &&
-    route === 'Home' &&
-    homeChatOpen
-  ) {
-    return (
-      <MobileChat
-        messages={messages}
-        busy={chatBusy}
-        error={chatError}
-        loadingHistory={!chatHistorySettled}
-        hasOlder={hasOlderChat && olderChatCursor !== null}
-        loadingOlder={loadingOlderChat}
-        onLoadOlder={loadOlderMessages}
-        onClose={() => setHomeChatOpen(false)}
-        onUsePrompt={prompt => {
-          setDraft(prompt);
-          composerRef.current?.focus();
-        }}
-        prompts={quickPrompts}
-        composer={composer}
-        liveVoiceControl={mobileLiveControl}
-        scrollRef={chatScrollRef}
-        shouldAnimate={shouldAnimateChatMessage}
-        onScroll={event => {
-          const {contentOffset, contentSize, layoutMeasurement} =
-            event.nativeEvent;
-          shouldFollowChat.current =
-            contentOffset.y + layoutMeasurement.height >=
-            contentSize.height - 40;
-        }}
-      />
-    );
-  }
+  const mobileChat = homeChatOpen ? (
+    <MobileChat
+      messages={messages}
+      busy={chatBusy}
+      error={chatError}
+      loadingHistory={!chatHistorySettled}
+      hasOlder={hasOlderChat && olderChatCursor !== null}
+      loadingOlder={loadingOlderChat}
+      onLoadOlder={loadOlderMessages}
+      onClose={() => {
+        setHomeChatOpen(false);
+        setRoute(beforeMobileChat.current.route);
+        setMobileMode(beforeMobileChat.current.mode);
+      }}
+      onUsePrompt={prompt => {
+        setMobileMode('Ask');
+        setDraft(prompt);
+        composerRef.current?.focus();
+      }}
+      prompts={quickPrompts}
+      scrollRef={chatScrollRef}
+      shouldAnimate={shouldAnimateChatMessage}
+      onScroll={event => {
+        const {contentOffset, contentSize, layoutMeasurement} =
+          event.nativeEvent;
+        shouldFollowChat.current =
+          contentOffset.y + layoutMeasurement.height >= contentSize.height - 40;
+      }}
+    />
+  ) : undefined;
 
   if (
     !macDesktop &&
     compact &&
     onboardingRequired === false &&
-    !homeChatOpen &&
     (route === 'Home' ||
       route === 'Conversations' ||
       route === 'Tasks' ||
@@ -1165,8 +1164,76 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         taskPagination={taskPagination}
         {...taskMutations}
         activeRoute={activeMobileRoute}
+        chatContent={mobileChat}
+        omnibar={
+          <MobileOmnibar
+            key="mobile-omnibar"
+            mode={mobileMode}
+            onModeChange={next => {
+              setMobileMode(next);
+              if (next === 'Search' && homeChatOpen) {
+                setHomeChatOpen(false);
+                setRoute('Home');
+              }
+            }}
+            value={draft}
+            onChange={setDraft}
+            inputRef={composerRef}
+            busy={chatBusy}
+            canStop={activeGenerationId !== null}
+            onStop={() => {
+              void stopGeneration();
+            }}
+            onSubmit={() => {
+              if (mobileMode === 'Search') {
+                setHomeChatOpen(false);
+                setRoute('Home');
+                return;
+              }
+              if (!homeChatOpen)
+                beforeMobileChat.current = {route, mode: mobileMode};
+              setRoute('Home');
+              setHomeChatOpen(true);
+              send().catch(() => undefined);
+            }}
+          />
+        }
+        searchContent={
+          mobileMode === 'Search' && draft.trim() !== '' ? (
+            <ProjectionList
+              accessibilityLabel="Search results"
+              items={[
+                ...reads,
+                ...(readOutcomes?.tasks.status === 'success'
+                  ? readOutcomes.tasks.value.items
+                  : []),
+              ].filter(item =>
+                item.searchableText
+                  .toLocaleLowerCase()
+                  .includes(draft.trim().toLocaleLowerCase()),
+              )}
+              loading={
+                readsPhase === 'initial-loading' || readsPhase === 'refreshing'
+              }
+              error={
+                readsPhase === 'unavailable' ||
+                readsPhase === 'saved-but-refresh-failed'
+                  ? 'Some saved data could not be loaded.'
+                  : null
+              }
+              emptyTitle="No loaded results match"
+              emptyCopy="Search covers data already loaded on this device."
+            />
+          ) : undefined
+        }
         conversationContent={
           <ConversationsPage
+            search={{
+              value: mobileMode === 'Search' ? draft : '',
+              onChange: value => {
+                if (mobileMode === 'Search') setDraft(value);
+              },
+            }}
             onRefresh={() => {
               void refreshReads(false);
             }}
@@ -1193,7 +1260,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
         }
         liveVoiceControl={mobileLiveControl}
-        askValue={draft}
         capture={{
           active: nativeSnapshot?.capture === 'recording',
           waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',
@@ -1220,16 +1286,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         mindMapStatus={
           readOutcomes?.memories.status === 'error' ? 'error' : projectionStatus
         }
-        onAskChange={setDraft}
-        onAskSubmit={() => {
-          setRoute('Home');
-          setHomeChatOpen(true);
-          send().catch(() => undefined);
-        }}
         onExpandMindMap={() => setRoute('Memories')}
         onOpenCalls={() => setRoute('Conversations')}
         onOpenDevice={() => setDevicePanelOpen(open => !open)}
-        onOpenSettings={() => setRoute('Settings')}
         onRouteChange={destination => {
           setHomeChatOpen(false);
           setRoute(

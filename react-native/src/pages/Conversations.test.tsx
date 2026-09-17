@@ -205,3 +205,43 @@ test('loading uses the reduced-motion mark without claiming an empty library; re
   expect(refresh).toHaveBeenCalledTimes(1);
   act(() => tree.unmount());
 });
+
+test('the shared bottom search owns the query without a second page input', () => {
+  const onChange = jest.fn();
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    tree = ReactTestRenderer.create(
+      <ConversationsPage
+        embedded
+        outcome={outcome}
+        loading={false}
+        search={{value: 'workspace', onChange}}
+      />,
+    );
+  });
+  expect(
+    tree.root.findAllByProps({
+      accessibilityLabel: 'Search loaded conversations',
+    }),
+  ).toHaveLength(0);
+  expect(textOf(tree)).toContain('Quiet workspace');
+  expect(textOf(tree)).not.toContain('Afternoon walk');
+  act(() =>
+    tree.update(
+      <ConversationsPage
+        embedded
+        outcome={outcome}
+        loading={false}
+        search={{value: 'unmatched', onChange}}
+      />,
+    ),
+  );
+  act(() =>
+    tree.root
+      .findAllByProps({accessibilityLabel: 'Clear conversation filters'})[0]
+      .props.onPress(),
+  );
+  expect(onChange).toHaveBeenCalledWith('');
+  expect(textOf(tree)).not.toContain('Quiet workspace');
+  act(() => tree.unmount());
+});
