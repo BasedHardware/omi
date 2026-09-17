@@ -102,6 +102,9 @@ class CreateIssueRequest(ChatToolRequest):
     description: Optional[str] = ""
     priority: Optional[str] = None
     team_id: Optional[str] = None
+    team: Optional[str] = None
+    status: Optional[str] = None
+    state: Optional[str] = None
 
 
 class ListMyIssuesRequest(ChatToolRequest):

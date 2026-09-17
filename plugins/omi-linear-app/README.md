@@ -41,7 +41,7 @@ https://spacious-undiscouragingly-kelle.ngrok-free.dev/auth/linear/callback
 
 ## 🎯 Features
 
-- **➕ Create Issues** - Create new issues with title, description, and priority
+- **➕ Create Issues** - Create new issues with title, description, priority, team, and optional workflow status
 - **📋 List My Issues** - See all issues assigned to you
 - **🔄 Update Status** - Move issues through workflow states (Todo → In Progress → Done)
 - **🔍 Search Issues** - Find issues by keyword or topic
@@ -56,6 +56,14 @@ https://spacious-undiscouragingly-kelle.ngrok-free.dev/auth/linear/callback
 2. Click "Connect Linear" to authenticate with your workspace
 3. (Optional) Set a default team for issue creation
 4. Start using voice commands!
+
+Issue creation is fail-closed when a workspace has multiple teams and no
+saved default: provide a team key, name, or UUID. Team matching prefers UUID,
+then exact key/name, then a unique substring; ambiguous matches are reported
+instead of silently routing an issue to the first team. Status names support
+workflow aliases such as `todo`, `in progress`, and `done`, and ambiguous
+states are also rejected. Issue lookups accept shorthand such as `#ENG-123`,
+`issue: ENG-123`, and Linear issue URLs.
 
 ---
 
@@ -113,7 +121,7 @@ This app exposes a manifest endpoint at `/.well-known/omi-tools.json` that Omi a
 
 | Tool                 | Description                           |
 | -------------------- | ------------------------------------- |
-| `create_issue`       | Create a new issue in Linear          |
+| `create_issue`       | Create a new issue in Linear (team/status-aware) |
 | `list_my_issues`     | List issues assigned to the user      |
 | `update_issue_status`| Update an issue's workflow status     |
 | `search_issues`      | Search for issues by text             |
@@ -199,6 +207,10 @@ It covers exact targets, missing/inaccessible issues, no unintended mutations,
 authentication/validation, mutation errors, and unchanged keyword search. It does
 not test live Linear ranking, OAuth, HTTP transport, or FastAPI/Pydantic behavior.
 The suite runs in both local and CI preflight manifest lanes.
+
+The companion `test_team_disambiguation.py` suite covers team resolution,
+default-team behavior, status binding, numeric priorities, identifier
+sanitization, nullable GraphQL connections, and manifest/model alignment.
 
 ### Local Testing with ngrok
 
