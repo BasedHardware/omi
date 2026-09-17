@@ -1,13 +1,15 @@
 {
   "app/test/spine/pending_mechanism_test.dart": "MECHANISM",
   "app/test/support/spine/contract.dart": "MECHANISM",
+  "backend/testing/e2e/test_client_compat_replay.py": "C10",
   "scripts/dev-harness/tests/spine/__init__.py": "MECHANISM",
+  "scripts/dev-harness/tests/spine/c10_backend_contract.py": "C10",
   "scripts/dev-harness/tests/spine/fake_flutter.py": "V1",
   "scripts/dev-harness/tests/spine/pending.py": "MECHANISM",
-  "scripts/dev-harness/tests/spine/test_evidence_freeze.py": "V8",
-  "scripts/dev-harness/tests/spine/test_live_session.py": "V1",
-  "scripts/dev-harness/tests/spine/test_live_revision.py": "V1",
   "scripts/dev-harness/tests/spine/test_client_compat.py": "C10",
-  "scripts/dev-harness/tests/spine/c10_backend_contract.py": "C10",
-  "backend/testing/e2e/test_client_compat_replay.py": "C10"
+  "scripts/dev-harness/tests/spine/test_evidence_freeze.py": "V8",
+  "scripts/dev-harness/tests/spine/test_live_conformance.py": "V1",
+  "scripts/dev-harness/tests/spine/test_live_negotiation.py": "V1",
+  "scripts/dev-harness/tests/spine/test_live_revision.py": "V1",
+  "scripts/dev-harness/tests/spine/test_live_session.py": "V1"
 }

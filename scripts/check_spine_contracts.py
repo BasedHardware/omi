@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import argparse
+from contextvars import ContextVar
 import json
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 
@@ -15,8 +18,18 @@ ROOTS = ("scripts/dev-harness/tests/spine/", "app/test/spine/")
 MARKER = re.compile(r'''^\s*(?:@pending\("([A-Z][A-Z0-9-]*)"\)|pendingContract\('([A-Z][A-Z0-9-]*)'\);)\s*$''')
 
 
+_reads = ContextVar("spine_git_reads", default=None)
+
+
 def git(*args: str, root: Path = ROOT) -> str:
-    return subprocess.check_output(["git", "-C", str(root), *args], text=True, stderr=subprocess.DEVNULL)
+    cache = _reads.get()
+    key = (root, args)
+    if cache is not None and key in cache:
+        return cache[key]
+    result = subprocess.check_output(["git", "-C", str(root), *args], text=True, stderr=subprocess.DEVNULL)
+    if cache is not None:
+        cache[key] = result
+    return result
 
 
 def allowed(original: str, current: str) -> bool:
@@ -34,6 +47,166 @@ def allowed(original: str, current: str) -> bool:
 
 
 REVISIONS = "contracts/spine/revisions"
+SCOPE = "contracts/spine/revision-scope.json"
+RUNNERS = "contracts/spine/runners.json"
+
+
+def introductions(root: Path, path: str) -> list[str]:
+    # Default path history simplifies merges and can hide the PR parent's copy.
+    return git("log", "--full-history", "--diff-filter=A", "--format=%H", "HEAD", "--", path, root=root).splitlines()
+
+
+def pinned_text(root: Path, path: str, current: str) -> None:
+    for commit in introductions(root, path):
+        if git("show", f"{commit}:{path}", root=root) != current:
+            raise ValueError(f"{path}: committed definition is immutable")
+
+
+def direct_commands(source: str) -> list[list[str]]:
+    """Constrained shell invocation tripwire, not an interpreter or sandbox.
+
+    Only direct top-level commands count. Nested branches/functions, pipelines,
+    short-circuit calls and comment-only copies cannot satisfy an invocation.
+    """
+    result, depth = [], 0
+    for line in source.replace("\\\n", " ").splitlines():
+        tokens = shlex.split(line, comments=True)
+        if not tokens:
+            continue
+        first = tokens[0]
+        if any("<<" in token for token in tokens):
+            raise ValueError("heredocs require a reviewed invocation rule")
+        if first in ("exec", "eval", "source", ".", "trap", "alias") or (first == "exit" and (len(tokens) != 2 or not tokens[1].isdigit() or int(tokens[1]) == 0)):
+            raise ValueError("early success/indirect dispatch cannot replace the spine suite")
+        if first == "set" and tokens not in (["set", "-euo", "pipefail"], ["set", "-x"]):
+            raise ValueError("runner must preserve fail-fast options and caller arguments")
+        if first in ("fi", "done", "esac", "}"):
+            depth -= 1
+            if depth < 0:
+                raise ValueError("unbalanced shell dispatch")
+            continue
+        block = first in ("if", "for", "while", "until", "case", "select", "function") or bool(re.match(r"[A-Za-z_][A-Za-z_0-9]*\s*\(\)\s*\{", line.strip()))
+        if block:
+            depth += 1
+            continue
+        if depth == 0:
+            result.append(tokens)
+    if depth:
+        raise ValueError("unbalanced shell dispatch")
+    return result
+
+
+def runner_contracts(root: Path, registry: dict) -> tuple[set[str], list[str]]:
+    declaration = root / RUNNERS
+    if not declaration.is_file():
+        if introductions(root, RUNNERS):
+            return set(), [f"{RUNNERS}: invocation contracts cannot be removed"]
+        return set(), []  # older fixture/repository without runner adoption
+    raw = declaration.read_text()
+    pinned_text(root, RUNNERS, raw)
+    runners, errors = set(), []
+    for row in json.loads(raw)["runners"]:
+        path = row["path"]
+        if path in registry or path.startswith(ROOTS + ("app/test/support/spine/",)):
+            raise ValueError(f"{path}: an oracle cannot be classified as a shared runner")
+        required = [item["argv"] for item in row["invocations"]
+                    if not item.get("when_registered") or item["when_registered"] in registry]
+        try:
+            source = (root / path).read_text()
+            syntax = subprocess.run(["bash", "-n", str(root / path)], capture_output=True, text=True)
+            if syntax.returncode:
+                raise ValueError("shared runner must be valid Bash")
+            commands = direct_commands(source)
+            if ["set", "-euo", "pipefail"] not in commands:
+                raise ValueError("must preserve fail-fast set -euo pipefail")
+            for argv in required:
+                if argv not in commands:
+                    raise ValueError(f"missing direct unconditional suite invocation: {shlex.join(argv)}")
+            names = {argv[0] for argv in required}
+            if any(re.search(r"(?:^|\n)\s*(?:function\s+)?" + re.escape(name) + r"\s*(?:\(\)|\{)", source) for name in names):
+                raise ValueError("suite command shadowed by a shell function")
+            for command in commands:
+                if command[0] in ("exit", "return", "exec", "eval", "source", ".", "trap", "alias") or command[:2] == ["set", "+e"]:
+                    raise ValueError("runner dispatch must remain direct and fail-fast; early exit/indirection is not accepted")
+            runners.add(path)
+        except (OSError, ValueError) as exc:
+            errors.append(f"{path}: {exc}; restore the declared spine invocation in {RUNNERS}")
+    return runners, errors
+
+
+def grandfathered_oracle(root: Path, path: str, current: str, policy: dict) -> bool:
+    """A pinned pre-policy correction is already an accepted oracle, even if
+    main squash-merged its older parent while the corrected child was open.
+    New records cannot add to this immutable set.
+    """
+    for name, hashes in policy.get("grandfathered_revisions", {}).items():
+        file = root / name
+        if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() not in hashes:
+            continue
+        record = json.loads(file.read_text())
+        if record["path"] != path:
+            continue
+        commits = introductions(root, name)
+        for commit in commits:
+            oracle = git("show", f"{commit}:{path}", root=root)
+            if digest(oracle) == record["after"] and allowed(oracle, current):
+                return True
+    return False
+
+
+def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
+    """A revision is an oracle-only PR, including unstaged/untracked edits.
+
+    Frozen scaffolding permits existing stacked spine PRs, never subsequent
+    implementation at those paths. The policy is pinned at introduction.
+    """
+    policy_file = root / SCOPE
+    commits = introductions(root, SCOPE)
+    policy = json.loads(policy_file.read_text()) if policy_file.is_file() else {}
+    if commits:
+        if not policy_file.is_file():
+            return [f"{SCOPE}: the initial scope snapshot is immutable; it cannot authorize a builder's edit"]
+        try:
+            pinned_text(root, SCOPE, policy_file.read_text())
+        except ValueError as exc:
+            return [str(exc)]
+    shared_runners, runner_errors = runner_contracts(root, registry)
+    if runner_errors:
+        return runner_errors
+    changed = set(git("diff", "--name-only", base, "--", root=root).splitlines())
+    changed.update(git("ls-files", "--others", "--exclude-standard", root=root).splitlines())
+    needs_revision = False
+    for path in changed:
+        if path.startswith(REVISIONS + "/"):
+            file = root / path
+            if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() not in policy.get("grandfathered_revisions", {}).get(path, []):
+                needs_revision = True
+        elif path in registry:
+            try:
+                old = git("show", f"{base}:{path}", root=root)
+            except subprocess.CalledProcessError:
+                continue  # introducing a new contract is not revising one
+            file = root / path
+            if not file.is_file():
+                needs_revision = True
+            elif not allowed(old, file.read_text()) and not grandfathered_oracle(root, path, file.read_text(), policy):
+                needs_revision = True
+    if not needs_revision:
+        return []
+    permitted = set(policy.get("oracle_paths", [])) | {"scripts/check_spine_contracts.py", "scripts/dev-harness/tests/test_spine_mechanism.py"}
+    rejected = []
+    for path in sorted(changed):
+        if path.startswith(ROOTS + ("contracts/spine/", "app/test/support/spine/")) or path in permitted or path in shared_runners:
+            continue
+        file = root / path
+        if file.is_file() and hashlib.sha256(file.read_bytes()).hexdigest() in policy.get("scaffolding", {}).get(path, []):
+            continue
+        rejected.append(path)
+    if not rejected:
+        return []
+    return ["Spine revision mixed with implementation/non-oracle paths: " + ", ".join(rejected)
+            + ". Restore the oracle and remove the revision record from the builder PR; send its reproduction to the spine. "
+            "Land the oracle-only revision separately, then base the implementation on it. Separate commits in one PR do not satisfy this rule."]
 
 
 def digest(value: str) -> str:
@@ -43,23 +216,25 @@ def digest(value: str) -> str:
 def revisions(root: Path, registry: dict) -> dict:
     """Reviewed, append-only exact replacements; never a builder rebaseline flag."""
     directory = root / REVISIONS
-    existing = set(git("ls-tree", "-r", "--name-only", "HEAD", "--", REVISIONS, root=root).splitlines())
+    existing = set(git("log", "--full-history", "--diff-filter=A", "--name-only", "--format=", "HEAD", "--", REVISIONS, root=root).splitlines()) - {""}
     present = {str(p.relative_to(root)) for p in directory.glob("*.json")}
     if existing - present:
         raise ValueError("Spine revision records cannot be removed")
     result = {}
     for path in sorted(present):
         raw = (root / path).read_text()
-        commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", path, root=root).splitlines()
-        if commits and raw != git("show", f"{commits[-1]}:{path}", root=root):
-            raise ValueError(f"{path}: committed revision record is immutable")
+        commits = introductions(root, path)
+        pinned_text(root, path, raw)
         record = json.loads(raw)
         if set(record) != {"path", "owner", "before", "after", "reason"} or not record["reason"].strip():
             raise ValueError(f"{path}: invalid spine revision record")
         target = record["path"]
         if registry.get(target) != record["owner"]:
             raise ValueError(f"{path}: revision owner differs from registry")
-        revised = git("show", f"{commits[-1]}:{target}", root=root) if commits else (root / target).read_text()
+        # Several introductions can coexist after a squash + PR merge. Find
+        # the pinned payload, never whichever parent the history walk favours.
+        candidates = [git("show", f"{commit}:{target}", root=root) for commit in commits]
+        revised = next((text for text in candidates if digest(text) == record["after"]), "") if commits else (root / target).read_text()
         result.setdefault(target, []).append((record, revised))
     return result
 
@@ -114,20 +289,33 @@ def retirement_allowed(anchors: list[str], base: str, current: str) -> bool:
     return False
 
 
-def check(root: Path = ROOT) -> list[str]:
+def check(root: Path = ROOT, base_ref: str = "origin/main") -> list[str]:
+    # One read snapshot per invocation, never retained across edits/checks.
+    token = _reads.set({})
+    try:
+        return _check(root, base_ref)
+    finally:
+        _reads.reset(token)
+
+
+def _check(root: Path, base_ref: str) -> list[str]:
     errors = []
     registry = json.loads((root / REGISTRY).read_text())
     if git("rev-parse", "--is-shallow-repository", root=root).strip() == "true":
         return ["Spine protection needs full history: git fetch --unshallow origin"]
-    base = git("merge-base", "HEAD", "origin/main", root=root).strip()
+    base = git("merge-base", "HEAD", base_ref, root=root).strip()
+    errors.extend(revision_scope(root, base, registry))
     try:
         previous = json.loads(git("show", f"{base}:{REGISTRY}", root=root))
     except subprocess.CalledProcessError:
         previous = {}
-    registry_commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", REGISTRY, root=root).splitlines()
-    if registry_commits:
-        introduced = json.loads(git("show", f"{registry_commits[-1]}:{REGISTRY}", root=root))
-        previous = {**introduced, **previous}
+    registry_commits = git("log", "--full-history", "--format=%H", "HEAD", "--", REGISTRY, root=root).splitlines()
+    for commit in registry_commits:
+        introduced = json.loads(git("show", f"{commit}:{REGISTRY}", root=root))
+        for path, owner in introduced.items():
+            if path in previous and previous[path] != owner:
+                errors.append(f"{path}: conflicting registry owners in reachable history")
+            previous[path] = owner
     for path, owner in previous.items():
         if registry.get(path) != owner:
             errors.append(f"{path}: existing registry entry changed/deleted")
@@ -143,16 +331,27 @@ def check(root: Path = ROOT) -> list[str]:
             errors.append(f"{path}: protected file missing")
             continue
         current = file.read_text()
-        commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", path, root=root).splitlines()
+        commits = introductions(root, path)
         if commits:
-            original = git("show", f"{commits[-1]}:{path}", root=root)
-            anchors = [original] + [text for _, text in amendments.get(path, [])]
-            original = revised_original(original, amendments.get(path, []))
+            introduced = {git("show", f"{commit}:{path}", root=root) for commit in commits}
+            records = amendments.get(path, [])
+            if records:
+                accepted = [records[0][0]["before"]] + [record["after"] for record, _ in records]
+                candidates = [text for text in introduced if digest(text) in accepted]
+                if not candidates:
+                    raise ValueError(f"{path}: no introduction matches the pinned revision chain")
+                initial = min(candidates, key=lambda text: accepted.index(digest(text)))
+            else:
+                initial = max(introduced, key=lambda text: (len(text), text))
+            anchors = [initial] + [text for _, text in records if text]
+            original = revised_original(initial, records)
+            if any(not any(allowed(anchor, text) for anchor in anchors) for text in introduced):
+                raise ValueError(f"{path}: conflicting oracle introductions in reachable history")
             if not allowed(original, current):
                 errors.append(f"{path}: only pending-marker removal allowed (spine {commits[-1]})")
             # Also enforce monotonic retirement against current main.
             try:
-                base_text = git("show", f"{base}:{path}", root=root)
+                base_text = git("show", f"{base_ref}:{path}", root=root)
             except subprocess.CalledProcessError:
                 base_text = original
             # Corrections preserve ordered marker slots. Retiring another test
@@ -180,8 +379,11 @@ def check(root: Path = ROOT) -> list[str]:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", default="origin/main", help="actual PR target; supplied by the checks manifest")
+    args = parser.parse_args()
     try:
-        problems = check()
+        problems = check(base_ref=args.base)
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         problems = [str(exc)]
     for problem in problems:
