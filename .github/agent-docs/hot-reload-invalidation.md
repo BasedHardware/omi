@@ -19,7 +19,7 @@ isolate (dart SDK + Flutter + plugins + app). l10n locale files are not in
 the 387: they import nothing in the app.
 
 Genuine direct dependent of the colour leaf: **one file**,
-`mobile/mobile_app.dart`. The other 386 only appear because they transit a
+`app/lib/mobile/mobile_app.dart`. The other 386 only appear because they transit a
 hub. The leaf sits in a **378-library strongly connected component** with
 `HomePage`. A chat-chip edit, a home edit, and this splash edit all
 invalidate the same 387.
@@ -39,7 +39,7 @@ everyone who can reach those descendants
 ```
 
 The back-edges exist to run `routeToPage(context, const AppShell(), replace: true)`
-after sign-out / delete. `settings_drawer.dart` also reaches `AppShell`
+after sign-out / delete. `app/lib/pages/settings/settings_drawer.dart` also reaches `AppShell`
 indirectly (`drawer → profile → delete_account → app_shell`), so cutting
 only the direct `settings_drawer → app_shell` import saves **0**.
 
@@ -49,19 +49,19 @@ providers, 18 widgets. High fan-in files (`l10n_extensions` 204,
 imported, but they are not what *amplifies this leaf*. Changing them is as
 bad or worse; splitting them does not shrink a Get Started reload.
 
-Barrels (`backend/schema/schema.dart`, `services/wals.dart`) and
-`gen/assets.gen.dart` are the same: high fan-in, not the cycle.
+Barrels (`app/lib/backend/schema/schema.dart`, `app/lib/services/wals.dart`) and
+`app/lib/gen/assets.gen.dart` are the same: high fan-in, not the cycle.
 
 ## Ranked edges
 
 Before: **387** invalidated `package:omi` libraries for the Get Started
 colour edit. “After” is the reverse closure with that edge (or pair)
-removed. Typical leaf is `pages/chat/widgets/chat_followup_chip.dart`.
+removed. Typical leaf is `app/lib/pages/chat/widgets/chat_followup_chip.dart`.
 
 | Rank | Edge | Get Started after (save) | Chat-chip after (save) | Load-bearing? |
 | --- | --- | --- | --- | --- |
 | 1 | **Both** `settings_drawer.dart → app_shell.dart` **and** `delete_account.dart → app_shell.dart` | **4 (−383)** | 387 (0) | **No as types.** They only construct `AppShell` to restart the tree. Inject a restart callback from `main` / `AppShell`. Remaining 4: `device_selection`, `mobile_app`, `app_shell`, `main`. |
-| 2 | Eight descendant → `home/page.dart` imports: `conversation_detail/page.dart`, `onboarding/wrapper.dart`, `notifications.dart`, `firmware_update.dart`, `omiglass_ota_update.dart`, `permissions_checker.dart`, `speech_profile/page.dart`, `capture/connect.dart`. Keep `mobile_app → home`. | 8 (−379) | **59 (−328)** | **Partially.** They import `HomePage` to `routeToPage` back to home. The route registry (B1) is the replacement. This is the typical-leaf lever; (1) is not. |
+| 2 | Eight descendant → `app/lib/pages/home/page.dart` imports: `app/lib/pages/conversation_detail/page.dart`, `app/lib/pages/onboarding/wrapper.dart`, `app/lib/services/notifications.dart`, `app/lib/pages/home/firmware_update.dart`, `app/lib/pages/home/omiglass_ota_update.dart`, `app/lib/pages/onboarding/permissions/permissions_checker.dart`, `app/lib/pages/speech_profile/page.dart`, `app/lib/pages/capture/connect.dart`. Keep `mobile_app → home`. | 8 (−379) | **59 (−328)** | **Partially.** They import `HomePage` to `routeToPage` back to home. The route registry (B1) is the replacement. This is the typical-leaf lever; (1) is not. |
 | 3 | `home/page.dart → settings_drawer.dart` | 7 (−380) | (not the real cut) | **Yes.** Parent composing a child. Looks like a lever only because the drawer is on the back-edge path. Do not remove. |
 | 4 | `app_shell.dart → mobile_app.dart` | 2 (−385) | (not the real cut) | **Yes.** Parent composing a child. Do not remove. |
 | 5 | `device_selection.dart → wrapper.dart` | 387 (0 reverse); forward 596 → 53 | 387 (0) | Navigation to onboarding. Invert with a builder from `MobileApp` if you want a cheaper *forward* graph. **Does not move the measured 387.** |
@@ -82,7 +82,7 @@ warm 2.9–3.8 s for *this* edit has room under 3 s on this route.
 
 **For a typical in-app widget edit: 387 is near the floor until rank 2.**
 A chat-chip change stays at 387 after rank 1. Rank 2 drops it to 59, not
-to 4 — widgets still import `conversation_detail/page.dart` to open a
+to 4 — widgets still import `app/lib/pages/conversation_detail/page.dart` to open a
 conversation, which is a second navigation hub. Further cuts there are
 the same shape (route registry instead of importing a page) and were not
 needed to explain the harness number.
