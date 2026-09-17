@@ -41,7 +41,24 @@ def _ready_doctor(**kwargs):
     return SimpleNamespace(overall="ready", checks=(), as_dict=lambda: {"overall": "ready"})
 
 
-def _lease(tmp_path: Path) -> dict:
+def _lease(tmp_path: Path, platform: str = "ios-simulator") -> dict:
+    if platform == "android":
+        apk = tmp_path / "app-dev-debug.apk"
+        apk.write_bytes(b"apk")
+        return {
+            "session_id": "oms-v3android",
+            "platform": "android",
+            "flavor": "dev",
+            "profile": "local_dev",
+            "status": "seeded",
+            "generation": 1,
+            "app_id": "com.friend.ios.dev",
+            "device": {"kind": "emulator", "udid": "emulator-5554", "owner": "session", "avd": "omi-session-oms-v3android"},
+            "ports": {"backend": 8100, "auth": 9199, "firestore": 8185, "redis": 6479},
+            "source_at_acquire": {"git_sha": "a" * 40, "dirty_digest": "clean"},
+            "default_auth_uid": "fixture-user",
+            "fixture_version": "v1",
+        }
     apk = tmp_path / "bundle.app"
     apk.mkdir()
     (apk / "Info.plist").write_bytes(b"ios")
@@ -61,8 +78,8 @@ def _lease(tmp_path: Path) -> dict:
     }
 
 
-def _engine(tmp_path: Path, *, mode="ok", start_raises=None, **overrides):
-    lease = _lease(tmp_path)
+def _engine(tmp_path: Path, *, mode="ok", start_raises=None, platform="ios-simulator", **overrides):
+    lease = _lease(tmp_path, platform)
     released = []
     codegen_argv = []
     engine_state = {}
@@ -84,12 +101,19 @@ def _engine(tmp_path: Path, *, mode="ok", start_raises=None, **overrides):
 
     def evidence(session_id, **kwargs):
         shot = tmp_path / "screenshots" / "smoke.png"
-        bundle = tmp_path / "bundle.app"
+        if platform == "android":
+            bundle = tmp_path / "app" / "build" / "app" / "outputs" / "flutter-apk" / "app-dev-debug.apk"
+            kind = "apk"
+            rel = "app-dev-debug.apk"
+        else:
+            bundle = tmp_path / "bundle.app"
+            kind = "ios-app-bundle"
+            rel = "bundle.app"
         document = se.build_evidence(
             session_id=session_id,
             source={"git_sha": "a" * 40, "dirty_digest": "clean", "repo": "BasedHardware/omi"},
             target={
-                "platform": "ios-simulator",
+                "platform": platform,
                 "app_id": lease["app_id"],
                 "flavor": "dev",
                 "profile": "local_dev",
@@ -105,10 +129,10 @@ def _engine(tmp_path: Path, *, mode="ok", start_raises=None, **overrides):
             status={"state": "running"},
             timestamps={"created_at": "2026-09-17T00:00:00Z"},
             artifact={
-                "kind": "ios-app-bundle",
+                "kind": kind,
                 "sha256": se.file_sha256(bundle),
                 "git_sha": "a" * 40,
-                "path": "bundle.app",
+                "path": rel,
             },
             artifacts={"screenshots": ["screenshots/smoke.png"]},
         )
@@ -139,6 +163,8 @@ def _engine(tmp_path: Path, *, mode="ok", start_raises=None, **overrides):
         uvicorn_ok=lambda root: True,
         startup_timeout_s=412,
         env={"OMI_LOCAL_STATE_ROOT": str(tmp_path / "state")},
+        platform=platform,
+        grant=lambda serial, package: engine_state.setdefault("grants", []).append((serial, package)),
     )
     kwargs.update(overrides)
     engine = smoke.SimulatorSmoke(tmp_path, **kwargs)
@@ -146,9 +172,14 @@ def _engine(tmp_path: Path, *, mode="ok", start_raises=None, **overrides):
     engine._codegen_argv = codegen_argv
     engine._spec_holder = engine_state
     (tmp_path / "app").mkdir(exist_ok=True)
-    bundle = tmp_path / "app" / "build" / "ios" / "iphonesimulator" / "Runner.app"
-    bundle.mkdir(parents=True, exist_ok=True)
-    (bundle / "Info.plist").write_bytes(b"ios")
+    if platform == "android":
+        apk = tmp_path / "app" / "build" / "app" / "outputs" / "flutter-apk" / "app-dev-debug.apk"
+        apk.parent.mkdir(parents=True, exist_ok=True)
+        apk.write_bytes(b"fake apk")
+    else:
+        bundle = tmp_path / "app" / "build" / "ios" / "iphonesimulator" / "Runner.app"
+        bundle.mkdir(parents=True, exist_ok=True)
+        (bundle / "Info.plist").write_bytes(b"ios")
     (tmp_path / "Makefile").write_text("setup-backend:\n\t@true\n", encoding="utf-8")
     return engine
 
@@ -303,3 +334,71 @@ def test_cmd_smoke_uses_injected_engine_path(tmp_path: Path, monkeypatch: pytest
     args = argparse.Namespace(json=True, session=None, evidence_dir=None, journey_timeout=900, platform="ios-simulator")
     assert mv.cmd_smoke(tmp_path, args) == 0
     assert json.loads(capsys.readouterr().out)["outcome"] == "passed"
+
+
+def test_android_fake_flutter_grants_and_binds_apk(tmp_path: Path) -> None:
+    engine = _engine(tmp_path, platform="android")
+    result = engine.run(name="v3android")
+    assert result["outcome"] == "passed"
+    assert result["artifact"] and result["artifact"].endswith("app-dev-debug.apk")
+    assert result["controls"]["state"]["profile"] == "local_dev"
+    assert result["controls"]["state"]["readiness"]["signedIn"] is False
+    assert engine._spec_holder["spec"].device_id == "emulator-5554"
+    assert engine._spec_holder["grants"] == [("emulator-5554", "com.friend.ios.dev")]
+    assert engine._released == ["oms-v3android"]
+    assert se.validate_evidence(result["evidence"]) == []
+    assert result["evidence"]["artifact"]["kind"] == "apk"
+
+
+def test_plain_smoke_runs_doctor_ready_platforms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class Ready:
+        overall = "ready"
+        checks = ()
+
+        def as_dict(self):
+            return {"overall": "ready"}
+
+    class Blocked:
+        overall = "blocked"
+        checks = (
+            md.CheckResult(
+                "android-sdk",
+                md.AGENT_REMEDIABLE,
+                "ANDROID_HOME/ANDROID_SDK_ROOT not set to an existing SDK",
+                "export ANDROID_HOME=<sdk>",
+                (md.LANE_ANDROID,),
+            ),
+        )
+
+        def as_dict(self):
+            return {"overall": "blocked"}
+
+    def doctor(repo_root, env=None, platforms=(), skip_capacity=False):
+        wanted = platforms[0] if platforms else ""
+        if wanted == "android":
+            return Blocked()
+        return Ready()
+
+    calls: list[str] = []
+
+    def fake_one(repo_root, args, platform_name, evidence_dir):
+        calls.append(platform_name)
+        return 0
+
+    monkeypatch.setattr(smoke.mobile_doctor, "run_doctor", doctor)
+    monkeypatch.setattr(smoke, "_run_one_platform", fake_one)
+    args = argparse.Namespace(json=True, session=None, evidence_dir=None, journey_timeout=900, platform=None)
+    assert smoke.run_smoke(tmp_path, args) == 0
+    assert calls == ["ios-simulator"]
+
+    calls.clear()
+
+    def both_ready(repo_root, env=None, platforms=(), skip_capacity=False):
+        return Ready()
+
+    monkeypatch.setattr(smoke.mobile_doctor, "run_doctor", both_ready)
+    assert smoke.run_smoke(tmp_path, args) == 0
+    assert calls == ["ios-simulator", "android"]
+    capsys.readouterr()

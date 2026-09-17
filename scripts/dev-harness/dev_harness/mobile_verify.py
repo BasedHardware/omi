@@ -707,8 +707,9 @@ def cmd_smoke(repo_root: Path, args: argparse.Namespace) -> int:
     Acquires a C1 session and its simulator (unless --session is already
     started), launches debug/dev/local_dev with OMI_DEV_CONTROLS=1, reads
     ext.omi.controls, screenshots, writes session-evidence-v1, and releases
-    whatever this run acquired. Android is blocked with the doctor's message.
-    Sign-in is not implemented: signedIn must be false.
+    whatever this run acquired. ``--platform android`` runs the emulator lane
+    when doctor is ready; omitting ``--platform`` runs every doctor-ready
+    platform sequentially. Sign-in is not implemented: signedIn must be false.
     """
     from . import simulator_smoke
 
@@ -793,9 +794,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_fast.add_argument("--session", help="attach to an existing live session; never cold fallback")
     p_fast.add_argument("--journey-timeout", type=int, default=DEFAULT_JOURNEY_TIMEOUT_S)
 
-    p_smoke = _add("smoke", help="bounded iOS-simulator full-app smoke (fail-closed; not for ordinary CI)")
+    p_smoke = _add("smoke", help="bounded iOS-simulator / Android-emulator full-app smoke (fail-closed; not for ordinary CI)")
     p_smoke.add_argument("--session", help="reuse an existing C1 session instead of acquiring one")
-    p_smoke.add_argument("--platform", default="ios-simulator", help="ios-simulator (default) or android (blocked)")
+    p_smoke.add_argument(
+        "--platform",
+        default=None,
+        help="android, ios-simulator, or omit to run every doctor-ready platform",
+    )
     p_smoke.add_argument("--evidence-dir")
     p_smoke.add_argument("--journey-timeout", type=int, default=3600)
 
