@@ -53,22 +53,20 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 import {MobileAppSurface, type MobileAppSurfaceProps} from './MobileAppSurface';
+import {MobileOmnibar} from './MobileOmnibar';
 
 function buildProps(
   overrides: Partial<MobileAppSurfaceProps> = {},
 ): MobileAppSurfaceProps {
   return {
     activeRoute: 'home',
-    askValue: '',
+    omnibar: <Text>Shared bottom dock</Text>,
     capture: {active: true, transcript: 'Preparing the product demo'},
     device: {connected: true, label: '100%'},
     mindMapStatus: 'ready',
-    onAskChange: jest.fn(),
-    onAskSubmit: jest.fn(),
     onExpandMindMap: jest.fn(),
     onOpenCalls: jest.fn(),
     onOpenDevice: jest.fn(),
-    onOpenSettings: jest.fn(),
     onRouteChange: jest.fn(),
     onTaskToggle: jest.fn(),
     onViewRecaps: jest.fn(),
@@ -320,7 +318,20 @@ test('mobile waiting-for-audio state never claims Listening before the first pac
 
 test('the mobile composer rejects blank taps and keyboard submits but accepts a draft', () => {
   const onAskSubmit = jest.fn();
-  const props = buildProps({askValue: '  \n ', onAskSubmit});
+  const omnibar = (value: string) => (
+    <MobileOmnibar
+      mode="Ask"
+      onModeChange={jest.fn()}
+      value={value}
+      onChange={jest.fn()}
+      onSubmit={onAskSubmit}
+      onStop={jest.fn()}
+      busy={false}
+      canStop={false}
+      inputRef={{current: null}}
+    />
+  );
+  const props = buildProps({omnibar: omnibar('  \n ')});
   const renderer = render(props);
   const control = (label: string) =>
     renderer.root.findAll(node => node.props.accessibilityLabel === label)[0];
@@ -330,7 +341,10 @@ test('the mobile composer rejects blank taps and keyboard submits but accepts a 
   expect(onAskSubmit).not.toHaveBeenCalled();
   act(() =>
     renderer.update(
-      <MobileAppSurface {...props} askValue="What did I decide today?" />,
+      <MobileAppSurface
+        {...props}
+        omnibar={omnibar('What did I decide today?')}
+      />,
     ),
   );
   expect(control('Send to Omi').props.disabled).toBe(false);

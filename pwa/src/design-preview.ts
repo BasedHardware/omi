@@ -10,7 +10,11 @@ import { ConversationsPage } from "../../react-native/src/pages/Conversations";
 import { SettingsPage } from "../../react-native/src/pages/Settings";
 import { ConnectorsPage } from "../../react-native/src/pages/Connectors";
 import { MobileChat } from "../../react-native/src/mobile/MobileChat";
-import { Composer } from "../../react-native/src/ui/Composer";
+import {
+  MobileOmnibar,
+  type MobileOmnibarMode,
+} from "../../react-native/src/mobile/MobileOmnibar";
+import { ProjectionList } from "../../react-native/src/ui/ProjectionList";
 import { LiveVoiceButton } from "../../react-native/src/ui/LiveVoiceButton";
 import {
   DeviceSession,
@@ -21,6 +25,7 @@ import type { ChatMessage } from "../../react-native/src/chatClient";
 import { omiBackend } from "../../react-native/src/omiNative.web";
 import type {
   DesktopReadOutcomes,
+  DesktopReadProjection,
   ReadPageState,
   TaskProjection,
 } from "../../react-native/src/desktopReadClient";
@@ -167,7 +172,7 @@ function Preview() {
       ? "Example connection error. Check Bluetooth and try again."
       : null
   );
-  const [composerFocused, setComposerFocused] = useState(false);
+  const [mode, setMode] = useState<MobileOmnibarMode>("Ask");
   const composerRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
@@ -195,12 +200,15 @@ function Preview() {
       : []
   );
   const previewSend = () => {
+    if (!chatOpen) beforeChat.current = route;
+    setRoute("home");
     setChatOpen(true);
     setChatError("Preview only — messages are not sent.");
   };
   const [route, setRoute] = useState<MobileRoute>(
     conversationState ? "chat" : "home"
   );
+  const beforeChat = useRef<MobileRoute>("home");
   const [conversationNotice, setConversationNotice] = useState<string | null>(
     null
   );
@@ -301,39 +309,62 @@ function Preview() {
               onSend: noop,
               onStop: noop,
             })
-          : surface.startsWith("mobile") && chatOpen
-          ? h(MobileChat, {
-              messages: chatMessages,
-              busy: chatBusy,
-              error: chatError,
-              loadingHistory: chatState === "loading",
-              hasOlder: false,
-              loadingOlder: false,
-              onLoadOlder: noop,
-              onClose: () => setChatOpen(false),
-              prompts: ["What should I remember?", "Help me find a next step"],
-              onUsePrompt: (prompt) => {
-                setDraft(prompt);
-                composerRef.current?.focus();
+          : surface === "mobile" || (surface === "mobile-setup" && complete)
+          ? h(MobileAppSurface, {
+              ...taskActions,
+              activeRoute: route,
+              onRouteChange: (next) => {
+                setChatOpen(false);
+                setRoute(next);
               },
-              shouldAnimate: () => false,
-              scrollRef,
-              onScroll: noop,
-              liveVoiceControl: h(LiveVoiceButton, {
-                backend: null,
-                compact: true,
-              }),
-              composer: h(Composer, {
-                compact: true,
-                activeGenerationId: chatBusy ? "example-generation" : null,
-                chatBusy,
-                composerFocused,
-                composerMaxWidth: 430,
-                composerRef,
-                draft,
-                onDraftChange: setDraft,
-                onFocusChange: setComposerFocused,
-                onSend: previewSend,
+              chatContent: chatOpen
+                ? h(MobileChat, {
+                    messages: chatMessages,
+                    busy: chatBusy,
+                    error: chatError,
+                    loadingHistory: chatState === "loading",
+                    hasOlder: false,
+                    loadingOlder: false,
+                    onLoadOlder: noop,
+                    onClose: () => {
+                      setChatOpen(false);
+                      setRoute(beforeChat.current);
+                    },
+                    prompts: [
+                      "What should I remember?",
+                      "Help me find a next step",
+                    ],
+                    onUsePrompt: (prompt) => {
+                      setDraft(prompt);
+                      composerRef.current?.focus();
+                    },
+                    shouldAnimate: () => false,
+                    scrollRef,
+                    onScroll: noop,
+                  })
+                : undefined,
+              omnibar: h(MobileOmnibar, {
+                key: "mobile-omnibar",
+                mode,
+                onModeChange: (next) => {
+                  setMode(next);
+                  if (next === "Search" && chatOpen) {
+                    setChatOpen(false);
+                    setRoute("home");
+                  }
+                },
+                value: draft,
+                onChange: setDraft,
+                inputRef: composerRef,
+                busy: chatBusy,
+                canStop: chatBusy,
+                onSubmit: () => {
+                  if (mode === "Ask") previewSend();
+                  else {
+                    setChatOpen(false);
+                    setRoute("home");
+                  }
+                },
                 onStop: () => {
                   setChatBusy(false);
                   setChatMessages((current) =>
@@ -345,12 +376,29 @@ function Preview() {
                   );
                 },
               }),
-            })
-          : surface === "mobile" || (surface === "mobile-setup" && complete)
-          ? h(MobileAppSurface, {
-              ...taskActions,
-              activeRoute: route,
-              onRouteChange: setRoute,
+              searchContent:
+                mode === "Search" && draft.trim() !== ""
+                  ? h(ProjectionList, {
+                      items: Object.values(outcomes ?? {})
+                        .flatMap<DesktopReadProjection>((outcome) =>
+                          outcome.status === "success"
+                            ? outcome.value.items
+                            : []
+                        )
+                        .filter((item) =>
+                          item.searchableText
+                            .toLowerCase()
+                            .includes(draft.trim().toLowerCase())
+                        ),
+                      loading: false,
+                      error: outcomes
+                        ? null
+                        : "Saved data unavailable in this preview.",
+                      emptyTitle: "No loaded results match",
+                      emptyCopy:
+                        "Search covers data already loaded on this device.",
+                    })
+                  : undefined,
               capture: {
                 active:
                   deviceState !== null && previewDevice.capture === "recording",
@@ -401,6 +449,12 @@ function Preview() {
               mindMapStatus: "empty",
               conversationContent: h(ConversationsPage, {
                 embedded: true,
+                search: {
+                  value: mode === "Search" ? draft : "",
+                  onChange: (value) => {
+                    if (mode === "Search") setDraft(value);
+                  },
+                },
                 loading: conversationState === "loading",
                 onRefresh: () =>
                   setConversationNotice(
@@ -423,10 +477,6 @@ function Preview() {
               }),
               settingsContent: h(SettingsPage),
               appsContent: h(ConnectorsPage),
-              askValue: draft,
-              onAskChange: setDraft,
-              onAskSubmit: previewSend,
-              onOpenSettings: () => setRoute("settings"),
               onOpenDevice: () => setDeviceOpen((open) => !open),
               onOpenCalls: noop,
               onViewTasks: () => setRoute("tasks"),

@@ -1,8 +1,8 @@
 import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
-import {ScrollView, TextInput} from 'react-native';
+import {ScrollView, TextInput, View} from 'react-native';
 import {MobileChat} from './MobileChat';
-import {Composer} from '../ui/Composer';
+import {MobileOmnibar} from './MobileOmnibar';
 import {ChatThinking} from '../ui/ChatTranscript';
 
 jest.mock('../app/useReduceMotion', () => ({useReduceMotion: () => true}));
@@ -27,26 +27,26 @@ function setup(
     scrollRef: {current: null},
     onScroll: jest.fn(),
     shouldAnimate: () => false,
-    composer: (
-      <Composer
-        compact
-        activeGenerationId={overrides.busy ? 'generation' : null}
-        chatBusy={overrides.busy ?? false}
-        composerFocused={false}
-        composerMaxWidth={390}
-        composerRef={{current: null}}
-        draft="A draft"
-        onDraftChange={jest.fn()}
-        onFocusChange={jest.fn()}
-        onSend={onSend}
-        onStop={onStop}
-      />
-    ),
     ...overrides,
   };
   let tree!: Renderer.ReactTestRenderer;
   act(() => {
-    tree = Renderer.create(<MobileChat {...props} />);
+    tree = Renderer.create(
+      <View>
+        <MobileChat {...props} />
+        <MobileOmnibar
+          mode="Ask"
+          onModeChange={jest.fn()}
+          inputRef={{current: null}}
+          value="A draft"
+          onChange={jest.fn()}
+          busy={overrides.busy ?? false}
+          canStop={overrides.busy ?? false}
+          onSubmit={onSend}
+          onStop={onStop}
+        />
+      </View>,
+    );
   });
   const control = (label: string) =>
     tree.root.findAll(node => node.props.accessibilityLabel === label)[0];
@@ -60,10 +60,10 @@ test('mobile chat keeps Back outside scrolling content and suggestions never sen
   expect(onSend).not.toHaveBeenCalled();
   const scroll = tree.root.findByType(ScrollView);
   expect(
-    scroll.findAll(node => node.props.accessibilityLabel === 'Back to Home'),
+    scroll.findAll(node => node.props.accessibilityLabel === 'Close chat'),
   ).toHaveLength(0);
   expect(scroll.findAllByType(TextInput)).toHaveLength(0);
-  act(() => control('Back to Home').props.onPress());
+  act(() => control('Close chat').props.onPress());
   expect(props.onClose).toHaveBeenCalledTimes(1);
   act(() => tree.unmount());
 });
