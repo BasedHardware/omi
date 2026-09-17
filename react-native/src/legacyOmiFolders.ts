@@ -25,10 +25,39 @@ function array(value: unknown): unknown[] {
   return value;
 }
 
-function presentPaddedKnown(value: unknown): void {
-  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+function presentNullableDate(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
     throw new FoldersError();
   }
+  if (visibleDisplayText(value) !== value) {
+    throw new FoldersError();
+  }
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (value === '' || !Number.isFinite(parsed)) {
+    throw new FoldersError();
+  }
+}
+
+function presentDefaultInt(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new FoldersError();
+    }
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new FoldersError();
+    }
+    return;
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    return;
+  }
+  throw new FoldersError();
 }
 
 const FOLDER_HEX_COLOR = /^#?[0-9A-Fa-f]{6}$/;
@@ -118,10 +147,10 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     names.set(id, name);
     const color = omiFolderColorCopy(folder.color);
     const icon = omiFolderIconCopy(folder.icon);
-    presentPaddedKnown(folder.created_at);
-    presentPaddedKnown(folder.updated_at);
-    presentPaddedKnown(folder.conversation_count);
-    presentPaddedKnown(folder.order);
+    presentNullableDate(folder.created_at);
+    presentNullableDate(folder.updated_at);
+    presentDefaultInt(folder.conversation_count);
+    presentDefaultInt(folder.order);
     folders.push({
       id,
       name,
