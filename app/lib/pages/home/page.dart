@@ -167,6 +167,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   CaptureProvider? _captureProvider;
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
+  Timer? _announcementTimer;
 
   void _ensurePageInitialized(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
@@ -629,31 +630,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _checkForAnnouncements() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _announcementTimer?.cancel();
+      _announcementTimer = Timer(const Duration(seconds: 2), () async {
+        if (!mounted) return;
 
-      await Future.delayed(const Duration(seconds: 2));
+        final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
+        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+        await AnnouncementService().checkAndShowAnnouncements(
+          context,
+          announcementProvider,
+          connectedDevice: deviceProvider.connectedDevice,
+        );
+        if (!mounted) return;
 
-      if (!mounted) return;
+        // Register callback for device connection to check firmware announcements and device onboarding
+        deviceProvider.onDeviceConnected = (BtDevice device) {
+          _onDeviceConnectedForAnnouncements(device);
+          _checkDeviceOnboarding(device);
+        };
 
-      final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
-      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-      await AnnouncementService().checkAndShowAnnouncements(
-        context,
-        announcementProvider,
-        connectedDevice: deviceProvider.connectedDevice,
-      );
-
-      // Register callback for device connection to check firmware announcements and device onboarding
-      deviceProvider.onDeviceConnected = (BtDevice device) {
-        _onDeviceConnectedForAnnouncements(device);
-        _checkDeviceOnboarding(device);
-      };
-
-      // Also check if already connected right now
-      if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
-        _checkDeviceOnboarding(deviceProvider.connectedDevice!);
-      }
+        // Also check if already connected right now
+        if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
+          _checkDeviceOnboarding(deviceProvider.connectedDevice!);
+        }
+      });
     });
   }
 
@@ -910,8 +912,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       onTap: () {
         HapticFeedback.lightImpact();
         PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
-        Navigator.push(context,
-            MaterialPageRoute(fullscreenDialog: true, builder: (context) => const ChatPage(isPivotBottom: false)));
+        Navigator.push(
+          context,
+          MaterialPageRoute(fullscreenDialog: true, builder: (context) => const ChatPage(isPivotBottom: false)),
+        );
       },
       child: Container(
         height: kHomeChatBarHeight,
@@ -941,8 +945,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                      fullscreenDialog: true,
-                      builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
+                    fullscreenDialog: true,
+                    builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true),
+                  ),
                 );
               },
               child: Semantics(
@@ -1170,6 +1175,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    _announcementTimer?.cancel();
+    _announcementTimer = null;
     WidgetsBinding.instance.removeObserver(this);
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
