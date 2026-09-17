@@ -3238,5 +3238,6 @@
     },
     "tapPlusToStartRecording": "＋をタップして録音を開始",
     "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。",
-    "speechProfileEnrollmentPrompt": "Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。"
+    "speechProfileEnrollmentPrompt": "Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。",
+    "home": "ホーム"
 }
