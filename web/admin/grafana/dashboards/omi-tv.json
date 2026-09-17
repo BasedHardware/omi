@@ -7,6 +7,470 @@
   "graphTooltip": 1,
   "panels": [
     {
+      "id": 1000,
+      "type": "stat",
+      "title": "Last 7 days (rolling)",
+      "description": "Trailing 7-day monitoring summary. Inactive this week = prior 7-day active people absent from the current 7 days; rate uses prior active people as the denominator. This is separate from complete UTC calendar weeks.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 132
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#9ca3af"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#9ca3af",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Inactive rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9ca3af"
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Net active change"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#ef4444",
+                      "value": null
+                    },
+                    {
+                      "color": "#22c55e",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "rollingActive",
+              "text": "Active (7d)",
+              "type": "number"
+            },
+            {
+              "selector": "rollingPriorActive",
+              "text": "Prior active (7d)",
+              "type": "number"
+            },
+            {
+              "selector": "rollingInactive",
+              "text": "Inactive this week",
+              "type": "number"
+            },
+            {
+              "selector": "rollingInactiveRate",
+              "text": "Inactive rate",
+              "type": "number"
+            },
+            {
+              "selector": "rollingNetActiveChange",
+              "text": "Net active change",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "format": "table",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "summary",
+          "source": "url",
+          "type": "json",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=all",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ]
+    },
+    {
+      "id": 1001,
+      "type": "timeseries",
+      "title": "Established-user retention (weekly)",
+      "description": "Of people active in both preceding complete UTC weeks, the share active again in this complete week. Numerator and denominator are shown so an empty cohort is distinguishable from zero retention.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 132
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Retained people"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Established cohort"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "timeFrom": "90d",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "week",
+              "text": "time",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
+              "type": "timestamp"
+            },
+            {
+              "selector": "rate",
+              "text": "Established retention %",
+              "type": "number"
+            },
+            {
+              "selector": "retained",
+              "text": "Retained people",
+              "type": "number"
+            },
+            {
+              "selector": "established",
+              "text": "Established cohort",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "format": "timeseries",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "establishedRetention",
+          "source": "url",
+          "type": "json",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=90&_tzdates=week&platform=all",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ]
+    },
+    {
+      "id": 1002,
+      "type": "timeseries",
+      "title": "Successful usage / capture output",
+      "description": "Separate successful telemetry proxies: people with a saved/reconciled conversation (Memory Created), people with transcribed speech (macOS Desktop Recording Stopped with word_count > 0), and completed assistant interaction users (macOS chat_agent_query_completed). Recording Started is intentionally excluded; mobile has no equivalent for the macOS-only series.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 132
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "timeFrom": "90d",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "date",
+              "text": "time",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
+              "type": "timestamp"
+            },
+            {
+              "selector": "conversationCreators",
+              "text": "Saved conversation creators",
+              "type": "number"
+            },
+            {
+              "selector": "transcribedSpeechUsers",
+              "text": "People with transcribed speech (macOS)",
+              "type": "number"
+            },
+            {
+              "selector": "assistantUsers",
+              "text": "Completed assistant users (macOS)",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "format": "timeseries",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "meaningfulUsage",
+          "source": "url",
+          "type": "json",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=90&_tzdates=date&platform=all",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ]
+    },
+    {
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -170,7 +634,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Weekly active users (last full week) and change vs the week before (new + resurrected \u2212 churned). Compounding \u22657% WoW is the 1M trajectory.",
+      "description": "Weekly active people in the last complete UTC week and change vs the previous complete week. Compounding \u22657% WoW is the 1M trajectory.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -654,7 +1118,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Last bucket is the current partial week.",
+      "description": "Complete UTC calendar weeks only; the separate Last 7 days (rolling) tile covers current monitoring.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -739,7 +1203,7 @@
           "root_selector": "growthAccounting",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week&platform=all",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=90&_tzdates=week&platform=all",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1550,7 +2014,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "(new + resurrected) / churned, weekly",
+      "description": "(new + resurrected) / inactive this week, using complete UTC calendar weeks",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2498,7 +2962,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Churned is negative; quick ratio = (new + resurrected) / churned.",
+      "description": "Complete UTC weeks only. Inactive this week is the prior week's active people absent this week; quick ratio = (new + resurrected) / inactive this week.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2570,7 +3034,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Churned"
+              "options": "Inactive this week"
             },
             "properties": [
               {
@@ -2578,6 +3042,194 @@
                 "value": {
                   "fixedColor": "#ef4444",
                   "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Inactive count"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Prior active people"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Inactive rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Net active change"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
                 }
               }
             ]
@@ -2627,8 +3279,28 @@
               "type": "number"
             },
             {
-              "selector": "churned",
-              "text": "Churned",
+              "selector": "inactiveLoss",
+              "text": "Inactive this week",
+              "type": "number"
+            },
+            {
+              "selector": "inactive",
+              "text": "Inactive count",
+              "type": "number"
+            },
+            {
+              "selector": "priorActive",
+              "text": "Prior active people",
+              "type": "number"
+            },
+            {
+              "selector": "inactiveRate",
+              "text": "Inactive rate",
+              "type": "number"
+            },
+            {
+              "selector": "netActiveChange",
+              "text": "Net active change",
               "type": "number"
             }
           ],
@@ -2642,7 +3314,7 @@
           "root_selector": "growthAccounting",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week&platform=all",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=90&_tzdates=week&platform=all",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2808,7 +3480,7 @@
           "root_selector": "stickinessTrend",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week&platform=all",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=90&_tzdates=week&platform=all",
           "url_options": {
             "data": "",
             "method": "GET"
