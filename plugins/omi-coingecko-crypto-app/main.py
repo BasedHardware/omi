@@ -88,18 +88,6 @@ def _get_currency_symbol(currency_code: str) -> str:
     return symbols.get(code, f"{code.upper()} ")
 
 
-def _coerce_number(value: Any) -> Optional[float]:
-    """Return the value only when it is a real JSON number.
-
-    Third-party payloads can carry strings, booleans, nested objects, or nulls
-    where a number is expected; those must degrade to "N/A" instead of raising
-    inside a numeric comparison or an f-string format spec.
-    """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
-
-
 def _format_currency(amount: Optional[float], currency_symbol: str = "$", decimals: int = 2) -> str:
     """Format numerical prices cleanly with precision preservation for micro-values."""
     amount = _coerce_number(amount)
@@ -146,13 +134,16 @@ async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = Non
     client: httpx.AsyncClient = app.state.http_client
     url = f"{COINGECKO_BASE_URL}{endpoint}"
     try:
-        response = await client.get(url, params=params)
+        response = await client.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
         if response.status_code == 429:
             raise ValueError("CoinGecko API rate limit reached. Please wait a moment before trying again.")
         if response.status_code == 404:
             raise ValueError(f"Resource not found at {endpoint}.")
         response.raise_for_status()
-        return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            raise ValueError("CoinGecko returned a response that was not valid JSON.")
     except httpx.TimeoutException:
         raise ValueError("Request to CoinGecko timed out. Please try again.")
     except httpx.HTTPError as exc:
