@@ -46,27 +46,40 @@ def _safe_limit(limit: Any) -> int:
     return max(1, min(limit, MAX_LIMIT))
 
 
-def _safe_language(language: Optional[str]) -> str:
-    lang = (language or DEFAULT_LANGUAGE).strip().lower()
+def _safe_text(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _safe_language(language: Any) -> str:
+    lang = (_safe_text(language) or DEFAULT_LANGUAGE).strip().lower()
     if not lang.replace("-", "").isalpha() or len(lang) > 12:
         return DEFAULT_LANGUAGE
     return lang
 
 
-async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> Any:
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
-        response = await client.get(url, params=params)
+        response = await client.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
-    return response.json()
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise httpx.HTTPError("Wikipedia returned an invalid JSON response") from exc
 
 
 def _article_url(language: str, title: str) -> str:
     return f"https://{language}.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}"
 
 
-def _clean_snippet(value: Optional[str]) -> str:
-    if not value:
+def _dict_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _clean_snippet(value: Any) -> str:
+    if not isinstance(value, str) or not value:
         return ""
 
     text = unescape(value)
@@ -75,11 +88,18 @@ def _clean_snippet(value: Optional[str]) -> str:
     return text.strip()
 
 
-def _format_summary(data: dict[str, Any], language: str) -> str:
-    title = data.get("title") or "Untitled"
-    extract = data.get("extract") or "No summary was returned for this article."
-    description = data.get("description")
-    page_url = data.get("content_urls", {}).get("desktop", {}).get("page") or _article_url(language, title)
+def _format_summary(data: Any, language: str) -> str:
+    if not isinstance(data, dict):
+        data = {}
+
+    title = _safe_text(data.get("title")) or "Untitled"
+    extract = _safe_text(data.get("extract")) or "No summary was returned for this article."
+    description = _safe_text(data.get("description"))
+
+    content_urls = data.get("content_urls")
+    desktop = content_urls.get("desktop") if isinstance(content_urls, dict) else None
+    page = desktop.get("page") if isinstance(desktop, dict) else None
+    page_url = _safe_text(page) or _article_url(language, title)
 
     lines = [title]
     if description:
@@ -185,7 +205,7 @@ async def get_omi_tools_manifest():
 
 @app.post("/tools/search_articles", tags=["chat_tools"], response_model=ChatToolResponse)
 async def search_articles(payload: dict[str, Any]):
-    query = (payload.get("query") or "").strip()
+    query = _safe_text(payload.get("query")).strip()
     if not query:
         return ChatToolResponse(error="Missing required field: query")
 
@@ -205,13 +225,28 @@ async def search_articles(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        results = data.get("query", {}).get("search", [])[:limit]
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Wikipedia search returned an unexpected response. Please try again.")
+
+        query_data = data.get("query")
+        if query_data is None:
+            query_data = {}
+        if not isinstance(query_data, dict):
+            return ChatToolResponse(error="Wikipedia search returned an unexpected response. Please try again.")
+
+        raw_results = query_data.get("search")
+        if raw_results is None:
+            raw_results = []
+        if not isinstance(raw_results, list):
+            return ChatToolResponse(error="Wikipedia search returned an unexpected response. Please try again.")
+
+        results = _dict_items(raw_results)[:limit]
         if not results:
             return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
 
         lines = [f"Wikipedia search results for '{query}':"]
         for index, item in enumerate(results, start=1):
-            title = item.get("title") or "Untitled"
+            title = _safe_text(item.get("title")) or "Untitled"
             snippet = _clean_snippet(item.get("snippet"))
             lines.append(f"\n{index}. {title}")
             if snippet:
@@ -227,7 +262,7 @@ async def search_articles(payload: dict[str, Any]):
 
 @app.post("/tools/get_article_summary", tags=["chat_tools"], response_model=ChatToolResponse)
 async def get_article_summary(payload: dict[str, Any]):
-    title = (payload.get("title") or "").strip()
+    title = _safe_text(payload.get("title")).strip()
     if not title:
         return ChatToolResponse(error="Missing required field: title")
 
@@ -236,6 +271,8 @@ async def get_article_summary(payload: dict[str, Any]):
 
     try:
         data = await _request_json(url)
+        if not isinstance(data, dict):
+            return ChatToolResponse(error=f"No Wikipedia article found for '{title}'. Try search_articles first.")
         if data.get("type") == "disambiguation":
             return ChatToolResponse(
                 result=_format_summary(data, language)
@@ -267,16 +304,33 @@ async def get_random_article(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        random_items = data.get("query", {}).get("random", [])
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="Wikipedia random article request returned an unexpected response.")
+
+        query_data = data.get("query")
+        if query_data is None:
+            query_data = {}
+        if not isinstance(query_data, dict):
+            return ChatToolResponse(error="Wikipedia random article request returned an unexpected response.")
+
+        raw_items = query_data.get("random")
+        if raw_items is None:
+            raw_items = []
+        if not isinstance(raw_items, list):
+            return ChatToolResponse(error="Wikipedia random article request returned an unexpected response.")
+
+        random_items = _dict_items(raw_items)
         if not random_items:
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 
-        title = random_items[0].get("title")
+        title = _safe_text(random_items[0].get("title"))
         if not title:
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 
         summary_url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
         summary = await _request_json(summary_url)
+        if not isinstance(summary, dict):
+            return ChatToolResponse(error="Wikipedia random article request returned an unexpected response.")
         return ChatToolResponse(result="Random Wikipedia article:\n\n" + _format_summary(summary, language))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia random article request failed with status {exc.response.status_code}.")
