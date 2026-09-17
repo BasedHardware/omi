@@ -1148,6 +1148,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
+  - id: stack-overflow-app-tests
+    command: ["bash", "scripts/run-plugin-hermetic-tests.sh", "plugins/omi-stack-overflow-app"]
+    triggers: ["plugins/omi-stack-overflow-app/**", "scripts/run-plugin-hermetic-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Stack Exchange tool payloads can arrive as non-dict bodies, non-list items members, non-object entries, string tags or out-of-range timestamps; parsers must degrade instead of raising"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
