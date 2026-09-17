@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.357",
+      "date": "2026-09-17",
+      "changes": [
+        "Chat-first tab switches acknowledge the mounted page sooner so navigation feels snappier."
+      ]
+    },
+    {
       "version": "0.12.356",
       "date": "2026-09-16",
       "changes": [
