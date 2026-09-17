@@ -56,6 +56,11 @@ import {
 } from "./device-transcriptions";
 import { parseTaskLimit, readTasks } from "./tasks";
 import {
+  parseRewindMomentUpsert,
+  readRewindMoments,
+  upsertRewindMoment,
+} from "./rewind-moments";
+import {
   backendError,
   isChatCreate,
   isClientId,
@@ -787,6 +792,59 @@ export async function handleDeviceSessionList(
   });
 }
 
+export async function handleRewindMomentUpsert(
+  context: CoreContext
+): Promise<Response> {
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const parsed = await readBoundedJson(context.req.raw, 65_536);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const moment = parseRewindMomentUpsert(parsed.value);
+  if (moment === null) return backendError("validation", "edit_request", 422);
+  const result = await upsertRewindMoment(
+    db,
+    context.get("accountId"),
+    moment,
+    Date.now()
+  );
+  return result === "conflict"
+    ? backendError("conflict", "edit_request", 409)
+    : json({ moment: result }, 201);
+}
+
+export async function handleRewindMoments(
+  context: CoreContext
+): Promise<Response> {
+  const query = new URL(context.req.url).searchParams;
+  if (
+    [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("cursor").length > 1
+  ) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const limit = parseLimit(query.get("limit") ?? undefined);
+  const cursor = query.get("cursor") ?? undefined;
+  if (limit === null || cursor === "")
+    return backendError("bad_request", "edit_request", 400);
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const page = await readRewindMoments(
+    db,
+    context.get("accountId"),
+    limit,
+    cursor
+  );
+  return page === "invalid_cursor"
+    ? backendError("bad_request", "edit_request", 400)
+    : json(page);
+}
+
 export async function handleConversations(
   context: CoreContext
 ): Promise<Response> {
@@ -1059,6 +1117,12 @@ export const v1Routes: readonly CoreRoute[] = [
   { method: "GET", path: "/v1/conversations", handle: handleConversations },
   { method: "GET", path: "/v1/memories", handle: handleMemories },
   { method: "GET", path: "/v1/tasks", handle: handleTasks },
+  { method: "GET", path: "/v1/rewind-moments", handle: handleRewindMoments },
+  {
+    method: "POST",
+    path: "/v1/rewind-moments",
+    handle: handleRewindMomentUpsert,
+  },
 ];
 
 function account(context: CoreContext): AccountPort {

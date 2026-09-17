@@ -14,6 +14,8 @@ Migration `0007_device_audio_chunks.sql` adds the per-packet hash and acknowledg
 
 Migration `0008_device_capture_id.sql` adds a nullable capture ID and account-scoped unique index. Existing rows retain NULL capture IDs; no historical identity is fabricated. Updated clients require `createRecordingId` on the native backend bridge (or browser cryptographic UUID support). Creation requires the capture ID; coordinate the client and Worker release. Replays return the same server session, and changed device metadata returns 409.
 
+Migration `0010_rewind_moments.sql` stores per-account Recall *metadata* only (`frame_id`, capture time, app, window, source, 240-character OCR preview). It never stores JPEG or video bytes. Do not apply it to a shared database from an unverified checkout.
+
 Migration `0009_device_capture_time.sql` adds nullable `captured_at_ms`. Creation accepts optional `capturedAtMs`, a safe integer from 0 through 8,640,000,000,000,000 Unix milliseconds representing native receipt of the first packet. Invalid values, including null, are rejected. Exact replay preserves presence and value; changing either returns 409. Historical values remain unknown and are omitted from session and conversation responses. This display provenance never changes server `startedAt`/`endedAt` (also Unix milliseconds), conversation ordering, audio duration, or billing.
 
 ## Recording processing and canonical services
@@ -56,7 +58,7 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
 
    ```json
    {
-     "schema_version": "0009_device_capture_time.sql",
+     "schema_version": "0010_rewind_moments.sql",
      "migrations": [
        {
          "name": "0001_tasks.sql",
@@ -93,6 +95,10 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
        {
          "name": "0009_device_capture_time.sql",
          "sha256": "d4aa1e8b83636fb5d9b49807b2a21fa511b729fb669e1bc1a1958adc3cd46fd4"
+       },
+       {
+         "name": "0010_rewind_moments.sql",
+         "sha256": "50d8be492c57313ca34711ff5cce4568470681a6eb1aa1baa1400a5299566827"
        }
      ],
      "evidence_id": "ops-20260818-1"
