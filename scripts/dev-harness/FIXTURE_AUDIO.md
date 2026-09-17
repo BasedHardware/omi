@@ -10,8 +10,8 @@ gitignored `.local/ios-smoke-rebuild-trigger.dart` /
 
 | Platform | What D7 will feed | Kind | Blocker this turn |
 |---|---|---|---|
-| Android emulator | QEMU/emulator host audio into `AudioRecord` (16 kHz PCM16 mono) | `platform_mic` | V3 boots with `-no-audio`. That flag cannot be labelled a microphone. V3 is not on `origin/main` yet; dropping `-no-audio` belongs with the emulator lane, not a silent copy onto this branch. |
-| iOS simulator | No `simctl` audio-in API. A deterministic file into the simulator mic is the Mac default input fed by a **virtual audio device**. | `platform_mic` only with that device | Adding BlackHole/Loopback is a new dependency. Stopped. |
+| Android emulator | QEMU wav-in (`-audio wav`, `QEMU_WAV_IN_PATH`) into the emulated mic, then `AudioRecord` | `platform_mic` | Owner-authorized on this lane. `-no-audio` is gone. Label `platform_mic` only if AudioRecord actually ran and content evidence exists. |
+| iOS simulator | No `simctl` audio-in API. A deterministic file into the simulator mic would be a **virtual audio device**. | not authorized | Owner declined BlackHole/equivalent (system audio driver, admin rights). Do not pick a lighter package. iOS keeps `in_app_fake` with `platform_path_proven: false`; the iOS microphone path stays unproven (L2 gap). |
 
 An in-app capture-source swap (feeding PCM into `CaptureController` /
 `PhoneMicSource`) is a **fake**. It is useful for WAL/frame identity and must
@@ -68,15 +68,16 @@ is unblocked:
 
 | Lane | Existing cold `app.started` | D7 add-on (predicted floor) |
 |---|---|---|
-| iOS simulator | 412 s | clip 5 s + permission/start; not measured this turn |
-| Android emulator | 970 s | clip 5 s + dropping `-no-audio` (unknown qemu cost); not measured this turn |
+| iOS simulator | 412 s | clip 5 s + permission/start; mic path unproven (no virtual device) |
+| Android emulator | 970.1 s | qemu wav-in boot is +1.48 s first / −4.42 s warm vs `-no-audio`; clip ~5 s. Cold app.started not re-run this turn. |
 
-A double of either lane would come from enabling host audio on the emulator,
-not from the 5 s clip. Report measured numbers before making D7 routine.
+A double of either lane would come from enabling qemu audio, not from the
+4.9 s clip. Measured boot deltas live in `LANE.md` / the V3 report.
 
-## Stopped (ask before continuing)
+## Owner rulings (do not reopen here)
 
-1. **New dependency:** virtual audio device for iOS (BlackHole or equivalent).
-2. **App seam:** capture-source injection in `capture_controller.dart`.
-   Handover spec above if App core should own it.
-3. Not a new class: no `Failure-Class` on this branch; ask first.
+1. **iOS virtual audio device: not authorized.** Do not install BlackHole or a
+   lighter equivalent. iOS stays `in_app_fake` / unproven mic (L2 gap).
+2. **Capture seam:** specified in `.local/inputs/d7-capture-seam-request.md`
+   for the architect. Do not edit `capture_controller.dart`.
+3. Not a new class: ask before defining a `Failure-Class`.

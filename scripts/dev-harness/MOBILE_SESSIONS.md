@@ -99,9 +99,10 @@ were not installed and shared capacity was ~15GiB — device-attach paths are
 implemented and unit-tested with injected runners, and the live Android lane
 fails closed through `doctor`/`start` with the exact remedy. iOS simulator
 attach is implemented (`simctl create/boot/shutdown/delete` of a session-owned
-device); live boots were deferred by the same capacity gate. Concurrency
-(two live sessions), physical-device and untethered-signing acceptance remain
-open and are tracked in SCA-487/SCA-491.
+device); live boots were deferred by the same capacity gate. Concurrency (two live sessions on iOS), physical-device and untethered-signing
+acceptance remain open and are tracked in SCA-487/SCA-491. Two session-owned
+Android AVDs are specified to coexist (disjoint serials and reverse mappings);
+see [LANE.md](LANE.md).
 
 ## Live session contract
 

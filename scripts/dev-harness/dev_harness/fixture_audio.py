@@ -92,8 +92,33 @@ def load_known_audio_fixture(repo_root: Path) -> KnownAudioFixture:
     )
 
 
+def qemu_wav_input_env(wav_path: Path) -> dict[str, str]:
+    """QEMU wav backend reads this file as the emulated microphone.
+
+    ``wav_init_in`` / ``QEMU_WAV_IN_PATH`` (default ``qemu_in.wav``) is the
+    emulator's own file-backed audio-in, not an in-app capture seam and not a
+    host virtual audio device.
+    """
+
+    path = Path(wav_path)
+    if not path.is_file():
+        raise FixtureAudioError(f"QEMU wav input missing: {path}")
+    return {
+        "QEMU_AUDIO_DRV": "wav",
+        "QEMU_AUDIO_IN_DRV": "wav",
+        "QEMU_WAV_IN_PATH": str(path),
+    }
+
+
+def emulator_audio_argv(*, audio_disabled: bool = False) -> list[str]:
+    """Product boots enable the wav backend. ``-no-audio`` cannot be a microphone."""
+
+    refuse_platform_mic_without_host_audio(audio_disabled)
+    return ["-audio", "wav"]
+
+
 def refuse_platform_mic_without_host_audio(audio_disabled: bool) -> None:
-    """V3 product boots use -no-audio; that cannot be labelled platform_mic."""
+    """``-no-audio`` zeroes the emulated mic; that cannot be labelled platform_mic."""
 
     if audio_disabled:
         raise FixtureAudioError(

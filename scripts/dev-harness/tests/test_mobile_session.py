@@ -297,7 +297,6 @@ class TestStart:
         assert payload["status"] == "running"
         assert "cmd_up: starting services" in captured.err
 
-
     def test_start_android_attaches_a_session_owned_avd(
         self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -361,6 +360,35 @@ class TestStart:
         stopped = ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
         assert stopped["status"] == "stopped"
         assert calls == [("android", "emulator-5554", "omi-session-oms-emu-stop")]
+
+    def test_failed_emulator_teardown_leaves_the_lease_unreleased(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="emu-keep", platform_name="android", listeners=_no_listeners)
+        monkeypatch.setattr("dev_harness.cli.cmd_down", lambda namespace: 0)
+
+        class FakeDevices:
+            def detach(self, platform_name: str, device_id: str, device=None) -> None:
+                raise ms.SessionError("emulator pid was not proven dead; AVD will not be deleted")
+
+        directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
+        data = json.loads((directory / "lease.json").read_text("utf-8"))
+        data["status"] = "running"
+        data["device"] = {
+            "kind": "emulator",
+            "udid": "emulator-5554",
+            "avd": "omi-session-oms-emu-keep",
+            "owner": "session",
+        }
+        (directory / "lease.json").write_text(json.dumps(data), "utf-8")
+        with pytest.raises(ms.SessionError, match="not proven dead"):
+            ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        kept = json.loads((directory / "lease.json").read_text("utf-8"))
+        assert kept["status"] == "running"
+        assert kept["device"]["avd"] == "omi-session-oms-emu-keep"
+        with pytest.raises(ms.SessionError, match="not proven dead"):
+            ms.release(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        assert (directory / "lease.json").is_file()
 
 
 class TestEvidence:

@@ -52,7 +52,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from . import config, mobile_doctor, mobile_fixtures, safety, session_evidence
+from . import config, fixture_audio, mobile_doctor, mobile_fixtures, safety, session_evidence
 from .session_evidence import EvidenceError
 
 CLI_VERSION = "0.1.0"
@@ -85,6 +85,9 @@ DEFAULT_FLAVOR = "dev"
 ANDROID_IMAGE_PACKAGE = mobile_doctor.PREFERRED_ANDROID_IMAGE
 ANDROID_EMULATOR_BOOT_TIMEOUT_S = 240
 ANDROID_EMULATOR_CONSOLE_BASE = 5554
+ANDROID_EMULATOR_CONSOLE_MAX = 5854
+ANDROID_AVD_NAME_PREFIX = "omi-session-"
+_EMULATOR_SERIAL_RE = re.compile(r"^emulator-(\d+)$")
 ANDROID_PERMISSIONS = (
     "android.permission.RECORD_AUDIO",
     "android.permission.BLUETOOTH_CONNECT",
@@ -106,8 +109,7 @@ def normalize_session_platform(platform_name: str) -> str:
     mapped = SESSION_PLATFORM_ALIASES.get(platform_name)
     if mapped is None:
         raise SessionError(
-            f"platform must be one of {PLATFORMS} (ios is an alias for ios-simulator), "
-            f"got {platform_name!r}"
+            f"platform must be one of {PLATFORMS} (ios is an alias for ios-simulator), " f"got {platform_name!r}"
         )
     return mapped
 
@@ -350,6 +352,47 @@ def _release_port_offset(root: Path, offset: int, session_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def session_avd_name(session_id: str) -> str:
+    return f"{ANDROID_AVD_NAME_PREFIX}{session_id}"
+
+
+def emulator_serials_from_adb_devices(devices_out: str) -> list[str]:
+    """Parse ``adb devices`` serials. Physical phones are not emulator-N."""
+
+    serials: list[str] = []
+    for raw in devices_out.splitlines():
+        token = raw.split()[0] if raw.strip() else ""
+        if _EMULATOR_SERIAL_RE.fullmatch(token):
+            serials.append(token)
+    return serials
+
+
+def console_port_for_offset(port_offset: int) -> int:
+    slot = max(0, int(port_offset) // PORT_OFFSET_STEP - 1)
+    port = ANDROID_EMULATOR_CONSOLE_BASE + slot * 2
+    if port % 2:
+        port += 1
+    return port
+
+
+def _allocate_console_port(requested: int, devices_out: str) -> int:
+    taken: set[int] = set()
+    for serial in emulator_serials_from_adb_devices(devices_out):
+        match = _EMULATOR_SERIAL_RE.fullmatch(serial)
+        if match:
+            taken.add(int(match.group(1)))
+    port = int(requested)
+    if port % 2:
+        port += 1
+    while port in taken:
+        port += 2
+        if port > ANDROID_EMULATOR_CONSOLE_MAX:
+            raise SessionError(
+                f"no free emulator console port in {ANDROID_EMULATOR_CONSOLE_BASE}-{ANDROID_EMULATOR_CONSOLE_MAX}"
+            )
+    return port
+
+
 class DeviceController:
     """Owns the simulator/emulator lifecycle for a session. Injectable."""
 
@@ -411,8 +454,7 @@ class DeviceController:
                 return True, f"android emulator engine present ({image})"
             return (
                 False,
-                "no Android system image installed "
-                f"(sdkmanager '{ANDROID_IMAGE_PACKAGE}')",
+                "no Android system image installed " f"(sdkmanager '{ANDROID_IMAGE_PACKAGE}')",
             )
         return False, f"no Android system image at {home.joinpath(*mobile_doctor.PREFERRED_ANDROID_IMAGE_DIR)}"
 
@@ -439,13 +481,19 @@ class DeviceController:
         console_port: int | None = None,
         spawn: Callable[..., subprocess.Popen[Any]] | None = None,
         boot_timeout_s: float = ANDROID_EMULATOR_BOOT_TIMEOUT_S,
+        repo_root: Path | None = None,
     ) -> dict[str, Any]:
         """Create a session-owned AVD, boot it headless, reverse session ports.
 
-        Product boots use ``-no-window -no-audio -no-snapshot``: the AVD is
-        created for this lease and deleted on release, so a qemu snapshot
-        would be a shared-template leftover. Warm-boot numbers are a second
-        start of the same AVD's userdata, not a reused snapshot file.
+        Product boots use ``-no-window -audio wav -no-snapshot``. ``-no-audio``
+        zeroes the emulated mic and cannot be labelled a microphone. The AVD is
+        created for this lease and deleted on release, so a qemu snapshot would
+        be a shared-template leftover. Warm-boot numbers are a second start of
+        the same AVD's userdata, not a reused snapshot file.
+
+        A physical phone or a foreign emulator visible to adb does not block.
+        Only a still-running harness AVD with this session's name is refused.
+        Console ports are chosen so two session-owned AVDs get disjoint serials.
         """
 
         home = Path(android_home)
@@ -455,14 +503,14 @@ class DeviceController:
         ready, detail = self.android_ready(android_home)
         if not ready:
             raise SessionError(detail)
+        avd_name = session_avd_name(session_id)
         code, devices_out = self._runner([str(adb), "devices"])
-        if any(line.startswith("emulator-") for line in devices_out.splitlines()[1:] if line.strip()):
-            raise SessionError(
-                "another Android emulator is already visible to adb; one emulator at a time"
-            )
+        self._refuse_live_harness_avd(str(adb), devices_out, avd_name)
+        requested = int(console_port or ANDROID_EMULATOR_CONSOLE_BASE)
+        port = _allocate_console_port(requested, devices_out)
+        serial = f"emulator-{port}"
         avd_home = Path(avd_home)
         avd_home.mkdir(parents=True, exist_ok=True)
-        avd_name = f"omi-session-{session_id}"
         env = {
             **os.environ,
             "ANDROID_HOME": str(home),
@@ -484,13 +532,11 @@ class DeviceController:
         code, created_out = self._call(create, timeout=120, env=env, input_text="no\n")
         if code != 0:
             raise SessionError(f"avdmanager create failed: {created_out.strip()[:800]}")
-        port = int(console_port or ANDROID_EMULATOR_CONSOLE_BASE)
-        if port % 2:
-            port += 1
-        serial = f"emulator-{port}"
         marker = f"omi-dev-harness:{session_id}:android-emulator:{secrets.token_hex(8)}"
         log_path = Path(log_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[3]
+        wav = fixture_audio.load_known_audio_fixture(root)
         argv = [
             sys.executable,
             "-m",
@@ -506,13 +552,14 @@ class DeviceController:
             "-port",
             str(port),
             "-no-window",
-            "-no-audio",
+            *fixture_audio.emulator_audio_argv(audio_disabled=False),
             "-no-snapshot",
             "-gpu",
             "swiftshader_indirect",
         ]
         child_env = {
             **env,
+            **fixture_audio.qemu_wav_input_env(wav.path),
             "PYTHONPATH": str(Path(__file__).resolve().parent.parent),
             "PATH": f"{home / 'platform-tools'}{os.pathsep}{home / 'emulator'}{os.pathsep}{env.get('PATH', '')}",
         }
@@ -533,20 +580,21 @@ class DeviceController:
             log_handle.close()
         try:
             self._wait_android_boot(str(adb), serial, timeout_s=boot_timeout_s)
-        except Exception:
-            self._kill_owned_emulator(int(proc.pid), marker)
-            self._delete_avd(avdmanager, avd_name, env)
-            raise
+        except Exception as exc:
+            self._abort_unbooted_emulator(int(proc.pid), marker, avdmanager, avd_name, env, exc)
         reverses: list[dict[str, int]] = []
         for name in ("backend", "auth"):
             host_port = int(ports[name])
-            code, out = self._runner(
-                [str(adb), "-s", serial, "reverse", f"tcp:{host_port}", f"tcp:{host_port}"]
-            )
+            code, out = self._runner([str(adb), "-s", serial, "reverse", f"tcp:{host_port}", f"tcp:{host_port}"])
             if code != 0:
-                self._kill_owned_emulator(int(proc.pid), marker)
-                self._delete_avd(avdmanager, avd_name, env)
-                raise SessionError(f"adb reverse tcp:{host_port} failed: {out.strip()[:400]}")
+                self._abort_unbooted_emulator(
+                    int(proc.pid),
+                    marker,
+                    avdmanager,
+                    avd_name,
+                    env,
+                    SessionError(f"adb reverse tcp:{host_port} failed: {out.strip()[:400]}"),
+                )
             reverses.append({"device": host_port, "host": host_port, "name": name})
         return {
             "kind": "emulator",
@@ -558,9 +606,44 @@ class DeviceController:
             "owner": "session",
             "label": ANDROID_IMAGE_PACKAGE,
             "boot": "no-snapshot",
+            "audio": "wav",
             "console_port": port,
+            "mic_fixture_sha256": wav.sha256,
             "reverse": reverses,
         }
+
+    def _refuse_live_harness_avd(self, adb: str, devices_out: str, avd_name: str) -> None:
+        """Refuse only this session's AVD still running. Phones and foreign emulators pass."""
+
+        for serial in emulator_serials_from_adb_devices(devices_out):
+            name = self._avd_name_for_serial(adb, serial)
+            if name == avd_name:
+                raise SessionError(
+                    f"harness-owned AVD {avd_name} is already visible as {serial}; "
+                    "stop or recover that session — a phone or foreign emulator is not a blocker"
+                )
+
+    def _avd_name_for_serial(self, adb: str, serial: str) -> str:
+        code, out = self._runner([adb, "-s", serial, "emu", "avd", "name"])
+        if code != 0 or not out.strip():
+            return ""
+        return out.strip().splitlines()[0].strip()
+
+    def _abort_unbooted_emulator(
+        self,
+        pid: int,
+        marker: str,
+        avdmanager: Path,
+        avd_name: str,
+        env: Mapping[str, str],
+        cause: BaseException,
+    ) -> None:
+        try:
+            self._kill_owned_emulator(pid, marker)
+        except SessionError as kill_error:
+            raise SessionError(f"{cause}; qemu was not proven dead so AVD {avd_name} was not deleted") from kill_error
+        self._delete_avd(avdmanager, avd_name, env)
+        raise cause
 
     def _wait_android_boot(self, adb: str, serial: str, *, timeout_s: float) -> None:
         deadline = time.monotonic() + timeout_s
@@ -577,33 +660,53 @@ class DeviceController:
             if code == 0 and token == "1":
                 return
             time.sleep(min(1.0, max(0.05, remaining)))
-        raise SessionError(
-            f"emulator {serial} did not reach sys.boot_completed within {timeout_s:.0f}s"
-        )
+        raise SessionError(f"emulator {serial} did not reach sys.boot_completed within {timeout_s:.0f}s")
+
+    def _emulator_proven_dead(self, pid: int, marker: str) -> bool:
+        """Qemu is gone only when the recorded pid is dead or no longer carries the marker."""
+
+        if pid <= 0 or not marker:
+            return False
+        if not safety.process_exists(pid):
+            return True
+        return marker not in safety.command_line_for_pid(pid)
 
     def _kill_owned_emulator(self, pid: int, marker: str) -> None:
-        if pid <= 0 or not safety.process_exists(pid):
-            return
-        cmdline = safety.command_line_for_pid(pid)
-        if marker not in cmdline:
-            raise SessionError(
-                f"refusing to kill PID {pid}: command line does not contain ownership marker"
-            )
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                return
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline and safety.process_exists(pid):
-            time.sleep(0.25)
+        if pid <= 0 or not marker:
+            raise SessionError("cannot prove emulator dead: missing pid or ownership marker")
         if safety.process_exists(pid):
+            cmdline = safety.command_line_for_pid(pid)
+            if marker not in cmdline:
+                raise SessionError(f"refusing to kill PID {pid}: command line does not contain ownership marker")
+            signaled = False
             try:
-                os.killpg(pid, signal.SIGKILL)
+                os.killpg(pid, signal.SIGTERM)
+                signaled = True
             except (ProcessLookupError, PermissionError):
-                pass
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    signaled = True
+                except (ProcessLookupError, PermissionError):
+                    pass
+            if signaled:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline and safety.process_exists(pid):
+                    time.sleep(0.25)
+            if safety.process_exists(pid) and marker in safety.command_line_for_pid(pid):
+                try:
+                    os.killpg(pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline and safety.process_exists(pid):
+                    time.sleep(0.1)
+        if not self._emulator_proven_dead(pid, marker):
+            raise SessionError(
+                f"emulator pid {pid} was not proven dead (ownership marker still live); AVD will not be deleted"
+            )
 
     def _delete_avd(self, avdmanager: Path, avd_name: str, env: Mapping[str, str]) -> None:
         self._call(
@@ -631,11 +734,7 @@ class DeviceController:
                     self._runner([adb, "-s", device_id, "reverse", "--remove", f"tcp:{port}"])
             marker = str(record.get("ownership_marker") or "")
             pid = int(record.get("pid") or 0)
-            if pid and marker:
-                try:
-                    self._kill_owned_emulator(pid, marker)
-                except SessionError:
-                    pass
+            self._kill_owned_emulator(pid, marker)
             avd = str(record.get("avd") or "")
             avd_home = record.get("avd_home")
             if avd and android_home:
@@ -820,6 +919,8 @@ def start(
                 avd_home=directory / "avd",
                 ports=lease["ports"],
                 log_path=directory / "emulator.log",
+                console_port=console_port_for_offset(int(lease["port_offset"])),
+                repo_root=Path(repo_root),
             )
             attached["android_home"] = android_home
             lease = {**lease, "device": attached}
@@ -1182,7 +1283,9 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--no-device", action="store_true", help="services only; skip the device lease")
 
     live = sub.add_parser("live", help="V1 live Flutter broker (pending implementation)")
-    live.add_argument("operation", choices=("start", "reload", "restart", "screenshot", "logs", "controls", "status", "stop"))
+    live.add_argument(
+        "operation", choices=("start", "reload", "restart", "screenshot", "logs", "controls", "status", "stop")
+    )
     live.add_argument("session_id")
     live.add_argument("--params", type=json.loads, default={}, help="operation-specific JSON object")
     live.add_argument("--json", action="store_true")
@@ -1285,9 +1388,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _emit(lease, as_json=args.json)
             return 0
         if args.command == "start":
-            lease = start(
-                repo_root, args.session_id, attach_device=not args.no_device, json_stdout=args.json
-            )
+            lease = start(repo_root, args.session_id, attach_device=not args.no_device, json_stdout=args.json)
             _emit(lease, as_json=args.json)
             return 0
         if args.command == "seed":

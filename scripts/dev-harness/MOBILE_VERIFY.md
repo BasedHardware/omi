@@ -86,12 +86,16 @@ loopback backend, reads `ext.omi.controls.capabilities` and `state`,
 screenshots, writes a session-evidence-v1 receipt, and releases everything it
 acquired — including on failure. `--platform android` uses a session-owned AVD
 (`ANDROID_AVD_HOME` under the session dir, deleted on release; never a shared
-template), boots the emulator headless with `-no-window -no-audio -no-snapshot`
+template), boots the emulator headless with `-no-window -audio wav -no-snapshot`
 (the AVD dies with the lease, so a qemu snapshot would be leftover shared
-state), `adb reverse`s only the session backend and Auth ports, `pm grant`s
+state; `-no-audio` cannot be labelled a microphone). A physical phone or a
+foreign emulator visible to `adb` does not block; only a still-running
+harness AVD with this session's name is refused. Two session-owned AVDs
+coexist with disjoint serials and reverse mappings. `adb reverse`s only the
+session backend and Auth ports, `pm grant`s
 runtime permissions, and captures `adb exec-out screencap -p`. `--platform
 ios-simulator` is the V2 simctl path. Omitting `--platform` runs every platform
-the doctor reports ready, sequentially (one emulator at a time). Sign-in is
+the doctor reports ready, sequentially. Sign-in is
 not part of this lane: the app is signed out (`signedIn=false`). The
 cold-start deadline is at least the measured host cold boot (412 s here);
 default 900 s. This package does not add the lane to CI. Missing
