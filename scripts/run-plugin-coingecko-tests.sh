@@ -19,6 +19,7 @@ pinned_deps=(
   "httpx==0.28.1"
   "pydantic==2.13.4"
   "starlette==0.49.1"
+  "pytest==8.4.1"
 )
 
 run_with_uv() {

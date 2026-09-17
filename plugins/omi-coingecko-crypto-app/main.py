@@ -134,7 +134,7 @@ async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = Non
     client: httpx.AsyncClient = app.state.http_client
     url = f"{COINGECKO_BASE_URL}{endpoint}"
     try:
-        response = await client.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+        response = await client.get(url, params=params)
         if response.status_code == 429:
             raise ValueError("CoinGecko API rate limit reached. Please wait a moment before trying again.")
         if response.status_code == 404:
