@@ -9914,4 +9914,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.';
+
+  @override
+  String get home => 'בית';
 }

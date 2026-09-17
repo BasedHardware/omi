@@ -174,7 +174,8 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $(scripts/build_provenance_dart_defines.sh)
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -409,7 +410,8 @@ workflows:
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            $(scripts/build_provenance_dart_defines.sh)
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -558,7 +560,8 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $(scripts/build_provenance_dart_defines.sh)
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -957,7 +960,8 @@ workflows:
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            $(scripts/build_provenance_dart_defines.sh)
 
 
     artifacts:
@@ -1103,7 +1107,8 @@ workflows:
           # Build
           shorebird patch ios \
             --flavor prod -- \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $(scripts/build_provenance_dart_defines.sh)
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -1797,7 +1802,8 @@ workflows:
 
           # Should use bump version automatically by CI
           shorebird patch android \
-            --flavor prod
+            --flavor prod -- \
+            $(scripts/build_provenance_dart_defines.sh)
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt

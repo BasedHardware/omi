@@ -10022,4 +10022,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Da Omi zna koji je glas vaš — pričajte o bilo čemu oko 5 sekundi.';
+
+  @override
+  String get home => 'Početna';
 }

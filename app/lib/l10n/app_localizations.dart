@@ -18608,6 +18608,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
   String get speechProfileEnrollmentPrompt;
+
+  /// Screen-reader label for the Home tab in the bottom navigation bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get home;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
