@@ -226,6 +226,15 @@ function presentActionItems(value: unknown): void {
     presentNullableDate(action.updated_at);
   }
 }
+function presentStructuredSections(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    const section = object(item);
+    presentNullableString(section.heading);
+    presentNullableString(section.body_markdown);
+  }
+}
 function presentStructuredEvents(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) throw new Error('Omi list is malformed');
@@ -536,6 +545,7 @@ export async function loadOmiConversations(
     presentConversationAudio(row.conversation_audio);
     presentPhotos(row.photos);
     presentActionItems(structured.action_items);
+    presentStructuredSections(structured.sections);
     presentStructuredEvents(structured.events);
     presentClientProcessing(row.client_processing);
     const emoji = conversationStructuredEmojiCopy(

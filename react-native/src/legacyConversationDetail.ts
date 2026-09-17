@@ -501,10 +501,9 @@ export async function loadLegacyConversationDetail(
   const locked = boolean(value.is_locked ?? false);
   const sections: LegacyConversationDetail['sections'] = [];
   for (const raw of optionalArray(structured.sections)) {
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-      continue;
-    }
-    const section = raw as Record<string, unknown>;
+    const section = object(raw);
+    presentNullableString(section.heading);
+    presentNullableString(section.body_markdown);
     if (
       typeof section.heading !== 'string' ||
       typeof section.body_markdown !== 'string'
@@ -574,10 +573,7 @@ export async function loadLegacyConversationDetail(
   }
   if (Array.isArray(structured.events)) {
     for (const raw of structured.events) {
-      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-        continue;
-      }
-      const event = raw as Record<string, unknown>;
+      const event = object(raw);
       presentNullableString(event.description);
       if (event.start !== undefined && event.start !== null) {
         calendarEventTimeCopy(event.start);
