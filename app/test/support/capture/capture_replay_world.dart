@@ -432,17 +432,22 @@ class CaptureReplayWorld {
     connectivityStream.add(value);
   }
 
-  /// Drain work started by timer callbacks and injections: coordinator
-  /// recovery passes (including unawaited cooldown wakes) and event-queue
-  /// IO. Quiescence is observed — no wall-clock sleeps.
+  /// Drain work started by timer callbacks and injections: WAL file writes
+  /// returned as Futures from async periodic callbacks, coordinator recovery
+  /// passes (including unawaited cooldown wakes), and event-queue microtasks.
+  /// Coordinator-idle is not durable I/O. Quiescence is observed — no sleeps.
   Future<void> settle({int maxTurns = 64}) async {
     for (var i = 0; i < maxTurns; i++) {
+      await scheduler.waitForCallbackIo();
       await coordinator.waitUntilIdle();
       await pumpEventQueue();
+      await scheduler.waitForCallbackIo();
       await coordinator.waitUntilIdle();
-      if (!coordinator.hasInFlight) return;
+      if (!coordinator.hasInFlight && !scheduler.hasInFlightIo) return;
     }
-    throw StateError('CaptureReplayWorld.settle: coordinator did not go idle after $maxTurns turns');
+    throw StateError(
+      'CaptureReplayWorld.settle: coordinator/timer IO did not go idle after $maxTurns turns',
+    );
   }
 
   /// Advance virtual time by [duration], firing due timers in order, then
@@ -483,7 +488,9 @@ class CaptureReplayWorld {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    // Finish in-flight drain/index writes before callers delete [tempDir].
+    // Finish timer-callback file writes and in-flight drain/index writes
+    // before callers delete [tempDir]. Coordinator-idle is not enough.
+    await scheduler.waitForCallbackIo();
     await coordinator.waitUntilIdle();
     if (!_controllerDisposed) _controller?.dispose();
     coordinator.dispose();

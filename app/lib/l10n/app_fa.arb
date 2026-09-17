@@ -10828,5 +10828,6 @@
     },
     "tapPlusToStartRecording": "برای شروع ضبط روی + بزنید",
     "processingTakingLonger": "هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.",
-    "speechProfileEnrollmentPrompt": "برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید."
+    "speechProfileEnrollmentPrompt": "برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.",
+    "home": "خانه"
 }

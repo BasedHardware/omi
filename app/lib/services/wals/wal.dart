@@ -47,8 +47,11 @@ enum SyncMethod { ble }
 ///                  a Retry the user would spend forever
 enum WalSyncDisplayState { syncing, uploaded, synced, waiting, retrying, failed, corrupted, outsideRecoveryWindow }
 
-/// Max automatic sync attempts before a recording is considered [WalSyncDisplayState.failed].
-/// Mirrors the `maxRetries` used by the auto-sync loop in capture_provider.
+/// Max automatic sync attempts before a recording is considered
+/// [WalSyncDisplayState.failed]. This is the budget itself, not a display
+/// mirror: `isAutoUploadEligible` in local_wal_sync.dart drops a recording that
+/// has spent it from every automatic drain, so the label and the behaviour
+/// cannot drift apart. Only the per-recording manual Retry ignores it.
 const int walMaxAutoRetries = 3;
 
 class WalStats {

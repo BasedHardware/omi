@@ -10007,4 +10007,7 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi\'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.';
+
+  @override
+  String get home => 'Ana Sayfa';
 }

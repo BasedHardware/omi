@@ -3262,5 +3262,6 @@
     },
     "tapPlusToStartRecording": "Aloita tallennus napauttamalla +",
     "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin.",
-    "speechProfileEnrollmentPrompt": "Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia."
+    "speechProfileEnrollmentPrompt": "Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.",
+    "home": "Koti"
 }

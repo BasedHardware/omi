@@ -10052,4 +10052,7 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Perché Omi sappia qual è la tua voce — parla di qualsiasi cosa per circa 5 secondi.';
+
+  @override
+  String get home => 'Home';
 }

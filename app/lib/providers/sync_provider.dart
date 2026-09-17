@@ -556,6 +556,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // UI Sync/Auto Sync still call syncWal for a single row, but must not
     // race a coordinator drain (or device download) on the same WAL stack.
     if (_startBackgroundSync && _isTransferSeamBusy()) {
+      // Coalescing this tap into the running drain must not silently drop it:
+      // the drain skips recordings whose auto-upload budget is spent, so grant
+      // the same fresh budget the direct path gives.
+      wal.retryCount = 0;
       await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }

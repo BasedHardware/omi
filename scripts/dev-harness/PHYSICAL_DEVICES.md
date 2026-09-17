@@ -28,8 +28,8 @@ make mobile-session ARGS="device release --platform android --device-id <serial>
 ```
 
 Direct form: `scripts/dev-harness/mobile-session.sh device <op> …` (add
-`--json` right after `device` — e.g. `device --json doctor` — for
-machine-readable output).
+`--json` after `device` or after the subcommand — `device --json doctor` and
+`device doctor --json` are equivalent — for machine-readable output).
 `device doctor` exits 2 while anything is `operator-action-needed` or
 `agent-remediable` — the message names the exact smallest step.
 

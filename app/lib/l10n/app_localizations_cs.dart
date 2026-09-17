@@ -9994,4 +9994,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Aby Omi věděl, který hlas je váš — mluvte asi 5 sekund o čemkoli.';
+
+  @override
+  String get home => 'Domů';
 }
