@@ -158,6 +158,8 @@ function presentCalendarEvent(value: unknown): void {
   presentRequiredDate(event.start_time);
   presentRequiredDate(event.end_time);
   presentNullableString(event.html_link);
+  presentUnusedStringListItems(event.attendees);
+  presentUnusedStringListItems(event.attendee_emails);
 }
 function presentAudioFiles(value: unknown): void {
   if (value === undefined) return;

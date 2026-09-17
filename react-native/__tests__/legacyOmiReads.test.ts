@@ -312,6 +312,95 @@ test('old conversations name Flutter ConversationListItem fromJson padded GET ca
   ).rejects.toThrow('Omi timestamp is malformed');
 });
 
+test('old conversations name Flutter ConversationListItem fromJson type-wrong GET attendees item instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const event = {
+    event_id: 'evt-1',
+    title: 'Standup',
+    start_time: '2026-09-07T15:00:00.000Z',
+    end_time: '2026-09-07T15:30:00.000Z',
+    attendees: ['Alex Chen'],
+    attendee_emails: ['alex@example.com'],
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    calendar_event: event,
+  };
+  const titles = async (rows: unknown[]) =>
+    (await loadConversations(backend(rows).api)).items.map(item => item.title);
+  expect(await titles([row, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([
+      {
+        ...row,
+        calendar_event: {
+          event_id: 'evt-1',
+          title: 'Standup',
+          start_time: '2026-09-07T15:00:00.000Z',
+          end_time: '2026-09-07T15:30:00.000Z',
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        calendar_event: {...event, attendees: null, attendee_emails: null},
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        calendar_event: {...event, attendees: 1, attendee_emails: 1},
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        calendar_event: {...event, attendees: [], attendee_emails: []},
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  for (const extra of [1, true, []]) {
+    await expect(
+      titles([
+        {
+          ...row,
+          calendar_event: {...event, attendees: [extra]},
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      titles([
+        {
+          ...row,
+          calendar_event: {...event, attendee_emails: [extra]},
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+});
+
 test('old conversations name Flutter ConversationListItem fromJson padded GET action_items capture_confidence instead of remapping to a conversation chip', async () => {
   const neighbor = {
     ...conversation,
