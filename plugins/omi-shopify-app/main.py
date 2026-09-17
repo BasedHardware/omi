@@ -1272,8 +1272,8 @@ async def tool_create_order(request: Request):
         product_matches = []
         
         for item in line_items:
-            title = item.get("title", "Custom Item")
-            quantity = item.get("quantity", 1)
+            title = item.get("title") or "Custom Item"
+            quantity = _coerce_int(item.get("quantity"), default=1, minimum=1)
             provided_price = item.get("price")
             variant_id = item.get("variant_id")
             sku = item.get("sku")
