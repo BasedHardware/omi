@@ -9,14 +9,11 @@ Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
 - **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.env`, Firebase project `based-hardware-prod`
 - **raybanDat**: camera-capable iOS target with the same iOS development identity; `scripts/rayban_dat.sh` excludes mcumgr only for that transaction, then restores the default graph.
 
-### Generated Files (never edit manually)
-| Generator | Source | Output | Command |
-|-----------|--------|--------|---------|
-| envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (obfuscated secrets) | `flutter pub run build_runner build` |
-| json_serializable | `@JsonSerializable` models | `*.g.dart` (fromJson/toJson) | `flutter pub run build_runner build` |
-| pigeon | `lib/pigeon_interfaces.dart` | `lib/gen/pigeon_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
-| flutter_gen | `pubspec.yaml` assets/fonts | `lib/gen/assets.gen.dart`, `lib/gen/fonts.gen.dart` | `flutter pub run build_runner build` |
-| flutter_localizations | `lib/l10n/*.arb` | `lib/gen_l10n/app_localizations*.dart` | `flutter gen-l10n` |
+### Version string
+`pubspec.yaml` (`1.0.543+992`) is the local marketing+build placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest TestFlight/App Store (or Play) version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only when stores have no history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER` (Codemagic's `BUILD_NUMBER`, else `"local"`). Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
+
+### Generated Files (never edit)
+envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
 
 ### Setup Sequence
 ```bash
