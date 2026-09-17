@@ -42376,6 +42376,118 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/reprocess-transcription": {
+      "post": {
+        "description": "Re-run prerecorded STT on stored audio, then the existing enrichment pipeline.\n\nUnlike ``POST .../reprocess``, which only regenerates the summary from the\ncurrent transcript, this replaces transcript segments from stored audio and\nthen calls ``process_conversation`` with the same reprocess flags.",
+        "operationId": "reprocess_conversation_transcription_v1_conversations__conversation_id__reprocess_transcription_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language_code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language Code"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "No stored audio is available, or STT produced no speech"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "description": "The conversation does not exist"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "description": "The transcription provider failed"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Reprocess Conversation Transcription",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/screenshot-sharing": {
       "patch": {
         "operationId": "update_conversation_screenshot_sharing_v1_conversations__conversation_id__screenshot_sharing_patch",
