@@ -5,13 +5,188 @@ Runs without network or API keys, testing request validation, query building,
 error handling, feed parsing, and all FastAPI endpoints.
 """
 
+from pathlib import Path
+import sys
+import types
 from unittest.mock import AsyncMock, patch
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote_plus, urlencode, urlsplit
 import unittest
 import xml.etree.ElementTree as ET
 
-import httpx
-from pydantic import ValidationError
+# Ensure plugin directory is on sys.path so main and models can be imported hermetically
+PLUGIN_DIR = Path(__file__).resolve().parent
+if str(PLUGIN_DIR) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_DIR))
+
+# Provide lightweight stubs for third-party runtime dependencies so test_main.py
+# runs hermetically on any clean standard library Python environment without
+# requiring FastAPI, httpx, or Pydantic to be installed (such as the CI hygiene lane).
+if "httpx" not in sys.modules:
+    try:
+        import httpx  # type: ignore
+    except ImportError:
+        httpx = types.ModuleType("httpx")
+
+        class HTTPError(Exception):
+            pass
+
+        class HTTPStatusError(HTTPError):
+            def __init__(self, message="", *, request=None, response=None):
+                super().__init__(message)
+                self.request = request
+                self.response = response
+
+        class TimeoutException(HTTPError):
+            pass
+
+        class ConnectError(HTTPError):
+            pass
+
+        class Request:
+            def __init__(self, method, url, params=None, headers=None):
+                self.method = method
+                if params:
+                    self.url = f"{url}?{urlencode(params, quote_via=quote_plus)}"
+                else:
+                    self.url = url
+
+        class Response:
+            def __init__(self, status_code, *, request=None, text="", content=b""):
+                self.status_code = status_code
+                self.request = request
+                self.text = text
+                self.content = content
+
+        class AsyncClient:
+            def __init__(self, *args, **kwargs):
+                self.is_closed = False
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def get(self, *args, **kwargs):
+                pass
+
+            async def aclose(self):
+                self.is_closed = True
+
+        httpx.HTTPError = HTTPError
+        httpx.HTTPStatusError = HTTPStatusError
+        httpx.TimeoutException = TimeoutException
+        httpx.ConnectError = ConnectError
+        httpx.Request = Request
+        httpx.Response = Response
+        httpx.AsyncClient = AsyncClient
+        sys.modules["httpx"] = httpx
+else:
+    import httpx  # type: ignore
+
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi  # type: ignore
+        import fastapi.exceptions  # type: ignore
+        import fastapi.responses  # type: ignore
+    except ImportError:
+        fastapi = types.ModuleType("fastapi")
+
+        class FastAPI:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def get(self, *args, **kwargs):
+                return lambda f: f
+
+            def post(self, *args, **kwargs):
+                return lambda f: f
+
+            def exception_handler(self, *args, **kwargs):
+                return lambda f: f
+
+        class FastApiRequest:
+            pass
+
+        fastapi.FastAPI = FastAPI
+        fastapi.Request = FastApiRequest
+        sys.modules["fastapi"] = fastapi
+
+        fastapi_exc = types.ModuleType("fastapi.exceptions")
+
+        class RequestValidationError(Exception):
+            pass
+
+        fastapi_exc.RequestValidationError = RequestValidationError
+        sys.modules["fastapi.exceptions"] = fastapi_exc
+        fastapi.exceptions = fastapi_exc
+
+        fastapi_resp = types.ModuleType("fastapi.responses")
+
+        class HTMLResponse:
+            def __init__(self, content="", status_code=200, **kwargs):
+                self.status_code = status_code
+                self.body = content.encode("utf-8") if isinstance(content, str) else content
+
+        class JSONResponse:
+            def __init__(self, content=None, status_code=200, **kwargs):
+                self.status_code = status_code
+                self.content = content
+
+        fastapi_resp.HTMLResponse = HTMLResponse
+        fastapi_resp.JSONResponse = JSONResponse
+        sys.modules["fastapi.responses"] = fastapi_resp
+        fastapi.responses = fastapi_resp
+
+if "pydantic" not in sys.modules:
+    try:
+        import pydantic  # type: ignore
+        from pydantic import ValidationError  # type: ignore
+    except ImportError:
+        pydantic = types.ModuleType("pydantic")
+
+        class ValidationError(Exception):
+            pass
+
+        class _FieldInfo:
+            def __init__(self, default=..., description=None):
+                self.default = default
+                self.description = description
+
+        def Field(default=..., **kwargs):
+            return _FieldInfo(default=default, description=kwargs.get("description"))
+
+        class BaseModel:
+            def __init__(self, **kwargs):
+                cls_fields = {}
+                for cls in reversed(self.__class__.__mro__):
+                    for k, v in getattr(cls, "__dict__", {}).items():
+                        if not k.startswith("_") and not callable(v):
+                            if isinstance(v, _FieldInfo):
+                                cls_fields[k] = v.default
+                            else:
+                                cls_fields[k] = v
+                for k, default_val in cls_fields.items():
+                    if default_val is ... and k not in kwargs:
+                        raise ValidationError(f"Field '{k}' is required")
+                    val = kwargs.get(k, None if default_val is ... else default_val)
+                    setattr(self, k, val)
+                for k, v in kwargs.items():
+                    if k not in cls_fields:
+                        setattr(self, k, v)
+
+            def model_dump(self, *args, **kwargs):
+                return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+
+            def dict(self, *args, **kwargs):
+                return self.model_dump(*args, **kwargs)
+
+        pydantic.BaseModel = BaseModel
+        pydantic.Field = Field
+        pydantic.ValidationError = ValidationError
+        sys.modules["pydantic"] = pydantic
+else:
+    from pydantic import ValidationError  # type: ignore
 
 import main
 import models
