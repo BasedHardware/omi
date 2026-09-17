@@ -193,8 +193,13 @@ class RecordingTransferCoordinator {
   /// by the next foreground or startup wake.
   void setForeground(bool isForeground) {
     _foreground = isForeground;
-    if (!isForeground && _inFlight == null) {
-      _cancelForegroundTimers();
+    if (!isForeground) {
+      // An already-running pass must finish, but a coalesced extra pass is a
+      // new discovery/drain and stays foreground-only (#5221).
+      _pendingWake = null;
+      if (_inFlight == null) {
+        _cancelForegroundTimers();
+      }
     }
   }
 
@@ -210,7 +215,7 @@ class RecordingTransferCoordinator {
   Future<void> wake(WakeTrigger trigger) {
     // New recovery stays foreground-only. An in-flight pass must finish even
     // after screen-off (#5221); background connectivity must not queue another
-    // whole-WAL drain once that pass ends.
+    // whole-WAL drain, and setForeground(false) drops a coalesced extra pass.
     if (!_foreground) {
       final active = _inFlight;
       if (active != null) return active;
@@ -255,16 +260,22 @@ class RecordingTransferCoordinator {
   }
 
   Future<void> _run(WakeTrigger firstWake) async {
-    await _onTransferStarted?.call();
+    final started = _onTransferStarted;
+    if (started != null) await started();
     try {
       WakeTrigger wake = firstWake;
       do {
         _pendingWake = null;
         await _runPass(wake);
+        if (!_foreground) {
+          _pendingWake = null;
+          break;
+        }
         wake = _pendingWake ?? wake;
       } while (_pendingWake != null);
     } finally {
-      await _onTransferFinished?.call();
+      final finished = _onTransferFinished;
+      if (finished != null) await finished();
     }
   }
 
