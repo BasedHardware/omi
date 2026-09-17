@@ -1240,7 +1240,7 @@ async def google_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content=f"Authentication error: {html.escape(str(e), quote=True)}", status_code=500)
 
 
 @app.get("/setup/google")
