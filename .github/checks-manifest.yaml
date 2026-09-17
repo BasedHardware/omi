@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: cli-markdown-export-naming-tests
+    command: ["python3", "sdks/python-cli/examples/test_conversations_to_markdown.py"]
+    triggers: ["sdks/python-cli/examples/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14277: the Markdown export example named files from the date, title slug, and only the first eight sanitized id characters, then wrote with no collision handling, so two conversations sharing a prefix silently overwrote each other while the summary still reported both exported; distinct ids must produce distinct files and re-exporting an id must stay idempotent"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]

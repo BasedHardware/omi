@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -34,6 +35,16 @@ def slugify(text: str) -> str:
     """Create a filesystem-safe filename slug."""
     text = re.sub(r"[^\w\s-]", "", text.lower()).strip()
     return re.sub(r"[-\s]+", "_", text)[:50] or "conversation"
+
+
+def stable_suffix(conv_id: Any) -> str:
+    """Derive a short, stable, filesystem-safe suffix from a conversation id.
+
+    The first eight sanitized characters are not enough to separate ids that
+    share a prefix, so a digest of the full id is appended when two different
+    conversations would otherwise map to the same filename.
+    """
+    return hashlib.sha256(str(conv_id).encode("utf-8")).hexdigest()[:8]
 
 
 def conversation_to_markdown(conv: Dict[str, Any]) -> str:
@@ -178,6 +189,11 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     count = 0
+    # Map a candidate filename to the conversation id that produced it, so a
+    # second conversation landing on the same name is disambiguated instead of
+    # silently overwriting the first one. Re-exporting the same conversation id
+    # still targets the same file, keeping repeat runs idempotent.
+    claimed: Dict[str, str] = {}
     for conv in items:
         if not isinstance(conv, dict):
             continue
@@ -196,6 +212,16 @@ def main() -> None:
         short_id = re.sub(r"[^\w-]", "", str(conv_id))[:8] or f"{count:03d}"
 
         filename = f"{date_prefix}_{slug}_{short_id}.md"
+        owner = claimed.get(filename)
+        if owner is not None and owner != str(conv_id):
+            filename = f"{date_prefix}_{slug}_{short_id}_{stable_suffix(conv_id)}.md"
+            # Guard against a digest collision as well: keep probing until the
+            # name is either free or owned by this same conversation.
+            probe = 1
+            while filename in claimed and claimed[filename] != str(conv_id):
+                filename = f"{date_prefix}_{slug}_{short_id}_{stable_suffix(conv_id)}_{probe}.md"
+                probe += 1
+        claimed[filename] = str(conv_id)
         filepath = output_dir / filename
 
         md_content = conversation_to_markdown(conv)
