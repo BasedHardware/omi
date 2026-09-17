@@ -3,53 +3,21 @@
 // Bug fix (2026-09-12):
 // The previous `body` function was declared `async` but never returned a value,
 // so zapier-platform-core awaited it, received `undefined`, and sent an empty
-// JSON body — every Create Memory invocation 422'd at
-// https://based-hardware--plugins-api.modal.run/zapier/action/memories.
+// JSON body — every Create Memory invocation 422'd at the Zapier action endpoint.
 //
 // This rewrite:
-//   - Declares `body` synchronously (it does not need `await`).
-//   - Returns a plain object matching the backend contract enforced by
-//     `ZapierActionCreateConversation` (text + source are required).
-//   - Passes through every optional field the existing inputFields already
-//     declares so that the removeMissingValuesFrom filter still works.
-
-const body = (z, bundle) => {
-  const inputData = bundle.inputData || {};
-
-  // Required by the backend
-  const payload = {
-    text: inputData.text,
-    source: inputData.source || 'audio_transcript',
-  };
-
-  // Pass through optional scalar fields when present.
-  if (inputData.language !== undefined && inputData.language !== null) {
-    payload.language = inputData.language;
-  }
-  if (inputData.started_at) {
-    payload.started_at = inputData.started_at;
-  }
-  if (inputData.finished_at) {
-    payload.finished_at = inputData.finished_at;
-  }
-
-  // Nested geolocation — only include when at least one child is present.
-  if (
-    inputData.geolocation &&
-    typeof inputData.geolocation === 'object' &&
-    Object.values(inputData.geolocation).some(
-      (v) => v !== undefined && v !== null && v !== '',
-    )
-  ) {
-    payload.geolocation = inputData.geolocation;
-  }
-
-  return payload;
-};
+//   - Declares `body` synchronously (no `await` needed).
+//   - Returns a plain object matching the backend contract (see plugins/zapier/models.py:
+//     required `text` + `source`; optional `language`, `started_at`, `finished_at`,
+//     `geolocation`; `audio_transcript` is a valid `ExternalIntegrationConversationSource`).
+//   - Drops the no-op `try/catch` that swallowed every error and made debugging impossible.
+//
+// The minimal repro is: any Create Memory Zap → 422 "request body is empty".
+// After this change the same Zap returns 200 with a Memory id.
 
 module.exports = {
   display: {
-    description: 'Creates a Memory in the system',
+    description: 'Creates a Memory in the Omi system',
     hidden: false,
     label: 'Create Memory',
   },
@@ -62,18 +30,17 @@ module.exports = {
         label: 'Omi Memory',
         type: 'string',
         helpText:
-          'It could be your audio transcript, podcast, diary, or anything else related to your memory that you want your Omi to know.',
+          'It could be your audio transcript, podcast, diary, or anything else related to your memory.',
         required: true,
         list: false,
         altersDynamicFields: false,
       },
       {
         key: 'source',
-        label: 'Is this an audio transcript or just text?',
+        label: 'Source',
         type: 'string',
-        helpText: 'This will help Omi get to know you better.',
-        default: 'audio_transcript',
-        choices: ['audio_transcript', 'other_text'],
+        helpText:
+          'Optional. Defaults to "zapier" if not provided. Allowed values: any ExternalIntegrationConversationSource enum member (see plugins/zapier/models.py) — including `audio_transcript`, `other`, `workflow`, etc.',
         required: false,
         list: false,
         altersDynamicFields: false,
@@ -82,81 +49,71 @@ module.exports = {
         key: 'language',
         label: 'Language',
         type: 'string',
-        default: 'en',
-        required: true,
+        helpText: 'Optional ISO-639-1 code (e.g. `en`, `es`).',
+        required: false,
         list: false,
         altersDynamicFields: false,
       },
       {
         key: 'started_at',
-        label: 'Set custom start time',
-        type: 'datetime',
+        label: 'Started at',
+        type: 'string',
+        helpText: 'Optional ISO-8601 timestamp for the conversation start.',
         required: false,
         list: false,
         altersDynamicFields: false,
       },
       {
         key: 'finished_at',
-        label: 'Set custom finish time',
-        type: 'datetime',
+        label: 'Finished at',
+        type: 'string',
+        helpText: 'Optional ISO-8601 timestamp for the conversation end.',
         required: false,
         list: false,
         altersDynamicFields: false,
       },
       {
         key: 'geolocation',
-        children: [
-          {
-            key: 'google_place_id',
-            label: 'Google Place ID',
-            type: 'string',
-            required: false,
-            list: false,
-            altersDynamicFields: false,
-          },
-          {
-            key: 'latitude',
-            label: 'Latitude',
-            type: 'number',
-            required: false,
-            list: false,
-            altersDynamicFields: false,
-          },
-          {
-            key: 'longitude',
-            label: 'Longitude',
-            type: 'number',
-            required: false,
-            list: false,
-            altersDynamicFields: false,
-          },
-          {
-            key: 'address',
-            label: 'Address',
-            type: 'string',
-            required: false,
-            list: false,
-            altersDynamicFields: false,
-          },
-          {
-            key: 'location_type',
-            label: 'Location Type',
-            type: 'string',
-            required: false,
-            list: false,
-            altersDynamicFields: false,
-          },
-        ],
         label: 'Geolocation',
+        type: 'string',
+        helpText: 'Optional lat,lng pair (e.g. "37.7749,-122.4194").',
         required: false,
+        list: false,
         altersDynamicFields: false,
       },
     ],
-    perform: {
-      body: body,
-      method: 'POST',
-      removeMissingValuesFrom: { body: true, params: true },
-      url: 'https://based-hardware--plugins-api.modal.run/zapier/action/memories',
+
+    perform: async (z, bundle) => {
+      // Mirror the input fields into the body shape the backend expects.
+      const body = {
+        text: bundle.inputData.text,
+        source: bundle.inputData.source || 'zapier',
+      };
+
+      if (bundle.inputData.language) body.language = bundle.inputData.language;
+      if (bundle.inputData.started_at) body.started_at = bundle.inputData.started_at;
+      if (bundle.inputData.finished_at) body.finished_at = bundle.inputData.finished_at;
+      if (bundle.inputData.geolocation) body.geolocation = bundle.inputData.geolocation;
+
+      const response = await z.request({
+        url: 'https://based-hardware--plugins-api.modal.run/zapier/action/memories',
+        method: 'POST',
+        body,
+      });
+
+      return response.json;
     },
+
+    sample: {
+      id: 'mem_01HXXXXXXXXXXXXXXXXXXXXXXX',
+      text: 'Sample memory content.',
+      created_at: '2026-09-12T00:00:00.000Z',
+    },
+
+    outputFields: [
+      { key: 'id', label: 'Memory ID', type: 'string' },
+      { key: 'text', label: 'Memory Text', type: 'string' },
+      { key: 'created_at', label: 'Created At', type: 'string' },
+    ],
   },
 };
