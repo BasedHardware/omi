@@ -543,7 +543,7 @@ extension AppState {
       let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
       try await mic.startCapture(
         onAudioChunk: { rawAudioData in
-          firstAudioFrame.noteFirstAudioFrame { [weak self] in
+          firstAudioFrame.noteFirstAudioFrame { [weak self = self] in
             self?.captureAttempt?.noteFirstAudioFrame()
           }
           let audioData = dictationGate.gated(rawAudioData)
@@ -598,7 +598,7 @@ extension AppState {
       let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
       try await systemService.startCapture(
         onAudioChunk: { audioData in
-          firstAudioFrame.noteFirstAudioFrame { [weak self] in
+          firstAudioFrame.noteFirstAudioFrame { [weak self = self] in
             self?.captureAttempt?.noteFirstAudioFrame()
           }
           if useLocalSTT {
