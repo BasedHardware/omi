@@ -52,13 +52,6 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Android: `android/app/src/main/kotlin/com/friend/ios/phonecalls/PhoneCallsPlugin.kt`
 - Methods: initialize, makeCall, endCall, toggleMute, toggleSpeaker
 
-### MethodChannel (Android recording-transfer keep-alive)
-- Channel: `com.friend.ios/sync_transfer`
-- Dart: `lib/services/wals/sync_transfer_keep_alive.dart` — refcount around transfer lifetime; iOS is a no-op
-- Android: `android/app/src/main/kotlin/com/friend/ios/sync/` — `SyncTransferForegroundService` (`dataSync` FGS + `PARTIAL_WAKE_LOCK`) so BLE/cloud WAL drains survive screen-off; stop on complete, cancel, or Flutter engine death
-- Methods: `start` (optional `text`), `stop`
-- Wired from `RecordingTransferCoordinator` pass start/finish and `SyncProvider._performSync` / `cancelSync`
-
 ### Pigeon (Phone Mic — conversation capture)
 - Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift` + `android/app/src/main/kotlin/com/friend/ios/phonemic/PhoneMicPigeon.g.kt`
 - Regenerate: `dart run pigeon --input lib/phone_mic_interface.dart`
@@ -81,7 +74,7 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Calendar | READ/WRITE_CALENDAR | NSCalendarsUsageDescription | Calendar integration |
 | Camera | — | NSCameraUsageDescription | QR/photo features |
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
-| Background | FOREGROUND_SERVICE_* (5 types, including `dataSync` for file transfer) | UIBackgroundModes (7 modes) | Continuous capture / recording file sync |
+| Background | FOREGROUND_SERVICE_* (5 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
 Android: 27 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
 
