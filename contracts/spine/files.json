@@ -1,4 +1,5 @@
 {
+  "app/test/spine/b0_registration_test.dart": "B0",
   "app/test/spine/pending_mechanism_test.dart": "MECHANISM",
   "app/test/support/spine/contract.dart": "MECHANISM",
   "scripts/dev-harness/tests/spine/__init__.py": "MECHANISM",
