@@ -142,6 +142,52 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def export_conversations(
+    items: List[Dict[str, Any]],
+    output_dir: Path,
+    overwrite: bool = False,
+) -> List[Path]:
+    """Convert a list of conversation dicts to Markdown files in output_dir."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    exported_paths: List[Path] = []
+    used_paths: set[Path] = set()
+
+    for count, conv in enumerate(items):
+        if not isinstance(conv, dict):
+            continue
+        conv_id = conv.get("id", f"conv_{count}")
+        started_at = conv.get("started_at") or ""
+
+        # Validate date_prefix strictly against YYYY-MM-DD to avoid path traversal
+        date_match = re.match(r"^(\d{4}-\d{2}-\d{2})", str(started_at))
+        date_prefix = date_match.group(1) if date_match else "undated"
+
+        structured = conv.get("structured") or {}
+        title = structured.get("title") if isinstance(structured, dict) else ""
+        slug = slugify(title or "conversation")
+
+        # Sanitize unique suffix to avoid silent overwrites for duplicate title/date pairs
+        short_id = re.sub(r"[^\w-]", "", str(conv_id))[:8] or f"{count:03d}"
+
+        base_name = f"{date_prefix}_{slug}_{short_id}"
+        filepath = output_dir / f"{base_name}.md"
+
+        if not overwrite:
+            counter = 1
+            while filepath in used_paths or filepath.exists():
+                counter += 1
+                filepath = output_dir / f"{base_name}_{counter}.md"
+
+        used_paths.add(filepath)
+
+        md_content = conversation_to_markdown(conv)
+        filepath.write_text(md_content, encoding="utf-8")
+        print(f"Exported: {filepath}")
+        exported_paths.append(filepath)
+
+    return exported_paths
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Convert Omi conversation JSON exports to Markdown files."
@@ -156,6 +202,12 @@ def main() -> None:
         type=Path,
         default=Path("./conversations_md"),
         help="Directory to write markdown files (default: ./conversations_md).",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        default=False,
+        help="Overwrite existing markdown files if filenames collide (default: False).",
     )
     args = parser.parse_args()
 
@@ -174,37 +226,15 @@ def main() -> None:
     else:
         sys.exit("Error: Expected JSON object or array.")
 
-    output_dir: Path = args.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
+    exported = export_conversations(
+        items,
+        output_dir=args.output_dir,
+        overwrite=args.overwrite,
+    )
 
-    count = 0
-    for conv in items:
-        if not isinstance(conv, dict):
-            continue
-        conv_id = conv.get("id", f"conv_{count}")
-        started_at = conv.get("started_at") or ""
-
-        # Validate date_prefix strictly against YYYY-MM-DD to avoid path traversal
-        date_match = re.match(r"^(\d{4}-\d{2}-\d{2})", str(started_at))
-        date_prefix = date_match.group(1) if date_match else "undated"
-
-        structured = conv.get("structured") or {}
-        title = structured.get("title") if isinstance(structured, dict) else ""
-        slug = slugify(title or "conversation")
-
-        # Sanitize unique suffix to avoid silent overwrites for duplicate title/date pairs
-        short_id = re.sub(r"[^\w-]", "", str(conv_id))[:8] or f"{count:03d}"
-
-        filename = f"{date_prefix}_{slug}_{short_id}.md"
-        filepath = output_dir / filename
-
-        md_content = conversation_to_markdown(conv)
-        filepath.write_text(md_content, encoding="utf-8")
-        print(f"Exported: {filepath}")
-        count += 1
-
-    print(f"\nSuccessfully exported {count} conversation(s) to {output_dir}/")
+    print(f"\nSuccessfully exported {len(exported)} conversation(s) to {args.output_dir}/")
 
 
 if __name__ == "__main__":
     main()
+

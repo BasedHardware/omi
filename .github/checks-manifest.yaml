@@ -49,6 +49,11 @@ checks:
     triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13925: null or non-dict data/papers payloads, mixed-type year/citationCount sort keys, null authors, and unnormalized DOI/arXiv identifiers must produce clean chat-tool responses, not TypeErrors or 500s"
+  - id: arxiv-app-tests
+    command: ["python3", "plugins/omi-arxiv-app/test_main.py"]
+    triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14181: arXiv paper search and detail endpoints require typed request validation, defensive Atom XML parsing, and hermetic CI coverage"
   - id: public-holidays-app-tests
     command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
@@ -69,6 +74,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**"]
     lanes: ["local", "ci"]
     reason: "list_upcoming read one calendarView page and ignored @odata.nextLink, so a window with more than 50 events silently dropped every later event"
+  - id: ms365-services-hardening-tests
+    command: ["python3", "plugins/omi-ms365-app/test_services_hardening.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Graph null collections and HTTP-date Retry-After crashed mail/teams/sharepoint/calendar tools (#14247)"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
@@ -82,9 +92,9 @@ checks:
     reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/dev-harness/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered"
+    reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered, and the mobile-verify selection/discovery contract (SCA-490) executes here — journey runner, session evidence contract, and Makefile edits must keep it selected"
   - id: windows-update-feed-probe-tests
     command: ["python3", ".github/scripts/test_probe_windows_update_feed.py"]
     triggers: [".github/scripts/probe_windows_update_feed.py", ".github/scripts/test_probe_windows_update_feed.py", ".github/workflows/desktop_windows_release.yml", ".github/checks-manifest.yaml"]
@@ -421,6 +431,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-ble-pairing-policy
+    command: ["ruby", "app/ios/test/omi_ble_pairing_policy_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiBlePairingPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_pairing_policy_test.rb", "app/ios/Runner.xcodeproj/project.pbxproj", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "CV1 DFU stale iOS bonds surface as CB error 14; native reconnect must classify pairing_lost reliably"
   - id: ios-batch-audio-energy
     command: ["ruby", "app/ios/test/batch_audio_energy_test.rb"]
     triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", ".github/checks-manifest.yaml"]
@@ -1085,6 +1101,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
 
+  - id: plugin-oauth-hardening-tests
+    command: ["python3", "plugins/oauth/test_oauth_hardening.py"]
+    triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "regression suite for oauth plugin timeouts, exception envelopes, non-JSON error pages, and null-guarded payload building"
+
   - id: hive-update-task-status-tests
     command: ["python3", "plugins/omi-hive-app/test_update_task_status.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
@@ -1096,6 +1118,42 @@ checks:
     triggers: ["plugins/omi-clickup-app/**"]
     lanes: ["local", "ci"]
     reason: "#13922: create_task aborted task creation on non-numeric assignee tokens, dropped millisecond due-date timestamps, and forwarded unvalidated priority; the suite drives the production handler and client to assert coercion, 1-4 bounds, and graceful continuation"
+  - id: hive-create-task-ambiguous-target-tests
+    command: ["python3", "plugins/omi-hive-app/test_create_task_ambiguous_target.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hive_create_task resolved project_name and parent_task_name by returning the first candidate that matched a name, so an ambiguous project name created the task under whichever project get_user_projects listed first, and a parent task name matching a task in a different project was used as a fallback instead of refused; both now require a single unambiguous candidate"
+
+  - id: gcal-event-id-round-trip-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_event_ids.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "list_events printed event ids cut to 20 characters and create_event printed none, so the ids the tools handed back could not be passed to get_event, update_event or delete_event; the suite round-trips every emitted id through those handlers"
+
+  - id: twitter-chat-tools-max-results-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "get_timeline, get_my_tweets, get_mentions and search_tweets clamped max_results only at 100, so a request for fewer posts than the X endpoint floor (10 for search, 5 for user posts and mentions) was sent as is and rejected with HTTP 400; the suite drives the real handlers against a seam that enforces the documented ranges"
+
+  - id: ms365-tool-dispatch-tests
+    command: ["python3", "plugins/omi-ms365-app/test_tool_dispatch.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+
+  - id: shopify-app-limit-input-tests
+    command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13946: ensure omitted or malformed limit inputs are coerced safely without TypeError"
+
+  - id: hive-app-tests
+    command: ["python3", "plugins/omi-hive-app/test_main.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manifest schema parameter types, project retrieval, and task creation flows"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

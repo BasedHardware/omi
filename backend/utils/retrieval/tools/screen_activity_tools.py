@@ -227,7 +227,7 @@ def _append_screen_evidence_reference(
 def _cap_apps_for_llm(apps: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, Dict[str, Any]]], bool]:
     """Keep at most ``MAX_APPS_FOR_LLM`` apps for the chat model.
 
-    Apps arrive sorted most-used first, so this keeps the ones that matter. Returns
+    Apps arrive sorted by observation count descending. Returns
     ``(capped_list, truncated)`` where ``truncated`` is True when some apps were dropped.
     """
     if len(apps) > MAX_APPS_FOR_LLM:
@@ -262,7 +262,7 @@ def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
         truncated = True
     if truncated:
         result += (
-            "\n\n[Only the most-used apps are shown here to stay within limits; more may exist. "
+            "\n\n[Only a subset of the observed apps and windows is shown here to stay within limits; more may exist. "
             "Summarize what is shown and tell the user they can ask about a specific app or a "
             "narrower date range for the rest.]"
         )
@@ -294,7 +294,8 @@ def get_screen_activity_tool(
     Get a summary of the user's screen/computer activity for a date range.
 
     Use this for questions like "what did I do on my computer today/this week?" or
-    "which apps did I use?". Shows per-app usage time and top window titles.
+    "which apps did I use?". Shows per-app observation counts and sampled window titles.
+    These are synced screen observations, not measured usage durations or proof of intent.
 
     Requires the Omi desktop app to be installed and running.
 
@@ -325,16 +326,30 @@ def get_screen_activity_tool(
     apps_dict: Dict[str, Dict[str, Any]] = cast(Dict[str, Dict[str, Any]], summary['apps'])
     if not apps_dict:
         return (
-            "No screen activity data available for this date range. "
-            "The user may not have the Omi desktop app installed, or it wasn't running during this period."
+            "No synced screen observations are available for this date range. "
+            "Capture and sync completeness are unknown; this does not establish that the user was inactive."
         )
 
     # Format output
     total = summary['total_screenshots']
-    # Each screenshot is ~3 seconds apart
-    total_minutes = (total * 3) // 60
-
-    result = f"Screen Activity Summary ({total} screenshots, ~{total_minutes} min total):\n\n"
+    coverage = summary.get('coverage') or {}
+    rows_truncated = coverage.get('truncated') is True
+    result = (
+        f"Screen Activity Summary ({total} synced screen observations):\n"
+        "Observations are sampled, not measured usage durations or proof of intent. "
+        "Capture and sync completeness are unknown.\n"
+    )
+    if rows_truncated:
+        result += (
+            f"Partial query: only the earliest {total} observations are summarized; later observations exist. "
+            "Narrow the date range to inspect the rest.\n"
+        )
+    if coverage.get('first_observed_at') and coverage.get('last_observed_at'):
+        result += (
+            f"Summarized observations (UTC): {coverage['first_observed_at']} to {coverage['last_observed_at']}. "
+            "These bounds do not establish continuous activity or current capture status.\n"
+        )
+    result += "\n"
 
     # Sort apps by count descending
     sorted_apps: List[Tuple[str, Dict[str, Any]]] = sorted(apps_dict.items(), key=lambda x: x[1]['count'], reverse=True)
@@ -342,27 +357,26 @@ def get_screen_activity_tool(
     if app_filter:
         sorted_apps = [(name, data) for name, data in sorted_apps if name.lower() == app_filter.lower()]
         if not sorted_apps:
-            return f"No screen activity found for app '{app_filter}' in this date range."
+            return result + f"No observations for app '{app_filter}' in the summarized rows."
 
     # Bound how many apps go to the chat model so a wide date range on a busy machine cannot
-    # overflow its context (issue #4927). Apps are already sorted most-used first.
+    # overflow its context (issue #4927). Apps are sorted by observation count.
     total_apps = len(sorted_apps)
     sorted_apps, apps_truncated = _cap_apps_for_llm(sorted_apps)
     if apps_truncated:
-        result += f"(showing the {len(sorted_apps)} most-used apps of {total_apps})\n\n"
+        result += f"(showing {len(sorted_apps)} of {total_apps} apps, ranked by observation count)\n\n"
 
     for app_name, data in sorted_apps:
         count = data['count']
-        minutes = (count * 3) // 60
         titles = data.get('window_titles', [])
         first = data.get('first_seen', '')
         last = data.get('last_seen', '')
 
-        result += f"**{app_name}** — ~{minutes} min ({count} screenshots)\n"
+        result += f"**{app_name}** — {count} observations\n"
         if first and last:
-            result += f"  Active: {first} to {last}\n"
+            result += f"  Observed (UTC): {first} to {last}\n"
         if titles:
-            result += f"  Top windows: {', '.join(titles[:5])}\n"
+            result += f"  Sampled windows: {', '.join(titles[:5])}\n"
         result += "\n"
 
     return _bounded_screen_activity_result(result.strip(), apps_truncated)

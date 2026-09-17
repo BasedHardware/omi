@@ -14,7 +14,9 @@
     "Remember this",
     "Add this to memory.",
     "Create a memory for my tea preference.",
-    "Make this a memory."
+    "Make this a memory.",
+    "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\nremember that I prefer tea.",
+    "# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nPlease remember that I prefer tea."
   ],
   "unauthorized": [
     "I prefer tea.",
@@ -29,6 +31,10 @@
     "I wondered whether they should remember this?",
     "Ask Sarah to remember that I prefer tea.",
     "The model should remember that I prefer tea.",
-    "Your ability to remember that I prefer tea is impressive."
+    "Your ability to remember that I prefer tea is impressive.",
+    "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\nDo not remember that I prefer tea.",
+    "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\nShould I save this?",
+    "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\nAsk Sarah to remember that I prefer tea.",
+    "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\n"
   ]
 }
