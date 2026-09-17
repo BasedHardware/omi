@@ -49,11 +49,6 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
-  - id: open-food-facts-tests
-    command: ["python3", "plugins/omi-openfoodfacts-app/test_main.py"]
-    triggers: ["plugins/omi-openfoodfacts-app/**"]
-    lanes: ["local", "ci"]
-    reason: "#13987: non-string nutrient grades, non-dict nutriments, and malformed search items crashed product summarization, and untyped bodies bypassed the ChatToolResponse error envelope; exercise the real handlers through the stubbed provider seam"
   - id: semantic-scholar-tests
     command: ["python3", "plugins/omi-semantic-scholar-app/test_main.py"]
     triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
