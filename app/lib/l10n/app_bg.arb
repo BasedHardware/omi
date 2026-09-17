@@ -574,7 +574,6 @@
     "permissionsRequired": "Необходими разрешения",
     "permissionsRequiredDesc": "Това приложение се нуждае от разрешения за Bluetooth и местоположение, за да функционира правилно. Моля, активирайте ги в настройките.",
     "openSettings": "Отвори настройки",
-    "wantDifferentName": "Искате ли различно име?",
     "whatsYourName": "Как се казвате?",
     "speakTranscribeSummarize": "Говорете. Транскрибирайте. Обобщавайте.",
     "signInWithApple": "Влезте с Apple",
@@ -781,12 +780,10 @@
     "settingUp": "Настройване...",
     "startYourFirstRecording": "Започнете първия си запис",
     "preparingSystemAudioCapture": "Подготовка на системното аудио заснемане",
-    "recordingInstructions": "Натиснете бутона, за да заснемете аудио за живи транскрипции, AI прозрения и автоматично запазване.",
     "reconnecting": "Повторно свързване...",
     "recordingPaused": "Записът е на пауза",
     "recordingActive": "Записът е активен",
     "startRecording": "Започнете запис",
-    "resumingInSeconds": "Възобновяване след {seconds} сек...",
     "tapPlayToResume": "Натиснете възпроизвеждане за възобновяване",
     "listeningForAudio": "Слушане за аудио...",
     "preparingAudioCapture": "Подготовка на аудио заснемане",
@@ -3242,5 +3239,7 @@
     "processingTakingLonger": "Все още работи — отнема повече време от обичайното.",
     "speechProfileEnrollmentPrompt": "За да знае Omi кой глас е вашият — говорете за каквото искате около 5 секунди.",
     "home": "Начало",
-    "failedToUpdateBaselineStatus": "Неуспешна актуализация на базовия статус."
+    "failedToUpdateBaselineStatus": "Неуспешна актуализация на базовия статус.",
+    "memoryAllowUse": "Разреши използване",
+    "memoryDontUse": "Не използвай"
 }

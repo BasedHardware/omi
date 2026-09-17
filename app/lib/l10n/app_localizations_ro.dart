@@ -245,7 +245,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get searchConversations => 'Căutare conversații...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count selectate';
   }
 
@@ -2055,10 +2055,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get memoryHistory => 'Istoric';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Permite utilizarea';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nu utiliza';
 
   @override
   String get undo => 'Anulează';

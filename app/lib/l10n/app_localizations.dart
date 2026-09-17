@@ -649,7 +649,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{count} selected'**
-  String selectedCount(int count, Object s);
+  String selectedCount(int count);
 
   /// Merge button label
   ///

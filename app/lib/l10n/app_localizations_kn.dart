@@ -244,7 +244,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get searchConversations => 'ಸಂವಾದ ಹುಡುಕಿ...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count ಆಯ್ದ';
   }
 
@@ -2051,10 +2051,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get memoryHistory => 'ಇತಿಹಾಸ';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'ಬಳಕೆಗೆ ಅನುಮತಿಸಿ';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'ಬಳಸಬೇಡಿ';
 
   @override
   String get undo => 'ರದ್ದುಗೊಳಿಸಿ';

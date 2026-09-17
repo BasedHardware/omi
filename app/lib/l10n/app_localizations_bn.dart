@@ -242,7 +242,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get searchConversations => 'কথোপকথন খুঁজুন...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count নির্বাচিত';
   }
 
@@ -2044,10 +2044,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get memoryHistory => 'ইতিহাস';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'ব্যবহারের অনুমতি দিন';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'ব্যবহার করবেন না';
 
   @override
   String get undo => 'পূর্বাবস্থা';

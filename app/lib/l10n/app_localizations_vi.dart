@@ -244,7 +244,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchConversations => 'Tìm kiếm cuộc trò chuyện...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Đã chọn $count';
   }
 
@@ -2049,10 +2049,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryHistory => 'Lịch sử';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Cho phép dùng';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Không dùng';
 
   @override
   String get undo => 'Hoàn tác';

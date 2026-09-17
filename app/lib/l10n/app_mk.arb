@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "Сакате да использите некое друго име?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "Кое е вашето име?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -10830,5 +10826,7 @@
     "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
     "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.",
     "home": "Почетна",
-    "failedToUpdateBaselineStatus": "Неуспешно ажурирање на основниот статус."
+    "failedToUpdateBaselineStatus": "Неуспешно ажурирање на основниот статус.",
+    "memoryAllowUse": "Дозволи употреба",
+    "memoryDontUse": "Не користи"
 }

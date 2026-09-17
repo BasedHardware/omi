@@ -244,7 +244,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get searchConversations => 'Meklēt sarunas...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count atlasīts';
   }
 
@@ -2050,10 +2050,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryHistory => 'Vēsture';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Atļaut lietošanu';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nelietot';
 
   @override
   String get undo => 'Atsaukt';

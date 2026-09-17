@@ -243,7 +243,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get searchConversations => 'संभाषण शोधा...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count निवडले';
   }
 
@@ -2046,10 +2046,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'वापर करू द्या';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'वापरू नका';
 
   @override
   String get undo => 'पूर्ववत् करा';

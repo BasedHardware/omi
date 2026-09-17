@@ -241,7 +241,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get searchConversations => '会話を検索...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count件選択中';
   }
 
@@ -2007,10 +2007,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryHistory => '履歴';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => '使用を許可';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => '使用しない';
 
   @override
   String get undo => '元に戻す';

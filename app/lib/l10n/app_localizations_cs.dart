@@ -244,7 +244,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get searchConversations => 'Hledat konverzace...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Vybráno: $count';
   }
 
@@ -2047,10 +2047,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistory => 'Historie';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Povolit použití';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nepoužívat';
 
   @override
   String get undo => 'Vrátit zpět';

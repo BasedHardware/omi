@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "רוצה להכנס בשם אחר?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "מה שמך?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -10830,5 +10826,7 @@
     "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל.",
     "speechProfileEnrollmentPrompt": "כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.",
     "home": "בית",
-    "failedToUpdateBaselineStatus": "עדכון מצב קו הבסיס נכשל."
+    "failedToUpdateBaselineStatus": "עדכון מצב קו הבסיס נכשל.",
+    "memoryAllowUse": "אפשר שימוש",
+    "memoryDontUse": "אל תשתמש"
 }

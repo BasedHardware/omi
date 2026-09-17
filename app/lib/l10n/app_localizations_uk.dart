@@ -244,7 +244,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get searchConversations => 'Пошук розмов...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Вибрано: $count';
   }
 
@@ -2049,10 +2049,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistory => 'Історія';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Дозволити використання';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Не використовувати';
 
   @override
   String get undo => 'Скасувати';

@@ -245,7 +245,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchConversations => 'Αναζήτηση συνομιλιών...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count επιλεγμένα';
   }
 
@@ -2062,10 +2062,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryHistory => 'Ιστορικό';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Να επιτρέπεται η χρήση';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Να μην χρησιμοποιείται';
 
   @override
   String get undo => 'Αναίρεση';

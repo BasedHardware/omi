@@ -244,7 +244,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get searchConversations => 'Пребарај разговори...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count избрано';
   }
 
@@ -2053,10 +2053,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Дозволи употреба';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Не користи';
 
   @override
   String get undo => 'Врати';

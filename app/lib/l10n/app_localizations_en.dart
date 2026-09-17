@@ -243,7 +243,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchConversations => 'Search conversations...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count selected';
   }
 

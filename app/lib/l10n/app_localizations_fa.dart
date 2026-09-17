@@ -243,7 +243,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get searchConversations => 'جستجوی گفتگوها...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count انتخاب‌شده';
   }
 
@@ -2044,10 +2044,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryHistory => 'تاریخچه';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'اجازه استفاده';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'استفاده نکن';
 
   @override
   String get undo => 'بازگشت';
