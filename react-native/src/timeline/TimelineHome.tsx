@@ -64,10 +64,16 @@ export function TimelineStatePanel({
   );
 }
 
-function TimelineRail({last}: {last?: boolean}) {
+function TimelineRail({
+  last,
+  marker,
+}: {
+  last?: boolean;
+  marker: React.ReactNode;
+}) {
   return (
-    <View style={styles.rail} pointerEvents="none">
-      <View style={styles.dot} />
+    <View style={styles.rail} pointerEvents="box-none">
+      <View style={styles.marker}>{marker}</View>
       {last ? null : <View style={styles.line} />}
     </View>
   );
@@ -88,7 +94,16 @@ export const TimelineTaskRow = memo(function TimelineTaskRow({
 }) {
   return (
     <View style={styles.taskRow}>
-      <TimelineRail last={last} />
+      <TimelineRail
+        last={last}
+        marker={
+          <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
+            {task.completed && (
+              <Check color={mobileColor.background} size={12} />
+            )}
+          </View>
+        }
+      />
       <Pressable
         accessibilityLabel={`${
           onToggle
@@ -108,9 +123,6 @@ export const TimelineTaskRow = memo(function TimelineTaskRow({
         disabled={!onToggle || busy}
         onPress={() => onToggle?.(task.id)}
         style={styles.taskToggle}>
-        <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
-          {task.completed && <Check color={mobileColor.background} size={14} />}
-        </View>
         <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
           {task.title}
         </Text>
@@ -163,10 +175,10 @@ export const TimelineEventRow = memo(function TimelineEventRow({
       disabled={onPress === undefined}
       onPress={() => onPress?.(item)}
       style={styles.eventRow}>
-      <TimelineRail last={last} />
-      <View style={styles.eventGlyph}>
-        <Icon color={mobileColor.textMuted} size={16} />
-      </View>
+      <TimelineRail
+        last={last}
+        marker={<Icon color={mobileColor.textMuted} size={14} />}
+      />
       <View style={styles.eventBody}>
         <View style={styles.eventMeta}>
           <Text style={styles.kind}>{kind}</Text>
@@ -259,19 +271,19 @@ const styles = StyleSheet.create({
   rail: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    width: 16,
+    width: 22,
   },
-  dot: {
-    backgroundColor: mobileColor.text,
-    borderRadius: 4,
-    height: 8,
-    marginTop: 8,
-    width: 8,
+  marker: {
+    alignItems: 'center',
+    height: 22,
+    justifyContent: 'center',
+    marginTop: 10,
+    width: 22,
+    zIndex: 1,
   },
   line: {
     backgroundColor: mobileColor.border,
     flex: 1,
-    marginTop: 4,
     width: StyleSheet.hairlineWidth,
   },
   taskRow: {
@@ -298,8 +310,8 @@ const styles = StyleSheet.create({
     borderColor: mobileColor.textSubtle,
     borderRadius: mobileRadius.round,
     borderWidth: 1.5,
-    height: 22,
-    width: 22,
+    height: 18,
+    width: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -319,16 +331,9 @@ const styles = StyleSheet.create({
   eventRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     minHeight: 52,
-    paddingBottom: 12,
-  },
-  eventGlyph: {
-    alignItems: 'center',
-    height: 24,
-    justifyContent: 'center',
-    marginTop: 2,
-    width: 24,
+    paddingBottom: 14,
   },
   eventBody: {flex: 1, gap: 4, minWidth: 0},
   eventMeta: {

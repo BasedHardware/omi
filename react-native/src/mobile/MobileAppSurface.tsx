@@ -256,6 +256,7 @@ export function MobileAppSurface({
                             : undefined
                         }
                         busy={busyTaskId !== null}
+                        last={false}
                         task={task}
                       />
                     ))
@@ -495,7 +496,7 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: 16,
-    paddingBottom: 28,
+    paddingBottom: 140,
     paddingHorizontal: mobileSpace.md,
     paddingTop: 8,
   },
