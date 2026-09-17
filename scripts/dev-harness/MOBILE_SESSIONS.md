@@ -64,7 +64,8 @@ emulator is the remaining acceptance for this seam.
 user (`omi-fixture-v1-user-1@local.test`, RFC-reserved domain so it can never
 collide with a real account). The fixture version is pinned in the lease and in
 every evidence receipt. No real Google/Apple user, provider key, or copied
-token is involved at any point.
+token is involved at any point. Phone-mic **content** is a separate corpus:
+see [FIXTURE_AUDIO.md](FIXTURE_AUDIO.md) (LibriSpeech release-probe WAV).
 
 ## Doctor
 
