@@ -2,6 +2,11 @@ import 'dart:async';
 
 import 'package:omi/services/capture/capture_seams.dart';
 
+/// Explicit release shares the lifetime's drain; completing cancellation untracks it.
+abstract interface class CaptureOwned {
+  Future<void> release();
+}
+
 /// Every timer/subscription/listener created by the capture owner is registered
 /// here immediately, including resources acquired after asynchronous work.
 class CaptureLifetime implements CaptureScheduling {
@@ -15,6 +20,6 @@ class CaptureLifetime implements CaptureScheduling {
   StreamSubscription<T> listen<T>(Stream<T> stream, void Function(T) onData,
           {Function? onError, void Function()? onDone, bool? cancelOnError}) =>
       throw UnimplementedError('C1 owned subscription');
-  void own(FutureOr<void> Function() cancel) => throw UnimplementedError('C1 owned listener removal');
+  CaptureOwned own(FutureOr<void> Function() cancel) => throw UnimplementedError('C1 owned listener removal');
   Future<void> close() => throw UnimplementedError('C1 idempotent disposal');
 }

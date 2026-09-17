@@ -74,8 +74,9 @@ Evidence: recovery `edc8683e80`, `97ec3d9cea`; FGS `9495f70852`; stale callbacks
    and can miss aliases/dynamic dispatch. They complement real-provider effects;
    they cannot prove transitive ownership or replace behavioral tests.
 9. **Dispose/tests.** Each owner has CaptureLifetime. Register timers, subscriptions,
-   listeners and late acquisitions immediately. Close invalidates first, cancels
-   everything even if removal fails; concurrent closes join the drain. Terminal
+   listeners and late acquisitions immediately. Close invalidates first and drains
+   despite removal errors, joining explicit release/subscription cancellation already
+   in flight. Concurrent closes join. Terminal
    resources untrack, including asFuture; replacement/error/done callbacks stay
    closed-guarded. Later close is inert. Scheduler-wide inventory
    must be empty after teardown; tests exercise real provider behavior plus an
