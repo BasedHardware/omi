@@ -1996,62 +1996,82 @@ public enum OmiAPI {
 
   public struct Evidence: Codable {
     public let artifactRef: [String: OmiAnyCodable]?
+    public let attribution: String?
     public let captureConfidence: Double?
+    public let capturedAt: String?
     public let clientDeviceId: String?
     public let createdAt: String?
     public let evidenceId: String
     public let extractorId: String?
     public let extractorVersion: String?
     public let independenceGroup: String
+    public let lineageId: String?
+    public let quoteRefs: [[String: OmiAnyCodable]]?
     public let redactionStatus: String?
     public let sourceId: String?
     public let sourceSignal: String?
     public let sourceType: String?
+    public let sourceVersion: String?
 
     private enum CodingKeys: String, CodingKey {
       case artifactRef = "artifact_ref"
+      case attribution
       case captureConfidence = "capture_confidence"
+      case capturedAt = "captured_at"
       case clientDeviceId = "client_device_id"
       case createdAt = "created_at"
       case evidenceId = "evidence_id"
       case extractorId = "extractor_id"
       case extractorVersion = "extractor_version"
       case independenceGroup = "independence_group"
+      case lineageId = "lineage_id"
+      case quoteRefs = "quote_refs"
       case redactionStatus = "redaction_status"
       case sourceId = "source_id"
       case sourceSignal = "source_signal"
       case sourceType = "source_type"
+      case sourceVersion = "source_version"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       artifactRef = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .artifactRef)
+      attribution = try c.decodeIfPresent(String.self, forKey: .attribution)
       captureConfidence = try c.decodeIfPresent(Double.self, forKey: .captureConfidence)
+      capturedAt = try c.decodeIfPresent(String.self, forKey: .capturedAt)
       clientDeviceId = try c.decodeIfPresent(String.self, forKey: .clientDeviceId)
       createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
       evidenceId = try c.decode(String.self, forKey: .evidenceId)
       extractorId = try c.decodeIfPresent(String.self, forKey: .extractorId)
       extractorVersion = try c.decodeIfPresent(String.self, forKey: .extractorVersion)
       independenceGroup = try c.decode(String.self, forKey: .independenceGroup)
+      lineageId = try c.decodeIfPresent(String.self, forKey: .lineageId)
+      quoteRefs = try c.decodeIfPresent([[String: OmiAnyCodable]].self, forKey: .quoteRefs)
       redactionStatus = try c.decodeIfPresent(String.self, forKey: .redactionStatus)
       sourceId = try c.decodeIfPresent(String.self, forKey: .sourceId)
       sourceSignal = try c.decodeIfPresent(String.self, forKey: .sourceSignal)
       sourceType = try c.decodeIfPresent(String.self, forKey: .sourceType)
+      sourceVersion = try c.decodeIfPresent(String.self, forKey: .sourceVersion)
     }
 
-    public init(artifactRef: [String: OmiAnyCodable]? = nil, captureConfidence: Double? = nil, clientDeviceId: String? = nil, createdAt: String? = nil, evidenceId: String, extractorId: String? = nil, extractorVersion: String? = nil, independenceGroup: String, redactionStatus: String? = nil, sourceId: String? = nil, sourceSignal: String? = nil, sourceType: String? = nil) {
+    public init(artifactRef: [String: OmiAnyCodable]? = nil, attribution: String? = nil, captureConfidence: Double? = nil, capturedAt: String? = nil, clientDeviceId: String? = nil, createdAt: String? = nil, evidenceId: String, extractorId: String? = nil, extractorVersion: String? = nil, independenceGroup: String, lineageId: String? = nil, quoteRefs: [[String: OmiAnyCodable]]? = nil, redactionStatus: String? = nil, sourceId: String? = nil, sourceSignal: String? = nil, sourceType: String? = nil, sourceVersion: String? = nil) {
       self.artifactRef = artifactRef
+      self.attribution = attribution
       self.captureConfidence = captureConfidence
+      self.capturedAt = capturedAt
       self.clientDeviceId = clientDeviceId
       self.createdAt = createdAt
       self.evidenceId = evidenceId
       self.extractorId = extractorId
       self.extractorVersion = extractorVersion
       self.independenceGroup = independenceGroup
+      self.lineageId = lineageId
+      self.quoteRefs = quoteRefs
       self.redactionStatus = redactionStatus
       self.sourceId = sourceId
       self.sourceSignal = sourceSignal
       self.sourceType = sourceType
+      self.sourceVersion = sourceVersion
     }
   }
 
@@ -3153,6 +3173,56 @@ public enum OmiAPI {
   }
 
 
+  public struct MemoryCaptureContext: Codable {
+    public let attribution: String?
+    public let capturedAt: String?
+    public let independenceGroup: String?
+    public let lineageId: String?
+    public let quoteRefs: [[String: OmiAnyCodable]]?
+    public let sourceId: String?
+    public let sourceSignal: String?
+    public let sourceType: String
+    public let sourceVersion: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case attribution
+      case capturedAt = "captured_at"
+      case independenceGroup = "independence_group"
+      case lineageId = "lineage_id"
+      case quoteRefs = "quote_refs"
+      case sourceId = "source_id"
+      case sourceSignal = "source_signal"
+      case sourceType = "source_type"
+      case sourceVersion = "source_version"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      attribution = try c.decodeIfPresent(String.self, forKey: .attribution)
+      capturedAt = try c.decodeIfPresent(String.self, forKey: .capturedAt)
+      independenceGroup = try c.decodeIfPresent(String.self, forKey: .independenceGroup)
+      lineageId = try c.decodeIfPresent(String.self, forKey: .lineageId)
+      quoteRefs = try c.decodeIfPresent([[String: OmiAnyCodable]].self, forKey: .quoteRefs)
+      sourceId = try c.decodeIfPresent(String.self, forKey: .sourceId)
+      sourceSignal = try c.decodeIfPresent(String.self, forKey: .sourceSignal)
+      sourceType = try c.decode(String.self, forKey: .sourceType)
+      sourceVersion = try c.decodeIfPresent(String.self, forKey: .sourceVersion)
+    }
+
+    public init(attribution: String? = nil, capturedAt: String? = nil, independenceGroup: String? = nil, lineageId: String? = nil, quoteRefs: [[String: OmiAnyCodable]]? = nil, sourceId: String? = nil, sourceSignal: String? = nil, sourceType: String, sourceVersion: String? = nil) {
+      self.attribution = attribution
+      self.capturedAt = capturedAt
+      self.independenceGroup = independenceGroup
+      self.lineageId = lineageId
+      self.quoteRefs = quoteRefs
+      self.sourceId = sourceId
+      self.sourceSignal = sourceSignal
+      self.sourceType = sourceType
+      self.sourceVersion = sourceVersion
+    }
+  }
+
+
   public enum MemoryCategory: String, Codable, CaseIterable {
     case interesting
     case system
@@ -3182,9 +3252,11 @@ public enum OmiAPI {
     public let arguments: [String: OmiAnyCodable]?
     public let asOf: String?
     public let beliefClass: String?
+    public let beliefComputedAt: String?
     public let body: String?
     public let canonicalMemoryId: String?
     public let captureConfidence: Double?
+    public let captureContext: MemoryCaptureContext?
     public let captureDeviceIds: [String]?
     public let category: MemoryCategory?
     public let content: String
@@ -3242,9 +3314,11 @@ public enum OmiAPI {
       case arguments
       case asOf = "as_of"
       case beliefClass = "belief_class"
+      case beliefComputedAt = "belief_computed_at"
       case body
       case canonicalMemoryId = "canonical_memory_id"
       case captureConfidence = "capture_confidence"
+      case captureContext = "capture_context"
       case captureDeviceIds = "capture_device_ids"
       case category
       case content
@@ -3304,9 +3378,11 @@ public enum OmiAPI {
       arguments = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .arguments)
       asOf = try c.decodeIfPresent(String.self, forKey: .asOf)
       beliefClass = try c.decodeIfPresent(String.self, forKey: .beliefClass)
+      beliefComputedAt = try c.decodeIfPresent(String.self, forKey: .beliefComputedAt)
       body = try c.decodeIfPresent(String.self, forKey: .body)
       canonicalMemoryId = try c.decodeIfPresent(String.self, forKey: .canonicalMemoryId)
       captureConfidence = try c.decodeIfPresent(Double.self, forKey: .captureConfidence)
+      captureContext = try c.decodeIfPresent(MemoryCaptureContext.self, forKey: .captureContext)
       captureDeviceIds = try c.decodeIfPresent([String].self, forKey: .captureDeviceIds)
       category = try c.decodeIfPresent(MemoryCategory.self, forKey: .category)
       content = try c.decode(String.self, forKey: .content)
@@ -3360,14 +3436,16 @@ public enum OmiAPI {
       writeReason = try c.decodeIfPresent(LedgerWriteReason.self, forKey: .writeReason)
     }
 
-    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, asOf: String? = nil, beliefClass: String? = nil, body: String? = nil, canonicalMemoryId: String? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, currency: Double? = nil, currencyBand: String? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, halfLifeDays: Double? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, ledgerStatus: MemoryItemStatus? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, validTo: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
+    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, asOf: String? = nil, beliefClass: String? = nil, beliefComputedAt: String? = nil, body: String? = nil, canonicalMemoryId: String? = nil, captureConfidence: Double? = nil, captureContext: MemoryCaptureContext? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, currency: Double? = nil, currencyBand: String? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, halfLifeDays: Double? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, ledgerStatus: MemoryItemStatus? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, validTo: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
       self.appId = appId
       self.arguments = arguments
       self.asOf = asOf
       self.beliefClass = beliefClass
+      self.beliefComputedAt = beliefComputedAt
       self.body = body
       self.canonicalMemoryId = canonicalMemoryId
       self.captureConfidence = captureConfidence
+      self.captureContext = captureContext
       self.captureDeviceIds = captureDeviceIds
       self.category = category
       self.content = content
@@ -15102,6 +15180,32 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func syncUserTimeZoneV1UsersTimeZonePut(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/time-zone"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PUT"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func getTrainingDataOptInStatusV1UsersTrainingDataOptInGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/training-data-opt-in"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -16194,7 +16298,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getMemoriesV3MemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, includeArchive: Bool? = nil, deviceScope: String? = nil, clientDeviceId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, authorization: String? = nil, xAppVersion: String? = nil) async throws -> [MemoryDB] {
+  public static func getMemoriesV3MemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, includeArchive: Bool? = nil, deviceScope: String? = nil, clientDeviceId: String? = nil, view: String? = nil, asOf: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, authorization: String? = nil, xAppVersion: String? = nil) async throws -> [MemoryDB] {
     let _path = "/v3/memories"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -16217,6 +16321,12 @@ public enum OmiAPI {
     }
     if let clientDeviceId {
       queryItems.append(URLQueryItem(name: "client_device_id", value: String(clientDeviceId)))
+    }
+    if let view {
+      queryItems.append(URLQueryItem(name: "view", value: String(view)))
+    }
+    if let asOf {
+      queryItems.append(URLQueryItem(name: "as_of", value: String(asOf)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -16345,7 +16455,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getLedgerHistoryV3MemoriesLedgerHistoryGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [MemoryDB] {
+  public static func getLedgerHistoryV3MemoriesLedgerHistoryGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [MemoryDB] {
     let _path = "/v3/memories/ledger-history"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -16356,6 +16466,9 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -16620,6 +16733,32 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func useMemoryV3MemoriesMemoryIdUsePost(client: OmiApiClient, memoryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v3/memories/\(memoryId)/use"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func updateMemoryVisibilityV3MemoriesMemoryIdVisibilityPatch(client: OmiApiClient, memoryId: String, value: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/memories/\(memoryId)/visibility"
     guard var components = URLComponents(string: client.baseURL + _path) else {
@@ -16831,5 +16970,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 440 Swift client methods generated.
+  // Total: 442 Swift client methods generated.
 }

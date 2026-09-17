@@ -2004,6 +2004,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryHistoryPartial => '기억 기록의 일부를 불러올 수 없습니다. 지금까지 받은 기록을 표시합니다.';
 
   @override
+  String get memoryHistory => '기록';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => '실행 취소';
 
   @override
@@ -9814,4 +9823,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
 }

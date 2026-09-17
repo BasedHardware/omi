@@ -2018,6 +2018,15 @@ class AppLocalizationsHi extends AppLocalizations {
       'यादों के इतिहास का कुछ हिस्सा उपलब्ध नहीं है। अब तक प्राप्त इतिहास दिखाया जा रहा है।';
 
   @override
+  String get memoryHistory => 'इतिहास';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'पूर्ववत करें';
 
   @override
@@ -9961,4 +9970,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'ताकि Omi आपकी आवाज़ पहचान सके — किसी भी विषय पर लगभग 5 सेकंड बोलें।';
 }

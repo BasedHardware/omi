@@ -55,13 +55,12 @@ class SpeechProfileProvider extends ChangeNotifier
 
   bool startedRecording = false;
 
-  /// Sentences the user must speak before the profile is finalized. The UI
-  /// shows a bar filling toward it; reaching it is what completes the
-  /// recording. A sentence ends at ., ! or ? followed by a space or the end
-  /// of the text (so "3.5" is not a boundary); both server STT and the
+  /// Sentence target for Settings redo; first-run onboarding uses
+  /// transcribed speech duration via [recordingProgress]. A sentence ends at
+  /// ., ! or ? followed by a space or the end of the text (so "3.5" is not a boundary); both server STT and the
   /// on-device recognizers punctuate their output.
   static const int targetSentenceCount = 3;
-  bool _sentenceTargetReached = false;
+  bool _recordingTargetReached = false;
 
   /// Once the target is reached the recording is not cut off mid-sentence:
   /// it finalizes after [completionGrace] without new speech (each new
@@ -121,6 +120,32 @@ class SpeechProfileProvider extends ChangeNotifier
   // onboarded account still gets the question flow — see
   // routers/listen/runtime.py's _bootstrap for why that distinction exists.
   bool _isOnboardingFlow = false;
+  bool get isOnboardingFlow => _isOnboardingFlow;
+
+  /// First-run enrollment needs a short voice sample, not three answers.
+  /// Use the union of non-empty user transcript spans: gaps, overlapping
+  /// updates and Omi's prompts must not fill the bar. STT timestamps are an
+  /// estimate; the backend still validates the actual uploaded audio.
+  double get recordingProgress {
+    if (!isOnboardingFlow) return sentenceProgress;
+    final speech = segments
+        .where((s) =>
+            s.speakerId != omiSpeakerId &&
+            s.text.trim().isNotEmpty &&
+            s.start.isFinite &&
+            s.end.isFinite &&
+            s.start >= 0 &&
+            s.end > s.start)
+        .toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+    double seconds = 0;
+    double end = 0;
+    for (final segment in speech) {
+      seconds += max(0, segment.end - max(end, segment.start));
+      end = max(end, segment.end);
+    }
+    return (seconds / minUploadDuration.inSeconds).clamp(0.0, 1.0);
+  }
 
   /// True while the question flow is transcribed on-device instead of by the
   /// backend's streaming STT — entered up front when the pre-flight
@@ -530,10 +555,17 @@ class SpeechProfileProvider extends ChangeNotifier
 
       updateLoadingState(SpeechProfileLoadingState.memorizing);
       Logger.debug('Creating WAV file...');
-      var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+      File file;
+      try {
+        file = (await audioStorage.createWavFile(filename: 'speaker_profile.wav')).item1;
+      } catch (_) {
+        Logger.debug('Speech profile WAV creation failed');
+        completeAfterUploadFailure(tooShort: false);
+        return;
+      }
       Logger.debug('WAV file created, uploading profile...');
 
-      final upload = await uploadProfileWithRetry(data.item1);
+      final upload = await uploadProfileWithRetry(file);
       Logger.debug('Profile upload completed: success=${upload.success} tooShort=${upload.tooShort}');
 
       if (!upload.success) {
@@ -577,7 +609,7 @@ class SpeechProfileProvider extends ChangeNotifier
     uploadingProfile = false;
     profileCompleted = false;
     _completionFired = false;
-    _sentenceTargetReached = false;
+    _recordingTargetReached = false;
     _cancelCompletionTimers();
     notifyError(tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED');
     PlatformManager.instance.analytics.speechProfileUploadFailed(
@@ -676,7 +708,7 @@ class SpeechProfileProvider extends ChangeNotifier
     segments.clear();
     streamStartedAtSecond = null;
     text = '';
-    _sentenceTargetReached = false;
+    _recordingTargetReached = false;
     _recordingStartedAt = startedRecording ? clock.now() : null;
     profileCompleted = false;
     uploadingProfile = false;
@@ -709,7 +741,7 @@ class SpeechProfileProvider extends ChangeNotifier
     currentQuestionIndex = 0;
     totalQuestions = 0;
     startedRecording = false;
-    _sentenceTargetReached = false;
+    _recordingTargetReached = false;
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
@@ -864,7 +896,7 @@ class SpeechProfileProvider extends ChangeNotifier
       Logger.debug('Question ${event.questionIndex} answered');
       notifyInfo('NEXT_QUESTION');
     } else if (event is OnboardingCompleteEvent) {
-      // Completion is driven by the spoken word target (onSegmentReceived);
+      // Completion is driven by the recording target (onSegmentReceived);
       // the backend finishing its topic checks only means it stops asking.
       Logger.debug('Onboarding topics complete from backend: conversationId=${event.conversationId}');
     }
@@ -897,18 +929,17 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   /// Recomputes what the user has said (Omi's own question segments are
-  /// excluded), the sentence-target progress, and finalizes the recording
+  /// excluded), the recording progress, and finalizes the recording
   /// once the target is reached. Split from onSegmentReceived so it can be
   /// exercised without the audio storage that method also touches.
   @visibleForTesting
   void updateSpokenText() {
     text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    if (_completionFired || spokenSentenceCount < targetSentenceCount) return;
+    if (_completionFired || recordingProgress < 1) return;
 
-    if (!_sentenceTargetReached) {
-      _sentenceTargetReached = true;
-      Logger.debug(
-          'Spoken sentence target reached ($spokenSentenceCount/$targetSentenceCount); finalizing after a pause');
+    if (!_recordingTargetReached) {
+      _recordingTargetReached = true;
+      Logger.debug('Speech profile recording target reached; finalizing after a pause');
       _completionCapTimer = Timer(completionCap, _completeOnTarget);
     }
     // Still talking: wait for a pause so the last sentence is not cut off.
@@ -923,7 +954,7 @@ class SpeechProfileProvider extends ChangeNotifier
       if (elapsed < minUploadDuration) {
         final wait = minUploadDuration - elapsed;
         Logger.debug(
-            'Sentence target reached after ${elapsed.inMilliseconds}ms; waiting ${wait.inMilliseconds}ms to meet upload floor');
+            'Recording target reached after ${elapsed.inMilliseconds}ms; waiting ${wait.inMilliseconds}ms to meet upload floor');
         _completionGraceTimer?.cancel();
         _completionGraceTimer = Timer(wait, _completeOnTarget);
         return;

@@ -1,325 +1,115 @@
-# omi-cli — hitri začetek v slovenščini
+# Prvi koraki z omi-cli
 
-> Praktičen vodnik za delo z Omijem iz terminala. Primeren za človeka in za AI agenta.
+Ta vodnik razlaga prve ukaze v slovenščini. Imena ukazov in sporočila programa
+ostajajo v angleščini. Primeri poizvedb, prikazani tukaj, ne spreminjajo vaših
+spominov, pogovorov, opravil ali ciljev.
 
-`omi-cli` je uradni vmesnik ukazne vrstice za razvijalski API [Omija](https://omi.me).
-Omogoča hiter in skriptibilen dostop do štirih glavnih entitet Omija:
-spominov (memories), pogovorov (conversations), nalog (action items) in ciljev (goals).
+## Namestitev programa
 
-* **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
-* **Dokumentacija:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
-* **Izvorna koda:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
+Zahteve: Python 3.10 ali novejša različica in račun Omi.
 
----
+Če imate nameščen `pipx`:
 
-## 1. Namestitev
-
-Priporočen način je `pipx`: orodje namesti v izolirano okolje,
-zato se njegove odvisnosti ne spopadajo z vašimi projekti.
-
-```bash
-# priporočeno: namestitev prek pipx
+```sh
 pipx install omi-cli
-
-# ali prek pip
-pip install omi-cli
-```
-
-> **Pomembno: ime paketa in ime ukaza se razlikujeta.**
-> * Namesti se paket **`omi-cli`** (samostojni paket `omi` je drug, nepovezan projekt).
-> * Po namestitvi se zažene ukaz **`omi`**.
-
-Preverite, da je namestitev uspela:
-
-```bash
-omi --version
 omi --help
 ```
 
----
+Druga možnost je namestitev v aktiviranem navideznem okolju Python
+(virtual environment):
 
-## 2. Prijava
-
-`omi-cli` podpira dva načina prijave.
-
-| Način | Kdaj je primeren | Ukaz |
-| :--- | :--- | :--- |
-| **Razvijalski ključ (`omi_dev_*`)** | CI/CD, skripte, AI agenti | `omi auth login --api-key ...` ali okoljska spremenljivka |
-| **Prijava prek brskalnika (Google/Apple)** | Delo na svojem računalu | `omi auth login --browser` |
-
-### Interaktivna prijava
-
-Brez zastavic ukaz sam vpraša, na kateri način se želite prijaviti:
-
-```bash
-omi auth login
-# 1) Browser — prijava prek Googla ali Appla (prikladno za človeka)
-# 2) API key — prilepite razvijalski ključ z app.omi.me (prikladno za agente in CI)
+```sh
+python -m pip install omi-cli
+omi --help
 ```
 
-Pri izbiri ključa se vnos maskira, zato ključ ne ostane v zgodovini terminala.
+Če terminal ne najde `omi`, preverite, ali je navidezno okolje aktivirano ali pa
+je imenik, kamor `pipx` namesti izvedljive datoteke, v vaši spremenljivki `PATH`.
 
-### Neposredno prek brskalnika
+## Povezovanje vašega računa
 
-```bash
+Zaženite interaktivnega pomočnika:
+
+```sh
+omi auth login
+```
+
+Izberite prijavo prek brskalnika ali možnost lepljenja razvijalskega API ključa
+Omi. Interaktivni vnos skrije ključ; izogibajte se pisanju ključa v ukazu, ki bo
+ostal v zgodovini terminala.
+
+Za neposreden prehod v brskalnik:
+
+```sh
 omi auth login --browser
 ```
 
-### Z razvijalskim ključem
+Prijavite se na istem računalniku, kjer teče terminal: odgovor za preverjanje
+pristnosti uporablja lokalni naslov. Sledite navodilom na zaslonu.
 
-Ključ dobite na [app.omi.me](https://app.omi.me) v razdelku **Developer → API Keys**.
+Nato preverite konfiguracijo in dostop do API-ja:
 
-```bash
-# shraniti ključ v konfiguracijo
-omi auth login --api-key omi_dev_...
-
-# ali ga posredovati prek okolja — bolje za CI/CD in vsebnike
-export OMI_API_KEY=omi_dev_...
+```sh
+omi auth status
+omi auth whoami
 ```
 
-Spremenljivka `OMI_API_KEY` se uporabi, kadar aktivni profil nima shranjenega ključa,
-zato v vsebniku ni treba ničesar pisati na disk. Če je ključ v profilu že
-shranjen, ima prednost pred okoljsko spremenljivko.
+`status` prikazuje lokalno stanje in skrije skrivnost, vendar ne preveri
+veljavnosti na strežniku. `whoami` pošlje overjeno zahtevo; če uspe, potrdi, da
+poverilnice delujejo, ne da bi nujno prikazal vaše ime.
 
-### Preverjanje prijave
+Konfiguracija se privzeto shrani v `~/.omi/config.toml`. Te datoteke ne delite
+z drugimi: lahko vsebuje vaše zaupne poverilnice.
 
-Dva ukaza odgovarjata na različni vprašanji in ju ne smete zamenjevati:
+## Ogled vaših podatkov
 
-* `omi auth status` — kaj je shranjeno **lokalno**: profil, maskiran ključ, veljavnost.
-  Deluje brez omrežja.
-* `omi auth whoami` — povpraševanje **Omijevega strežnika**: preveri, ali strežnik
-  ključ resnično sprejme. Zahteva omrežje.
-
-```bash
-omi auth status    # lokalno preverjanje, brez povezave
-omi auth whoami    # preverjanje na strežniku
+```sh
+omi memory list --limit 5
+omi conversation list --limit 5
+omi action-item list --open
+omi goal list
 ```
 
-Obnovitev OAuth seje, ki se ji izteka veljavnost, brez ponovne prijave — velja samo za prijavo v brskalniku (OAuth). Za ključe `omi_dev_*` ta ukaz ne osveži; ključ zamenjajte v spletni aplikaciji pod `Developer → API Keys`:
+Prazen seznam lahko preprosto pomeni, da ni elementov, ki ustrezajo poizvedbi.
+Uporabite pomoč, da odkrijete filtre za vsak ukaz:
 
-```bash
-omi auth refresh
+```sh
+omi memory list --help
+omi action-item list --help
 ```
 
-Odjava:
+## Pridobivanje JSON-a in krmarjenje po straneh
 
-```bash
+Postavite globalno možnost `--json` **pred** skupino ukazov:
+
+```sh
+omi --json memory list --limit 25 --offset 0
+omi --json memory list --limit 25 --offset 25
+```
+
+Prvi ukaz zahteva prvih 25 spominov; drugi, naslednjih 25. Ena stran torej ni
+popolna varnostna kopija (backup). Izhod JSON ohrani polne identifikatorje,
+medtem ko jih tabele na zaslonu lahko skrajšajo za prikaz.
+
+Če želite stran shraniti v datoteko:
+
+```sh
+omi --json memory list --limit 25 --offset 0 > spomini-stran-1.json
+```
+
+Ta preusmeritev ustvari ali prepiše lokalno datoteko. Pred uporabo vsebine
+preverite, ali se je ukaz uspešno zaključil. Napake se izpišejo v izhod za
+napake (stderr); prazna datoteka ne zagotavlja, da ni podatkov. Izvožena datoteka
+lahko vsebuje osebne podatke: ohranite jo zasebno.
+
+## Odjava iz računa (Logout)
+
+```sh
 omi auth logout
 ```
 
----
-
-## 3. Osnovni ukazi
-
-### Spomini (memories)
-
-Dejstva in znanja, ki si jih je sistem zapomnil o vas.
-
-```bash
-# seznam spominov
-omi memory list
-
-# ustvariti novega
-omi memory create "Uporabnik ima raje temno temo" --category lifestyle
-
-# ogled konkretnega
-omi memory get <MEMORY_ID>
-```
-
-### Pogovori (conversations)
-
-Zgodovina govora in besedila z naprave ali iz aplikacije.
-
-```bash
-# zadnjih 5 pogovorov
-omi conversation list --limit 5
-
-# celoten pogovor s prepisom
-omi conversation get <CONVERSATION_ID> --include-transcript
-```
-
-### Naloge (action items)
-
-Naloge, ki jih je Omi izluščil iz pogovorov.
-
-```bash
-# samo nedokončane
-omi action-item list --open
-
-# označiti kot dokončano
-omi action-item complete <ACTION_ITEM_ID>
-```
-
-### Cilji (goals)
-
-```bash
-# seznam ciljev
-omi goal list
-
-# zapisati novo vrednost napredka (potrebna sta OBA argumenta: cilj in vrednost)
-omi goal progress <GOAL_ID> 25
-
-# zgodovina sprememb
-omi goal history <GOAL_ID>
-```
-
----
-
-## Vprašanje v svojih besedah (`ask`)
-
-Samostojni ukaz najvišje ravni: postavi vprašanje v naravnem jeziku,
-odgovor pa se sestavi iz vaših lastnih pogovorov.
-
-```bash
-omi ask "kaj sem se odločil glede selitve"
-omi --json ask "katere naloge sem obljubil zaključiti ta teden"
-```
-
----
-
-## 4. JSON in skripte (`--json`)
-
-`omi-cli` zna vrniti strojno berljiv JSON. Zastavica `--json` je **globalna**,
-zato jo podajte **pred** podukazom.
-
-```bash
-# spomini: izvleči id, besedilo in kategorijo
-omi --json memory list | jq '.[] | {id, content, category}'
-
-# naslovi zadnjih pogovorov
-omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
-
-# nedokončane naloge
-omi --json action-item list --open | jq '.'
-```
-
-> **Pogosta napaka.** `--json` gre pred podukaz, ne za njim.
-> * Pravilno: `omi --json memory list`
-> * Napačno: `omi memory list --json`
-
-V načinu `--json` na standardni izhod ne pride nič drugega kot sam JSON —
-na to se lahko zanesete v skriptah.
-
----
-
-## 5. Izhodne kode
-
-Kode so stabilne, zato se po njih lahko veji logika v skriptah in CI.
-
-| Koda | Pomen | Kdaj nastane |
-| :---: | :--- | :--- |
-| `0` | Uspeh | Ukaz se je izvedel |
-| `1` | Napaka klica | Lastna preveritev omi-cli (npr. `--browser` in `--api-key` hkrati, neveljavna izbira, prazen vnos) |
-| `2` | Napaka dostopa ali argumentov | Niste prijavljeni, ključ je neveljaven ali potekel — tudi napake razčlenjevalnika (neznana zastavica, manjkajoč argument) |
-| `3` | Napaka strežnika | Odgovor 5xx, timeout, ni povezave |
-| `4` | Preveč zahtevkov | 429 Too Many Requests |
-| `5` | Ni najdeno | 404, navedeni identifikator ne obstaja |
-
-Primer preverjanja v Bashu:
-
-```bash
-if omi --json auth whoami > /dev/null 2>&1; then
-  echo "ključ deluje"
-else
-  code=$?
-  [ "$code" -eq 2 ] && echo "potrebna je ponovna prijava"
-  [ "$code" -eq 3 ] && echo "strežnik nedostopen, poskusite pozneje"
-fi
-```
-
----
-
-## 6. Okoljske spremenljivke
-
-### Bash / Zsh (Linux, macOS)
-
-```bash
-export OMI_API_KEY="omi_dev_vas_kljuc"
-
-omi --json memory list --limit 10
-```
-
-Da se ključ naloži tudi v novih sejah, dodajte vrstico v `~/.bashrc` ali `~/.zshrc`.
-
-### PowerShell (Windows)
-
-```powershell
-$env:OMI_API_KEY = "omi_dev_vas_kljuc"
-
-# obdelava JSON s PowerShellom
-(omi --json memory list | ConvertFrom-Json) | Select-Object id, content
-```
-
-Trajna nastavitev:
-
-```powershell
-[Environment]::SetEnvironmentVariable("OMI_API_KEY", "omi_dev_vas_kljuc", "User")
-```
-
----
-
-## 7. Lokalna aplikacija Omi Desktop
-
-Če teče namizna aplikacija Omi, je del podatkov dostopen neposredno,
-brez obiska oblaka.
-
-```bash
-# nastaviti naslov lokalnega API-ja
-omi local configure --url http://127.0.0.1:47778 --token VAS_ZETON
-
-# preveriti, ali odgovarja
-omi --json local status
-
-# iskanje po zgodovini zaslona
-omi --json local search-screen "tarife" --days 7 --app Safari
-
-# posnetek zaslona po identifikatorju
-omi --json local screenshot 123 --output /tmp/omi-shot.jpg
-
-# poljubna SQL poizvedba nad lokalno bazo
-omi --json local sql "SELECT appName, COUNT(*) FROM screenshots GROUP BY appName"
-```
-
-Vrstni red dela: najprej `local status`, nato `local tools` — da izveste
-razpoložljiva orodja in njihove parametre — in šele nato klici.
-
----
-
-## 8. Profili
-
-Če imate več računov ali okolij, jih ločite po profilih.
-Nastavitve se hranijo v `~/.omi/config.toml`.
-
-```bash
-# prijava v osebni profil
-omi --profile personal auth login
-
-# prijava v službenega
-omi --profile work auth login
-
-# izvesti ukaz v konkretnem profilu
-omi --profile work memory list
-```
-
-Če profila ne navedete, CLI najprej uporabi profil iz okoljske spremenljivke `OMI_PROFILE`, nato aktivni profil iz konfiguracijske datoteke, nazadnje `default`. Vrstni red prednosti: `--profile` → `OMI_PROFILE` → aktivni profil v `~/.omi/config.toml` → `default`.
-
-Ogled in spreminjanje same konfiguracije:
-
-```bash
-# kaj je trenutno nastavljeno
-omi config show
-
-# kje leži konfiguracijska datoteka
-omi config path
-
-# spremeniti vrednost
-omi config set api_base https://api.omi.me
-```
-
----
-
-## 9. Kaj naprej
-
-* [`agent_quickstart.md`](./agent_quickstart.md) — kako povezati `omi-cli` z AI agentom.
-* [`shell_examples.sh`](./shell_examples.sh) — pripravljeni primeri za lupino.
-* [Dokumentacija Omija](https://docs.omi.me/doc/developer/cli/introduction) — popoln pregled ukazov.
+Ta ukaz izbriše lokalno shranjene poverilnice. Za preklic ključa na strežniku
+uporabite upravljanje razvijalskih ključev v svojem računu.
+
+Za ostale ukaze in napredne možnosti glejte
+[glavni vodnik v angleščini](../README.md) in `omi --help`.

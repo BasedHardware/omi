@@ -248,3 +248,72 @@ def test_exhaustion_matching_is_case_insensitive():
     where the regional one uses title case. Measured 2026-08-18."""
     assert ptr.is_provisioned_capacity_exhausted(429, 'Too many requests. Exceeded the provisioned throughput.')
     assert ptr.is_provisioned_capacity_exhausted(429, 'Too many requests. Exceeded the Provisioned Throughput.')
+
+
+# --- SCA-481: company-paid Pro/image containment -----------------------------
+
+
+@pytest.mark.parametrize(
+    'model',
+    [
+        'gemini-3-pro-preview',
+        'gemini-3.0-pro',
+        'gemini-3.1-pro',
+        'gemini-2.5-pro',
+        'gemini-3.1-flash-image',
+        'gemini-2.5-flash-image',
+        'imagen-4.0-generate-001',
+        'google/gemini-3-pro-preview',
+    ],
+)
+def test_operator_pins_cannot_select_pro_or_image_models(model):
+    """Pro text and image output are PayGo-only SKUs (2026-09-06..09-12 dev
+    billing: "Gemini 3.0 / 3.1 Pro Text Output", "Gemini 3.1 Flash Image
+    Global Image Output", "Pro Image Output"). An operator override is the one
+    code-free way such a model could become a served model, so every pin
+    resolver fails closed."""
+    with pytest.raises(ValueError, match='SCA-481'):
+        ptr.resolve_pt_model(target_dedicated_ready=False, override=model)
+    with pytest.raises(ValueError, match='SCA-481'):
+        ptr.resolve_overflow_model(pt_model='gemini-2.5-flash', override=model)
+    with pytest.raises(ValueError, match='SCA-481'):
+        ptr.resolve_overflow_ladder(pt_model='gemini-2.5-flash', override=model)
+    with pytest.raises(ValueError, match='SCA-481'):
+        ptr.resolve_fallback_chain(model='gemini-2.5-pro', pt_model='gemini-2.5-flash', override=model)
+
+
+def test_operator_pins_still_move_between_declared_anchors():
+    """The escape hatch survives containment: pinning the reservation back
+    during a bad auto-promotion, or overflow onto the cheap floor, both work."""
+    assert ptr.resolve_pt_model(target_dedicated_ready=True, override='gemini-2.5-flash') == 'gemini-2.5-flash'
+    assert (
+        ptr.resolve_overflow_model(pt_model='gemini-2.5-flash', override='gemini-2.5-flash-lite')
+        == 'gemini-2.5-flash-lite'
+    )
+    assert ptr.resolve_fallback_chain(
+        model='gemini-2.5-pro', pt_model='gemini-2.5-flash', override='gemini-2.5-flash-lite'
+    ) == ('gemini-2.5-flash-lite',)
+
+
+@pytest.mark.parametrize('model', sorted(ptr.COMPANY_PAID_VERTEX_TEXT_MODELS))
+def test_declared_company_paid_models_never_carry_a_pro_or_image_shape(model):
+    assert not ptr.is_prohibited_company_paid_model(model)
+
+
+def test_non_gemini_models_that_merely_contain_the_substrings_stay_routable():
+    """Perplexity `sonar-pro` is not a Gemini Pro SKU; containment must not
+    reach outside the Google model family."""
+    assert not ptr.is_prohibited_company_paid_model('sonar-pro')
+    assert not ptr.is_prohibited_company_paid_model('gpt-5.6-luna')
+
+
+def test_every_desktop_text_anchor_serves_a_declared_company_paid_model():
+    """Requested anchors remap onto the declared serving set. `gemini-2.5-pro`
+    is a request anchor only: company-paid traffic is never served on it."""
+    for anchor in ptr.DESKTOP_TEXT_LANES:
+        if anchor == 'gemini-2.5-pro':
+            continue
+        assert anchor in ptr.COMPANY_PAID_VERTEX_TEXT_MODELS
+    assert (
+        ptr.desktop_serving_model('gemini-2.5-pro', target_dedicated_ready=False) in ptr.COMPANY_PAID_VERTEX_TEXT_MODELS
+    )

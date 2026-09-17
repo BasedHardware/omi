@@ -205,20 +205,18 @@ def _empty_stream():
     return gen()
 
 
-def test_soniox_serves_streaming_only_and_is_opt_in():
-    """Soniox stays streaming-capable but is not a default hop.
+def test_soniox_serves_streaming_only_and_backs_velma_there():
+    """Soniox is the streaming failover hop directly behind Velma.
 
-    Prod's key is empty, so listing it consumed a mental next slot while
-    accepted=0. A deployment that wants it must name it in STT_SERVICE_MODELS
-    and set SONIOX_API_KEY. The batch path still has no Soniox client.
+    The batch path still has no Soniox client, so it must stay absent from the
+    non-streaming surfaces however the streaming chain is ordered.
     """
     assert provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PRERECORDED)
     assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PTT)
 
     streaming = default_models_for_surface(STTServingSurface.STREAMING)
-    assert 'soniox' not in streaming
-    assert streaming == ('modulate-velma-2', 'dg-nova-3', 'parakeet')
+    assert streaming.index('soniox') == streaming.index('modulate-velma-2') + 1
     for surface in (STTServingSurface.PRERECORDED, STTServingSurface.PTT):
         assert 'soniox' not in default_models_for_surface(surface)
 

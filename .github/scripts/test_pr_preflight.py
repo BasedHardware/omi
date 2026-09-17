@@ -15,6 +15,7 @@ import time
 import unittest
 import urllib.error
 from pathlib import Path
+from typing import TextIO
 from unittest.mock import Mock, patch
 
 import preflight_runner
@@ -815,6 +816,7 @@ class SingleFlightTests(unittest.TestCase):
         command: list[str],
         *,
         extra_env: dict[str, str] | None = None,
+        stdout_file: TextIO | None = None,
     ) -> subprocess.Popen[str]:
         env = {**os.environ, "OMI_PREFLIGHT_STATE_DIR": str(state_root)}
         if extra_env:
@@ -824,7 +826,7 @@ class SingleFlightTests(unittest.TestCase):
             cwd=REPO_ROOT,
             env=env,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdout=stdout_file if stdout_file is not None else subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
@@ -832,10 +834,34 @@ class SingleFlightTests(unittest.TestCase):
 
     def wait_for_lock(self, state_root: Path) -> None:
         lock = state_root / "test" / "lock" / "owner.json"
-        deadline = time.monotonic() + 5
+        # The runner fingerprints before acquiring, and the fingerprint runs
+        # `git rev-parse HEAD` — seconds, not milliseconds, on a host with a
+        # contended object store. Keep the deadline generous so slow hosts are
+        # not misread as a missing lock.
+        deadline = time.monotonic() + 30
         while not lock.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         self.assertTrue(lock.exists(), "runner did not acquire its lock")
+
+    def wait_for_join(self, process: subprocess.Popen[str], log: Path) -> None:
+        # The second runner reaches the lock only after its own fingerprint
+        # (again `git rev-parse HEAD`). Releasing the hold before the join is
+        # observed lets the first child finish and release the lock first, so
+        # the second acquires freshly and re-runs the command — the double
+        # execution this test exists to catch, but as a host-timing artifact.
+        # Wait for the join line instead of sleeping a fixed interval.
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                output = log.read_text(encoding="utf-8", errors="replace")
+            except FileNotFoundError:
+                output = ""
+            if "Joining identical preflight" in output:
+                return
+            if process.poll() is not None:
+                self.fail(f"second runner exited before joining; output:\n{output}")
+            time.sleep(0.05)
+        self.fail(f"second runner did not report joining within 30s; output:\n{output}")
 
     @unittest.skipUnless(os.name == "nt", "Windows-only")
     def test_process_liveness_check_does_not_send_windows_ctrl_c(self) -> None:
@@ -866,7 +892,7 @@ class SingleFlightTests(unittest.TestCase):
                 f"hold = Path({str(hold)!r})\n"
                 "p.write_text(p.read_text() + 'x' if p.exists() else 'x')\n"
                 "print('==> focused-tests', flush=True)\n"
-                "deadline = time.monotonic() + 10\n"
+                "deadline = time.monotonic() + 30\n"
                 "while hold.exists() and time.monotonic() < deadline:\n"
                 "    time.sleep(0.02)\n"
             )
@@ -876,20 +902,20 @@ class SingleFlightTests(unittest.TestCase):
             first.stdin.write("same\n")
             first.stdin.close()
             self.wait_for_lock(temp)
-            second = self.run_runner(temp, command)
-            assert second.stdin is not None
-            second.stdin.write("same\n")
-            second.stdin.close()
-            time.sleep(0.3)
-            hold.unlink(missing_ok=True)
-            first_output = first.stdout.read() if first.stdout else ""
-            second_output = second.stdout.read() if second.stdout else ""
-            self.assertEqual(first.wait(), 0, first_output)
-            self.assertEqual(second.wait(), 0, second_output)
+            second_log = temp / "second.log"
+            with second_log.open("w", encoding="utf-8") as second_output_file:
+                second = self.run_runner(temp, command, stdout_file=second_output_file)
+                assert second.stdin is not None
+                second.stdin.write("same\n")
+                second.stdin.close()
+                self.wait_for_join(second, second_log)
+                hold.unlink(missing_ok=True)
+                first_output = first.stdout.read() if first.stdout else ""
+                self.assertEqual(first.wait(), 0, first_output)
+                self.assertEqual(second.wait(), 0)
             if first.stdout:
                 first.stdout.close()
-            if second.stdout:
-                second.stdout.close()
+            second_output = second_log.read_text(encoding="utf-8")
             self.assertEqual(counter.read_text(), "x")
             self.assertIn("Joining identical preflight", second_output)
             status = json.loads((temp / "test" / "status.json").read_text())

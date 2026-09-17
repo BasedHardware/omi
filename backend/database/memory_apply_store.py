@@ -37,7 +37,8 @@ from models.memory_evidence import (
     SourceState,
     SourceStateReason,
 )
-from models.memory_contracts import DurablePatchDecision, deterministic_contract_id
+from models.feedback import FeedbackEvent, FeedbackReason, FeedbackSurface, FeedbackTargetKind, MemoryUseFeedback
+from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_apply import (
     ApplyResult,
     ApplyStatus,
@@ -49,7 +50,12 @@ from models.memory_apply import (
     apply_long_term_patch_transaction,
     require_writer_admitted,
 )
-from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
+from models.memory_operations import (
+    MemoryLedgerReopenReceipt,
+    MemoryOperation,
+    MemoryOperationStatus,
+    MemoryOperationType,
+)
 from models.jit_proactivity import JITProactivityEventReceipt
 from models.jit_trigger_feedback import JITTriggerFeedbackReceipt
 from models.memory_promotion import MemoryGraphAssertion, PromotionGraphPlan, build_memory_graph_assertion
@@ -64,6 +70,7 @@ from models.product_memory import (
     MemorySubjectScope,
 )
 from models.memory_state_head import trusted_memory_state_head_fields
+from utils.memory.memory_use import MemoryUseConflict, build_memory_use_patch
 
 
 class MemoryFirestoreApplyError(Exception):
@@ -90,6 +97,332 @@ def _require_canonical_intake_enabled() -> None:
 
 class MissingMemoryDocument(MemoryFirestoreApplyError):
     pass
+
+
+_MEMORY_USE_FEEDBACK_EVENTS_COLLECTION = "feedback_events"
+
+
+def memory_use_feedback_event_id(uid: str, feedback_id: str) -> str:
+    """Return the deterministic global feedback-ledger document id.
+
+    The target memory and action are intentionally excluded.  Reusing an id
+    for either is therefore detected as a payload conflict instead of creating
+    a second receipt or silently applying a different owner decision.
+    """
+
+    if not uid.strip() or not feedback_id.strip():
+        raise ValueError("memory-use feedback receipt identity must not be blank")
+    return deterministic_contract_id(
+        "memory-use-feedback",
+        {"uid": uid, "feedback_id": feedback_id},
+    )
+
+
+def _memory_use_feedback_event(feedback: MemoryUseFeedback) -> FeedbackEvent:
+    value_by_action = {"suppress": -1, "allow": 0, "useful": 1}
+    reason = FeedbackReason.not_useful if feedback.action == "suppress" else None
+    return FeedbackEvent(
+        id=memory_use_feedback_event_id(feedback.uid, feedback.feedback_id),
+        uid=feedback.uid,
+        surface=FeedbackSurface.memory,
+        target_kind=FeedbackTargetKind.memory,
+        target_id=feedback.target_memory_id,
+        value=value_by_action[feedback.action],
+        reason=reason,
+        created_at=feedback.created_at,
+    )
+
+
+def _validate_memory_use_feedback_event(existing: FeedbackEvent, expected: FeedbackEvent) -> None:
+    if (
+        existing.id != expected.id
+        or existing.uid != expected.uid
+        or existing.surface != expected.surface
+        or existing.target_kind != expected.target_kind
+        or existing.target_id != expected.target_id
+        or existing.value != expected.value
+        or existing.reason != expected.reason
+    ):
+        raise MemoryFirestoreApplyError("memory-use feedback id was reused with a different payload")
+
+
+def _validate_memory_use_patch(
+    *,
+    uid: str,
+    feedback: MemoryUseFeedback,
+    operation: MemoryOperation,
+    patch_payload: Dict[str, Any],
+    existing_item: MemoryItem,
+) -> None:
+    """Keep owner-use mutations additive and outside truth/currency fields."""
+
+    if existing_item.status != MemoryItemStatus.active:
+        raise MemoryFirestoreApplyError("memory-use feedback target is not active")
+
+    target_memory_id = operation.logical_payload.target_memory_id or operation.target_memory_id
+    if (
+        feedback.uid != uid
+        or target_memory_id != feedback.target_memory_id
+        or operation.operation_type not in {MemoryOperationType.user_mutation, MemoryOperationType.ledger_mutation}
+        or operation.logical_payload.decision != DurablePatchDecision.update.value
+        or patch_payload.get("target_memory_id") != feedback.target_memory_id
+        or patch_payload.get("decision") != DurablePatchDecision.update.value
+        or patch_payload.get("result_status") != LifecycleState.active.value
+    ):
+        raise MemoryFirestoreApplyError("memory-use feedback target authority is stale or invalid")
+
+    allowed_keys = {
+        "patch_id",
+        "packet_id",
+        "run_id",
+        "observed_head_commit_id",
+        "idempotency_key",
+        "decision",
+        "target_memory_id",
+        "result_status",
+        "mutation_metadata",
+        "evidence_ids",
+        "expected_item_revision",
+        "expected_content_hash",
+        "arguments",
+        "curation_weight",
+    }
+    if set(patch_payload) - allowed_keys:
+        raise MemoryFirestoreApplyError("memory-use feedback may only update use state and curation weight")
+    expected_evidence_ids = sorted(evidence.evidence_id for evidence in existing_item.evidence)
+    if sorted(patch_payload.get("evidence_ids") or []) != expected_evidence_ids:
+        raise MemoryFirestoreApplyError("memory-use feedback may not change evidence")
+    if patch_payload.get("expected_item_revision") != existing_item.item_revision:
+        raise MemoryFirestoreApplyError("memory-use feedback item revision fence is stale")
+    if patch_payload.get("expected_content_hash") != existing_item.content_hash:
+        raise MemoryFirestoreApplyError("memory-use feedback content fence is stale")
+    arguments = patch_payload.get("arguments")
+    if not isinstance(arguments, dict):
+        raise MemoryFirestoreApplyError("memory-use feedback arguments must be an object")
+    try:
+        expected_patch = build_memory_use_patch(
+            existing_item,
+            action=feedback.action,
+            feedback_id=feedback.feedback_id,
+            expected_item_revision=existing_item.item_revision,
+        )
+    except (MemoryUseConflict, ValueError) as exc:
+        raise MemoryFirestoreApplyError("memory-use feedback state is stale or conflicting") from exc
+    if arguments != expected_patch.arguments:
+        raise MemoryFirestoreApplyError("memory-use feedback may only update its bounded use state")
+    expected_weight = expected_patch.curation_weight
+    if patch_payload.get("curation_weight", existing_item.curation_weight) != expected_weight:
+        raise MemoryFirestoreApplyError("memory-use feedback curation weight is invalid")
+
+
+_DIRECT_USER_REVIEW_EXTRA_FIELDS = frozenset(
+    {
+        "rationale",
+        "last_corroborated_at",
+        "corroboration_count",
+        "confidence",
+    }
+)
+
+
+def _direct_user_review_value(source_packet_id: str) -> Optional[bool]:
+    """Return the review value for the trusted adapter's exact source shape."""
+
+    prefix = "user_mutation:review:"
+    if not source_packet_id.startswith(prefix):
+        return None
+    remainder = source_packet_id[len(prefix) :]
+    if remainder.startswith("True:"):
+        return True
+    if remainder.startswith("False:"):
+        return False
+    return None
+
+
+def _validate_direct_user_review_patch(
+    *,
+    uid: str,
+    operation: MemoryOperation,
+    patch_payload: Dict[str, Any],
+    existing_item: MemoryItem,
+    direct_user_authorized: bool,
+) -> None:
+    """Bound belief review's extra fields to the opaque user-review capability.
+
+    The source packet is only a shape check.  It never grants authority by
+    itself; callers must also arrive through the direct-user adapter.  Review
+    writes may carry evidence bookkeeping, but they cannot become a general
+    content, scope, lifecycle, or source mutation.
+    """
+
+    review_value = _direct_user_review_value(operation.source_packet_id or "")
+    if review_value is None:
+        if direct_user_authorized and set(patch_payload) & _DIRECT_USER_REVIEW_EXTRA_FIELDS:
+            raise MemoryFirestoreApplyError("belief review extras require the exact review source packet")
+        return
+    if not direct_user_authorized:
+        if set(patch_payload) & _DIRECT_USER_REVIEW_EXTRA_FIELDS:
+            raise MemoryFirestoreApplyError("belief review extras require direct user authority")
+        return
+    if existing_item.status != MemoryItemStatus.active:
+        raise MemoryFirestoreApplyError("belief review target is not active")
+    target_memory_id = operation.logical_payload.target_memory_id or operation.target_memory_id
+    if (
+        operation.uid != uid
+        or target_memory_id != existing_item.memory_id
+        or operation.operation_type not in {MemoryOperationType.user_mutation, MemoryOperationType.ledger_mutation}
+        or operation.logical_payload.decision != DurablePatchDecision.update.value
+        or operation.logical_payload.result_status != LifecycleState.active.value
+        or patch_payload.get("target_memory_id") != existing_item.memory_id
+        or patch_payload.get("decision") != DurablePatchDecision.update.value
+        or patch_payload.get("result_status") != LifecycleState.active.value
+    ):
+        raise MemoryFirestoreApplyError("belief review target authority is stale or invalid")
+
+    promotion = patch_payload.get("promotion_audit")
+    if (
+        not isinstance(promotion, dict)
+        or promotion.get("reviewed") is not True
+        or promotion.get("user_review") is not review_value
+    ):
+        raise MemoryFirestoreApplyError("belief review promotion does not match the requested value")
+    expected_evidence_ids = sorted(evidence.evidence_id for evidence in existing_item.evidence)
+    if (
+        sorted(patch_payload.get("evidence_ids") or []) != expected_evidence_ids
+        or patch_payload.get("expected_item_revision") != existing_item.item_revision
+        or patch_payload.get("expected_content_hash") != existing_item.content_hash
+        or patch_payload.get("memory_text") not in (None, existing_item.content)
+        or patch_payload.get("valid_to", existing_item.valid_to) != existing_item.valid_to
+        or patch_payload.get("supersedes") not in (None, [])
+        or patch_payload.get("clear_graph_assertion") is True
+    ):
+        raise MemoryFirestoreApplyError("belief review may not change content, validity, or evidence")
+    if "target_tier" in patch_payload:
+        target_tier = patch_payload.get("target_tier")
+        target_tier = getattr(target_tier, "value", target_tier)
+        if target_tier != getattr(existing_item.tier, "value", existing_item.tier):
+            raise MemoryFirestoreApplyError("belief review may not change tier")
+    if "target_visibility" in patch_payload and patch_payload.get("target_visibility") != existing_item.visibility:
+        raise MemoryFirestoreApplyError("belief review may not change visibility")
+    immutable_updates = {
+        "subject_scope": existing_item.subject_scope,
+        "valid_from": existing_item.valid_from,
+        "expires_at": existing_item.expires_at,
+        "target_user_asserted": existing_item.user_asserted,
+        "subject_entity_id": existing_item.subject_entity_id,
+        "predicate": existing_item.predicate,
+        "arguments": existing_item.arguments,
+    }
+    for field, expected in immutable_updates.items():
+        if field not in patch_payload:
+            continue
+        actual = patch_payload[field]
+        actual = getattr(actual, "value", actual)
+        expected = getattr(expected, "value", expected)
+        if actual != expected:
+            raise MemoryFirestoreApplyError(f"belief review may not change {field}")
+
+    extras_present = set(patch_payload) & _DIRECT_USER_REVIEW_EXTRA_FIELDS
+    if not extras_present:
+        return
+    rationale = patch_payload.get("rationale")
+    if not isinstance(rationale, str) or not rationale.strip():
+        raise MemoryFirestoreApplyError("belief review rationale is required")
+    confidence = patch_payload.get("confidence")
+    expected_count = int(existing_item.corroboration_count or 0)
+    if review_value:
+        corroboration_count = patch_payload.get("corroboration_count")
+        last_corroborated_at = patch_payload.get("last_corroborated_at")
+        if (
+            frozenset(extras_present) != _DIRECT_USER_REVIEW_EXTRA_FIELDS
+            or corroboration_count != expected_count + 1
+            or not isinstance(last_corroborated_at, datetime)
+            or last_corroborated_at.tzinfo is None
+            or last_corroborated_at < (existing_item.last_corroborated_at or existing_item.updated_at)
+            or confidence != 1.0
+        ):
+            raise MemoryFirestoreApplyError("positive belief review must record one corroboration")
+    else:
+        if confidence != 0.0 or "corroboration_count" in extras_present or "last_corroborated_at" in extras_present:
+            raise MemoryFirestoreApplyError("negative belief review may not advance corroboration")
+
+
+_BELIEF_BACKFILL_SOURCE_PREFIX = "user_mutation:belief_backfill:"
+_BELIEF_BACKFILL_PATCH_FIELDS = frozenset(
+    {
+        "patch_id",
+        "packet_id",
+        "run_id",
+        "observed_head_commit_id",
+        "idempotency_key",
+        "decision",
+        "target_memory_id",
+        "result_status",
+        "mutation_metadata",
+        "evidence_ids",
+        "expected_item_revision",
+        "expected_content_hash",
+        "belief_class",
+        "half_life_days",
+    }
+)
+
+
+def _validate_belief_backfill_patch(
+    *,
+    uid: str,
+    operation: MemoryOperation,
+    patch_payload: Dict[str, Any],
+    existing_item: Optional[MemoryItem],
+    required_source_item: Optional[MemoryItem],
+    direct_user_authorized: bool,
+) -> None:
+    """Fence the automated class/horizon backfill to its exact source row.
+
+    The backfill classifier is allowed to fill only the two missing belief
+    fields.  It cannot become a general automated memory editor by smuggling
+    lifecycle, source, content, tier, expiry, or semantic fields through the
+    canonical patch envelope.
+    """
+
+    source_packet_id = operation.source_packet_id or ""
+    if not source_packet_id.startswith(_BELIEF_BACKFILL_SOURCE_PREFIX):
+        return
+    if direct_user_authorized:
+        raise MemoryFirestoreApplyError("belief backfill requires automated authority")
+    if required_source_item is None or existing_item is None:
+        raise MemoryFirestoreApplyError("belief backfill requires an exact source item")
+
+    target_memory_id = operation.logical_payload.target_memory_id or operation.target_memory_id
+    if (
+        operation.uid != uid
+        or operation.operation_type != MemoryOperationType.user_mutation
+        or operation.logical_payload.decision != DurablePatchDecision.update.value
+        or target_memory_id != existing_item.memory_id
+        or target_memory_id != required_source_item.memory_id
+        or required_source_item.uid != uid
+        or required_source_item.model_dump(mode="json") != existing_item.model_dump(mode="json")
+    ):
+        raise MemoryFirestoreApplyError("belief backfill source fence is stale or invalid")
+
+    if set(patch_payload) != set(_BELIEF_BACKFILL_PATCH_FIELDS):
+        raise MemoryFirestoreApplyError(
+            "belief backfill may only update ordinary mutation metadata and belief classification fields"
+        )
+    expected_evidence_ids = sorted(evidence.evidence_id for evidence in existing_item.evidence)
+    if (
+        patch_payload.get("decision") != DurablePatchDecision.update.value
+        or patch_payload.get("target_memory_id") != existing_item.memory_id
+        or patch_payload.get("result_status") != existing_item.status.value
+        or operation.logical_payload.result_status != existing_item.status.value
+        or patch_payload.get("expected_item_revision") != existing_item.item_revision
+        or patch_payload.get("expected_content_hash") != existing_item.content_hash
+        or sorted(patch_payload.get("evidence_ids") or []) != expected_evidence_ids
+        or patch_payload.get("mutation_metadata") != operation.logical_payload.mutation_metadata
+        or "belief_class" not in patch_payload
+        or "half_life_days" not in patch_payload
+    ):
+        raise MemoryFirestoreApplyError("belief backfill patch does not match its source memory")
 
 
 _DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
@@ -377,6 +710,7 @@ def apply_long_term_patch_firestore(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
     trigger_feedback_receipt: Optional[JITTriggerFeedbackReceipt] = None,
+    memory_use_feedback: Optional[MemoryUseFeedback] = None,
     allow_ledger_migration: bool = False,
     _direct_user_authority: object | None = None,
     db_client: Any = db,
@@ -401,6 +735,7 @@ def apply_long_term_patch_firestore(
         required_source_item,
         ledger_reopen_receipt,
         trigger_feedback_receipt,
+        memory_use_feedback,
         allow_ledger_migration,
         _direct_user_authority is _DIRECT_USER_WRITE_AUTHORITY,
     )
@@ -417,6 +752,7 @@ def apply_direct_user_long_term_patch_firestore(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
     trigger_feedback_receipt: Optional[JITTriggerFeedbackReceipt] = None,
+    memory_use_feedback: Optional[MemoryUseFeedback] = None,
     allow_ledger_migration: bool = False,
     db_client: Any = db,
 ) -> ApplyResult:
@@ -438,6 +774,7 @@ def apply_direct_user_long_term_patch_firestore(
         required_source_item=required_source_item,
         ledger_reopen_receipt=ledger_reopen_receipt,
         trigger_feedback_receipt=trigger_feedback_receipt,
+        memory_use_feedback=memory_use_feedback,
         _direct_user_authority=_DIRECT_USER_WRITE_AUTHORITY,
         db_client=db_client,
     )
@@ -723,6 +1060,12 @@ def _privacy_tombstoned_evidence(evidence: MemoryEvidence, *, scrub_source_ident
             "source_version": None if scrub_source_identity else evidence.source_version,
             "conversation_id": None if scrub_source_identity else evidence.conversation_id,
             "lineage_id": None if scrub_source_identity else evidence.lineage_id,
+            "independence_group": None if scrub_source_identity else evidence.independence_group,
+            "source_signal": None,
+            "extractor_id": None,
+            "extractor_version": None,
+            "capture_confidence": None,
+            "attribution": None,
             "source_state": SourceState.tombstoned,
             "source_state_reason": SourceStateReason.deleted_by_user,
             "provenance_visibility": ProvenanceVisibility.hidden,
@@ -1900,6 +2243,7 @@ def _apply_long_term_patch_firestore_transaction(
     required_source_item: Optional[MemoryItem],
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt],
     trigger_feedback_receipt: Optional[JITTriggerFeedbackReceipt],
+    memory_use_feedback: Optional[MemoryUseFeedback],
     allow_ledger_migration: bool = False,
     direct_user_authorized: bool = False,
 ) -> ApplyResult:
@@ -1927,6 +2271,29 @@ def _apply_long_term_patch_firestore_transaction(
     existing_feedback_receipt = None
     feedback_event_ref = None
     feedback_event_receipt = None
+    memory_use_feedback_event_ref = None
+    existing_memory_use_feedback_event = None
+    expected_memory_use_feedback_event = None
+    if memory_use_feedback is not None:
+        if not direct_user_authorized:
+            raise MemoryFirestoreApplyError("memory-use feedback requires direct user authority")
+        if memory_use_feedback.uid != uid:
+            raise MemoryFirestoreApplyError("memory-use feedback owner mismatch")
+        expected_memory_use_feedback_event = _memory_use_feedback_event(memory_use_feedback)
+        memory_use_feedback_event_ref = db_client.collection(_MEMORY_USE_FEEDBACK_EVENTS_COLLECTION).document(
+            expected_memory_use_feedback_event.id
+        )
+        memory_use_feedback_snapshot = memory_use_feedback_event_ref.get(transaction=transaction)
+        if getattr(memory_use_feedback_snapshot, "exists", False):
+            existing_memory_use_feedback_event = parse_snapshot_strict(
+                FeedbackEvent,
+                memory_use_feedback_snapshot,
+                payload_from_snapshot=_typed_doc,
+            )
+            _validate_memory_use_feedback_event(
+                existing_memory_use_feedback_event,
+                expected_memory_use_feedback_event,
+            )
     if trigger_feedback_receipt is not None:
         if trigger_feedback_receipt.uid != uid:
             raise MemoryFirestoreApplyError("trigger feedback receipt owner mismatch")
@@ -1997,6 +2364,30 @@ def _apply_long_term_patch_firestore_transaction(
         raise MemoryFirestoreApplyError("operation_id does not match requested operation document")
     source_packet_id = operation.source_packet_id or ""
 
+    if memory_use_feedback is not None and existing_memory_use_feedback_event is not None:
+        target_memory_id = operation.logical_payload.target_memory_id or operation.target_memory_id
+        if (
+            operation.operation_type not in {MemoryOperationType.user_mutation, MemoryOperationType.ledger_mutation}
+            or operation.logical_payload.decision != DurablePatchDecision.update.value
+            or target_memory_id != memory_use_feedback.target_memory_id
+        ):
+            raise MemoryFirestoreApplyError("memory-use feedback target authority is stale or invalid")
+        current_item = _read_authoritative_target_item(
+            db_client=db_client,
+            transaction=transaction,
+            collections=collections,
+            operation=operation,
+        )
+        if current_item is None or current_item.uid != uid or current_item.status != MemoryItemStatus.active:
+            raise MemoryFirestoreApplyError("memory-use feedback target is unavailable")
+        replay_operation = operation.model_copy(update={"status": MemoryOperationStatus.skipped_idempotent})
+        return ApplyResult(
+            status=ApplyStatus.idempotent_skip,
+            control_state=control_state,
+            operation=replay_operation,
+            memory_items=[current_item],
+        )
+
     committed_replay = apply_long_term_patch_transaction(
         control_state=control_state,
         operation=operation,
@@ -2011,6 +2402,8 @@ def _apply_long_term_patch_firestore_transaction(
             )
         if trigger_feedback_receipt is not None and existing_feedback_receipt is None:
             raise MemoryFirestoreApplyError("committed trigger feedback is missing its receipt")
+        if memory_use_feedback is not None and existing_memory_use_feedback_event is None:
+            raise MemoryFirestoreApplyError("committed memory-use operation is missing its feedback receipt")
         return committed_replay
     if committed_replay.status == ApplyStatus.payload_mismatch:
         return committed_replay
@@ -2109,6 +2502,32 @@ def _apply_long_term_patch_firestore_transaction(
     )
     if existing_item is not None:
         authoritative_payload["existing_item"] = existing_item.model_dump(mode="python")
+    _validate_belief_backfill_patch(
+        uid=uid,
+        operation=operation,
+        patch_payload=patch_payload,
+        existing_item=existing_item,
+        required_source_item=required_source_item,
+        direct_user_authorized=direct_user_authorized,
+    )
+    if existing_item is not None:
+        _validate_direct_user_review_patch(
+            uid=uid,
+            operation=operation,
+            patch_payload=patch_payload,
+            existing_item=existing_item,
+            direct_user_authorized=direct_user_authorized,
+        )
+    if memory_use_feedback is not None:
+        if existing_item is None:
+            raise MemoryFirestoreApplyError("memory-use feedback target is unavailable")
+        _validate_memory_use_patch(
+            uid=uid,
+            feedback=memory_use_feedback,
+            operation=operation,
+            patch_payload=patch_payload,
+            existing_item=existing_item,
+        )
     if trigger_feedback_receipt is not None:
         if existing_feedback_receipt is not None:
             raise MemoryFirestoreApplyError("trigger feedback receipt exists without a committed replay")
@@ -2159,8 +2578,10 @@ def _apply_long_term_patch_firestore_transaction(
         writer_class = MemoryWriterClass.ledger
     elif operation.operation_type != MemoryOperationType.deletion:
         allowed_direct_user_fields = _DIRECT_USER_MUTATION_PATCH_FIELDS
-        if trigger_feedback_receipt is not None:
+        if trigger_feedback_receipt is not None or memory_use_feedback is not None:
             allowed_direct_user_fields = allowed_direct_user_fields | {"curation_weight"}
+        if direct_user_authorized and _direct_user_review_value(source_packet_id) is not None:
+            allowed_direct_user_fields = allowed_direct_user_fields | _DIRECT_USER_REVIEW_EXTRA_FIELDS
         invalid_direct_user_fields = set(patch_payload) - allowed_direct_user_fields
         direct_user_update = (
             direct_user_authorized
@@ -2263,7 +2684,10 @@ def _apply_long_term_patch_firestore_transaction(
         control_state=control_state,
         operation=operation,
         patch_payload=authoritative_payload,
-        allow_trigger_feedback_arguments=trigger_feedback_receipt is not None,
+        # Owner memory-use feedback is the other bounded case where an
+        # existing Long-term row may receive an additive argument update. The
+        # store validates this envelope before reaching the pure apply model.
+        allow_trigger_feedback_arguments=(trigger_feedback_receipt is not None or memory_use_feedback is not None),
     )
     # Validate the authoritative source before reporting a row-id collision so
     # a delayed replay from deleted evidence remains fail-closed as
@@ -2311,6 +2735,18 @@ def _apply_long_term_patch_firestore_transaction(
         operation_ref=operation_ref,
         result=result,
     )
+    if result.status == ApplyStatus.committed and memory_use_feedback is not None:
+        if (
+            memory_use_feedback_event_ref is None
+            or expected_memory_use_feedback_event is None
+            or len(result.memory_items) != 1
+            or result.memory_items[0].memory_id != memory_use_feedback.target_memory_id
+        ):
+            raise MemoryFirestoreApplyError("memory-use feedback did not update exactly one memory")
+        transaction.set(
+            memory_use_feedback_event_ref,
+            _firestore_data(expected_memory_use_feedback_event),
+        )
     if result.status == ApplyStatus.committed:
         _write_canonical_review_resolution(
             transaction=transaction,
@@ -2435,6 +2871,75 @@ def read_trigger_feedback_replay_firestore(
         feedback_id,
         request_hash,
     )
+
+
+@transactional
+def _read_memory_use_feedback_replay_transaction(
+    transaction: Any,
+    db_client: Any,
+    uid: str,
+    feedback: MemoryUseFeedback,
+) -> Optional[MemoryItem]:
+    """Read a memory-use receipt and current item under one read-only fence."""
+
+    assert_no_destructive_operation_transaction(transaction, db_client, uid=uid)
+    deletion_ref = db_client.document(f"account_deletions/{uid}")
+    deletion_snapshot = deletion_ref.get(transaction=transaction)
+    deletion_payload = deletion_snapshot.to_dict() if getattr(deletion_snapshot, "exists", False) else {}
+    deletion_status = normalize_account_deletion_status(
+        marker_exists=bool(getattr(deletion_snapshot, "exists", False)),
+        raw_status=deletion_payload.get("wipe_status") if isinstance(deletion_payload, dict) else None,
+    )
+    if account_deletion_blocks_access(deletion_status):
+        raise MemoryFirestoreApplyError("memory-use feedback replay blocked by account deletion fence")
+    if feedback.uid != uid:
+        raise MemoryFirestoreApplyError("memory-use feedback owner mismatch")
+    control = _required_model(
+        ref=db_client.document(MemoryCollections(uid=uid).memory_apply_control_state),
+        transaction=transaction,
+        model=MemoryControlState,
+        label="memory control state",
+    )
+    expected_event = _memory_use_feedback_event(feedback)
+    event_ref = db_client.collection(_MEMORY_USE_FEEDBACK_EVENTS_COLLECTION).document(expected_event.id)
+    event_snapshot = event_ref.get(transaction=transaction)
+    if not getattr(event_snapshot, "exists", False):
+        return None
+    existing_event = parse_snapshot_strict(FeedbackEvent, event_snapshot, payload_from_snapshot=_typed_doc)
+    _validate_memory_use_feedback_event(existing_event, expected_event)
+
+    item_ref = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{feedback.target_memory_id}")
+    item_snapshot = item_ref.get(transaction=transaction)
+    if not getattr(item_snapshot, "exists", False):
+        raise MemoryFirestoreApplyError("memory-use feedback replay target is missing")
+    item = parse_snapshot_strict(MemoryItem, item_snapshot, payload_from_snapshot=_typed_doc)
+    if (
+        item.uid != uid
+        or item.memory_id != feedback.target_memory_id
+        or item.status != MemoryItemStatus.active
+        or item.account_generation != control.account_generation
+    ):
+        raise MemoryFirestoreApplyError("memory-use feedback replay target is unavailable")
+    return item
+
+
+def read_memory_use_feedback_replay(
+    uid: str,
+    feedback: MemoryUseFeedback,
+    *,
+    db_client: Any = None,
+) -> Optional[MemoryItem]:
+    """Return the current item for a durable owner-use retry, if recorded.
+
+    A missing receipt returns ``None`` so the caller can build the first
+    mutation.  An existing receipt is validated against owner, target, and
+    action before the current item is returned.  The deletion fence is read in
+    the same transaction to prevent a stale retry from crossing a wipe.
+    """
+
+    client = db_client if db_client is not None else db
+    transaction = client.transaction()
+    return _read_memory_use_feedback_replay_transaction(transaction, client, uid, feedback)
 
 
 _EVIDENCE_SEMANTIC_EXCLUDES = {
