@@ -11,9 +11,8 @@
     "fixtures",
     "keys",
     "routes",
-    "deferred_pages",
-    "navigation_sites",
-    "deferred_widgets"
+    "controls",
+    "interactive_widgets"
   ],
   "properties": {
     "version": {
@@ -139,30 +138,81 @@
         }
       }
     },
-    "deferred_pages": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {
-        "type": "string"
+    "interactive_widgets": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^on[A-Z][a-zA-Z]*$"
+            }
+          }
+        ]
       }
     },
-    "navigation_sites": {
+    "controls": {
       "type": "object",
       "additionalProperties": {
         "type": "array",
         "minItems": 1,
         "items": {
-          "type": "string"
-        }
-      }
-    },
-    "deferred_widgets": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "array",
-        "uniqueItems": true,
-        "items": {
-          "type": "string"
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "source",
+            "scope",
+            "label_en",
+            "role",
+            "action",
+            "row_id"
+          ],
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^omi\\."
+            },
+            "source": {
+              "type": "string",
+              "pattern": "^app/lib/.*\\.dart$"
+            },
+            "scope": {
+              "enum": [
+                "root",
+                "shell"
+              ]
+            },
+            "label_en": {
+              "type": "string",
+              "minLength": 1
+            },
+            "role": {
+              "enum": [
+                "button",
+                "textField"
+              ]
+            },
+            "action": {
+              "enum": [
+                "tap",
+                "setText"
+              ]
+            },
+            "row_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
         }
       }
     }

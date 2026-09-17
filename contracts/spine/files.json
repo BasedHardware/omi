@@ -1,5 +1,6 @@
 {
   "app/test/spine/b0_registration_test.dart": "B0",
+  "app/test/spine/b1_catalog_contract_test.dart": "B1",
   "app/test/spine/b1_chat_surface_test.dart": "B1",
   "app/test/spine/b1_controls_test.dart": "B1",
   "app/test/spine/b1_conversation_detail_surface_test.dart": "B1",
@@ -13,6 +14,7 @@
   "app/test/spine/b1_settings_surface_test.dart": "B1",
   "app/test/spine/b1_surface_contract.dart": "B1",
   "app/test/spine/b1_tasks_surface_test.dart": "B1",
+  "app/test/spine/b1_template_mechanism_test.dart": "B1",
   "app/test/spine/b1_wire_test.dart": "B1",
   "app/test/spine/pending_mechanism_test.dart": "MECHANISM",
   "app/test/support/spine/contract.dart": "MECHANISM",

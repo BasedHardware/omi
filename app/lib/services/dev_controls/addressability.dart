@@ -77,7 +77,8 @@ class AppAddressability implements AddressableNavigator {
   AppAddressability._();
   static final instance = AppAddressability._();
 
-  Widget buildShell() => throw UnimplementedError('B1 existing HomePage shell');
+  /// Signed-out onboarding boot never constructs the signed-in HomePage.
+  Widget buildShell({String initialRoute = 'home'}) => throw UnimplementedError('B1 existing app shell');
   ControlsV2 get controls => throw UnimplementedError('B1 live provider projection');
   @override
   String? get visibleRoute => throw UnimplementedError('B1 visible route');

@@ -37,7 +37,19 @@
     "onboardingRoot": "omi.onboarding.root",
     "devicesRoot": "omi.devices.root",
     "chatInput": "omi.chat.input",
-    "chatSend": "omi.chat.send"
+    "chatSend": "omi.chat.send",
+    "homeTabConversations": "omi.home.tab_conversations",
+    "homeTabTasks": "omi.home.tab_tasks",
+    "conversationDetailBack": "omi.conversation_detail.back",
+    "conversationDetailAsk": "omi.conversation_detail.ask",
+    "memoriesCreate": "omi.memories.create",
+    "tasksCreate": "omi.tasks.create",
+    "settingsProfile": "omi.settings.profile",
+    "settingsDone": "omi.settings.done",
+    "onboardingGoogle": "omi.onboarding.google",
+    "devicesBack": "omi.devices.back",
+    "devicesGuide": "omi.devices.guide",
+    "homeTabHome": "omi.home.tab_home"
   },
   "routes": [
     {
@@ -167,1167 +179,239 @@
       "ready_provider": null
     }
   ],
-  "deferred_pages": [
-    "app/lib/pages/action_items/services/action_item_export_service.dart",
-    "app/lib/pages/action_items/task_categorization.dart",
-    "app/lib/pages/action_items/widgets/accept_shared_tasks_sheet.dart",
-    "app/lib/pages/action_items/widgets/action_item_form_sheet.dart",
-    "app/lib/pages/action_items/widgets/action_item_shimmer_widget.dart",
-    "app/lib/pages/action_items/widgets/task_selection_action_bar.dart",
-    "app/lib/pages/announcements/announcement_dialog.dart",
-    "app/lib/pages/announcements/changelog_sheet.dart",
-    "app/lib/pages/announcements/feature_screen.dart",
-    "app/lib/pages/apps/add_app.dart",
-    "app/lib/pages/apps/add_mcp_server_page.dart",
-    "app/lib/pages/apps/app_detail/app_detail.dart",
-    "app/lib/pages/apps/app_detail/app_detail_config.dart",
-    "app/lib/pages/apps/app_detail/app_summary.dart",
-    "app/lib/pages/apps/app_detail/reviews_list_page.dart",
-    "app/lib/pages/apps/app_detail/reviews_section.dart",
-    "app/lib/pages/apps/app_detail/widgets/capabilities_card.dart",
-    "app/lib/pages/apps/app_detail/widgets/info_card_widget.dart",
-    "app/lib/pages/apps/app_detail/widgets/review_avatar.dart",
-    "app/lib/pages/apps/app_home_web_page.dart",
-    "app/lib/pages/apps/explore_install_page.dart",
-    "app/lib/pages/apps/list_item.dart",
-    "app/lib/pages/apps/markdown_viewer.dart",
-    "app/lib/pages/apps/page.dart",
-    "app/lib/pages/apps/providers/add_app_provider.dart",
-    "app/lib/pages/apps/update_app.dart",
-    "app/lib/pages/apps/widgets/action_fields_widget.dart",
-    "app/lib/pages/apps/widgets/ai_app_generator_banner.dart",
-    "app/lib/pages/apps/widgets/api_keys_widget.dart",
-    "app/lib/pages/apps/widgets/app_metadata_widget.dart",
-    "app/lib/pages/apps/widgets/capabilities_chips_widget.dart",
-    "app/lib/pages/apps/widgets/capability_apps_page.dart",
-    "app/lib/pages/apps/widgets/capability_category_section.dart",
-    "app/lib/pages/apps/widgets/category_apps_page.dart",
-    "app/lib/pages/apps/widgets/category_section.dart",
-    "app/lib/pages/apps/widgets/external_trigger_fields_widget.dart",
-    "app/lib/pages/apps/widgets/filter_sheet.dart",
-    "app/lib/pages/apps/widgets/notification_scopes_chips_widget.dart",
-    "app/lib/pages/apps/widgets/payment_details_widget.dart",
-    "app/lib/pages/apps/widgets/popular_apps_section.dart",
-    "app/lib/pages/apps/widgets/prompt_text_field.dart",
-    "app/lib/pages/apps/widgets/search_loading_sliver.dart",
-    "app/lib/pages/apps/widgets/show_app_options_sheet.dart",
-    "app/lib/pages/capture/widgets/widgets.dart",
-    "app/lib/pages/chat/chat_scroll_policy.dart",
-    "app/lib/pages/chat/widgets/ai_message.dart",
-    "app/lib/pages/chat/widgets/chart_message_widget.dart",
-    "app/lib/pages/chat/widgets/chat_followup_chip.dart",
-    "app/lib/pages/chat/widgets/content_blocks/agent_run_blocks.dart",
-    "app/lib/pages/chat/widgets/content_blocks/chat_block_chrome.dart",
-    "app/lib/pages/chat/widgets/content_blocks/chat_content_block_list.dart",
-    "app/lib/pages/chat/widgets/content_blocks/conversation_link_blocks.dart",
-    "app/lib/pages/chat/widgets/content_blocks/discovery_card_block.dart",
-    "app/lib/pages/chat/widgets/content_blocks/goal_link_block.dart",
-    "app/lib/pages/chat/widgets/content_blocks/memory_link_block.dart",
-    "app/lib/pages/chat/widgets/content_blocks/question_card_block.dart",
-    "app/lib/pages/chat/widgets/content_blocks/task_card_block.dart",
-    "app/lib/pages/chat/widgets/files_handler_widget.dart",
-    "app/lib/pages/chat/widgets/jump_to_latest_button.dart",
-    "app/lib/pages/chat/widgets/markdown_message_widget.dart",
-    "app/lib/pages/chat/widgets/typing_indicator.dart",
-    "app/lib/pages/chat/widgets/user_message.dart",
-    "app/lib/pages/chat/widgets/voice_recorder_widget.dart",
-    "app/lib/pages/conversation_capturing/page.dart",
-    "app/lib/pages/conversation_detail/conversation_detail_provider.dart",
-    "app/lib/pages/conversation_detail/maps_util.dart",
-    "app/lib/pages/conversation_detail/share.dart",
-    "app/lib/pages/conversation_detail/test_prompts.dart",
-    "app/lib/pages/conversation_detail/widgets.dart",
-    "app/lib/pages/conversation_detail/widgets/audio_download_progress_sheet.dart",
-    "app/lib/pages/conversation_detail/widgets/conversation_markdown_widget.dart",
-    "app/lib/pages/conversation_detail/widgets/create_template_bottom_sheet.dart",
-    "app/lib/pages/conversation_detail/widgets/edit_segment_sheet.dart",
-    "app/lib/pages/conversation_detail/widgets/name_speaker_sheet.dart",
-    "app/lib/pages/conversation_detail/widgets/share_to_contacts_sheet.dart",
-    "app/lib/pages/conversation_detail/widgets/summarized_apps_sheet.dart",
-    "app/lib/pages/conversation_detail/widgets/template_creation_outcome.dart",
-    "app/lib/pages/conversations/auto_sync_page.dart",
-    "app/lib/pages/conversations/conversation_map_page.dart",
-    "app/lib/pages/conversations/local_storage_page.dart",
-    "app/lib/pages/conversations/private_cloud_sync_page.dart",
-    "app/lib/pages/conversations/recording_detail/recording_detail_sheet.dart",
-    "app/lib/pages/conversations/sync_cooldown_copy.dart",
-    "app/lib/pages/conversations/sync_page.dart",
-    "app/lib/pages/conversations/synced_conversations_page.dart",
-    "app/lib/pages/conversations/wal_item_detail/wal_item_detail_page.dart",
-    "app/lib/pages/conversations/widgets/capture.dart",
-    "app/lib/pages/conversations/widgets/capture_gap_list_item.dart",
-    "app/lib/pages/conversations/widgets/conversation_list_item.dart",
-    "app/lib/pages/conversations/widgets/conversations_group_widget.dart",
-    "app/lib/pages/conversations/widgets/create_folder_sheet.dart",
-    "app/lib/pages/conversations/widgets/daily_summaries_list.dart",
-    "app/lib/pages/conversations/widgets/date_list_item.dart",
-    "app/lib/pages/conversations/widgets/device_storage_card.dart",
-    "app/lib/pages/conversations/widgets/empty_conversations.dart",
-    "app/lib/pages/conversations/widgets/folder_tabs.dart",
-    "app/lib/pages/conversations/widgets/goals_widget.dart",
-    "app/lib/pages/conversations/widgets/merge_action_bar.dart",
-    "app/lib/pages/conversations/widgets/merge_confirmation_dialog.dart",
-    "app/lib/pages/conversations/widgets/move_to_folder_sheet.dart",
-    "app/lib/pages/conversations/widgets/processing_capture.dart",
-    "app/lib/pages/conversations/widgets/recording_list_item.dart",
-    "app/lib/pages/conversations/widgets/search_result_header_widget.dart",
-    "app/lib/pages/conversations/widgets/search_widget.dart",
-    "app/lib/pages/conversations/widgets/speaker_filter_sheet.dart",
-    "app/lib/pages/conversations/widgets/status_action_pill.dart",
-    "app/lib/pages/conversations/widgets/sync_error_card.dart",
-    "app/lib/pages/conversations/widgets/synced_conversation_list_item.dart",
-    "app/lib/pages/conversations/widgets/today_tasks_widget.dart",
-    "app/lib/pages/home/device.dart",
-    "app/lib/pages/home/firmware_mixin.dart",
-    "app/lib/pages/home/firmware_update.dart",
-    "app/lib/pages/home/firmware_update_dialog.dart",
-    "app/lib/pages/home/omiglass_ota_update.dart",
-    "app/lib/pages/home/page.dart",
-    "app/lib/pages/home/widgets/battery_info_widget.dart",
-    "app/lib/pages/home/widgets/daily_summary_card.dart",
-    "app/lib/pages/memories/widgets/delete_confirmation.dart",
-    "app/lib/pages/memories/widgets/memories_load_error.dart",
-    "app/lib/pages/memories/widgets/memory_dialog.dart",
-    "app/lib/pages/memories/widgets/memory_edit_sheet.dart",
-    "app/lib/pages/memories/widgets/memory_graph_page.dart",
-    "app/lib/pages/memories/widgets/memory_history_status_banner.dart",
-    "app/lib/pages/memories/widgets/memory_item.dart",
-    "app/lib/pages/memories/widgets/memory_management_sheet.dart",
-    "app/lib/pages/onboarding/ai_consent_widget.dart",
-    "app/lib/pages/onboarding/apple_watch_permission_page.dart",
-    "app/lib/pages/onboarding/auth.dart",
-    "app/lib/pages/onboarding/complete_screen.dart",
-    "app/lib/pages/onboarding/device_selection.dart",
-    "app/lib/pages/onboarding/find_device/found_devices.dart",
-    "app/lib/pages/onboarding/find_device/page.dart",
-    "app/lib/pages/onboarding/found_omi/found_omi_widget.dart",
-    "app/lib/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart",
-    "app/lib/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart",
-    "app/lib/pages/onboarding/interactive_device_onboarding/steps/power_cycle_step.dart",
-    "app/lib/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart",
-    "app/lib/pages/onboarding/interactive_device_onboarding/steps/transcription_demo_step.dart",
-    "app/lib/pages/onboarding/interactive_device_onboarding/widgets/double_tap_demo_animation.dart",
-    "app/lib/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart",
-    "app/lib/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart",
-    "app/lib/pages/onboarding/knowledge_graph_step.dart",
-    "app/lib/pages/onboarding/name/name_widget.dart",
-    "app/lib/pages/onboarding/permissions/permissions_checker.dart",
-    "app/lib/pages/onboarding/permissions/permissions_widget.dart",
-    "app/lib/pages/onboarding/primary_language/primary_language_widget.dart",
-    "app/lib/pages/onboarding/speech_profile_widget.dart",
-    "app/lib/pages/payments/models/payment_method_config.dart",
-    "app/lib/pages/payments/payment_method_provider.dart",
-    "app/lib/pages/payments/payments_page.dart",
-    "app/lib/pages/payments/stripe_connect_setup.dart",
-    "app/lib/pages/payments/widgets/country_bottom_sheet.dart",
-    "app/lib/pages/payments/widgets/payment_method_card.dart",
-    "app/lib/pages/phone_calls/active_call_banner.dart",
-    "app/lib/pages/phone_calls/active_call_page.dart",
-    "app/lib/pages/phone_calls/call_duration_format.dart",
-    "app/lib/pages/phone_calls/phone_calls_page.dart",
-    "app/lib/pages/phone_calls/phone_setup_intro_page.dart",
-    "app/lib/pages/phone_calls/phone_setup_number_page.dart",
-    "app/lib/pages/phone_calls/phone_setup_verify_page.dart",
-    "app/lib/pages/processing_conversations/page.dart",
-    "app/lib/pages/referral/referral_page.dart",
-    "app/lib/pages/settings/ai_app_generator_page.dart",
-    "app/lib/pages/settings/ai_app_generator_provider.dart",
-    "app/lib/pages/settings/apple_health_detail_page.dart",
-    "app/lib/pages/settings/asana_settings_page.dart",
-    "app/lib/pages/settings/change_name_widget.dart",
-    "app/lib/pages/settings/clickup_settings_page.dart",
-    "app/lib/pages/settings/conversation_display_settings.dart",
-    "app/lib/pages/settings/conversation_timeout_dialog.dart",
-    "app/lib/pages/settings/custom_vocabulary_page.dart",
-    "app/lib/pages/settings/daily_summary_detail_page.dart",
-    "app/lib/pages/settings/data_privacy_page.dart",
-    "app/lib/pages/settings/delete_account.dart",
-    "app/lib/pages/settings/developer.dart",
-    "app/lib/pages/settings/device_diagnostics.dart",
-    "app/lib/pages/settings/device_settings.dart",
-    "app/lib/pages/settings/fair_use_page.dart",
-    "app/lib/pages/settings/google_tasks_settings_page.dart",
-    "app/lib/pages/settings/import_history_page.dart",
-    "app/lib/pages/settings/integration_settings_page.dart",
-    "app/lib/pages/settings/integrations_page.dart",
-    "app/lib/pages/settings/language_selection_dialog.dart",
-    "app/lib/pages/settings/language_settings_page.dart",
-    "app/lib/pages/settings/notifications_settings_page.dart",
-    "app/lib/pages/settings/payment_webview_page.dart",
-    "app/lib/pages/settings/people.dart",
-    "app/lib/pages/settings/permissions_page.dart",
-    "app/lib/pages/settings/phone_call_settings_page.dart",
-    "app/lib/pages/settings/profile.dart",
-    "app/lib/pages/settings/task_integrations_page.dart",
-    "app/lib/pages/settings/todoist_settings_page.dart",
-    "app/lib/pages/settings/transcription_settings_page.dart",
-    "app/lib/pages/settings/usage_page.dart",
-    "app/lib/pages/settings/widgets/cancel_subscription_sheet.dart",
-    "app/lib/pages/settings/widgets/create_dev_api_key_sheet.dart",
-    "app/lib/pages/settings/widgets/create_mcp_api_key_dialog.dart",
-    "app/lib/pages/settings/widgets/dev_api_key_created_dialog.dart",
-    "app/lib/pages/settings/widgets/dev_api_key_list_item.dart",
-    "app/lib/pages/settings/widgets/developer_api_keys_section.dart",
-    "app/lib/pages/settings/widgets/mcp_api_key_created_dialog.dart",
-    "app/lib/pages/settings/widgets/mcp_api_key_list_item.dart",
-    "app/lib/pages/settings/widgets/plans_sheet.dart",
-    "app/lib/pages/settings/widgets/profile_settings_tile.dart",
-    "app/lib/pages/settings/wrapped_2025_page.dart",
-    "app/lib/pages/settings/wrapped_2025_share_templates.dart",
-    "app/lib/pages/speech_profile/page.dart",
-    "app/lib/pages/speech_profile/speech_progress_bar.dart",
-    "app/lib/pages/speech_profile/speech_topics_card.dart"
-  ],
-  "navigation_sites": {
-    "app/lib/core/app_shell.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6"
-    ],
-    "app/lib/pages/action_items/action_items_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8"
-    ],
-    "app/lib/pages/action_items/widgets/action_item_form_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/action_items/widgets/task_selection_action_bar.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/announcements/announcement_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/announcements/changelog_sheet.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/announcements/feature_screen.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/apps/add_app.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4"
-    ],
-    "app/lib/pages/apps/add_mcp_server_page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/apps/app_detail/app_detail.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9",
-      "legacy:10",
-      "legacy:11",
-      "legacy:12",
-      "legacy:13",
-      "legacy:14",
-      "legacy:15",
-      "legacy:16",
-      "legacy:17",
-      "legacy:18",
-      "legacy:19"
-    ],
-    "app/lib/pages/apps/app_detail/reviews_list_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/apps/explore_install_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5"
-    ],
-    "app/lib/pages/apps/list_item.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/apps/update_app.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/apps/widgets/ai_app_generator_banner.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/apps/widgets/api_keys_widget.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/apps/widgets/app_metadata_widget.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/apps/widgets/capability_category_section.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/apps/widgets/category_section.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/apps/widgets/external_trigger_fields_widget.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/apps/widgets/payment_details_widget.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/apps/widgets/show_app_options_sheet.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4"
-    ],
-    "app/lib/pages/capture/connect.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/capture/widgets/widgets.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/chat/page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/chat/widgets/ai_message.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/chat/widgets/content_blocks/conversation_link_blocks.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/chat/widgets/content_blocks/goal_link_block.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversation_capturing/page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4"
-    ],
-    "app/lib/pages/conversation_detail/page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9",
-      "legacy:10",
-      "legacy:11"
-    ],
-    "app/lib/pages/conversation_detail/widgets.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9",
-      "legacy:10",
-      "legacy:11"
-    ],
-    "app/lib/pages/conversation_detail/widgets/audio_download_progress_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversation_detail/widgets/create_template_bottom_sheet.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/conversation_detail/widgets/edit_segment_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversation_detail/widgets/name_speaker_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversation_detail/widgets/share_to_contacts_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversation_detail/widgets/summarized_apps_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/auto_sync_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6"
-    ],
-    "app/lib/pages/conversations/conversation_map_page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/conversations/conversations_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/local_storage_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/private_cloud_sync_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/recording_detail/recording_detail_sheet.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/conversations/sync_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6"
-    ],
-    "app/lib/pages/conversations/wal_item_detail/wal_item_detail_page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/conversations/widgets/conversation_list_item.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4"
-    ],
-    "app/lib/pages/conversations/widgets/create_folder_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/widgets/daily_summaries_list.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/widgets/folder_tabs.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/conversations/widgets/goals_widget.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/conversations/widgets/merge_confirmation_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/widgets/move_to_folder_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/widgets/processing_capture.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/conversations/widgets/speaker_filter_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/conversations/widgets/synced_conversation_list_item.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/home/device.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7"
-    ],
-    "app/lib/pages/home/firmware_update.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/home/firmware_update_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/home/home_content.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/home/omiglass_ota_update.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/home/page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9",
-      "legacy:10",
-      "legacy:11",
-      "legacy:12",
-      "legacy:13",
-      "legacy:14"
-    ],
-    "app/lib/pages/home/widgets/battery_info_widget.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8"
-    ],
-    "app/lib/pages/memories/page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/memories/widgets/delete_confirmation.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/memories/widgets/memory_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/memories/widgets/memory_edit_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/memories/widgets/memory_item.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/memories/widgets/memory_management_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/onboarding/apple_watch_permission_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/onboarding/device_selection.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/onboarding/find_device/found_devices.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/onboarding/find_device/page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/onboarding/permissions/permissions_checker.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/onboarding/permissions/permissions_widget.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/onboarding/primary_language/primary_language_widget.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/onboarding/speech_profile_widget.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9"
-    ],
-    "app/lib/pages/onboarding/wrapper.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/payments/payments_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/payments/stripe_connect_setup.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/phone_calls/active_call_banner.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/phone_calls/active_call_page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/phone_calls/phone_calls_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/phone_calls/phone_setup_intro_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/phone_calls/phone_setup_number_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/pages/phone_calls/phone_setup_verify_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/ai_app_generator_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/apple_health_detail_page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/settings/conversation_timeout_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/daily_summary_detail_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5"
-    ],
-    "app/lib/pages/settings/data_privacy_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/delete_account.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/developer.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8"
-    ],
-    "app/lib/pages/settings/device_settings.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8"
-    ],
-    "app/lib/pages/settings/import_history_page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/settings/integration_settings_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/integrations_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4"
-    ],
-    "app/lib/pages/settings/language_selection_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/language_settings_page.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/settings/notifications_settings_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/people.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4"
-    ],
-    "app/lib/pages/settings/phone_call_settings_page.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/profile.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9",
-      "legacy:10"
-    ],
-    "app/lib/pages/settings/settings_drawer.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9",
-      "legacy:10",
-      "legacy:11",
-      "legacy:12",
-      "legacy:13",
-      "legacy:14",
-      "legacy:15",
-      "legacy:16",
-      "legacy:17",
-      "legacy:18",
-      "legacy:19",
-      "legacy:20",
-      "legacy:21",
-      "legacy:22",
-      "legacy:23",
-      "legacy:24"
-    ],
-    "app/lib/pages/settings/task_integrations_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9",
-      "legacy:10"
-    ],
-    "app/lib/pages/settings/transcription_settings_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9"
-    ],
-    "app/lib/pages/settings/usage_page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4"
-    ],
-    "app/lib/pages/settings/widgets/cancel_subscription_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/widgets/create_dev_api_key_sheet.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/pages/settings/widgets/create_mcp_api_key_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/widgets/dev_api_key_list_item.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/widgets/mcp_api_key_list_item.dart": [
-      "legacy:1"
-    ],
-    "app/lib/pages/settings/widgets/plans_sheet.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7",
-      "legacy:8",
-      "legacy:9",
-      "legacy:10"
-    ],
-    "app/lib/pages/speech_profile/page.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5",
-      "legacy:6",
-      "legacy:7"
-    ],
-    "app/lib/providers/connectivity_provider.dart": [
-      "legacy:1"
-    ],
-    "app/lib/providers/device_provider.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5"
-    ],
-    "app/lib/services/app_review_service.dart": [
-      "legacy:1"
-    ],
-    "app/lib/services/dev_controls/semantic_controls.dart": [
-      "legacy:1"
-    ],
-    "app/lib/services/notifications.dart": [
-      "legacy:1"
-    ],
-    "app/lib/services/quick_actions_service.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3",
-      "legacy:4",
-      "legacy:5"
-    ],
-    "app/lib/utils/alerts/app_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/utils/other/temp.dart": [
-      "legacy:1",
-      "legacy:2",
-      "legacy:3"
-    ],
-    "app/lib/widgets/bluetooth_guidance_listener.dart": [
-      "legacy:1"
-    ],
-    "app/lib/widgets/connection_guide_sheet.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/widgets/conversation_bottom_bar.dart": [
-      "legacy:1"
-    ],
-    "app/lib/widgets/freemium_switch_dialog.dart": [
-      "legacy:1"
-    ],
-    "app/lib/widgets/omi_confirm_dialog.dart": [
-      "legacy:1",
-      "legacy:2"
-    ],
-    "app/lib/widgets/photos_grid.dart": [
-      "legacy:1"
-    ],
-    "app/lib/widgets/rayban_meta_setup_sheet.dart": [
-      "legacy:1"
-    ],
-    "app/lib/widgets/transcript.dart": [
-      "legacy:1"
-    ],
-    "app/lib/widgets/upgrade_alert.dart": [
-      "legacy:1"
-    ]
+  "interactive_widgets": {
+    "IconButton": null,
+    "TextButton": null,
+    "ElevatedButton": null,
+    "OutlinedButton": null,
+    "FilledButton": null,
+    "FloatingActionButton": null,
+    "CupertinoButton": null,
+    "GestureDetector": [
+      "onTapDown",
+      "onTapUp",
+      "onTap",
+      "onTapMove",
+      "onTapCancel",
+      "onDoubleTapDown",
+      "onDoubleTap",
+      "onDoubleTapCancel",
+      "onLongPressDown",
+      "onLongPressCancel",
+      "onLongPress",
+      "onLongPressStart",
+      "onLongPressMoveUpdate",
+      "onLongPressUp",
+      "onLongPressEnd",
+      "onVerticalDragDown",
+      "onVerticalDragStart",
+      "onVerticalDragUpdate",
+      "onVerticalDragEnd",
+      "onVerticalDragCancel",
+      "onHorizontalDragDown",
+      "onHorizontalDragStart",
+      "onHorizontalDragUpdate",
+      "onHorizontalDragEnd",
+      "onHorizontalDragCancel",
+      "onPanDown",
+      "onPanStart",
+      "onPanUpdate",
+      "onPanEnd",
+      "onPanCancel",
+      "onScaleStart",
+      "onScaleUpdate",
+      "onScaleEnd"
+    ],
+    "InkWell": [
+      "onTap",
+      "onTapDown",
+      "onTapUp",
+      "onTapCancel",
+      "onDoubleTap",
+      "onLongPress",
+      "onLongPressUp"
+    ],
+    "InkResponse": [
+      "onTap",
+      "onTapDown",
+      "onTapUp",
+      "onTapCancel",
+      "onDoubleTap",
+      "onLongPress",
+      "onLongPressUp"
+    ],
+    "TextField": null,
+    "TextFormField": null,
+    "CupertinoTextField": null,
+    "Checkbox": null,
+    "Radio": null,
+    "Switch": null,
+    "Slider": null,
+    "RangeSlider": null,
+    "DropdownButton": null,
+    "DropdownButtonFormField": null,
+    "PopupMenuButton": null,
+    "ListTile": [
+      "onTap",
+      "onLongPress"
+    ],
+    "CheckboxListTile": null,
+    "RadioListTile": null,
+    "SwitchListTile": null
   },
-  "deferred_widgets": {
-    "app/lib/pages/action_items/action_items_page.dart": [
-      "_GoalCreateSheet",
-      "_GoalEditSheet"
-    ],
-    "app/lib/pages/action_items/widgets/accept_shared_tasks_sheet.dart": [
-      "AcceptSharedTasksSheet"
-    ],
-    "app/lib/pages/action_items/widgets/action_item_form_sheet.dart": [
-      "ActionItemFormSheet",
-      "DateTimePickerSheet"
-    ],
-    "app/lib/pages/announcements/changelog_sheet.dart": [
-      "ChangelogSheet"
-    ],
-    "app/lib/pages/announcements/feature_screen.dart": [
-      "FeatureScreen"
-    ],
-    "app/lib/pages/apps/add_app.dart": [
-      "AddAppPage"
-    ],
-    "app/lib/pages/apps/add_mcp_server_page.dart": [
-      "AddMcpServerPage"
-    ],
-    "app/lib/pages/apps/app_detail/app_detail.dart": [
-      "AppDetailPage"
-    ],
-    "app/lib/pages/apps/app_detail/reviews_list_page.dart": [
-      "ReviewsListPage"
-    ],
-    "app/lib/pages/apps/app_home_web_page.dart": [
-      "AppHomeWebPage"
-    ],
-    "app/lib/pages/apps/explore_install_page.dart": [
-      "ExploreInstallPage"
-    ],
-    "app/lib/pages/apps/page.dart": [
-      "AppsPage"
-    ],
-    "app/lib/pages/apps/update_app.dart": [
-      "UpdateAppPage"
-    ],
-    "app/lib/pages/apps/widgets/capability_apps_page.dart": [
-      "CapabilityAppsPage"
-    ],
-    "app/lib/pages/apps/widgets/category_apps_page.dart": [
-      "CategoryAppsPage"
-    ],
-    "app/lib/pages/apps/widgets/filter_sheet.dart": [
-      "FilterBottomSheet"
-    ],
-    "app/lib/pages/apps/widgets/show_app_options_sheet.dart": [
-      "ShowAppOptionsSheet"
-    ],
-    "app/lib/pages/chat/widgets/ai_message.dart": [
-      "FeedbackBottomSheet"
-    ],
-    "app/lib/pages/conversation_capturing/page.dart": [
-      "ConversationCapturingPage"
-    ],
-    "app/lib/pages/conversation_detail/page.dart": [
-      "CalendarEventPickerSheet"
-    ],
-    "app/lib/pages/conversation_detail/test_prompts.dart": [
-      "TestPromptsPage"
-    ],
-    "app/lib/pages/conversation_detail/widgets.dart": [
-      "CalendarEventDetailsSheet"
-    ],
-    "app/lib/pages/conversation_detail/widgets/audio_download_progress_sheet.dart": [
-      "AudioDownloadProgressSheet"
-    ],
-    "app/lib/pages/conversation_detail/widgets/create_template_bottom_sheet.dart": [
-      "CreateTemplateBottomSheet"
-    ],
-    "app/lib/pages/conversation_detail/widgets/edit_segment_sheet.dart": [
-      "_EditSegmentSheet"
-    ],
-    "app/lib/pages/conversation_detail/widgets/name_speaker_sheet.dart": [
-      "NameSpeakerBottomSheet"
-    ],
-    "app/lib/pages/conversation_detail/widgets/share_to_contacts_sheet.dart": [
-      "ShareToContactsBottomSheet"
-    ],
-    "app/lib/pages/conversation_detail/widgets/summarized_apps_sheet.dart": [
-      "SummarizedAppsBottomSheet"
-    ],
-    "app/lib/pages/conversations/auto_sync_page.dart": [
-      "AutoSyncPage",
-      "_ManageStorageSheet"
-    ],
-    "app/lib/pages/conversations/conversation_map_page.dart": [
-      "ConversationMapPage"
-    ],
-    "app/lib/pages/conversations/local_storage_page.dart": [
-      "LocalStoragePage"
-    ],
-    "app/lib/pages/conversations/private_cloud_sync_page.dart": [
-      "PrivateCloudSyncPage"
-    ],
-    "app/lib/pages/conversations/recording_detail/recording_detail_sheet.dart": [
-      "_RecordingDetailSheet"
-    ],
-    "app/lib/pages/conversations/sync_page.dart": [
-      "SyncPage",
-      "_ManageStorageSheet"
-    ],
-    "app/lib/pages/conversations/synced_conversations_page.dart": [
-      "SyncedConversationsPage"
-    ],
-    "app/lib/pages/conversations/wal_item_detail/wal_item_detail_page.dart": [
-      "WalItemDetailPage"
-    ],
-    "app/lib/pages/conversations/widgets/create_folder_sheet.dart": [
-      "CreateFolderBottomSheet"
-    ],
-    "app/lib/pages/conversations/widgets/folder_tabs.dart": [
-      "_DeleteFolderSheet"
-    ],
-    "app/lib/pages/conversations/widgets/move_to_folder_sheet.dart": [
-      "MoveToFolderSheet"
-    ],
-    "app/lib/pages/conversations/widgets/speaker_filter_sheet.dart": [
-      "SpeakerFilterSheet"
-    ],
-    "app/lib/pages/home/firmware_update_dialog.dart": [
-      "FirmwareUpdateSheet"
-    ],
-    "app/lib/pages/home/page.dart": [
-      "HomePage"
-    ],
-    "app/lib/pages/home/widgets/battery_info_widget.dart": [
-      "RecordOptionsSheet"
-    ],
-    "app/lib/pages/memories/widgets/memory_edit_sheet.dart": [
-      "MemoryEditSheet"
-    ],
-    "app/lib/pages/memories/widgets/memory_graph_page.dart": [
-      "MemoryGraphPage"
-    ],
-    "app/lib/pages/memories/widgets/memory_management_sheet.dart": [
-      "MemoryManagementSheet"
-    ],
-    "app/lib/pages/onboarding/apple_watch_permission_page.dart": [
-      "AppleWatchPermissionPage"
-    ],
-    "app/lib/pages/onboarding/complete_screen.dart": [
-      "OnboardingCompleteScreen"
-    ],
-    "app/lib/pages/onboarding/device_selection.dart": [
-      "DeviceSelectionPage"
-    ],
-    "app/lib/pages/onboarding/find_device/page.dart": [
-      "FindDevicesPage"
-    ],
-    "app/lib/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart": [
-      "OnboardingIntroScreen"
-    ],
-    "app/lib/pages/onboarding/permissions/permissions_checker.dart": [
-      "PermissionsInterstitialPage"
-    ],
-    "app/lib/pages/payments/payments_page.dart": [
-      "PaymentsPage"
-    ],
-    "app/lib/pages/payments/widgets/country_bottom_sheet.dart": [
-      "CountryBottomSheet"
-    ],
-    "app/lib/pages/phone_calls/active_call_page.dart": [
-      "ActiveCallPage",
-      "_AudioRouteSheet",
-      "_DtmfDialpadSheet"
-    ],
-    "app/lib/pages/phone_calls/phone_calls_page.dart": [
-      "PhoneCallsPage"
-    ],
-    "app/lib/pages/phone_calls/phone_setup_intro_page.dart": [
-      "PhoneSetupIntroPage"
-    ],
-    "app/lib/pages/phone_calls/phone_setup_number_page.dart": [
-      "PhoneSetupNumberPage",
-      "_CountryPickerSheet"
-    ],
-    "app/lib/pages/phone_calls/phone_setup_verify_page.dart": [
-      "PhoneSetupVerifyPage"
-    ],
-    "app/lib/pages/processing_conversations/page.dart": [
-      "ProcessingConversationPage"
-    ],
-    "app/lib/pages/referral/referral_page.dart": [
-      "ReferralPage"
-    ],
-    "app/lib/pages/settings/ai_app_generator_page.dart": [
-      "AiAppGeneratorPage"
-    ],
-    "app/lib/pages/settings/apple_health_detail_page.dart": [
-      "AppleHealthDetailPage"
-    ],
-    "app/lib/pages/settings/asana_settings_page.dart": [
-      "AsanaSettingsPage"
-    ],
-    "app/lib/pages/settings/clickup_settings_page.dart": [
-      "ClickUpSettingsPage"
-    ],
-    "app/lib/pages/settings/custom_vocabulary_page.dart": [
-      "CustomVocabularyPage"
-    ],
-    "app/lib/pages/settings/daily_summary_detail_page.dart": [
-      "DailySummaryDetailPage"
-    ],
-    "app/lib/pages/settings/data_privacy_page.dart": [
-      "DataPrivacyPage"
-    ],
-    "app/lib/pages/settings/developer.dart": [
-      "DeveloperSettingsPage",
-      "_ManualFirmwareFlashPage"
-    ],
-    "app/lib/pages/settings/fair_use_page.dart": [
-      "FairUsePage"
-    ],
-    "app/lib/pages/settings/google_tasks_settings_page.dart": [
-      "GoogleTasksSettingsPage"
-    ],
-    "app/lib/pages/settings/import_history_page.dart": [
-      "ImportHistoryPage"
-    ],
-    "app/lib/pages/settings/integration_settings_page.dart": [
-      "IntegrationSettingsPage"
-    ],
-    "app/lib/pages/settings/integrations_page.dart": [
-      "IntegrationsPage"
-    ],
-    "app/lib/pages/settings/language_settings_page.dart": [
-      "LanguageSettingsPage"
-    ],
-    "app/lib/pages/settings/notifications_settings_page.dart": [
-      "NotificationsSettingsPage"
-    ],
-    "app/lib/pages/settings/payment_webview_page.dart": [
-      "PaymentWebViewPage"
-    ],
-    "app/lib/pages/settings/people.dart": [
-      "UserPeoplePage",
-      "_UserPeoplePage"
-    ],
-    "app/lib/pages/settings/permissions_page.dart": [
-      "PermissionsPage"
-    ],
-    "app/lib/pages/settings/phone_call_settings_page.dart": [
-      "PhoneCallSettingsPage"
-    ],
-    "app/lib/pages/settings/profile.dart": [
-      "ProfilePage"
-    ],
-    "app/lib/pages/settings/task_integrations_page.dart": [
-      "TaskIntegrationsPage"
-    ],
-    "app/lib/pages/settings/todoist_settings_page.dart": [
-      "TodoistSettingsPage"
-    ],
-    "app/lib/pages/settings/transcription_settings_page.dart": [
-      "TranscriptionSettingsPage",
-      "_JsonEditorPage"
-    ],
-    "app/lib/pages/settings/usage_page.dart": [
-      "UsagePage"
-    ],
-    "app/lib/pages/settings/widgets/create_dev_api_key_sheet.dart": [
-      "CreateDevApiKeySheet"
-    ],
-    "app/lib/pages/settings/widgets/dev_api_key_created_dialog.dart": [
-      "DevApiKeyCreatedSheet"
-    ],
-    "app/lib/pages/settings/widgets/plans_sheet.dart": [
-      "PlansSheet"
-    ],
-    "app/lib/pages/settings/wrapped_2025_page.dart": [
-      "Wrapped2025Page"
-    ],
-    "app/lib/pages/speech_profile/page.dart": [
-      "SpeechProfilePage"
-    ],
-    "app/lib/widgets/apple_watch_setup_bottom_sheet.dart": [
-      "AppleWatchSetupBottomSheet"
-    ],
-    "app/lib/widgets/connection_guide_sheet.dart": [
-      "ConnectionGuideSheet"
-    ],
-    "app/lib/widgets/device_pairing_sheet.dart": [
-      "DevicePairingSheet"
-    ],
-    "app/lib/widgets/media_viewer_page.dart": [
-      "MediaViewerPage"
-    ],
-    "app/lib/widgets/rayban_meta_input_picker_sheet.dart": [
-      "RayBanMetaInputPickerSheet"
-    ],
-    "app/lib/widgets/rayban_meta_setup_sheet.dart": [
-      "RayBanMetaSetupSheet"
+  "controls": {
+    "chat": [
+      {
+        "key": "omi.chat.input",
+        "source": "app/lib/pages/chat/page.dart",
+        "scope": "root",
+        "label_en": "Message",
+        "role": "textField",
+        "action": "setText",
+        "row_id": null
+      },
+      {
+        "key": "omi.chat.send",
+        "source": "app/lib/pages/chat/page.dart",
+        "scope": "root",
+        "label_en": "Send message",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      }
+    ],
+    "home": [
+      {
+        "key": "omi.home.tab_home",
+        "source": "app/lib/widgets/bottom_nav_bar.dart",
+        "scope": "shell",
+        "label_en": "Home",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      },
+      {
+        "key": "omi.home.tab_conversations",
+        "source": "app/lib/widgets/bottom_nav_bar.dart",
+        "scope": "shell",
+        "label_en": "Conversations",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      },
+      {
+        "key": "omi.home.tab_tasks",
+        "source": "app/lib/widgets/bottom_nav_bar.dart",
+        "scope": "shell",
+        "label_en": "Tasks",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      }
+    ],
+    "conversations": [
+      {
+        "key": "omi.conversations.row.rdaf2934440d6b578d73634beaa346288f9702bae8e7242ac870532b6ac43fb5c",
+        "source": "app/lib/pages/conversations/widgets/conversation_list_item.dart",
+        "scope": "root",
+        "label_en": "Open Journey one seeded conversation",
+        "role": "button",
+        "action": "tap",
+        "row_id": "seeded-conv-j1-0001"
+      }
+    ],
+    "conversation_detail": [
+      {
+        "key": "omi.conversation_detail.back",
+        "source": "app/lib/pages/conversation_detail/page.dart",
+        "scope": "root",
+        "label_en": "Back",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      },
+      {
+        "key": "omi.conversation_detail.ask",
+        "source": "app/lib/pages/conversation_detail/page.dart",
+        "scope": "root",
+        "label_en": "Ask about this conversation",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      }
+    ],
+    "memories": [
+      {
+        "key": "omi.memories.create",
+        "source": "app/lib/pages/memories/page.dart",
+        "scope": "root",
+        "label_en": "Create memory",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      }
+    ],
+    "tasks": [
+      {
+        "key": "omi.tasks.create",
+        "source": "app/lib/pages/action_items/action_items_page.dart",
+        "scope": "root",
+        "label_en": "Create action item",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      }
+    ],
+    "settings": [
+      {
+        "key": "omi.settings.profile",
+        "source": "app/lib/pages/settings/settings_drawer.dart",
+        "scope": "root",
+        "label_en": "Profile",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      },
+      {
+        "key": "omi.settings.done",
+        "source": "app/lib/pages/settings/settings_drawer.dart",
+        "scope": "root",
+        "label_en": "Done",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      }
+    ],
+    "onboarding": [
+      {
+        "key": "omi.onboarding.google",
+        "source": "app/lib/pages/onboarding/auth.dart",
+        "scope": "root",
+        "label_en": "Sign in with Google",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      }
+    ],
+    "devices": [
+      {
+        "key": "omi.devices.back",
+        "source": "app/lib/pages/capture/connect.dart",
+        "scope": "root",
+        "label_en": "Back",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      },
+      {
+        "key": "omi.devices.guide",
+        "source": "app/lib/pages/capture/connect.dart",
+        "scope": "root",
+        "label_en": "Connection guide",
+        "role": "button",
+        "action": "tap",
+        "row_id": null
+      }
     ]
   }
 }

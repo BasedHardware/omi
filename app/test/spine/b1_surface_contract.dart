@@ -6,6 +6,7 @@ import 'dart:ui' show SemanticsAction, SemanticsActionEvent, Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/dev_controls/semantic_controls.dart';
+import '../support/addressability_widgets.dart';
 
 import '../../integration_test/journeys/support/hermetic_boot.dart';
 import '../support/addressability_fixture.dart';
@@ -27,7 +28,7 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
   final api = AppAddressability.instance;
   // Ask for the production shell before setting up I/O. The skeleton's expected
   // failure cannot hide a broken fixture setup in the eventual implementation.
-  final shell = api.buildShell();
+  final shell = api.buildShell(initialRoute: id == 'onboarding' ? 'onboarding' : 'home');
   expect(
       () => SemanticControls.instance.installIfEligible(register: (name, handler) {
             developer.registerExtension(name, handler);
@@ -39,13 +40,19 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
   await JourneyHermeticBoot.pumpPage(tester, page: shell, providers: providers!);
   final semantics = tester.ensureSemantics();
   addTearDown(semantics.dispose);
+  if (id != 'onboarding') {
+    await expectLater(api.navigate('onboarding'),
+        throwsA(isA<AddressabilityRefused>().having((e) => e.code, 'code', 'auth-required')));
+  }
   final navigation = _wire('navigate', params: {
     'destination': id,
     if (id == 'conversation_detail') 'record_id': 'seeded-conv-j1-0001',
   });
   if (route['reach']['kind'] == 'push' || route['reach']['kind'] == 'sheet') {
-    await expectLater(
-        api.navigate('home'), throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'busy')));
+    late Future<void> competing;
+    expect(() => competing = api.navigate('home'), returnsNormally, reason: 'refusals are failed Futures');
+    await expectLater(competing, throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'busy')));
+    expect(api.visibleRoute, isNull, reason: 'no destination is ready during transition');
   }
   // Bound frames; waitReady owns the asynchronous condition, not pumpAndSettle
   // on an app with perpetual capture/shimmer animations.
@@ -53,8 +60,11 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
     await tester.pump(const Duration(milliseconds: 16));
   }
   expect((await navigation)['ok'], isTrue);
-  final root = find.byKey(ValueKey<String>(route['root'] as String));
+  final rootKey = ValueKey<String>(route['root'] as String);
+  final root = find.byKey(rootKey, skipOffstage: true);
   expect(root, findsOneWidget);
+  expect(find.byKey(rootKey, skipOffstage: false), findsOneWidget);
+  final retainedPage = find.byType(pageType).evaluate().single;
   final page = find.byType(pageType);
   expect(page, findsOneWidget, reason: 'must reach the actual production page, not a catalog placeholder');
   expect(
@@ -96,47 +106,30 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
         throwsA(isA<AddressabilityRefused>().having((error) => error.code, 'code', 'record-unavailable')));
     expect(api.visibleRoute, id);
   }
-  final keys = <String>{};
-  final controls = find.descendant(
-      of: root,
-      matching: find.byWidgetPredicate((widget) =>
-          widget is ButtonStyleButton ||
-          widget is IconButton ||
-          widget is TextField ||
-          widget is Checkbox ||
-          widget is Switch ||
-          widget is Slider ||
-          (widget is ListTile && widget.onTap != null)));
-  expect(controls.evaluate(), isNotEmpty, reason: 'an empty shell cannot satisfy a surface');
-  for (final element in controls.evaluate()) {
-    final key = element.widget.key;
-    expect(key, isA<ValueKey<String>>(), reason: '${element.widget.runtimeType} needs its own key');
-    final value = (key as ValueKey<String>).value;
+  final catalog = (jsonDecode(addressableControlsJson) as Map<String, dynamic>)[id] as List;
+  expect(catalog, isNotEmpty);
+  if (id == 'chat') {
+    // Establish the actionable send state before checking its semantics.
+    await tester.enterText(find.byKey(OmiKeys.chatInput), 'fixture input');
+    await tester.pump();
+  }
+  for (final item in catalog.cast<Map<String, dynamic>>()) {
+    final value = item['key'] as String;
+    final control = find.byKey(ValueKey<String>(value), skipOffstage: true);
+    expect(control, findsOneWidget, reason: 'catalogued control must be unique and onstage: $value');
+    if (item['scope'] == 'root') {
+      expect(find.descendant(of: root, matching: control), findsOneWidget);
+    }
+    expect(isCatalogInteractive(tester.widget(control), includeDisabled: true), isTrue,
+        reason: 'the catalog key belongs on the actual interactive constructor, not a decorative wrapper');
     expect(AddressKey.valid(value), isTrue);
-    expect(keys.add(value), isTrue, reason: 'duplicate visible control key: $value');
-    final node = tester.getSemantics(find.byWidget(element.widget));
-    final data = node.getSemanticsData();
+    final data = tester.getSemantics(control).getSemanticsData();
     expect(data.identifier, value);
-    expect(data.label.trim(), isNotEmpty);
-    expect(data.label, isNot(contains('omi.')));
-    expect(data.label, isNot(contains('seeded-')));
-    if (element.widget is TextField) {
-      final field = element.widget as TextField;
-      expect(data.flagsCollection.isTextField, isTrue);
-      expect(data.hasAction(SemanticsAction.setText), field.enabled != false && !field.readOnly);
-    }
-    if (element.widget is IconButton || element.widget is ButtonStyleButton) {
-      final enabled = element.widget is IconButton
-          ? (element.widget as IconButton).onPressed != null
-          : (element.widget as ButtonStyleButton).onPressed != null ||
-              (element.widget as ButtonStyleButton).onLongPress != null;
-      expect(data.flagsCollection.isButton, isTrue);
-      expect(data.flagsCollection.isEnabled, enabled ? Tristate.isTrue : Tristate.isFalse);
-    }
-    if (element.widget is IconButton && (element.widget as IconButton).onPressed != null ||
-        element.widget is ButtonStyleButton && (element.widget as ButtonStyleButton).onPressed != null) {
-      expect(data.hasAction(SemanticsAction.tap), isTrue);
-    }
+    expect(data.label, item['label_en'], reason: 'English fixture uses the localized human label');
+    expect(data.flagsCollection.isEnabled, Tristate.isTrue);
+    expect(data.flagsCollection.isButton, item['role'] == 'button');
+    expect(data.flagsCollection.isTextField, item['role'] == 'textField');
+    expect(data.hasAction(item['action'] == 'setText' ? SemanticsAction.setText : SemanticsAction.tap), isTrue);
   }
   if (id == 'chat') {
     expect(tester.getSemantics(find.byKey(OmiKeys.chatInput)).getSemanticsData().label, 'Message');
@@ -146,22 +139,62 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
       viewId: tester.view.viewId,
       nodeId: input.id,
       type: SemanticsAction.setText,
-      arguments: 'fixture input',
+      arguments: 'accessible input',
     ));
     await tester.pump();
-    expect(tester.widget<TextField>(find.byKey(OmiKeys.chatInput)).controller!.text, 'fixture input',
+    expect(tester.widget<TextField>(find.byKey(OmiKeys.chatInput)).controller!.text, 'accessible input',
         reason: 'accessibility action must change the real control, not an agent-only semantics node');
   }
-  // This is the same static enumerator as the manifest, now requiring zero
-  // debt for the migrated surface rather than merely no growth.
+  // Catalog declaration/reference check only. Uncatalogued directory debt is
+  // deliberately outside surface acceptance; changed-file no-growth still runs.
   final scan = await tester.runAsync(() => Process.run('python3', [
         '../scripts/check_app_addressability.py',
         '--surface',
         id,
       ]));
   expect(scan!.exitCode, 0, reason: '${scan.stdout}\n${scan.stderr}');
-  if (route['reach']['kind'] == 'push' || route['reach']['kind'] == 'sheet') {
+  void accessibleTap(Key key) {
+    final node = tester.getSemantics(find.byKey(key));
+    tester.binding.performSemanticsAction(SemanticsActionEvent(
+      viewId: tester.view.viewId,
+      nodeId: node.id,
+      type: SemanticsAction.tap,
+    ));
+  }
+
+  if (id == 'home') {
+    expect(tester.getSemantics(find.byKey(OmiKeys.homeTabHome)).getSemanticsData().flagsCollection.isSelected,
+        Tristate.isTrue);
+    accessibleTap(OmiKeys.homeTabConversations);
+    await tester.pump(const Duration(seconds: 1));
+    expect(api.visibleRoute, 'conversations', reason: 'tab semantics must call the real owner');
+    final returned = api.navigate('home');
+    await tester.pump(const Duration(seconds: 1));
+    await returned;
+    expect(find.byType(pageType).evaluate().single, same(retainedPage));
+  }
+  if (id == 'conversations') {
+    accessibleTap(ValueKey<String>((catalog.single as Map)['key'] as String));
+    await tester.pump(const Duration(seconds: 1));
+    expect(api.visibleRoute, 'conversation_detail', reason: 'row semantics must open the actual seeded detail');
+    expect(find.byKey(OmiKeys.conversationDetailRoot), findsOneWidget);
+    expect(find.textContaining('Journey one seeded conversation'), findsWidgets);
     await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(seconds: 1));
+    expect(api.visibleRoute, id);
+  }
+  if (route['reach']['kind'] == 'push' || route['reach']['kind'] == 'sheet') {
+    final closeKey = switch (id) {
+      'settings' => OmiKeys.settingsDone,
+      'devices' => OmiKeys.devicesBack,
+      'conversation_detail' => OmiKeys.conversationDetailBack,
+      _ => null,
+    };
+    if (closeKey == null) {
+      await tester.binding.handlePopRoute();
+    } else {
+      accessibleTap(closeKey);
+    }
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(pageType), findsNothing);
     expect(api.visibleRoute, isNot(id));
@@ -171,8 +204,14 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
     await tester.pump(const Duration(seconds: 1));
     await switched;
     expect(api.visibleRoute, next);
-    expect(find.byKey(ValueKey<String>(route['root'] as String)), findsNothing,
-        reason: 'offstage cached tabs are not visible destinations');
+    expect(find.byKey(rootKey, skipOffstage: true), findsNothing);
+    expect(find.byKey(rootKey, skipOffstage: false), findsOneWidget, reason: 'visited tabs remain mounted');
+    expect(find.byType(pageType, skipOffstage: false).evaluate().single, same(retainedPage));
+    final returned = api.navigate(id);
+    await tester.pump(const Duration(seconds: 1));
+    await returned;
+    expect(find.byKey(rootKey, skipOffstage: true), findsOneWidget);
+    expect(find.byType(pageType).evaluate().single, same(retainedPage), reason: 'return must preserve tab state');
   }
   await tester.pumpWidget(const SizedBox.shrink());
   expect(api.rootMounted, isFalse, reason: 'disposed scope must invalidate route readiness');

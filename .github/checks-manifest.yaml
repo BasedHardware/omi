@@ -92,14 +92,14 @@ checks:
     reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
   - id: app-addressability
     command: ["python3", "scripts/check_app_addressability.py", "--changed-files", "{changed_files}", "--base", "{base}"]
-    triggers: ["app/lib/**/*.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
+    triggers: ["app/lib/**/*.dart", "app/test/support/addressability_widgets.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; shared catalog plus no-growth debt prevents new invisible routes/controls"
+    reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; explicit route declarations plus changed-file no-growth debt protect catalogued navigation and control keys"
   - id: app-addressability-check-tests
     command: ["python3", "scripts/test_check_app_addressability.py"]
     triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "Token scan must reject child-key laundering and detect new page/navigation inventory without a Dart analyzer dependency"
+    reason: "Token scan must reject child-key laundering and unknown explicit route declarations without taxing helpers or dialogs"
   - id: spine-contracts
     command: ["python3", "scripts/check_spine_contracts.py"]
     triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", ".github/checks-manifest.yaml"]
@@ -107,7 +107,7 @@ checks:
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["Makefile", "scripts/dev-harness/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered, and the mobile-verify selection/discovery contract (SCA-490) executes here — journey runner, session evidence contract, and Makefile edits must keep it selected"
   - id: windows-update-feed-probe-tests
