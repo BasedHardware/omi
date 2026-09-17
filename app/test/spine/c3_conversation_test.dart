@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/api_presentation.dart';
@@ -9,6 +7,10 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
+import 'package:provider/provider.dart';
+import '../support/typed_conversation_screen.dart';
 import '../support/spine/contract.dart';
 import '../support/spine/widgets.dart';
 import 'c3_fixture.dart';
@@ -92,11 +94,45 @@ void main() {
     final missing = await ConversationApi(baseUrl: fixture.backend.baseUrl, send: fixture.send).byId('missing');
     expect((missing as ApiFailure<ServerConversation>).problem.kind, ApiProblemKind.notFound);
   });
-  contractTest('C3 static adoption tripwire: production list page uses the tested status region', () {
+  contractWidgets('C3 actual conversation page never renders empty hero for a persistent outage', (tester) async {
     pendingContract('C3');
-    final source = File('lib/pages/conversations/conversations_page.dart').readAsStringSync();
-    // Static wiring tripwire, not claimed as behavioral UI coverage.
-    final code = source.replaceAll(RegExp(r'//[^\n]*|/\*[\s\S]*?\*/'), '');
-    expect(code, matches(RegExp(r'\bConversationApiStatus\s*\(')));
+    final fixture = await tester.runAsync(C3Fixture.start);
+    addTearDown(fixture!.close);
+    var outage = true;
+    final api = ConversationApi(
+        baseUrl: fixture.backend.baseUrl,
+        send: (request) async {
+          if (outage && request.method == 'GET' && Uri.parse(request.url).path == '/v1/conversations') {
+            fixture.backend.failNext('GET', '/v1/conversations', status: 503);
+          }
+          return fixture.send(request);
+        });
+    final provider = composeTypedConversationProvider(api);
+    expect(provider.runtimeType, ConversationProvider);
+    addTearDown(provider.dispose);
+    final screen = await tester.runAsync(() => buildTypedConversationScreen(provider));
+    await tester.pumpWidget(screen!);
+    // Use the production initial-load entrypoint too; every request stays faulty.
+    await tester.runAsync(() async {
+      await provider.getInitialConversations();
+      await pumpEventQueue();
+    });
+    await tester.pump();
+    final page = find.byType(ConversationsPage);
+    expect(page, findsOneWidget);
+    expect(tester.widget(page).runtimeType, ConversationsPage);
+    expect(identical(tester.element(page).read<ConversationProvider>(), provider), isTrue);
+    expect(find.descendant(of: page, matching: find.byKey(const ValueKey('omi.conversations.error'))), findsOneWidget);
+    expect(find.byType(EmptyConversationsWidget), findsNothing);
+    expect(find.byKey(const ValueKey('omi.conversations.empty')), findsNothing);
+    expect(provider.apiViewState.phase, ApiViewPhase.error);
+    outage = false;
+    await tester.runAsync(() async => await provider.forceRefreshConversations());
+    await tester.pump();
+    expect(provider.apiViewState.phase, ApiViewPhase.empty);
+    expect(find.descendant(of: page, matching: find.byKey(const ValueKey('omi.conversations.error'))), findsNothing);
+    expect(find.descendant(of: page, matching: find.byKey(const ValueKey('omi.conversations.empty'))), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1)); // drain the page's deferred callbacks after disposal
   });
 }

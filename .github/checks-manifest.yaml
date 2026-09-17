@@ -94,7 +94,7 @@ checks:
     command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/api-result/boundary-baseline.json"]
     triggers: ["app/lib/**/*.dart", "app/contracts/api-result/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "Outage-as-empty cfaaaf2fb9db and detail null conflation 06597a0757cb: no new nullable HTTP calls or swallowing debt"
+    reason: "Outage-as-empty cfaaaf2fb9db and detail null conflation 06597a0757cb: prevent nullable HTTP regression after file adoption, and debt in new files"
 
   - id: mobile-boundary-check-tests
     command: ["python3", "scripts/test_check_mobile_boundaries.py"]

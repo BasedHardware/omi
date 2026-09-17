@@ -41,7 +41,18 @@ void main() {
     for (final kind in ApiProblemKind.values) {
       final failure = ApiFailure<List<int>>(ApiProblem(kind));
       final first = presentApiResult(failure, isEmpty: empty, fallback: events.add);
-      expect(first.phase, isNot(ApiViewPhase.empty));
+      final expected = switch (kind) {
+        ApiProblemKind.authTerminal => ApiViewPhase.authenticationRequired,
+        ApiProblemKind.paymentRequired => ApiViewPhase.locked,
+        ApiProblemKind.forbidden ||
+        ApiProblemKind.notFound ||
+        ApiProblemKind.unprocessable ||
+        ApiProblemKind.rejected =>
+          ApiViewPhase.terminal,
+        _ => ApiViewPhase.error,
+      };
+      expect(first.phase, expected);
+      expect(first.data, isNull);
       expect(first.problem!.kind, kind);
       expect(events, isEmpty); // hard failures are not fallbacks
     }
@@ -50,6 +61,18 @@ void main() {
     expect(stale.phase, ApiViewPhase.error);
     expect(stale.data, [7]);
     expect(stale.problem!.kind, ApiProblemKind.server);
+    for (final kind in [
+      ApiProblemKind.transport,
+      ApiProblemKind.authTransient,
+      ApiProblemKind.rateLimited,
+      ApiProblemKind.decode
+    ]) {
+      final projected =
+          presentApiResult(ApiFailure<List<int>>(ApiProblem(kind)), previous: [7], isEmpty: empty, fallback: (_) {});
+      expect(projected.phase, ApiViewPhase.error);
+      expect(projected.data, [7]);
+      expect(projected.problem!.kind, kind);
+    }
     expect(events.single.reason, ApiFallbackReason.staleData);
     expect(events.single.outcome, ApiFallbackOutcome.degraded);
   });
@@ -93,7 +116,6 @@ void main() {
           'to': 'none',
           'reason': 'other',
           'outcome': 'degraded',
-          'mobile_reason': 'partialDecode',
         }
       )
     ]);

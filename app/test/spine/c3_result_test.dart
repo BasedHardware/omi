@@ -96,6 +96,12 @@ void main() {
     await expectLater(
         executeApi<String>(request: request, send: (_) async => throw StateError('bug'), decode: (s) => s),
         throwsStateError);
+    await expectLater(
+        executeApi<String>(
+            request: request,
+            send: (_) async => http.Response('valid response', 200),
+            decode: (_) => throw StateError('programmer bug')),
+        throwsStateError);
     final bad = await executeApi<String>(
         request: request,
         send: (_) async => http.Response('bad', 200),
