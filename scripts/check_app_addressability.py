@@ -18,6 +18,11 @@ GENERATED = 'app/lib/services/dev_controls/addressability_catalog.dart'
 INTERACTIVE = set('IconButton TextButton ElevatedButton OutlinedButton FilledButton FloatingActionButton CupertinoButton GestureDetector InkWell InkResponse TextField TextFormField CupertinoTextField Checkbox Radio Switch Slider RangeSlider DropdownButton DropdownButtonFormField PopupMenuButton ListTile CheckboxListTile RadioListTile SwitchListTile'.split())
 ROUTES = set('MaterialPageRoute CupertinoPageRoute PageRouteBuilder showModalBottomSheet showDialog routeToPage pushNamed pushReplacementNamed'.split())
 TOKEN = re.compile(r'''//[^\n]*|/\*[\s\S]*?\*/|r?(?:"""[\s\S]*?"""|''' + "'''[\\s\\S]*?'''" + r'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|[A-Za-z_$][\w$]*|[^\s]''')
+ROUTE_HELP = (f'Add a routes entry in {CATALOG} with id, source, widget, root, reach, fixture, auth, profile, '
+              'and ready_provider; add its root to keys. For each new navigation call, append the destination route id '
+              'to navigation_sites[file] (do not add legacy/deferred entries). Then run '
+              'python3 scripts/check_app_addressability.py --generate. '
+              'Examples: app/lib/services/dev_controls/ADDRESSABILITY.md.')
 KEY = re.compile(r'omi\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*(?:\.[a-z0-9][a-z0-9_-]*)?\Z')
 
 
@@ -142,17 +147,17 @@ def validate_catalog(catalog, sources):
         registered_widgets = {r['widget'] for r in catalog['routes'] if r['source'] == path}
         registered_widgets.update(catalog.get('deferred_widgets', {}).get(path, []))
         for widget in screen_classes(source) - registered_widgets:
-            errors.append(f'{path}: new screen class {widget} needs a route registry entry')
+            errors.append(f'{path}: new screen class {widget} needs a route registry entry; {ROUTE_HELP}')
         if path.startswith('app/lib/pages/') and path not in known_pages:
-            errors.append(f'{path}: new page file needs a route registry entry')
+            errors.append(f'{path}: new page file needs a route registry entry; {ROUTE_HELP}')
         actual = len(list(calls(source, ROUTES)))
         registered = catalog['navigation_sites'].get(path, [])
         if actual != len(registered):
-            errors.append(f'{path}: {actual} navigation sites != registered {len(registered)}; describe new route in catalog')
+            errors.append(f'{path}: {actual} navigation sites != registered {len(registered)}; describe new route in catalog; {ROUTE_HELP}')
     for path, sites in catalog['navigation_sites'].items():
         for site in sites:
             if not site.startswith('legacy:') and site not in ids:
-                errors.append(f'{path}: navigation site {site} is not a registered route id')
+                errors.append(f'{path}: navigation site {site} is not a registered route id; {ROUTE_HELP}')
         if path not in sources:
             errors.append(f'{path}: stale navigation inventory')
     return errors
@@ -161,15 +166,15 @@ def validate_catalog(catalog, sources):
 def inventory_growth(catalog, previous):
     errors = []
     if set(catalog['deferred_pages']) - set(previous['deferred_pages']):
-        errors.append('new pages cannot be deferred; register their route')
+        errors.append(f'new pages cannot be deferred; register their route; {ROUTE_HELP}')
     for path, widgets in catalog.get('deferred_widgets', {}).items():
         if set(widgets) - set(previous.get('deferred_widgets', {}).get(path, [])):
-            errors.append(f'{path}: legacy screen-class inventory cannot grow; register routes')
+            errors.append(f'{path}: legacy screen-class inventory cannot grow; register routes; {ROUTE_HELP}')
     for path, sites in catalog['navigation_sites'].items():
         old_sites = previous['navigation_sites'].get(path, [])
         for legacy in (site for site in sites if site.startswith('legacy:')):
             if sites.count(legacy) > old_sites.count(legacy):
-                errors.append(f'{path}: legacy navigation inventory cannot grow; use route ids')
+                errors.append(f'{path}: legacy navigation inventory cannot grow; use route ids; {ROUTE_HELP}')
     return errors
 
 

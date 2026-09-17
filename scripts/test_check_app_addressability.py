@@ -46,7 +46,10 @@ class AddressabilityCheckTests(unittest.TestCase):
     def test_new_page_and_unregistered_navigation_fail(self):
         catalog = dict(routes=[], keys={}, fixtures={}, deferred_pages=['app/lib/pages/old.dart'], navigation_sites={})
         self.assertEqual(validate_catalog(catalog, {'app/lib/pages/old.dart': 'class Old {}'}), [])
-        self.assertTrue(validate_catalog(catalog, {'app/lib/pages/new.dart': 'class New {}'}))
+        errors = validate_catalog(catalog, {'app/lib/pages/new.dart': 'class New {}'})
+        self.assertTrue(errors)
+        for remedy in (check.CATALOG, 'routes entry', 'navigation_sites[file]', '--generate', 'ADDRESSABILITY.md'):
+            self.assertIn(remedy, errors[0])
         self.assertTrue(validate_catalog(catalog, {'app/lib/pages/old.dart': 'MaterialPageRoute(builder: f)'}))
 
     def test_new_screen_in_old_file_cannot_hide_behind_page_file_inventory(self):
