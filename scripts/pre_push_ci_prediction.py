@@ -275,15 +275,22 @@ IOS_PIGEON_DEFINITIONS = {
 
 
 def _is_app_ios_compile_input(path: str) -> bool:
-    """Wake the iOS simulator compile on native iOS, Pigeon, or pubspec changes.
+    """Wake the iOS simulator compile on native iOS, Pigeon, pubspec, or this job.
 
     Generated Pigeon Swift lives under ``app/ios/``, so it is covered by that
     prefix. Ordinary Dart under ``app/lib/`` stays on Android compile smoke.
+    Editing this workflow (or detect-changes) must wake the job so a change
+    to the compile check actually runs the compile check.
     """
     return (
         path.startswith("app/ios/")
+        or path.startswith(".github/actions/detect-changes/")
         or path in IOS_PIGEON_DEFINITIONS
-        or path in {"app/pubspec.yaml", "app/pubspec.lock"}
+        or path in {
+            "app/pubspec.yaml",
+            "app/pubspec.lock",
+            ".github/workflows/mobile-app-checks.yml",
+        }
     )
 
 

@@ -566,6 +566,17 @@ def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_fr
     swift_outputs = resolver.github_outputs(resolver.resolve_impact([swift]))
     assert swift_outputs["has_app_ios_compile"] == "true"
 
+    workflow = ".github/workflows/mobile-app-checks.yml"
+    workflow_outputs = resolver.github_outputs(resolver.resolve_impact([workflow]))
+    assert workflow_outputs["has_app_ios_compile"] == "true"
+
+    # Stacked PRs whose base is not main must still start this workflow.
+    # `pull_request: branches: main` skipped the entire run for #14358.
+    header = mobile_checks.split("jobs:", 1)[0]
+    assert "pull_request:" in header
+    assert "push:\n    branches: main" in header
+    assert "pull_request:\n    branches:" not in header
+
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():
     installer = (BACKEND_DIR.parent / "scripts/install-git-hooks.sh").read_text(encoding="utf-8")

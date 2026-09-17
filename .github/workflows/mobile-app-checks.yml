@@ -3,8 +3,10 @@ name: Mobile App Checks
 on:
   push:
     branches: main
+  # Stacked PRs (V6 on V5, #14358) must run this workflow. `branches: main`
+  # made GitHub skip the entire workflow — the iOS job never existed, which
+  # reads as "green" and proves nothing.
   pull_request:
-    branches: main
 
 concurrency:
   group: mobile-app-checks-${{ github.event.pull_request.number || github.ref }}

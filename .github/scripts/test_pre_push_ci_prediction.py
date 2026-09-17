@@ -446,6 +446,8 @@ class PrePushCiPredictionTests(unittest.TestCase):
             "app/lib/phone_mic_interface.dart",
             "app/pubspec.yaml",
             "app/pubspec.lock",
+            ".github/workflows/mobile-app-checks.yml",
+            ".github/actions/detect-changes/action.yml",
         ):
             with self.subTest(path=path):
                 plan = self.plan([path])
