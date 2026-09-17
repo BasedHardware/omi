@@ -93,10 +93,7 @@ function presentObjectListStrings(value: unknown, fields: string[]): void {
     return;
   }
   for (const raw of value) {
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-      continue;
-    }
-    const row = raw as Record<string, unknown>;
+    const row = object(raw);
     for (const field of fields) {
       presentNullableString(row[field]);
     }
@@ -108,10 +105,7 @@ function presentLocations(value: unknown): void {
     return;
   }
   for (const raw of value) {
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-      continue;
-    }
-    const pin = raw as Record<string, unknown>;
+    const pin = object(raw);
     presentNullableDouble(pin.latitude);
     presentNullableDouble(pin.longitude);
     presentNullableString(pin.address);
@@ -125,10 +119,7 @@ function presentMemoriesLearned(value: unknown): void {
     return;
   }
   for (const raw of value) {
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-      continue;
-    }
-    const memory = raw as Record<string, unknown>;
+    const memory = object(raw);
     presentNullableDate(memory.captured_at);
     presentNullableString(memory.category);
     presentNullableString(memory.content);
