@@ -23,6 +23,10 @@ import Mic from 'lucide-react-native/icons/mic';
 import Phone from 'lucide-react-native/icons/phone';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
+import Check from 'lucide-react-native/icons/check';
+import Pencil from 'lucide-react-native/icons/pencil';
+import {OmiAvatar} from '../ui/OmiAvatar';
+import {useReduceMotion} from '../app/useReduceMotion';
 import {
   mobileColor,
   mobileRadius,
@@ -112,6 +116,9 @@ const StatePanel = memo(function StatePanel({
   return (
     <View
       accessibilityLabel={`${noun} ${status} state`}
+      accessibilityRole={
+        status === 'error' || status === 'offline' ? 'alert' : undefined
+      }
       style={styles.statePanel}>
       <Text style={styles.stateText}>{copy}</Text>
     </View>
@@ -150,9 +157,9 @@ const TaskRow = memo(function TaskRow({
         disabled={!onToggle || busy}
         onPress={() => onToggle?.(task.id)}
         style={styles.taskToggle}>
-        <View
-          style={[styles.checkbox, task.completed && styles.checkboxDone]}
-        />
+        <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
+          {task.completed && <Check color={mobileColor.background} size={14} />}
+        </View>
         <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
           {task.title}
         </Text>
@@ -164,7 +171,7 @@ const TaskRow = memo(function TaskRow({
           disabled={busy}
           onPress={() => onEdit(task.id)}
           style={styles.taskEdit}>
-          <Text style={styles.taskEditText}>Edit</Text>
+          <Pencil color={mobileColor.textMuted} size={16} />
         </Pressable>
       )}
     </View>
@@ -207,12 +214,27 @@ function MobileTabBar({
           key={route}
           onPress={() => onRouteChange(route)}
           style={styles.tabButton}>
-          <Icon
-            color={
-              activeRoute === route ? mobileColor.text : mobileColor.textSubtle
-            }
-            size={22}
-          />
+          <View
+            style={[
+              styles.tabIcon,
+              activeRoute === route && styles.tabIconActive,
+            ]}>
+            <Icon
+              color={
+                activeRoute === route
+                  ? mobileColor.text
+                  : mobileColor.textSubtle
+              }
+              size={22}
+            />
+          </View>
+          <Text
+            style={[
+              styles.tabLabel,
+              activeRoute === route && styles.tabLabelActive,
+            ]}>
+            {label}
+          </Text>
         </Pressable>
       ))}
     </View>
@@ -275,6 +297,14 @@ export function MobileAppSurface({
   tasks,
   taskStatus,
 }: MobileAppSurfaceProps): React.JSX.Element {
+  const reduceMotion = useReduceMotion();
+  const [greeting, setGreeting] = useState(0);
+  const canAsk = askValue.trim().length > 0;
+  const submitAsk = () => {
+    if (canAsk) {
+      onAskSubmit();
+    }
+  };
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(
@@ -324,23 +354,28 @@ export function MobileAppSurface({
       if (item.kind === 'capture') {
         return (
           <View style={styles.captureCard}>
-            <View style={styles.listeningBadge}>
-              <Text style={styles.listeningText}>
-                {capture.active
-                  ? capture.waitingForAudio
-                    ? 'Waiting for audio'
-                    : 'Listening'
-                  : 'Paused'}
-              </Text>
-              <View
-                style={[
-                  styles.captureDot,
-                  (!capture.active || capture.waitingForAudio) &&
-                    styles.captureDotPaused,
-                ]}
-              />
+            <View style={styles.captureHeader}>
+              <View style={styles.listeningBadge}>
+                <Text style={styles.listeningText}>
+                  {capture.active
+                    ? capture.waitingForAudio
+                      ? 'Waiting for audio'
+                      : 'Listening'
+                    : 'Paused'}
+                </Text>
+                <View
+                  style={[
+                    styles.captureDot,
+                    (!capture.active || capture.waitingForAudio) &&
+                      styles.captureDotPaused,
+                  ]}
+                />
+              </View>
+              <View style={styles.microphoneButton}>
+                <Mic color={mobileColor.text} size={18} />
+              </View>
             </View>
-            <Text numberOfLines={1} style={styles.transcript}>
+            <Text numberOfLines={2} style={styles.transcript}>
               {capture.transcript ||
                 (capture.active
                   ? capture.waitingForAudio
@@ -348,9 +383,6 @@ export function MobileAppSurface({
                     : 'Listening for speech…'
                   : 'Capture is paused')}
             </Text>
-            <View style={styles.microphoneButton}>
-              <Mic color={mobileColor.text} size={18} />
-            </View>
           </View>
         );
       }
@@ -468,7 +500,20 @@ export function MobileAppSurface({
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.flex}>
           <View style={styles.secondaryHeader}>
-            <Text style={styles.secondaryTitle}>{title}</Text>
+            <View style={styles.pageHeading}>
+              <Text accessibilityRole="header" style={styles.secondaryTitle}>
+                {title}
+              </Text>
+              <Text style={styles.pageSubtitle}>
+                {activeRoute === 'chat'
+                  ? 'A place for what you want to remember.'
+                  : activeRoute === 'tasks'
+                  ? 'A little follow-through.'
+                  : activeRoute === 'apps'
+                  ? 'Make Omi your own.'
+                  : 'Your Omi, your way.'}
+              </Text>
+            </View>
             {activeRoute !== 'settings' && (
               <Pressable
                 accessibilityLabel="Open settings"
@@ -479,51 +524,57 @@ export function MobileAppSurface({
               </Pressable>
             )}
           </View>
-          {activeRoute === 'settings' ? (
-            <View accessibilityLabel="Settings stage" style={styles.flex}>
-              {settingsContent}
-            </View>
-          ) : activeRoute === 'apps' && appsContent ? (
-            <View accessibilityLabel="Connectors stage" style={styles.flex}>
-              {appsContent}
-            </View>
-          ) : activeRoute === 'tasks' ? (
-            taskStatus === 'ready' ? (
-              <FlatList
-                contentContainerStyle={styles.secondaryList}
-                data={tasks}
-                keyExtractor={task => task.id}
-                ListFooterComponent={<>{taskPagination}</>}
-                ListHeaderComponent={taskFeedback}
-                ListEmptyComponent={<StatePanel noun="tasks" status="empty" />}
-                renderItem={({item}) => (
-                  <TaskRow
-                    onToggle={writesAvailable ? onTaskToggle : undefined}
-                    onEdit={
-                      writesAvailable && onTaskEdit
-                        ? setSelectedTaskId
-                        : undefined
-                    }
-                    busy={busyTaskId !== null}
-                    task={item}
-                  />
-                )}
-              />
-            ) : (
-              <View style={styles.secondaryList}>
-                <StatePanel noun="tasks" status={taskStatus} />
-                {taskPagination}
+          <View style={styles.flex}>
+            {activeRoute === 'settings' ? (
+              <View accessibilityLabel="Settings stage" style={styles.flex}>
+                {settingsContent}
               </View>
-            )
-          ) : activeRoute === 'chat' ? (
-            conversationContent ?? (
-              <StatePanel noun="conversations" status="error" />
-            )
-          ) : (
-            <View style={styles.secondaryEmpty}>
-              <Text style={styles.secondaryPrompt}>No apps connected yet</Text>
-            </View>
-          )}
+            ) : activeRoute === 'apps' && appsContent ? (
+              <View accessibilityLabel="Connectors stage" style={styles.flex}>
+                {appsContent}
+              </View>
+            ) : activeRoute === 'tasks' ? (
+              taskStatus === 'ready' ? (
+                <FlatList
+                  contentContainerStyle={styles.secondaryList}
+                  data={tasks}
+                  keyExtractor={task => task.id}
+                  ListFooterComponent={<>{taskPagination}</>}
+                  ListHeaderComponent={taskFeedback}
+                  ListEmptyComponent={
+                    <StatePanel noun="tasks" status="empty" />
+                  }
+                  renderItem={({item}) => (
+                    <TaskRow
+                      onToggle={writesAvailable ? onTaskToggle : undefined}
+                      onEdit={
+                        writesAvailable && onTaskEdit
+                          ? setSelectedTaskId
+                          : undefined
+                      }
+                      busy={busyTaskId !== null}
+                      task={item}
+                    />
+                  )}
+                />
+              ) : (
+                <View style={[styles.secondaryList, styles.flex]}>
+                  <StatePanel noun="tasks" status={taskStatus} />
+                  {taskPagination}
+                </View>
+              )
+            ) : activeRoute === 'chat' ? (
+              conversationContent ?? (
+                <StatePanel noun="conversations" status="error" />
+              )
+            ) : (
+              <View style={styles.secondaryEmpty}>
+                <Text style={styles.secondaryPrompt}>
+                  No apps connected yet
+                </Text>
+              </View>
+            )}
+          </View>
           <MobileTabBar
             activeRoute={activeRoute}
             onRouteChange={onRouteChange}
@@ -582,7 +633,32 @@ export function MobileAppSurface({
         <FlatList
           contentContainerStyle={styles.content}
           data={rows}
-          ListHeaderComponent={devicePanel ? <View>{devicePanel}</View> : null}
+          ListHeaderComponent={
+            <View>
+              <View style={styles.homeHeading}>
+                <View style={styles.pageHeading}>
+                  <Text style={styles.homeEyebrow}>YOUR PERSONAL CONTEXT</Text>
+                  <Text accessibilityRole="header" style={styles.homeTitle}>
+                    A little space for your day.
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Say hello to Omi"
+                  onPress={() => setGreeting(value => value + 1)}
+                  style={styles.greeting}>
+                  <OmiAvatar
+                    tone="ink"
+                    size={60}
+                    motion="arrive"
+                    motionKey={String(greeting)}
+                    reduceMotion={reduceMotion}
+                  />
+                </Pressable>
+              </View>
+              {devicePanel ? <View>{devicePanel}</View> : null}
+            </View>
+          }
           keyExtractor={item => item.key}
           renderItem={renderRow}
           showsVerticalScrollIndicator={false}
@@ -591,8 +667,8 @@ export function MobileAppSurface({
           <TextInput
             accessibilityLabel="Ask Omi"
             onChangeText={onAskChange}
-            onSubmitEditing={onAskSubmit}
-            placeholder="Ask Omi anything about your life…"
+            onSubmitEditing={submitAsk}
+            placeholder="Ask about your day…"
             placeholderTextColor={mobileColor.textSubtle}
             returnKeyType="send"
             style={styles.askInput}
@@ -601,8 +677,10 @@ export function MobileAppSurface({
           <Pressable
             accessibilityLabel="Send to Omi"
             accessibilityRole="button"
-            onPress={onAskSubmit}
-            style={styles.askButton}>
+            accessibilityState={{disabled: !canAsk}}
+            disabled={!canAsk}
+            onPress={submitAsk}
+            style={[styles.askButton, !canAsk && styles.askButtonDisabled]}>
             <ArrowUp color={mobileColor.background} size={18} />
           </Pressable>
         </View>
@@ -615,6 +693,33 @@ export function MobileAppSurface({
 const styles = StyleSheet.create({
   flex: {flex: 1},
   safeArea: {backgroundColor: mobileColor.background, flex: 1},
+  homeHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingBottom: 4,
+  },
+  pageHeading: {flex: 1, gap: 8},
+  pageSubtitle: {fontSize: 14, lineHeight: 20, color: mobileColor.textMuted},
+  greeting: {
+    height: 64,
+    width: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeEyebrow: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: mobileColor.textSubtle,
+    fontWeight: '600',
+  },
+  homeTitle: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.8,
+    color: mobileColor.text,
+    maxWidth: 280,
+  },
   topBar: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -628,11 +733,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: mobileSpace.md,
+    gap: 16,
   },
-  secondaryTitle: {...mobileType.title, color: mobileColor.text},
+  secondaryTitle: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '600',
+    letterSpacing: -0.7,
+    color: mobileColor.text,
+  },
   secondaryList: {
     flexGrow: 1,
-    paddingBottom: 96,
+    paddingBottom: 24,
     paddingHorizontal: mobileSpace.md,
     paddingTop: mobileSpace.lg,
   },
@@ -674,8 +786,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: mobileSpace.md,
   },
   lens: {
-    backgroundColor: '#536078',
-    borderColor: '#7d89a0',
+    backgroundColor: '#292b27',
+    borderColor: '#696e63',
     borderRadius: mobileRadius.round,
     borderWidth: 2,
     height: 25,
@@ -689,7 +801,8 @@ const styles = StyleSheet.create({
   },
   connectionDotOffline: {backgroundColor: mobileColor.textSubtle},
   deviceLabel: {
-    ...mobileType.body,
+    fontSize: 14,
+    lineHeight: 20,
     flexShrink: 1,
     color: mobileColor.text,
     fontWeight: '600',
@@ -710,30 +823,33 @@ const styles = StyleSheet.create({
   },
   roundGlyph: {color: mobileColor.text, fontSize: 22},
   content: {
-    gap: mobileSpace.xl,
-    paddingBottom: 164,
+    gap: mobileSpace.lg,
+    paddingBottom: 24,
     paddingHorizontal: mobileSpace.md,
     paddingTop: mobileSpace.xl,
   },
   captureCard: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     backgroundColor: mobileColor.surface,
+    borderWidth: 1,
+    borderColor: mobileColor.border,
     borderRadius: mobileRadius.lg,
-    flexDirection: 'row',
-    gap: mobileSpace.md,
+    gap: mobileSpace.sm,
     minHeight: 74,
     padding: mobileSpace.md,
   },
+  captureHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   listeningBadge: {
     alignItems: 'center',
-    backgroundColor: mobileColor.surfaceRaised,
     borderRadius: mobileRadius.round,
     flexDirection: 'row',
     gap: mobileSpace.sm,
-    paddingHorizontal: mobileSpace.md,
-    paddingVertical: mobileSpace.sm,
   },
-  listeningText: {...mobileType.body, color: mobileColor.textMuted},
+  listeningText: {...mobileType.caption, color: mobileColor.textMuted},
   captureDot: {
     backgroundColor: mobileColor.recording,
     borderRadius: mobileRadius.round,
@@ -741,7 +857,7 @@ const styles = StyleSheet.create({
     width: 8,
   },
   captureDotPaused: {backgroundColor: mobileColor.textSubtle},
-  transcript: {...mobileType.body, color: mobileColor.textMuted, flex: 1},
+  transcript: {...mobileType.body, color: mobileColor.textMuted},
   microphoneButton: {
     alignItems: 'center',
     backgroundColor: mobileColor.surfaceRaised,
@@ -751,61 +867,79 @@ const styles = StyleSheet.create({
     width: 44,
   },
   microphoneGlyph: {color: mobileColor.text, fontSize: 13},
-  section: {gap: mobileSpace.md},
+  section: {gap: mobileSpace.sm},
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: mobileSpace.sm,
+    paddingHorizontal: 2,
   },
-  sectionTitle: {...mobileType.title, color: mobileColor.text},
+  sectionTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '600',
+    color: mobileColor.text,
+  },
   quietButton: {
-    backgroundColor: mobileColor.surfaceQuiet,
     borderRadius: mobileRadius.round,
-    paddingHorizontal: mobileSpace.md,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: mobileSpace.sm,
     paddingVertical: mobileSpace.sm,
   },
   quietButtonText: {...mobileType.caption, color: mobileColor.textMuted},
   taskCard: {
     backgroundColor: mobileColor.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: mobileColor.border,
     borderRadius: mobileRadius.lg,
     paddingHorizontal: mobileSpace.md,
     paddingVertical: mobileSpace.sm,
   },
   taskRow: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
-    gap: mobileSpace.md,
+    gap: mobileSpace.sm,
     minHeight: 64,
-    paddingVertical: mobileSpace.md,
+    paddingVertical: mobileSpace.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: mobileColor.border,
   },
   taskToggle: {
     flex: 1,
     minHeight: 44,
     flexDirection: 'row',
-    gap: mobileSpace.md,
-    alignItems: 'flex-start',
+    gap: 12,
+    alignItems: 'center',
   },
-  taskEdit: {minHeight: 44, minWidth: 44, justifyContent: 'center'},
-  taskEditText: {color: mobileColor.text, fontSize: 13},
+  taskEdit: {
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   checkbox: {
     borderColor: mobileColor.textSubtle,
     borderRadius: mobileRadius.round,
-    borderWidth: 2,
-    height: 25,
-    marginTop: 1,
-    width: 25,
+    borderWidth: 1.5,
+    height: 22,
+    width: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checkboxDone: {backgroundColor: mobileColor.textSubtle},
-  taskText: {...mobileType.body, color: mobileColor.text, flex: 1},
+  taskText: {fontSize: 15, lineHeight: 22, color: mobileColor.text, flex: 1},
   taskTextDone: {
     color: mobileColor.textSubtle,
     textDecorationLine: 'line-through',
   },
   recapCard: {
     backgroundColor: mobileColor.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: mobileColor.border,
     borderRadius: mobileRadius.md,
-    height: 178,
+    minHeight: 136,
+    gap: 20,
     justifyContent: 'space-between',
     marginRight: mobileSpace.sm,
     padding: mobileSpace.md,
@@ -858,6 +992,8 @@ const styles = StyleSheet.create({
     minHeight: 96,
     justifyContent: 'center',
     padding: mobileSpace.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: mobileColor.border,
   },
   stateText: {
     ...mobileType.body,
@@ -870,17 +1006,17 @@ const styles = StyleSheet.create({
     borderColor: mobileColor.border,
     borderRadius: mobileRadius.round,
     borderWidth: StyleSheet.hairlineWidth,
-    bottom: 76,
     flexDirection: 'row',
-    left: mobileSpace.md,
-    padding: mobileSpace.sm,
-    position: 'absolute',
-    right: mobileSpace.md,
+    marginHorizontal: mobileSpace.md,
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 6,
   },
   askInput: {
     ...mobileType.body,
     color: mobileColor.text,
     flex: 1,
+    minWidth: 0,
     minHeight: 44,
     paddingHorizontal: mobileSpace.md,
   },
@@ -892,19 +1028,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 46,
   },
+  askButtonDisabled: {opacity: 0.35},
   askGlyph: {color: mobileColor.background, fontSize: 14},
   tabBar: {
     alignItems: 'center',
-    backgroundColor: 'rgba(10, 10, 12, 0.96)',
-    bottom: 0,
+    backgroundColor: mobileColor.surfaceQuiet,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: mobileColor.border,
+    borderRadius: mobileRadius.lg,
+    marginHorizontal: 10,
+    marginBottom: 8,
     flexDirection: 'row',
-    height: 68,
+    minHeight: 68,
+    flexShrink: 0,
     justifyContent: 'space-around',
-    left: 0,
-    position: 'absolute',
-    right: 0,
   },
-  tabButton: {alignItems: 'center', flex: 1, justifyContent: 'center'},
+  tabButton: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 60,
+    gap: 3,
+  },
+  tabIcon: {paddingVertical: 4, paddingHorizontal: 12, borderRadius: 12},
+  tabIconActive: {backgroundColor: mobileColor.surfaceRaised},
+  tabLabel: {fontSize: 9, color: mobileColor.textSubtle},
+  tabLabelActive: {color: mobileColor.text},
   tabGlyph: {color: mobileColor.textSubtle, fontSize: 30},
   tabGlyphActive: {color: mobileColor.text},
 });

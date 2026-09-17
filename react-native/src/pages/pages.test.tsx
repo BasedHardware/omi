@@ -121,6 +121,14 @@ test('Settings keeps Old backend and New backend on the native transport', async
     'https://omi-v5-backend-staging.example.workers.dev',
   );
   const renderer = await renderPage(SettingsPage);
+  expect(labelsOf(renderer)).not.toContain('Use New backend');
+  expect(textOf(renderer)).not.toContain('Live voice');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  expect(textOf(renderer)).toContain('Live voice');
   expect(textOf(renderer)).toContain(
     'Old backend uses your existing Omi account',
   );
@@ -143,6 +151,59 @@ test('a signed-out session still offers the native sign-in', async () => {
   expect(textOf(connectors)).toContain('Signed out');
   expect(textOf(connectors)).toContain('Omi cloud needs a signed-in session.');
   expect(labelsOf(connectors)).toContain('Sign in');
+});
+
+test('app gallery sections preserve catalog membership and failed install state', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => ({
+    id: request.id,
+    status: request.method === 'POST' ? 503 : 200,
+    body: JSON.stringify(
+      request.path === '/v1/apps'
+        ? [
+            {id: 'notes', name: 'Notes', uid: 'other'},
+            {
+              id: 'calendar',
+              name: 'Calendar',
+              uid: 'owner',
+              external_integration: {},
+            },
+          ]
+        : request.path === '/v1/apps/enabled'
+        ? ['notes']
+        : {uid: 'owner'},
+    ),
+  }));
+  const renderer = await renderPage(ConnectorsPage);
+  const press = async (label: string) =>
+    act(async () => {
+      await renderer.root
+        .find(node => node.props.accessibilityLabel === label)
+        .props.onPress();
+    });
+  expect(textOf(renderer)).toContain('Notes');
+  expect(textOf(renderer)).toContain('Calendar');
+  await press('Installed apps');
+  expect(labelsOf(renderer)).toContain('Remove Notes');
+  expect(textOf(renderer)).not.toContain('Calendar');
+  await press('My apps');
+  expect(textOf(renderer)).toContain('Calendar');
+  expect(textOf(renderer)).not.toContain('Notes');
+  await press('Services apps');
+  expect(labelsOf(renderer)).toContain('Install Calendar');
+  expect(textOf(renderer)).not.toContain('Notes');
+  await press('Install Calendar');
+  expect(mockBackend.request).toHaveBeenCalledWith(
+    expect.objectContaining({
+      method: 'POST',
+      path: '/v1/apps/enable?app_id=calendar',
+    }),
+  );
+  expect(labelsOf(renderer)).toContain('Install Calendar');
+  expect(labelsOf(renderer)).not.toContain('Remove Calendar');
+  expect(textOf(renderer)).toContain(
+    'This saved data could not be loaded. Retry without changing it.',
+  );
 });
 
 test('web Settings loads real service usage without offering a fake sign-in', async () => {

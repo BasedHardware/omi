@@ -24,15 +24,18 @@ import {
 } from '../ui/ConversationDetail';
 import {ReadStatus} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
+import {mobileColor} from '../mobile/mobileTokens';
 
 const ConversationRow = memo(function ConversationRow({
   item,
   selected,
   onPress,
+  embedded,
 }: {
   item: ConversationProjection;
   selected: boolean;
   onPress: () => void;
+  embedded: boolean;
 }) {
   return (
     <FocusPressable
@@ -42,6 +45,7 @@ const ConversationRow = memo(function ConversationRow({
       onPress={onPress}
       style={({pressed}) => [
         styles.conversationRow,
+        embedded && mobileStyles.card,
         selected && styles.conversationRowSelected,
         pressed && styles.pressed,
       ]}>
@@ -57,10 +61,14 @@ const ConversationRow = memo(function ConversationRow({
           {item.starred ? '★' : '☆'}
         </Text>
       </View>
-      <Text numberOfLines={1} style={styles.resultTitle}>
+      <Text
+        numberOfLines={2}
+        style={[styles.resultTitle, embedded && mobileStyles.title]}>
         {item.title}
       </Text>
-      <Text numberOfLines={2} style={styles.resultSummary}>
+      <Text
+        numberOfLines={2}
+        style={[styles.resultSummary, embedded && mobileStyles.summary]}>
         {item.summary}
       </Text>
       <Text style={styles.conversationRowDuration}>
@@ -168,9 +176,14 @@ export function ConversationsPage({
             <TextInput
               accessibilityLabel="Search loaded conversations"
               onChangeText={setQuery}
-              placeholder="Search loaded conversations"
+              placeholder={
+                embedded ? 'Search loaded…' : 'Search loaded conversations'
+              }
               placeholderTextColor="#666666"
-              style={styles.memorySearchInput}
+              style={[
+                styles.memorySearchInput,
+                embedded && mobileStyles.searchInput,
+              ]}
               value={query}
             />
           </View>
@@ -255,6 +268,7 @@ export function ConversationsPage({
                   {group.items.map(item => (
                     <ConversationRow
                       item={item}
+                      embedded={embedded}
                       key={item.id}
                       onPress={() => setSelectedId(item.id)}
                       selected={selectedId === item.id}
@@ -329,6 +343,20 @@ export function ConversationsPage({
 const mobileStyles = StyleSheet.create({
   pageAction: {minHeight: 44, justifyContent: 'center'},
   page: {paddingHorizontal: 20, paddingVertical: 16},
-  embedded: {paddingTop: 0, paddingBottom: 0},
+  embedded: {paddingTop: 0, paddingBottom: 0, paddingHorizontal: 16},
   discovery: {marginTop: 0},
+  searchInput: {minWidth: 0, fontSize: 14},
+  card: {
+    borderRadius: 22,
+    padding: 18,
+    backgroundColor: mobileColor.surface,
+    borderColor: mobileColor.border,
+  },
+  title: {fontSize: 17, lineHeight: 24, marginTop: 12},
+  summary: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: mobileColor.textMuted,
+    marginTop: 6,
+  },
 });

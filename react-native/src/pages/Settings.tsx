@@ -33,6 +33,7 @@ import {
   setDesktopPreference,
   type LiveVoiceProvider,
 } from '../desktopSettingsClient';
+import {mobileColor} from '../mobile/mobileTokens';
 
 const sections = ['Account', 'Privacy', 'Developer'] as const;
 type SettingsSection = (typeof sections)[number];
@@ -51,8 +52,8 @@ function SettingRow({
   title: string;
 }) {
   return (
-    <View style={styles.cloudRow}>
-      <View style={styles.cloudRowBody}>
+    <View style={[styles.cloudRow, settingsStyles.row]}>
+      <View style={[styles.cloudRowBody, settingsStyles.rowBody]}>
         <Text style={styles.cloudRowTitle}>{title}</Text>
         <Text style={styles.cloudRowMeta}>{copy}</Text>
       </View>
@@ -94,12 +95,12 @@ function BackendPlaneRow({
         : 'New is selected, but no valid stamped v5 origin is configured.'
       : 'Old backend uses your existing Omi account and api.omi.me.';
   return (
-    <View style={styles.cloudRow}>
-      <View style={styles.cloudRowBody}>
+    <View style={[styles.cloudRow, settingsStyles.row]}>
+      <View style={[styles.cloudRowBody, settingsStyles.rowBody]}>
         <Text style={styles.cloudRowTitle}>Backend</Text>
         <Text style={styles.cloudRowMeta}>{copy}</Text>
       </View>
-      <View>
+      <View style={settingsStyles.choices}>
         {(['old', 'new'] as const).map(option => (
           <FocusPressable
             accessibilityLabel={
@@ -113,6 +114,7 @@ function BackendPlaneRow({
             style={({pressed}) => [
               styles.cloudAction,
               settingsStyles.touchAction,
+              plane === option && settingsStyles.selectedChoice,
               pressed && styles.pressed,
             ]}>
             <Text style={styles.cloudActionText}>
@@ -139,12 +141,12 @@ function LiveVoiceRow({
       ? 'Uses models/gemini-3.1-flash-live-preview over Gemini Live. Fails closed if GEMINI_API_KEY is missing on the server.'
       : 'Uses gpt-live-1 over OpenAI WebRTC. Fails closed if OPENAI_API_KEY is missing on the server.';
   return (
-    <View style={styles.cloudRow}>
-      <View style={styles.cloudRowBody}>
+    <View style={[styles.cloudRow, settingsStyles.row]}>
+      <View style={[styles.cloudRowBody, settingsStyles.rowBody]}>
         <Text style={styles.cloudRowTitle}>Live voice</Text>
         <Text style={styles.cloudRowMeta}>{copy}</Text>
       </View>
-      <View>
+      <View style={settingsStyles.choices}>
         {(
           [
             ['gpt_live', 'GPT Live 1'],
@@ -161,6 +163,7 @@ function LiveVoiceRow({
             style={({pressed}) => [
               styles.cloudAction,
               settingsStyles.touchAction,
+              provider === value && settingsStyles.selectedChoice,
               pressed && styles.pressed,
             ]}>
             <Text style={styles.cloudActionText}>{label}</Text>
@@ -586,27 +589,9 @@ export function SettingsPage({
     );
 
   return (
-    <ScrollView contentContainerStyle={styles.destinationPage}>
-      {!browser && softwarePlane !== null && (
-        <BackendPlaneRow
-          busy={pending === 'software-plane'}
-          onSelect={plane => {
-            selectSoftwarePlane(plane).catch(() => undefined);
-          }}
-          plane={softwarePlane}
-          stampedOrigin={stampedV5Origin}
-        />
-      )}
-      {!browser && (
-        <LiveVoiceRow
-          busy={pending === 'live-voice'}
-          onSelect={provider => {
-            selectLiveVoiceProvider(provider).catch(() => undefined);
-          }}
-          provider={liveVoiceProvider}
-        />
-      )}
-      <View accessibilityRole="tablist" style={styles.destinationTabs}>
+    <ScrollView
+      contentContainerStyle={[styles.destinationPage, settingsStyles.page]}>
+      <View accessibilityRole="tablist" style={settingsStyles.tabs}>
         {sections
           .filter(label => !browser || label !== 'Developer')
           .map(label => (
@@ -618,6 +603,7 @@ export function SettingsPage({
               onPress={() => setSection(label)}
               style={({pressed}) => [
                 styles.destinationTab,
+                settingsStyles.tab,
                 section === label && styles.destinationTabActive,
                 pressed && styles.pressed,
               ]}>
@@ -631,7 +617,29 @@ export function SettingsPage({
             </FocusPressable>
           ))}
       </View>
-      <View style={styles.destinationSection}>
+      {!browser && section === 'Developer' && (
+        <View style={[styles.destinationSection, settingsStyles.group]}>
+          <Text style={styles.destinationSectionTitle}>AI & connection</Text>
+          {softwarePlane !== null && (
+            <BackendPlaneRow
+              busy={pending === 'software-plane'}
+              onSelect={plane => {
+                selectSoftwarePlane(plane).catch(() => undefined);
+              }}
+              plane={softwarePlane}
+              stampedOrigin={stampedV5Origin}
+            />
+          )}
+          <LiveVoiceRow
+            busy={pending === 'live-voice'}
+            onSelect={provider => {
+              selectLiveVoiceProvider(provider).catch(() => undefined);
+            }}
+            provider={liveVoiceProvider}
+          />
+        </View>
+      )}
+      <View style={[styles.destinationSection, settingsStyles.group]}>
         <Text style={styles.destinationSectionTitle}>{section}</Text>
         {phase === 'loading' && snapshot === null ? (
           <>
@@ -737,7 +745,7 @@ export function SettingsPage({
           <Text style={styles.cloudActionError}>{actionError}</Text>
         )}
       </View>
-      <View style={styles.destinationSection}>
+      <View style={[styles.destinationSection, settingsStyles.group]}>
         {!browser && (
           <SettingRow
             title="App permissions"
@@ -775,4 +783,27 @@ export function SettingsPage({
   );
 }
 
-const settingsStyles = StyleSheet.create({touchAction: {minHeight: 44}});
+const settingsStyles = StyleSheet.create({
+  page: {paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 16},
+  tabs: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  tab: {
+    minHeight: 44,
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  group: {
+    borderRadius: 22,
+    backgroundColor: mobileColor.surface,
+    borderColor: mobileColor.border,
+    padding: 20,
+  },
+  row: {flexWrap: 'wrap', gap: 8, paddingTop: 16, marginTop: 16},
+  rowBody: {minWidth: 160},
+  choices: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  selectedChoice: {
+    backgroundColor: mobileColor.surfaceRaised,
+    borderColor: mobileColor.textMuted,
+  },
+  touchAction: {minHeight: 44, marginTop: 0},
+});
