@@ -176,6 +176,136 @@ def _prove_completed_day_source_scan(db_client: Any, uid: str) -> None:
         batch.commit()
 
 
+def _prove_round4_admission_unlock_skip(db_client: Any, uid: str, now: datetime) -> None:
+    control, _ = _seed(db_client, uid, now)
+    identity = dict(
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=1,
+        window_id="round4-window",
+    )
+    entered, finish = threading.Event(), threading.Event()
+    calls: list[str] = []
+    results: list[Any] = []
+
+    def provider() -> tuple:
+        calls.append("first")
+        entered.set()
+        if not finish.wait(10):
+            raise AssertionError("admission overlap timed out")
+        return ()
+
+    def first() -> None:
+        results.append(
+            _invoke_model_once(
+                db_client,
+                uid,
+                lambda: "round4-first",
+                candidate_builder=provider,
+                input_digest="original",
+                now=now,
+                **identity,
+            )
+        )
+
+    with patch.object(daily_sweep, "_MODEL_INVOCATION_LOCK", nullcontext()):
+        worker = threading.Thread(target=first)
+        worker.start()
+        try:
+            if not entered.wait(10):
+                raise AssertionError("admitted worker failed to dispatch")
+            evidence: dict[str, Any] = {}
+            second = _invoke_model_once(
+                db_client,
+                uid,
+                lambda: "round4-future-identity",
+                candidate_builder=lambda: calls.append("second") or (),
+                input_digest="original",
+                now=now,
+                invocation_evidence=evidence,
+                **identity,
+            )
+            if second is not None or evidence.get("failure_reason") != "window_admission_busy":
+                raise AssertionError("real admission transaction did not serialize overlap")
+        finally:
+            finish.set()
+            worker.join(10)
+    if results != [()] or calls != ["first"]:
+        raise AssertionError("admission dispatched more than once")
+    replay = _invoke_model_once(
+        db_client,
+        uid,
+        lambda: "round4-future-identity",
+        candidate_builder=lambda: calls.append("third") or (),
+        input_digest="original",
+        now=now,
+        **identity,
+    )
+    if replay != () or calls != ["first"]:
+        raise AssertionError("released admission lost its durable identity binding")
+
+    legacy = db_client.document(f"{daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION}/round4-pre-lock")
+    legacy.set({"uid": uid, "claimed_at": now, "state": "pending"})
+    try:
+        daily_sweep.assert_no_live_pre_lock_claims(db_client, now=now, uids=(uid,))
+    except RuntimeError as error:
+        if str(error) != "pre_lock_claim_live":
+            raise
+    else:
+        raise AssertionError("pre-lock live claim passed rollout assertion")
+    daily_sweep.assert_no_live_pre_lock_claims(db_client, now=now + daily_sweep.MODEL_INVOCATION_LEASE, uids=(uid,))
+    legacy.delete()
+
+    fence = db_client.document(f"{daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION}/round4-first").get().to_dict()
+    attested_at = (
+        now + daily_sweep.MODEL_INVOCATION_LEASE + daily_sweep.MODEL_INVOCATION_REPAIR_MARGIN + timedelta(seconds=1)
+    )
+    evidence = {
+        "provider_outcome": "operator_attested_skip_window",
+        "attempts": [],
+        "confirmation": daily_sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
+        "attested_by": "emulator-operator",
+        "evidence_reference": "emulator:round4",
+        "attested_at": attested_at.isoformat(),
+        "claimed_at": now.isoformat(),
+        "claim_id": fence["claim_id"],
+        "claim_identity": {"uid": uid, "invocation_id": "round4-first", **identity},
+    }
+    daily_sweep.repair_daily_sweep_model_invocation(
+        db_client,
+        uid=uid,
+        invocation_id="round4-first",
+        provider_outcome_evidence=evidence,
+        repair_authority="emulator-operator",
+        now=attested_at,
+    )
+    if not daily_sweep._consume_attested_window_skip(db_client, uid, **identity):
+        raise AssertionError("real transaction failed to consume skip attestation")
+    if not daily_sweep._consume_attested_window_skip(db_client, uid, **identity):
+        raise AssertionError("skip outcome did not survive retry")
+
+    ref = db_client.document(f"users/{uid}/conversations/round4-locked")
+    ref.set({"is_locked": True, "started_at": now - timedelta(days=4)})
+    try:
+        if daily_sweep.unlock_conversations_with_sweep_replay(db_client, uid, [ref]) != 1:
+            raise AssertionError("unlock handoff did not commit")
+        if ref.get().to_dict().get("is_locked") is not False:
+            raise AssertionError("unlock handoff failed to unlock")
+        live_control = MemoryControlState.model_validate(
+            db_client.document(MemoryCollections(uid=uid).memory_apply_control_state).get().to_dict()
+        )
+        cursor = daily_sweep._read_cursor(db_client, uid, live_control)
+        if live_control.source_generation != control.source_generation + 1:
+            raise AssertionError("unlock did not invalidate old canonical writers")
+        if cursor.last_completed_local_date != (now - timedelta(days=5)).date():
+            raise AssertionError("unlock did not rewind to the earliest excluded day")
+        if daily_sweep.unlock_conversations_with_sweep_replay(db_client, uid, [ref]) != 0:
+            raise AssertionError("retried payment repeated the replay epoch")
+    finally:
+        ref.delete()
+        db_client.document(f"users/{uid}/memory_control/daily_memory_sweep_unlock").delete()
+
+
 def main() -> int:
     _assert_emulator_only()
     db_client: Any = firestore.Client(project=PROJECT_ID)
@@ -604,7 +734,11 @@ def main() -> int:
 
             if (
                 _invoke_model_once(
-                    db_client, uid, lost_invocation_id, candidate_builder=reserved_provider_crash, **identity
+                    db_client,
+                    uid,
+                    lost_invocation_id,
+                    candidate_builder=reserved_provider_crash,
+                    **{**identity, "window_id": "lost-accounting-window"},
                 )
                 is not None
             ):
@@ -692,7 +826,7 @@ def main() -> int:
 
         print(
             "PASS: daily memory sweep Firestore emulator retry/interruption proof "
-            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/source-digest-binding/legacy-fence/source-projection/accounting-pagination/lost-accounting-refusal)"
+            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/source-digest-binding/legacy-fence/source-projection/accounting-pagination/lost-accounting-refusal/window-admission/pre-lock-preflight/unlock-replay/attested-skip)"
         )
         return 0
     finally:
@@ -700,6 +834,8 @@ def main() -> int:
             cleanup = MemoryCollections(uid=uid)
             _delete_user_documents(db_client, cleanup)
             db_client.document(f"account_deletions/{uid}").delete()
+        for snapshot in db_client.collection(daily_sweep.WINDOW_ADMISSION_COLLECTION).stream():
+            snapshot.reference.delete()
         for snapshot in db_client.collection(daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION).stream():
             snapshot.reference.delete()
 

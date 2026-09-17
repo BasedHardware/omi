@@ -43,6 +43,7 @@ class StrictFirestoreSnapshot:
     def __init__(self, data: dict[str, Any] | None):
         self._data = deepcopy(data)
         self.exists = data is not None
+        self.reference: Any = None
 
     def to_dict(self) -> dict[str, Any] | None:
         return deepcopy(self._data)
@@ -132,12 +133,14 @@ class StrictFirestoreIdQuery:
         if transaction._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
         transaction._assert_read_allowed()
-        rows = [
-            StrictFirestoreSnapshot({})
-            for path, value in sorted(self._database.rows.items())
-            if path[:-1] == self._path
-            and all(field in value and value[field] == expected for field, expected in self._filters)
-        ]
+        rows = []
+        for path, value in sorted(self._database.rows.items()):
+            if path[:-1] == self._path and all(
+                field in value and value[field] == expected for field, expected in self._filters
+            ):
+                snapshot = StrictFirestoreSnapshot({})
+                snapshot.reference = StrictFirestoreDocument(self._database, path)
+                rows.append(snapshot)
         return iter(rows[: self._limit])
 
 

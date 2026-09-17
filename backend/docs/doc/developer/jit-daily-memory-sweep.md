@@ -1,5 +1,9 @@
 # Daily memory sweep contract
 
+The [admission and paid-unlock design note](daily-sweep-admission-and-unlock.md)
+describes the permanent window lock, required first-deployment drain,
+claim-bound operator skip, replay policy, read bounds and remaining limitations.
+
 `utils.memory.daily_memory_sweep` is the dark authority seam for the ratified
 once-per-user-local-day memory sweep. The maintenance job contains a bounded
 producer/scheduler/adaptor, but its separate backend authority remains closed
@@ -64,15 +68,26 @@ cover maximal days; typical days ceiling far lower).
 
 ### Completed-day source bounds and invocation ownership
 
-Eligibility and selection have separate budgets. One `started_at` range query,
-ordered by `started_at ASC, __name__ ASC`, projects only `started_at`, `status`,
-`finished_at`, `discarded`, and `is_locked` (document IDs are implicit). The
-query returns at most 2,001 rows: a 2,000-row eligibility ceiling plus one
-probe. Overflow returns `eligibility_scan_over_budget`; an unfinished visible
-row anywhere in the projection returns `row_not_eligible`. Neither result
-advances the cursor or dispatches. At exactly 2,000 rows the scan is complete.
-This is a bounded snapshot of the window, not an ingestion seal: a later insert
-cannot be observed retroactively, but it cannot reopen a claimed invocation.
+Eligibility and selection have separate budgets. The `started_at` timestamp
+range projects `started_at`, `status`, `finished_at`, `discarded`, and `is_locked`,
+ordered by `started_at ASC, __name__ ASC`. At most 100,001 projections are read;
+more than 100,000 scanned rows returns `source_scan_over_budget`. The separate
+2,000 eligible-row ceiling excludes discarded/locked rows and returns
+`eligibility_scan_over_budget`; an unfinished visible row returns
+`row_not_eligible`. These results cannot advance the cursor or dispatch.
+
+Projection and subsequent full reads are not atomic. Mutations beyond the
+full-read page and late inserts are not rechecked; even selected rows can
+change afterward. This is an observed-read eligibility check, not a stable
+whole-window snapshot or ingestion seal. Admission protects only code that
+participates in the shared admission protocol. The deployment note explicitly
+requires draining pre-lock workers for the first transition.
+
+There is no explicit settle margin: the previous local date is eligible as
+soon as midnight passes, potentially arbitrarily close to window end. Missing
+or string-typed `started_at` values are not covered by the timestamp query.
+Conversations are attributed to their start day, not finish day; `finished_at`
+is required to be a datetime but is not required to precede window end.
 
 After the scan succeeds, only the first `min(2 * max_conversations, 400)`
 eligible IDs in that total order have their full documents read (16 for QA).
@@ -81,63 +96,38 @@ returns `source_row_changed`. The selected page ranks structured summaries,
 longer summaries, later start times, then IDs. An individually oversized row is
 always skipped, even after selection began; remaining rows stop at the first
 aggregate budget overflow. Selected rows are finally sorted by ID. Thus a
-successful attempt reads at most 2,000 projected and 400 full documents (16 in
-QA); a scan-overflow attempt reads 2,001 projections and no full documents.
+successful attempt reads at most 100,000 projected and 400 full documents (16 in
+QA); a scan-overflow attempt reads 100,001 projections and no full documents.
 Firestore projections reduce payload, not billed document reads.
 
 Rows locked in the projection are excluded like discarded rows before full
 content reads. Full-document reads recheck locking before building provider
 input. This matches chat RAG's exclusion and integration rendering's removal
 of locked summaries/evidence. They do not hold the day open;
-unlocking later does not make a consumed day eligible for another sweep.
+paid unlock atomically rotates the source generation and rewinds the cursor,
+as described in the admission and unlock note. Exclusions are counted without IDs.
 Onboarding uses the same lock exclusion before its additional finalization
 check, so it cannot route a locked transcript around the completed-day gate.
 `rows_seen` counts eligible projected rows, `rows_used` counts selected rows,
-and truncation means eligible rows were actually omitted, never just that a
-query exactly filled its limit. Source evidence belongs to the producer/stage;
+and the selection cap no longer treats an exactly-full query as truncation.
+Contentless eligible rows are counted as omissions and set the truncation flag.
+Source evidence belongs to the producer/stage;
 the agent receives a separate dispatch-evidence dictionary. The scheduler and
 both QA receipts accept only `SOURCE_REASON_CODES`; other values become
 `unknown_reason`.
 
-The completed-day invocation key is `(uid, local_date, window_id,
-account_generation, source_generation, sweep_generation)`, with no source-text
-or selection digest in its identity. In the same transaction that claims the
-durable fence, both the content-free top-level fence and the user invocation
-payload record `input_digest`, `claim_id`, generations, window, state `pending`,
-and the existing pre-dispatch release count. Ordered IDs are not frozen: this
-chooses window ownership with digest-bound replay instead of a stored selection.
-The staged page retains its existing transcript and candidate digest checks.
+Both completed-day and onboarding invocations use stable owner/source/window/
+generation identity. A durable window admission lease commits before its identity factory runs;
+a holder-checked transaction then binds the result independently of mutable text. Both payload
+and content-free fence bind a separate input digest; only certified pre-dispatch
+release can change it. The existing three-release limit and claim binding remain.
+Lease expiry permits another admission holder, never another invocation ID.
+See the design note for mutation interleavings, distinct failure reasons, and the
+single operator skip exit through the existing repair attestation machinery.
 
-- `pending` / `indeterminate` / `pre_dispatch_exhausted` cannot auto-dispatch.
-  An exact-claim operator repair still requires the existing no-provider-call
-  evidence, and cannot substitute a different input digest.
-- `returned` replays only the matching input digest and validated unexpired
-  output. After a failed stage write, the same source can stage that output.
-  Late earlier rows, deleted boundary rows, summary edits, or first-open
-  enrichment that change selection/text/evidence fail closed, without a new
-  invocation or a stage under a different digest. This also closes the
-  under-budget summary-edit redispatch path.
-- Only `pre_dispatch_released`, certified before the provider-dispatch latch,
-  may bind a freshly selected digest under the SAME invocation ID. Claim-ID
-  binding and `MAX_PRE_DISPATCH_RELEASES` remain authoritative.
-- Overlapping new workers contend on one fence; the loser cannot dispatch.
-  Deletion and live account/source generation checks still run transactionally
-  before claim/finalize/stage. The top-level fence survives user deletion.
-
-Before creating a new window fence, its transaction also checks for any existing
-fence with the same UID, window, and generations, projecting one document ID.
-This prevents old transcript-keyed receipts from being bypassed after an
-upgrade, even if their user payload was deleted. Historical fences without a
-usable stage remain incomplete; they are not automatically adopted or reset.
-Drain older workers before activation: an older binary does not honor the new
-window key. No rollout or repair is performed by this source change.
-
-No new composite index is required. The source range uses the existing
-ascending `started_at` index's implicit ascending document-ID suffix. The
-historical-fence query uses only equality filters and automatic single-field
-index merging; see [Firestore index ordering and merging](https://firebase.google.com/docs/firestore/query-data/index-overview).
-An index/query failure fails closed. The emulator proves query/transaction
-semantics, but does not prove the serving index state of a remote deployment.
+All new lookups use single-field range indexes or equality index merging; no
+new composite index is needed. The emulator proves query/transaction semantics,
+not the serving index state of a remote deployment.
 
 Onboarding provenance is a server-generated session marker written by the
 listen runtime; client `source` and onboarding flags are not trusted. The

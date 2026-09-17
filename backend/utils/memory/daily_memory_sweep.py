@@ -117,6 +117,10 @@ MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS = 200
 MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS = 120_000
 COMPLETED_DAY_SOURCE_PAGE_CAP = 400
 COMPLETED_DAY_ELIGIBILITY_CAP = 2_000
+COMPLETED_DAY_SCAN_CAP = 100_000
+WINDOW_ADMISSION_COLLECTION = "daily_memory_sweep_window_admissions"
+PRE_LOCK_PREFLIGHT_CAP = 10_000
+MAX_HISTORICAL_WINDOW_CLAIMS = 100
 MAX_DAILY_TRANSCRIPT_FETCHES = 8
 MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS = 8_000
 MAX_DAILY_MEMORY_LOOKUPS = 4
@@ -152,6 +156,7 @@ MODEL_INVOCATION_FENCE_COLLECTION = "daily_memory_sweep_model_invocation_fences"
 MODEL_INVOCATION_SCHEMA_VERSION = "daily_memory_sweep_model_invocation.v1"
 MAX_PRE_DISPATCH_RELEASES = 3
 MODEL_INVOCATION_REPAIR_MARGIN = timedelta(minutes=2)
+SKIP_WINDOW_ATTESTATION_CONFIRMATION = "ATTEST_SKIP_WINDOW_WITHOUT_DISPATCH_AND_WORKER_TERMINATED"
 NO_DISPATCH_ATTESTATION_CONFIRMATION = "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED"
 # An explicit operator repair for a tombstoned model invocation.  Pending,
 # indeterminate, and payload-expired fences are closed forever by design; this
@@ -252,6 +257,16 @@ _ID_RE = re.compile(r"[a-z0-9][a-z0-9._:-]{0,127}")
 SOURCE_REASON_CODES = frozenset(
     {
         "source_incomplete",
+        "pre_lock_claim_live",
+        "pre_lock_scan_over_budget",
+        "window_admission_busy",
+        "invocation_input_changed",
+        "invocation_output_unavailable",
+        "historical_invocation_unresolved",
+        "invocation_pending",
+        "invocation_indeterminate",
+        "source_scan_over_budget",
+        "contentless_rows_omitted",
         "unknown_reason",
         "query_failed",
         "row_not_eligible",
@@ -1582,7 +1597,185 @@ def _invoke_model_once_legacy(
             return None
 
 
+def assert_no_live_pre_lock_claims(db_client: Any, *, now: datetime, uids: Optional[Iterable[str]] = None) -> None:
+    """Bounded rollout tripwire; draining pre-lock workers is still required.
+
+    A pre-claim old worker has no observable document. This assertion cannot
+    replace the operator's scheduler pause and zero-running-executions proof.
+    Recent claims use the existing single-field claimed_at index, not a composite.
+    Pre-lock claim writers always persist claimed_at and never renew that lease.
+    """
+    scope = set(uids) if uids is not None else None
+    rows = list(
+        db_client.collection(MODEL_INVOCATION_FENCE_COLLECTION)
+        .where(filter=FieldFilter("claimed_at", ">", now - MODEL_INVOCATION_LEASE))
+        .select(("uid", "state", "claimed_at", "admission_id"))
+        .limit(PRE_LOCK_PREFLIGHT_CAP + 1)
+        .stream()
+    )
+    if len(rows) > PRE_LOCK_PREFLIGHT_CAP:
+        raise RuntimeError("pre_lock_scan_over_budget")
+    for row in rows:
+        payload = row.to_dict() or {}
+        if scope is not None and payload.get("uid") not in scope:
+            continue
+        if payload.get("state") != "pending" or payload.get("admission_id"):
+            continue
+        claimed = payload.get("claimed_at")
+        if not isinstance(claimed, datetime) or claimed.tzinfo is None or claimed + MODEL_INVOCATION_LEASE > now:
+            raise RuntimeError("pre_lock_claim_live")
+
+
+@dataclass(frozen=True)
+class WindowAdmissionGrant:
+    invocation_id: Optional[str]
+
+
 def _invoke_model_once(
+    db_client: Any,
+    uid: str,
+    invocation_id: Any,
+    *,
+    candidate_builder: Any,
+    account_generation: Optional[int] = None,
+    source_generation: Optional[int] = None,
+    sweep_generation: Optional[int] = None,
+    window_id: Optional[str] = None,
+    input_digest: Optional[str] = None,
+    now: Optional[datetime] = None,
+    invocation_evidence: Optional[Dict[str, Any]] = None,
+) -> Optional[Tuple[dict[str, Any], ...]]:
+    """Admit the window before evaluating its version-specific identity factory.
+
+    Lease expiry permits another holder, never another identity. The binding
+    survives payload deletion and must be retained like the invocation fence.
+    """
+    evidence = invocation_evidence if invocation_evidence is not None else {}
+    if any(value is None for value in (account_generation, source_generation, sweep_generation, window_id)):
+        resolved = invocation_id() if callable(invocation_id) else invocation_id
+        if not isinstance(resolved, str) or not resolved:
+            raise ValueError("invocation identity must be a nonempty string")
+        evidence["invocation_id"] = resolved
+        return _invoke_model_once_legacy(db_client, uid, resolved, candidate_builder=candidate_builder, now=now)
+    assert account_generation is not None and source_generation is not None
+    claimed_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    identity = dict(
+        uid=uid,
+        account_generation=account_generation,
+        source_generation=source_generation,
+        sweep_generation=sweep_generation,
+        window_id=window_id,
+    )
+    admission_id = deterministic_contract_id("daily-sweep-window-admission.v1", identity)
+    ref = db_client.document(f"{WINDOW_ADMISSION_COLLECTION}/{admission_id}")
+    deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+    holder = uuid4().hex
+
+    def admit(transaction: Any) -> Optional[WindowAdmissionGrant]:
+        if not _transaction_fence_open(
+            transaction,
+            deletion_ref,
+            control_ref,
+            uid=uid,
+            account_generation=account_generation,
+            source_generation=source_generation,
+        ):
+            return None
+        snapshot = ref.get(transaction=transaction)
+        prior = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+        if prior is not None:
+            if not all(prior.get(key) == value for key, value in identity.items()):
+                return None
+            deadline = prior.get("lease_expires_at")
+            if not isinstance(deadline, datetime) or deadline.tzinfo is None or deadline > claimed_now:
+                evidence["failure_reason"] = "window_admission_busy"
+                return None
+            resolved = prior.get("invocation_id")
+            if resolved is not None and (not isinstance(resolved, str) or not resolved):
+                return None
+        else:
+            resolved = None
+        transaction.set(
+            ref,
+            {
+                **identity,
+                "invocation_id": resolved,
+                "holder": holder,
+                "lease_expires_at": claimed_now + MODEL_INVOCATION_LEASE,
+            },
+        )
+        return WindowAdmissionGrant(invocation_id=resolved)
+
+    try:
+        grant = firestore.transactional(admit)(db_client.transaction())
+    except Exception:
+        return None
+    if grant is None:
+        return None
+    try:
+        resolved = grant.invocation_id
+        if resolved is None:
+            # The admission lease has COMMITTED before the identity factory
+            # runs. A losing/retried acquisition never computes an identity.
+            resolved = invocation_id() if callable(invocation_id) else invocation_id
+            if not isinstance(resolved, str) or not resolved:
+                raise ValueError("invocation identity must be a nonempty string")
+
+            def bind(transaction: Any) -> bool:
+                if not _transaction_fence_open(
+                    transaction,
+                    deletion_ref,
+                    control_ref,
+                    uid=uid,
+                    account_generation=account_generation,
+                    source_generation=source_generation,
+                ):
+                    return False
+                snapshot = ref.get(transaction=transaction)
+                payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+                binding_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+                if (
+                    not isinstance(payload, dict)
+                    or payload.get("holder") != holder
+                    or payload.get("invocation_id") is not None
+                    or payload.get("lease_expires_at", binding_now) <= binding_now
+                ):
+                    return False
+                transaction.set(ref, {**payload, "invocation_id": resolved})
+                return True
+
+            if not firestore.transactional(bind)(db_client.transaction()):
+                return None
+        evidence["invocation_id"] = resolved
+        return _invoke_model_once_claimed(
+            db_client,
+            uid,
+            resolved,
+            candidate_builder=candidate_builder,
+            account_generation=account_generation,
+            source_generation=source_generation,
+            sweep_generation=sweep_generation,
+            window_id=window_id,
+            input_digest=input_digest,
+            now=now,
+            admission_id=admission_id,
+            invocation_evidence=evidence,
+        )
+    finally:
+
+        def release(transaction: Any) -> None:
+            snapshot = ref.get(transaction=transaction)
+            payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+            if isinstance(payload, dict) and payload.get("holder") == holder:
+                transaction.set(ref, {**payload, "lease_expires_at": claimed_now})
+
+        try:
+            firestore.transactional(release)(db_client.transaction())
+        except Exception:
+            pass  # A failed release waits for the bounded lease; binding survives.
+
+
+def _invoke_model_once_claimed(
     db_client: Any,
     uid: str,
     invocation_id: str,
@@ -1594,6 +1787,8 @@ def _invoke_model_once(
     window_id: Optional[str] = None,
     input_digest: Optional[str] = None,
     now: Optional[datetime] = None,
+    admission_id: Optional[str] = None,
+    invocation_evidence: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[dict[str, Any], ...]]:
     """Run one fenced provider call with a durable cross-account-delete claim.
 
@@ -1643,6 +1838,7 @@ def _invoke_model_once(
         "window_id": window_id,
     }
 
+    evidence = invocation_evidence if invocation_evidence is not None else {}
     claim_id = uuid4().hex
 
     def _identity_matches(payload: Any) -> bool:
@@ -1700,6 +1896,8 @@ def _invoke_model_once(
         if fence_payload is not None:
             if not _identity_matches(fence_payload):
                 return "blocked", None
+            if fence_payload.get("state") == "window_skipped":
+                return "returned", ()
             released = fence_payload.get("state") == "pre_dispatch_released"
             # The window owns the invocation. Only a certified no-dispatch
             # release may bind different inputs; returned/uncertain output
@@ -1713,15 +1911,23 @@ def _invoke_model_once(
                     or user_payload.get("input_digest") != input_digest
                 )
             ):
+                evidence["failure_reason"] = "invocation_input_changed"
                 return "blocked", None
             if fence_payload.get("state") == "returned":
+                if _validated_output(user_payload) is None:
+                    evidence["failure_reason"] = "invocation_output_unavailable"
                 return "returned", _validated_output(user_payload)
             if not released:
                 repair_snapshot = _read(repair_ref, transaction)
                 repair_payload = repair_snapshot.to_dict() if getattr(repair_snapshot, "exists", False) else None
                 if not _valid_model_invocation_repair(repair_payload, identity, fence_payload, claim_now):
+                    evidence["failure_reason"] = (
+                        "invocation_pending" if fence_payload.get("state") == "pending" else "invocation_indeterminate"
+                    )
                     return "blocked", None
                 assert isinstance(repair_payload, dict)
+                if repair_payload.get("provider_outcome_summary") == "operator_attested_skip_window":
+                    return "blocked", None
                 transaction.set(repair_ref, {**repair_payload, "consumed": True, "consumed_at": claim_now})
             elif (
                 not isinstance(user_payload, dict)
@@ -1735,6 +1941,7 @@ def _invoke_model_once(
             repaired_pending = {
                 **identity,
                 "input_digest": input_digest,
+                "admission_id": admission_id,
                 "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
                 "state": "pending",
                 "at_most_once_tombstone": True,
@@ -1761,6 +1968,7 @@ def _invoke_model_once(
                 if key != "invocation_id":
                     prior_query = prior_query.where(filter=FieldFilter(key, "==", value))
             if next(iter(prior_query.select(()).limit(1).stream(transaction=transaction)), None) is not None:
+                evidence["failure_reason"] = "historical_invocation_unresolved"
                 return "blocked", None
         # A user payload without its top-level identity fence is an orphan,
         # usually the result of an interrupted account wipe. Never recreate it.
@@ -1769,6 +1977,7 @@ def _invoke_model_once(
         pending = {
             **identity,
             "input_digest": input_digest,
+            "admission_id": admission_id,
             "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
             "state": "pending",
             "at_most_once_tombstone": True,
@@ -1872,6 +2081,7 @@ def _invoke_model_once(
         returned_payload = {
             **identity,
             "input_digest": input_digest,
+            "admission_id": admission_id,
             "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
             "state": "returned",
             "at_most_once_tombstone": True,
@@ -1983,10 +2193,15 @@ def valid_no_dispatch_attestation(
     this validator checks attribution and claim binding, not that assertion's truth.
     """
     if (
-        evidence.get("provider_outcome") != "operator_attested_no_dispatch"
+        evidence.get("provider_outcome") not in {"operator_attested_no_dispatch", "operator_attested_skip_window"}
         or evidence.get("attempts") != []
         or "jit_run_id" in evidence
-        or evidence.get("confirmation") != NO_DISPATCH_ATTESTATION_CONFIRMATION
+        or evidence.get("confirmation")
+        != (
+            SKIP_WINDOW_ATTESTATION_CONFIRMATION
+            if evidence.get("provider_outcome") == "operator_attested_skip_window"
+            else NO_DISPATCH_ATTESTATION_CONFIRMATION
+        )
         or any(
             identity.get(key) is None
             for key in (
@@ -2039,7 +2254,9 @@ def _valid_model_invocation_repair(
     if not isinstance(evidence, Mapping):
         return False
     outcome = evidence.get("provider_outcome")
-    if outcome == "operator_attested_no_dispatch":
+    if outcome in {"operator_attested_no_dispatch", "operator_attested_skip_window"}:
+        if payload.get("provider_outcome_summary") != outcome:
+            return False
         return valid_no_dispatch_attestation(
             evidence,
             identity=identity,
@@ -2086,8 +2303,14 @@ def repair_daily_sweep_model_invocation(
         raise ValueError("daily sweep invocation repair requires a bounded invocation id")
     evidence = dict(provider_outcome_evidence or {})
     recorded_attempts = evidence.get("attempts")
-    attested = evidence.get("provider_outcome") == "operator_attested_no_dispatch"
-    if evidence.get("provider_outcome") not in {None, "recorded_attempt", "operator_attested_no_dispatch"}:
+    skip_window = evidence.get("provider_outcome") == "operator_attested_skip_window"
+    attested = evidence.get("provider_outcome") in {"operator_attested_no_dispatch", "operator_attested_skip_window"}
+    if evidence.get("provider_outcome") not in {
+        None,
+        "recorded_attempt",
+        "operator_attested_no_dispatch",
+        "operator_attested_skip_window",
+    }:
         raise ValueError("accounting absence is not proof of no dispatch; explicit operator attestation required")
     if not attested and (not isinstance(evidence.get("jit_run_id"), str) or not evidence["jit_run_id"].strip()):
         raise ValueError("daily sweep invocation repair requires the owning run id in its provider evidence")
@@ -2124,7 +2347,9 @@ def repair_daily_sweep_model_invocation(
     ):
         raise ValueError("daily sweep invocation repair requires a complete fence identity")
     prior_state = fence_payload.get("state")
-    if prior_state not in {"pending", "indeterminate", "payload_expired", "pre_dispatch_exhausted"}:
+    if prior_state not in {"pending", "indeterminate", "payload_expired", "pre_dispatch_exhausted"} and not (
+        skip_window and prior_state == "returned"
+    ):
         raise ValueError(f"daily sweep invocation in state {prior_state!r} is not repairable")
 
     user_snapshot = _model_invocation_ref(db_client, uid, normalized_invocation_id).get()
@@ -2156,7 +2381,7 @@ def repair_daily_sweep_model_invocation(
     if getattr(existing_repair, "exists", False):
         raise ValueError("daily sweep invocation already has a repair receipt")
 
-    outcome_summary = "operator_attested_no_dispatch" if attested else "recorded_attempt"
+    outcome_summary = str(evidence["provider_outcome"]) if attested else "recorded_attempt"
     for attempt in recorded_attempts:
         outcome = attempt.get("outcome")
         if outcome == "success" and attempt.get("total_tokens") not in (None, 0):
@@ -2192,6 +2417,84 @@ def repair_daily_sweep_model_invocation(
     return receipt
 
 
+def _consume_attested_window_skip(
+    db_client: Any,
+    uid: str,
+    *,
+    account_generation: int,
+    source_generation: int,
+    sweep_generation: int,
+    window_id: str,
+) -> bool:
+    """Consume the existing repair receipt as an empty, exact-window result.
+
+    No provider call, no reconstructed output, and no direct cursor write:
+    the scheduler still completes its normal generation-fenced packet/cursor.
+    """
+    identity = dict(
+        uid=uid,
+        account_generation=account_generation,
+        source_generation=source_generation,
+        sweep_generation=sweep_generation,
+        window_id=window_id,
+    )
+    deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+    now = datetime.now(timezone.utc)
+
+    def consume(transaction: Any) -> bool:
+        if not _transaction_fence_open(
+            transaction,
+            deletion_ref,
+            control_ref,
+            uid=uid,
+            account_generation=account_generation,
+            source_generation=source_generation,
+        ):
+            return False
+        query = db_client.collection(MODEL_INVOCATION_FENCE_COLLECTION)
+        for key, value in identity.items():
+            query = query.where(filter=FieldFilter(key, "==", value))
+        matches = list(query.select(()).limit(MAX_HISTORICAL_WINDOW_CLAIMS + 1).stream(transaction=transaction))
+        if not matches or len(matches) > MAX_HISTORICAL_WINDOW_CLAIMS:
+            return False
+        # Historical digest-keyed code could already have created multiple
+        # owners. Each exact claim must be attested; consume all in one commit.
+        writes: List[Tuple[Any, Dict[str, Any]]] = []
+        for match in matches:
+            fence_ref = match.reference
+            fence = fence_ref.get(transaction=transaction).to_dict() or {}
+            if fence.get("state") == "window_skipped":
+                continue
+            invocation_id = fence.get("invocation_id")
+            if not isinstance(invocation_id, str):
+                return False
+            repair_ref = _model_invocation_repair_ref(db_client, uid, invocation_id)
+            repair = repair_ref.get(transaction=transaction).to_dict()
+            if (
+                not isinstance(repair, dict)
+                or repair.get("provider_outcome_summary") != "operator_attested_skip_window"
+                or not _valid_model_invocation_repair(repair, {**identity, "invocation_id": invocation_id}, fence, now)
+            ):
+                return False
+            writes.append((repair_ref, {**repair, "consumed": True, "consumed_at": now}))
+            writes.append((fence_ref, {**fence, "state": "window_skipped", "skipped_at": now}))
+        for reference, payload in writes:
+            transaction.set(reference, payload)
+        return True
+
+    skipped = firestore.transactional(consume)(db_client.transaction())
+    if skipped:
+        record_fallback(
+            component="daily_summary",
+            from_mode="model_invocation",
+            to_mode="attested_skip",
+            reason="policy",
+            outcome="degraded",
+            log=logger,
+        )
+    return skipped
+
+
 def _receipt_id(
     uid: str,
     local_date: date,
@@ -2214,6 +2517,172 @@ def _receipt_id(
                 "sweep_generation": sweep_generation,
             },
         )[:40]
+    )
+
+
+def unlock_conversations_with_sweep_replay(db_client: Any, uid: str, references: Sequence[Any]) -> int:
+    """Atomically unlock at most 100 rows and publish their replay epoch.
+
+    Payment callers all use this handoff. A crash after commit cannot lose
+    replay: the rows, control generation, cursor and replay range commit together.
+    No locked content is copied into the control documents.
+    """
+    if len(references) > 100:
+        raise ValueError("unlock batch exceeds 100 rows")
+    for reference in references:
+        path = reference.path
+        parts = tuple(path.split("/")) if isinstance(path, str) else tuple(path)
+        if len(parts) != 4 or parts[:3] != ("users", uid, "conversations"):
+            raise ValueError("unlock conversation owner mismatch")
+    now = datetime.now(timezone.utc)
+    deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+    cursor_ref = _cursor_ref(db_client, uid)
+    replay_ref = db_client.document(f"users/{uid}/memory_control/daily_memory_sweep_unlock")
+
+    def unlock(transaction: Any) -> int:
+        deletion = deletion_ref.get(transaction=transaction)
+        control_snapshot = control_ref.get(transaction=transaction)
+        cursor_snapshot = cursor_ref.get(transaction=transaction)
+        replay_snapshot = replay_ref.get(transaction=transaction)
+        user_snapshot = db_client.document(f"users/{uid}").get(transaction=transaction)
+        rows = [(ref, ref.get(transaction=transaction)) for ref in references]
+        deletion_payload = deletion.to_dict() or {}
+        if account_deletion_blocks_access(
+            normalize_account_deletion_status(
+                marker_exists=bool(getattr(deletion, "exists", False)), raw_status=deletion_payload.get("wipe_status")
+            )
+        ):
+            raise ValueError("unlock blocked by account deletion")
+        control = (
+            MemoryControlState.model_validate(control_snapshot.to_dict())
+            if getattr(control_snapshot, "exists", False)
+            else MemoryControlState(
+                uid=uid, head_commit_id="head0", account_generation=1, source_generation=1, updated_at=now
+            )
+        )
+        if control.uid != uid:
+            raise ValueError("unlock control owner mismatch")
+        cursor = (
+            DailySweepCursor.model_validate(cursor_snapshot.to_dict())
+            if getattr(cursor_snapshot, "exists", False)
+            else DailySweepCursor(
+                uid=uid, account_generation=control.account_generation, source_generation=control.source_generation
+            )
+        )
+        if (
+            cursor.uid != uid
+            or cursor.account_generation != control.account_generation
+            or cursor.source_generation > control.source_generation
+        ):
+            raise ValueError("unlock cursor owner mismatch")
+        locked = [
+            (ref, row.to_dict())
+            for ref, row in rows
+            if getattr(row, "exists", False) and (row.to_dict() or {}).get("is_locked") is True
+        ]
+        if not locked:
+            return 0
+        timezone_name = cursor.timezone_name or (user_snapshot.to_dict() or {}).get("time_zone") or "UTC"
+        dates = [
+            raw["started_at"].astimezone(ZoneInfo(timezone_name)).date()
+            for _, raw in locked
+            if isinstance(raw.get("started_at"), datetime) and raw["started_at"].tzinfo is not None
+        ]
+        bumped = control.model_copy(update={"source_generation": control.source_generation + 1, "updated_at": now})
+        prior_replay = replay_snapshot.to_dict() or {}
+        if prior_replay.get("account_generation") == control.account_generation:
+            earliest = prior_replay.get("earliest_local_date")
+            if isinstance(earliest, str):
+                dates.append(date.fromisoformat(earliest))
+        updates: Dict[str, Any] = {
+            "source_generation": bumped.source_generation,
+            "generation": cursor.generation + 1,
+            "updated_at": now,
+        }
+        if dates:
+            earliest_day = min(dates)
+            if cursor.last_completed_local_date is not None:
+                earliest_day = min(earliest_day, cursor.last_completed_local_date + timedelta(days=1))
+            anchor = completed_local_day_window(earliest_day - timedelta(days=1), timezone_name)
+            updates.update(
+                timezone_name=timezone_name,
+                last_completed_local_date=earliest_day - timedelta(days=1),
+                last_completed_window_id=anchor.window_id,
+                last_completed_window_start_utc=anchor.start_utc,
+                last_completed_window_end_utc=anchor.end_utc,
+                pending_transition_local_date=None,
+                pending_transition_window_id=None,
+                pending_transition_start_utc=None,
+                pending_transition_end_utc=None,
+            )
+            through = max(
+                cursor.last_completed_local_date or earliest_day,
+                date.fromisoformat(prior_replay.get("replay_through_local_date", earliest_day.isoformat())),
+            )
+            transaction.set(
+                replay_ref,
+                {
+                    "uid": uid,
+                    "account_generation": control.account_generation,
+                    "source_generation": bumped.source_generation,
+                    "earliest_local_date": earliest_day.isoformat(),
+                    "replay_through_local_date": through.isoformat(),
+                    "updated_at": now,
+                },
+            )
+        new_cursor = DailySweepCursor.model_validate({**cursor.model_dump(), **updates})
+        transaction.set(control_ref, bumped.model_dump(mode="python"))
+        cursor_payload = new_cursor.model_dump(mode="python")
+        for key in ("last_completed_local_date", "pending_transition_local_date"):
+            if cursor_payload[key] is not None:
+                cursor_payload[key] = cursor_payload[key].isoformat()
+        transaction.set(cursor_ref, cursor_payload)
+        for ref, _ in locked:
+            transaction.update(ref, {"is_locked": False})
+        return len(locked)
+
+    return firestore.transactional(unlock)(db_client.transaction())
+
+
+def _is_unlock_replay(db_client: Any, uid: str, local_date: date, control: MemoryControlState) -> bool:
+    snapshot = db_client.document(f"users/{uid}/memory_control/daily_memory_sweep_unlock").get()
+    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
+    return (
+        payload.get("uid") == uid
+        and payload.get("account_generation") == control.account_generation
+        and type(payload.get("source_generation")) is int
+        and payload["source_generation"] <= control.source_generation
+        and payload.get("earliest_local_date", "9999")
+        <= local_date.isoformat()
+        <= payload.get("replay_through_local_date", "")
+    )
+
+
+def _unlock_invalidates_artifact(
+    db_client: Any,
+    uid: str,
+    local_date: date,
+    control: MemoryControlState,
+    artifact: Mapping[str, Any],
+) -> bool:
+    """Only the explicit unlock handoff can supersede a prior generation's artifact.
+
+    This also covers an already-produced pending day beyond the replay high
+    water mark. Its old generation is invalidated, but it is not historical
+    canonical replay and can use the ordinary forward-day apply policy.
+    """
+    snapshot = db_client.document(f"users/{uid}/memory_control/daily_memory_sweep_unlock").get()
+    handoff = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
+    generation = artifact.get("source_generation")
+    return (
+        handoff.get("uid") == uid
+        and handoff.get("account_generation") == control.account_generation
+        and handoff.get("source_generation") == control.source_generation
+        and handoff.get("earliest_local_date", "9999") <= local_date.isoformat()
+        and artifact.get("uid") == uid
+        and artifact.get("account_generation") == control.account_generation
+        and type(generation) is int
+        and generation < control.source_generation
     )
 
 
@@ -3240,6 +3709,8 @@ def _apply_candidate(
     if candidate.operation == "add":
         occupant = _find_active_slot_or_subject(uid, candidate, db_client=db_client)
         if occupant is not None:
+            if candidate.source_version.startswith("daily-memory-agent.unlock."):
+                return occupant.memory_id, "existing_active_slot" if candidate.slot else "existing_active_subject"
             # Crash-replay recognition: if the occupant already carries this
             # exact plan/candidate's evidence identity, the canonical write for
             # this receipt landed before a crash prevented receipt
@@ -3859,6 +4330,8 @@ class CompletedDaySourceRead:
     status: Literal["complete", "incomplete"] = "incomplete"
     reason: str = ""
     truncated: bool = False
+    locked_rows_excluded: int = 0
+    contentless_rows_omitted: int = 0
     rows_seen: int = 0
     rows_used: int = 0
 
@@ -4030,7 +4503,8 @@ def _read_completed_day_conversation_sources(
     unfinished) row is incomplete so callers cannot move the cursor past a
     transcript that may still change.  A day that is merely too big is
     truncated only after the eligibility projection observes every row, up to
-    COMPLETED_DAY_ELIGIBILITY_CAP. Above that hard cap the day stays incomplete.
+    COMPLETED_DAY_SCAN_CAP reads, with at most COMPLETED_DAY_ELIGIBILITY_CAP
+    eligible rows. Neither projection nor full reads freeze future mutations.
     """
 
     collection = db_client.collection(f"users/{uid}/conversations")
@@ -4051,23 +4525,29 @@ def _read_completed_day_conversation_sources(
         query = query.order_by("started_at").order_by("__name__")
         snapshots = list(
             query.select(("started_at", "discarded", "is_locked", "status", "finished_at"))
-            .limit(COMPLETED_DAY_ELIGIBILITY_CAP + 1)
+            .limit(COMPLETED_DAY_SCAN_CAP + 1)
             .stream()
         )
     except Exception:
         return _incomplete_day_read("query_failed")
-    if len(snapshots) > COMPLETED_DAY_ELIGIBILITY_CAP:
-        return _incomplete_day_read("eligibility_scan_over_budget")
+    if len(snapshots) > COMPLETED_DAY_SCAN_CAP:
+        return _incomplete_day_read("source_scan_over_budget")
     eligible_snapshots = []
+    locked_rows_excluded = 0
+    contentless_rows_omitted = 0
     for snapshot in snapshots:
         raw = snapshot.to_dict()
         if not getattr(snapshot, "id", "") or not isinstance(raw, dict):
             return _incomplete_day_read("row_undecodable")
+        if raw.get("is_locked") and not raw.get("discarded"):
+            locked_rows_excluded += 1
         eligibility = _completed_day_row_eligibility(raw)
         if eligibility == "unfinished":
             return _incomplete_day_read("row_not_eligible")
         if eligibility == "eligible":
             eligible_snapshots.append(snapshot)
+            if len(eligible_snapshots) > COMPLETED_DAY_ELIGIBILITY_CAP:
+                return _incomplete_day_read("eligibility_scan_over_budget")
     page_capped = len(eligible_snapshots) > fetch_limit
 
     from database.conversations import (  # pyright: ignore[reportPrivateUsage]
@@ -4091,6 +4571,8 @@ def _read_completed_day_conversation_sources(
         # cursor past a transcript that may still change.
         eligibility = _completed_day_row_eligibility(raw)
         if eligibility == "discarded":
+            if raw.get("is_locked") and not raw.get("discarded"):
+                locked_rows_excluded += 1
             continue
         if eligibility != "eligible":
             return _incomplete_day_read("row_not_eligible")
@@ -4102,8 +4584,11 @@ def _read_completed_day_conversation_sources(
             )
             if conversation is None:
                 return _incomplete_day_read("row_undecodable")
-            owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
-            transcript = memory_transcript_from_segments(conversation.transcript_segments)
+            segments = cast(Conversation, conversation).transcript_segments
+            owner_evidence = OwnerAttributionEvidence.from_segments(segments)
+            transcript = (
+                memory_transcript_from_segments(segments) if any(segment.text.strip() for segment in segments) else ""
+            )
             structured = conversation.structured
             title = (getattr(structured, "title", "") or "").strip() if structured else ""
             overview = (getattr(structured, "overview", "") or "").strip() if structured else ""
@@ -4127,6 +4612,7 @@ def _read_completed_day_conversation_sources(
             summary = f"{UNSTRUCTURED_SUMMARY_MARKER} {head}" if head else ""
         summary = summary.strip()
         if not summary and not transcript:
+            contentless_rows_omitted += 1
             continue
         decoded.append(
             CompletedDayConversationSource(
@@ -4144,13 +4630,17 @@ def _read_completed_day_conversation_sources(
         max_conversations=max_conversations,
         max_summary_characters=max_summary_characters,
     )
-    truncated = selection.truncated or page_capped
+    truncated = selection.truncated or page_capped or contentless_rows_omitted > 0
     truncation_reason = selection.truncation_reason or ("conversation_page_over_budget" if page_capped else "")
+    if not truncation_reason and contentless_rows_omitted:
+        truncation_reason = "contentless_rows_omitted"
     return CompletedDaySourceRead(
         rows=selection.rows,
         status="complete",
         reason=truncation_reason if truncated else "",
         truncated=truncated,
+        locked_rows_excluded=locked_rows_excluded,
+        contentless_rows_omitted=contentless_rows_omitted,
         rows_seen=len(eligible_snapshots),
         rows_used=len(selection.rows),
     )
@@ -4277,6 +4767,7 @@ class OnboardingSourceProduction:
     """Named result for the bounded onboarding producer contract."""
 
     candidates: Tuple[DailySweepCandidate, ...] = ()
+    failure_reason: Optional[str] = None
     complete: bool = False
     source_keys: Tuple[str, ...] = ()
     source_progress: Mapping[str, int] = field(default_factory=dict)
@@ -4294,6 +4785,7 @@ def _load_or_stage_onboarding_candidates(
     source_generation: Optional[int] = None,
     sweep_generation: Optional[int] = None,
     window_id: Optional[str] = None,
+    failure_evidence: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[DailySweepCandidate, ...]]:
     """Materialize one deterministic candidate page before continuation slicing.
 
@@ -4356,6 +4848,22 @@ def _load_or_stage_onboarding_candidates(
             return None
         return staged
 
+    if (
+        account_generation is not None
+        and source_generation is not None
+        and sweep_generation is not None
+        and window_id is not None
+        and _consume_attested_window_skip(
+            db_client,
+            uid,
+            account_generation=account_generation,
+            source_generation=source_generation,
+            sweep_generation=sweep_generation,
+            window_id=window_id,
+        )
+    ):
+        return ()
+
     try:
         staged_snapshot = stage_ref.get()
     except Exception:
@@ -4369,12 +4877,12 @@ def _load_or_stage_onboarding_candidates(
         except Exception:
             return None
 
-    invocation_id = deterministic_contract_id(
+    invocation_evidence = failure_evidence if failure_evidence is not None else {}
+    invocation_id = lambda: deterministic_contract_id(
         "daily-sweep-onboarding-model-invocation",
         {
             "uid": uid,
             "source_key": source_key,
-            "transcript_digest": transcript_digest,
             "account_generation": account_generation,
             "source_generation": source_generation,
             "sweep_generation": sweep_generation,
@@ -4423,6 +4931,8 @@ def _load_or_stage_onboarding_candidates(
             source_generation=source_generation,
             sweep_generation=sweep_generation,
             window_id=window_id,
+            input_digest=transcript_digest,
+            invocation_evidence=invocation_evidence,
         )
         if raw_staged is None:
             return None
@@ -4439,7 +4949,7 @@ def _load_or_stage_onboarding_candidates(
             "candidate_count": len(staged),
             "staged_at": datetime.now(timezone.utc),
             "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
-            "model_invocation_id": invocation_id,
+            "model_invocation_id": invocation_evidence["invocation_id"],
         }
         if account_generation is not None:
             stage_payload["account_generation"] = account_generation
@@ -4648,6 +5158,7 @@ def _produce_onboarding_sources(
         for conversation_id, text in rows:
             source_key = f"onboarding:{conversation_id}"
             offset = candidate_offsets.get(source_key, 0)
+            failure_evidence: Dict[str, Any] = {}
             staged = _load_or_stage_onboarding_candidates(
                 uid,
                 source_key,
@@ -4655,13 +5166,18 @@ def _produce_onboarding_sources(
                 text,
                 db_client=db_client,
                 extractor=extractor,
+                failure_evidence=failure_evidence,
                 account_generation=account_generation,
                 source_generation=source_generation,
                 sweep_generation=sweep_generation,
                 window_id=f"onboarding:{source_key}" if source_generation is not None else None,
             )
             if staged is None or offset > len(staged):
-                return OnboardingSourceProduction()
+                return OnboardingSourceProduction(
+                    failure_reason=_content_free_reason(
+                        failure_evidence.get("failure_reason", "daily_summary_stage_unavailable")
+                    )
+                )
             available = max(0, max_candidates - len(candidates))
             row_candidates = list(staged[offset : offset + available])
             candidates.extend(row_candidates)
@@ -4867,7 +5383,9 @@ def _load_or_stage_daily_summary_candidates(
         # created by the first attempt.
         return read_staged(staged_snapshot)
 
-    invocation_id = deterministic_contract_id(
+    replaying_unlock = _is_unlock_replay(db_client, uid, local_date, control)
+    invocation_evidence: Dict[str, Any] = {}
+    invocation_id = lambda: deterministic_contract_id(
         "daily-sweep-daily-summary-model-invocation",
         {
             "uid": uid,
@@ -4994,7 +5512,11 @@ def _load_or_stage_daily_summary_candidates(
                     content=content,
                     source_id=f"conversation:{cited[0]}",
                     source_type="daily_summary",
-                    source_version="daily-memory-agent.v1",
+                    source_version=(
+                        f"daily-memory-agent.unlock.{control.source_generation}"
+                        if replaying_unlock
+                        else "daily-memory-agent.v1"
+                    ),
                     source_refs=tuple(f"conversation:{conversation_id}" for conversation_id in cited[:MAX_SOURCE_REFS]),
                     authority=SweepAuthority.sweep_inference,
                     subject_scope=subject_scope,
@@ -5045,13 +5567,18 @@ def _load_or_stage_daily_summary_candidates(
             sweep_generation=sweep_generation,
             window_id=window.window_id,
             input_digest=transcript_digest,
+            invocation_evidence=invocation_evidence,
         )
+        if dispatch_evidence is not None and "failure_reason" in invocation_evidence:
+            dispatch_evidence["failure_reason"] = invocation_evidence["failure_reason"]
         if raw_candidates is None:
             return None
         candidate_dicts, folder_assignments = _split_daily_summary_page(raw_candidates)
         candidate_page = tuple(DailySweepCandidate.model_validate(item) for item in candidate_dicts)
         stage_payload = {
             "schema_version": DAILY_SUMMARY_STAGE_SCHEMA_VERSION,
+            "unlock_replay": replaying_unlock,
+            "supersedes_source_generations_before": control.source_generation if replaying_unlock else None,
             "uid": uid,
             "local_date": local_date.isoformat(),
             "timezone_name": timezone_name,
@@ -5074,7 +5601,7 @@ def _load_or_stage_daily_summary_candidates(
             "folder_assignments": list(folder_assignments),
             "staged_at": datetime.now(timezone.utc),
             "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
-            "model_invocation_id": invocation_id,
+            "model_invocation_id": invocation_evidence["invocation_id"],
             "dispatch_evidence": dict(dispatch_evidence or {}),
         }
         if jit_run_id is not None:
@@ -5252,6 +5779,15 @@ def produce_completed_day_daily_summary_sources(
     """
 
     window = window_override or completed_local_day_window(local_date, timezone_name)
+    if _consume_attested_window_skip(
+        db_client,
+        uid,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=sweep_generation,
+        window_id=window.window_id,
+    ):
+        return DailySweepRuntimeSources.from_iterables(complete=True, source_status="complete_zero")
     collection = db_client.collection(f"users/{uid}/daily_summaries")
     where = getattr(collection, "where", None)
     if not callable(where):
@@ -5286,7 +5822,9 @@ def produce_completed_day_daily_summary_sources(
     # open.  In particular, a missing key is not interpreted as []: older
     # summary writers did not produce this field and must not advance the new
     # cursor without a producer proof.
-    if "memory_candidates" in payload:
+    if "memory_candidates" in payload and not _unlock_invalidates_artifact(
+        db_client, uid, local_date, control, payload
+    ):
         if is_qa_run:
             # QA must observe a fresh, bounded gateway request. A historical
             # summary cache is a producer artifact from another run and cannot
@@ -5342,7 +5880,12 @@ def produce_completed_day_daily_summary_sources(
     if source_read.status == "incomplete":
         return _incomplete_runtime_sources(source_read.reason or "source_incomplete")
     conversation_rows = source_read.rows
-    dispatch_evidence: Dict[str, Any] = {}
+    dispatch_evidence: Dict[str, Any] = {
+        "locked_rows_excluded": source_read.locked_rows_excluded,
+        "contentless_rows_omitted": source_read.contentless_rows_omitted,
+        "rows_seen": source_read.rows_seen,
+        "rows_used": source_read.rows_used,
+    }
     if source_read.truncated:
         dispatch_evidence["truncated"] = True
         dispatch_evidence["rows_seen"] = source_read.rows_seen
@@ -5575,7 +6118,9 @@ def firestore_daily_sweep_source_provider(
 
     ref = db_client.document(f"{MemoryCollections(uid=uid).daily_memory_sweep_sources}/{local_date.isoformat()}")
     snapshot = ref.get()
-    if not getattr(snapshot, "exists", False):
+    if not getattr(snapshot, "exists", False) or _unlock_invalidates_artifact(
+        db_client, uid, local_date, control, snapshot.to_dict() or {}
+    ):
         # The source is not allowed to advance the cursor merely because the
         # staging document is absent. Fall back only to the durable completed-
         # day summary producer; its missing-summary result remains incomplete.
@@ -5619,7 +6164,14 @@ def firestore_daily_sweep_source_provider(
             ),
             eligibility_proof=summary_sources.eligibility_proof,
             model_cost_usd=summary_sources.model_cost_usd,
-            model_dispatch_evidence=summary_sources.model_dispatch_evidence,
+            model_dispatch_evidence={
+                **summary_sources.model_dispatch_evidence,
+                **(
+                    {"failure_reason": onboarding_production.failure_reason}
+                    if onboarding_production.failure_reason
+                    else {}
+                ),
+            },
         )
     if qa_run_id is not None:
         # The QA producer must read the completed conversation source and make

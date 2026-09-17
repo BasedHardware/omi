@@ -38,6 +38,7 @@ from utils.memory.daily_memory_sweep import (  # noqa: E402
     MODEL_INVOCATION_LEASE,
     MODEL_INVOCATION_REPAIR_MARGIN,
     NO_DISPATCH_ATTESTATION_CONFIRMATION,
+    SKIP_WINDOW_ATTESTATION_CONFIRMATION,
     MODEL_INVOCATION_PATH,
     MODEL_INVOCATION_REPAIR_PATH,
     QA_SWEEP_UID,
@@ -51,7 +52,7 @@ GATEWAY_ATTEMPT_COLLECTION = "llm_gateway_attempts"
 GATEWAY_ATTEMPT_PAGE_LIMIT = 50
 EVIDENCE_WINDOW_MARGIN = MODEL_INVOCATION_REPAIR_MARGIN
 GATEWAY_ATTEMPT_MAX_PAGES = 1000
-TOMBSTONED_STATES = ("pending", "indeterminate", "payload_expired", "pre_dispatch_exhausted")
+TOMBSTONED_STATES = ("pending", "indeterminate", "payload_expired", "pre_dispatch_exhausted", "returned")
 
 
 class JITQASweepRepairError(RuntimeError):
@@ -179,7 +180,12 @@ def collect_provider_outcome_evidence(
 def list_tombstones(db_client: Any, *, uid: str = QA_SWEEP_UID) -> list[dict[str, Any]]:
     """Enumerate tombstoned invocations with their repair state, content-free."""
 
-    invocations = db_client.collection(f"users/{uid}/{MODEL_INVOCATION_PATH}").limit(200).stream()
+    invocations = (
+        db_client.collection(MODEL_INVOCATION_FENCE_COLLECTION)
+        .where(filter=FieldFilter("uid", "==", uid))
+        .limit(200)
+        .stream()
+    )
     rows: list[dict[str, Any]] = []
     now = datetime.now(timezone.utc)
     for snapshot in invocations:
@@ -189,6 +195,9 @@ def list_tombstones(db_client: Any, *, uid: str = QA_SWEEP_UID) -> list[dict[str
             continue
         invocation_id = str(snapshot.id)
         lease_expires_at = _parse_timestamp(payload.get("lease_expires_at"))
+        claimed_at = _parse_timestamp(payload.get("claimed_at"))
+        if lease_expires_at is None and claimed_at is not None:
+            lease_expires_at = claimed_at + MODEL_INVOCATION_LEASE
         repair_snapshot = db_client.document(f"users/{uid}/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}").get()
         repair_payload = repair_snapshot.to_dict() if getattr(repair_snapshot, "exists", False) else None
         rows.append(
@@ -200,7 +209,7 @@ def list_tombstones(db_client: Any, *, uid: str = QA_SWEEP_UID) -> list[dict[str
                 "failure_reason": payload.get("failure_reason"),
                 "blocked_reason": payload.get("blocked_reason"),
                 "claimed_at": str(payload.get("claimed_at") or ""),
-                "lease_expired": lease_expires_at is None or lease_expires_at <= now,
+                "lease_expired": lease_expires_at is not None and lease_expires_at <= now,
                 "repair_receipt": bool(repair_payload),
                 "repair_consumed": bool(repair_payload and repair_payload.get("consumed")),
             }
@@ -228,7 +237,7 @@ def repair_tombstone(
     attestation_confirmation: str | None = None,
     attestation_reference: str | None = None,
 ) -> dict[str, Any]:
-    """Write a retry authorization; accounting absence alone never authorizes it."""
+    """Write one retry or skip attestation; accounting absence authorizes neither."""
 
     invocation_id = validate_invocation_id(invocation_id)
     repaired_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -236,21 +245,29 @@ def repair_tombstone(
     claimed_at = _parse_timestamp(fence.get("claimed_at"))
     if claimed_at is None:
         raise JITQASweepRepairError("tombstoned invocation does not record its claim time")
-    evidence = collect_provider_outcome_evidence(
-        db_client,
-        uid=uid,
-        claimed_at=claimed_at,
-        now=repaired_now,
+    # Skipping accepts loss of this window; it neither infers non-dispatch nor
+    # needs complete accounting. The exact claim-bound assertion is authority.
+    evidence = (
+        {}
+        if attestation_confirmation == SKIP_WINDOW_ATTESTATION_CONFIRMATION
+        else collect_provider_outcome_evidence(db_client, uid=uid, claimed_at=claimed_at, now=repaired_now)
     )
     if attestation_confirmation is not None or attestation_reference is not None:
-        if attestation_confirmation != NO_DISPATCH_ATTESTATION_CONFIRMATION or not attestation_reference:
+        if (
+            attestation_confirmation not in {NO_DISPATCH_ATTESTATION_CONFIRMATION, SKIP_WINDOW_ATTESTATION_CONFIRMATION}
+            or not attestation_reference
+        ):
             raise JITQASweepRepairError(
                 "explicit no-dispatch/terminated-worker attestation and evidence reference required"
             )
-        if evidence.get("attempts"):
+        if evidence.get("attempts") and attestation_confirmation != SKIP_WINDOW_ATTESTATION_CONFIRMATION:
             raise JITQASweepRepairError("recorded accounting attempts conflict with no-dispatch attestation")
         evidence = {
-            "provider_outcome": "operator_attested_no_dispatch",
+            "provider_outcome": (
+                "operator_attested_skip_window"
+                if attestation_confirmation == SKIP_WINDOW_ATTESTATION_CONFIRMATION
+                else "operator_attested_no_dispatch"
+            ),
             "attempts": [],
             "confirmation": attestation_confirmation,
             "evidence_reference": attestation_reference,
@@ -289,7 +306,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--uid", default=QA_SWEEP_UID)
     parser.add_argument("--authority", help="bounded operator identity recorded on the repair receipt")
     parser.add_argument("--invocation-id")
-    parser.add_argument("--attestation-confirmation", choices=(NO_DISPATCH_ATTESTATION_CONFIRMATION,))
+    parser.add_argument(
+        "--attestation-confirmation",
+        choices=(NO_DISPATCH_ATTESTATION_CONFIRMATION, SKIP_WINDOW_ATTESTATION_CONFIRMATION),
+    )
     parser.add_argument(
         "--attestation-reference", help="content-free reference to independently reviewed claim evidence"
     )
