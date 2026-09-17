@@ -844,6 +844,7 @@ export function parseStoreRecordingPermission(
 
 export function parseTrainingOptIn(value: unknown, label: string): boolean {
   const record = object(value, label);
+  presentNullableString(record.status, label);
   const optedIn = optionalBoolean(record.opted_in);
   if (optedIn === null) {
     throw new Error(`${label} is malformed`);

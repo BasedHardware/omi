@@ -1255,6 +1255,50 @@ test('Settings names Flutter UserWebhooksStatusResponse fromJson type-wrong GET 
   expect(tree).not.toContain('Day Summary');
 });
 
+test('Settings names Flutter TrainingDataOptInResponse fromJson type-wrong GET status instead of remapping to a Training data chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+        }),
+      };
+    }
+    if (request.path === '/v1/users/training-data-opt-in') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          opted_in: true,
+          status: 1,
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const account = textOf(renderer);
+  expect(account).toContain('Fair Use');
+  expect(account).toContain('Ada');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Privacy settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Training opt-in response is malformed')),
+  );
+  expect(tree).not.toContain(
+    'This account has opted in to training data. The API does not expose an opt-out from here.',
+  );
+});
+
 test('Settings omits Flutter Profile.build() GET company, job, and data protection', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
