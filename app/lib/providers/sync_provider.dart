@@ -48,6 +48,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   final Future<void> Function(LocalWalSyncImpl phone) _waitForWalReady;
   final Future<void> Function() _startRecovery;
   final Future<void> Function(WakeTrigger trigger) _wakeTransfer;
+  final SyncTransferKeepAlive _keepAlive;
 
   /// Completes after WAL loading and startup fair-use reconciliation finish.
   @visibleForTesting
@@ -349,12 +350,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
+    @visibleForTesting SyncTransferKeepAlive? keepAlive,
   })  : _walServiceOverride = walService,
         _uploadGate = uploadGate ?? SyncUploadGate.instance,
         _startBackgroundSync = startBackgroundSync,
         _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
         _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)),
+        _keepAlive = keepAlive ?? SyncTransferKeepAlive.instance {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -404,6 +407,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
         connectivityChanges: ConnectivityService().onConnectionChange,
         initiallyConnected: ConnectivityService().isConnected,
+        onTransferStarted: _keepAlive.acquire,
+        onTransferFinished: _keepAlive.release,
       );
       unawaited(_startRecovery());
     } catch (e) {
@@ -595,6 +600,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     bool checkFlashStall = false,
   }) async {
     _uploadedWalIdsAtSyncStart = uploadedWals.map((w) => w.id).toSet();
+    await _keepAlive.acquire();
     try {
       _updateSyncState(_syncState.toSyncing());
 
@@ -696,6 +702,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (rethrowOnError) rethrow;
       return null;
     } finally {
+      await _keepAlive.release();
       if (!_isDisposed) {
         await refreshWals();
         _recordNewlyAcceptedUploads();
@@ -957,6 +964,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else {
       _updateSyncState(_syncState.toIdle());
     }
+    // Drop the Android transfer FGS immediately so screen-off keep-alive
+    // cannot outlive a user cancel (#5221).
+    unawaited(_keepAlive.releaseAll());
     // Cancel only stops further uploads. Recordings already `uploaded` are
     // safe on the server — keep reconciling them through the single owner.
     unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
@@ -970,6 +980,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
     _updateSyncState(_syncState.toSyncing());
 
+    await _keepAlive.acquire();
     try {
       await _walService.getSyncs().syncWal(wal: wal, progress: this);
       await refreshWals();
@@ -978,6 +989,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       await refreshWals();
       _updateSyncState(_syncState.toIdle());
       rethrow;
+    } finally {
+      await _keepAlive.release();
     }
   }
 
@@ -1005,6 +1018,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   @override
   void dispose() {
     _isDisposed = true;
+    unawaited(_keepAlive.releaseAll());
     _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
     SyncRateLimiter.instance.removeListener(_onRateLimiterChanged);
     WaveformUtils.clearCache();
