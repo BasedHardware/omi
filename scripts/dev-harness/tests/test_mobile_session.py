@@ -251,6 +251,52 @@ class TestStart:
         assert seen["provider_mode"] == "offline"
         assert started["device"]["udid"] == "DEADBEEF-1234"
 
+    def test_start_json_keeps_cmd_up_logs_off_stdout(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="jsonup", platform_name="ios-simulator", listeners=_no_listeners)
+
+        def fake_up(namespace) -> int:
+            print("cmd_up: starting services")
+            return 0
+
+        monkeypatch.setattr("dev_harness.cli.cmd_up", fake_up)
+
+        class FakeDevices:
+            def attach_ios_simulator(self, sid: str, device_type: str, runtime: str) -> tuple[str, str]:
+                return "DEADBEEF-1234", "iPhone 17 Pro"
+
+            def android_ready(self, home: str) -> tuple[bool, str]:
+                return True, "ready"
+
+            def detach(self, platform: str, device: str) -> None:
+                pass
+
+        started = ms.start(REPO_ROOT, lease["session_id"], env, devices=FakeDevices(), json_stdout=True)
+        assert started["status"] == "running"
+        captured = capsys.readouterr()
+        assert "cmd_up: starting services" in captured.err
+        assert "cmd_up: starting services" not in captured.out
+
+    def test_start_json_cli_stdout_is_pure_json(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="jsoncli", listeners=_no_listeners)
+
+        def fake_up(namespace) -> int:
+            print("cmd_up: starting services")
+            return 0
+
+        monkeypatch.setattr("dev_harness.cli.cmd_up", fake_up)
+        monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", env["OMI_LOCAL_STATE_ROOT"])
+        monkeypatch.chdir(REPO_ROOT)
+        assert ms.main(["start", lease["session_id"], "--json", "--no-device"]) == 0
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["session_id"] == lease["session_id"]
+        assert payload["status"] == "running"
+        assert "cmd_up: starting services" in captured.err
+
 
 class TestEvidence:
     def test_ready_requires_an_artifact(self, tmp_path: Path, env: dict) -> None:
@@ -331,6 +377,21 @@ class TestListAndCLI:
         ms.acquire(REPO_ROOT, env, name="listed", listeners=_no_listeners)
         sessions = ms.list_sessions(REPO_ROOT, env)
         assert [s["session_id"] for s in sessions] == ["oms-listed"]
+
+    def test_acquire_accepts_ios_as_ios_simulator_alias(self, tmp_path: Path, env: dict) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="iosalias", platform_name="ios", listeners=_no_listeners)
+        assert lease["platform"] == "ios-simulator"
+        assert lease["app_id"] == ms.DEFAULT_APP_IDS["ios-simulator"]
+
+    def test_acquire_rejects_unknown_platform_naming_valid_values(self, tmp_path: Path, env: dict) -> None:
+        with pytest.raises(ms.SessionError, match="ios-simulator"):
+            ms.acquire(REPO_ROOT, env, name="badplat", platform_name="iphone", listeners=_no_listeners)
+
+    def test_cli_platform_aliases_round_trip(self) -> None:
+        doctor = ms.build_parser().parse_args(["doctor", "--platform", "ios-simulator"])
+        assert doctor.platform == ["ios"]
+        acquire = ms.build_parser().parse_args(["acquire", "--platform", "ios"])
+        assert acquire.platform == "ios-simulator"
 
     def test_main_doctor_exit_codes_follow_the_report(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class Blocked:

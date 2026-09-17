@@ -104,6 +104,18 @@ class TestOverallClassification:
         assert all(c.check != "xcode" for c in report.checks)
         assert report.overall == "ready"
 
+    def test_ios_simulator_is_an_alias_for_the_ios_lane(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        runner.which_results["xcodebuild"] = None
+        report = md.run_doctor(tmp_path, runner=runner, platforms=("ios-simulator",), skip_capacity=True)
+        xcode = next(c for c in report.checks if c.check == "xcode")
+        assert xcode.status == md.OPERATOR
+        assert xcode.lanes == (md.LANE_IOS,)
+
+    def test_unknown_platform_is_refused_with_valid_values(self, tmp_path: Path) -> None:
+        with pytest.raises(md.DoctorError, match="ios-simulator is an alias for ios"):
+            md.run_doctor(tmp_path, platforms=("iphone",))
+
 
 class TestIndividualChecks:
     def test_capacity_below_threshold_is_an_operator_gate(self, tmp_path: Path) -> None:

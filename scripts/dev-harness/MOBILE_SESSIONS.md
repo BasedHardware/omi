@@ -71,7 +71,10 @@ token is involved at any point.
 `doctor` classifies every prerequisite exactly one of `ready`,
 `agent-remediable` (remedy command included), or `operator-action-needed`
 (privileged install/license/host capacity), per lane (`backend`, `android`,
-`ios`). Pins: Flutter version comes from `.github/workflows/mobile-app-checks.yml`
+`ios`). `--platform ios-simulator` is an alias for the `ios` lane; `acquire
+--platform ios` is an alias for `ios-simulator`. Unknown names are refused
+with a message that lists the valid values. Pins: Flutter version comes from
+`.github/workflows/mobile-app-checks.yml`
 (never "latest"); the backend venv must be Python 3.11; JDK ≥ 21 for the
 Firebase emulators. Capacity: emulator lanes require ≥ 12GiB free on the
 shared Data/scratch container — below that the check is an operator gate and
