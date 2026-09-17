@@ -50,6 +50,10 @@ SUMMARY_PIPELINE_FLAGS = (
     'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
+    # Same co-host rule: an omitted or disagreeing value on one
+    # process_conversation host would silently keep that host ungated (code
+    # default OFF) while the others deny identified-basic first-open.
+    'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
 )
 
 # The runtime resolves these flags with strip().casefold() against the truthy

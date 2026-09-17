@@ -1496,6 +1496,7 @@ def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted
 
 def _flag_off(monkeypatch, pc) -> None:
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
 
 
 def _identified_basic_deny(pc) -> Any:
@@ -1621,3 +1622,28 @@ def test_flag_off_non_desktop_basic_keeps_eager_extraction(monkeypatch, pc) -> N
     pc.process_conversation('basic-uid', 'en', omi_create, force_process=True)
 
     spies['get_structured'].assert_called_once()
+
+
+def test_eager_extraction_switch_off_first_open_basic_reaches_structured_without_authorize(monkeypatch, pc) -> None:
+    """Unset switch: first-open basic is byte-identical to main before #14165."""
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.delenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', raising=False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    auth_calls: list[str] = []
+
+    def boom(*_args, **_kwargs):
+        auth_calls.append('authorize')
+        raise AssertionError('authorize_managed_compute must not run when the eager-extraction switch is off')
+
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', boom)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: pytest.fail('policy consulted when the eager-extraction switch is off'),
+    )
+    _stub_completed_for_normal_path(monkeypatch, pc)
+
+    pc.process_conversation('basic-uid', 'en', _desktop_create(), force_process=True)
+
+    spies['get_structured'].assert_called_once()
+    assert auth_calls == []

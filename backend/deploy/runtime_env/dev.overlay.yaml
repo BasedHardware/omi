@@ -12,6 +12,8 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'true'
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omiapi.com
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -69,6 +71,8 @@ overlay:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'true'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         MEMORY_BELIEF_MODEL_ENABLED:
           value: 'true'
@@ -220,6 +224,10 @@ overlay:
     env:
       MEMORY_BELIEF_MODEL_ENABLED:
         value: 'true'
+      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+        value: 'true'
+      BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+        value: 'true'
       MEMORY_BELIEF_AUTOMATION_PAUSED:
         value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -242,6 +250,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'true'
+          BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
             value: 'true'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
@@ -311,6 +323,8 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
