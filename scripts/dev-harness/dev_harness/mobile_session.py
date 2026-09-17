@@ -39,11 +39,14 @@ import os
 import platform
 import random
 import re
+import secrets
 import shutil
+import signal
 import string
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -79,6 +82,14 @@ DEFAULT_APP_IDS = {
 }
 DEFAULT_PROFILE = "local_dev"
 DEFAULT_FLAVOR = "dev"
+ANDROID_IMAGE_PACKAGE = mobile_doctor.PREFERRED_ANDROID_IMAGE
+ANDROID_EMULATOR_BOOT_TIMEOUT_S = 240
+ANDROID_EMULATOR_CONSOLE_BASE = 5554
+ANDROID_PERMISSIONS = (
+    "android.permission.RECORD_AUDIO",
+    "android.permission.BLUETOOTH_CONNECT",
+    "android.permission.BLUETOOTH_SCAN",
+)
 
 
 class SessionError(RuntimeError):
@@ -346,30 +357,64 @@ class DeviceController:
         self._runner = runner or self._default_runner
 
     @staticmethod
-    def _default_runner(command: Sequence[str]) -> tuple[int, str]:
+    def _default_runner(
+        command: Sequence[str],
+        timeout: float = 120,
+        env: Mapping[str, str] | None = None,
+        input_text: str | None = None,
+    ) -> tuple[int, str]:
         # A missing binary (e.g. xcrun on a host without Xcode) must surface as
         # exit 127 + message so callers fail closed with a remedy; an escaping
         # FileNotFoundError would also break stop()/release() idempotency.
         try:
-            completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=120)
+            completed = subprocess.run(
+                list(command),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
+                env=dict(env) if env is not None else None,
+                input=input_text,
+            )
         except FileNotFoundError as exc:
             return 127, f"{command[0]} not installed: {exc}"
+        except subprocess.TimeoutExpired:
+            return 124, f"timeout after {timeout:.0f}s: {command[0]}"
         return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
+    def _call(
+        self,
+        command: Sequence[str],
+        *,
+        timeout: float = 120,
+        env: Mapping[str, str] | None = None,
+        input_text: str | None = None,
+    ) -> tuple[int, str]:
+        try:
+            return self._runner(command, timeout=timeout, env=env, input_text=input_text)
+        except TypeError:
+            return self._runner(command)
+
     def android_ready(self, android_home: str) -> tuple[bool, str]:
-        emulator = Path(android_home) / "emulator" / "emulator"
-        sdkmanager = Path(android_home) / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        home = Path(android_home or "")
+        emulator = home / "emulator" / "emulator"
         if not emulator.exists():
             return False, f"emulator engine missing at {emulator} (sdkmanager 'emulator' 'cmdline-tools;latest')"
+        image = mobile_doctor.installed_android_system_image(home)
+        if image:
+            return True, f"android emulator engine present ({image})"
+        sdkmanager = home / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
         if sdkmanager.exists():
             code, out = self._runner([str(sdkmanager), "--list_installed"])
-            if code == 0 and not any(line.strip().startswith("system-images;") for line in out.splitlines()):
-                return (
-                    False,
-                    "no Android system image installed "
-                    "(sdkmanager 'system-images;android-36;google_apis;arm64-v8a')",
-                )
-        return True, "android emulator engine present"
+            image = mobile_doctor.installed_android_system_image(home, list_output=out if code == 0 else "")
+            if image:
+                return True, f"android emulator engine present ({image})"
+            return (
+                False,
+                "no Android system image installed "
+                f"(sdkmanager '{ANDROID_IMAGE_PACKAGE}')",
+            )
+        return False, f"no Android system image at {home.joinpath(*mobile_doctor.PREFERRED_ANDROID_IMAGE_DIR)}"
 
     def attach_ios_simulator(self, session_id: str, device_type: str, runtime: str) -> tuple[str, str]:
         name = f"omi-session-{session_id}"
@@ -383,12 +428,241 @@ class DeviceController:
             raise SessionError(f"simctl boot failed for {udid}: {out.strip()}")
         return udid, f"{device_type} ({runtime})"
 
-    def detach(self, platform_name: str, device_id: str) -> None:
+    def attach_android_emulator(
+        self,
+        session_id: str,
+        android_home: str,
+        *,
+        avd_home: Path,
+        ports: Mapping[str, int],
+        log_path: Path,
+        console_port: int | None = None,
+        spawn: Callable[..., subprocess.Popen[Any]] | None = None,
+        boot_timeout_s: float = ANDROID_EMULATOR_BOOT_TIMEOUT_S,
+    ) -> dict[str, Any]:
+        """Create a session-owned AVD, boot it headless, reverse session ports.
+
+        Product boots use ``-no-window -no-audio -no-snapshot``: the AVD is
+        created for this lease and deleted on release, so a qemu snapshot
+        would be a shared-template leftover. Warm-boot numbers are a second
+        start of the same AVD's userdata, not a reused snapshot file.
+        """
+
+        home = Path(android_home)
+        adb = home / "platform-tools" / "adb"
+        emulator = home / "emulator" / "emulator"
+        avdmanager = _sdk_cli_tool(home, "avdmanager")
+        ready, detail = self.android_ready(android_home)
+        if not ready:
+            raise SessionError(detail)
+        code, devices_out = self._runner([str(adb), "devices"])
+        if any(line.startswith("emulator-") for line in devices_out.splitlines()[1:] if line.strip()):
+            raise SessionError(
+                "another Android emulator is already visible to adb; one emulator at a time"
+            )
+        avd_home = Path(avd_home)
+        avd_home.mkdir(parents=True, exist_ok=True)
+        avd_name = f"omi-session-{session_id}"
+        env = {
+            **os.environ,
+            "ANDROID_HOME": str(home),
+            "ANDROID_SDK_ROOT": str(home),
+            "ANDROID_AVD_HOME": str(avd_home),
+        }
+        create = [
+            str(avdmanager),
+            "create",
+            "avd",
+            "--force",
+            "--name",
+            avd_name,
+            "--package",
+            ANDROID_IMAGE_PACKAGE,
+            "--device",
+            "pixel_7",
+        ]
+        code, created_out = self._call(create, timeout=120, env=env, input_text="no\n")
+        if code != 0:
+            raise SessionError(f"avdmanager create failed: {created_out.strip()[:800]}")
+        port = int(console_port or ANDROID_EMULATOR_CONSOLE_BASE)
+        if port % 2:
+            port += 1
+        serial = f"emulator-{port}"
+        marker = f"omi-dev-harness:{session_id}:android-emulator:{secrets.token_hex(8)}"
+        log_path = Path(log_path)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        argv = [
+            sys.executable,
+            "-m",
+            "dev_harness.supervise",
+            "--marker",
+            marker,
+            "--service",
+            "android-emulator",
+            "--",
+            str(emulator),
+            "-avd",
+            avd_name,
+            "-port",
+            str(port),
+            "-no-window",
+            "-no-audio",
+            "-no-snapshot",
+            "-gpu",
+            "swiftshader_indirect",
+        ]
+        child_env = {
+            **env,
+            "PYTHONPATH": str(Path(__file__).resolve().parent.parent),
+            "PATH": f"{home / 'platform-tools'}{os.pathsep}{home / 'emulator'}{os.pathsep}{env.get('PATH', '')}",
+        }
+        log_handle = log_path.open("ab")
+        try:
+            spawner = spawn or (
+                lambda command, **kwargs: subprocess.Popen(
+                    command,
+                    cwd=str(home),
+                    env=child_env,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            )
+            proc = spawner(argv, env=child_env, cwd=str(home), stdout=log_handle, stderr=subprocess.STDOUT)
+        finally:
+            log_handle.close()
+        try:
+            self._wait_android_boot(str(adb), serial, timeout_s=boot_timeout_s)
+        except Exception:
+            self._kill_owned_emulator(int(proc.pid), marker)
+            self._delete_avd(avdmanager, avd_name, env)
+            raise
+        reverses: list[dict[str, int]] = []
+        for name in ("backend", "auth"):
+            host_port = int(ports[name])
+            code, out = self._runner(
+                [str(adb), "-s", serial, "reverse", f"tcp:{host_port}", f"tcp:{host_port}"]
+            )
+            if code != 0:
+                self._kill_owned_emulator(int(proc.pid), marker)
+                self._delete_avd(avdmanager, avd_name, env)
+                raise SessionError(f"adb reverse tcp:{host_port} failed: {out.strip()[:400]}")
+            reverses.append({"device": host_port, "host": host_port, "name": name})
+        return {
+            "kind": "emulator",
+            "udid": serial,
+            "avd": avd_name,
+            "avd_home": str(avd_home),
+            "pid": int(proc.pid),
+            "ownership_marker": marker,
+            "owner": "session",
+            "label": ANDROID_IMAGE_PACKAGE,
+            "boot": "no-snapshot",
+            "console_port": port,
+            "reverse": reverses,
+        }
+
+    def _wait_android_boot(self, adb: str, serial: str, *, timeout_s: float) -> None:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            remaining = min(5.0, max(0.2, deadline - time.monotonic()))
+            code, _out = self._call([adb, "-s", serial, "wait-for-device"], timeout=remaining)
+            if code == 124:
+                continue
+            if code != 0:
+                time.sleep(min(1.0, remaining))
+                continue
+            code, out = self._call([adb, "-s", serial, "shell", "getprop", "sys.boot_completed"], timeout=remaining)
+            token = out.strip().splitlines()[-1].strip() if out.strip() else ""
+            if code == 0 and token == "1":
+                return
+            time.sleep(min(1.0, max(0.05, remaining)))
+        raise SessionError(
+            f"emulator {serial} did not reach sys.boot_completed within {timeout_s:.0f}s"
+        )
+
+    def _kill_owned_emulator(self, pid: int, marker: str) -> None:
+        if pid <= 0 or not safety.process_exists(pid):
+            return
+        cmdline = safety.command_line_for_pid(pid)
+        if marker not in cmdline:
+            raise SessionError(
+                f"refusing to kill PID {pid}: command line does not contain ownership marker"
+            )
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                return
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and safety.process_exists(pid):
+            time.sleep(0.25)
+        if safety.process_exists(pid):
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+    def _delete_avd(self, avdmanager: Path, avd_name: str, env: Mapping[str, str]) -> None:
+        self._call(
+            [str(avdmanager), "delete", "avd", "--name", avd_name],
+            timeout=60,
+            env=env,
+        )
+
+    def detach(self, platform_name: str, device_id: str, device: Mapping[str, Any] | None = None) -> None:
+        record = dict(device or {})
         if platform_name == "ios-simulator":
             self._runner(["xcrun", "simctl", "shutdown", device_id])
             self._runner(["xcrun", "simctl", "delete", device_id])
-        # android: AVD-based emulators stop with the session services; the AVD
-        # template stays for reuse and is owned by the session's lease record.
+            return
+        if platform_name == "android":
+            android_home = (
+                record.get("android_home")
+                or os.environ.get("ANDROID_HOME", "")
+                or os.environ.get("ANDROID_SDK_ROOT", "")
+            )
+            adb = str(Path(android_home) / "platform-tools" / "adb") if android_home else "adb"
+            for mapping in record.get("reverse") or ():
+                port = mapping.get("device") if isinstance(mapping, Mapping) else None
+                if port:
+                    self._runner([adb, "-s", device_id, "reverse", "--remove", f"tcp:{port}"])
+            marker = str(record.get("ownership_marker") or "")
+            pid = int(record.get("pid") or 0)
+            if pid and marker:
+                try:
+                    self._kill_owned_emulator(pid, marker)
+                except SessionError:
+                    pass
+            avd = str(record.get("avd") or "")
+            avd_home = record.get("avd_home")
+            if avd and android_home:
+                env = {
+                    **os.environ,
+                    "ANDROID_HOME": str(android_home),
+                    "ANDROID_SDK_ROOT": str(android_home),
+                }
+                if avd_home:
+                    env["ANDROID_AVD_HOME"] = str(avd_home)
+                try:
+                    tool = _sdk_cli_tool(Path(android_home), "avdmanager")
+                except SessionError:
+                    return
+                self._delete_avd(tool, avd, env)
+
+
+def _sdk_cli_tool(android_home: Path, name: str) -> Path:
+    """Resolve avdmanager/sdkmanager from the SDK, never Homebrew PATH."""
+
+    latest = android_home / "cmdline-tools" / "latest" / "bin" / name
+    if latest.is_file():
+        return latest
+    matches = sorted(android_home.glob(f"cmdline-tools/*/bin/{name}"))
+    if matches:
+        return matches[-1]
+    raise SessionError(f"{name} not found under {android_home}/cmdline-tools (do not use Homebrew avdmanager)")
 
 
 # ---------------------------------------------------------------------------
@@ -540,6 +814,15 @@ def start(
                 raise SessionError(
                     f"android device lane not ready: {detail} — run 'mobile-session doctor --platform android'"
                 )
+            attached = devices.attach_android_emulator(
+                session_id,
+                android_home,
+                avd_home=directory / "avd",
+                ports=lease["ports"],
+                log_path=directory / "emulator.log",
+            )
+            attached["android_home"] = android_home
+            lease = {**lease, "device": attached}
         else:  # ios-simulator
             device_type = "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro"
             runtime = "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
@@ -643,8 +926,8 @@ def stop(
     check_ownership(lease, allow_dead_owner=True)
 
     device = lease.get("device")
-    if isinstance(device, Mapping) and device.get("kind") == "simulator" and device.get("udid"):
-        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]))
+    if isinstance(device, Mapping) and device.get("udid") and device.get("kind") in {"simulator", "emulator"}:
+        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]), device)
 
     code = _harness_call(lease, harness_cli.cmd_down)
     if code != 0:
