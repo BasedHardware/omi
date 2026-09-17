@@ -356,19 +356,6 @@ jobs:
         working-directory: app
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: Enable Gradle configuration cache
-        # CI-only: do not flip this in android/gradle.properties. Cross-run
-        # restore of configuration-cache needs cache-encryption-key, which is a
-        # secret and would break fork PRs; warn-mode still helps repeated
-        # Gradle invocations inside this job. The setup-gradle cache below is
-        # what carries the build cache (task outputs) across runs.
-        working-directory: app/android
-        run: |
-          {
-            echo "org.gradle.configuration-cache=true"
-            echo "org.gradle.configuration-cache.problems=warn"
-          } >> gradle.properties
-
       - name: Setup Gradle for Flutter compile smoke
         uses: gradle/actions/setup-gradle@v6
         with:
@@ -462,13 +449,13 @@ jobs:
         working-directory: app
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: Enable Gradle configuration cache
-        working-directory: app/android
-        run: |
-          {
-            echo "org.gradle.configuration-cache=true"
-            echo "org.gradle.configuration-cache.problems=warn"
-          } >> gradle.properties
+      # gradlew, gradle-wrapper.jar, and local.properties are gitignored.
+      # On main they were created by the APK compile in the same job before
+      # this Gradle task ran. The parallel job never compiles an APK, so
+      # generate those files only (`--config-only`).
+      - name: Generate Android Gradle wrapper
+        working-directory: app
+        run: flutter build apk --debug --flavor dev --target-platform android-arm64 --config-only
 
       - name: Setup Gradle for Android JVM unit tests
         uses: gradle/actions/setup-gradle@v6
