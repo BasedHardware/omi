@@ -166,6 +166,13 @@ function presentChatTools(value: unknown): void {
   });
 }
 
+function presentNullableMap(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  object(value);
+}
+
 export type OmiAppChrome = {
   name: string;
   description?: string;
@@ -215,6 +222,8 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   presentNullableString(row.username);
   presentExternalIntegration(row.external_integration);
   presentChatTools(row.chat_tools);
+  presentNullableMap(row.proactive_notification);
+  presentNullableMap(row.twitter);
   presentNullableString(row.image);
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
   if (row.description === undefined || row.description === null) {

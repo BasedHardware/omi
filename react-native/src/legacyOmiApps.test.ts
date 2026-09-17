@@ -376,6 +376,66 @@ test('old apps name Flutter App.fromGenerated type-wrong GET image instead of re
   }
 });
 
+test('old apps name Flutter App.fromGenerated type-wrong GET proactive_notification instead of remapping to a catalog name', () => {
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        proactive_notification: {scopes: ['user']},
+        twitter: {handle: 'notes'},
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        proactive_notification: null,
+        twitter: null,
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes'}),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        proactive_notification: {scopes: 1},
+        twitter: {},
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  for (const extra of [1, true, []]) {
+    expect(() =>
+      parseOmiApp(
+        JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          proactive_notification: extra,
+        }),
+        'notes',
+      ),
+    ).toThrow('Omi app is malformed');
+    expect(() =>
+      parseOmiApp(
+        JSON.stringify({id: 'notes', name: 'Notes', twitter: extra}),
+        'notes',
+      ),
+    ).toThrow('Omi app is malformed');
+  }
+});
+
 test('old apps name Flutter App.fromGenerated type-wrong GET webhook_url instead of remapping to a catalog name', () => {
   expect(
     parseOmiApp(
@@ -1106,6 +1166,58 @@ test('old apps name Flutter App.fromGenerated type-wrong GET image instead of at
       id: 'notes',
       name: 'Notes',
       image: 1,
+    }),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  expect((await loadOmiApps(backend, ['notes'])).has('notes')).toBe(false);
+  const messages = await attachOmiChatAppNames(backend, [
+    {
+      id: 'ai-1',
+      text: 'Saved.',
+      sender: 'ai',
+      createdAt: 1,
+      generationOutcome: null,
+      appId: 'notes',
+    },
+  ]);
+  expect(messages[0]).toEqual(expect.objectContaining({appId: 'notes'}));
+  expect(messages[0]).not.toHaveProperty('appName');
+});
+
+test('old apps name Flutter App.fromGenerated type-wrong GET proactive_notification instead of attaching a catalog name', async () => {
+  const request = jest.fn(async () => ({
+    id: 'app',
+    status: 200,
+    body: JSON.stringify({
+      id: 'notes',
+      name: 'Notes',
+      proactive_notification: 1,
+    }),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  expect((await loadOmiApps(backend, ['notes'])).has('notes')).toBe(false);
+  const messages = await attachOmiChatAppNames(backend, [
+    {
+      id: 'ai-1',
+      text: 'Saved.',
+      sender: 'ai',
+      createdAt: 1,
+      generationOutcome: null,
+      appId: 'notes',
+    },
+  ]);
+  expect(messages[0]).toEqual(expect.objectContaining({appId: 'notes'}));
+  expect(messages[0]).not.toHaveProperty('appName');
+});
+
+test('old apps name Flutter App.fromGenerated type-wrong GET twitter instead of attaching a catalog name', async () => {
+  const request = jest.fn(async () => ({
+    id: 'app',
+    status: 200,
+    body: JSON.stringify({
+      id: 'notes',
+      name: 'Notes',
+      twitter: 1,
     }),
   }));
   const backend = {request} as unknown as OmiBackend;
