@@ -176,7 +176,7 @@ def _prove_completed_day_source_scan(db_client: Any, uid: str) -> None:
         batch.commit()
 
 
-def _prove_round4_admission_unlock_skip(db_client: Any, uid: str, now: datetime) -> None:
+def _prove_window_admission_and_skip(db_client: Any, uid: str, now: datetime) -> None:
     control, _ = _seed(db_client, uid, now)
     identity = dict(
         account_generation=control.account_generation,
@@ -262,7 +262,9 @@ def _prove_round4_admission_unlock_skip(db_client: Any, uid: str, now: datetime)
     )
     evidence = {
         "provider_outcome": "operator_attested_skip_window",
-        "attempts": [],
+        "window_disposition": "abandoned",
+        "provider_dispatch_status": "not_attested",
+        "accounting_checked": False,
         "confirmation": daily_sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
         "attested_by": "emulator-operator",
         "evidence_reference": "emulator:round4",
@@ -284,26 +286,24 @@ def _prove_round4_admission_unlock_skip(db_client: Any, uid: str, now: datetime)
     if not daily_sweep._consume_attested_window_skip(db_client, uid, **identity):
         raise AssertionError("skip outcome did not survive retry")
 
-    ref = db_client.document(f"users/{uid}/conversations/round4-locked")
-    ref.set({"is_locked": True, "started_at": now - timedelta(days=4)})
+
+def _prove_selected_source_lock_projection(db_client: Any, uid: str) -> None:
+    ref = db_client.document(f"users/{uid}/conversations/privacy-projection")
     try:
-        if daily_sweep.unlock_conversations_with_sweep_replay(db_client, uid, [ref]) != 1:
-            raise AssertionError("unlock handoff did not commit")
-        if ref.get().to_dict().get("is_locked") is not False:
-            raise AssertionError("unlock handoff failed to unlock")
-        live_control = MemoryControlState.model_validate(
-            db_client.document(MemoryCollections(uid=uid).memory_apply_control_state).get().to_dict()
-        )
-        cursor = daily_sweep._read_cursor(db_client, uid, live_control)
-        if live_control.source_generation != control.source_generation + 1:
-            raise AssertionError("unlock did not invalidate old canonical writers")
-        if cursor.last_completed_local_date != (now - timedelta(days=5)).date():
-            raise AssertionError("unlock did not rewind to the earliest excluded day")
-        if daily_sweep.unlock_conversations_with_sweep_replay(db_client, uid, [ref]) != 0:
-            raise AssertionError("retried payment repeated the replay epoch")
+        ref.set({"is_locked": False, "transcript": "must not be projected"})
+        if ref.get(field_paths=["is_locked"]).to_dict() != {"is_locked": False}:
+            raise AssertionError("privacy projection transferred unrequested content")
+        daily_sweep._assert_selected_sources_unlocked(db_client, uid, ("privacy-projection",))
+        ref.update({"is_locked": True})
+        try:
+            daily_sweep._assert_selected_sources_unlocked(db_client, uid, ("privacy-projection",))
+        except MemoryExtractionError as error:
+            if error.extractor != "source_locked_before_dispatch":
+                raise
+        else:
+            raise AssertionError("fresh lock did not block the provider boundary")
     finally:
         ref.delete()
-        db_client.document(f"users/{uid}/memory_control/daily_memory_sweep_unlock").delete()
 
 
 def main() -> int:
@@ -313,6 +313,10 @@ def main() -> int:
     authority = SweepAuthorityState(enabled=True)
     uids: list[str] = []
     try:
+        admission_uid = f"daily-memory-sweep-admission-{uuid4().hex}"
+        uids.append(admission_uid)
+        _prove_window_admission_and_skip(db_client, admission_uid, now)
+        _prove_selected_source_lock_projection(db_client, admission_uid)
         _prove_completed_day_source_scan(db_client, f"daily-memory-sweep-source-{uuid4().hex}")
         # Crash-after-canonical-before-receipt: the pending claimant is safely
         # replayable and canonical apply remains the sole write authority.
@@ -826,7 +830,7 @@ def main() -> int:
 
         print(
             "PASS: daily memory sweep Firestore emulator retry/interruption proof "
-            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/source-digest-binding/legacy-fence/source-projection/accounting-pagination/lost-accounting-refusal/window-admission/pre-lock-preflight/unlock-replay/attested-skip)"
+            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/source-digest-binding/legacy-fence/source-projection/accounting-pagination/lost-accounting-refusal/window-admission/pre-lock-preflight/attested-skip/lock-projection)"
         )
         return 0
     finally:

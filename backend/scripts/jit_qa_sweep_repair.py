@@ -257,9 +257,7 @@ def repair_tombstone(
             attestation_confirmation not in {NO_DISPATCH_ATTESTATION_CONFIRMATION, SKIP_WINDOW_ATTESTATION_CONFIRMATION}
             or not attestation_reference
         ):
-            raise JITQASweepRepairError(
-                "explicit no-dispatch/terminated-worker attestation and evidence reference required"
-            )
+            raise JITQASweepRepairError("explicit terminated-worker attestation and evidence reference required")
         if evidence.get("attempts") and attestation_confirmation != SKIP_WINDOW_ATTESTATION_CONFIRMATION:
             raise JITQASweepRepairError("recorded accounting attempts conflict with no-dispatch attestation")
         evidence = {
@@ -268,7 +266,15 @@ def repair_tombstone(
                 if attestation_confirmation == SKIP_WINDOW_ATTESTATION_CONFIRMATION
                 else "operator_attested_no_dispatch"
             ),
-            "attempts": [],
+            **(
+                {
+                    "window_disposition": "abandoned",
+                    "provider_dispatch_status": "not_attested",
+                    "accounting_checked": False,
+                }
+                if attestation_confirmation == SKIP_WINDOW_ATTESTATION_CONFIRMATION
+                else {"attempts": []}
+            ),
             "confirmation": attestation_confirmation,
             "evidence_reference": attestation_reference,
             "attested_by": repair_authority,

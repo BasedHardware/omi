@@ -1,8 +1,8 @@
 # Daily memory sweep contract
 
-The [admission and paid-unlock design note](daily-sweep-admission-and-unlock.md)
+The [admission and deferred-unlock design note](daily-sweep-admission-and-unlock.md)
 describes the permanent window lock, required first-deployment drain,
-claim-bound operator skip, replay policy, read bounds and remaining limitations.
+claim-bound operator abandonment, deferred replay design, read bounds and limitations.
 
 `utils.memory.daily_memory_sweep` is the dark authority seam for the ratified
 once-per-user-local-day memory sweep. The maintenance job contains a bounded
@@ -104,8 +104,13 @@ Rows locked in the projection are excluded like discarded rows before full
 content reads. Full-document reads recheck locking before building provider
 input. This matches chat RAG's exclusion and integration rendering's removal
 of locked summaries/evidence. They do not hold the day open;
-paid unlock atomically rotates the source generation and rewinds the cursor,
-as described in the admission and unlock note. Exclusions are counted without IDs.
+a day consumed while locked is not revisited after later payment unlocks it.
+Replay is deferred to a separate PR; payment unlock is unchanged. Exclusions
+are counted without IDs. The completed-day agent rechecks selected rows' locks
+before each provider phase (up to 200 additional reads per phase, 8 for QA),
+failing closed if a row locks, disappears or cannot be read. A lock committed
+after its last check can still race the external request; no atomic cross-system
+privacy guarantee is claimed.
 Onboarding uses the same lock exclusion before its additional finalization
 check, so it cannot route a locked transcript around the completed-day gate.
 `rows_seen` counts eligible projected rows, `rows_used` counts selected rows,

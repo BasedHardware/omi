@@ -2207,16 +2207,18 @@ def unlock_all_conversations(uid: str):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     locked_conversations_query = conversations_ref.where(filter=FieldFilter('is_locked', '==', True))
 
-    from utils.memory.daily_memory_sweep import unlock_conversations_with_sweep_replay
-
-    references = []
-    for doc in locked_conversations_query.stream():
-        references.append(doc.reference)
-        if len(references) == 100:
-            unlock_conversations_with_sweep_replay(db, uid, references)
-            references = []
-    if references:
-        unlock_conversations_with_sweep_replay(db, uid, references)
+    batch = db.batch()
+    docs = locked_conversations_query.stream()
+    count = 0
+    for doc in docs:
+        batch.update(doc.reference, {'is_locked': False})
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count > 0:
+        batch.commit()
     logger.info(f"Unlocked all conversations for user {uid}")
 
 

@@ -3519,6 +3519,8 @@ class _ConversationDb(_Db):
     def __init__(self, snapshots, *, error=None):
         super().__init__()
         self.conversation_query = _LimitedQuery(snapshots, error=error)
+        for row in snapshots:
+            self.store[f"users/user-1/conversations/{row.id}"] = row.to_dict()
 
     def collection(self, path):
         if str(path).endswith("/conversations"):
@@ -3836,6 +3838,12 @@ def test_completed_day_producer_keeps_processing_row_incomplete(monkeypatch):
         "qa_rate_card_unavailable",
         "model_cost_over_budget",
         "daily_summary_stage_unavailable",
+        "invocation_payload_expired",
+        "invocation_pre_dispatch_exhausted",
+        "invocation_indeterminate",
+        "invocation_pending",
+        "source_locked_before_dispatch",
+        "source_lock_check_unavailable",
         "eligibility_scan_over_budget",
         "source_row_changed",
         "private_but_snake_case",
@@ -4045,6 +4053,9 @@ def window_stage(monkeypatch):
     window = completed_local_day_window(date(2026, 8, 23), "UTC")
 
     def stage(rows, runner):
+        for row in rows:
+            path = ("users", "user-1", "conversations", row.conversation_id)
+            db.rows.setdefault(path, {"is_locked": False})
         return sweep._load_or_stage_daily_summary_candidates(
             "user-1",
             date(2026, 8, 23),
@@ -4465,40 +4476,6 @@ def test_projection_is_not_a_stable_whole_window_snapshot(change):
     assert _read_test_day(db).reason == "row_not_eligible"
 
 
-def test_locked_day_unlock_atomically_rewinds_and_rotates_generation(window_stage):
-    from utils.memory import daily_memory_sweep as sweep
-
-    db, _ = window_stage
-    started = datetime(2026, 8, 20, 12, tzinfo=timezone.utc)
-    window = completed_local_day_window(date(2026, 8, 23), "UTC")
-    cursor = sweep.DailySweepCursor(
-        uid="user-1",
-        account_generation=4,
-        source_generation=7,
-        timezone_name="UTC",
-        last_completed_local_date=date(2026, 8, 23),
-        last_completed_window_id=window.window_id,
-        last_completed_window_start_utc=window.start_utc,
-        last_completed_window_end_utc=window.end_utc,
-    )
-    db.document("users/user-1/memory_control/daily_memory_sweep").create(cursor.model_dump(mode="python"))
-    ref = db.document("users/user-1/conversations/locked")
-    ref.create({"is_locked": True, "started_at": started, "content": "retained locally"})
-    assert sweep.unlock_conversations_with_sweep_replay(db, "user-1", [ref]) == 1
-    assert ref.get().to_dict()["is_locked"] is False
-    assert ref.get().to_dict()["content"] == "retained locally"
-    control = MemoryControlState.model_validate(db.document("users/user-1/memory_state/apply_control").get().to_dict())
-    assert control.source_generation == 8
-    updated = sweep._read_cursor(db, "user-1", control)
-    assert sweep._pending_completed_dates(
-        updated, timezone_name="UTC", now=datetime(2026, 8, 24, tzinfo=timezone.utc), max_days=3
-    ) == (date(2026, 8, 20), date(2026, 8, 21), date(2026, 8, 22))
-    assert sweep._is_unlock_replay(db, "user-1", date(2026, 8, 23), control)
-    # Retrying payment after the committed handoff must not rotate the epoch again.
-    assert sweep.unlock_conversations_with_sweep_replay(db, "user-1", [ref]) == 0
-    assert db.document("users/user-1/memory_state/apply_control").get().to_dict()["source_generation"] == 8
-
-
 def test_locked_only_day_records_exclusion_without_content():
     started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
     result = _read_test_day(_ConversationDb([_conversation_snapshot("locked", started=started, is_locked=True)]))
@@ -4530,7 +4507,9 @@ def test_skip_attestation_consumes_once_without_dispatch_and_survives_changed_in
     fence = db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/skip-id").get().to_dict()
     evidence = {
         "provider_outcome": "operator_attested_skip_window",
-        "attempts": [],
+        "window_disposition": "abandoned",
+        "provider_dispatch_status": "not_attested",
+        "accounting_checked": False,
         "confirmation": sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
         "attested_by": "operator",
         "evidence_reference": "incident:review-123",
@@ -4573,118 +4552,6 @@ def test_skip_attestation_consumes_once_without_dispatch_and_survives_changed_in
         )
 
 
-def test_unlock_replay_preserves_old_stage_and_creates_generation_scoped_successor(window_stage):
-    from utils.memory import daily_memory_sweep as sweep
-
-    db, stage = window_stage
-    assert stage([_day_source("one", "old source")], lambda *_args, **_kwargs: _agent_output()) == ((), ())
-    old_stages = {
-        path: dict(value) for path, value in db.rows.items() if "daily_memory_sweep_daily_summary_staged" in path
-    }
-    ref = db.document("users/user-1/conversations/locked")
-    ref.create({"is_locked": True, "started_at": datetime(2026, 8, 23, 12, tzinfo=timezone.utc)})
-    assert sweep.unlock_conversations_with_sweep_replay(db, "user-1", [ref]) == 1
-    control = MemoryControlState.model_validate(db.document("users/user-1/memory_state/apply_control").get().to_dict())
-    result = sweep._load_or_stage_daily_summary_candidates(
-        "user-1",
-        date(2026, 8, 23),
-        "UTC",
-        control,
-        completed_local_day_window(date(2026, 8, 23), "UTC"),
-        [_day_source("one", "old source"), _day_source("two", "unlocked source")],
-        db_client=db,
-        agent_runner=lambda *_args, **_kwargs: _agent_output(),
-        max_candidates=3,
-    )
-    assert result == ((), ())
-    stages = {path: value for path, value in db.rows.items() if "daily_memory_sweep_daily_summary_staged" in path}
-    assert len(stages) == 2
-    assert all(stages[path] == value for path, value in old_stages.items())
-    successor = next(value for value in stages.values() if value["source_generation"] == 8)
-    assert successor["unlock_replay"] is True
-    assert successor["supersedes_source_generations_before"] == 8
-
-
-def test_unlock_replay_does_not_overwrite_existing_canonical_slot(monkeypatch):
-    from utils.memory import daily_memory_sweep as sweep
-
-    candidate = DailySweepCandidate(
-        candidate_id="unlock-new",
-        kind="fact",
-        operation="add",
-        content="Historical home city",
-        source_id="day-2026-08-20",
-        source_type="daily_summary",
-        source_version="daily-memory-agent.unlock.8",
-        authority=SweepAuthority.sweep_inference,
-        slot="home_city",
-    )
-    monkeypatch.setattr(sweep, "_target_for_candidate", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        sweep, "_find_active_slot_or_subject", lambda *_args, **_kwargs: SimpleNamespace(memory_id="newer-canonical")
-    )
-    monkeypatch.setattr(sweep, "amend_fact", lambda *_args, **_kwargs: pytest.fail("overwrote newer fact"))
-    assert sweep._apply_candidate("user-1", date(2026, 8, 20), candidate, db_client=_Db()) == (
-        "newer-canonical",
-        "existing_active_slot",
-    )
-
-
-def test_unlock_invalidates_pending_old_packet_without_restamping_current_packet(window_stage):
-    from utils.memory import daily_memory_sweep as sweep
-
-    db, _ = window_stage
-    ref = db.document("users/user-1/conversations/locked")
-    ref.create({"is_locked": True, "started_at": datetime(2026, 8, 20, 12, tzinfo=timezone.utc)})
-    sweep.unlock_conversations_with_sweep_replay(db, "user-1", [ref])
-    control = MemoryControlState.model_validate(db.document("users/user-1/memory_state/apply_control").get().to_dict())
-    old_packet = dict(uid="user-1", account_generation=4, source_generation=7)
-    assert sweep._unlock_invalidates_artifact(db, "user-1", date(2026, 8, 23), control, old_packet)
-    assert not sweep._unlock_invalidates_artifact(
-        db, "user-1", date(2026, 8, 23), control, {**old_packet, "source_generation": 8}
-    )
-    assert not sweep._unlock_invalidates_artifact(
-        db, "user-1", date(2026, 8, 23), control, {**old_packet, "account_generation": 3}
-    )
-
-
-def test_payment_unlock_helper_uses_atomic_replay_batches(window_stage, monkeypatch):
-    from database import conversations
-
-    db, _ = window_stage
-    refs = [db.document(f"users/user-1/conversations/locked-{i}") for i in range(101)]
-    for ref in refs:
-        ref.create({"is_locked": True, "started_at": datetime(2026, 8, 23, 12, tzinfo=timezone.utc)})
-    query = SimpleNamespace()
-    query.where = lambda **_kwargs: query
-    query.stream = lambda: [SimpleNamespace(reference=ref) for ref in refs]
-    client = SimpleNamespace(
-        document=db.document,
-        transaction=db.transaction,
-        collection=lambda _path: SimpleNamespace(document=lambda _uid: SimpleNamespace(collection=lambda _name: query)),
-    )
-    monkeypatch.setattr(conversations, "db", client)
-    conversations.unlock_all_conversations("user-1")
-    assert all(ref.get().to_dict()["is_locked"] is False for ref in refs)
-    assert db.document("users/user-1/memory_state/apply_control").get().to_dict()["source_generation"] == 9
-    assert (
-        db.document("users/user-1/memory_control/daily_memory_sweep_unlock").get().to_dict()["earliest_local_date"]
-        == "2026-08-23"
-    )
-
-
-def test_unlock_handoff_rejects_foreign_conversation_reference(window_stage):
-    from utils.memory import daily_memory_sweep as sweep
-
-    db, _ = window_stage
-    ref = db.document("users/another-user/conversations/locked")
-    ref.create({"is_locked": True, "started_at": datetime(2026, 8, 23, tzinfo=timezone.utc)})
-    with pytest.raises(ValueError, match="owner mismatch"):
-        sweep.unlock_conversations_with_sweep_replay(db, "user-1", [ref])
-    assert ref.get().to_dict()["is_locked"] is True
-    assert db.document("users/user-1/memory_state/apply_control").get().to_dict()["source_generation"] == 7
-
-
 def test_multiple_historical_claims_require_each_skip_attestation(window_stage):
     from utils.memory import daily_memory_sweep as sweep
 
@@ -4703,7 +4570,9 @@ def test_multiple_historical_claims_require_each_skip_attestation(window_stage):
         fence = db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation}").get().to_dict()
         evidence = {
             "provider_outcome": "operator_attested_skip_window",
-            "attempts": [],
+            "window_disposition": "abandoned",
+            "provider_dispatch_status": "not_attested",
+            "accounting_checked": False,
             "confirmation": sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
             "attested_by": "operator",
             "evidence_reference": "incident:historical",
@@ -4750,3 +4619,138 @@ def test_admission_lease_is_committed_before_identity_factory_runs(window_stage)
         )
         == ()
     )
+
+
+@pytest.mark.parametrize("state", ["pending", "indeterminate", "payload_expired", "pre_dispatch_exhausted"])
+@pytest.mark.parametrize("changed_input", [False, True])
+def test_blocked_invocation_reports_durable_state(window_stage, state, changed_input):
+    from utils.memory import daily_memory_sweep as sweep
+
+    db, _ = window_stage
+    identity = dict(account_generation=4, source_generation=7, sweep_generation=1, window_id="reasons")
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    assert (
+        sweep._invoke_model_once(
+            db, "user-1", "reason-id", candidate_builder=lambda: (), input_digest="original", now=now, **identity
+        )
+        == ()
+    )
+    fence_key = (MODEL_INVOCATION_FENCE_COLLECTION, "reason-id")
+    db.rows[fence_key]["state"] = state
+    if state == "payload_expired":
+        user_ref = sweep._model_invocation_ref(db, "user-1", "reason-id")
+        del db.rows[user_ref.path]
+    evidence = {}
+    assert (
+        sweep._invoke_model_once(
+            db,
+            "user-1",
+            "reason-id",
+            candidate_builder=lambda: pytest.fail("blocked state dispatched"),
+            input_digest="changed" if changed_input else "original",
+            now=now,
+            invocation_evidence=evidence,
+            **identity,
+        )
+        is None
+    )
+    expected = "invocation_input_changed" if changed_input and state == "pending" else f"invocation_{state}"
+    assert evidence["failure_reason"] == expected
+    assert expected in sweep.SOURCE_REASON_CODES
+
+
+@pytest.mark.parametrize("lock_before_phase", [1, 2])
+def test_selected_source_locked_during_preparation_never_reaches_next_provider_call(monkeypatch, lock_before_phase):
+    from utils.llm import memories
+
+    db = _ConversationDb([_conversation_snapshot("private", started=datetime(2026, 8, 23, 8, tzinfo=timezone.utc))])
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    monkeypatch.setattr(memories, "get_prompt_memories", lambda _: ("Test", ""))
+    monkeypatch.setattr(memories, "current_date_for_uid", lambda _: "2026-08-24")
+    calls = []
+    payloads = []
+
+    class Model:
+        def _get_request_payload(self, prompt, **kwargs):
+            payloads.append(prompt)
+            if len(calls) + 1 == lock_before_phase:
+                db.store["users/user-1/conversations/private"]["is_locked"] = True
+            return {"messages": [{"role": "user", "content": prompt.to_string()}], **kwargs}
+
+        def invoke(self, prompt, **kwargs):
+            assert not db.store["users/user-1/conversations/private"]["is_locked"]
+            calls.append(prompt)
+            return '{"memories": [], "transcript_requests": [{"conversation_id": "private", "reason": "verify"}]}'
+
+    monkeypatch.setattr(memories, "get_llm", lambda *_a, **_kw: Model())
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=3, max_cost_usd=1),
+        agent_runner=memories.run_daily_sweep_summary_agent,
+    )
+    assert not result.complete
+    assert result.model_dispatch_evidence["failure_reason"] == "source_locked_before_dispatch"
+    assert len(calls) == lock_before_phase - 1
+    assert len(payloads) >= lock_before_phase
+    fence = next(value for key, value in db.store.items() if key.startswith(MODEL_INVOCATION_FENCE_COLLECTION + "/"))
+    assert fence["state"] == ("pre_dispatch_released" if lock_before_phase == 1 else "indeterminate")
+
+
+@pytest.mark.parametrize("source", [None, {}, {"is_locked": False}, {"is_locked": True}])
+def test_dispatch_lock_projection_fails_closed_but_accepts_legacy_unlocked_row(source):
+    from models.memory_contracts import MemoryExtractionError
+    from utils.memory.daily_memory_sweep import _assert_selected_sources_unlocked
+
+    db = _Db()
+    if source is not None:
+        db.store["users/user-1/conversations/one"] = source
+    if source is None or source.get("is_locked"):
+        with pytest.raises(MemoryExtractionError):
+            _assert_selected_sources_unlocked(db, "user-1", ("one",))
+    else:
+        _assert_selected_sources_unlocked(db, "user-1", ("one",))
+
+
+@pytest.mark.parametrize("invalid", ["empty_attempts", "old_assertion", "no_abandonment", "dispatch_denial"])
+def test_abandonment_attestation_rejects_misleading_evidence(invalid):
+    from utils.memory import daily_memory_sweep as sweep
+
+    claimed = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    now = claimed + sweep.MODEL_INVOCATION_LEASE + sweep.MODEL_INVOCATION_REPAIR_MARGIN + timedelta(seconds=1)
+    identity = dict(
+        uid="user-1",
+        invocation_id="one",
+        account_generation=4,
+        source_generation=7,
+        sweep_generation=1,
+        window_id="window",
+    )
+    evidence = {
+        "provider_outcome": "operator_attested_skip_window",
+        "window_disposition": "abandoned",
+        "provider_dispatch_status": "not_attested",
+        "accounting_checked": False,
+        "confirmation": sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
+        "attested_by": "operator",
+        "evidence_reference": "incident:abandon-window",
+        "attested_at": now.isoformat(),
+        "claimed_at": claimed.isoformat(),
+        "claim_id": "claim",
+        "claim_identity": identity,
+    }
+    kwargs = dict(identity=identity, claimed_at=claimed, claim_id="claim", authority="operator", now=now)
+    assert sweep.valid_no_dispatch_attestation(evidence, **kwargs)
+    if invalid == "empty_attempts":
+        evidence["attempts"] = []
+    elif invalid == "old_assertion":
+        evidence["confirmation"] = "ATTEST_SKIP_WINDOW_WITHOUT_DISPATCH_AND_WORKER_TERMINATED"
+    elif invalid == "no_abandonment":
+        evidence.pop("window_disposition")
+    else:
+        evidence["provider_dispatch_status"] = "never_dispatched"
+    assert not sweep.valid_no_dispatch_attestation(evidence, **kwargs)

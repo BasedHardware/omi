@@ -4,7 +4,8 @@ This fixture models document-reference ``get(transaction=...)`` plus transaction
 ``create``, ``set``, and ``update``. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
 
-It also supports equality-only, document-id projections with a positive limit,
+It also supports the direct-document is_locked projection used at dispatch,
+and equality-only, document-id projections with a positive limit,
 proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
 It deliberately does not model other queries, deletes, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
@@ -57,11 +58,18 @@ class StrictFirestoreDocument:
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 
-    def get(self, transaction: StrictFirestoreTransaction | None = None) -> StrictFirestoreSnapshot:
+    def get(
+        self, transaction: StrictFirestoreTransaction | None = None, *, field_paths: list[str] | None = None
+    ) -> StrictFirestoreSnapshot:
         if transaction is not None:
             transaction._assert_reference_belongs(self)
             transaction._assert_read_allowed()
-        return StrictFirestoreSnapshot(self._database.rows.get(self.path))
+        data = self._database.rows.get(self.path)
+        if field_paths is not None and data is not None:
+            if field_paths != ["is_locked"]:
+                raise UnsupportedFirestoreOperationError("only the sweep privacy projection is supported")
+            data = {key: value for key, value in data.items() if key in field_paths}
+        return StrictFirestoreSnapshot(data)
 
     def create(self, data: dict[str, Any]) -> None:
         if self.path in self._database.rows:

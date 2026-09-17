@@ -38,7 +38,7 @@ import logging
 import os
 import re
 import threading
-from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
 
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -70,7 +70,7 @@ from database.firestore_index_registry import (
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import cleanup_expired_memory_deletion_receipts
 from models.memory_apply import MemoryControlState, WriterMode
-from models.memory_contracts import deterministic_contract_id
+from models.memory_contracts import MemoryExtractionError, deterministic_contract_id
 from models.product_memory import (
     LedgerWriteReason,
     MemoryItem,
@@ -156,7 +156,7 @@ MODEL_INVOCATION_FENCE_COLLECTION = "daily_memory_sweep_model_invocation_fences"
 MODEL_INVOCATION_SCHEMA_VERSION = "daily_memory_sweep_model_invocation.v1"
 MAX_PRE_DISPATCH_RELEASES = 3
 MODEL_INVOCATION_REPAIR_MARGIN = timedelta(minutes=2)
-SKIP_WINDOW_ATTESTATION_CONFIRMATION = "ATTEST_SKIP_WINDOW_WITHOUT_DISPATCH_AND_WORKER_TERMINATED"
+SKIP_WINDOW_ATTESTATION_CONFIRMATION = "ATTEST_WORKER_TERMINATED_AND_ABANDON_WINDOW"
 NO_DISPATCH_ATTESTATION_CONFIRMATION = "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED"
 # An explicit operator repair for a tombstoned model invocation.  Pending,
 # indeterminate, and payload-expired fences are closed forever by design; this
@@ -265,6 +265,10 @@ SOURCE_REASON_CODES = frozenset(
         "historical_invocation_unresolved",
         "invocation_pending",
         "invocation_indeterminate",
+        "invocation_payload_expired",
+        "invocation_pre_dispatch_exhausted",
+        "source_locked_before_dispatch",
+        "source_lock_check_unavailable",
         "source_scan_over_budget",
         "contentless_rows_omitted",
         "unknown_reason",
@@ -1644,6 +1648,7 @@ def _invoke_model_once(
     input_digest: Optional[str] = None,
     now: Optional[datetime] = None,
     invocation_evidence: Optional[Dict[str, Any]] = None,
+    before_provider_dispatch: Optional[Callable[[], None]] = None,
 ) -> Optional[Tuple[dict[str, Any], ...]]:
     """Admit the window before evaluating its version-specific identity factory.
 
@@ -1760,6 +1765,7 @@ def _invoke_model_once(
             now=now,
             admission_id=admission_id,
             invocation_evidence=evidence,
+            before_provider_dispatch=before_provider_dispatch,
         )
     finally:
 
@@ -1789,6 +1795,7 @@ def _invoke_model_once_claimed(
     now: Optional[datetime] = None,
     admission_id: Optional[str] = None,
     invocation_evidence: Optional[Dict[str, Any]] = None,
+    before_provider_dispatch: Optional[Callable[[], None]] = None,
 ) -> Optional[Tuple[dict[str, Any], ...]]:
     """Run one fenced provider call with a durable cross-account-delete claim.
 
@@ -1911,7 +1918,11 @@ def _invoke_model_once_claimed(
                     or user_payload.get("input_digest") != input_digest
                 )
             ):
-                evidence["failure_reason"] = "invocation_input_changed"
+                evidence["failure_reason"] = {
+                    "payload_expired": "invocation_payload_expired",
+                    "pre_dispatch_exhausted": "invocation_pre_dispatch_exhausted",
+                    "indeterminate": "invocation_indeterminate",
+                }.get(fence_payload.get("state"), "invocation_input_changed")
                 return "blocked", None
             if fence_payload.get("state") == "returned":
                 if _validated_output(user_payload) is None:
@@ -1921,9 +1932,12 @@ def _invoke_model_once_claimed(
                 repair_snapshot = _read(repair_ref, transaction)
                 repair_payload = repair_snapshot.to_dict() if getattr(repair_snapshot, "exists", False) else None
                 if not _valid_model_invocation_repair(repair_payload, identity, fence_payload, claim_now):
-                    evidence["failure_reason"] = (
-                        "invocation_pending" if fence_payload.get("state") == "pending" else "invocation_indeterminate"
-                    )
+                    evidence["failure_reason"] = {
+                        "pending": "invocation_pending",
+                        "indeterminate": "invocation_indeterminate",
+                        "payload_expired": "invocation_payload_expired",
+                        "pre_dispatch_exhausted": "invocation_pre_dispatch_exhausted",
+                    }.get(fence_payload.get("state"), "unknown_reason")
                     return "blocked", None
                 assert isinstance(repair_payload, dict)
                 if repair_payload.get("provider_outcome_summary") == "operator_attested_skip_window":
@@ -2006,13 +2020,18 @@ def _invoke_model_once_claimed(
         if claim_state != "claimed":
             return None
 
-        dispatch_scope = SweepDispatchScope()
+        dispatch_scope = SweepDispatchScope(before_provider_dispatch=before_provider_dispatch)
         try:
             with dispatch_scope:
                 built = tuple(candidate_builder())
             if any(not isinstance(item, dict) for item in built):
                 raise ValueError("model invocation candidate output is malformed")
         except Exception as error:
+            if isinstance(error, MemoryExtractionError) and error.extractor in {
+                "source_locked_before_dispatch",
+                "source_lock_check_unavailable",
+            }:
+                evidence["failure_reason"] = error.extractor
             reason = dispatch_scope.pre_dispatch_reason(error)
             pre_dispatch = reason is not None
 
@@ -2188,13 +2207,23 @@ def valid_no_dispatch_attestation(
 ) -> bool:
     """Validate a human assertion, never infer non-dispatch from ledger absence.
 
-    The operator owns the assertion that the old worker has terminated and
-    never dispatched. The reference identifies their independent evidence;
+    Both assertions require worker termination. Only no-dispatch asserts that
+    no call happened; abandonment accepts lost output and possible spend.
+    The reference identifies the operator's independent evidence;
     this validator checks attribution and claim binding, not that assertion's truth.
     """
     if (
         evidence.get("provider_outcome") not in {"operator_attested_no_dispatch", "operator_attested_skip_window"}
-        or evidence.get("attempts") != []
+        or (
+            (
+                "attempts" in evidence
+                or evidence.get("window_disposition") != "abandoned"
+                or evidence.get("provider_dispatch_status") != "not_attested"
+                or evidence.get("accounting_checked") is not False
+            )
+            if evidence.get("provider_outcome") == "operator_attested_skip_window"
+            else evidence.get("attempts") != []
+        )
         or "jit_run_id" in evidence
         or evidence.get("confirmation")
         != (
@@ -2292,6 +2321,8 @@ def repair_daily_sweep_model_invocation(
     invocation.  The next claim consumes the receipt transactionally and
     rewrites the fence as a fresh ``pending`` claim, so exactly one further
     bounded attempt becomes possible — never an automatic second charge.
+    The abandonment assertion instead consumes to ``window_skipped`` without
+    another dispatch; it makes no claim about past provider activity.
     """
 
     repaired_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -2302,8 +2333,8 @@ def repair_daily_sweep_model_invocation(
     if not normalized_invocation_id or len(normalized_invocation_id) > 128:
         raise ValueError("daily sweep invocation repair requires a bounded invocation id")
     evidence = dict(provider_outcome_evidence or {})
-    recorded_attempts = evidence.get("attempts")
     skip_window = evidence.get("provider_outcome") == "operator_attested_skip_window"
+    recorded_attempts = [] if skip_window else evidence.get("attempts")
     attested = evidence.get("provider_outcome") in {"operator_attested_no_dispatch", "operator_attested_skip_window"}
     if evidence.get("provider_outcome") not in {
         None,
@@ -2401,6 +2432,11 @@ def repair_daily_sweep_model_invocation(
         "provider_outcome_evidence": evidence,
         "consumed": False,
     }
+
+    if skip_window:
+        receipt["window_disposition"] = "abandoned"
+        receipt["provider_dispatch_status"] = "not_attested"
+        receipt["accounting_checked"] = False
 
     def write_repair(transaction: Any) -> None:
         current = fence_ref.get(transaction=transaction)
@@ -2517,172 +2553,6 @@ def _receipt_id(
                 "sweep_generation": sweep_generation,
             },
         )[:40]
-    )
-
-
-def unlock_conversations_with_sweep_replay(db_client: Any, uid: str, references: Sequence[Any]) -> int:
-    """Atomically unlock at most 100 rows and publish their replay epoch.
-
-    Payment callers all use this handoff. A crash after commit cannot lose
-    replay: the rows, control generation, cursor and replay range commit together.
-    No locked content is copied into the control documents.
-    """
-    if len(references) > 100:
-        raise ValueError("unlock batch exceeds 100 rows")
-    for reference in references:
-        path = reference.path
-        parts = tuple(path.split("/")) if isinstance(path, str) else tuple(path)
-        if len(parts) != 4 or parts[:3] != ("users", uid, "conversations"):
-            raise ValueError("unlock conversation owner mismatch")
-    now = datetime.now(timezone.utc)
-    deletion_ref, control_ref = _live_fence_refs(db_client, uid)
-    cursor_ref = _cursor_ref(db_client, uid)
-    replay_ref = db_client.document(f"users/{uid}/memory_control/daily_memory_sweep_unlock")
-
-    def unlock(transaction: Any) -> int:
-        deletion = deletion_ref.get(transaction=transaction)
-        control_snapshot = control_ref.get(transaction=transaction)
-        cursor_snapshot = cursor_ref.get(transaction=transaction)
-        replay_snapshot = replay_ref.get(transaction=transaction)
-        user_snapshot = db_client.document(f"users/{uid}").get(transaction=transaction)
-        rows = [(ref, ref.get(transaction=transaction)) for ref in references]
-        deletion_payload = deletion.to_dict() or {}
-        if account_deletion_blocks_access(
-            normalize_account_deletion_status(
-                marker_exists=bool(getattr(deletion, "exists", False)), raw_status=deletion_payload.get("wipe_status")
-            )
-        ):
-            raise ValueError("unlock blocked by account deletion")
-        control = (
-            MemoryControlState.model_validate(control_snapshot.to_dict())
-            if getattr(control_snapshot, "exists", False)
-            else MemoryControlState(
-                uid=uid, head_commit_id="head0", account_generation=1, source_generation=1, updated_at=now
-            )
-        )
-        if control.uid != uid:
-            raise ValueError("unlock control owner mismatch")
-        cursor = (
-            DailySweepCursor.model_validate(cursor_snapshot.to_dict())
-            if getattr(cursor_snapshot, "exists", False)
-            else DailySweepCursor(
-                uid=uid, account_generation=control.account_generation, source_generation=control.source_generation
-            )
-        )
-        if (
-            cursor.uid != uid
-            or cursor.account_generation != control.account_generation
-            or cursor.source_generation > control.source_generation
-        ):
-            raise ValueError("unlock cursor owner mismatch")
-        locked = [
-            (ref, row.to_dict())
-            for ref, row in rows
-            if getattr(row, "exists", False) and (row.to_dict() or {}).get("is_locked") is True
-        ]
-        if not locked:
-            return 0
-        timezone_name = cursor.timezone_name or (user_snapshot.to_dict() or {}).get("time_zone") or "UTC"
-        dates = [
-            raw["started_at"].astimezone(ZoneInfo(timezone_name)).date()
-            for _, raw in locked
-            if isinstance(raw.get("started_at"), datetime) and raw["started_at"].tzinfo is not None
-        ]
-        bumped = control.model_copy(update={"source_generation": control.source_generation + 1, "updated_at": now})
-        prior_replay = replay_snapshot.to_dict() or {}
-        if prior_replay.get("account_generation") == control.account_generation:
-            earliest = prior_replay.get("earliest_local_date")
-            if isinstance(earliest, str):
-                dates.append(date.fromisoformat(earliest))
-        updates: Dict[str, Any] = {
-            "source_generation": bumped.source_generation,
-            "generation": cursor.generation + 1,
-            "updated_at": now,
-        }
-        if dates:
-            earliest_day = min(dates)
-            if cursor.last_completed_local_date is not None:
-                earliest_day = min(earliest_day, cursor.last_completed_local_date + timedelta(days=1))
-            anchor = completed_local_day_window(earliest_day - timedelta(days=1), timezone_name)
-            updates.update(
-                timezone_name=timezone_name,
-                last_completed_local_date=earliest_day - timedelta(days=1),
-                last_completed_window_id=anchor.window_id,
-                last_completed_window_start_utc=anchor.start_utc,
-                last_completed_window_end_utc=anchor.end_utc,
-                pending_transition_local_date=None,
-                pending_transition_window_id=None,
-                pending_transition_start_utc=None,
-                pending_transition_end_utc=None,
-            )
-            through = max(
-                cursor.last_completed_local_date or earliest_day,
-                date.fromisoformat(prior_replay.get("replay_through_local_date", earliest_day.isoformat())),
-            )
-            transaction.set(
-                replay_ref,
-                {
-                    "uid": uid,
-                    "account_generation": control.account_generation,
-                    "source_generation": bumped.source_generation,
-                    "earliest_local_date": earliest_day.isoformat(),
-                    "replay_through_local_date": through.isoformat(),
-                    "updated_at": now,
-                },
-            )
-        new_cursor = DailySweepCursor.model_validate({**cursor.model_dump(), **updates})
-        transaction.set(control_ref, bumped.model_dump(mode="python"))
-        cursor_payload = new_cursor.model_dump(mode="python")
-        for key in ("last_completed_local_date", "pending_transition_local_date"):
-            if cursor_payload[key] is not None:
-                cursor_payload[key] = cursor_payload[key].isoformat()
-        transaction.set(cursor_ref, cursor_payload)
-        for ref, _ in locked:
-            transaction.update(ref, {"is_locked": False})
-        return len(locked)
-
-    return firestore.transactional(unlock)(db_client.transaction())
-
-
-def _is_unlock_replay(db_client: Any, uid: str, local_date: date, control: MemoryControlState) -> bool:
-    snapshot = db_client.document(f"users/{uid}/memory_control/daily_memory_sweep_unlock").get()
-    payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
-    return (
-        payload.get("uid") == uid
-        and payload.get("account_generation") == control.account_generation
-        and type(payload.get("source_generation")) is int
-        and payload["source_generation"] <= control.source_generation
-        and payload.get("earliest_local_date", "9999")
-        <= local_date.isoformat()
-        <= payload.get("replay_through_local_date", "")
-    )
-
-
-def _unlock_invalidates_artifact(
-    db_client: Any,
-    uid: str,
-    local_date: date,
-    control: MemoryControlState,
-    artifact: Mapping[str, Any],
-) -> bool:
-    """Only the explicit unlock handoff can supersede a prior generation's artifact.
-
-    This also covers an already-produced pending day beyond the replay high
-    water mark. Its old generation is invalidated, but it is not historical
-    canonical replay and can use the ordinary forward-day apply policy.
-    """
-    snapshot = db_client.document(f"users/{uid}/memory_control/daily_memory_sweep_unlock").get()
-    handoff = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
-    generation = artifact.get("source_generation")
-    return (
-        handoff.get("uid") == uid
-        and handoff.get("account_generation") == control.account_generation
-        and handoff.get("source_generation") == control.source_generation
-        and handoff.get("earliest_local_date", "9999") <= local_date.isoformat()
-        and artifact.get("uid") == uid
-        and artifact.get("account_generation") == control.account_generation
-        and type(generation) is int
-        and generation < control.source_generation
     )
 
 
@@ -3709,8 +3579,6 @@ def _apply_candidate(
     if candidate.operation == "add":
         occupant = _find_active_slot_or_subject(uid, candidate, db_client=db_client)
         if occupant is not None:
-            if candidate.source_version.startswith("daily-memory-agent.unlock."):
-                return occupant.memory_id, "existing_active_slot" if candidate.slot else "existing_active_subject"
             # Crash-replay recognition: if the occupant already carries this
             # exact plan/candidate's evidence identity, the canonical write for
             # this receipt landed before a crash prevented receipt
@@ -5226,6 +5094,20 @@ def _split_daily_summary_page(
     return tuple(candidates), tuple(assignments)
 
 
+def _assert_selected_sources_unlocked(db_client: Any, uid: str, conversation_ids: Sequence[str]) -> None:
+    """Recheck privacy at each provider boundary; never substitute different input."""
+    for conversation_id in conversation_ids:
+        try:
+            snapshot = db_client.document(f"users/{uid}/conversations/{conversation_id}").get(field_paths=["is_locked"])
+            if not snapshot.exists:
+                raise ValueError("source unavailable")
+            locked = (snapshot.to_dict() or {}).get("is_locked", False)
+        except Exception as error:
+            raise MemoryExtractionError("source_lock_check_unavailable") from error
+        if locked:
+            raise MemoryExtractionError("source_locked_before_dispatch")
+
+
 def _load_or_stage_daily_summary_candidates(
     uid: str,
     local_date: date,
@@ -5383,7 +5265,6 @@ def _load_or_stage_daily_summary_candidates(
         # created by the first attempt.
         return read_staged(staged_snapshot)
 
-    replaying_unlock = _is_unlock_replay(db_client, uid, local_date, control)
     invocation_evidence: Dict[str, Any] = {}
     invocation_id = lambda: deterministic_contract_id(
         "daily-sweep-daily-summary-model-invocation",
@@ -5512,11 +5393,7 @@ def _load_or_stage_daily_summary_candidates(
                     content=content,
                     source_id=f"conversation:{cited[0]}",
                     source_type="daily_summary",
-                    source_version=(
-                        f"daily-memory-agent.unlock.{control.source_generation}"
-                        if replaying_unlock
-                        else "daily-memory-agent.v1"
-                    ),
+                    source_version="daily-memory-agent.v1",
                     source_refs=tuple(f"conversation:{conversation_id}" for conversation_id in cited[:MAX_SOURCE_REFS]),
                     authority=SweepAuthority.sweep_inference,
                     subject_scope=subject_scope,
@@ -5568,6 +5445,9 @@ def _load_or_stage_daily_summary_candidates(
             window_id=window.window_id,
             input_digest=transcript_digest,
             invocation_evidence=invocation_evidence,
+            before_provider_dispatch=lambda: _assert_selected_sources_unlocked(
+                db_client, uid, tuple(row.conversation_id for row in conversation_rows)
+            ),
         )
         if dispatch_evidence is not None and "failure_reason" in invocation_evidence:
             dispatch_evidence["failure_reason"] = invocation_evidence["failure_reason"]
@@ -5577,8 +5457,6 @@ def _load_or_stage_daily_summary_candidates(
         candidate_page = tuple(DailySweepCandidate.model_validate(item) for item in candidate_dicts)
         stage_payload = {
             "schema_version": DAILY_SUMMARY_STAGE_SCHEMA_VERSION,
-            "unlock_replay": replaying_unlock,
-            "supersedes_source_generations_before": control.source_generation if replaying_unlock else None,
             "uid": uid,
             "local_date": local_date.isoformat(),
             "timezone_name": timezone_name,
@@ -5822,9 +5700,7 @@ def produce_completed_day_daily_summary_sources(
     # open.  In particular, a missing key is not interpreted as []: older
     # summary writers did not produce this field and must not advance the new
     # cursor without a producer proof.
-    if "memory_candidates" in payload and not _unlock_invalidates_artifact(
-        db_client, uid, local_date, control, payload
-    ):
+    if "memory_candidates" in payload:
         if is_qa_run:
             # QA must observe a fresh, bounded gateway request. A historical
             # summary cache is a producer artifact from another run and cannot
@@ -6118,9 +5994,7 @@ def firestore_daily_sweep_source_provider(
 
     ref = db_client.document(f"{MemoryCollections(uid=uid).daily_memory_sweep_sources}/{local_date.isoformat()}")
     snapshot = ref.get()
-    if not getattr(snapshot, "exists", False) or _unlock_invalidates_artifact(
-        db_client, uid, local_date, control, snapshot.to_dict() or {}
-    ):
+    if not getattr(snapshot, "exists", False):
         # The source is not allowed to advance the cursor merely because the
         # staging document is absent. Fall back only to the durable completed-
         # day summary producer; its missing-summary result remains incomplete.

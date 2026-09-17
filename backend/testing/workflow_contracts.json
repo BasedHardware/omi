@@ -785,7 +785,6 @@
       ],
       "invariants": [
         "FC-daily-memory-sweep-fence: common admission binds one invocation per owner/window/generation before dispatch",
-        "paid unlock commits its source generation and bounded cursor replay handoff atomically",
         "claim-bound skip consumes the existing attestation without authorizing another dispatch"
       ]
     }

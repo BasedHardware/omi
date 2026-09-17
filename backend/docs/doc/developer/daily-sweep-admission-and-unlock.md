@@ -1,4 +1,4 @@
-# Sweep admission, rollout and paid-unlock replay
+# Sweep admission, source selection and deferred unlock replay
 
 ## Deployment boundary
 
@@ -71,7 +71,10 @@ unstructured-to-structured enrichment identically: selection may differ, but
 invocation identity cannot. A changed input fails with `invocation_input_changed`;
 a returned fence without valid retained output reports
 `invocation_output_unavailable`. Pending and indeterminate claims have separate
-`invocation_pending` / `invocation_indeterminate` reasons. An existing pre-lock
+`invocation_pending` / `invocation_indeterminate` reasons. Payload expiry reports
+`invocation_payload_expired`; exhausted certified releases report
+`invocation_pre_dispatch_exhausted`, including when the input has changed or
+the expired user payload has been removed. An existing pre-lock
 fence found by the bounded historical lookup reports
 `historical_invocation_unresolved`. These are allowlisted content-free tokens.
 Onboarding now uses stable source/window/generation ownership and a separate
@@ -83,7 +86,7 @@ stale workers cannot finalize or apply it under the new generation.
 
 The existing repair function and QA repair CLI also accept:
 
-`ATTEST_SKIP_WINDOW_WITHOUT_DISPATCH_AND_WORKER_TERMINATED`
+`ATTEST_WORKER_TERMINATED_AND_ABANDON_WINDOW`
 
 Use it as `--attestation-confirmation`, together with the existing
 `--authority` and `--attestation-reference` arguments. It records
@@ -91,7 +94,10 @@ Use it as `--attestation-confirmation`, together with the existing
 claim ID, claim timestamp, operator identity and evidence-reference validator
 as `operator_attested_no_dispatch`. The assertion explicitly accepts losing
 this window's output and asserts that its worker has terminated; it does NOT
-assert that the prior provider never ran. The lease plus the existing two-minute
+assert that the prior provider never ran. The receipt explicitly records
+`window_disposition=abandoned`, `provider_dispatch_status=not_attested`, and
+`accounting_checked=false`; it omits `attempts` entirely. No empty attempt list
+is fabricated from unread accounting. The old misleading assertion is rejected. The lease plus the existing two-minute
 repair margin must have elapsed. Returned claims are skip-only; the no-dispatch
 assertion cannot reopen them. The operator list includes returned records so
 stage-gap owners can be found; listing is not permission to retry them.
@@ -112,61 +118,71 @@ plus one overflow probe, with at most 200 writes. Overflow remains fail-closed;
 this is not an unbounded historical repair scan. No extra alias fence or second
 repair mechanism is introduced.
 
-## Locked content and atomic paid unlock
+## Locked content: shipped behavior and deferred gap
 
-Locked rows are excluded before provider input, and counted in
-`locked_rows_excluded` without IDs or content. The day can complete, including
-complete-zero, so free users progress. All three payment paths already call
-`unlock_all_conversations`; their sibling memory/action-item unlocks do not
-own conversation source identity and do not separately rotate it.
+Locked rows are excluded before provider input and counted in
+`locked_rows_excluded` without IDs or content. The day completes, including
+complete-zero, and the cursor advances so free-tier users do not stall.
+**A day consumed while locked is not revisited after a later paid unlock.**
+Closing this rarer correctness gap is deferred to a separately reviewed PR.
+`database/conversations.py` matches `origin/main`; payment, conversation,
+memory and action-item unlock paths have no sweep metadata dependency.
+No generation bump, cursor rewind, replay handoff or replay-specific canonical
+write policy is shipped here.
 
-Conversation unlock now processes batches of at most 100 references. Each
-transaction reads deletion, canonical control, cursor, prior replay handoff,
-user timezone and current locked rows before any writes. It atomically:
+For completed-day agent calls, every actual provider boundary re-reads only
+`is_locked` on the selected source IDs, including before phase B. Missing rows
+or failed reads report `source_lock_check_unavailable`; locking reports
+`source_locked_before_dispatch`. Input is never silently replaced after claim.
+Before phase A, the instrumented agent can certify failure and release the
+claim under the existing bounded policy. After phase A dispatched, a failed
+phase-B check leaves the invocation indeterminate and cannot permit another call.
+Legacy rows with no `is_locked` field remain readable, matching other readers.
+This costs one additional document read per selected row per provider phase:
+at most 200 per phase / 400 across two phases in production, or 8 for QA's
+single phase. Projections reduce payload, not billed reads. No new index is
+needed for direct document reads. The check narrows but cannot eliminate the
+check-to-call race: a lock can commit after its row's last read and before the
+request is sent. There is no transaction spanning Firestore and the provider.
+Onboarding retains its source-read lock check; its separate extractor does not
+use the instrumented daily-summary provider boundary.
 
-1. Unlocks only rows still locked.
-2. Bumps canonical source generation, invalidating old canonical writers.
-3. Rewinds the cursor to the day before the earliest unlocked local start date,
-   preserving any earlier pending work and advancing the cursor CAS generation.
-4. Writes `memory_control/daily_memory_sweep_unlock`, containing only owner,
-   generations, earliest replay date, previous completed-date high-water mark
-   and timestamp.
+## Deferred paid-unlock replay design (not implemented)
 
-Without a cursor timezone, the transaction reads the user's persisted
-`time_zone` (UTC if absent). No separate post-unlock bump can be lost in a crash.
-A retry with no locked rows does nothing. Later batches merge the earliest date
-and high-water mark, and atomically invalidate work from earlier batches.
-Missing/string-typed start times retain the pre-existing timestamp-query
-limitation: those rows unlock, but cannot themselves supply a replay date.
+The prior proposal correctly identified that a source-generation bump alone
+preserves the completed-day cursor. Replay needs both generation-scoped ownership
+and durable scheduling of affected days. It also requires an atomic publication
+point that prevents the sweep from seeing a partial unlock epoch. The removed
+implementation published each 100-row chunk separately; with 101 rows that
+can dispatch one day in successive generations. It cannot be used as-is.
 
-The existing scheduler drains at most 3 days per user per run (1 in QA), with
-at most 32 candidates and 16 canonical writes per day, across at most 400 UIDs.
-Total replay spans the finite range from the earliest unlocked day through the
-current completed day; a long history may take many runs. The unlock call does
-not invoke models or synchronously backfill those days. The unlock transaction
-has at most 105 document reads and 103 writes. The existing payment unlock scan
-still visits all locked rows; only each transaction and each sweep run are
-bounded, not the total payment scan or number of future runs.
+A follow-up should start from a durable, resumable unlock operation, with
+idempotent batch progress and **one** final activation after every batch completes.
+Payment success and sibling memory/action-item unlocks must not depend on sweep
+metadata. An already-subscribed retry must be able to finish partial conversation
+unlock after a crash. Invalid user timezones must be validated or resolved by a
+server-owned fallback without aborting paid unlock. Deletion and generation
+checks belong at the final activation and every later write. Coalesce overlapping
+unlock operations rather than publishing repeated replay generations per batch.
 
-Old cached summaries and prebuilt packets are never restamped. The exact
-handoff authorizes bypass of an older source generation's artifacts from that
-account starting at the replay date, including an already-produced pending day.
-Current-generation artifacts retain their usual validation. New stages are
-stored in the existing generation-scoped namespace, with `unlock_replay` and
-`supersedes_source_generations_before` ancestry. Prior stages remain historical
-records until normal retention; prior UI daily-summary documents are retained
-and no duplicate UI summary is created. This sweep still owns memory extraction,
-not regeneration of the user-facing daily-summary text.
+Record affected local days, not a rewind through every intervening day. A
+single year-old row must not cause a year of repeat provider calls. The design
+needs an explicit aggregate replay budget as well as the existing per-run drain
+limit (3 days per user, 1 in QA; 32 candidates and 16 canonical writes per day).
+The durable queue, coalescing and overflow disposition need review before any
+new generation can become visible. Missing/string start dates need an explicit
+policy; the timestamp range alone cannot schedule those rows.
 
-Historical replay candidates use generation-scoped provenance. Exact-subject
-or occupied-slot facts are explicitly recorded as skipped; replay can add facts
-with no existing occupant. It does not supersede an occupied slot, even if the
-unlocked material suggests a correction. This conservative limit avoids
-rewinding newer/user-authored knowledge and avoids duplicating existing facts.
-**Not implemented:** automatically adjudicating conflicting historical facts
-or regenerating prior UI summaries. Those need a separate recency/provenance
-policy and the daily-summary owner's update contract; neither is silently
-approximated here. Later forward days retain ordinary slot-refresh behavior.
+Preserve old summaries, packets and stages as provenance; never restamp them
+into a new generation. A replay artifact should identify its predecessor and
+have one logical owner, with old pending work explicitly invalidated at activation.
+The earlier proposal kept UI summary documents unchanged and created new
+memory-extraction stages; regeneration of UI summaries belongs to that writer's
+update contract. Canonical provenance must distinguish replay from current
+knowledge. Skipping an occupied subject/slot avoids overwriting newer or
+user-authored facts but also loses historical corrections; an explicit recency
+and conflict policy is required. These cache, stage and canonical policies are
+design questions for the follow-up, not hidden behavior in this branch.
 
 ## Source observation and cost bounds
 
@@ -187,8 +203,8 @@ overflow is checked before any full-document reads.
 
 Eligibility is an observed-read proof, not a stable snapshot. Projection and
 full-document reads are not atomic. A processing mutation beyond the full-read
-page or a later insert is not rechecked. Even selected rows can change after
-reading. There is **no explicit settle margin**: yesterday becomes eligible at
+page or a later insert is not rechecked. Selected rows can change after reading; the dispatch-boundary lock re-check
+above narrows privacy exposure without claiming an atomic whole-window view. There is **no explicit settle margin**: yesterday becomes eligible at
 local midnight, potentially immediately after its end. Missing/string-typed
 `started_at` values are outside the timestamp range, and attribution is by
 start day, not finish day. These pre-existing limitations remain explicit.
@@ -202,38 +218,45 @@ an exactly-full page alone is never proof of truncation. Source evidence lives
 outside the dictionary the real agent clears. Scheduler and receipt reason
 fields use `SOURCE_REASON_CODES`; unknown values become `unknown_reason`.
 
-## Local verification (2026-09-18)
+## Local verification (Round 5, 2026-09-18)
 
-All Python commands used the shared `backend/.venv/bin/python`,
-`GOOGLE_APPLICATION_CREDENTIALS=/nonexistent/adc.json`,
-`CLOUDSDK_CONFIG=/nonexistent`, and `timeout 900`. The venv was not modified.
+Rebased onto the locally available `origin/main` at `591d701323` without
+network access. No fetch was performed, so remote freshness was not independently
+verified. `database/conversations.py` is byte-for-byte identical to that base;
+`routers/payment.py` has no diff from it. The shared venv was execute-only.
+Every Python command used `GOOGLE_APPLICATION_CREDENTIALS=/nonexistent/adc.json
+CLOUDSDK_CONFIG=/nonexistent timeout 900` and `backend/.venv/bin/python`
+(`.venv/bin/python` when running from backend). Black used the requested
+`~/.local/bin/black` with the same credential isolation and timeout.
 
 ```text
-pytest: seven sweep/job/inventory/agent/repair/operator/strict-transaction unit files
-291 passed in 6.68s
-python -m pyright -p pyrightconfig.json --pythonpath .venv/bin/python
-0 errors, 6014 warnings, 0 informations
-python backend/scripts/check_workflow_contracts.py
+cd backend
+.venv/bin/python -m pytest tests/unit/test_daily_memory_sweep.py tests/unit/test_daily_memory_sweep_job.py tests/unit/test_daily_memory_sweep_inventory.py tests/unit/test_daily_sweep_summary_agent.py tests/unit/test_jit_qa_sweep_repair.py tests/unit/test_jit_qa_sweep_operator.py tests/unit/test_strict_firestore_transaction.py -q --disable-warnings
+310 passed in 17.33s
+.venv/bin/python -m pyright -p pyrightconfig.json --pythonpath .venv/bin/python
+0 errors, 5988 warnings, 0 informations
+
+# repository root
+backend/.venv/bin/python backend/scripts/check_workflow_contracts.py
 Workflow contract checks passed.
-black --line-length 120 --skip-string-normalization --check (9 changed Python files)
-9 files would be left unchanged.
-Firestore emulator (loopback only, demo-daily-memory-sweep, MEMORY_ENABLED=on)
-PASS: crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/
-source-digest-binding/legacy-fence/source-projection/accounting-pagination/
-lost-accounting-refusal/window-admission/pre-lock-preflight/unlock-replay/attested-skip
+~/.local/bin/black --line-length 120 --skip-string-normalization --check <all 13 changed Python files>
+13 files would be left unchanged.
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8789 GOOGLE_CLOUD_PROJECT=demo-daily-memory-sweep GCLOUD_PROJECT=demo-daily-memory-sweep MEMORY_ENABLED=on backend/.venv/bin/python backend/scripts/daily_memory_sweep_emulator_test.py
+PASS: daily memory sweep Firestore emulator retry/interruption proof
+(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/source-digest-binding/legacy-fence/source-projection/accounting-pagination/lost-accounting-refusal/window-admission/pre-lock-preflight/attested-skip/lock-projection)
 ```
 
-The new behavioral tests also cover identity computation after committed
-admission, onboarding's stage gap, mostly-discarded scans, contentless omissions,
-post-projection changes, real payment-helper batching, generation-scoped stage
-succession, occupied-slot preservation, foreign-reference rejection, and multiple
-historical claim attestations. The tuple-result workflow gate now explicitly
-covers the sweep admission/repair boundary. The narrow Firestore fixture only
-adds document references to its existing ID projections; real emulator queries
-exercise that shape too.
+The admission/skip proof helper is now explicitly called by the emulator runner;
+its previous presence in the file and printed PASS labels were not evidence of
+execution. The emulator was stopped after the proof. New hermetic tests exercise
+locking during prompt preparation before both provider phases, permanent-state
+reasons (including missing payload and changed digest), and truthful abandonment
+receipts. Existing concurrency, mutation, onboarding and certified-release tests
+continue to pass. The assertion's existing exact identity/claim/lease/margin/
+single-use checks remain in the shared repair machinery.
 
-No Omi service, live payment webhook, provider model, production index, or cloud
-rollout was exercised. No deployment observation was independently repeated.
-The setup refresh, shared-hook rewrite and venv synchronization steps were
-omitted to honor the worktree/execute-only/no-force constraints; the existing
-hook dispatcher and interpreter were verified. No push or PR was performed.
+No live payment, provider model, Omi service, cloud index or deployment was
+exercised. No deployment observation was independently repeated. Setup's network
+refresh, shared-hook rewrite and venv synchronization were omitted under the
+worktree/execute-only/no-network constraints; the existing hook was verified.
+Only a local commit is authorized; no push or PR is performed.

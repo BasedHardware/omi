@@ -455,4 +455,25 @@ def test_operator_skip_returned_claim_does_not_require_lost_accounting(monkeypat
         attestation_reference="incident:stage-gap",
     )
     assert receipt["provider_outcome_summary"] == "operator_attested_skip_window"
+    assert receipt["window_disposition"] == "abandoned"
+    assert receipt["provider_dispatch_status"] == "not_attested"
+    assert receipt["accounting_checked"] is False
+    assert "attempts" not in receipt["provider_outcome_evidence"]
+    assert receipt["provider_outcome_evidence"]["confirmation"] == "ATTEST_WORKER_TERMINATED_AND_ABANDON_WINDOW"
     assert receipt["consumed"] is False
+
+
+@pytest.mark.parametrize("confirmation", ["ATTEST_SKIP_WINDOW_WITHOUT_DISPATCH_AND_WORKER_TERMINATED"])
+def test_obsolete_skip_assertion_cannot_attest_no_dispatch_for_returned_claim(confirmation):
+    db = _Db()
+    _tombstoned_invocation(db.store, state="returned")
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="attestation and evidence reference"):
+        OPERATOR.repair_tombstone(
+            db,
+            invocation_id="inv-1",
+            repair_authority="operator:test",
+            uid=UID,
+            now=NOW,
+            attestation_confirmation=confirmation,
+            attestation_reference="incident:stage-gap",
+        )
