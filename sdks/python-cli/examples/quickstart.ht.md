@@ -112,8 +112,8 @@ omi memory list --limit 5
 # kreye yon nouvo souvni manyèlman
 omi memory create "Mwen gen yon reyinyon enpòtan lendi a 10è nan maten."
 
-# chèche nan souvni w yo
-omi memory search "reyinyon"
+# filtre souvni w yo avèk jq
+omi --json memory list | jq '.[] | select(.content | contains("reyinyon"))'
 
 # gade detay yon souvni espesifik
 omi memory get <memory_id>
@@ -142,11 +142,11 @@ omi conversation get <conversation_id>
 Tache ak devwa ki soti nan konvèsasyon w yo.
 
 ```bash
-# afiche aksyon ki poko fèt yo
-omi action-item list
+# afiche aksyon ki poko fèt yo sèlman
+omi action-item list --open
 
-# afiche tout aksyon yo, menm sa ki fini deja
-omi action-item list --all
+# afiche aksyon ki fini deja yo
+omi action-item list --completed
 
 # kreye yon nouvo aksyon
 omi action-item create "Voye imèl rapò finansye a bay ekip la"
@@ -200,11 +200,11 @@ Lè w ap ekri script, kòd sòti a pèmèt ou konnen egzakteman si kòmand lan r
 | Kòd | Siyifikasyon | Deskripsyon |
 | :--- | :--- | :--- |
 | `0` | **Siksè** | Kòmand lan egzekite san okenn pwoblèm. |
-| `1` | **Erè Itilizasyon** | Move agiman, opsyon ki pa egziste, oswa move sentaks. |
+| `1` | **Erè Itilizasyon** | Validasyon omi-cli (egzanp: agiman manke, opsyon envalid, stdin vid). |
 | `2` | **Erè Otantifikasyon** | Kle API manke, pa valab, oswa sesyon an ekspire. |
-| `3` | **Erè Kominikasyon** | Pwoblèm rezo, sèvè Omi pa reponn, oswa `timeout`. |
-| `4` | **Resous Pa Jwenn** | ID souvni, konvèsasyon, oswa aksyon an pa egziste (404). |
-| `5` | **Erè Envalid** | Done voye yo pa kòrèk selon règleman API a. |
+| `3` | **Erè Sèvè / Rezo** | Repons 5xx, koneksyon koupe, oswa tan delè (`timeout`). |
+| `4` | **Twòp Rekèt** | 429 Too Many Requests (depase limit vitès). |
+| `5` | **Resous Pa Jwenn** | 404 Not Found, idantifyan an pa egziste nan sistèm nan. |
 
 ---
 
@@ -258,12 +258,14 @@ foreach ($mem in $memories) {
 Si w gen aplikasyon Omi Desktop ki louvri sou òdinatè w, li bay yon API lokal sou pòt `47778` :
 
 ```bash
-# defini adrès ak siy lokal la
-export OMI_LOCAL_API_URL="http://127.0.0.1:47778"
-export OMI_LOCAL_TOKEN="siy_lokal_ou_la"
+# konfigire adrès ak siy lokal la
+omi local configure --url http://127.0.0.1:47778 --token SIY_LOKAL_OU_A
 
-# entèwoge estati aplikasyon lokal la
-curl -s -H "Authorization: Bearer $OMI_LOCAL_TOKEN" "$OMI_LOCAL_API_URL/v1/status" | jq .
+# verifye si aplikasyon an ap reponn
+omi --json local status
+
+# lis zouti lokal ki disponib yo
+omi --json local tools
 ```
 
 ---
