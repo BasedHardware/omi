@@ -371,7 +371,7 @@ test('opens a recording row into the full transcript detail and retires it on ba
   }
 });
 
-test('conversation list exposes refresh and load more with truthful pending actions', async () => {
+test('conversation list refreshes on entry and keeps load more pending state truthful', async () => {
   const {ConversationsPage} = require('./pages/Conversations');
   const onRefresh = jest.fn(),
     onLoadMore = jest.fn();
@@ -403,11 +403,11 @@ test('conversation list exposes refresh and load more with truthful pending acti
   renderers.push(renderer);
   const button = (name: string) =>
     renderer.root.findAll(node => node.props.accessibilityLabel === name)[0]!;
+  expect(onRefresh).toHaveBeenCalledTimes(1);
+  expect(button('Refresh conversations')).toBeUndefined();
   act(() => {
-    button('Refresh conversations').props.onPress();
     button('Load more conversations').props.onPress();
   });
-  expect(onRefresh).toHaveBeenCalledTimes(1);
   expect(onLoadMore).toHaveBeenCalledTimes(1);
   await act(async () => {
     renderer.update(
@@ -421,7 +421,6 @@ test('conversation list exposes refresh and load more with truthful pending acti
       />,
     );
   });
-  expect(button('Refresh conversations').props.disabled).toBe(true);
   expect(button('Load more conversations').props.disabled).toBe(true);
   expect(textOf(renderer)).toContain('The list has been refreshed');
 });

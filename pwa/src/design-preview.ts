@@ -209,9 +209,6 @@ function Preview() {
     conversationState ? "chat" : "home"
   );
   const beforeChat = useRef<MobileRoute>("home");
-  const [conversationNotice, setConversationNotice] = useState<string | null>(
-    null
-  );
   const [outcomes, setOutcomes] = useState<DesktopReadOutcomes | null>(
     example === "example" || example === "empty" ? exampleOutcomes : null
   );
@@ -456,11 +453,6 @@ function Preview() {
                   },
                 },
                 loading: conversationState === "loading",
-                onRefresh: () =>
-                  setConversationNotice(
-                    "Preview only — no account data is refreshed."
-                  ),
-                notice: conversationNotice,
                 outcome:
                   conversationState === "loading"
                     ? null
@@ -468,7 +460,7 @@ function Preview() {
                     ? {
                         status: "error",
                         error:
-                          "Example connection error. Your saved conversations could not be loaded. Try refreshing.",
+                          "Example connection error. Your saved conversations could not be loaded.",
                       }
                     : outcomes?.conversations ?? {
                         status: "error",
