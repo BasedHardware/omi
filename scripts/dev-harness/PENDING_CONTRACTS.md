@@ -15,7 +15,9 @@ put `pendingContract('C1');` on its own line first inside the body. This survive
 Dart formatting (a named argument gets folded onto another line). The async body
 executes in its own zone; assertions/UnimplementedError print PENDING;
 success throws XPASS outside the catch. Ordinary errors still fail. Use
-awaited assertions; `testWidgets`/skip are not supported pending markers.
+awaited assertions; widget contracts use `contractWidgets` from
+`app/test/support/spine/widgets.dart`. Framework/async/teardown exceptions stay
+red; only awaited assertions in the body are pending. Plain skip is forbidden.
 
 Register each file (including helper/fixture files) in `contracts/spine/files.json`.
 The check resolves the file's **introducing Git commit**, reads its bytes with
