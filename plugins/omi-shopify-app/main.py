@@ -451,7 +451,7 @@ async def shopify_callback(
         store_default_store(uid, shop, shop_data.get("name", shop))
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 @app.get("/setup/shopify", tags=["setup"])
@@ -465,7 +465,7 @@ async def check_setup(uid: str):
 async def disconnect_shopify(uid: str):
     """Disconnect Shopify account."""
     delete_shopify_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 # ============================================
