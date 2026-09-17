@@ -15,10 +15,10 @@ put `pendingContract('C1');` on its own line first inside the body. This survive
 Dart formatting (a named argument gets folded onto another line). The async body
 executes in its own zone; assertions/UnimplementedError print PENDING;
 success throws XPASS outside the catch. Ordinary errors still fail. Use
-awaited assertions. For widgets use `contractWidgets` from `support/spine/widgets.dart`;
-framework/async/teardown errors still fail normally. Never use `skip`.
-B0/B1 wire contracts run once with compile-time opt-in via `app/test.sh`, then
-the ordinary suite still proves the opt-out guard.
+awaited assertions; widget contracts use `contractWidgets` from
+`app/test/support/spine/widgets.dart`. Plain skip is forbidden. Compile/load
+errors precede the wrapper and fail the owner suite; overridden noSuchMethod
+is valid Dart. Unexpected runtime/framework/teardown errors stay red.
 
 Register each file (including helper/fixture files) in `contracts/spine/files.json`.
 The check resolves the file's **introducing Git commit**, reads its bytes with
@@ -44,3 +44,8 @@ revision records to accept their implementation: the owning spine and coordinato
 review the changed oracle, just as changes to this checker require review. Git
 cannot authenticate reviewer roles; this explicit review boundary is not a bypass
 flag. Subsequent edits still permit only marker removal against the revised oracle.
+
+All spine ratchets constrain only files already migrated to that pattern (no
+regression after adoption), plus at most brand-new files. Legacy debt growth in
+unmigrated files never blocks ordinary work. Record adoption explicitly with the
+behavioral acceptance tests; inventory counts alone do not imply adoption.

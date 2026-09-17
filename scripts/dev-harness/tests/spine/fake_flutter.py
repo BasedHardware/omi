@@ -4,6 +4,7 @@ No device/SDK/network. Modes inject faults after a real stdin command, not
 precomputed broker results. Transcript proves the engine sent the right RPC.
 """
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -14,9 +15,9 @@ def emit(value):
     print(json.dumps([value]), flush=True)
 
 
-emit({'event': 'daemon.connected', 'params': {'version': '0.6.1', 'pid': 123}})
+emit({'event': 'daemon.connected', 'params': {'version': '0.6.1', 'pid': os.getpid()}})
 emit({'event': 'app.start', 'params': {'appId': app_id, 'deviceId': device_id,
-     'directory': '/fixture/app', 'supportsRestart': True, 'launchMode': 'run', 'mode': 'debug'}})
+     'directory': str(Path.cwd()), 'supportsRestart': True, 'launchMode': 'run', 'mode': 'debug'}})
 emit({'event': 'app.debugPort', 'params': {'appId': app_id, 'port': 12345,
      'wsUri': 'ws://127.0.0.1:12345/private-vm-auth/ws'}})
 emit({'event': 'app.started', 'params': {'appId': app_id}})
@@ -54,7 +55,7 @@ for line in sys.stdin:
                      'principal': {'uid': 'fixture-user', 'signed_in': True}, 'route': '/home'}
             result = {'ok': True, 'state': state} if name.endswith('wait_ready') else state
         elif name == 'ext.omi.controls.navigate':
-            result = {'ok': True, 'destination': params['params']['destination']}
+            result = {'ok': True}
         elif name == 'ext.omi.controls.fault':
             emit({'id': request['id'], 'error': {'code': -32602, 'message': 'unknown fault'}})
             continue
@@ -63,6 +64,7 @@ for line in sys.stdin:
             continue
         emit({'id': request['id'], 'result': result})
     elif method == 'app.stop':
+        emit({'event': 'app.stop', 'params': {'appId': app_id}})
         emit({'id': request['id'], 'result': True})
         sys.exit(0)
     else:
