@@ -20,45 +20,42 @@ awaited assertions; widget contracts use `contractWidgets` from
 errors precede the wrapper and fail the owner suite; overridden noSuchMethod
 is valid Dart. Unexpected runtime/framework/teardown errors stay red.
 
-Register each file (including helper/fixture files) in `contracts/spine/files.json`.
-The check resolves the file's **introducing Git commit**, reads its bytes with
-`git show`, and permits only deletion of whole pending-marker lines. Removing,
-renaming, editing assertions, re-adding a removed marker, or changing an existing
-registry owner fails. New contracts can be added; no baseline update flag exists.
-The introducing commit is the spine commit; squash merges pin its final bytes.
-A shallow checkout missing that commit must fetch history, never rebaseline.
-New files not yet in HEAD can be checked before their first local commit.
+The smallest immutable boundary is the **whole oracle**: registered spine tests,
+fixtures and support code, including setup and assertions, with only whole pending
+marker lines removable. Assertions alone are insufficient: changing a fixture or
+not executing a test also weakens it. Registry owners and reviewed revision
+records remain immutable; the exact before/after SHA256 pins are unchanged.
+Neither shared runner bytes nor parent ordering is an oracle.
 
-A builder removes markers and makes these same tests pass. A mistaken contract
-comes back to the owning spine for a reviewed contract revision/version, not a
-builder rewrite. This mechanism is for the explicitly requested mobile program;
-it is not a general exemption from the repository's regression-test rules.
+Register every oracle in `contracts/spine/files.json`. Resolve introductions and
+revision payloads from **all reachable history**, never a single simplified
+history path or a selected parent. Match revision payloads by their pinned digest;
+conflicting introductions/owners/records fail closed. A squash may absorb only a
+revision prefix ending at an exact accepted digest. Retired marker occurrences
+cannot return on either a branch head or a base-first PR merge. Missing/shallow
+history requires fetching it, never rebaselining.
 
-Spine-only corrections append `contracts/spine/revisions/NNN-description.json`
-with path, owner, before/after SHA256 and review reason. Exact corrected bytes
-and record land together; pending markers stay unchanged. The checker pins the
-introducing commit and hash chain; a squash absorbs only a prefix ending at its
-exact oracle digest. Retire markers separately.
+A builder removes markers and makes those same tests pass. Corrections append
+`contracts/spine/revisions/NNN-description.json` with path, owner, before/after
+SHA256 and reason, preserving pending markers. A revision PR may change only
+oracle paths, design/check machinery and already accepted skeleton bytes;
+splitting revision and implementation into two commits still fails. Restore a
+changed oracle on a builder PR and send its reproduction to the spine.
 
-A revision PR may change only oracle paths: spine tests/fixtures, design notes,
-the registry and check machinery. The manifest supplies the actual PR base
-(`--base`); splitting revision and implementation into two commits in one PR
-still fails. `revision-scope.json` is an immutable introduction snapshot: already
-reviewed stacked scaffolding is allowed only at those exact bytes, never an
-implementation merely because its path once held a skeleton. Its legacy records
-are grandfathered; a builder cannot extend that list. Ordinary marker retirement
-with implementation stays allowed. Restore the oracle on a builder PR and send
-the reproduction to the spine for a separate revision PR.
-
-This separates changes, not people: a builder can propose an oracle-only PR,
-and someone modifying this checker could defeat it. Coordinator review of pure
-oracle/check changes is still required; no Git rule authenticates reviewer roles.
+Shared shell runners are declared separately in `contracts/spine/runners.json`.
+Their invocation contract, not their file hash, is protected: fail-fast, direct
+unconditional suite commands with the required defines and discovery scope.
+The constrained shell check rejects commented/conditional/filtered invocations,
+early successful exits and command shadowing; it is not a general shell proof or
+sandbox. Keep dispatch direct; new indirection needs a reviewed invocation rule.
+Main may add guards/logging around those calls. A runner cannot also be an oracle.
+The runner declarations are immutable, like the legacy revision-scope snapshot;
+no builder can add its implementation to either allowlist. Spine-owned skeletons
+retain the existing exact-byte scope pins. The runner/checker and pure-oracle PRs
+still require coordinator review: Git cannot authenticate reviewer roles or stop
+a malicious replacement of the checker itself.
 
 All spine ratchets constrain only files already migrated to that pattern (no
 regression after adoption), plus at most brand-new files. Legacy debt growth in
 unmigrated files never blocks ordinary work. Record adoption explicitly with the
 behavioral acceptance tests; inventory counts alone do not imply adoption.
-
-The immutable snapshot also pins pre-policy corrected oracle bytes: they remain
-accepted when main merges an older parent. Further assertion changes are new
-revisions, even at the same path. Marker retirement remains monotonic.
