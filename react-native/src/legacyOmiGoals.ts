@@ -14,6 +14,13 @@ function text(value: unknown, limit: number): string {
   return value;
 }
 
+function object(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new GoalError();
+  }
+  return value as Record<string, unknown>;
+}
+
 function goalMetric(value: unknown): number | null {
   if (value === undefined || value === null) {
     return 0;
@@ -201,20 +208,22 @@ function presentGeneratedGoalExtras(row: Record<string, unknown>): void {
   presentNullableDouble(row.min_value);
   presentNullableInt(row.focus_rank);
   presentNullableInt(row.latest_progress_sequence);
-  if (
-    row.metric === undefined ||
-    row.metric === null ||
-    typeof row.metric !== 'object' ||
-    Array.isArray(row.metric)
-  ) {
+  presentNullableString(row.status);
+  if (row.metric === undefined || row.metric === null) {
     return;
   }
-  const metric = row.metric as Record<string, unknown>;
+  const metric = object(row.metric);
+  if (metric.current === undefined || metric.current === null) {
+    throw new GoalError();
+  }
   presentNullableDouble(metric.current);
+  if (metric.target === undefined || metric.target === null) {
+    throw new GoalError();
+  }
   presentNullableDouble(metric.target);
+  text(metric.type, 1_000_000);
   presentNullableDouble(metric.max);
   presentNullableDouble(metric.min);
-  presentNullableString(metric.type);
   presentNullableString(metric.unit);
 }
 

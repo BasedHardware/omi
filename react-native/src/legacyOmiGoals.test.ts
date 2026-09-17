@@ -702,6 +702,102 @@ test('old goals name Flutter Goal.fromGenerated type-wrong GET advice instead of
   }
 });
 
+test('names Flutter Goal.fromGenerated type-wrong GET metric instead of remapping to a progress chip', () => {
+  const neighbor = {
+    id: 'goal-read',
+    title: 'Read 20 books',
+    current: 3,
+    target: 10,
+  };
+  const exact = {
+    id: 'goal-exact',
+    title: 'Exact extras',
+    current_value: 3,
+    target_value: 10,
+    metric: {current: 3, target: 10, type: 'scale'},
+    status: 'active',
+  };
+  expect(
+    parseOmiGoals(
+      JSON.stringify([
+        exact,
+        {
+          id: 'goal-omitted',
+          title: 'Omitted extras',
+          current_value: 3,
+          target_value: 10,
+        },
+        {
+          id: 'goal-null',
+          title: 'Null extras',
+          current_value: 3,
+          target_value: 10,
+          metric: null,
+          status: null,
+        },
+        {
+          id: 'goal-empty',
+          title: 'Empty extras',
+          current_value: 3,
+          target_value: 10,
+          status: '',
+        },
+        {
+          id: 'goal-extra',
+          title: 'Unknown extras',
+          current_value: 3,
+          target_value: 10,
+          extra: 1,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id: 'goal-exact', title: 'Exact extras', current: 3, target: 10},
+    {id: 'goal-omitted', title: 'Omitted extras', current: 3, target: 10},
+    {id: 'goal-null', title: 'Null extras', current: 3, target: 10},
+    {id: 'goal-empty', title: 'Empty extras', current: 3, target: 10},
+    {id: 'goal-extra', title: 'Unknown extras', current: 3, target: 10},
+    neighbor,
+  ]);
+  for (const extra of [
+    {metric: 1},
+    {metric: true},
+    {metric: []},
+    {metric: {}},
+    {metric: {current: 3, target: 10}},
+    {status: 1},
+    {status: true},
+    {status: []},
+    {status: {}},
+  ]) {
+    const rows = parseOmiGoals(
+      JSON.stringify([
+        {
+          id: 'goal-wrong',
+          title: 'Type-wrong extras',
+          current_value: 3,
+          target_value: 10,
+          ...extra,
+        },
+        {
+          id: 'goal-read',
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+      ]),
+    );
+    expect(rows.find(row => row.id === 'goal-wrong')).toBeUndefined();
+    expect(rows.find(row => row.id === 'goal-read')).toEqual(neighbor);
+  }
+});
+
 test('loadOmiGoals names resolved GET goals and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'goals',

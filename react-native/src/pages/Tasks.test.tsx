@@ -1066,6 +1066,55 @@ test('tasks page names Flutter Goal.fromGenerated type-wrong GET advice instead 
   act(() => renderer.unmount());
 });
 
+test('tasks page names Flutter Goal.fromGenerated type-wrong GET metric instead of remapping to a progress chip', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'goal-wrong',
+            title: 'Type-wrong extras',
+            current_value: 3,
+            target_value: 10,
+            metric: 1,
+          },
+          {
+            id: 'goal-read',
+            title: 'Read 20 books',
+            current_value: 3,
+            target_value: 10,
+            metric: {current: 3, target: 10, type: 'scale'},
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        backend={{request} as never}
+        outcome={outcome}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = taskPageText(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain('Read 20 books (3/10)');
+  expect(tree).not.toContain('Type-wrong extras');
+  expect(tree).not.toContain('Type-wrong extras (3/10)');
+  expect(tree).not.toContain('goal-wrong');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('Add');
+  act(() => renderer.unmount());
+});
+
 test('tasks page names a failed GET goals instead of empty success', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/goals/all') {
