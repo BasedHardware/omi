@@ -36,6 +36,8 @@ def test_fake_flutter_process_uses_real_array_framing(tmp_path):
     try:
         events = [json.loads(child.receive(5))[0] for _ in range(4)]
         assert [event['event'] for event in events] == ['daemon.connected', 'app.start', 'app.debugPort', 'app.started']
+        assert events[0]['params']['pid'] == child.process.pid
+        assert events[1]['params']['directory'] == str(Path.cwd())
         assert events[1]['params']['deviceId'] == 'owned-device'
         child.send(json.dumps([{'id': 42, 'method': 'app.restart', 'params': {'appId': 'owned-app', 'fullRestart': False}}]) + '\n')
         replies = [json.loads(child.receive(5))[0] for _ in range(3)]

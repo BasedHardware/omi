@@ -19,11 +19,11 @@ from .pending import pending
 
 
 class Child:
-    def __init__(self, mode, transcript, app_id, device):
+    def __init__(self, mode, transcript, app_id, device, cwd=None):
         self.process = subprocess.Popen(
             [sys.executable, '-u', str(Path(__file__).with_name('fake_flutter.py')), mode,
              str(transcript), app_id, device], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, bufsize=0)
+            stderr=subprocess.PIPE, bufsize=0, cwd=cwd)
         self.readable = selectors.DefaultSelector()
         self.readable.register(self.process.stdout, selectors.EVENT_READ)
 
@@ -87,7 +87,7 @@ def rig(tmp_path):
 
         def factory(self, spec):
             self.specs.append(spec)
-            child = Child(self.mode, self.transcript, 'app-fixture', spec.device_id)
+            child = Child(self.mode, self.transcript, 'app-fixture', spec.device_id, cwd=spec.cwd)
             self.children.append(child)
             original = child.send
             def send(line):
