@@ -950,6 +950,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/hive_get_projects",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "limit": {
                             "type": "integer",
@@ -967,6 +968,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/hive_get_tasks",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "project_name": {
                             "type": "string",
@@ -988,6 +990,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/hive_create_task",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "task_name": {
                             "type": "string",
@@ -1021,6 +1024,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/hive_search",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
@@ -1042,6 +1046,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/hive_update_task_status",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "task_name": {
                             "type": "string",

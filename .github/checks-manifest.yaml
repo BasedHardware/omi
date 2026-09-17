@@ -1127,6 +1127,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13946: ensure omitted or malformed limit inputs are coerced safely without TypeError"
 
+  - id: hive-app-tests
+    command: ["python3", "plugins/omi-hive-app/test_main.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manifest schema parameter types, project retrieval, and task creation flows"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
