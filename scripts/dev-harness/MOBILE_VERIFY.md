@@ -6,6 +6,7 @@ C2) or the session CLI (`mobile-session.sh`, C1) — it selects, admits,
 classifies, validates receipts, and writes the lane summary.
 
 ```bash
+make lane-bootstrap                                 # fresh worktree: cheap gates + app/test.sh
 make mobile-verify ARGS="doctor"                    # lane readiness (C1 doctor + verify surface)
 make mobile-verify ARGS="select --paths app/lib/pages/chat/page.dart"
 make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"   # focused hermetic feedback
