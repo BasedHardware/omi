@@ -78,6 +78,32 @@ def revised_original(original: str, records: list) -> str:
     return original
 
 
+def marker_slots(original: str, current: str) -> set[int] | None:
+    """Identify retained marker occurrences, not just their count/package."""
+    if not allowed(original, current):
+        return None
+    wanted = iter(current.splitlines(keepends=True))
+    next_line = next(wanted, None)
+    kept, slot = set(), 0
+    for line in original.splitlines(keepends=True):
+        marker = bool(MARKER.fullmatch(line.rstrip("\n")))
+        if line == next_line:
+            if marker:
+                kept.add(slot)
+            next_line = next(wanted, None)
+        slot += marker
+    return kept
+
+
+def retirement_allowed(anchors: list[str], base: str, current: str) -> bool:
+    remaining = marker_slots(anchors[-1], current)
+    for anchor in anchors:
+        retired_base = marker_slots(anchor, base)
+        if retired_base is not None:
+            return remaining is not None and remaining <= retired_base
+    return False
+
+
 def check(root: Path = ROOT) -> list[str]:
     errors = []
     registry = json.loads((root / REGISTRY).read_text())
@@ -110,6 +136,7 @@ def check(root: Path = ROOT) -> list[str]:
         commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", path, root=root).splitlines()
         if commits:
             original = git("show", f"{commits[-1]}:{path}", root=root)
+            anchors = [original] + [text for _, text in amendments.get(path, [])]
             original = revised_original(original, amendments.get(path, []))
             if not allowed(original, current):
                 errors.append(f"{path}: only pending-marker removal allowed (spine {commits[-1]})")
@@ -118,12 +145,10 @@ def check(root: Path = ROOT) -> list[str]:
                 base_text = git("show", f"{base}:{path}", root=root)
             except subprocess.CalledProcessError:
                 base_text = original
-            # A reviewed revision replaces the oracle, but cannot restore retired markers.
-            if amendments.get(path):
-                retired = sum(bool(MARKER.fullmatch(line)) for line in base_text.splitlines())
-                remaining = sum(bool(MARKER.fullmatch(line)) for line in current.splitlines())
-                base_text = original if remaining <= retired else ""
-            if not allowed(base_text, current):
+            # Corrections preserve ordered marker slots. Retiring another test
+            # cannot pay for restoring a marker already retired on main.
+            monotonic = retirement_allowed(anchors, base_text, current) if amendments.get(path) else allowed(base_text, current)
+            if not monotonic:
                 errors.append(f"{path}: retired markers cannot be restored")
         else:
             try:
