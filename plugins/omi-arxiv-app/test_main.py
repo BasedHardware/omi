@@ -257,6 +257,16 @@ class BuildSearchQueryTest(unittest.TestCase):
         self.assertIn("search_query=au%3AYann+LeCun", encoded)
         self.assertNotIn("%2B", encoded)
 
+    def test_category_with_extended_subdisciplines_in_query(self):
+        query = main._build_search_query({"category": "physics.acc-ph"})
+        self.assertEqual(query, "cat:physics.acc-ph")
+
+        query_combined = main._build_search_query({"query": "electron", "category": "physics.acc-ph"})
+        self.assertEqual(query_combined, "all:electron AND cat:physics.acc-ph")
+
+        query_cond_mat = main._build_search_query({"category": "cond-mat.mes-hall"})
+        self.assertEqual(query_cond_mat, "cat:cond-mat.mes-hall")
+
 
 class SanitizerAndHelperTests(unittest.TestCase):
     def test_clean_text(self):
@@ -281,6 +291,10 @@ class SanitizerAndHelperTests(unittest.TestCase):
         self.assertEqual(main._safe_category("stat.ML"), "stat.ml")
         self.assertEqual(main._safe_category("quant-ph"), "quant-ph")
         self.assertEqual(main._safe_category("  math.PR  "), "math.pr")
+        self.assertEqual(main._safe_category("physics.acc-ph"), "physics.acc-ph")
+        self.assertEqual(main._safe_category("physics.optics"), "physics.optics")
+        self.assertEqual(main._safe_category("cond-mat.mes-hall"), "cond-mat.mes-hall")
+        self.assertEqual(main._safe_category("cond-mat.soft"), "cond-mat.soft")
         self.assertEqual(main._safe_category("invalid_cat;DROP TABLE"), "")
         self.assertEqual(main._safe_category(None), "")
 
