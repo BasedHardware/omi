@@ -222,6 +222,249 @@
       "correlation": null
     },
     {
+      "id": "deviceOnboardingAbandoned",
+      "wire_name": "Device Onboarding Abandoned",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "step": {
+          "type": "int",
+          "wire_name": "step"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deviceOnboardingDoubleTapConfigured",
+      "wire_name": "Device Onboarding Double Tap Configured",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "action": {
+          "type": "int",
+          "wire_name": "action"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallEnded",
+      "wire_name": "Phone Call Ended",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "durationSeconds": {
+          "type": "int",
+          "wire_name": "duration_seconds"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "shortConversationThresholdChanged",
+      "wire_name": "Short Conversation Threshold Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "thresholdSeconds": {
+          "type": "int",
+          "wire_name": "threshold_seconds"
+        },
+        "thresholdMinutes": {
+          "type": "int",
+          "wire_name": "threshold_minutes"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memorySearchCleared",
+      "wire_name": "Fact Search Cleared",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "totalFactsCount": {
+          "type": "int",
+          "wire_name": "total_facts_count"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memoriesAllDeleted",
+      "wire_name": "All Facts Deleted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "factsCountBeforeDeletion": {
+          "type": "int",
+          "wire_name": "facts_count_before_deletion"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "notificationFrequencyChanged",
+      "wire_name": "Notification Frequency Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "oldFrequency": {
+          "type": "int",
+          "wire_name": "old_frequency"
+        },
+        "newFrequency": {
+          "type": "int",
+          "wire_name": "new_frequency"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "changelogDismissed",
+      "wire_name": "Changelog Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "changelogCount": {
+          "type": "int",
+          "wire_name": "changelog_count"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsFilterRating",
+      "wire_name": "Apps Filter Rating",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "rating": {
+          "type": "int",
+          "wire_name": "rating"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "aiAppGeneratorPromptSubmitted",
+      "wire_name": "AI App Generator Prompt Submitted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "promptLength": {
+          "type": "int",
+          "wire_name": "prompt_length"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceResponseModeChanged",
+      "wire_name": "Voice Response Mode Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "mode": {
+          "type": "enum",
+          "wire_name": "mode",
+          "values": [
+            "off",
+            "headphones_only",
+            "always",
+            "unknown"
+          ]
+        },
+        "modeInt": {
+          "type": "int",
+          "wire_name": "mode_int"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memoriesAllVisibilityChanged",
+      "wire_name": "All Facts Visibility Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "newVisibility": {
+          "type": "enum",
+          "wire_name": "new_visibility",
+          "values": [
+            "private",
+            "public",
+            "shared"
+          ]
+        },
+        "factsCount": {
+          "type": "int",
+          "wire_name": "facts_count"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
       "id": "typeExtensionProbe",
       "wire_name": "Type Extension Probe",
       "status": "active",

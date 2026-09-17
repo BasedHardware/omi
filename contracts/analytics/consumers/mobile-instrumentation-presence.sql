@@ -17,6 +17,18 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Developer Mode Disabled',
     'Developer Settings Saved',
     'Voice Response Audio Toggled',
-    'Show Short Conversations Toggled'
+    'Show Short Conversations Toggled',
+    'Device Onboarding Abandoned',
+    'Device Onboarding Double Tap Configured',
+    'Phone Call Ended',
+    'Short Conversation Threshold Changed',
+    'Fact Search Cleared',
+    'All Facts Deleted',
+    'Notification Frequency Changed',
+    'Changelog Dismissed',
+    'Apps Filter Rating',
+    'AI App Generator Prompt Submitted',
+    'Voice Response Mode Changed',
+    'All Facts Visibility Changed'
   )
 GROUP BY event ORDER BY event;

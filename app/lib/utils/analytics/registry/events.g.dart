@@ -130,6 +130,135 @@ final class ShowShortConversationsToggled extends RegisteredEvent {
   Map<String, Object> get properties => {"show_short": showShort};
 }
 
+final class DeviceOnboardingAbandoned extends RegisteredEvent {
+  const DeviceOnboardingAbandoned({required this.step});
+  final int step;
+  @override
+  String get wireName => "Device Onboarding Abandoned";
+  @override
+  Map<String, Object> get properties => {"step": step};
+}
+
+final class DeviceOnboardingDoubleTapConfigured extends RegisteredEvent {
+  const DeviceOnboardingDoubleTapConfigured({required this.action});
+  final int action;
+  @override
+  String get wireName => "Device Onboarding Double Tap Configured";
+  @override
+  Map<String, Object> get properties => {"action": action};
+}
+
+final class PhoneCallEnded extends RegisteredEvent {
+  const PhoneCallEnded({required this.durationSeconds});
+  final int durationSeconds;
+  @override
+  String get wireName => "Phone Call Ended";
+  @override
+  Map<String, Object> get properties => {"duration_seconds": durationSeconds};
+}
+
+final class ShortConversationThresholdChanged extends RegisteredEvent {
+  const ShortConversationThresholdChanged({required this.thresholdSeconds, required this.thresholdMinutes});
+  final int thresholdSeconds;
+  final int thresholdMinutes;
+  @override
+  String get wireName => "Short Conversation Threshold Changed";
+  @override
+  Map<String, Object> get properties => {"threshold_seconds": thresholdSeconds, "threshold_minutes": thresholdMinutes};
+}
+
+final class MemorySearchCleared extends RegisteredEvent {
+  const MemorySearchCleared({required this.totalFactsCount});
+  final int totalFactsCount;
+  @override
+  String get wireName => "Fact Search Cleared";
+  @override
+  Map<String, Object> get properties => {"total_facts_count": totalFactsCount};
+}
+
+final class MemoriesAllDeleted extends RegisteredEvent {
+  const MemoriesAllDeleted({required this.factsCountBeforeDeletion});
+  final int factsCountBeforeDeletion;
+  @override
+  String get wireName => "All Facts Deleted";
+  @override
+  Map<String, Object> get properties => {"facts_count_before_deletion": factsCountBeforeDeletion};
+}
+
+final class NotificationFrequencyChanged extends RegisteredEvent {
+  const NotificationFrequencyChanged({required this.oldFrequency, required this.newFrequency});
+  final int oldFrequency;
+  final int newFrequency;
+  @override
+  String get wireName => "Notification Frequency Changed";
+  @override
+  Map<String, Object> get properties => {"old_frequency": oldFrequency, "new_frequency": newFrequency};
+}
+
+final class ChangelogDismissed extends RegisteredEvent {
+  const ChangelogDismissed({required this.changelogCount});
+  final int changelogCount;
+  @override
+  String get wireName => "Changelog Dismissed";
+  @override
+  Map<String, Object> get properties => {"changelog_count": changelogCount};
+}
+
+final class AppsFilterRating extends RegisteredEvent {
+  const AppsFilterRating({required this.rating});
+  final int rating;
+  @override
+  String get wireName => "Apps Filter Rating";
+  @override
+  Map<String, Object> get properties => {"rating": rating};
+}
+
+final class AiAppGeneratorPromptSubmitted extends RegisteredEvent {
+  const AiAppGeneratorPromptSubmitted({required this.promptLength});
+  final int promptLength;
+  @override
+  String get wireName => "AI App Generator Prompt Submitted";
+  @override
+  Map<String, Object> get properties => {"prompt_length": promptLength};
+}
+
+enum VoiceResponseModeChangedMode {
+  off("off"),
+  headphonesOnly("headphones_only"),
+  always("always"),
+  unknown("unknown");
+  const VoiceResponseModeChangedMode(this.wireName);
+  final String wireName;
+}
+
+final class VoiceResponseModeChanged extends RegisteredEvent {
+  const VoiceResponseModeChanged({required this.mode, required this.modeInt});
+  final VoiceResponseModeChangedMode mode;
+  final int modeInt;
+  @override
+  String get wireName => "Voice Response Mode Changed";
+  @override
+  Map<String, Object> get properties => {"mode": mode.wireName, "mode_int": modeInt};
+}
+
+enum MemoriesAllVisibilityChangedNewVisibility {
+  private("private"),
+  public("public"),
+  shared("shared");
+  const MemoriesAllVisibilityChangedNewVisibility(this.wireName);
+  final String wireName;
+}
+
+final class MemoriesAllVisibilityChanged extends RegisteredEvent {
+  const MemoriesAllVisibilityChanged({required this.newVisibility, required this.factsCount});
+  final MemoriesAllVisibilityChangedNewVisibility newVisibility;
+  final int factsCount;
+  @override
+  String get wireName => "All Facts Visibility Changed";
+  @override
+  Map<String, Object> get properties => {"new_visibility": newVisibility.wireName, "facts_count": factsCount};
+}
+
 enum TypeExtensionProbeMode {
   off("off"),
   headphonesOnly("headphones_only"),

@@ -19,7 +19,19 @@
     "developerModeDisabled",
     "developerSettingsSaved",
     "voiceResponseToggled",
-    "showShortConversationsToggled"
+    "showShortConversationsToggled",
+    "deviceOnboardingAbandoned",
+    "deviceOnboardingDoubleTapConfigured",
+    "phoneCallEnded",
+    "shortConversationThresholdChanged",
+    "memorySearchCleared",
+    "memoriesAllDeleted",
+    "notificationFrequencyChanged",
+    "changelogDismissed",
+    "appsFilterRating",
+    "aiAppGeneratorPromptSubmitted",
+    "voiceResponseModeChanged",
+    "memoriesAllVisibilityChanged"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

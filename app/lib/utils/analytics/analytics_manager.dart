@@ -441,10 +441,10 @@ class AnalyticsManager {
 
   void deviceOnboardingCompleted() => const TypedEvents().emit(const DeviceOnboardingCompleted());
 
-  void deviceOnboardingAbandoned(int step) => track('Device Onboarding Abandoned', properties: {'step': step});
+  void deviceOnboardingAbandoned(int step) => const TypedEvents().emit(DeviceOnboardingAbandoned(step: step));
 
   void deviceOnboardingDoubleTapConfigured(int action) =>
-      track('Device Onboarding Double Tap Configured', properties: {'action': action});
+      const TypedEvents().emit(DeviceOnboardingDoubleTapConfigured(action: action));
 
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) =>
       const TypedEvents().emit(DeveloperSettingsSaved(
@@ -570,7 +570,7 @@ class AnalyticsManager {
   void phoneCallConnected() => track('Phone Call Connected');
 
   void phoneCallEnded({required int durationSeconds}) =>
-      track('Phone Call Ended', properties: {'duration_seconds': durationSeconds});
+      const TypedEvents().emit(PhoneCallEnded(durationSeconds: durationSeconds));
 
   /// End-of-call (or stall) snapshot of the live-transcript session.
   /// Aggregate counts and closed status strings only — no raw audio samples,
@@ -754,7 +754,7 @@ class AnalyticsManager {
   }
 
   void memorySearchCleared(int totalFactsCount) {
-    track('Fact Search Cleared', properties: {'total_facts_count': totalFactsCount});
+    const TypedEvents().emit(MemorySearchCleared(totalFactsCount: totalFactsCount));
   }
 
   void memoryListItemClicked(Memory memory) {
@@ -807,11 +807,18 @@ class AnalyticsManager {
   }
 
   void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
-    track('All Facts Visibility Changed', properties: {'new_visibility': newVisibility.name, 'facts_count': count});
+    const TypedEvents().emit(MemoriesAllVisibilityChanged(
+      newVisibility: switch (newVisibility) {
+        MemoryVisibility.private => MemoriesAllVisibilityChangedNewVisibility.private,
+        MemoryVisibility.public => MemoriesAllVisibilityChangedNewVisibility.public,
+        MemoryVisibility.shared => MemoriesAllVisibilityChangedNewVisibility.shared,
+      },
+      factsCount: count,
+    ));
   }
 
   void memoriesAllDeleted(int countBeforeDeletion) {
-    track('All Facts Deleted', properties: {'facts_count_before_deletion': countBeforeDeletion});
+    const TypedEvents().emit(MemoriesAllDeleted(factsCountBeforeDeletion: countBeforeDeletion));
   }
 
   void memoriesFiltered(String filter) => track('Facts Filtered', properties: {'filter': filter});
@@ -935,16 +942,25 @@ class AnalyticsManager {
   void showDiscardedConversationsToggled(bool showDiscarded) =>
       track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
 
-  void shortConversationThresholdChanged(int thresholdSeconds) => track(
-        'Short Conversation Threshold Changed',
-        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+  void shortConversationThresholdChanged(int thresholdSeconds) => const TypedEvents().emit(
+        ShortConversationThresholdChanged(
+          thresholdSeconds: thresholdSeconds,
+          thresholdMinutes: thresholdSeconds ~/ 60,
+        ),
       );
 
   void voiceResponseToggled(bool enabled) => const TypedEvents().emit(VoiceResponseToggled(enabled: enabled));
 
   void voiceResponseModeChanged(int mode) {
-    const names = {0: 'off', 1: 'headphones_only', 2: 'always'};
-    track('Voice Response Mode Changed', properties: {'mode': names[mode] ?? 'unknown', 'mode_int': mode});
+    const TypedEvents().emit(VoiceResponseModeChanged(
+      mode: switch (mode) {
+        0 => VoiceResponseModeChangedMode.off,
+        1 => VoiceResponseModeChangedMode.headphonesOnly,
+        2 => VoiceResponseModeChangedMode.always,
+        _ => VoiceResponseModeChangedMode.unknown,
+      },
+      modeInt: mode,
+    ));
   }
 
   // Conversation Merge Events
@@ -1630,7 +1646,7 @@ class AnalyticsManager {
   }
 
   void appsFilterRating({required int rating}) {
-    track('Apps Filter Rating', properties: {'rating': rating});
+    const TypedEvents().emit(AppsFilterRating(rating: rating));
   }
 
   void appsFilterCategory({required String category}) {
@@ -2036,7 +2052,7 @@ class AnalyticsManager {
   }
 
   void changelogDismissed({required int changelogCount}) {
-    track('Changelog Dismissed', properties: {'changelog_count': changelogCount});
+    const TypedEvents().emit(ChangelogDismissed(changelogCount: changelogCount));
   }
 
   void whatsNewOpened() => track('Whats New Opened');
@@ -2161,7 +2177,7 @@ class AnalyticsManager {
   void aiAppGeneratorPageOpened() => track('AI App Generator Page Opened');
 
   void aiAppGeneratorPromptSubmitted({required int promptLength}) {
-    track('AI App Generator Prompt Submitted', properties: {'prompt_length': promptLength});
+    const TypedEvents().emit(AiAppGeneratorPromptSubmitted(promptLength: promptLength));
   }
 
   void aiAppGeneratorAppGenerated({required bool success}) {
@@ -2175,7 +2191,7 @@ class AnalyticsManager {
   }
 
   void notificationFrequencyChanged({required int oldFrequency, required int newFrequency}) {
-    track('Notification Frequency Changed', properties: {'old_frequency': oldFrequency, 'new_frequency': newFrequency});
+    const TypedEvents().emit(NotificationFrequencyChanged(oldFrequency: oldFrequency, newFrequency: newFrequency));
   }
 
   static Object? _coerceProperty(dynamic value) {
