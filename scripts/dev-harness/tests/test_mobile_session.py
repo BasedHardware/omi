@@ -269,6 +269,17 @@ class TestEvidence:
         path = ms.session_dir(REPO_ROOT, lease["session_id"], env) / "evidence.json"
         assert se.read_evidence(path)["session_id"] == lease["session_id"]
 
+    def test_ready_binds_an_ios_app_bundle_directory(self, tmp_path: Path, env: dict) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="iosapp", platform_name="ios-simulator", listeners=_no_listeners)
+        bundle = tmp_path / "Runner.app"
+        bundle.mkdir()
+        (bundle / "Info.plist").write_bytes(b"ios-bundle")
+        document = ms.evidence(REPO_ROOT, lease["session_id"], env, state="ready", artifact_path=bundle)
+        assert document["artifact"]["kind"] == "ios-app-bundle"
+        assert document["artifact"]["sha256"] == se.file_sha256(bundle)
+        path = ms.session_dir(REPO_ROOT, lease["session_id"], env) / "evidence.json"
+        assert se.validate_evidence(se.read_evidence(path)) == []
+
     def test_stale_source_cannot_report_ready(self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch) -> None:
         lease = ms.acquire(REPO_ROOT, env, name="stale", listeners=_no_listeners)
         apk = tmp_path / "app.apk"
