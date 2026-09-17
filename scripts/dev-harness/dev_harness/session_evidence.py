@@ -1,4 +1,4 @@
-"""session-evidence-v1: the proposed session/evidence receipt contract.
+"""session-evidence-v1: the frozen session/evidence receipt contract.
 
 Executable form of ``contracts/session/session-evidence-v1.schema.json``.
 Consumers (C2 journeys, C3 capture replay, C4 verification, C5 device
@@ -7,8 +7,8 @@ re-implementing the rules. The schema file is the wire contract; this module
 adds the cross-field semantics a JSON Schema cannot express (artifact/source
 binding, honest accounting, credential-free keys, timestamps ordering).
 
-v1 is proposed, not frozen, until C2/C3/C4 consumers review it with the
-coordinator. Additive changes require consumer tests and a bumped version.
+V8 freezes validation structure; only documentation annotations may change.
+The optional live extension is reserved for the V1 builder; see contracts/session/README.md.
 """
 
 from __future__ import annotations
@@ -410,6 +410,10 @@ def validate_evidence(document: Mapping[str, Any]) -> list[str]:
                     for index, item in enumerate(value):
                         _validate_relative(item, f"artifacts.{key}[{index}]", errors)
 
+    if "live" in document:
+        from .live_session import validate_live_evidence
+
+        errors.extend(validate_live_evidence(document))
     errors.extend(_walk_credential_keys(document))
     return errors
 
