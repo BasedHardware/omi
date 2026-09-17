@@ -15,11 +15,12 @@ admits booleans; subsequent batches may add bounded counts and generated closed
 enums with rejection tests. Never accept arbitrary String, Map, Object, payload,
 uid, hashed device address, transcript, memory text, email or exception text.
 This is an allowlist, not a PII regex filter pretending to sanitize values.
-Legacy events that contain such fields cannot claim byte-preserving migration:
-leave them unmigrated until their privacy/measurement replacement is reviewed.
-The raw-call scanner catches known analytics receivers in adopted files;
-comments and strings are ignored, unrelated camera/counter methods are not
-analytics. Aliases, dynamic dispatch and legacy manager methods can evade this
+C8 owns unadopted legacy events, including Memory Created/getTranscript statistics;
+C7 makes no privacy claim for them. Unsafe events need reviewed replacements,
+not byte-preserving migration. The pending emission oracle checks literal sink
+payloads through both ready and pre-init queues; active constructor tests alone
+prove only type safety.
+The raw-call scanner checks known analytics receivers in adopted files. Aliases, dynamic dispatch and legacy manager methods can evade this
 lexical tripwire; it is not data-flow proof. TypedEvents.emit alone may make one
 AnalyticsManager().track call; direct SDK capture is forbidden there. Generated sealed
 types provide the stronger boundary on the new API. Legacy person properties
