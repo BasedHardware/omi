@@ -36,6 +36,9 @@ const surface = new URLSearchParams(location.search).get("surface") ?? "setup";
 const example = new URLSearchParams(location.search).get("data");
 const chatState = new URLSearchParams(location.search).get("chat");
 const deviceState = new URLSearchParams(location.search).get("device");
+const conversationState = new URLSearchParams(location.search).get(
+  "conversations"
+);
 const previewDevice: PlatformNativeSnapshot = {
   bluetooth: "poweredOn",
   phase:
@@ -100,7 +103,7 @@ const exampleOutcomes: DesktopReadOutcomes = {
               updatedAt: "2026-09-17T10:30:00Z",
               startedAt: "2026-09-17T10:00:00Z",
               finishedAt: "2026-09-17T10:30:00Z",
-              starred: false,
+              starred: index === 1,
               status: "completed",
               source: "desktop",
               visibility: "private",
@@ -195,7 +198,12 @@ function Preview() {
     setChatOpen(true);
     setChatError("Preview only — messages are not sent.");
   };
-  const [route, setRoute] = useState<MobileRoute>("home");
+  const [route, setRoute] = useState<MobileRoute>(
+    conversationState ? "chat" : "home"
+  );
+  const [conversationNotice, setConversationNotice] = useState<string | null>(
+    null
+  );
   const [outcomes, setOutcomes] = useState<DesktopReadOutcomes | null>(
     example === "example" || example === "empty" ? exampleOutcomes : null
   );
@@ -393,11 +401,25 @@ function Preview() {
               mindMapStatus: "empty",
               conversationContent: h(ConversationsPage, {
                 embedded: true,
-                loading: false,
-                outcome: outcomes?.conversations ?? {
-                  status: "error",
-                  error: "Conversations unavailable in this preview.",
-                },
+                loading: conversationState === "loading",
+                onRefresh: () =>
+                  setConversationNotice(
+                    "Preview only — no account data is refreshed."
+                  ),
+                notice: conversationNotice,
+                outcome:
+                  conversationState === "loading"
+                    ? null
+                    : conversationState === "error"
+                    ? {
+                        status: "error",
+                        error:
+                          "Example connection error. Your saved conversations could not be loaded. Try refreshing.",
+                      }
+                    : outcomes?.conversations ?? {
+                        status: "error",
+                        error: "Conversations unavailable in this preview.",
+                      },
               }),
               settingsContent: h(SettingsPage),
               appsContent: h(ConnectorsPage),

@@ -10,6 +10,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
+import X from 'lucide-react-native/icons/x';
+import ChevronLeft from 'lucide-react-native/icons/chevron-left';
 import {
   conversationGroupLabel,
   type ConversationProjection,
@@ -25,6 +27,8 @@ import {
 import {ReadStatus} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 import {mobileColor} from '../mobile/mobileTokens';
+import {OmiAvatar} from '../ui/OmiAvatar';
+import {useReduceMotion} from '../app/useReduceMotion';
 
 const ConversationRow = memo(function ConversationRow({
   item,
@@ -50,7 +54,8 @@ const ConversationRow = memo(function ConversationRow({
         pressed && styles.pressed,
       ]}>
       <View style={styles.conversationRowMeta}>
-        <Text style={styles.conversationRowTime}>
+        <Text
+          style={[styles.conversationRowTime, embedded && mobileStyles.meta]}>
           {formatConversationDate(item.startedAt ?? item.createdAt)}
         </Text>
         <Text
@@ -71,7 +76,8 @@ const ConversationRow = memo(function ConversationRow({
         style={[styles.resultSummary, embedded && mobileStyles.summary]}>
         {item.summary}
       </Text>
-      <Text style={styles.conversationRowDuration}>
+      <Text
+        style={[styles.conversationRowDuration, embedded && mobileStyles.meta]}>
         {formatConversationDuration(item.startedAt, item.finishedAt)}
       </Text>
     </FocusPressable>
@@ -96,6 +102,7 @@ export function ConversationsPage({
   notice?: string | null;
 }) {
   const compact = useWindowDimensions().width < 720;
+  const reduceMotion = useReduceMotion();
   const conversations = useMemo(
     () =>
       outcome?.status === 'success'
@@ -171,46 +178,93 @@ export function ConversationsPage({
             styles.conversationDiscovery,
             embedded && mobileStyles.discovery,
           ]}>
-          <View style={styles.conversationSearchBox}>
+          <View
+            style={[
+              styles.conversationSearchBox,
+              embedded && mobileStyles.search,
+            ]}>
             <Search accessible={false} color="#777777" size={17} />
             <TextInput
               accessibilityLabel="Search loaded conversations"
               onChangeText={setQuery}
               placeholder={
-                embedded ? 'Search loaded…' : 'Search loaded conversations'
+                embedded
+                  ? 'Search loaded conversations…'
+                  : 'Search loaded conversations'
               }
-              placeholderTextColor="#666666"
+              placeholderTextColor={
+                embedded ? mobileColor.textSubtle : '#666666'
+              }
               style={[
                 styles.memorySearchInput,
                 embedded && mobileStyles.searchInput,
               ]}
               value={query}
             />
+            {embedded && query.length > 0 && (
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear conversation search"
+                onPress={() => setQuery('')}
+                style={mobileStyles.clear}>
+                <X size={18} color={mobileColor.textMuted} />
+              </FocusPressable>
+            )}
           </View>
-          <FocusPressable
-            accessibilityLabel="Show starred conversations"
-            accessibilityRole="button"
-            accessibilityState={{selected: starredOnly}}
-            onPress={() => setStarredOnly(value => !value)}
-            style={({pressed}) => [
-              styles.conversationStarFilter,
-              starredOnly && styles.conversationStarFilterActive,
-              pressed && styles.pressed,
-            ]}>
-            <Text
-              style={[
-                styles.conversationStarFilterText,
-                starredOnly && styles.conversationStarFilterTextActive,
+          <View style={embedded && mobileStyles.filters}>
+            {embedded && (
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel="Show all conversations"
+                accessibilityState={{selected: !starredOnly}}
+                onPress={() => setStarredOnly(false)}
+                style={[
+                  mobileStyles.filter,
+                  !starredOnly && mobileStyles.filterSelected,
+                ]}>
+                <Text
+                  style={[
+                    mobileStyles.filterText,
+                    !starredOnly && mobileStyles.filterTextSelected,
+                  ]}>
+                  All
+                </Text>
+              </FocusPressable>
+            )}
+            <FocusPressable
+              accessibilityLabel="Show starred conversations"
+              accessibilityRole="button"
+              accessibilityState={{selected: starredOnly}}
+              onPress={() => setStarredOnly(value => embedded || !value)}
+              style={({pressed}) => [
+                styles.conversationStarFilter,
+                starredOnly && styles.conversationStarFilterActive,
+                embedded && mobileStyles.filter,
+                embedded && starredOnly && mobileStyles.filterSelected,
+                pressed && styles.pressed,
               ]}>
-              Starred
-            </Text>
-          </FocusPressable>
+              <Text
+                style={[
+                  styles.conversationStarFilterText,
+                  starredOnly && styles.conversationStarFilterTextActive,
+                  embedded && mobileStyles.filterText,
+                  embedded && starredOnly && mobileStyles.filterTextSelected,
+                ]}>
+                Starred
+              </Text>
+            </FocusPressable>
+          </View>
         </View>
       )}
-      <View style={styles.conversationContent}>
+      <View
+        style={[styles.conversationContent, compact && mobileStyles.content]}>
         {(!compact || selected === null) && (
           <ScrollView
-            contentContainerStyle={styles.conversationList}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={[
+              styles.conversationList,
+              embedded && mobileStyles.list,
+            ]}
             style={styles.conversationListPane}>
             {onRefresh && (
               <FocusPressable
@@ -218,8 +272,15 @@ export function ConversationsPage({
                 accessibilityLabel="Refresh conversations"
                 disabled={loading || loadingMore}
                 onPress={onRefresh}
-                style={mobileStyles.pageAction}>
-                <Text style={styles.projectionEmptyCopy}>
+                style={[
+                  mobileStyles.pageAction,
+                  embedded && mobileStyles.refresh,
+                ]}>
+                <Text
+                  style={[
+                    styles.projectionEmptyCopy,
+                    embedded && mobileStyles.actionText,
+                  ]}>
                   {loading ? 'Refreshing…' : 'Refresh'}
                 </Text>
               </FocusPressable>
@@ -232,21 +293,54 @@ export function ConversationsPage({
               </Text>
             )}
             {loading && outcome === null ? (
-              <View style={styles.projectionEmpty}>
-                <ActivityIndicator color="#888888" />
+              <View
+                style={[
+                  styles.projectionEmpty,
+                  embedded && mobileStyles.state,
+                ]}>
+                {embedded ? (
+                  <OmiAvatar
+                    tone="ink"
+                    size={48}
+                    motion="breathe"
+                    reduceMotion={reduceMotion}
+                  />
+                ) : (
+                  <ActivityIndicator color="#888888" />
+                )}
                 <Text style={styles.projectionEmptyCopy}>
                   Loading conversations…
                 </Text>
               </View>
             ) : error !== null ? (
-              <View style={styles.projectionEmpty}>
+              <View
+                style={[
+                  styles.projectionEmpty,
+                  embedded && mobileStyles.state,
+                ]}>
                 <Text style={styles.projectionEmptyTitle}>
                   Conversations unavailable
                 </Text>
-                <Text style={styles.projectionEmptyCopy}>{error}</Text>
+                <Text
+                  accessibilityRole="alert"
+                  style={styles.projectionEmptyCopy}>
+                  {error}
+                </Text>
               </View>
             ) : grouped.length === 0 ? (
-              <View style={styles.projectionEmpty}>
+              <View
+                style={[
+                  styles.projectionEmpty,
+                  embedded && mobileStyles.state,
+                ]}>
+                {embedded && (
+                  <OmiAvatar
+                    tone="ink"
+                    size={48}
+                    motion="arrive"
+                    reduceMotion={reduceMotion}
+                  />
+                )}
                 <Text style={styles.projectionEmptyTitle}>
                   {filtering
                     ? 'No loaded conversations match.'
@@ -257,6 +351,25 @@ export function ConversationsPage({
                     Search and filters cover conversations already loaded on
                     this device.
                   </Text>
+                )}
+                {embedded && !filtering && (
+                  <Text style={mobileStyles.stateCopy}>
+                    Your saved conversations will appear here, ready to revisit.
+                  </Text>
+                )}
+                {embedded && filtering && (
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear conversation filters"
+                    onPress={() => {
+                      setQuery('');
+                      setStarredOnly(false);
+                    }}
+                    style={mobileStyles.reset}>
+                    <Text style={mobileStyles.filterTextSelected}>
+                      Clear filters
+                    </Text>
+                  </FocusPressable>
                 )}
               </View>
             ) : (
@@ -297,43 +410,52 @@ export function ConversationsPage({
           </ScrollView>
         )}
         {(!compact || selected !== null) && (
-          <ScrollView
-            accessibilityLabel="Selected conversation details"
-            contentContainerStyle={styles.conversationDetailContent}
-            style={styles.conversationDetail}>
-            {selected === null ? (
-              <View style={styles.conversationDetailEmpty}>
-                <Text style={styles.projectionEmptyTitle}>
-                  Select a conversation
+          <View style={mobileStyles.detailPane}>
+            {compact && selected !== null && (
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to conversations"
+                onPress={() => setSelectedId(null)}
+                style={mobileStyles.back}>
+                <ChevronLeft size={20} color={mobileColor.text} />
+                <Text style={mobileStyles.filterTextSelected}>
+                  Conversations
                 </Text>
-                <Text style={styles.projectionEmptyCopy}>
-                  Choose a conversation to view its summary and details.
-                </Text>
-              </View>
-            ) : (
-              <>
-                {compact && (
-                  <FocusPressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Back to conversations"
-                    onPress={() => setSelectedId(null)}
-                    style={styles.conversationTranscriptAction}>
-                    <Text style={styles.conversationDetailField}>
-                      Back to conversations
-                    </Text>
-                  </FocusPressable>
-                )}
-                <ConversationDetail
-                  conversation={selected}
-                  apiContract={
-                    outcome?.status === 'success'
-                      ? outcome.value.apiContract
-                      : undefined
-                  }
-                />
-              </>
+              </FocusPressable>
             )}
-          </ScrollView>
+            <ScrollView
+              accessibilityLabel="Selected conversation details"
+              contentContainerStyle={[
+                styles.conversationDetailContent,
+                embedded && mobileStyles.detailContent,
+              ]}
+              style={[
+                styles.conversationDetail,
+                embedded && mobileStyles.detail,
+              ]}>
+              {selected === null ? (
+                <View style={styles.conversationDetailEmpty}>
+                  <Text style={styles.projectionEmptyTitle}>
+                    Select a conversation
+                  </Text>
+                  <Text style={styles.projectionEmptyCopy}>
+                    Choose a conversation to view its summary and details.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <ConversationDetail
+                    conversation={selected}
+                    apiContract={
+                      outcome?.status === 'success'
+                        ? outcome.value.apiContract
+                        : undefined
+                    }
+                  />
+                </>
+              )}
+            </ScrollView>
+          </View>
         )}
       </View>
     </View>
@@ -344,8 +466,91 @@ const mobileStyles = StyleSheet.create({
   pageAction: {minHeight: 44, justifyContent: 'center'},
   page: {paddingHorizontal: 20, paddingVertical: 16},
   embedded: {paddingTop: 0, paddingBottom: 0, paddingHorizontal: 16},
-  discovery: {marginTop: 0},
-  searchInput: {minWidth: 0, fontSize: 14},
+  discovery: {
+    marginTop: 0,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 12,
+  },
+  search: {
+    flex: 0,
+    minHeight: 52,
+    paddingRight: 4,
+    backgroundColor: mobileColor.surface,
+    borderColor: mobileColor.border,
+    borderRadius: 16,
+  },
+  searchInput: {minWidth: 0, fontSize: 16},
+  clear: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filters: {
+    flexDirection: 'row',
+    gap: 6,
+    padding: 4,
+    borderRadius: 16,
+    backgroundColor: mobileColor.surfaceQuiet,
+  },
+  filter: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+  },
+  filterSelected: {backgroundColor: mobileColor.surfaceRaised},
+  filterText: {color: mobileColor.textMuted, fontSize: 14, fontWeight: '500'},
+  filterTextSelected: {
+    color: mobileColor.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  content: {flexDirection: 'column'},
+  list: {flexGrow: 1},
+  refresh: {alignSelf: 'flex-end', paddingHorizontal: 12},
+  actionText: {color: mobileColor.textMuted, fontSize: 14},
+  state: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 24,
+  },
+  stateCopy: {
+    color: mobileColor.textMuted,
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  reset: {
+    minHeight: 44,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: mobileColor.surfaceRaised,
+  },
+  meta: {color: mobileColor.textSubtle, fontSize: 12},
+  detailPane: {flex: 1},
+  back: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingRight: 14,
+    marginBottom: 12,
+  },
+  detail: {
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+  },
+  detailContent: {padding: 4, paddingBottom: 32},
   card: {
     borderRadius: 22,
     padding: 18,
