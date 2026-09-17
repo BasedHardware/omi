@@ -7,8 +7,21 @@ import VoiceTurnDomain
 /// gate and then fall through to a managed mint.
 enum RealtimeWarmCredential: Equatable {
   case clientDirect(key: String)
+  /// Current provider's stored key is known-bad, but failover has not been used
+  /// and the alternate has a usable client-direct key. The gate must not skip:
+  /// `ensureWarm` runs `failoverToAlternateProvider` and reconnects at $0.
+  case failoverToClientDirect
   case unusableBYOK(key: String, fingerprint: String)
   case none
+
+  /// Automatic warming is exempt only when this session can connect client-direct
+  /// on the current provider or via the one failover the connect path would run.
+  var hasUsableClientDirectRoute: Bool {
+    switch self {
+    case .clientDirect, .failoverToClientDirect: return true
+    case .unusableBYOK, .none: return false
+    }
+  }
 }
 
 /// Recovery for the two *expected* warm-session lifecycle closes: provider
@@ -86,12 +99,13 @@ extension RealtimeHubController {
   /// as Voice Model: `isByokActive` is false so the subscription decision is
   /// `.planGated`, but `selectedRealtimeBYOKKey(chosenForVoice:)` is non-nil and
   /// the hub connects client-direct at our $0. Warming is governed by that
-  /// realtime key: exempt only when this session will actually connect
-  /// client-direct. A stored key that `canUseBYOK` rejects falls through to
-  /// managed mint on the connect path — the same `resolvedRealtimeWarmCredential`
-  /// decision, so a known-bad key is not an exemption.
+  /// realtime key: exempt when this session can connect client-direct on the
+  /// current provider *or* via the one failover `ensureWarm` would run. A
+  /// known-bad current key with a healthy alternate is not a skip — that is
+  /// `$0` BYOK on the failover path. Only when no usable route exists does a
+  /// known-bad key fall through to managed mint, which the gate then skips.
   func shouldSkipAutomaticManagedWarm() -> Bool {
-    if case .clientDirect = resolvedRealtimeWarmCredential() { return false }
+    if resolvedRealtimeWarmCredential().hasUsableClientDirectRoute { return false }
     let decision = entitlementDecision()
     let skip = managedPlanGateLatch.shouldSkipAutomaticManagedWork(
       decision: decision,
@@ -107,26 +121,45 @@ extension RealtimeHubController {
     return skip
   }
 
-  /// Same key `ensureWarm` will pass to `startSession`. Tests pin the resolver.
-  func resolvedRealtimeBYOKKey() -> String? {
+  /// Same key `ensureWarm` will pass to `startSession` for `provider`.
+  func realtimeBYOKKey(for provider: RealtimeHubProvider) -> String? {
     if let realtimeBYOKKeyResolver {
-      return realtimeBYOKKeyResolver()
+      return realtimeBYOKKeyResolver(provider)
     }
-    let provider = effectiveProvider
     return APIKeyService.selectedRealtimeBYOKKey(
       for: provider.byokProvider,
       chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider))
   }
 
-  /// Authorization the connect path will make: a stored voice key is not enough.
-  /// Known-bad fingerprints (`canUseBYOK` false) are `.unusableBYOK` and mint.
+  /// Same key `ensureWarm` will pass to `startSession` for the effective provider.
+  func resolvedRealtimeBYOKKey() -> String? {
+    realtimeBYOKKey(for: effectiveProvider)
+  }
+
+  /// Authorization the connect path will make. A stored key is not enough;
+  /// known-bad fingerprints are `.unusableBYOK` unless failover can still reach
+  /// a usable alternate (`fallbackProvider == nil` and that key `canUseBYOK`).
   func resolvedRealtimeWarmCredential() -> RealtimeWarmCredential {
-    guard let key = resolvedRealtimeBYOKKey() else { return .none }
-    let fingerprint = APIKeyService.byokFingerprint(key)
-    if canUseRealtimeBYOK(effectiveProvider.byokProvider, fingerprint) {
+    let provider = effectiveProvider
+    if let key = clientDirectKeyIfUsable(for: provider) {
       return .clientDirect(key: key)
     }
+    guard let key = realtimeBYOKKey(for: provider) else { return .none }
+    let fingerprint = APIKeyService.byokFingerprint(key)
+    if fallbackProvider == nil,
+      clientDirectKeyIfUsable(for: RealtimeHubSettings.shared.provider.alternate) != nil
+    {
+      return .failoverToClientDirect
+    }
     return .unusableBYOK(key: key, fingerprint: fingerprint)
+  }
+
+  /// Usable client-direct key for `provider`, or nil if missing / known-bad.
+  func clientDirectKeyIfUsable(for provider: RealtimeHubProvider) -> String? {
+    guard let key = realtimeBYOKKey(for: provider) else { return nil }
+    let fingerprint = APIKeyService.byokFingerprint(key)
+    guard canUseRealtimeBYOK(provider.byokProvider, fingerprint) else { return nil }
+    return key
   }
 
   /// Launch / re-entrant `PushToTalkManager.setup`: not a key press, so the plan
@@ -216,8 +249,18 @@ extension RealtimeHubController {
     entitlementRefreshGeneration &+= 1
     let generation = entitlementRefreshGeneration
     let ownerAtStart = managedPlanGateOwnerID()
+    let timeout = entitlementRefreshTimeoutNanoseconds
     entitlementRefreshTask = Task { [weak self] in
-      await refreshEntitlement()
+      await withTaskGroup(of: Void.self) { group in
+        group.addTask { await refreshEntitlement() }
+        group.addTask {
+          if timeout > 0 {
+            try? await Task.sleep(nanoseconds: timeout)
+          }
+        }
+        await group.next()
+        group.cancelAll()
+      }
       await MainActor.run {
         guard let self else { return }
         self.planGateRefreshDidFinish?()

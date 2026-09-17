@@ -77,11 +77,17 @@ extension RealtimeHubController {
 
     // Offered for a provider the user picked themselves, withheld from one reached by
     // failover or by `.auto` resolving there — see RealtimeHubSettings.isVoiceModelChoice.
-    // Shared with `shouldSkipAutomaticManagedWarm`: only `.clientDirect` is a BYOK
-    // exemption. `.unusableBYOK` is the known-bad fingerprint path and mints.
+    // Shared with `shouldSkipAutomaticManagedWarm`. `.failoverToClientDirect`
+    // is a known-bad current key with a healthy alternate: run the existing
+    // failover, never mint.
     switch resolvedRealtimeWarmCredential() {
     case .clientDirect(let key):
       startSession(provider: provider, auth: .byokKey(key), ownerScope: ownerScope)
+    case .failoverToClientDirect:
+      log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
+      if failoverToAlternateProvider(reason: "auth") {
+        return
+      }
     case .unusableBYOK(_, let fingerprint):
       log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
       if failoverToAlternateProvider(reason: "auth") {

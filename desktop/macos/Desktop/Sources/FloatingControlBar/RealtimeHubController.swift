@@ -386,8 +386,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Owner identity for the plan-gate latch. Defaults to the runtime owner so
   /// a fail-open `.allow` on A cannot suppress B.
   var managedPlanGateOwnerID: () -> String? = { RuntimeOwnerIdentity.currentOwnerId() }
-  /// Realtime BYOK key this warm would actually use. Tests pin it.
-  var realtimeBYOKKeyResolver: (() -> String?)?
+  /// Realtime BYOK key this warm would actually use, per provider. Tests pin it.
+  var realtimeBYOKKeyResolver: ((RealtimeHubProvider) -> String?)?
+  /// Caps a hung entitlement refresh so `entitlementRefreshInFlight` cannot stick.
+  /// Matches the production HTTP timeout. `0` lets tests observe the clear without sleep.
+  var entitlementRefreshTimeoutNanoseconds: UInt64 = 30_000_000_000
   /// Same `canUseBYOK` the connect path consults. Tests pin known-bad keys.
   var canUseRealtimeBYOK: (BYOKProvider, String) -> Bool = { provider, fingerprint in
     CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint)

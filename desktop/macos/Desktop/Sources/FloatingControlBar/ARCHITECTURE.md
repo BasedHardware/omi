@@ -225,17 +225,19 @@ returns an authorized command.
 Automatic / idle / launch warming of a **managed** (ephemeral) session consults
 `SubscriptionEntitlement.decision` via `ManagedPlanGateLatch` (shared with
 LiveNotes). Identified basic without a **usable** realtime BYOK key skips
-keep-warm; a stored voice key whose fingerprint `canUseBYOK` rejects is not an
-exemption — that path falls through to managed mint, which the gate must skip.
-Unknown plans fail open. Warming is governed by
-`resolvedRealtimeWarmCredential()` (Voice Model key + credential health), not
-text-lane `APIKeyService.isByokActive`. `ensureWarm(userInitiated: true)` (PTT)
-still attempts. Launch uses `PushToTalkManager.warmHubOnLaunchIfNeeded` →
+keep-warm. A stored voice key whose fingerprint `canUseBYOK` rejects is not an
+exemption unless failover can still reach a usable alternate — that reconnect
+is client-direct at $0. Only when no usable route exists does the known-bad
+path fall through to managed mint, which the gate skips. Unknown plans fail
+open. Warming is governed by `resolvedRealtimeWarmCredential()` (Voice Model
+key + credential health + one failover), not text-lane
+`APIKeyService.isByokActive`. `ensureWarm(userInitiated: true)` (PTT) still
+attempts. Launch uses `PushToTalkManager.warmHubOnLaunchIfNeeded` →
 `prepareAutomaticWarm()` so an existing away deferral cannot block an entitled
 re-entrant `setup`. A typed server `plan_gated` denial latches automatic retries
 for ten minutes (one bounded re-drive) or until the decision becomes allow / the
-owner changes. Entitlement refresh is owner-fenced: a late completion for A
-must not re-drive B.
+owner changes. Entitlement refresh is owner-fenced and time-bounded so a hung
+fetch cannot stick `entitlementRefreshInFlight`.
 
 ## Verification
 

@@ -136,7 +136,7 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
 
   func testRealtimeBYOKAutomaticWarmIsNeverPlanGated() {
     let controller = gatedController(decision: .planGated)
-    controller.realtimeBYOKKeyResolver = { "AIza-test-gemini-voice-key" }
+    controller.realtimeBYOKKeyResolver = { _ in "AIza-test-gemini-voice-key" }
     controller.canUseRealtimeBYOK = { _, _ in true }
     var admitted: [Bool] = []
     controller.warmAdmissionProbe = { admitted.append($0) }
@@ -156,7 +156,7 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
 
   func testRealtimeBYOKIdleCloseIsNeverPlanGated() {
     let controller = gatedController(decision: .planGated)
-    controller.realtimeBYOKKeyResolver = { "AIza-test-gemini-voice-key" }
+    controller.realtimeBYOKKeyResolver = { _ in "AIza-test-gemini-voice-key" }
     controller.canUseRealtimeBYOK = { _, _ in true }
     controller.presenceIdleProvider = { 0 }
     controller.testingWarmAfterDrain = {}
@@ -169,7 +169,7 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
   func testUnusableRealtimeBYOKDoesNotMintWhenPlanGatedAndFailoverExhausted() {
     let key = "AIza-test-gemini-voice-key"
     let controller = gatedController(decision: .planGated)
-    controller.realtimeBYOKKeyResolver = { key }
+    controller.realtimeBYOKKeyResolver = { _ in key }
     controller.canUseRealtimeBYOK = { _, _ in false }
     controller.fallbackProvider = .openai
     var admitted: [Bool] = []
@@ -192,6 +192,41 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
 
     controller.ensureWarm(userInitiated: true)
     XCTAssertEqual(admitted, [true])
+  }
+
+  func testUnusablePrimaryBYOKDoesNotSkipWhenAlternateIsHealthy() {
+    let geminiKey = "AIza-test-gemini-voice-key"
+    let openAIKey = "sk-test-openai-realtime-key"
+    let controller = gatedController(decision: .planGated)
+    let previousProvider = RealtimeOmniSettings.shared.selectedProvider
+    RealtimeOmniSettings.shared.selectedProvider = .geminiFlashLive
+    defer { RealtimeOmniSettings.shared.selectedProvider = previousProvider }
+
+    controller.fallbackProvider = nil
+    controller.realtimeBYOKKeyResolver = { provider in
+      switch provider {
+      case .gemini: return geminiKey
+      case .openai: return openAIKey
+      }
+    }
+    controller.canUseRealtimeBYOK = { byokProvider, _ in byokProvider == .openai }
+    controller.prefetchedVoiceContextOwnerScope = controller.currentOwnerScope
+    controller.prefetchedVoiceContextSessionID = "test-session"
+    controller.prefetchedVoiceContextFreshnessIdentity = "fresh"
+    controller.testingWarmAfterDrain = {}
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+    var minted = 0
+    controller.managedMintProbe = { minted += 1 }
+
+    XCTAssertEqual(controller.resolvedRealtimeWarmCredential(), .failoverToClientDirect)
+    XCTAssertFalse(controller.shouldSkipAutomaticManagedWarm())
+
+    controller.ensureWarm()
+
+    XCTAssertEqual(admitted, [false])
+    XCTAssertEqual(minted, 0)
+    XCTAssertEqual(controller.fallbackProvider, .openai)
   }
 
   func testPlanGatedIdleCloseDoesNotScheduleRewarm() {
@@ -358,6 +393,22 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     await fulfillment(of: [refreshFinished], timeout: 1)
     XCTAssertEqual(admitted, [])
     XCTAssertEqual(minted, 0)
+  }
+
+  func testEntitlementRefreshInFlightClearsWhenRefreshHangs() async {
+    let controller = gatedController(decision: .planGated)
+    controller.entitlementRefreshTimeoutNanoseconds = 0
+    let finished = expectation(description: "refresh bounded")
+    controller.planGateRefreshDidFinish = { finished.fulfill() }
+    controller.refreshEntitlement = {
+      while !Task.isCancelled {
+        await Task.yield()
+      }
+    }
+
+    controller.ensureWarm()
+    await fulfillment(of: [finished], timeout: 1)
+    XCTAssertFalse(controller.entitlementRefreshInFlight)
   }
 
   func testLatchClearsAfterBoundedLifetime() {
