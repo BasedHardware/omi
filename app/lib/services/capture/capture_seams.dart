@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -44,6 +45,19 @@ class WallClockCaptureScheduling implements CaptureScheduling {
 abstract interface class CaptureBleListeners {
   void addBatchRecordingFinalizedListener(void Function(String) callback);
   void removeBatchRecordingFinalizedListener(void Function(String) callback);
+}
+
+/// Production [CaptureBleListeners] over the shared [BleBridge] singleton.
+class BleBridgeCaptureListeners implements CaptureBleListeners {
+  const BleBridgeCaptureListeners();
+
+  @override
+  void addBatchRecordingFinalizedListener(void Function(String) callback) =>
+      BleBridge.instance.addBatchRecordingFinalizedListener(callback);
+
+  @override
+  void removeBatchRecordingFinalizedListener(void Function(String) callback) =>
+      BleBridge.instance.removeBatchRecordingFinalizedListener(callback);
 }
 
 typedef CaptureSocketOpen = Future<TranscriptSegmentSocketService?> Function({

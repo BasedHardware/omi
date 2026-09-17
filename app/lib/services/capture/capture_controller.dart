@@ -13,7 +13,6 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -238,13 +237,15 @@ class CaptureController extends ChangeNotifier
         _bleListeners = bleListeners,
         _openSocketOverride = openSocket {
     _isConnected = _connectivity.initiallyConnected;
+    // Restore a persisted device mute so it survives an app kill/restart. When
+    // the device reconnects, streamDeviceRecording() reads _isPaused as
+    // `wasPaused` and re-applies the mute instead of silently resuming.
     _isPaused = (preferences ?? SharedPreferencesUtil()).deviceMuted;
     _connectionStateListener = _connectivity.changes.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
-    (_bleListeners?.addBatchRecordingFinalizedListener ?? BleBridge.instance.addBatchRecordingFinalizedListener)(
-      _onOfflineRecordingFinalized,
-    );
+    (_bleListeners ?? const BleBridgeCaptureListeners())
+        .addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
   }
 
   static Future<void> _startAndroidLocationForegroundTask() async {
@@ -1591,9 +1592,8 @@ class CaptureController extends ChangeNotifier
     _metrics.dispose();
     _autoSyncFallbackTimer?.cancel();
     _peopleRefreshFuture = null; // Clear in-flight tracker
-    (_bleListeners?.removeBatchRecordingFinalizedListener ?? BleBridge.instance.removeBatchRecordingFinalizedListener)(
-      _onOfflineRecordingFinalized,
-    );
+    (_bleListeners ?? const BleBridgeCaptureListeners())
+        .removeBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
 
     super.dispose();
   }
