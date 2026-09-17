@@ -560,6 +560,165 @@ test('old conversations name Flutter ConversationListItem fromJson padded GET cl
   ).rejects.toThrow('Omi order is malformed');
 });
 
+test('old conversations name Flutter GeneratedProjectedStructure fromJson type-wrong GET category instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+  };
+  const processing = {
+    transcript_sha256: 'abc',
+    schema_version: 1,
+    provenance: {
+      device_class: 'phone',
+      generated_at: '2026-09-07T00:00:00.000Z',
+      model_id: 'm1',
+      runtime: 'ios',
+    },
+    structure: {
+      title: 'Projected',
+      category: 'other',
+      emoji: '🧠',
+      overview: 'Notes',
+      events: [
+        {
+          title: 'Standup',
+          start: '2026-09-07T15:00:00.000Z',
+          duration: 30,
+          description: 'Notes',
+        },
+      ],
+    },
+  };
+  const titles = async (rows: unknown[]) =>
+    (await loadConversations(backend(rows).api)).items.map(item => item.title);
+  expect(
+    await titles([{...row, client_processing: processing}, neighbor]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        client_processing: {
+          ...processing,
+          structure: {title: 'Projected'},
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(await titles([row, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([{...row, client_processing: null}, neighbor]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        client_processing: {
+          ...processing,
+          structure: {
+            ...processing.structure,
+            category: '',
+            emoji: '',
+            overview: '',
+            events: [{...processing.structure.events[0], description: ''}],
+          },
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        client_processing: {
+          ...processing,
+          structure: {
+            ...processing.structure,
+            category: '  other  ',
+            emoji: ' 🧠 ',
+            overview: '  Notes  ',
+            events: [
+              {...processing.structure.events[0], description: '  Notes  '},
+            ],
+          },
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  for (const extra of [1, true, [], {}]) {
+    for (const field of ['category', 'emoji', 'overview']) {
+      await expect(
+        titles([
+          {
+            ...row,
+            client_processing: {
+              ...processing,
+              structure: {...processing.structure, [field]: extra},
+            },
+          },
+          neighbor,
+        ]),
+      ).rejects.toThrow('Omi text is malformed');
+    }
+    await expect(
+      titles([
+        {
+          ...row,
+          client_processing: {
+            ...processing,
+            structure: {
+              ...processing.structure,
+              events: [{...processing.structure.events[0], description: extra}],
+            },
+          },
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+  for (const field of ['category', 'emoji', 'overview']) {
+    await expect(
+      titles([
+        {
+          ...row,
+          client_processing: {
+            ...processing,
+            structure: {...processing.structure, [field]: null},
+          },
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+  await expect(
+    titles([
+      {
+        ...row,
+        client_processing: {
+          ...processing,
+          structure: {
+            ...processing.structure,
+            events: [{...processing.structure.events[0], description: null}],
+          },
+        },
+      },
+      neighbor,
+    ]),
+  ).rejects.toThrow('Omi text is malformed');
+});
+
 test('old conversations name Flutter ConversationListItem fromJson padded GET transcript_segments speaker_id instead of remapping to a conversation chip', async () => {
   const neighbor = {
     ...conversation,

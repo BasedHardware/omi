@@ -92,6 +92,12 @@ function presentNullableString(value: unknown): void {
   }
   text(value);
 }
+function presentDefaultString(value: unknown): void {
+  if (value === undefined) {
+    return;
+  }
+  text(value);
+}
 function boolean(value: unknown): boolean {
   if (typeof value !== 'boolean') {
     throw new DetailError('invalid');
@@ -702,6 +708,9 @@ export async function loadLegacyConversationDetail(
     calendarEventTimeCopy(provenance.generated_at);
     const structure = object(processing.structure);
     text(structure.title);
+    presentDefaultString(structure.category);
+    presentDefaultString(structure.emoji);
+    presentDefaultString(structure.overview);
     if (structure.events !== undefined && structure.events !== null) {
       if (!Array.isArray(structure.events)) {
         throw new DetailError('invalid');
@@ -709,6 +718,7 @@ export async function loadLegacyConversationDetail(
       for (const item of structure.events) {
         const event = object(item);
         text(event.title);
+        presentDefaultString(event.description);
         calendarEventTimeCopy(event.start);
         presentRequiredInteger(event.duration);
       }

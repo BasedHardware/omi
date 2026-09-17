@@ -255,11 +255,15 @@ function presentClientProcessing(value: unknown): void {
   presentRequiredDate(provenance.generated_at);
   const structure = object(processing.structure);
   text(structure.title);
+  presentDefaultString(structure.category);
+  presentDefaultString(structure.emoji);
+  presentDefaultString(structure.overview);
   if (structure.events === undefined || structure.events === null) return;
   if (!Array.isArray(structure.events)) throw new Error('Omi list is malformed');
   for (const item of structure.events) {
     const event = object(item);
     text(event.title);
+    presentDefaultString(event.description);
     presentRequiredDate(event.start);
     presentRequiredInt(event.duration);
   }
