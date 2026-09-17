@@ -52,7 +52,6 @@ void main() {
     expect(violations, isEmpty);
   });
   contractTest('C1 capture and extracted code request FGS intent rather than acting independently', () {
-    pendingContract('C1');
     final actor =
         RegExp(r'ForegroundUtil\s*\.\s*(?:initializeForegroundService|startForegroundTask|stopForegroundTask)\s*\(');
     for (final path in captureImplementation()) {

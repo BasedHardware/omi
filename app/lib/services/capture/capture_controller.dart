@@ -28,7 +28,6 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
-import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
@@ -225,8 +224,7 @@ class CaptureController extends ChangeNotifier
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
-        _conversationLocationCapture = conversationLocationCapture ??
-            ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
+        _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
         _audioCodecLoader = audioCodecLoader,
         _microphonePermissionRequester = microphonePermissionRequester,
@@ -253,10 +251,10 @@ class CaptureController extends ChangeNotifier
     );
   }
 
-  static Future<void> _startAndroidLocationForegroundTask() async {
-    if (!Platform.isAndroid) return;
-    await ForegroundUtil.initializeForegroundService();
-    await ForegroundUtil.startForegroundTask();
+  Future<void> _setCaptureForegroundRequired(bool required) async {
+    final owner = _sessionOwner;
+    if (owner == null) return;
+    await owner.setForegroundRequired(required);
   }
 
   // True while the audio session is interrupted (phone call, Siri, alarm).
@@ -1671,6 +1669,7 @@ class CaptureController extends ChangeNotifier
   @override
   void dispose() {
     _rollCaptureSession('disposed');
+    unawaited(_setCaptureForegroundRequired(false));
     _phoneBatchGeolocationPreference.invalidateSession();
     _clearSessionLocation();
     _recordingTelemetry.complete(reason: 'pipeline_closed');
@@ -1768,6 +1767,8 @@ class CaptureController extends ChangeNotifier
   }
 
   streamRecording() async {
+    await _setCaptureForegroundRequired(true);
+    if (_sessionOwner != null && !_sessionOwner!.foregroundRunning) return;
     _sessionRecordingDevice = null;
     // Drain any tail from the preceding phone session before replacing its
     // location. A stale session snapshot must never be applied to a later WAL.
@@ -1798,6 +1799,7 @@ class CaptureController extends ChangeNotifier
         await _microphonePermissionRequester?.call() ?? (await Permission.microphone.request()).isGranted;
     if (!micPermissionGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic');
+      await _setCaptureForegroundRequired(false);
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       _recordingTelemetry.failStart(failureClass: 'permission_denied');
@@ -1857,6 +1859,7 @@ class CaptureController extends ChangeNotifier
       Logger.error('[CaptureProvider] phone mic start failed: $e\n$st');
       _activeSource = null;
       _phoneMicWalActive = false;
+      await _setCaptureForegroundRequired(false);
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       await _socket?.stop(reason: 'phone mic start failed');
@@ -1865,6 +1868,7 @@ class CaptureController extends ChangeNotifier
   }
 
   stopStreamRecording({String reason = 'user_stopped'}) async {
+    await _setCaptureForegroundRequired(false);
     // Batch (Transcribe Later) phone-mic session: no WAL flush or socket to
     // close. Native stop() finalizes the current .bin before it resolves; the
     // recordings list refreshes from onBatchRecordingFinalized.
@@ -1916,6 +1920,7 @@ class CaptureController extends ChangeNotifier
         await _microphonePermissionRequester?.call() ?? (await Permission.microphone.request()).isGranted;
     if (!micPermissionGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic batch');
+      await _setCaptureForegroundRequired(false);
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       _recordingTelemetry.failStart(failureClass: 'permission_denied');
@@ -2552,11 +2557,11 @@ class CaptureController extends ChangeNotifier
     if (!_captureSessionIsCurrent(token)) return;
     final owner = _sessionOwner;
     if (owner != null) {
-      await owner.wakeIfCurrent(token!, WakeTrigger.cooldownElapsed);
+      await owner.requestRecovery(WakeTrigger.cooldownElapsed);
       return;
     }
-    // The stamped conversation id stays on the WAL; the single transfer owner
-    // will reconcile first and then offer retryable bytes through `syncAll`.
+    // Staged default constructor still has no owner; C2's five wake sites and
+    // Home FGS remain until those cuts. Do not claim sole recovery ownership.
     await RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed);
   }
 
