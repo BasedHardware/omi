@@ -602,56 +602,53 @@ def codegen(app_dir: Path, arb_dir: Path, expect_key: str | None) -> None:
 
 
 def codegen_freshness(app_dir: Path, arb_dir: Path) -> None:
+    """Re-run gen-l10n in place and restore. Alternate output-dir paths rewrite the
+    import comment in app_localizations.dart, so a temp dir is not a valid compare.
+    """
     require_package_config(app_dir)
-    yaml_path = app_dir / "l10n.yaml"
-    original = yaml_path.read_text(encoding="utf-8")
-    with tempfile.TemporaryDirectory(prefix="omi-l10n-out-") as tmp:
-        output_dir = Path(tmp)
-        lines: list[str] = []
-        replaced = False
-        for line in original.splitlines(True):
-            if line.lstrip().startswith("output-dir:"):
-                lines.append(f"output-dir: {output_dir}\n")
-                replaced = True
-            else:
-                lines.append(line)
-        if not replaced:
-            lines.append(f"output-dir: {output_dir}\n")
-        yaml_path.write_text("".join(lines), encoding="utf-8")
-        try:
-            result = subprocess.run(
-                [_flutter(), "gen-l10n"],
-                cwd=app_dir,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        finally:
-            yaml_path.write_text(original, encoding="utf-8")
+    before = generated_dart_files(arb_dir)
+    originals = {path: path.read_text(encoding="utf-8") for path in before}
+    before_names = {p.name for p in before}
+    try:
+        result = subprocess.run(
+            [_flutter(), "gen-l10n"],
+            cwd=app_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if result.returncode != 0:
             raise L10nError(f"flutter gen-l10n failed during check:\n{result.stderr or result.stdout}")
-        generated = generated_dart_files(arb_dir)
-        names = {p.name for p in generated}
-        produced = sorted(p for p in output_dir.glob("app_localizations*.dart") if p.is_file())
-        produced_names = {p.name for p in produced}
-        missing = produced_names - names
-        extra = names - produced_names
+        after = generated_dart_files(arb_dir)
+        run_dart_format(app_dir, after)
+        after = generated_dart_files(arb_dir)
+        after_names = {p.name for p in after}
+        missing = after_names - before_names
+        extra = before_names - after_names
         if missing or extra:
             raise L10nError(
                 "generated Dart set does not match gen-l10n output "
                 f"(missing {sorted(missing) or '-'}, extra {sorted(extra) or '-'})"
             )
-        diffs: list[str] = []
-        for path in produced:
-            committed = arb_dir / path.name
-            if committed.read_text(encoding="utf-8") != path.read_text(encoding="utf-8"):
-                diffs.append(path.name)
+        diffs = [
+            path.name
+            for path in after
+            if originals[path] != path.read_text(encoding="utf-8")
+        ]
         if diffs:
             raise L10nError(
                 "generated localization Dart is stale; run from app/: "
                 f"flutter gen-l10n && dart format --line-length 120 lib/l10n/app_localizations*.dart\n"
                 f"  drifted: {', '.join(diffs[:12])}{'…' if len(diffs) > 12 else ''}"
             )
+    finally:
+        restore_texts(originals)
+        for path in generated_dart_files(arb_dir):
+            if path not in originals:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
 
 
 # --- commands --------------------------------------------------------------
