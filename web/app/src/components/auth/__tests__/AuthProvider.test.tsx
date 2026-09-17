@@ -65,8 +65,8 @@ vi.mock('firebase/messaging', () => ({
   isSupported: async () => false,
 }));
 
-vi.mock('@/lib/analytics/mixpanel', () => ({
-  MixpanelManager: {
+vi.mock('@/lib/analytics/posthog', () => ({
+  PostHogManager: {
     init: vi.fn(),
     identify: vi.fn(),
     track: vi.fn(),

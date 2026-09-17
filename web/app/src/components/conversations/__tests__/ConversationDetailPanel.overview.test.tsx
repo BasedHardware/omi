@@ -22,8 +22,8 @@ vi.mock('@/hooks/useScreenFrames', () => ({
     setSharingEnabled: vi.fn(),
   }),
 }));
-vi.mock('@/lib/analytics/mixpanel', () => ({
-  MixpanelManager: { track: vi.fn() },
+vi.mock('@/lib/analytics/posthog', () => ({
+  PostHogManager: { track: vi.fn() },
 }));
 vi.mock('@/lib/api', () => ({
   precacheConversationAudio: vi.fn(),

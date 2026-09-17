@@ -2,12 +2,12 @@
 
 import { useEffect } from 'react';
 import { SettingsPage } from '@/components/settings/SettingsPage';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function Settings() {
   useEffect(() => {
-    MixpanelManager.pageView('Settings');
+    PostHogManager.pageView('Settings');
   }, []);
 
   return (
