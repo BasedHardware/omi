@@ -5,9 +5,12 @@ This app gives Omi users a small set of read-only food lookup tools backed by
 the public Open Food Facts API.
 """
 
+import math
 import os
 import re
+import unicodedata
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import requests
 from fastapi import FastAPI, Request
@@ -52,8 +55,8 @@ class ChatToolResponse(BaseModel):
 
 
 app = FastAPI(
-    title="Open Food Facts Omi Integration",
-    description="Food, nutrition, Nutri-Score, allergen, and barcode lookup tools for Omi.",
+    title="Omi Open Food Facts App",
+    description="Food lookup, allergen check, and nutrition comparison tools for Omi.",
     version="1.0.0",
 )
 
@@ -66,17 +69,69 @@ def _headers() -> Dict[str, str]:
 
 
 def _safe_int(value: Any, default: int, minimum: int = 1, maximum: int = 10) -> int:
+    if value is None or isinstance(value, bool):
+        return default
     try:
-        number = int(value)
-    except (TypeError, ValueError):
+        f_val = float(str(value).strip())
+        if not math.isfinite(f_val):
+            return default
+        number = int(f_val)
+    except (TypeError, ValueError, OverflowError):
         return default
     return max(minimum, min(maximum, number))
+
+
+def _normalize_term(text: Any) -> str:
+    """Normalize Unicode, treat zero-width formatting as whitespace, collapse spaces and casefold."""
+    if text is None:
+        return ""
+    norm = unicodedata.normalize("NFKC", str(text))
+    norm = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', ' ', norm)
+    return re.sub(r'\s+', ' ', norm).strip().casefold()
+
+
+def sanitize_barcode(raw: Any) -> Optional[str]:
+    """Sanitize and validate barcode, extracting from URLs or formatted inputs."""
+    if raw is None or isinstance(raw, bool) or not isinstance(raw, (str, int)):
+        return None
+    val = str(raw).strip().strip("`'\"<>[]()")
+    if not val:
+        return None
+
+    is_url = "openfoodfacts.org" in val or val.startswith(("http://", "https://"))
+    if is_url:
+        try:
+            path_part = urlsplit(val).path.rstrip("/")
+            if path_part:
+                val = path_part.split("/")[-1]
+        except Exception:
+            pass
+
+    # Strip prefixes like 'barcode:', 'ean:', 'upc:', 'code:', '#'
+    lower_val = val.lower()
+    for prefix in ("barcode:", "barcode/", "ean:", "upc:", "gtin:", "code:", "#"):
+        if lower_val.startswith(prefix):
+            val = val[len(prefix):].strip()
+            break
+
+    # If extracted from a URL slug like 3017666510800-product-name, barcode is the leading segment
+    if is_url and "-" in val:
+        first_segment = val.split("-")[0].strip()
+        if first_segment.isdigit() and 4 <= len(first_segment) <= 18:
+            return first_segment
+
+    # Clean allowed internal separators (spaces or hyphens in formatted GTINs)
+    cleaned_val = val.replace(" ", "").replace("-", "")
+    if cleaned_val.isdigit() and 4 <= len(cleaned_val) <= 18:
+        return cleaned_val
+    return None
 
 
 def _normalize_tag(tag: str) -> str:
     if not isinstance(tag, str):
         return ""
-    return tag.split(":", 1)[-1].replace("-", " ").strip()
+    cleaned = tag.split(":", 1)[-1].replace("-", " ")
+    return _normalize_term(cleaned)
 
 
 def _normalize_tags(tags: Any) -> List[str]:
@@ -111,27 +166,38 @@ def _nutrient(product: Dict[str, Any], key: str) -> Optional[Any]:
     Unsuffixed nutriment keys depend on nutrition_data_per (often serving).
     Falling back to them and labeling the result per_100g is wrong.
     """
-    nutriments = product.get("nutriments") or {}
+    nutriments = product.get("nutriments")
+    if not isinstance(nutriments, dict):
+        return None
     per_100g_key = f"{key}_100g"
-    if per_100g_key in nutriments:
-        return nutriments[per_100g_key]
-    return None
+    return nutriments.get(per_100g_key)
 
 
 def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(product, dict):
+        product = {}
+    raw_name = product.get("product_name") or product.get("generic_name") or "Unknown product"
+    name = str(raw_name) if raw_name else "Unknown product"
+    nutri_raw = product.get("nutriscore_grade")
+    nutri_score = nutri_raw.upper() if isinstance(nutri_raw, str) and nutri_raw else None
+    eco_raw = product.get("ecoscore_grade")
+    eco_score = eco_raw.upper() if isinstance(eco_raw, str) and eco_raw else None
+    raw_ingredients = product.get("ingredients_text")
+    ingredients = str(raw_ingredients) if isinstance(raw_ingredients, str) else ""
+
     return {
-        "barcode": product.get("code") or "",
-        "name": product.get("product_name") or product.get("generic_name") or "Unknown product",
-        "brands": product.get("brands") or "",
-        "quantity": product.get("quantity") or "",
-        "nutri_score": (product.get("nutriscore_grade") or "").upper() or None,
+        "barcode": str(product.get("code") or ""),
+        "name": name,
+        "brands": str(product.get("brands") or ""),
+        "quantity": str(product.get("quantity") or ""),
+        "nutri_score": nutri_score,
         "nova_group": product.get("nova_group"),
-        "eco_score": (product.get("ecoscore_grade") or "").upper() or None,
+        "eco_score": eco_score,
         "allergens": _normalize_tags(product.get("allergens_tags")),
         "traces": _normalize_tags(product.get("traces_tags")),
         "labels": _normalize_tags(product.get("labels_tags"))[:12],
         "categories": _normalize_tags(product.get("categories_tags"))[:12],
-        "ingredients": product.get("ingredients_text") or "",
+        "ingredients": ingredients,
         "nutrition_per_100g": {
             "energy_kcal": _nutrient(product, "energy-kcal"),
             "fat_g": _nutrient(product, "fat"),
@@ -142,7 +208,7 @@ def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
             "proteins_g": _nutrient(product, "proteins"),
             "salt_g": _nutrient(product, "salt"),
         },
-        "image_url": product.get("image_front_small_url") or "",
+        "image_url": str(product.get("image_front_small_url") or ""),
         "data_note": "Open Food Facts data is community contributed and can be incomplete.",
     }
 
@@ -155,10 +221,12 @@ def _openfoodfacts_get(path: str, params: Optional[Dict[str, Any]] = None) -> Di
             headers=_headers(),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
+        if response.status_code == 404:
+            return {"not_found": True, "status_code": 404}
         response.raise_for_status()
         return response.json()
-    except requests.RequestException as exc:
-        return {"error": f"Open Food Facts request failed: {exc}"}
+    except requests.RequestException:
+        return {"error": "Open Food Facts request failed"}
     except ValueError:
         return {"error": "Open Food Facts returned a non-JSON response"}
 
@@ -169,10 +237,10 @@ async def _openfoodfacts_get_async(
     return await run_in_threadpool(_openfoodfacts_get, path, params)
 
 
-async def _lookup_barcode(barcode: str) -> Dict[str, Any]:
-    cleaned = "".join(char for char in str(barcode or "") if char.isdigit())
+async def _lookup_barcode(barcode: Any) -> Dict[str, Any]:
+    cleaned = sanitize_barcode(barcode)
     if not cleaned:
-        return {"error": "barcode is required"}
+        return {"error": "valid barcode is required"}
 
     payload = await _openfoodfacts_get_async(
         f"/api/v2/product/{cleaned}.json",
@@ -180,7 +248,7 @@ async def _lookup_barcode(barcode: str) -> Dict[str, Any]:
     )
     if "error" in payload:
         return payload
-    if payload.get("status") == 0 or not payload.get("product"):
+    if payload.get("not_found") or payload.get("status") == 0 or not payload.get("product"):
         return {"error": f"no product found for barcode {cleaned}"}
     return {"product": _summarize_product(payload["product"])}
 
@@ -215,14 +283,18 @@ async def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
 
 
 async def _collect_foods_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
-    barcodes = body.get("barcodes") or []
+    barcodes = body.get("barcodes")
     if not isinstance(barcodes, list):
         return {"error": "barcodes must be a list"}
 
     products = []
     errors = []
     for barcode in barcodes[:5]:
-        result = await _lookup_barcode(str(barcode))
+        b = sanitize_barcode(barcode)
+        if not b:
+            errors.append({"barcode": barcode, "error": "valid barcode is required"})
+            continue
+        result = await _lookup_barcode(b)
         if "product" in result:
             products.append(result["product"])
         else:
@@ -233,21 +305,61 @@ async def _collect_foods_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
     return {"products": products, "errors": errors}
 
 
+def _term_variants(term: str) -> List[str]:
+    norm_term = _normalize_term(term)
+    if not norm_term:
+        return []
+    variants = {norm_term}
+    if norm_term.endswith("ies") and len(norm_term) > 3:
+        variants.add(norm_term[:-3] + "y")
+    if norm_term.endswith("es") and len(norm_term) > 3:
+        variants.add(norm_term[:-2])  # e.g. peaches -> peach, boxes -> box
+        variants.add(norm_term[:-1])  # e.g. apples -> apple, grapes -> grape
+    elif norm_term.endswith("s") and len(norm_term) > 2:
+        variants.add(norm_term[:-1])  # e.g. peanuts -> peanut
+    else:
+        variants.add(norm_term + "s")
+        variants.add(norm_term + "es")
+    return [v for v in variants if v]
+
+
 def _ingredient_mentions_term(ingredients: str, term: str) -> bool:
-    term = str(term or "").lower().strip()
-    if not term:
+    norm_term = _normalize_term(term)
+    if not norm_term:
         return False
 
-    normalized = ingredients.lower()
-    pattern = re.compile(rf"(?<![a-z]){re.escape(term)}(?![a-z])")
-    for match in pattern.finditer(normalized):
-        after = normalized[match.end() : match.end() + 8]
-        before = normalized[max(0, match.start() - 8) : match.start()]
-        if after.startswith("-free") or after.startswith(" free"):
-            continue
-        if before.endswith("no ") or before.endswith("non-"):
-            continue
-        return True
+    norm_ingredients = _normalize_term(ingredients)
+    if not norm_ingredients:
+        return False
+
+    # Non-spaced CJK script support (Chinese, Japanese, Korean)
+    is_cjk = bool(re.search(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', norm_term))
+    if is_cjk:
+        pattern = re.compile(re.escape(norm_term))
+        neg_prefixes = ("无", "不含", "零", "免", "不包括")
+        for match in pattern.finditer(norm_ingredients):
+            start = match.start()
+            prefix_window = norm_ingredients[max(0, start - 4) : start]
+            if any(prefix_window.endswith(neg) for neg in neg_prefixes):
+                continue
+            return True
+        return False
+
+    # Unicode word-boundary pattern supporting accented characters (e.g. blé, lait, nüsse)
+    # Support common singular/plural variants for Latin-script terms (e.g. peanut <-> peanuts)
+    variants = _term_variants(norm_term)
+
+    for v in variants:
+        pattern = re.compile(rf"(?<!\w){re.escape(v)}(?!\w)")
+        for match in pattern.finditer(norm_ingredients):
+            start, end = match.start(), match.end()
+            after = norm_ingredients[end : min(len(norm_ingredients), end + 10)]
+            before = norm_ingredients[max(0, start - 12) : start]
+            if after.startswith(("-free", " free", "-less")):
+                continue
+            if before.endswith(("no ", "non-", "free of ", "free from ", "without ")):
+                continue
+            return True
     return False
 
 
@@ -444,18 +556,24 @@ async def tool_check_allergens(request: Request):
             )
         product = products[0]
 
-    avoid_terms = {str(item).lower().strip() for item in avoid if str(item).strip()}
-    known_allergens = {item.lower() for item in product.get("allergens", [])}
-    traces = {item.lower() for item in product.get("traces", [])}
-    ingredients = (product.get("ingredients") or "").lower()
+    avoid_terms = {_normalize_term(item) for item in avoid if _normalize_term(item)}
+    if not avoid_terms:
+        return ChatToolResponse(
+            success=False,
+            message="avoid must contain valid terms",
+            data={"error": "avoid must contain valid terms"},
+        )
+    known_allergens = {_normalize_term(item) for item in product.get("allergens", [])}
+    traces = {_normalize_term(item) for item in product.get("traces", [])}
+    ingredients = product.get("ingredients") or ""
 
-    matches = sorted(
-        term
-        for term in avoid_terms
-        if term in known_allergens
-        or term in traces
-        or _ingredient_mentions_term(ingredients, term)
-    )
+    def _matches_term(term: str) -> bool:
+        term_vars = set(_term_variants(term))
+        if any(v in known_allergens or v in traces for v in term_vars):
+            return True
+        return _ingredient_mentions_term(ingredients, term)
+
+    matches = sorted(term for term in avoid_terms if _matches_term(term))
 
     data = {
         "product": product,
