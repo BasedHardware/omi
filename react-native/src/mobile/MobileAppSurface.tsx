@@ -163,9 +163,10 @@ export function MobileAppSurface({
   );
 
   const rows = useMemo<HomeRow[]>(() => {
-    const next: HomeRow[] = [{kind: 'tasks', key: 'tasks'}];
+    const next: HomeRow[] = [];
     if (timelineStatus !== 'ready' || timelineItems.length === 0) {
       next.push({kind: 'day', key: 'timeline-state', label: '', items: []});
+      next.push({kind: 'tasks', key: 'tasks'});
       return next;
     }
     const groups = new Map<string, MixedTimelineItem[]>();
@@ -187,6 +188,9 @@ export function MobileAppSurface({
     for (const [label, items] of groups) {
       next.push({kind: 'day', key: `day:${label}`, label, items});
     }
+    if (![...groups.keys()].includes('Today')) {
+      next.unshift({kind: 'tasks', key: 'tasks'});
+    }
     return next;
   }, [
     timelineItems,
@@ -200,27 +204,25 @@ export function MobileAppSurface({
         const openTasks = tasks.filter(task => !task.completed);
         return (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Action items</Text>
             {taskFeedback}
             {taskStatus === 'ready' ? (
               openTasks.length === 0 ? (
                 <TimelineStatePanel noun="action items" status="empty" />
               ) : (
-                <View style={styles.taskCard}>
-                  {openTasks.slice(0, 5).map(task => (
-                    <TimelineTaskRow
-                      key={task.id}
-                      onToggle={writesAvailable ? onTaskToggle : undefined}
-                      onEdit={
-                        writesAvailable && onTaskEdit
-                          ? setSelectedTaskId
-                          : undefined
-                      }
-                      busy={busyTaskId !== null}
-                      task={task}
-                    />
-                  ))}
-                </View>
+                openTasks.slice(0, 5).map((task, index) => (
+                  <TimelineTaskRow
+                    key={task.id}
+                    onToggle={writesAvailable ? onTaskToggle : undefined}
+                    onEdit={
+                      writesAvailable && onTaskEdit
+                        ? setSelectedTaskId
+                        : undefined
+                    }
+                    busy={busyTaskId !== null}
+                    last={index === openTasks.slice(0, 5).length - 1}
+                    task={task}
+                  />
+                ))
               )
             ) : (
               <TimelineStatePanel noun="action items" status={taskStatus} />
@@ -237,10 +239,39 @@ export function MobileAppSurface({
       return (
         <View style={styles.section}>
           <Text style={styles.dayLabel}>{item.label}</Text>
-          {item.items.map(event => (
+          {item.label === 'Today' ? (
+            <>
+              {taskFeedback}
+              {taskStatus === 'ready'
+                ? tasks
+                    .filter(task => !task.completed)
+                    .slice(0, 5)
+                    .map(task => (
+                      <TimelineTaskRow
+                        key={task.id}
+                        onToggle={writesAvailable ? onTaskToggle : undefined}
+                        onEdit={
+                          writesAvailable && onTaskEdit
+                            ? setSelectedTaskId
+                            : undefined
+                        }
+                        busy={busyTaskId !== null}
+                        task={task}
+                      />
+                    ))
+                : (
+                    <TimelineStatePanel
+                      noun="action items"
+                      status={taskStatus}
+                    />
+                  )}
+            </>
+          ) : null}
+          {item.items.map((event, index) => (
             <TimelineEventRow
               key={`${event.kind}:${event.id}`}
               item={event}
+              last={index === item.items.length - 1}
               onPress={onOpenTimelineItem}
             />
           ))}
@@ -463,8 +494,8 @@ const styles = StyleSheet.create({
     width: 48,
   },
   content: {
-    gap: 10,
-    paddingBottom: 12,
+    gap: 16,
+    paddingBottom: 28,
     paddingHorizontal: mobileSpace.md,
     paddingTop: 8,
   },
@@ -486,24 +517,11 @@ const styles = StyleSheet.create({
     width: 8,
   },
   captureDotPaused: {backgroundColor: mobileColor.textSubtle},
-  section: {gap: mobileSpace.sm},
-  sectionTitle: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '600',
-    color: mobileColor.text,
-  },
+  section: {gap: 2},
   dayLabel: {
     ...mobileType.caption,
     color: mobileColor.textMuted,
-  },
-  taskCard: {
-    backgroundColor: mobileColor.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.lg,
-    paddingHorizontal: mobileSpace.md,
-    paddingVertical: mobileSpace.sm,
+    marginBottom: 6,
   },
   secondaryList: {
     flexGrow: 1,

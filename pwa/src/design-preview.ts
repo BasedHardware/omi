@@ -83,6 +83,19 @@ const page: ReadPageState = {
   completenessStatus: "complete",
   reasons: [],
 };
+const exampleNow = Date.now();
+const exampleToday = (hour: number, minute: number) => {
+  const date = new Date(exampleNow);
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
+};
+const exampleYesterday = (hour: number, minute: number) => {
+  const date = new Date(exampleNow);
+  date.setDate(date.getDate() - 1);
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
+};
+
 // Explicitly labelled, local-only fixtures for populated/empty layout review.
 const exampleOutcomes: DesktopReadOutcomes = {
   conversations: {
@@ -92,25 +105,39 @@ const exampleOutcomes: DesktopReadOutcomes = {
         example === "empty"
           ? []
           : [
-              "A thoughtful start to the week",
-              "Planning a quieter workspace",
-            ].map((title, index) => ({
-              kind: "conversation",
+              {
+                title: "Product standup",
+                summary: "Q3 goals, hiring, and the next release.",
+                startedAt: exampleToday(10, 24),
+                finishedAt: exampleToday(10, 48),
+              },
+              {
+                title: "Chat with Alex",
+                summary: "Aligned on GTM and the quieter workspace plan.",
+                startedAt: exampleToday(8, 41),
+                finishedAt: exampleToday(9, 5),
+              },
+              {
+                title: "1:1 with Taylor",
+                summary: "Career growth, next steps, and time to think.",
+                startedAt: exampleYesterday(16, 36),
+                finishedAt: exampleYesterday(17, 2),
+                starred: true,
+              },
+            ].map((item, index) => ({
+              kind: "conversation" as const,
               id: `preview-conversation-${index}`,
-              title,
-              summary:
-                index === 0
-                  ? "A few ideas, a clear next step, and time to think."
-                  : "Less visual noise. More room for the work that matters.",
-              searchableText: title,
-              createdAt: "2026-09-17T10:00:00Z",
-              updatedAt: "2026-09-17T10:30:00Z",
-              startedAt: "2026-09-17T10:00:00Z",
-              finishedAt: "2026-09-17T10:30:00Z",
-              starred: index === 1,
+              title: item.title,
+              summary: item.summary,
+              searchableText: `${item.title} ${item.summary}`,
+              createdAt: item.startedAt,
+              updatedAt: item.finishedAt,
+              startedAt: item.startedAt,
+              finishedAt: item.finishedAt,
+              starred: "starred" in item ? item.starred === true : false,
               status: "completed",
               source: "desktop",
-              visibility: "private",
+              visibility: "private" as const,
               folderId: null,
               locked: false,
               discarded: false,
@@ -375,11 +402,31 @@ function Preview() {
                       {
                         kind: "recall" as const,
                         id: "preview-recall-1",
-                        appName: "Notes",
-                        windowTitle: "Example screen history",
-                        searchableText: "Notes Example screen history",
-                        atMs: Date.parse("2026-09-17T09:12:00Z"),
+                        appName: "Figma",
+                        windowTitle: "Viewed roadmap designs",
+                        searchableText: "Figma roadmap designs",
+                        atMs: Date.parse(exampleToday(9, 12)),
                         source: "captured" as const,
+                        local: true,
+                      },
+                      {
+                        kind: "recall" as const,
+                        id: "preview-recall-2",
+                        appName: "Slack",
+                        windowTitle: "Viewed team updates",
+                        searchableText: "Slack team updates",
+                        atMs: Date.parse(exampleToday(8, 3)),
+                        source: "captured" as const,
+                        local: true,
+                      },
+                      {
+                        kind: "recall" as const,
+                        id: "preview-recall-3",
+                        appName: "Chrome",
+                        windowTitle: "Read competitor analysis",
+                        searchableText: "Chrome competitor analysis",
+                        atMs: Date.parse(exampleYesterday(14, 17)),
+                        source: "shipping" as const,
                         local: true,
                       },
                     ]

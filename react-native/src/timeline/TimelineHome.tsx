@@ -64,19 +64,31 @@ export function TimelineStatePanel({
   );
 }
 
+function TimelineRail({last}: {last?: boolean}) {
+  return (
+    <View style={styles.rail} pointerEvents="none">
+      <View style={styles.dot} />
+      {last ? null : <View style={styles.line} />}
+    </View>
+  );
+}
+
 export const TimelineTaskRow = memo(function TimelineTaskRow({
   task,
   onToggle,
   onEdit,
   busy,
+  last = false,
 }: {
   task: TimelineTask;
   onToggle?: (id: string) => void;
   onEdit?: (id: string) => void;
   busy: boolean;
+  last?: boolean;
 }) {
   return (
     <View style={styles.taskRow}>
+      <TimelineRail last={last} />
       <Pressable
         accessibilityLabel={`${
           onToggle
@@ -130,9 +142,11 @@ function timeLabel(atMs: number | null): string {
 export const TimelineEventRow = memo(function TimelineEventRow({
   item,
   onPress,
+  last = false,
 }: {
   item: MixedTimelineItem;
   onPress?: (item: MixedTimelineItem) => void;
+  last?: boolean;
 }) {
   const kind = item.kind === 'conversation' ? 'Conversation' : 'Recall';
   const title =
@@ -149,8 +163,9 @@ export const TimelineEventRow = memo(function TimelineEventRow({
       disabled={onPress === undefined}
       onPress={() => onPress?.(item)}
       style={styles.eventRow}>
+      <TimelineRail last={last} />
       <View style={styles.eventGlyph}>
-        <Icon color={mobileColor.text} size={16} />
+        <Icon color={mobileColor.textMuted} size={16} />
       </View>
       <View style={styles.eventBody}>
         <View style={styles.eventMeta}>
@@ -211,10 +226,11 @@ export function TimelineSections({
       {groups.map(group => (
         <View key={group.label} style={styles.day}>
           <Text style={styles.dayLabel}>{group.label}</Text>
-          {group.items.map(item => (
+          {group.items.map((item, index) => (
             <TimelineEventRow
               key={`${item.kind}:${item.id}`}
               item={item}
+              last={index === group.items.length - 1}
               onPress={onOpenItem}
             />
           ))}
@@ -240,14 +256,30 @@ const styles = StyleSheet.create({
     color: mobileColor.textMuted,
     textAlign: 'center',
   },
-  taskRow: {
+  rail: {
     alignItems: 'center',
+    alignSelf: 'stretch',
+    width: 16,
+  },
+  dot: {
+    backgroundColor: mobileColor.text,
+    borderRadius: 4,
+    height: 8,
+    marginTop: 8,
+    width: 8,
+  },
+  line: {
+    backgroundColor: mobileColor.border,
+    flex: 1,
+    marginTop: 4,
+    width: StyleSheet.hairlineWidth,
+  },
+  taskRow: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: mobileSpace.sm,
+    gap: 8,
     minHeight: 44,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: mobileColor.border,
+    paddingBottom: 4,
   },
   taskToggle: {
     flex: 1,
@@ -285,23 +317,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   eventRow: {
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: mobileSpace.sm,
-    minHeight: 56,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: 8,
+    minHeight: 52,
+    paddingBottom: 12,
   },
   eventGlyph: {
     alignItems: 'center',
-    backgroundColor: mobileColor.surfaceRaised,
-    borderRadius: 16,
-    height: 32,
+    height: 24,
     justifyContent: 'center',
-    width: 32,
+    marginTop: 2,
+    width: 24,
   },
   eventBody: {flex: 1, gap: 4, minWidth: 0},
   eventMeta: {

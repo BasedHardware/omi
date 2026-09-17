@@ -75,7 +75,7 @@ function buildProps(
         title: 'Product standup',
         summary: 'Discussed next steps',
         searchableText: 'Product standup Discussed next steps',
-        atMs: Date.parse('2026-09-17T10:24:00Z'),
+        atMs: Date.now(),
       },
     ],
     recall: [
@@ -85,7 +85,7 @@ function buildProps(
         appName: 'Figma',
         windowTitle: 'Roadmap',
         searchableText: 'Figma Roadmap',
-        atMs: Date.parse('2026-09-17T09:12:00Z'),
+        atMs: Date.now() - 72 * 60 * 1000,
         source: 'captured',
         local: true,
       },
@@ -136,7 +136,8 @@ describe('MobileAppSurface', () => {
     expect(tree).toContain('Omi');
     expect(tree).toContain('Open Omi device');
     expect(tree).toContain('Settings');
-    expect(tree).toContain('Action items');
+    expect(tree).not.toContain('Action items');
+    expect(tree).toContain('Today');
     expect(tree).toContain('Prepare product demo');
     expect(tree).toContain('Product standup');
     expect(tree).toContain('Figma');
