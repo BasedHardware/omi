@@ -36,6 +36,7 @@ if $RUN_UNIT; then
     cd "$APP_DIR"
     bash scripts/validate_mobile_build_config_test.sh
     bash scripts/mobile_build_wrapper_test.sh
+    bash scripts/build_provenance_dart_defines_test.sh
     flutter test
     echo ""
 fi
