@@ -40,9 +40,11 @@ Maintainers declining a PR for direction or taste will cite an invariant ID or o
 
 The [typed API result contract](https://github.com/BasedHardware/Omi/blob/main/app/lib/backend/http/API_RESULTS.md)
 keeps transport/auth failures distinct from empty data and defines locked and
-terminal outcomes. Migrate one API file and its consumers at a time; new nullable
-HTTP calls or null-swallowing patterns fail the changed-file ratchet. The protected
-contracts run in `TZ=UTC bash app/test.sh`, using synthetic loopback fixtures.
+terminal outcomes. Migrate endpoint families with their direct consumers; batch
+small files and split large ones. Declare completed file/rule adoption in
+`app/contracts/api-result/boundary-baseline.json`. Only adopted files and new files
+are constrained; ordinary legacy-file growth stays unblocked. Protected contracts
+run in `TZ=UTC bash app/test.sh`, using synthetic loopback fixtures.
 
 ## Pull Request Quality
 
