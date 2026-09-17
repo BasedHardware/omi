@@ -75,7 +75,9 @@ Evidence: recovery `edc8683e80`, `97ec3d9cea`; FGS `9495f70852`; stale callbacks
    they cannot prove transitive ownership or replace behavioral tests.
 9. **Dispose/tests.** Each owner has CaptureLifetime. Register timers, subscriptions,
    listeners and late acquisitions immediately. Close invalidates first, cancels
-   everything even if removal fails, and is idempotent. Scheduler-wide inventory
+   everything even if removal fails; concurrent closes join the drain. Terminal
+   resources untrack, including asFuture; replacement/error/done callbacks stay
+   closed-guarded. Later close is inert. Scheduler-wide inventory
    must be empty after teardown; tests exercise real provider behavior plus an
    isolated constructor with no plugin/global setup. One prepareCurrent primitive
    test is sufficient; codec/auth/location/persistence use distinct production tests.
