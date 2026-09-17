@@ -171,6 +171,20 @@ function presentNullableMap(value: unknown): void {
   object(value);
 }
 
+function presentUnusedStringListItems(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new AppError();
+    }
+  }
+}
+
 export type OmiAppChrome = {
   name: string;
   description?: string;
@@ -222,6 +236,10 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   presentChatTools(row.chat_tools);
   presentNullableMap(row.proactive_notification);
   presentNullableMap(row.twitter);
+  presentUnusedStringListItems(row.capabilities);
+  presentUnusedStringListItems(row.connected_accounts);
+  presentUnusedStringListItems(row.thumbnail_urls);
+  presentUnusedStringListItems(row.thumbnails);
   presentNullableString(row.image);
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
   if (row.description === undefined || row.description === null) {

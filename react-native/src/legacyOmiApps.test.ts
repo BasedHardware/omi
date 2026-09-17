@@ -630,6 +630,90 @@ test('old apps name Flutter App.fromGenerated type-wrong GET chat_tools item ins
   }
 });
 
+test('old apps name Flutter App.fromGenerated type-wrong GET capabilities item instead of remapping to a catalog name', () => {
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        capabilities: ['chat'],
+        connected_accounts: ['google'],
+        thumbnail_urls: ['https://cdn.example.test/notes.png'],
+        thumbnails: ['notes'],
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        capabilities: 1,
+        connected_accounts: 1,
+        thumbnail_urls: 1,
+        thumbnails: 1,
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        capabilities: null,
+        connected_accounts: null,
+        thumbnail_urls: [],
+        thumbnails: [],
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  for (const extra of [1, true, []]) {
+    expect(() =>
+      parseOmiApp(
+        JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          capabilities: [extra],
+        }),
+        'notes',
+      ),
+    ).toThrow('Omi app is malformed');
+    expect(() =>
+      parseOmiApp(
+        JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          connected_accounts: [extra],
+        }),
+        'notes',
+      ),
+    ).toThrow('Omi app is malformed');
+    expect(() =>
+      parseOmiApp(
+        JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          thumbnail_urls: [extra],
+        }),
+        'notes',
+      ),
+    ).toThrow('Omi app is malformed');
+    expect(() =>
+      parseOmiApp(
+        JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          thumbnails: [extra],
+        }),
+        'notes',
+      ),
+    ).toThrow('Omi app is malformed');
+  }
+});
+
 test('old apps name Flutter App.fromGenerated type-wrong GET webhook_url instead of remapping to a catalog name', () => {
   expect(
     parseOmiApp(
@@ -1490,6 +1574,32 @@ test('old apps name Flutter App.fromGenerated type-wrong GET chat_tools item ins
       id: 'notes',
       name: 'Notes',
       chat_tools: [1],
+    }),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  expect((await loadOmiApps(backend, ['notes'])).has('notes')).toBe(false);
+  const messages = await attachOmiChatAppNames(backend, [
+    {
+      id: 'ai-1',
+      text: 'Saved.',
+      sender: 'ai',
+      createdAt: 1,
+      generationOutcome: null,
+      appId: 'notes',
+    },
+  ]);
+  expect(messages[0]).toEqual(expect.objectContaining({appId: 'notes'}));
+  expect(messages[0]).not.toHaveProperty('appName');
+});
+
+test('old apps name Flutter App.fromGenerated type-wrong GET capabilities item instead of attaching a catalog name', async () => {
+  const request = jest.fn(async () => ({
+    id: 'app',
+    status: 200,
+    body: JSON.stringify({
+      id: 'notes',
+      name: 'Notes',
+      capabilities: [1],
     }),
   }));
   const backend = {request} as unknown as OmiBackend;
