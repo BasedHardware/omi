@@ -60,6 +60,20 @@ function presentDefaultInt(value: unknown): void {
   throw new PeopleError();
 }
 
+function presentUnusedStringListItems(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new PeopleError();
+    }
+  }
+}
+
 export function parseOmiPeopleNames(body: string): Map<string, string> {
   const rows = array(JSON.parse(body));
   const names = new Map<string, string>();
@@ -73,6 +87,8 @@ export function parseOmiPeopleNames(body: string): Map<string, string> {
     presentNullableDate(person.created_at);
     presentNullableDate(person.updated_at);
     presentDefaultInt(person.speech_samples_version);
+    presentUnusedStringListItems(person.speech_samples);
+    presentUnusedStringListItems(person.speech_sample_transcripts);
     names.set(id, name);
   }
   return names;

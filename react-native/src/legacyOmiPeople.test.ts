@@ -293,6 +293,103 @@ test('fails closed for malformed GET people', () => {
   ).toThrow();
 });
 
+test('old people names name Flutter Person.fromGenerated type-wrong GET speech_samples item instead of remapping to a person chip', () => {
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          speech_samples: ['sample.wav'],
+          speech_sample_transcripts: ['hello'],
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          speech_samples: 1,
+          speech_sample_transcripts: 1,
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          speech_samples: null,
+          speech_sample_transcripts: null,
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          speech_samples: [],
+          speech_sample_transcripts: [],
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  for (const extra of [1, true, []]) {
+    expect(() =>
+      parseOmiPeopleNames(
+        JSON.stringify([
+          {id: 'person-alex', name: 'Alex Chen', speech_samples: [extra]},
+          {id: 'person-kept', name: 'Neighbor'},
+        ]),
+      ),
+    ).toThrow('Omi people are malformed');
+    expect(() =>
+      parseOmiPeopleNames(
+        JSON.stringify([
+          {
+            id: 'person-alex',
+            name: 'Alex Chen',
+            speech_sample_transcripts: [extra],
+          },
+          {id: 'person-kept', name: 'Neighbor'},
+        ]),
+      ),
+    ).toThrow('Omi people are malformed');
+  }
+});
+
 test('loadOmiPeopleNames names resolved GET people and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'people',
@@ -343,6 +440,24 @@ test('old people names name Flutter Person.fromGenerated padded GET created_at i
         id: 'person-alex',
         name: 'Alex Chen',
         created_at: '  2026-09-07T00:00:00.000Z  ',
+      },
+    ]),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiPeopleNames(backend)).rejects.toThrow(
+    'Omi people are malformed',
+  );
+});
+
+test('old people names name Flutter Person.fromGenerated type-wrong GET speech_samples item instead of omitting People', async () => {
+  const request = jest.fn(async () => ({
+    id: 'people',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'person-alex',
+        name: 'Alex Chen',
+        speech_samples: [1],
       },
     ]),
   }));
