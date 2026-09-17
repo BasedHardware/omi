@@ -111,10 +111,7 @@ function presentObject(
   if (value === undefined || value === null) {
     return;
   }
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    return;
-  }
-  present(value as Record<string, unknown>);
+  present(object(value));
 }
 
 function presentObjectList(
