@@ -46,8 +46,11 @@ function optionalCount(value: unknown): number | undefined {
 }
 
 function createdAtMs(value: unknown): number | undefined {
-  if (value === undefined || value === null || typeof value !== 'string') {
+  if (value === undefined || value === null) {
     return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new ImportJobError();
   }
   const raw = text(value, 1_000_000);
   if (raw === '') {
@@ -241,12 +244,14 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
     const conversationsSkipped = optionalCount(row.conversations_skipped);
     const processedFiles = optionalCount(row.processed_files);
     const totalFiles = optionalCount(row.total_files);
-    const error =
-      row.error === undefined ||
-      row.error === null ||
-      typeof row.error !== 'string'
-        ? undefined
-        : text(row.error, 1_000_000);
+    let error: string | undefined;
+    if (row.error === undefined || row.error === null) {
+      error = undefined;
+    } else if (typeof row.error !== 'string') {
+      throw new ImportJobError();
+    } else {
+      error = text(row.error, 1_000_000);
+    }
     items.push({
       id,
       status,

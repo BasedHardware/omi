@@ -3749,6 +3749,47 @@ test('Settings names Flutter ImportHistoryPage padded GET created_at', async () 
   expect(tree).not.toContain('Start import');
 });
 
+test('Settings names Flutter ImportJobResponse.fromJson type-wrong GET created_at instead of remapping to a Completed chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/import/jobs?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            job_id: 'job-numeric-clock',
+            status: 'completed',
+            created_at: 1,
+            conversations_created: 3,
+          },
+          {
+            job_id: 'job-neighbor',
+            status: 'failed',
+            error: 'Zip could not be read.',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Import Data');
+  expect(tree).toContain('No imports yet');
+  expect(tree).not.toContain('Completed');
+  expect(tree).not.toContain('Failed');
+  expect(tree).not.toContain('Zip could not be read.');
+  expect(tree).not.toContain('3 conversations');
+  expect(tree).not.toContain('Limitless');
+  expect(tree).not.toContain('Start import');
+});
+
 test('Settings names Flutter ImportHistoryPage empty GET error without omitting Import Data', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

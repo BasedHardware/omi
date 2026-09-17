@@ -675,36 +675,59 @@ test('keeps GET import jobs when status exceeds 10000', () => {
   ]);
 });
 
-test('keeps GET import jobs when created_at is a non-string', () => {
+test('old import jobs name Flutter ImportJobResponse.fromJson type-wrong GET created_at instead of remapping to an Import Data chip', () => {
   expect(
     parseOmiImportJobs(
       JSON.stringify([
-        {job_id: 'job-numeric-clock', status: 'completed', created_at: 1},
         {
-          job_id: 'job-neighbor',
-          status: 'failed',
-          error: 'Zip could not be read.',
+          job_id: 'job-exact',
+          status: 'completed',
+          created_at: '2026-09-10T14:30:00.000Z',
         },
       ]),
     ),
   ).toEqual([
-    {id: 'job-numeric-clock', status: 'completed'},
-    {id: 'job-neighbor', status: 'failed', error: 'Zip could not be read.'},
+    {
+      id: 'job-exact',
+      status: 'completed',
+      createdAtMs: Date.parse('2026-09-10T14:30:00.000Z'),
+    },
   ]);
-});
-
-test('keeps GET import jobs when error is a non-string', () => {
   expect(
     parseOmiImportJobs(
       JSON.stringify([
-        {job_id: 'job-numeric-error', status: 'failed', error: 1},
-        {job_id: 'job-neighbor', status: 'completed'},
+        {job_id: 'job-omitted', status: 'completed'},
+        {job_id: 'job-null', status: 'completed', created_at: null},
       ]),
     ),
   ).toEqual([
-    {id: 'job-numeric-error', status: 'failed'},
-    {id: 'job-neighbor', status: 'completed'},
+    {id: 'job-omitted', status: 'completed'},
+    {id: 'job-null', status: 'completed'},
   ]);
+  for (const created_at of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiImportJobs(
+        JSON.stringify([
+          {job_id: 'job-numeric-clock', status: 'completed', created_at},
+          {
+            job_id: 'job-neighbor',
+            status: 'failed',
+            error: 'Zip could not be read.',
+          },
+        ]),
+      ),
+    ).toThrow('Omi import jobs are malformed');
+  }
+  for (const error of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiImportJobs(
+        JSON.stringify([
+          {job_id: 'job-numeric-error', status: 'failed', error},
+          {job_id: 'job-neighbor', status: 'completed'},
+        ]),
+      ),
+    ).toThrow('Omi import jobs are malformed');
+  }
 });
 
 test('fails closed for malformed GET import jobs', () => {
