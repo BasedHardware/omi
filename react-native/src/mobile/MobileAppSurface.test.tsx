@@ -3,6 +3,12 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
 import {TaskPagination} from '../ui/TaskPagination';
 
+jest.mock('../app/useReduceMotion', () => ({useReduceMotion: () => true}));
+jest.mock('../ui/OmiAvatar', () => ({
+  OmiAvatar: (props: object) =>
+    require('react').createElement('OmiAvatar', props),
+}));
+
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const component =
@@ -309,5 +315,45 @@ test('mobile waiting-for-audio state never claims Listening before the first pac
   );
   expect(renderedText(renderer)).toContain('Listening');
   expect(renderedText(renderer)).not.toContain('Waiting for audio');
+  act(() => renderer.unmount());
+});
+
+test('the mobile composer rejects blank taps and keyboard submits but accepts a draft', () => {
+  const onAskSubmit = jest.fn();
+  const props = buildProps({askValue: '  \n ', onAskSubmit});
+  const renderer = render(props);
+  const control = (label: string) =>
+    renderer.root.findAll(node => node.props.accessibilityLabel === label)[0];
+  expect(control('Send to Omi').props.disabled).toBe(true);
+  act(() => control('Send to Omi').props.onPress());
+  act(() => control('Ask Omi').props.onSubmitEditing());
+  expect(onAskSubmit).not.toHaveBeenCalled();
+  act(() =>
+    renderer.update(
+      <MobileAppSurface {...props} askValue="What did I decide today?" />,
+    ),
+  );
+  expect(control('Send to Omi').props.disabled).toBe(false);
+  act(() => control('Send to Omi').props.onPress());
+  act(() => control('Ask Omi').props.onSubmitEditing());
+  expect(onAskSubmit).toHaveBeenCalledTimes(2);
+  act(() => renderer.unmount());
+});
+
+test('the mobile greeting respects reduced motion without navigating or starting capture', () => {
+  const props = buildProps({capture: {active: false, transcript: ''}});
+  const renderer = render(props);
+  const mark = () => renderer.root.findByType('OmiAvatar' as any);
+  expect(mark().props.reduceMotion).toBe(true);
+  expect(mark().props.motionKey).toBe('0');
+  act(() =>
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Say hello to Omi')[0]
+      .props.onPress(),
+  );
+  expect(mark().props.motionKey).toBe('1');
+  expect(props.onRouteChange).not.toHaveBeenCalled();
+  expect(props.onOpenDevice).not.toHaveBeenCalled();
+  expect(renderedText(renderer)).toContain('Capture is paused');
   act(() => renderer.unmount());
 });
