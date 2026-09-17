@@ -81,10 +81,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get reprocessTranscription => 'Преработи транскрипција';
 
   @override
-  String get retranscribingConversation => 'Повторно транскрибирање на разговорот...\nОва може да потрае неколку секунди';
+  String get retranscribingConversation =>
+      'Повторно транскрибирање на разговорот...\nОва може да потрае неколку секунди';
 
   @override
-  String get errorReprocessingTranscription => 'Грешка при повторна обработка на транскрипцијата. Обидете се повторно подоцна.';
+  String get errorReprocessingTranscription =>
+      'Грешка при повторна обработка на транскрипцијата. Обидете се повторно подоцна.';
 
   @override
   String get errorNoStoredAudio => 'Нема зачувано аудио за овој разговор.';

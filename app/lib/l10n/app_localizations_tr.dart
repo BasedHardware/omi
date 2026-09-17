@@ -84,7 +84,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get retranscribingConversation => 'Konuşma yeniden yazıya dökülüyor...\nBu birkaç saniye sürebilir';
 
   @override
-  String get errorReprocessingTranscription => 'Transkripsiyon yeniden işlenirken hata oluştu. Lütfen daha sonra tekrar dene.';
+  String get errorReprocessingTranscription =>
+      'Transkripsiyon yeniden işlenirken hata oluştu. Lütfen daha sonra tekrar dene.';
 
   @override
   String get errorNoStoredAudio => 'Bu konuşma için kayıtlı ses yok.';

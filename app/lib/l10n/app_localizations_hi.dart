@@ -81,10 +81,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get reprocessTranscription => 'ट्रांसक्रिप्शन पुनः संसाधित करें';
 
   @override
-  String get retranscribingConversation => 'बातचीत को फिर से ट्रांसक्राइब किया जा रहा है...\nइसमें कुछ सेकंड लग सकते हैं';
+  String get retranscribingConversation =>
+      'बातचीत को फिर से ट्रांसक्राइब किया जा रहा है...\nइसमें कुछ सेकंड लग सकते हैं';
 
   @override
-  String get errorReprocessingTranscription => 'ट्रांसक्रिप्शन पुनः संसाधित करते समय त्रुटि हुई। बाद में पुनः प्रयास करें।';
+  String get errorReprocessingTranscription =>
+      'ट्रांसक्रिप्शन पुनः संसाधित करते समय त्रुटि हुई। बाद में पुनः प्रयास करें।';
 
   @override
   String get errorNoStoredAudio => 'इस बातचीत के लिए कोई संग्रहीत ऑडियो उपलब्ध नहीं है।';

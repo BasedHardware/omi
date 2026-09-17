@@ -84,7 +84,8 @@ class AppLocalizationsBn extends AppLocalizations {
   String get retranscribingConversation => 'কথোপকথন পুনরায় ট্রান্সক্রাইব করা হচ্ছে...\nএতে কয়েক সেকেন্ড লাগতে পারে';
 
   @override
-  String get errorReprocessingTranscription => 'ট্রান্সক্রিপশন পুনরায় প্রক্রিয়া করতে ত্রুটি হয়েছে। পরে আবার চেষ্টা করুন।';
+  String get errorReprocessingTranscription =>
+      'ট্রান্সক্রিপশন পুনরায় প্রক্রিয়া করতে ত্রুটি হয়েছে। পরে আবার চেষ্টা করুন।';
 
   @override
   String get errorNoStoredAudio => 'এই কথোপকথনের জন্য কোনো সংরক্ষিত অডিও নেই।';
