@@ -574,7 +574,6 @@
     "permissionsRequired": "Berechtigungen erforderlich",
     "permissionsRequiredDesc": "Diese App benötigt Bluetooth- und Standortberechtigungen, um ordnungsgemäß zu funktionieren. Bitte aktivieren Sie diese in den Einstellungen.",
     "openSettings": "Einstellungen öffnen",
-    "wantDifferentName": "Möchten Sie einen anderen Namen verwenden?",
     "whatsYourName": "Wie heißen Sie?",
     "speakTranscribeSummarize": "Sprechen. Transkribieren. Zusammenfassen.",
     "signInWithApple": "Mit Apple anmelden",
@@ -673,7 +672,6 @@
     "pressDoneToSave": "Drücken Sie Fertig zum Speichern",
     "pressDoneToCreate": "Drücken Sie Fertig zum Erstellen",
     "filterAll": "Alle",
-    "filterAuto": "Automatisch",
     "filterInteresting": "Einblicke",
     "filterSystem": "Über Sie",
     "filterManual": "Manuell",
@@ -3240,5 +3238,8 @@
     "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten",
     "processingTakingLonger": "Arbeitet noch — das dauert länger als üblich.",
     "speechProfileEnrollmentPrompt": "Damit Omi weiß, welche Stimme deine ist — sprich etwa 5 Sekunden über irgendetwas.",
-    "home": "Start"
+    "home": "Start",
+    "failedToUpdateBaselineStatus": "Baseline-Status konnte nicht aktualisiert werden.",
+    "memoryAllowUse": "Verwendung erlauben",
+    "memoryDontUse": "Nicht verwenden"
 }

@@ -11849,5 +11849,9 @@
     "home": "Home",
     "@home": {
         "description": "Screen-reader label for the Home tab in the bottom navigation bar."
+    },
+    "failedToUpdateBaselineStatus": "Failed to update baseline status",
+    "@failedToUpdateBaselineStatus": {
+        "description": "Snackbar when toggling a memory's baseline flag fails"
     }
 }

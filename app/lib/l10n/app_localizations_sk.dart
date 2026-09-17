@@ -244,7 +244,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get searchConversations => 'Hľadať konverzácie...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count vybraných';
   }
 
@@ -2050,10 +2050,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryHistory => 'História';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Povoliť použitie';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nepoužívať';
 
   @override
   String get undo => 'Vrátiť späť';
@@ -9989,4 +9989,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get home => 'Domov';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nepodarilo sa aktualizovať stav základnej pamäte.';
 }

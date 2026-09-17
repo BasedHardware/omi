@@ -242,7 +242,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get searchConversations => 'البحث في المحادثات...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count محدد';
   }
 
@@ -2029,10 +2029,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryHistory => 'السجل';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'السماح بالاستخدام';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'عدم الاستخدام';
 
   @override
   String get undo => 'تراجع';
@@ -9938,4 +9938,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get home => 'الرئيسية';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'فشل تحديث حالة الخط الأساسي.';
 }
