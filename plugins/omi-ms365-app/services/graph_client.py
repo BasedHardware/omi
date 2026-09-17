@@ -27,6 +27,25 @@ class GraphError(Exception):
         self.payload = payload
 
 
+def _parse_retry_after(header_val: str | None, default: int = 2) -> int:
+    """Safely parse Retry-After header (seconds or RFC 7231 HTTP-date)."""
+    if not header_val:
+        return default
+    try:
+        return max(1, int(header_val))
+    except (ValueError, TypeError):
+        pass
+    try:
+        from datetime import datetime, timezone
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(header_val)
+        now = datetime.now(timezone.utc)
+        delta = (dt - now).total_seconds()
+        return max(1, int(delta)) if delta > 0 else default
+    except Exception:
+        return default
+
+
 class GraphClient:
     def __init__(self, user_id: str) -> None:
         self.user_id = user_id
@@ -63,7 +82,7 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"), default=2)
                 # Honour the server cooldown; do not shorten a long Retry-After.
                 backoff = max(retry_after, min(2 ** attempt + 1, 30))
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
@@ -160,10 +179,10 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"), default=2)
                 # Honour the server cooldown; do not shorten a long Retry-After.
                 backoff = max(retry_after, min(2 ** attempt + 1, 30))
-                log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
+                log.warning("Graph %s on %s (bytes) — backing off %ss", resp.status_code, path, backoff)
                 await asyncio.sleep(backoff)
                 continue
 

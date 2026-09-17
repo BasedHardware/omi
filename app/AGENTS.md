@@ -89,25 +89,25 @@ Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 co
 
 ### Running Tests
 ```bash
-bash test.sh           # runs all tests
-flutter test           # same thing
-flutter test test/unit/  # specific directory
-# Android native tests: JDK 21, SDK 36, Flutter bootstrap
-(cd android && ./gradlew :app:testDevDebugUnitTest)
+bash test.sh            # all unit/widget tests (hermetic)
+flutter test test/unit/ # specific directory
+make mobile-verify ARGS="fast --paths <changed-file>"  # focused product journeys
+make mobile-verify ARGS="fast --all"                   # full hermetic journey suite
+(cd android && ./gradlew :app:testDevDebugUnitTest)     # Android JVM: JDK 21, SDK 36
 ```
 
-`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
+`bash test.sh` bootstraps missing generated files with an empty `API_BASE_URL` so `test/` stays hermetic. Journey selection/receipts/CI wiring: `scripts/dev-harness/MOBILE_VERIFY.md`.
 
-Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` runs the production Swift writers (macOS manifest, local + CI).
+Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manifest, local + CI).
 
-CI runs `flutter test` and `app/scripts/analyze_ratchet.sh`: errors fail; new info/warning occurrences above `app/analysis_baseline.json` fail. Run the ratchet before committing Dart changes. Update intentional baselines with `--update-baseline` in that PR.
+CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
-- A test that needs a live service, device, or real API goes under `integration_test/`, which `test.sh`/CI never runs. For integration tests against a local backend, set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`; use `OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test needs the prod API default. State in the PR how you ran it; it can't be the only evidence the change works.
+- Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.
 - Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
 
 ## Localization (l10n)

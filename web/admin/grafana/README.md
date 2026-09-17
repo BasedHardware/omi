@@ -12,6 +12,25 @@ Account-level metrics with no platform dimension (mentor "Omi says" volumes,
 the notifications-enabled gauge) live on the All board only — see
 `ACCOUNT_LEVEL_TITLES` in the builder.
 
+The viral metrics route uses one person key (`COALESCE(person_id, distinct_id)`)
+for all user counts. `growthAccounting` and `stickinessTrend` contain complete
+UTC calendar weeks only; the current trailing seven-day view is exposed
+separately as top-level `rollingGrowth` (with current values mirrored under
+`summary` for tile compatibility) and powers the explicitly labeled
+"Last 7 days (rolling)" tile. Growth points expose positive `inactive`, its
+`priorActive` denominator, `inactiveRate`, and `netActiveChange`; `inactiveLoss`
+is the negative chart projection used by the stacked growth chart. The
+`establishedRetention` series measures people active in both preceding complete
+weeks and reports the current-week numerator, denominator, and rate.
+
+The "Successful usage / capture output" panel keeps event families separate:
+saved/reconciled `Memory Created` conversation creators, macOS transcribed
+speech (`Desktop Recording Stopped` with positive `word_count`), and macOS
+completed assistant users (`chat_agent_query_completed`). `Recording Started`
+is intentionally not treated as successful usage; the mobile board shows only
+the saved-conversation series because the other two events have no mobile
+equivalent.
+
 ## Build
 
 `omi-tv.json` is the only hand-edited board. After changing it, run

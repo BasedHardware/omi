@@ -395,28 +395,6 @@ async def disconnect_shopify(uid: str):
 # Chat Tool Endpoints
 # ============================================
 
-def _coerce_int(value, default: int, minimum: int, maximum: Optional[int] = None) -> int:
-    """Coerce an optional JSON tool parameter to a bounded int.
-
-    The Omi backend forwards every optional parameter the LLM did not
-    supply as an explicit JSON null, so ``body.get(key, default)`` sees the
-    key and returns None instead of the default. Map None, booleans,
-    unparseable, and overflowing values to ``default``; accept ints and
-    numeric strings; clamp into [minimum, maximum].
-    """
-    if value is None or isinstance(value, bool):
-        return default
-    try:
-        number = int(value)
-    except (TypeError, ValueError, OverflowError):
-        return default
-    if number < minimum:
-        return minimum
-    if maximum is not None and number > maximum:
-        return maximum
-    return number
-
-
 def parse_date(date_str: str) -> Optional[datetime]:
     """Parse various date formats into datetime object."""
     if not date_str:
@@ -445,6 +423,22 @@ def parse_date(date_str: str) -> Optional[datetime]:
     return None
 
 
+def _coerce_int(
+    value: Any,
+    default: int = 10,
+    minimum: int = 1,
+    maximum: int = 50,
+) -> int:
+    """Coerce an untyped input (e.g. from JSON) to a clamped integer."""
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return default
+    return max(minimum, min(parsed, maximum))
+
+
 @app.post("/tools/get_analytics", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_get_analytics(request: Request):
     """
@@ -454,6 +448,8 @@ async def tool_get_analytics(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
         period = body.get("period") or "today"
         custom_start_date = body.get("start_date")  # Custom start date
@@ -766,6 +762,8 @@ async def tool_get_orders(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
         status = body.get("status") or "any"
         financial_status = body.get("financial_status")
@@ -838,6 +836,8 @@ async def tool_get_order_details(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
         order_id = body.get("order_id")
         order_number = body.get("order_number")
@@ -1043,6 +1043,8 @@ async def tool_create_order(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         print(f"🛒 CREATE ORDER - Received request: {body}")
         
         uid = body.get("uid")
@@ -1053,15 +1055,16 @@ async def tool_create_order(request: Request):
         customer_phone = body.get("customer_phone") or ""
         customer_id_provided = body.get("customer_id")  # Direct customer ID selection
         line_items = body.get("line_items") or []
+        if not isinstance(line_items, list):
+            line_items = []
         shipping_address = body.get("shipping_address")
         note = body.get("note") or ""
         tags = body.get("tags") or ""
-        send_receipt = body.get("send_receipt")
-        if send_receipt is None:
-            send_receipt = True
+        raw_send_receipt = body.get("send_receipt")
+        send_receipt = True if raw_send_receipt is None else bool(raw_send_receipt)
         financial_status = body.get("financial_status") or "pending"
         discount_code = body.get("discount_code") or ""  # Coupon/discount code
-        free_shipping = body.get("free_shipping") or False  # Skip shipping charges
+        free_shipping = bool(body.get("free_shipping")) if body.get("free_shipping") is not None else False  # Skip shipping charges
         
         # Check if discount code implies free shipping
         if discount_code and "freeshipping" in discount_code.lower().replace("_", "").replace("-", "").replace(" ", ""):
@@ -1069,12 +1072,12 @@ async def tool_create_order(request: Request):
             print(f"🆓 Free shipping detected from discount code: {discount_code}")
         
         # Address fields - can be passed individually
-        address_line1 = body.get("address_line1") or body.get("address1") or body.get("street") or ""
-        address_line2 = body.get("address_line2") or body.get("address2") or ""
-        city = body.get("city") or ""
-        state = body.get("state") or body.get("province") or ""
-        zip_code = body.get("zip_code") or body.get("zip") or body.get("postal_code") or ""
-        country = body.get("country") or "US"
+        address_line1 = body.get("address_line1", "") or body.get("address1", "") or body.get("street", "")
+        address_line2 = body.get("address_line2", "") or body.get("address2", "")
+        city = body.get("city", "")
+        state = body.get("state", "") or body.get("province", "")
+        zip_code = body.get("zip_code", "") or body.get("zip", "") or body.get("postal_code", "")
+        country = body.get("country", "US")
         
         # Build shipping address from individual fields if not provided as object
         if not shipping_address and (address_line1 or city):
@@ -1269,8 +1272,8 @@ async def tool_create_order(request: Request):
         product_matches = []
         
         for item in line_items:
-            title = item.get("title") or "Custom Item"
-            quantity = _coerce_int(item.get("quantity"), default=1, minimum=1)
+            title = item.get("title", "Custom Item")
+            quantity = item.get("quantity", 1)
             provided_price = item.get("price")
             variant_id = item.get("variant_id")
             sku = item.get("sku")
@@ -1692,6 +1695,8 @@ async def tool_get_customers(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
         query = body.get("query") or ""
         limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
@@ -1749,6 +1754,8 @@ async def tool_create_customer(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         print(f"👤 CREATE CUSTOMER - Received request: {body}")
         
         uid = body.get("uid")
@@ -1758,7 +1765,7 @@ async def tool_create_customer(request: Request):
         phone = body.get("phone") or ""
         tags = body.get("tags") or ""
         note = body.get("note") or ""
-        accepts_marketing = body.get("accepts_marketing") or False
+        accepts_marketing = bool(body.get("accepts_marketing")) if body.get("accepts_marketing") is not None else False
         
         if not uid:
             return ChatToolResponse(error="User ID is required")

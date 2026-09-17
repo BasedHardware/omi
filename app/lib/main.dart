@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/services/dev_controls/semantic_controls.dart';
 import 'package:marionette_flutter/marionette_flutter.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -254,6 +255,11 @@ void main() {
       // Ensure
       if (kDebugMode) {
         MarionetteBinding.ensureInitialized();
+        // Typed semantic controls for the seeded-journey lane: same debug VM
+        // service transport as Marionette, installed only in eligible
+        // local-dev test builds (inert everywhere else, including
+        // production-flavor debug builds).
+        SemanticControls.instance.installIfEligible();
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }
