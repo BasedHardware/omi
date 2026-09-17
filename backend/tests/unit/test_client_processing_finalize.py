@@ -324,6 +324,7 @@ def _add_conversations_fakes(fakes: dict[str, ModuleType]) -> None:
     add('utils.conversations.location', AutoMockModule('utils.conversations.location'))
     add('utils.conversations.share_email', AutoMockModule('utils.conversations.share_email'))
     add('utils.conversations.analytics', AutoMockModule('utils.conversations.analytics'))
+    add('utils.conversations.reprocess_transcription', AutoMockModule('utils.conversations.reprocess_transcription'))
     add('utils.speaker_identification', AutoMockModule('utils.speaker_identification'))
     add('utils.app_integrations', AutoMockModule('utils.app_integrations'))
     add('utils.retrieval.tools.calendar_tools', AutoMockModule('utils.retrieval.tools.calendar_tools'))
