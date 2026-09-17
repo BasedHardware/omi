@@ -24,6 +24,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/capture_lifetime.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
@@ -122,7 +123,8 @@ class CaptureController extends ChangeNotifier
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
 
   late final CaptureAuthBoundary _auth = _authOverride ?? CaptureAuthBoundary.production;
-  late final CaptureScheduling _scheduling = _schedulingOverride ?? const WallClockCaptureScheduling();
+  late final CaptureLifetime lifetime = CaptureLifetime(_schedulingOverride ?? const WallClockCaptureScheduling());
+  CaptureScheduling get _scheduling => lifetime;
 
   AudioSource? _activeSource;
 
@@ -130,7 +132,6 @@ class CaptureController extends ChangeNotifier
 
   bool get isWalSupported => _isWalSupported;
 
-  StreamSubscription<bool>? _connectionStateListener;
   late final CaptureConnectivityBoundary _connectivity;
   late bool _isConnected;
 
@@ -241,11 +242,15 @@ class CaptureController extends ChangeNotifier
     // the device reconnects, streamDeviceRecording() reads _isPaused as
     // `wasPaused` and re-applies the mute instead of silently resuming.
     _isPaused = (preferences ?? SharedPreferencesUtil()).deviceMuted;
-    _connectionStateListener = _connectivity.changes.listen((bool isConnected) {
-      onConnectionStateChanged(isConnected);
+    lifetime.listen(_connectivity.changes, onConnectionStateChanged);
+    final ble = _bleListeners ?? const BleBridgeCaptureListeners();
+    ble.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+    lifetime.own(() {
+      ble.removeBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+      _bleBytesStream?.cancel();
+      _blePhotoStream?.cancel();
+      _bleButtonStream?.cancel();
     });
-    (_bleListeners ?? const BleBridgeCaptureListeners())
-        .addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
   }
 
   static Future<void> _startAndroidLocationForegroundTask() async {
@@ -511,10 +516,6 @@ class CaptureController extends ChangeNotifier
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
-
-  StreamSubscription? _storageStream;
-
-  get storageStream => _storageStream;
 
   RecordingState recordingState = RecordingState.stop;
 
@@ -982,10 +983,11 @@ class CaptureController extends ChangeNotifier
 
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
-    _bleButtonStream?.cancel();
-    _bleButtonStream = await _getBleButtonListener(
-      deviceId,
-      onButtonReceived: (List<int> value) {
+    _bleButtonStream = lifetime.takeSubscription(
+      _bleButtonStream,
+      await _getBleButtonListener(
+        deviceId,
+        onButtonReceived: (List<int> value) {
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 4) return;
         var buttonState = ByteData.view(
@@ -1100,12 +1102,12 @@ class CaptureController extends ChangeNotifier
           _endVoiceCommandSession(deviceId);
         }
       },
+      ),
     );
   }
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     Logger.debug('streamAudioToWs in capture_provider');
-    _bleBytesStream?.cancel();
     _startMetricsTracking();
     final subscription = await _getBleAudioBytesListener(
       deviceId,
@@ -1160,7 +1162,7 @@ class CaptureController extends ChangeNotifier
         }
       },
     );
-    _bleBytesStream = subscription;
+    _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
     return subscription != null;
   }
@@ -1486,7 +1488,9 @@ class CaptureController extends ChangeNotifier
     if (connection == null) return;
 
     await connection.performCameraStartPhotoController();
-    _blePhotoStream = await connection.performGetImageListener(
+    _blePhotoStream = lifetime.takeSubscription(
+      _blePhotoStream,
+      await connection.performGetImageListener(
       onImageReceived: (orientedImage) async {
         final rotatedImageBytes = rotateImage(orientedImage);
         final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
@@ -1497,30 +1501,17 @@ class CaptureController extends ChangeNotifier
         photos = List.from(photos);
         _segmentsPhotosVersion++;
         notifyListeners();
-
-        // Chunking Logic
-        const int chunkSize = 8192; // 8KB chunks
-        final totalChunks = (base64Image.length / chunkSize).ceil();
-
-        for (int i = 0; i < totalChunks; i++) {
-          final start = i * chunkSize;
-          final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
-          final chunk = base64Image.substring(start, end);
-
-          final payload = jsonEncode({
-            'type': 'image_chunk',
-            'id': tempId,
-            'index': i,
-            'total': totalChunks,
-            'data': chunk,
-          });
-
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(payload); // Send the JSON string
-          }
-          await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
-        }
+        await emitBase64ImageChunks(
+          base64Image,
+          id: tempId,
+          emit: (payload) async {
+            if (_socket?.state == SocketServiceState.connected) {
+              _socket?.send(payload);
+            }
+          },
+        );
       },
+      ),
     );
     notifyListeners();
   }
@@ -1582,19 +1573,10 @@ class CaptureController extends ChangeNotifier
     _phoneBatchGeolocationPreference.invalidateSession();
     _clearSessionLocation();
     _recordingTelemetry.complete(reason: 'pipeline_closed');
-    _bleBytesStream?.cancel();
-    _blePhotoStream?.cancel();
-    _bleButtonStream?.cancel();
     _socket?.unsubscribe(this);
-    _keepAliveTimer?.cancel();
-    _inProgressConversationRefreshTimer?.cancel();
-    _connectionStateListener?.cancel();
     _metrics.dispose();
-    _autoSyncFallbackTimer?.cancel();
-    _peopleRefreshFuture = null; // Clear in-flight tracker
-    (_bleListeners ?? const BleBridgeCaptureListeners())
-        .removeBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
-
+    _peopleRefreshFuture = null;
+    unawaited(lifetime.close());
     super.dispose();
   }
 
@@ -2001,6 +1983,12 @@ class CaptureController extends ChangeNotifier
 
   @visibleForTesting
   bool get keepAliveScheduledForTesting => _keepAliveTimer?.isActive ?? false;
+
+  @visibleForTesting
+  void debugArmVoiceCommandTimeout(String deviceId) {
+    _voiceCommandSession = _now();
+    _startVoiceCommandTimeout(deviceId);
+  }
 
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();

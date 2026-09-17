@@ -22,6 +22,8 @@ class CaptureLifetime implements CaptureScheduling {
   @visibleForTesting
   int get debugTrackedCount => _releases.length;
 
+  bool get isClosed => _closed;
+
   void _untrack(FutureOr<void> Function() release) => _releases.remove(release);
 
   void _track(FutureOr<void> Function() release) {
@@ -110,15 +112,38 @@ class CaptureLifetime implements CaptureScheduling {
     });
   }
 
+  /// Replace [previous] with [next]. A closed lifetime cancels [next] immediately.
+  StreamSubscription? takeSubscription(StreamSubscription? previous, StreamSubscription? next) {
+    previous?.cancel();
+    if (next == null) return null;
+    if (_closed) {
+      next.cancel();
+      return null;
+    }
+    return next;
+  }
+
   Future<void> close() async {
     _closed = true;
     final releases = List<FutureOr<void> Function()>.of(_releases);
     _releases.clear();
     Object? error;
     StackTrace? stack;
+    final pending = <Future<void>>[];
     for (final release in releases) {
       try {
-        await Future.sync(release);
+        final result = release();
+        if (result is Future) {
+          pending.add(Future<void>.value(result));
+        }
+      } catch (caught, caughtStack) {
+        error ??= caught;
+        stack ??= caughtStack;
+      }
+    }
+    for (final future in pending) {
+      try {
+        await future;
       } catch (caught, caughtStack) {
         error ??= caught;
         stack ??= caughtStack;
