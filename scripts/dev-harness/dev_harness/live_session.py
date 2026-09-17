@@ -33,9 +33,11 @@ MAX_REQUEST_BYTES = 1024 * 1024
 MAX_LOG_ENTRIES = 256
 REQUIRED_CAPABILITIES = frozenset({"capabilities", "state", "wait_ready"})
 _URL_RE = re.compile(r"(?i)\b(?:https?|wss?)://[^\s'\"<>]+")
-_CREDENTIAL_ASSIGN_RE = re.compile(
-    r"(?i)\b(api[_-]?key|auth(?:orization|enticat\w*)?|bearer|password|secret|token)\s*[:=]\s*\S+"
-)
+# Complete authorization values, not the first whitespace token (`Authorization:
+# Bearer <token>` must not become `Authorization=<redacted> <token>`).
+_AUTHORIZATION_VALUE_RE = re.compile(r"(?i)\b(authorization)(?:\s*[:=]\s*|\s+)\S.*")
+_BEARER_TOKEN_RE = re.compile(r"(?i)\bbearer\s+\S+")
+_CREDENTIAL_ASSIGN_RE = re.compile(r"(?i)\b(api[_-]?key|auth(?:enticat\w*)?|password|secret|token)\s*[:=]\s*\S+")
 WORKTREE_LOCK = ".omi-live-worktree.lock"
 LIVE_FILENAME = "live.json"
 EMPTY_PARAM_OPS = frozenset({"reload", "restart", "screenshot", "status", "stop"})
@@ -146,7 +148,10 @@ def sanitize_log_text(text: str) -> str:
         port = f":{parsed.port}" if parsed.port else ""
         return f"{scheme}://{host}{port}/<redacted>"
 
-    return _CREDENTIAL_ASSIGN_RE.sub(r"\1=<redacted>", _URL_RE.sub(_url, text))
+    text = _URL_RE.sub(_url, text)
+    text = _AUTHORIZATION_VALUE_RE.sub(r"\1=<redacted>", text)
+    text = _BEARER_TOKEN_RE.sub("Bearer <redacted>", text)
+    return _CREDENTIAL_ASSIGN_RE.sub(r"\1=<redacted>", text)
 
 
 def _loopback_or_empty(url: str) -> bool:
@@ -479,6 +484,17 @@ class LiveSession:
                     started_mono=started_mono,
                     error_code="unready",
                 )
+            # Source was rechecked above. Publication still requires the pinned
+            # lease and child generation — a source-hash match is not that check.
+            if not self._generation_current(generation):
+                return self._publication_blocked(
+                    "start",
+                    requested,
+                    None,
+                    generation=generation,
+                    started_at=started_at,
+                    started_mono=started_mono,
+                )
             self._loaded = requested
             self._loaded_sequence = 1
             self._state = "ready"
@@ -505,8 +521,19 @@ class LiveSession:
                 started_mono=started_mono,
                 error_code="deadline",
             )
-        except LiveError:
-            raise
+        except LiveError as exc:
+            self._state = "blocked"
+            return self._finish(
+                "start",
+                "blocked",
+                requested,
+                self._loaded,
+                None,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code=exc.code,
+            )
 
     def request(
         self,
@@ -604,12 +631,43 @@ class LiveSession:
         raise LiveError("unsupported-operation", f"unsupported live operation {operation!r}")
 
     def _assert_generation(self, generation: int) -> None:
+        if not self._generation_current(generation):
+            raise LiveError("stale-session", "lease generation moved")
+
+    def _generation_current(self, generation: int) -> bool:
         lease = self._load_lease()
         current = int(lease.get("generation", 0))
         if int(generation) != current:
-            raise LiveError("stale-session", "lease generation moved")
+            return False
         if self._child_generation is not None and int(generation) != int(self._child_generation):
-            raise LiveError("stale-session", "request generation does not match the bound child")
+            return False
+        return True
+
+    def _publication_blocked(
+        self,
+        operation: str,
+        requested: SourceStamp,
+        loaded: SourceStamp | None,
+        *,
+        generation: int,
+        started_at: str,
+        started_mono: float,
+        daemon_code: int | None = None,
+    ) -> Mapping[str, Any]:
+        """Fence a completion whose lease/child generation moved during async work."""
+
+        self._state = "blocked"
+        return self._finish(
+            operation,
+            "blocked",
+            requested,
+            loaded,
+            daemon_code,
+            generation=generation,
+            started_at=started_at,
+            started_mono=started_mono,
+            error_code="stale-session",
+        )
 
     def _source_matches(self, requested: SourceStamp) -> bool:
         return self._source().inputs_sha256 == requested.inputs_sha256
@@ -715,12 +773,16 @@ class LiveSession:
             if message.get("id") == rpc_id:
                 return message
 
-    def _validate_capabilities(self, reply: Mapping[str, Any]) -> None:
+    def _rpc_result_object(self, reply: Mapping[str, Any], *, what: str) -> dict[str, Any]:
         if "error" in reply:
-            raise LiveError("malformed-response", "capabilities negotiation failed")
+            raise LiveError("malformed-response", f"{what} negotiation failed")
         result = reply.get("result")
         if not isinstance(result, dict):
-            raise LiveError("malformed-response", "capabilities result must be an object")
+            raise LiveError("malformed-response", f"{what} result must be an object")
+        return result
+
+    def _validate_capabilities(self, reply: Mapping[str, Any]) -> None:
+        result = self._rpc_result_object(reply, what="capabilities")
         if result.get("contract_version") != CONTRACT_VERSION:
             raise LiveError("malformed-response", "unsupported controls contract version")
         capabilities = result.get("capabilities")
@@ -742,7 +804,7 @@ class LiveSession:
             {"appId": self._app_id, "methodName": "ext.omi.controls.state", "params": {}},
             deadline=deadline,
         )
-        state = state_reply.get("result") or {}
+        state = self._rpc_result_object(state_reply, what="state")
         if wait and not self._is_ready(state):
             waited = self._rpc(
                 "app.callServiceExtension",
@@ -753,9 +815,12 @@ class LiveSession:
                 },
                 deadline=deadline,
             )
-            result = waited.get("result") or {}
-            state = result.get("state") or result
-        return self._is_ready(state), state
+            result = self._rpc_result_object(waited, what="wait_ready")
+            nested = result.get("state")
+            state = nested if isinstance(nested, Mapping) else result
+        if not isinstance(state, Mapping):
+            raise LiveError("malformed-response", "state result must be an object")
+        return self._is_ready(state), dict(state)
 
     def _is_ready(self, state: Mapping[str, Any]) -> bool:
         lease = self._load_lease()
@@ -765,10 +830,16 @@ class LiveSession:
             return False
         if state.get("contract_version") != CONTRACT_VERSION:
             return False
-        readiness = state.get("readiness") or {}
-        if not all(readiness.get(key) for key in ("signedIn", "routed", "captureIdle")):
+        readiness = state.get("readiness")
+        if not isinstance(readiness, Mapping):
             return False
-        uid = (state.get("principal") or {}).get("uid")
+        # Non-empty strings such as "false" must not satisfy readiness.
+        if any(readiness.get(key) is not True for key in ("signedIn", "routed", "captureIdle")):
+            return False
+        principal = state.get("principal")
+        if not isinstance(principal, Mapping):
+            return False
+        uid = principal.get("uid")
         return uid == lease.get("default_auth_uid") == seed.get("uid")
 
     def _reload(
@@ -896,6 +967,19 @@ class LiveSession:
                 started_mono=started_mono,
                 error_code="deadline",
             )
+        except LiveError as exc:
+            self._state = "blocked"
+            return self._finish(
+                op,
+                "blocked",
+                requested,
+                loaded,
+                code,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                error_code=exc.code,
+            )
         if not self._source_matches(requested):
             self._state = "blocked"
             return self._finish(
@@ -921,6 +1005,16 @@ class LiveSession:
                 started_at=started_at,
                 started_mono=started_mono,
                 error_code="unready",
+            )
+        if not self._generation_current(generation):
+            return self._publication_blocked(
+                op,
+                requested,
+                loaded,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+                daemon_code=code,
             )
         self._loaded = requested
         self._loaded_sequence += 1
@@ -955,6 +1049,15 @@ class LiveSession:
             deadline=self._deadline(timeout_s),
         )
         stamp = self._loaded or self._source()
+        if not self._generation_current(generation):
+            return self._publication_blocked(
+                "controls",
+                stamp,
+                self._loaded,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+            )
         if "error" in reply:
             return self._finish(
                 "controls",
@@ -999,6 +1102,15 @@ class LiveSession:
         lease = self._load_lease()
         device = str((lease.get("device") or {}).get("udid") or "")
         self._screenshot(device, path)
+        if not self._generation_current(generation):
+            return self._publication_blocked(
+                "screenshot",
+                stamp,
+                self._loaded,
+                generation=generation,
+                started_at=started_at,
+                started_mono=started_mono,
+            )
         shot = {"path": str(relative), "sha256": se.file_sha256(path)}
         return self._finish(
             "screenshot",

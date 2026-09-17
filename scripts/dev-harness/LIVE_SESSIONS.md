@@ -59,8 +59,11 @@ Do not automatically restart on rejection. Native/assets/dependency/defines/SDK
 input changes require a **cold live stop/start** (restart-required, exit 2),
 not a hot restart. Pin requested source and the child's generation before any
 work, including the initial compile; recheck those pins after daemon completion
-and after readiness. A recovered lease's new generation must not adopt the old
-child. A change during the operation blocks evidence attribution and does not
+and after readiness **before publication**. A source-hash recheck is not a
+generation recheck: a completion whose lease or child generation moved must be
+blocked, keep the original operation generation, and leave the last proven
+loaded identity and sequence unchanged. A recovered lease's new generation must
+not adopt the old child. A change during the operation blocks evidence attribution and does not
 advance loaded identity. One monotonic operation deadline owns every receive;
 progress events consume remaining budget instead of resetting timeout. Measure
 `elapsed_ms` from that clock, not from receipt serialization.
@@ -77,7 +80,7 @@ in shareable evidence. `screenshot` calls simctl/adb for the exact lease device,
 writing a broker-assigned PNG under the session directory, then hashes it.
 `status` reports starting/ready/busy/blocked/stopped and build/source identity;
 app.started alone is not ready. For readiness require state profile `local_dev`,
-contract `semantic-controls/v1`, signedIn+routed+captureIdle all true and fixture
+contract `semantic-controls/v1`, signedIn+routed+captureIdle all **boolean** true and fixture
 principal uid equal to BOTH seeded lease.default_auth_uid and seed.json.uid,
 with matching fixture_version and status=seeded; missing/mismatched seed blocks.
 Live/simulator lanes use the real isolated uvicorn/emulator/redis session stack,

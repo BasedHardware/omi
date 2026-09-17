@@ -222,3 +222,218 @@ def test_cli_live_ops_refuse_real_flutter_spawn(tmp_path):
     assert result.returncode == 2, result.stdout + result.stderr
     assert "does not spawn flutter run" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def _wrap_send(factory, hook):
+    def create(spec):
+        child = factory(spec)
+        send = child.send
+
+        def wrapped(line):
+            hook(line)
+            send(line)
+
+        child.send = wrapped
+        return child
+
+    return create
+
+
+def _wrap_receive(factory, hook):
+    def create(spec):
+        child = factory(spec)
+        receive = child.receive
+
+        def wrapped(timeout_s):
+            return hook(receive, timeout_s)
+
+        child.receive = wrapped
+        return child
+
+    return create
+
+
+def test_lease_roll_during_start_readiness_does_not_publish_ok(rig):
+    def hook(line):
+        if "ext.omi.controls.state" in line:
+            rig.lease["generation"] += 1
+
+    rig.factory = _wrap_send(rig.factory, hook)
+    engine = rig.engine()
+    reply = engine.start()
+    live_receipt = reply["evidence"]["live"]
+    assert reply["outcome"] == "blocked"
+    assert reply["error_code"] == "stale-session"
+    assert live_receipt["generation"] == 1
+    assert live_receipt["loaded_source"] is None
+    assert live_receipt["loaded_sequence"] == 0
+    engine.close()
+
+
+@pytest.mark.parametrize("operation", ["reload", "restart"])
+def test_lease_roll_during_reload_readiness_keeps_proven_loaded_identity(rig, operation):
+    armed = False
+
+    def hook(line):
+        if armed and "ext.omi.controls.state" in line:
+            rig.lease["generation"] += 1
+
+    rig.factory = _wrap_send(rig.factory, hook)
+    engine = rig.engine()
+    before = engine.start()["evidence"]["live"]
+    armed = True
+    reply = engine.request(operation, generation=1)
+    live_receipt = reply["evidence"]["live"]
+    assert reply["outcome"] == "blocked"
+    assert reply["error_code"] == "stale-session"
+    assert live_receipt["generation"] == 1
+    assert live_receipt["loaded_source"] == before["loaded_source"]
+    assert live_receipt["loaded_sequence"] == before["loaded_sequence"]
+    engine.close()
+
+
+def test_lease_roll_during_controls_does_not_publish_ok(rig):
+    armed = False
+
+    def hook(line):
+        if armed and "ext.omi.controls.state" in line:
+            rig.lease["generation"] += 1
+
+    rig.factory = _wrap_send(rig.factory, hook)
+    engine = rig.engine()
+    engine.start()
+    armed = True
+    reply = engine.request("controls", generation=1, params={"method": "state"})
+    assert reply["outcome"] == "blocked"
+    assert reply["error_code"] == "stale-session"
+    assert reply["evidence"]["live"]["generation"] == 1
+    engine.close()
+
+
+def test_lease_roll_during_screenshot_does_not_publish_ok(rig):
+    engine = None
+
+    def shot(device, path):
+        rig.lease["generation"] += 1
+        rig.screenshot(device, path)
+
+    engine = live.LiveSession(
+        rig.directory.parent,
+        rig.directory,
+        load_lease=lambda: rig.lease,
+        source=lambda: rig.stamp,
+        factory=rig.factory,
+        screenshot=shot,
+    )
+    engine.start()
+    reply = engine.request("screenshot", generation=1)
+    assert reply["outcome"] == "blocked"
+    assert reply["error_code"] == "stale-session"
+    assert reply["evidence"]["live"]["generation"] == 1
+    engine.close()
+
+
+def test_stringy_false_readiness_is_not_ready(rig):
+    def hook(receive, timeout_s):
+        line = receive(timeout_s)
+        if not line:
+            return line
+        payload = json.loads(line)
+        message = payload[0]
+        result = message.get("result")
+        if isinstance(result, dict):
+            holder = result["state"] if isinstance(result.get("state"), dict) else result
+            if isinstance(holder.get("readiness"), dict):
+                holder["readiness"] = {"signedIn": "false", "routed": "false", "captureIdle": "false"}
+                return json.dumps(payload)
+        return line
+
+    rig.factory = _wrap_receive(rig.factory, hook)
+    engine = rig.engine()
+    reply = engine.start()
+    assert reply["outcome"] == "blocked"
+    assert reply["error_code"] == "unready"
+    assert reply["evidence"]["live"]["loaded_source"] is None
+    engine.close()
+
+
+def test_post_reload_capabilities_error_leaves_status_blocked(rig):
+    armed = False
+    pending_id = [None]
+    base = rig.factory
+
+    def create(spec):
+        child = base(spec)
+        send = child.send
+        receive = child.receive
+
+        def wrapped_send(line):
+            request = json.loads(line)[0]
+            send(line)
+            if armed and request.get("params", {}).get("methodName") == "ext.omi.controls.capabilities":
+                pending_id[0] = request["id"]
+
+        def wrapped_receive(timeout_s):
+            line = receive(timeout_s)
+            if pending_id[0] is not None and line:
+                message = json.loads(line)[0]
+                if message.get("id") == pending_id[0]:
+                    pending_id[0] = None
+                    return json.dumps(
+                        [{"id": message["id"], "error": {"code": -32000, "message": "capabilities failed"}}]
+                    )
+            return line
+
+        child.send = wrapped_send
+        child.receive = wrapped_receive
+        return child
+
+    rig.factory = create
+    engine = rig.engine()
+    before = engine.start()["evidence"]["live"]
+    assert engine.request("status", generation=1)["result"]["state"] == "ready"
+    armed = True
+    reply = engine.request("reload", generation=1)
+    assert reply["outcome"] == "blocked"
+    assert reply["error_code"] == "malformed-response"
+    assert reply["evidence"]["live"]["loaded_source"] == before["loaded_source"]
+    assert reply["evidence"]["live"]["loaded_sequence"] == before["loaded_sequence"]
+    assert engine.request("status", generation=1)["result"]["state"] == "blocked"
+    engine.close()
+
+
+def test_authorization_bearer_is_redacted_from_logs_api(rig):
+    secret = "super-secret-bearer-token-99"
+    armed = False
+
+    def hook(receive, timeout_s):
+        nonlocal armed
+        if armed:
+            armed = False
+            return json.dumps(
+                [
+                    {
+                        "event": "app.log",
+                        "params": {
+                            "appId": "app-fixture",
+                            "log": f"Authorization: Bearer {secret}",
+                            "error": False,
+                        },
+                    }
+                ]
+            )
+        return receive(timeout_s)
+
+    rig.factory = _wrap_receive(rig.factory, hook)
+    engine = rig.engine()
+    engine.start()
+    armed = True
+    engine.request("reload", generation=1)
+    reply = engine.request("logs", generation=1)
+    dumped = json.dumps(reply)
+    assert secret not in dumped
+    assert "Authorization=<redacted> " + secret not in dumped
+    assert "Bearer " + secret not in dumped
+    for path in rig.directory.glob("operations/*/evidence.json"):
+        assert secret not in path.read_text()
+    engine.close()
