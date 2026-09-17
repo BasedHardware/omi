@@ -3864,12 +3864,21 @@ def _completed_day_source_rank_key(row: CompletedDayConversationSource) -> Tuple
     return (structured_rank, -len(row.summary_text), -recency, row.conversation_id)
 
 
+@dataclass(frozen=True)
+class CompletedDaySourceSelection:
+    """The bounded subset of a day's eligible rows, and whether any were left out."""
+
+    rows: Tuple[CompletedDayConversationSource, ...]
+    truncated: bool
+    truncation_reason: str
+
+
 def _select_completed_day_source_rows(
     rows: Sequence[CompletedDayConversationSource],
     *,
     max_conversations: int,
     max_summary_characters: int,
-) -> Tuple[Tuple[CompletedDayConversationSource, ...], bool, str]:
+) -> CompletedDaySourceSelection:
     """Take a deterministic prefix of ``rows`` that fits both budgets.
 
     Rank is a function of the stored rows only (structured before unstructured
@@ -3908,7 +3917,7 @@ def _select_completed_day_source_rows(
     if truncated and not truncation_reason:
         truncation_reason = "summary_characters_over_budget" if skipped_oversize else "conversation_page_over_budget"
     selected.sort(key=lambda item: item.conversation_id)
-    return tuple(selected), truncated, truncation_reason
+    return CompletedDaySourceSelection(rows=tuple(selected), truncated=truncated, truncation_reason=truncation_reason)
 
 
 def _incomplete_day_read(reason: str) -> CompletedDaySourceRead:
@@ -4044,22 +4053,20 @@ def _read_completed_day_conversation_sources(
                 has_structured_summary=has_structured_summary,
             )
         )
-    selected, truncated, truncation_reason = _select_completed_day_source_rows(
+    selection = _select_completed_day_source_rows(
         decoded,
         max_conversations=max_conversations,
         max_summary_characters=max_summary_characters,
     )
-    if page_capped:
-        truncated = True
-        if not truncation_reason:
-            truncation_reason = "conversation_page_over_budget"
+    truncated = selection.truncated or page_capped
+    truncation_reason = selection.truncation_reason or ("conversation_page_over_budget" if page_capped else "")
     return CompletedDaySourceRead(
-        rows=selected,
+        rows=selection.rows,
         status="complete",
         reason=truncation_reason if truncated else "",
         truncated=truncated,
         rows_seen=len(decoded),
-        rows_used=len(selected),
+        rows_used=len(selection.rows),
     )
 
 
