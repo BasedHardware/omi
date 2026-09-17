@@ -1,6 +1,7 @@
 import React, {memo, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Platform,
   ScrollView,
   StyleSheet,
@@ -122,6 +123,42 @@ export function ConversationsPage({
   const [starredOnly, setStarredOnly] = useState(false);
   const nowEpochMilliseconds = useRef(Date.now()).current;
   const selected = conversations.find(item => item.id === selectedId) ?? null;
+  const scrolledAway = useRef(false);
+  const paginated = useRef(false);
+  const refreshState = useRef({onRefresh, loading, loadingMore, selectedId});
+  refreshState.current = {onRefresh, loading, loadingMore, selectedId};
+  const refreshEnabled = onRefresh !== undefined;
+
+  useEffect(() => {
+    if (!refreshEnabled) return;
+    let active =
+      AppState.currentState !== 'background' &&
+      AppState.currentState !== 'inactive';
+    const refresh = () => {
+      const current = refreshState.current;
+      if (
+        active &&
+        !current.loading &&
+        !current.loadingMore &&
+        current.selectedId === null &&
+        !scrolledAway.current &&
+        !paginated.current
+      ) {
+        current.onRefresh?.();
+      }
+    };
+    const listener = AppState.addEventListener('change', state => {
+      active = state === 'active';
+      if (active) refresh();
+    });
+    refresh();
+    const timer = setInterval(refresh, 15000);
+    return () => {
+      clearInterval(timer);
+      listener.remove();
+    };
+  }, [refreshEnabled]);
+
   const error = outcome?.status === 'error' ? outcome.error : null;
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -267,30 +304,15 @@ export function ConversationsPage({
         {(!compact || selected === null) && (
           <ScrollView
             keyboardShouldPersistTaps="handled"
+            onScroll={event => {
+              scrolledAway.current = event.nativeEvent.contentOffset.y > 40;
+            }}
+            scrollEventThrottle={100}
             contentContainerStyle={[
               styles.conversationList,
               embedded && mobileStyles.list,
             ]}
             style={styles.conversationListPane}>
-            {onRefresh && (
-              <FocusPressable
-                accessibilityRole="button"
-                accessibilityLabel="Refresh conversations"
-                disabled={loading || loadingMore}
-                onPress={onRefresh}
-                style={[
-                  mobileStyles.pageAction,
-                  embedded && mobileStyles.refresh,
-                ]}>
-                <Text
-                  style={[
-                    styles.projectionEmptyCopy,
-                    embedded && mobileStyles.actionText,
-                  ]}>
-                  {loading ? 'Refreshing…' : 'Refresh'}
-                </Text>
-              </FocusPressable>
-            )}
             {notice && (
               <Text
                 accessibilityRole="alert"
@@ -389,7 +411,10 @@ export function ConversationsPage({
                       item={item}
                       embedded={embedded}
                       key={item.id}
-                      onPress={() => setSelectedId(item.id)}
+                      onPress={() => {
+                        if (compact) scrolledAway.current = false;
+                        setSelectedId(item.id);
+                      }}
                       selected={selectedId === item.id}
                     />
                   ))}
@@ -403,7 +428,11 @@ export function ConversationsPage({
                   accessibilityRole="button"
                   accessibilityLabel="Load more conversations"
                   disabled={loading || loadingMore}
-                  onPress={onLoadMore}
+                  onPress={() => {
+                    // A first-page refresh would discard the older rows.
+                    paginated.current = true;
+                    onLoadMore();
+                  }}
                   style={mobileStyles.pageAction}>
                   <Text style={styles.projectionEmptyCopy}>
                     {loadingMore ? 'Loading…' : 'Load more'}
@@ -518,8 +547,6 @@ const mobileStyles = StyleSheet.create({
   },
   content: {flexDirection: 'column'},
   list: {flexGrow: 1},
-  refresh: {alignSelf: 'flex-end', paddingHorizontal: 12},
-  actionText: {color: mobileColor.textMuted, fontSize: 14},
   state: {
     flex: 1,
     alignItems: 'center',

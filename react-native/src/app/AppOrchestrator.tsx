@@ -1696,7 +1696,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     }}
                     loadingMore={conversationsLoadingMore}
                     notice={conversationNotice}
-                    loading={readsPhase === 'initial-loading'}
+                    loading={
+                      readsPhase === 'initial-loading' ||
+                      readsPhase === 'refreshing'
+                    }
                     outcome={routeOutcome}
                   />
                 ) : route === 'Memories' ? (

@@ -1,6 +1,12 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {ScrollView, Text, useWindowDimensions} from 'react-native';
+import {
+  AppState,
+  type AppStateStatus,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+} from 'react-native';
 import {ConversationsPage} from './Conversations';
 import type {
   ConversationProjection,
@@ -17,12 +23,19 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
 }));
 
 beforeEach(() => {
+  jest.useFakeTimers();
+  AppState.currentState = 'active';
   (useWindowDimensions as jest.Mock).mockReturnValue({
     width: 390,
     height: 820,
     scale: 2,
     fontScale: 1,
   });
+});
+
+afterEach(() => {
+  jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
@@ -170,7 +183,7 @@ test('mobile detail Back stays outside the transcript and restores active search
   act(() => tree.unmount());
 });
 
-test('loading uses the reduced-motion mark without claiming an empty library; retry stays available after failure', () => {
+test('loading keeps the reduced-motion mark and failures retry automatically without a refresh button', () => {
   const refresh = jest.fn();
   let tree!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
@@ -182,9 +195,10 @@ test('loading uses the reduced-motion mark without claiming an empty library; re
   expect(textOf(tree)).not.toContain('No conversations yet.');
   expect(tree.root.findByType(OmiAvatar).props.reduceMotion).toBe(true);
   expect(
-    tree.root.findAllByProps({accessibilityLabel: 'Refresh conversations'})[0]
-      .props.disabled,
-  ).toBe(true);
+    tree.root.findAllByProps({accessibilityLabel: 'Refresh conversations'}),
+  ).toHaveLength(0);
+  act(() => jest.advanceTimersByTime(15000));
+  expect(refresh).not.toHaveBeenCalled();
   act(() =>
     tree.update(
       <ConversationsPage
@@ -195,14 +209,117 @@ test('loading uses the reduced-motion mark without claiming an empty library; re
       />,
     ),
   );
-  const retry = tree.root.findAllByProps({
-    accessibilityLabel: 'Refresh conversations',
-  })[0];
-  expect(retry.props.disabled).toBe(false);
   expect(textOf(tree)).toContain('Connection interrupted');
   expect(textOf(tree)).not.toContain('No conversations yet.');
-  act(() => retry.props.onPress());
+  act(() => jest.advanceTimersByTime(15000));
   expect(refresh).toHaveBeenCalledTimes(1);
+  act(() => tree.unmount());
+});
+
+test('automatic refresh follows foreground state, uses the latest callback and cleans up on exit', () => {
+  let onState!: (state: AppStateStatus) => void;
+  const remove = jest.fn();
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_, listener) => {
+    onState = listener;
+    return {remove};
+  });
+  const first = jest.fn();
+  const latest = jest.fn();
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  const page = (
+    onRefresh: () => void,
+    loading = false,
+    loadingMore = false,
+  ) => (
+    <ConversationsPage
+      embedded
+      outcome={outcome}
+      loading={loading}
+      loadingMore={loadingMore}
+      onRefresh={onRefresh}
+    />
+  );
+  act(() => {
+    tree = ReactTestRenderer.create(page(first));
+  });
+  expect(first).toHaveBeenCalledTimes(1);
+  act(() => jest.advanceTimersByTime(10000));
+  act(() => tree.update(page(latest)));
+  expect(latest).not.toHaveBeenCalled();
+  act(() => jest.advanceTimersByTime(5000));
+  expect(first).toHaveBeenCalledTimes(1);
+  expect(latest).toHaveBeenCalledTimes(1);
+  act(() => onState('background'));
+  act(() => jest.advanceTimersByTime(30000));
+  expect(latest).toHaveBeenCalledTimes(1);
+  act(() => onState('active'));
+  expect(latest).toHaveBeenCalledTimes(2);
+  act(() => tree.update(page(latest, true)));
+  act(() => jest.advanceTimersByTime(15000));
+  expect(latest).toHaveBeenCalledTimes(2);
+  act(() => tree.update(page(latest, false, true)));
+  act(() => onState('active'));
+  act(() => jest.advanceTimersByTime(15000));
+  expect(latest).toHaveBeenCalledTimes(2);
+  act(() => tree.update(page(latest)));
+  act(() => jest.advanceTimersByTime(15000));
+  expect(latest).toHaveBeenCalledTimes(3);
+  act(() => tree.unmount());
+  act(() => jest.advanceTimersByTime(30000));
+  expect(latest).toHaveBeenCalledTimes(3);
+  expect(remove).toHaveBeenCalledTimes(1);
+});
+
+test('automatic refresh does not disturb scrolled lists, open details or loaded older pages', () => {
+  const refresh = jest.fn();
+  const loadMore = jest.fn();
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    tree = ReactTestRenderer.create(
+      <ConversationsPage
+        embedded
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            page: {...outcome.value.page, hasMore: true, nextCursor: 'older'},
+          },
+        }}
+        loading={false}
+        onRefresh={refresh}
+        onLoadMore={loadMore}
+      />,
+    );
+  });
+  const press = (label: string) =>
+    act(() =>
+      tree.root.findAllByProps({accessibilityLabel: label})[0].props.onPress(),
+    );
+  const scroll = (y: number) =>
+    act(() =>
+      tree.root
+        .findByType(ScrollView)
+        .props.onScroll({nativeEvent: {contentOffset: {y}}}),
+    );
+  expect(refresh).toHaveBeenCalledTimes(1);
+  scroll(200);
+  act(() => jest.advanceTimersByTime(15000));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  scroll(0);
+  act(() => jest.advanceTimersByTime(15000));
+  expect(refresh).toHaveBeenCalledTimes(2);
+  scroll(200);
+  press('Open conversation Quiet workspace');
+  act(() => jest.advanceTimersByTime(15000));
+  expect(refresh).toHaveBeenCalledTimes(2);
+  press('Back to conversations');
+  act(() => jest.advanceTimersByTime(15000));
+  expect(refresh).toHaveBeenCalledTimes(3);
+  press('Load more conversations');
+  expect(loadMore).toHaveBeenCalledTimes(1);
+  scroll(0);
+  act(() => jest.advanceTimersByTime(30000));
+  expect(refresh).toHaveBeenCalledTimes(3);
   act(() => tree.unmount());
 });
 
