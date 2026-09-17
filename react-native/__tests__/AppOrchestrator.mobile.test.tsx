@@ -88,7 +88,6 @@ afterEach(() => {
 
 test.each([
   ['Settings', 'Settings stage'],
-  ['Saved memories', 'Memories stage'],
   ['Apps', 'Connectors stage'],
 ])(
   'mobile %s opens its real destination and can return home',
@@ -98,15 +97,68 @@ test.each([
       control(renderer, label).props.onPress();
     });
     expect(control(renderer, stage)).toBeDefined();
-    await act(async () =>
-      control(
-        renderer,
-        label === 'Saved memories' ? 'Back to Home' : 'Home',
-      ).props.onPress(),
-    );
+    await act(async () => control(renderer, 'Home').props.onPress());
     expect(control(renderer, 'Ask Omi')).toBeDefined();
   },
 );
+
+test('saved memories appear in matching Search results, not as a Home shortcut', async () => {
+  const readsModule: typeof import('../src/app/useDesktopReads') = require('../src/app/useDesktopReads');
+  const realReads = readsModule.useDesktopReads;
+  const memory: import('../src/desktopReadClient').MemoryProjection = {
+    kind: 'memory',
+    id: 'workspace',
+    title: 'Quiet workspace',
+    summary: '',
+    searchableText: 'Quiet workspace',
+    citations: [],
+    timestamp: null,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+  };
+  const spy = jest
+    .spyOn(readsModule, 'useDesktopReads')
+    .mockImplementation(options => ({
+      ...realReads(options),
+      readsPhase: 'ready',
+      reads: [
+        memory,
+        {
+          ...memory,
+          id: 'walk',
+          title: 'Afternoon walk',
+          searchableText: 'Afternoon walk',
+        },
+      ],
+    }));
+  try {
+    const renderer = await renderApp();
+    const {ProjectionList} = require('../src/ui/ProjectionList');
+    expect(control(renderer, 'Saved memories')).toBeUndefined();
+    expect(control(renderer, 'Search results')).toBeUndefined();
+    await act(async () => control(renderer, 'Search mode').props.onPress());
+    await act(async () =>
+      control(renderer, 'Search loaded data').props.onChangeText(' WORKSPACE '),
+    );
+    const results = () => renderer.root.findByType(ProjectionList).props.items;
+    expect(results().map((item: {id: string}) => item.id)).toEqual([
+      'workspace',
+    ]);
+    await act(async () =>
+      control(renderer, 'Search loaded data').props.onChangeText('no match'),
+    );
+    expect(results()).toEqual([]);
+    await act(async () => control(renderer, 'Clear search').props.onPress());
+    expect(control(renderer, 'Search results')).toBeUndefined();
+    expect(control(renderer, 'Saved memories')).toBeUndefined();
+  } finally {
+    spy.mockRestore();
+  }
+});
 
 test('action items open from Home and return without a bottom Tasks destination', async () => {
   const renderer = await renderApp();

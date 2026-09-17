@@ -63,7 +63,6 @@ function buildProps(
     omnibar: <Text>Shared bottom dock</Text>,
     capture: {active: true, transcript: 'Preparing the product demo'},
     device: {connected: true, label: '100%'},
-    onViewMemories: jest.fn(),
     onOpenDevice: jest.fn(),
     onRouteChange: jest.fn(),
     onTaskToggle: jest.fn(),

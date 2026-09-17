@@ -85,7 +85,6 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   onRouteChange: (route: MobileRoute) => void;
   onViewTasks: () => void;
   onViewConversations: () => void;
-  onViewMemories: () => void;
 };
 
 type DashboardRow =
@@ -302,7 +301,6 @@ export function MobileAppSurface({
   settingsContent,
   conversationContent,
   appsContent,
-  onViewMemories,
   onOpenDevice,
   onRouteChange,
   onTaskToggle,
@@ -579,15 +577,6 @@ export function MobileAppSurface({
                 </View>
               ) : null
             }
-            ListFooterComponent={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Saved memories"
-                onPress={onViewMemories}
-                style={styles.quietButton}>
-                <Text style={styles.quietButtonText}>Saved memories</Text>
-              </Pressable>
-            }
             keyExtractor={item => item.key}
             renderItem={renderRow}
             showsVerticalScrollIndicator={false}
@@ -715,8 +704,6 @@ const styles = StyleSheet.create({
     gap: mobileSpace.sm,
     minHeight: 64,
     paddingVertical: mobileSpace.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: mobileColor.border,
   },
   taskToggle: {
     flex: 1,
@@ -751,8 +738,6 @@ const styles = StyleSheet.create({
   conversationRow: {
     paddingVertical: 12,
     gap: 5,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: mobileColor.border,
   },
   conversationHeading: {flexDirection: 'row', alignItems: 'baseline', gap: 12},
   conversationTitle: {

@@ -1265,7 +1265,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             />
           ) : null
         }
-        onViewMemories={() => setRoute('Memories')}
         onOpenDevice={() => setDevicePanelOpen(open => !open)}
         onRouteChange={destination => {
           setHomeChatOpen(false);

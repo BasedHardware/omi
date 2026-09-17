@@ -462,7 +462,6 @@ function Preview() {
               onOpenDevice: () => setDeviceOpen((open) => !open),
               onViewTasks: () => setRoute("tasks"),
               onViewConversations: () => setRoute("chat"),
-              onViewMemories: noop,
             })
           : h(surface === "mobile-setup" ? Onboarding : DesktopOnboarding, {
               onSignIn: () => setSignedIn(true),
