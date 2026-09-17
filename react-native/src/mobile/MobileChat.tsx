@@ -8,7 +8,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import ChevronLeft from 'lucide-react-native/icons/chevron-left';
+import X from 'lucide-react-native/icons/x';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
@@ -32,7 +32,6 @@ export function MobileChat({
   onScroll,
   shouldAnimate,
   presentation = 'overlay',
-  onExpand,
   onRemember,
   savingMemoryId = null,
   savedMemoryIds = [],
@@ -52,7 +51,6 @@ export function MobileChat({
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   shouldAnimate: (id: string) => boolean;
   presentation?: 'compact' | 'overlay';
-  onExpand?: () => void;
   onRemember?: (message: ChatMessage) => void;
   savingMemoryId?: string | null;
   savedMemoryIds?: readonly string[];
@@ -60,31 +58,33 @@ export function MobileChat({
 }) {
   const reduceMotion = useReduceMotion();
   const resting =
-    messages.length === 0 && !busy && !loadingHistory && error === null;
+    presentation !== 'compact' &&
+    messages.length === 0 &&
+    !busy &&
+    !loadingHistory &&
+    error === null;
+  const responseMessages = messages.filter(message => message.sender === 'ai');
   return (
     <View style={[local.root, presentation === 'compact' && local.compactRoot]}>
-      <View style={local.header}>
+      <View
+        style={[
+          local.header,
+          presentation === 'compact' && local.compactHeader,
+        ]}>
         <FocusPressable
           accessibilityRole="button"
           accessibilityLabel="Close chat"
           onPress={onClose}
           style={local.back}>
-          <ChevronLeft color={color.text} size={22} />
+          <X color={color.text} size={18} />
         </FocusPressable>
-        <OmiAvatar
-          tone="ink"
-          size={presentation === 'compact' ? 28 : 36}
-          motion={busy ? 'breathe' : 'arrive'}
-          reduceMotion={reduceMotion}
-        />
-        {presentation === 'compact' && onExpand ? (
-          <FocusPressable
-            accessibilityRole="button"
-            accessibilityLabel="Expand response"
-            onPress={onExpand}
-            style={local.expand}>
-            <Text style={local.copy}>Expand</Text>
-          </FocusPressable>
+        {presentation !== 'compact' ? (
+          <OmiAvatar
+            tone="ink"
+            size={36}
+            motion={busy ? 'breathe' : 'arrive'}
+            reduceMotion={reduceMotion}
+          />
         ) : null}
       </View>
       <ScrollView
@@ -139,7 +139,7 @@ export function MobileChat({
             </View>
           </View>
         )}
-        {messages.map(message => (
+        {responseMessages.slice(-1).map(message => (
           <React.Fragment key={message.id}>
             <ChatMessageRow
               message={message}
@@ -198,8 +198,8 @@ export function MobileChat({
 const local = StyleSheet.create({
   root: {flex: 1, backgroundColor: color.background},
   compactRoot: {
-    height: 248,
-    maxHeight: 248,
+    height: 188,
+    maxHeight: 188,
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.border,
@@ -216,6 +216,11 @@ const local = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: color.border,
   },
+  compactHeader: {
+    justifyContent: 'flex-start',
+    padding: 8,
+    borderBottomWidth: 0,
+  },
   back: {
     width: 44,
     height: 44,
@@ -223,11 +228,6 @@ const local = StyleSheet.create({
     backgroundColor: color.surface,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  expand: {
-    minHeight: 40,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
   },
   content: {flexGrow: 1, padding: 16, gap: 24},
   remember: {alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center'},

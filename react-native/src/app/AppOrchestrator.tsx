@@ -147,7 +147,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
   const [homeChatOpen, setHomeChatOpen] = useState(false);
   const [mobileMode, setMobileMode] = useState<MobileOmnibarMode>('Search');
-  const [mobileChatExpanded, setMobileChatExpanded] = useState(false);
   const [memorySavingId, setMemorySavingId] = useState<string | null>(null);
   const [savedMemoryIds, setSavedMemoryIds] = useState<string[]>([]);
   const [memorySaveError, setMemorySaveError] = useState<string | null>(null);
@@ -1130,7 +1129,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const mobileChatHasLongResponse = messages.some(
     message => message.sender === 'ai' && message.text.length > 420,
   );
-  const mobileChatOverlay = mobileChatExpanded || mobileChatHasLongResponse;
+  const mobileChatOverlay = mobileChatHasLongResponse;
   const mobileChat = homeChatOpen ? (
     <MobileChat
       messages={messages}
@@ -1142,12 +1141,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       onLoadOlder={loadOlderMessages}
       onClose={() => {
         setHomeChatOpen(false);
-        setMobileChatExpanded(false);
         setRoute(beforeMobileChat.current.route);
         setMobileMode(beforeMobileChat.current.mode);
       }}
       presentation={mobileChatOverlay ? 'overlay' : 'compact'}
-      onExpand={() => setMobileChatExpanded(true)}
       onRemember={message => {
         rememberMessage(message).catch(() => undefined);
       }}
@@ -1254,7 +1251,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             inputRef={composerRef}
             busy={chatBusy}
             canStop={activeGenerationId !== null}
-            liveControl={mobileLiveControl}
             onStop={() => {
               void stopGeneration();
             }}
@@ -1266,7 +1262,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               }
               if (!homeChatOpen)
                 beforeMobileChat.current = {route, mode: mobileMode};
-              setMobileChatExpanded(false);
               setRoute('Home');
               setHomeChatOpen(true);
               send().catch(() => undefined);

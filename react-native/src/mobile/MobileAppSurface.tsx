@@ -424,13 +424,6 @@ export function MobileAppSurface({
           <View style={[styles.flex, styles.stage]}>{stage}</View>
         ) : (
           <View style={styles.contentStage}>
-            {chatContent && !chatOverlay ? (
-              <View
-                accessibilityLabel="Compact chat response"
-                style={styles.compactChat}>
-                {chatContent}
-              </View>
-            ) : null}
             <FlatList
               contentContainerStyle={styles.content}
               data={rows}
@@ -474,6 +467,13 @@ export function MobileAppSurface({
             </View>
           </View>
         )}
+        {chatContent && !chatOverlay ? (
+          <View
+            accessibilityLabel="Compact chat response"
+            style={styles.compactChat}>
+            {chatContent}
+          </View>
+        ) : null}
         {omnibar}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
   },
   contentStage: {flex: 1, minHeight: 0, position: 'relative'},
   compactChat: {
-    maxHeight: 248,
+    maxHeight: 196,
     paddingHorizontal: mobileSpace.md,
     paddingTop: mobileSpace.xs,
     position: 'relative',

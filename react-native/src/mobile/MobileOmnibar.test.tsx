@@ -44,8 +44,7 @@ test('search submits without cancelling an active reply; Ask stops it and retain
   act(() => tree.unmount());
 });
 
-test('Ask keeps Live beside Send; Search hides it', () => {
-  const live = <Text>Live control</Text>;
+test('Ask omits Live and phone shortcuts in the mobile composer', () => {
   let tree!: Renderer.ReactTestRenderer;
   act(() => {
     tree = Renderer.create(
@@ -59,28 +58,11 @@ test('Ask keeps Live beside Send; Search hides it', () => {
         busy={false}
         canStop={false}
         inputRef={{current: null}}
-        liveControl={live}
       />,
     );
   });
-  expect(JSON.stringify(tree.toJSON())).toContain('Live control');
-  act(() =>
-    tree.update(
-      <MobileOmnibar
-        mode="Search"
-        value=""
-        onChange={jest.fn()}
-        onSubmit={jest.fn()}
-        onStop={jest.fn()}
-        onModeChange={jest.fn()}
-        busy={false}
-        canStop={false}
-        inputRef={{current: null}}
-        liveControl={live}
-      />,
-    ),
-  );
-  expect(JSON.stringify(tree.toJSON())).not.toContain('Live control');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Live');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Phone');
   act(() => tree.unmount());
 });
 

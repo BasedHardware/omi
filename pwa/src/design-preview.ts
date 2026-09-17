@@ -14,7 +14,6 @@ import {
   MobileOmnibar,
   type MobileOmnibarMode,
 } from "../../react-native/src/mobile/MobileOmnibar";
-import { LiveVoiceButton } from "../../react-native/src/ui/LiveVoiceButton";
 import {
   DeviceSession,
   homeConnectionStatus,
@@ -224,7 +223,6 @@ function Preview() {
       : null
   );
   const [mode, setMode] = useState<MobileOmnibarMode>("Search");
-  const [chatExpanded, setChatExpanded] = useState(chatState === "long");
   const composerRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
@@ -362,18 +360,14 @@ function Preview() {
                     onLoadOlder: noop,
                     onClose: () => {
                       setChatOpen(false);
-                      setChatExpanded(false);
                       setRoute(beforeChat.current);
                     },
-                    presentation:
-                      chatExpanded ||
-                      chatMessages.some(
-                        (message) =>
-                          message.sender === "ai" && message.text.length > 420
-                      )
-                        ? "overlay"
-                        : "compact",
-                    onExpand: () => setChatExpanded(true),
+                    presentation: chatMessages.some(
+                      (message) =>
+                        message.sender === "ai" && message.text.length > 420
+                    )
+                      ? "overlay"
+                      : "compact",
                     onRemember: () =>
                       setChatError(
                         "Preview only — authenticated memory saving is not available here."
@@ -391,12 +385,10 @@ function Preview() {
                     onScroll: noop,
                   })
                 : undefined,
-              chatOverlay:
-                chatExpanded ||
-                chatMessages.some(
-                  (message) =>
-                    message.sender === "ai" && message.text.length > 420
-                ),
+              chatOverlay: chatMessages.some(
+                (message) =>
+                  message.sender === "ai" && message.text.length > 420
+              ),
               omnibar: h(MobileOmnibar, {
                 key: "mobile-omnibar",
                 mode,
@@ -429,10 +421,6 @@ function Preview() {
                     )
                   );
                 },
-                liveControl: h(LiveVoiceButton, {
-                  backend: null,
-                  dock: true,
-                }),
               }),
               searchQuery: mode === "Search" ? draft : "",
               conversations:

@@ -100,6 +100,8 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   const disconnections = mockNative.disconnectDevice.mock.calls.length;
   await act(async () => control(renderer, 'Ask mode').props.onPress());
   const input = control(renderer, 'Ask Omi');
+  expect(control(renderer, 'Start Live voice')).toBeUndefined();
+  expect(control(renderer, 'End Live voice')).toBeUndefined();
   await act(async () => {
     renderer.root
       .findAllByType(TextInput)
@@ -108,8 +110,13 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   });
   await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
   expect(control(renderer, 'Chat scroll region')).toBeDefined();
+  expect(control(renderer, 'Start Live voice')).toBeUndefined();
+  expect(control(renderer, 'End Live voice')).toBeUndefined();
   expect(control(renderer, 'Ask Omi')).toBe(input);
   expect(control(renderer, 'Compact chat response')).toBeDefined();
+  expect(control(renderer, 'Expand response')).toBeUndefined();
+  expect(control(renderer, 'Start Live voice')).toBeUndefined();
+  expect(control(renderer, 'End Live voice')).toBeUndefined();
   await act(async () => control(renderer, 'Close chat').props.onPress());
   expect(control(renderer, 'Open Omi device')).toBeDefined();
   expect(control(renderer, 'Ask Omi').props.value).toBe('Hello Omi');

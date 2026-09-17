@@ -312,15 +312,18 @@ test('the bottom dock stays mounted while chat is open', () => {
   ).toBeDefined();
 });
 
-test('compact replies stay above the timeline and the viewport has both edge fades', () => {
+test('compact replies dock directly above the input and the viewport has both edge fades', () => {
   const renderer = render({
     chatContent: <Text>Short answer</Text>,
     chatOverlay: false,
   });
+  const tree = JSON.stringify(renderer.toJSON());
   expect(
     renderer.root.findByProps({accessibilityLabel: 'Compact chat response'}),
   ).toBeDefined();
-  expect(renderedText(renderer)).toContain('Product standup');
+  expect(tree.indexOf('Short answer')).toBeLessThan(
+    tree.indexOf('Shared bottom dock'),
+  );
   expect(
     renderer.root.findByProps({testID: 'timeline-top-fade'}),
   ).toBeDefined();

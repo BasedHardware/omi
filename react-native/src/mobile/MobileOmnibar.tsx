@@ -20,7 +20,6 @@ export function MobileOmnibar({
   busy,
   canStop,
   inputRef,
-  liveControl,
 }: {
   mode: MobileOmnibarMode;
   onModeChange: (mode: MobileOmnibarMode) => void;
@@ -31,7 +30,6 @@ export function MobileOmnibar({
   busy: boolean;
   canStop: boolean;
   inputRef: React.RefObject<TextInput | null>;
-  liveControl?: React.ReactNode;
 }) {
   const stopping = mode === 'Ask' && canStop;
   const disabled =
@@ -85,7 +83,6 @@ export function MobileOmnibar({
             <X size={18} color={color.textMuted} />
           </FocusPressable>
         )}
-        {mode === 'Ask' ? liveControl : null}
         <FocusPressable
           accessibilityRole="button"
           accessibilityLabel={
