@@ -107,6 +107,65 @@ function presentReviews(value: unknown): void {
   }
 }
 
+function presentObject(
+  value: unknown,
+  present: (row: Record<string, unknown>) => void,
+): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return;
+  }
+  present(value as Record<string, unknown>);
+}
+
+function presentObjectList(
+  value: unknown,
+  present: (row: Record<string, unknown>) => void,
+): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const raw of value) {
+    presentObject(raw, present);
+  }
+}
+
+function presentExternalIntegration(value: unknown): void {
+  presentObject(value, row => {
+    presentNullableString(row.app_home_url);
+    presentNullableString(row.chat_messages_target);
+    presentNullableString(row.chat_tools_manifest_url);
+    presentNullableString(row.mcp_server_url);
+    presentNullableString(row.setup_completed_url);
+    presentNullableString(row.setup_instructions_file_path);
+    presentNullableString(row.triggers_on);
+    presentNullableString(row.webhook_url);
+    presentObjectList(row.actions, action => {
+      presentNullableString(action.action);
+    });
+    presentObjectList(row.auth_steps, step => {
+      presentNullableString(step.name);
+      presentNullableString(step.url);
+    });
+  });
+}
+
+function presentChatTools(value: unknown): void {
+  presentObjectList(value, tool => {
+    presentNullableString(tool.description);
+    presentNullableString(tool.endpoint);
+    presentNullableString(tool.method);
+    presentNullableString(tool.name);
+    presentNullableString(tool.status_message);
+    presentNullableString(tool.transport);
+  });
+}
+
 export type OmiAppChrome = {
   name: string;
   description?: string;
@@ -154,6 +213,8 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   presentNullableString(row.status);
   presentNullableString(row.uid);
   presentNullableString(row.username);
+  presentExternalIntegration(row.external_integration);
+  presentChatTools(row.chat_tools);
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
   if (row.description === undefined || row.description === null) {
     return image === null ? {name} : {name, image};
