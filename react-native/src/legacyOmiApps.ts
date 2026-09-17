@@ -15,10 +15,58 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function presentPaddedKnown(value: unknown): void {
-  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+function presentNullableDate(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
     throw new AppError();
   }
+  if (visibleDisplayText(value) !== value) {
+    throw new AppError();
+  }
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (value === '' || !Number.isFinite(parsed)) {
+    throw new AppError();
+  }
+}
+
+function presentDefaultInt(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new AppError();
+    }
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new AppError();
+    }
+    return;
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    return;
+  }
+  throw new AppError();
+}
+
+function presentNullableDouble(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new AppError();
+    }
+    if (value === '' || !Number.isFinite(Number(value))) {
+      throw new AppError();
+    }
+    return;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return;
+  }
+  throw new AppError();
 }
 
 function presentReview(value: unknown): void {
@@ -29,9 +77,9 @@ function presentReview(value: unknown): void {
     return;
   }
   const review = value as Record<string, unknown>;
-  presentPaddedKnown(review.rated_at);
-  presentPaddedKnown(review.responded_at);
-  presentPaddedKnown(review.score);
+  presentNullableDate(review.rated_at);
+  presentNullableDate(review.responded_at);
+  presentNullableDouble(review.score);
 }
 
 function presentReviews(value: unknown): void {
@@ -65,14 +113,14 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   if (id !== appId) {
     throw new AppError();
   }
-  presentPaddedKnown(row.created_at);
-  presentPaddedKnown(row.installs);
-  presentPaddedKnown(row.rating_avg);
-  presentPaddedKnown(row.rating_count);
-  presentPaddedKnown(row.price);
-  presentPaddedKnown(row.score);
-  presentPaddedKnown(row.money_made);
-  presentPaddedKnown(row.usage_count);
+  presentNullableDate(row.created_at);
+  presentDefaultInt(row.installs);
+  presentNullableDouble(row.rating_avg);
+  presentDefaultInt(row.rating_count);
+  presentNullableDouble(row.price);
+  presentNullableDouble(row.score);
+  presentNullableDouble(row.money_made);
+  presentDefaultInt(row.usage_count);
   presentReviews(row.reviews);
   presentReview(row.user_review);
   const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
