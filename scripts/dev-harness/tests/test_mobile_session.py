@@ -49,6 +49,34 @@ class TestAcquire:
         assert set(first["ports"].values()).isdisjoint(second["ports"].values())
         assert first["harness_instance"] != second["harness_instance"]
 
+    def test_port_number_claims_are_exclusive_across_the_offset_space(self, tmp_path: Path, env: dict) -> None:
+        from itertools import combinations
+
+        from dev_harness import config
+
+        root = ms.sessions_root(REPO_ROOT, env)
+        offsets = list(range(ms.PORT_OFFSET_MIN, ms.PORT_OFFSET_MAX + 1, ms.PORT_OFFSET_STEP))
+        port_sets = {
+            offset: set(config.harness_ports_from_env({config.PORT_OFFSET_ENV: str(offset)}).values())
+            for offset in offsets
+        }
+        intersecting = [(left, right) for left, right in combinations(offsets, 2) if port_sets[left] & port_sets[right]]
+        assert intersecting, "the configured offset space must include cross-role port collisions"
+        for left, right in intersecting:
+            first_ports = ms._claim_port_offset(
+                root, f"oms-left-{left}", requested_offset=left, listeners=_no_listeners
+            )[1]
+            assert set(first_ports.values()) == port_sets[left]
+            for port in port_sets[left]:
+                assert (root / "ports" / f"port-{port}.json").is_file()
+            with pytest.raises(ms.SessionError, match="already claimed"):
+                ms._claim_port_offset(root, f"oms-right-{right}", requested_offset=right, listeners=_no_listeners)
+            ms._release_port_offset(root, left, f"oms-left-{left}")
+            for port in port_sets[left]:
+                assert not (root / "ports" / f"port-{port}.json").exists()
+            ms._claim_port_offset(root, f"oms-right-{right}", requested_offset=right, listeners=_no_listeners)
+            ms._release_port_offset(root, right, f"oms-right-{right}")
+
     def test_duplicate_name_is_refused_with_owner_hint(self, tmp_path: Path, env: dict) -> None:
         ms.acquire(REPO_ROOT, env, name="dup", listeners=_no_listeners)
         with pytest.raises(ms.SessionError, match="already exists"):
