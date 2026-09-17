@@ -94,7 +94,7 @@ class SemanticsNodeDump {
 
   String get line {
     final parts = <String>[
-      '${'  ' * depth}#${id}',
+      '${'  ' * depth}#$id',
       if (flags.isNotEmpty) 'flags=${flags.join(',')}',
       if (actions.isNotEmpty) 'actions=${actions.join(',')}',
       if (label.isNotEmpty) 'label=${_quote(label)}',
@@ -103,7 +103,7 @@ class SemanticsNodeDump {
       if (tooltip.isNotEmpty) 'tooltip=${_quote(tooltip)}',
       if (identifier.isNotEmpty) 'identifier=${_quote(identifier)}',
       if (isInteractive && !hasAccessibleName) 'UNNAMED',
-      if (isInteractive && hasAccessibleName && isUnhelpful) 'UNHELPFUL(${unhelpfulReason})',
+      if (isInteractive && hasAccessibleName && isUnhelpful) 'UNHELPFUL($unhelpfulReason)',
     ];
     return parts.join(' ');
   }

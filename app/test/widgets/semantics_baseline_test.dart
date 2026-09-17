@@ -6,9 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
@@ -378,7 +376,7 @@ Future<SurfaceSemanticsReport> _measureConversationDetail(WidgetTester tester) a
 Future<SurfaceSemanticsReport> _measureMemories(WidgetTester tester) async {
   final home = HomeProvider();
   addTearDown(home.dispose);
-  final empty = GetMemoriesResult(const [], true);
+  const empty = GetMemoriesResult([], true);
   final memories = MemoriesProvider(
     fetchMemoriesRequest: ({limit = 100, offset = 0, thisDeviceOnly = false}) async => empty,
   );
