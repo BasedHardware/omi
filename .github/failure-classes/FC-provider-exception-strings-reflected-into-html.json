@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-provider-exception-strings-reflected-into-html",
+  "violated_contract": "An OAuth callback failure page that embeds provider response bodies or exception messages into an HTMLResponse must HTML-escape them: HTMLResponse defaults to text/html, so a raw provider body or an exception message carrying a crafted URL executes as markup in the browser even without page markup around it. Five plugin apps' token-exchange failure and exception branches interpolated response.text / str(e) raw (dropbox, google-calendar, twitter-chat-tools, whoop).",
+  "canonical_prevention": "Escape every dynamic string with html.escape(..., quote=True) at the interpolation site, and pin the failure paths with a manifest-registered hermetic suite that drives the real callbacks through a failing token exchange and a raising transport, asserting the escaped form and no raw script tag.",
+  "canonical_prevention_artifact": [
+    "plugins/test_callback_error_pages_escaped.py",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/**"
+  ],
+  "status": "open"
+}
