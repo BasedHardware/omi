@@ -17,7 +17,10 @@ app = Flask(__name__)
 APP_ID = "01JPP8Y2PA2YWQPTMDAFHXWX8E"
 API_KEY = "get_this_api_key_in_omi_app"
 # USER_ID is now extracted dynamically from requests rather than being hardcoded
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+# Integration Import API (backend/routers/integration.py): memories are created via
+# POST /v2/integrations/{app_id}/user/memories. The former ".../user/facts" path is
+# not served and answered every import with 404.
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
 
 # OpenAI API configuration
 # Set your OpenAI API key in environment variables for security
@@ -297,7 +300,7 @@ def submit_memories():
             # Print the full memory with no truncation
             print(f"\n🔍 MEMORY #{memory_count} ({len(memory)} chars): {memory}")
 
-            # Create the facts data according to existing structure (API still uses "facts")
+            # Raw-text payload; the backend extracts memories from `text`
             memory_data = {"text": memory, "text_source": "other", "text_source_spec": "learning_notes"}
 
             # Print full request data without truncation
@@ -307,7 +310,7 @@ def submit_memories():
             if memory_count > 1:
                 time.sleep(0.5)  # Half second delay between requests
 
-            # Send the request to OMI API with dynamic user_id (still using the facts endpoint)
+            # Send the request to the OMI memories endpoint with the dynamic user_id
             response = requests.post(f"{API_URL}?uid={user_id}", headers=headers, data=json.dumps(memory_data))
 
             # Record result

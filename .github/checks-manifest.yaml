@@ -1149,6 +1149,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
 
+  - id: manual-import-memories-route-tests
+    command: ["python3", "plugins/import/manual-import/test_submit_memories_route.py"]
+    triggers: ["plugins/import/manual-import/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the manual import app posted every extracted memory to /v2/integrations/{app_id}/user/facts, which is not a backend route (404), so imports never landed; regression pins the /user/memories import route"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
