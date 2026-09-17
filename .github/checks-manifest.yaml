@@ -98,9 +98,6 @@ checks:
   - id: spine-contracts
     command: ["python3", "scripts/check_spine_contracts.py"]
     triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "backend/testing/e2e/test_client_compat_replay.py", ".github/checks-manifest.yaml"]
-  - id: spine-contracts
-    command: ["python3", "scripts/check_spine_contracts.py"]
-    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
