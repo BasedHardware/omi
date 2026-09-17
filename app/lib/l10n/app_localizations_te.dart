@@ -79,6 +79,18 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reprocessConversation => 'సంభాషణను తిరిగి ప్రక్రియ చేయండి';
 
   @override
+  String get reprocessTranscription => 'ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేయండి';
+
+  @override
+  String get retranscribingConversation => 'సంభాషణను తిరిగి ట్రాన్స్‌క్రైబ్ చేస్తున్నాం...\nఇది కొన్ని సెకన్లు తీసుకోవచ్చు';
+
+  @override
+  String get errorReprocessingTranscription => 'ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేసేటప్పుడు త్రుటి. దయచేసి తరువాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get errorNoStoredAudio => 'ఈ సంభాషణకు నిల్వ చేసిన ఆడియో లేదు.';
+
+  @override
   String get deleteConversation => 'సంభాషణను తొలగించు';
 
   @override

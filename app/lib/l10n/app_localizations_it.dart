@@ -79,6 +79,18 @@ class AppLocalizationsIt extends AppLocalizations {
   String get reprocessConversation => 'Rielabora Conversazione';
 
   @override
+  String get reprocessTranscription => 'Rielabora trascrizione';
+
+  @override
+  String get retranscribingConversation => 'Ritrascrizione della conversazione...\nPotrebbero volerci alcuni secondi';
+
+  @override
+  String get errorReprocessingTranscription => 'Errore durante la rielaborazione della trascrizione. Riprova più tardi.';
+
+  @override
+  String get errorNoStoredAudio => 'Nessun audio salvato disponibile per questa conversazione.';
+
+  @override
   String get deleteConversation => 'Elimina conversazione';
 
   @override

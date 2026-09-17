@@ -79,6 +79,18 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reprocessConversation => 'Perdoroti pokalbį';
 
   @override
+  String get reprocessTranscription => 'Iš naujo apdoroti transkripciją';
+
+  @override
+  String get retranscribingConversation => 'Pokalbis transkribuojamas iš naujo...\nTai gali užtrukti kelias sekundes';
+
+  @override
+  String get errorReprocessingTranscription => 'Klaida iš naujo apdorojant transkripciją. Bandykite vėliau.';
+
+  @override
+  String get errorNoStoredAudio => 'Šiam pokalbiui nėra išsaugoto garso.';
+
+  @override
   String get deleteConversation => 'Ištrinti pokalbį';
 
   @override

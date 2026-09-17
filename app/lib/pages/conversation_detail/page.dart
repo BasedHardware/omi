@@ -388,8 +388,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
       case 'reprocess':
-        if (!provider.loadingReprocessConversation) {
+        if (!provider.loadingReprocessConversation && !provider.loadingReprocessTranscription) {
           await provider.reprocessConversation();
+        }
+        break;
+      case 'reprocess_transcription':
+        if (!provider.loadingReprocessConversation && !provider.loadingReprocessTranscription) {
+          await provider.reprocessTranscription();
         }
         break;
       case 'link_event':
@@ -666,6 +671,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(SnackBar(content: Text(context.l10n.errorProcessingConversation)));
+          } else if (error == 'REPROCESS_TRANSCRIPTION_FAILED') {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(context.l10n.errorReprocessingTranscription)));
+          } else if (error == 'REPROCESS_TRANSCRIPTION_NO_AUDIO') {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.errorNoStoredAudio)));
           }
         },
         showInfo: (info) {},
@@ -960,6 +971,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 iconWidget: const FaIcon(FontAwesomeIcons.commentDots, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
                               ),
+                              if (provider.conversation.hasAudio())
+                                PullDownMenuItem(
+                                  title: context.l10n.reprocessTranscription,
+                                  iconWidget: const FaIcon(FontAwesomeIcons.microphone, size: 16),
+                                  onTap: () => _handleMenuSelection(context, 'reprocess_transcription', provider),
+                                ),
                               if (!provider.conversation.discarded)
                                 PullDownMenuItem(
                                   title: context.l10n.reprocessConversation,
@@ -1324,6 +1341,26 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final transcriptionProvider = context.watch<ConversationDetailProvider>();
+    if (transcriptionProvider.loadingReprocessTranscription &&
+        transcriptionProvider.reprocessConversationId == transcriptionProvider.conversation.id) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 18.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+              const SizedBox(width: 16),
+              Text(
+                context.l10n.retranscribingConversation,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () {
@@ -1711,6 +1748,26 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         },
         child: Consumer<ConversationDetailProvider>(
           builder: (context, provider, child) {
+            if (provider.loadingReprocessTranscription &&
+                provider.reprocessConversationId == provider.conversation.id) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 18.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                      const SizedBox(width: 16),
+                      Text(
+                        context.l10n.retranscribingConversation,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
             final conversation = provider.conversation;
             final segments = conversation.transcriptSegments;
             final photos = conversation.photos;

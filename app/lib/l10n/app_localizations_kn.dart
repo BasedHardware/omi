@@ -79,6 +79,18 @@ class AppLocalizationsKn extends AppLocalizations {
   String get reprocessConversation => 'ಸಂವಾದ ಮರುಪ್ರಕ್ರಿಯೆ';
 
   @override
+  String get reprocessTranscription => 'ಲಿಪ್ಯಂತರವನ್ನು ಮರುಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ';
+
+  @override
+  String get retranscribingConversation => 'ಸಂವಾದವನ್ನು ಮತ್ತೆ ಲಿಪ್ಯಂತರಿಸಲಾಗುತ್ತಿದೆ...\nಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕಾಗಬಹುದು';
+
+  @override
+  String get errorReprocessingTranscription => 'ಲಿಪ್ಯಂತರವನ್ನು ಮರುಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವಾಗ ದೋಷ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get errorNoStoredAudio => 'ಈ ಸಂವಾದಕ್ಕೆ ಸಂಗ್ರಹಿತ ಆಡಿಯೋ ಇಲ್ಲ.';
+
+  @override
   String get deleteConversation => 'ಸಂವಾದ ಅಳಿಸಿ';
 
   @override

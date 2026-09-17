@@ -79,6 +79,18 @@ class AppLocalizationsUr extends AppLocalizations {
   String get reprocessConversation => 'بات چیت دوبارہ پروسیس کریں';
 
   @override
+  String get reprocessTranscription => 'نقل کو دوبارہ پروسیس کریں';
+
+  @override
+  String get retranscribingConversation => 'بات چیت دوبارہ نقل کی جا رہی ہے...\nاس میں چند سیکنڈ لگ سکتے ہیں';
+
+  @override
+  String get errorReprocessingTranscription => 'نقل کو دوبارہ پروسیس کرتے وقت خرابی۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get errorNoStoredAudio => 'اس بات چیت کے لیے کوئی محفوظ آڈیو دستیاب نہیں۔';
+
+  @override
   String get deleteConversation => 'بات چیت حذف کریں';
 
   @override

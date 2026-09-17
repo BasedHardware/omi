@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "Перапрацаваць транскрыпцыю",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "Паўторная транскрыпцыя размовы...\nГэта можа заняць некалькі секунд",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "Памылка пры паўторнай апрацоўцы транскрыпцыі. Паспрабуйце пазней.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "Для гэтай размовы няма захаванага аўдыё.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "Выдаліць размову",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

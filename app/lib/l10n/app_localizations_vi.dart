@@ -79,6 +79,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reprocessConversation => 'Xử lý lại cuộc trò chuyện';
 
   @override
+  String get reprocessTranscription => 'Xử lý lại bản ghi';
+
+  @override
+  String get retranscribingConversation => 'Đang phiên âm lại cuộc trò chuyện...\nViệc này có thể mất vài giây';
+
+  @override
+  String get errorReprocessingTranscription => 'Lỗi khi xử lý lại bản ghi. Vui lòng thử lại sau.';
+
+  @override
+  String get errorNoStoredAudio => 'Không có âm thanh đã lưu cho cuộc trò chuyện này.';
+
+  @override
   String get deleteConversation => 'Xóa cuộc trò chuyện';
 
   @override

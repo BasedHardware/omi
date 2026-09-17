@@ -79,6 +79,18 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reprocessConversation => 'Pārstrādāt sarunu';
 
   @override
+  String get reprocessTranscription => 'Atkārtoti apstrādāt transkripciju';
+
+  @override
+  String get retranscribingConversation => 'Saruna tiek transkribēta no jauna...\nTas var aizņemt dažas sekundes';
+
+  @override
+  String get errorReprocessingTranscription => 'Kļūda, atkārtoti apstrādājot transkripciju. Mēģiniet vēlāk.';
+
+  @override
+  String get errorNoStoredAudio => 'Šai sarunai nav saglabāta audioieraksta.';
+
+  @override
   String get deleteConversation => 'Dzēst sarunu';
 
   @override

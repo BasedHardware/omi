@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "ट्रान्सक्रिप्शन पुन्हा प्रक्रिया करा",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "संभाषण पुन्हा ट्रान्सक्राइब करत आहे...\nयाला काही सेकंद लागू शकतात",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "ट्रान्सक्रिप्शन पुन्हा प्रक्रिया करताना त्रुटी. नंतर पुन्हा प्रयत्न करा.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "या संभाषणासाठी संग्रहित ऑडिओ उपलब्ध नाही.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "संभाषण हटवा",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

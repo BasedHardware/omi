@@ -31,6 +31,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool isLoading = false;
   bool loadingReprocessConversation = false;
+  bool loadingReprocessTranscription = false;
   String reprocessConversationId = '';
   App? selectedAppForReprocessing;
 
@@ -206,6 +207,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  void updateReprocessTranscriptionLoadingState(bool loading) {
+    loadingReprocessTranscription = loading;
+    notifyListeners();
+  }
+
   void setSelectedAppForReprocessing(App app) {
     selectedAppForReprocessing = app;
     notifyListeners();
@@ -352,6 +358,41 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       );
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
+      updateReprocessConversationId('');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> reprocessTranscription({
+    Future<TranscriptionReprocessResult> Function(String id)? client,
+  }) async {
+    updateReprocessTranscriptionLoadingState(true);
+    updateReprocessConversationId(conversation.id);
+    try {
+      final result = await (client ?? reProcessTranscriptionServer)(conversation.id);
+      if (_isDisposed) return false;
+      updateReprocessTranscriptionLoadingState(false);
+      updateReprocessConversationId('');
+      if (result.conversation == null) {
+        notifyError(
+          result.errorCode == 'no_audio' ? 'REPROCESS_TRANSCRIPTION_NO_AUDIO' : 'REPROCESS_TRANSCRIPTION_FAILED',
+        );
+        notifyListeners();
+        return false;
+      }
+
+      conversationProvider!.updateConversation(result.conversation!);
+      SharedPreferencesUtil().modifiedConversationDetails = result.conversation;
+      _cachedConversation = result.conversation;
+      notifyInfo('REPROCESS_TRANSCRIPTION_SUCCESS');
+      notifyListeners();
+      return true;
+    } catch (err, stacktrace) {
+      print(err);
+      await PlatformManager.instance.crashReporter.reportCrash(err, stacktrace);
+      notifyError('REPROCESS_TRANSCRIPTION_FAILED');
+      updateReprocessTranscriptionLoadingState(false);
       updateReprocessConversationId('');
       notifyListeners();
       return false;
