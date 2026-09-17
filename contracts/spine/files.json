@@ -1,5 +1,6 @@
 {
   "app/test/spine/c3_conversation_test.dart": "C3",
+  "app/test/spine/c3_execution_test.dart": "C3",
   "app/test/spine/c3_fixture.dart": "C3",
   "app/test/spine/c3_projection_test.dart": "C3",
   "app/test/spine/c3_result_test.dart": "C3",
@@ -10,7 +11,6 @@
   "scripts/dev-harness/tests/spine/fake_flutter.py": "V1",
   "scripts/dev-harness/tests/spine/pending.py": "MECHANISM",
   "scripts/dev-harness/tests/spine/test_evidence_freeze.py": "V8",
-  "scripts/dev-harness/tests/spine/test_live_session.py": "V1",
   "scripts/dev-harness/tests/spine/test_live_revision.py": "V1",
-  "app/test/spine/c3_execution_test.dart": "C3"
+  "scripts/dev-harness/tests/spine/test_live_session.py": "V1"
 }

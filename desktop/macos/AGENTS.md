@@ -203,11 +203,12 @@ do not hand-edit those paths to match a specific machine.
 ## Key Architecture Notes
 
 ### Authentication
-- Firebase Auth with Apple/Google Sign-In
-- Desktop apps should use backend OAuth flow: `/v1/auth/authorize`
+- Firebase (Apple/Google); desktop OAuth: `/v1/auth/authorize`
 - Apple Services ID: `me.omi.web` (shared across all apps)
 - iOS apps use native Sign-In, Desktop uses backend OAuth + custom token
 - Session death is owned by `AuthSessionCoordinator` (`INV-AUTH-1`); use `invalidateSession` for expired/revoked Firebase creds, not nuclear `signOut()`.
+
+- [Agent credentials](docs/agent-model-credentials.md).
 
 #### Session 401 vs BYOK/provider 401
 
