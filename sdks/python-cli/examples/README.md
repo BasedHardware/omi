@@ -106,6 +106,7 @@
 * [`quickstart.hi.md`](quickstart.hi.md) — omi-cli के साथ शुरुआत (Hindi Quickstart).
 * [`quickstart.hr.md`](quickstart.hr.md) — Prvi koraci s omi-cli (Croatian Quickstart).
 * [`quickstart.chr.md`](quickstart.chr.md) — ᎢᎬᏱ ᏗᏕᏲᏗ omi-cli (Cherokee Quickstart).
+* [`quickstart.ht.md`](quickstart.ht.md) — omi-cli gid demaraj rapid an kreyòl ayisyen (Haitian Creole Quickstart).
 * [`quickstart.hu.md`](quickstart.hu.md) — Első lépések az omi-cli használatával (Hungarian Quickstart).
 * [`quickstart.hy.md`](quickstart.hy.md) — Առաջին քայլերը omi-cli-ով (Armenian Quickstart).
 * [`quickstart.is.md`](quickstart.is.md) — Fyrstu skref með omi-cli (Icelandic Quickstart).
