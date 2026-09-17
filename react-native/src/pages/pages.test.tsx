@@ -1176,14 +1176,11 @@ test('Settings developer webhook titles are not raw API keys', async () => {
         id: request.id,
         status: 200,
         body: JSON.stringify({
-          memory_created: {
-            enabled: true,
-            url: 'https://example.test/conversation',
-          },
+          memory_created: true,
           realtime_transcript: false,
-          audio_bytes: {enabled: true, url: 'https://example.test/audio'},
-          day_summary: {enabled: false, url: null},
-          button_event: {url: 'https://example.test/button'},
+          audio_bytes: true,
+          day_summary: false,
+          button_event: false,
         }),
       };
     }
@@ -1208,8 +1205,54 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).not.toContain('realtime_transcript');
   expect(tree).not.toContain('audio_bytes');
   expect(tree).not.toContain('day_summary');
-  expect(tree).toContain('Status unavailable');
   expect(tree).not.toContain('Status unknown');
+});
+
+test('Settings names Flutter UserWebhooksStatusResponse fromJson type-wrong GET memory_created instead of remapping to a Conversation Events chip', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+        }),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          memory_created: 1,
+          realtime_transcript: false,
+          audio_bytes: true,
+          day_summary: false,
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const account = textOf(renderer);
+  expect(account).toContain('Fair Use');
+  expect(account).toContain('Ada');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Webhooks response is malformed')),
+  );
+  expect(tree).not.toContain('Conversation Events');
+  expect(tree).not.toContain('Real-time Transcript');
+  expect(tree).not.toContain('Audio Bytes');
+  expect(tree).not.toContain('Day Summary');
 });
 
 test('Settings omits Flutter Profile.build() GET company, job, and data protection', async () => {
@@ -3009,9 +3052,23 @@ test('Settings names Flutter developer webhook empty GET URLs', async () => {
         id: request.id,
         status: 200,
         body: JSON.stringify({
-          memory_created: {enabled: true, url: ' \t\n'},
-          day_summary: {enabled: false, url: '  https://example.test/day  '},
+          memory_created: true,
+          day_summary: false,
         }),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhook/memory_created') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({url: ' \t\n'}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhook/day_summary') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({url: '  https://example.test/day  '}),
       };
     }
     return {id: request.id, status: 404, body: null};

@@ -860,11 +860,29 @@ export function parsePrivateCloudSync(value: unknown, label: string): boolean {
   return enabled;
 }
 
+const FLUTTER_WEBHOOK_STATUS_BOOLS = [
+  'audio_bytes',
+  'button_event',
+  'day_summary',
+  'memory_created',
+  'realtime_transcript',
+] as const;
+
 export function parseWebhookStatuses(
   value: unknown,
   label: string,
 ): CloudWebhookStatus[] {
   const record = object(value, label);
+  for (const key of FLUTTER_WEBHOOK_STATUS_BOOLS) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      continue;
+    }
+    const entry = record[key];
+    if (entry === null || typeof entry === 'boolean') {
+      continue;
+    }
+    malformed(label);
+  }
   return Object.entries(record).flatMap(([type, entry]) => {
     if (typeof entry === 'boolean') {
       return [{type, enabled: entry, url: null}];
