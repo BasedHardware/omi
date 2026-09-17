@@ -3963,6 +3963,24 @@ abstract class AppLocalizations {
   /// **'Some memory history is unavailable. Showing the history received so far.'**
   String get memoryHistoryPartial;
 
+  /// Filter option for retained memory history
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get memoryHistory;
+
+  /// Button that clears suppression so this memory may be used
+  ///
+  /// In en, this message translates to:
+  /// **'Allow use'**
+  String get memoryAllowUse;
+
+  /// Button that suppresses this memory from future use
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t use'**
+  String get memoryDontUse;
+
   /// Undo button text
   ///
   /// In en, this message translates to:
@@ -18584,6 +18602,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working — this is taking longer than usual.'**
   String get processingTakingLonger;
+
+  /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
+  String get speechProfileEnrollmentPrompt;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

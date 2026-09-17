@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 from pydantic import BaseModel
 
 import firebase_admin.auth
+from google.api_core import exceptions as google_api_exceptions
 from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
@@ -101,6 +102,10 @@ MCP_AUTHORIZATION_SERVER_URL = os.getenv("MCP_AUTHORIZATION_SERVER_URL", "https:
 MCP_AUTHORIZATION_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/authorize"
 MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
+# How long a client should wait before retrying once the token store is down.
+# Kept short: the outages this covers (quota, transient Firestore unavailability)
+# clear on their own, and MCP clients hold no session state to rebuild.
+MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS = int(os.getenv("MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS", "30"))
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
@@ -206,7 +211,12 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
 
 
 def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:
-    """Validate Authorization and return an MCP auth context."""
+    """Validate Authorization and return an MCP auth context.
+
+    Raises 503 (never 401) when the token store itself is unreachable: a client
+    told "unauthorized" discards its token and restarts the whole OAuth dance,
+    which is the wrong answer to a transient backend outage.
+    """
     if not authorization:
         return None
 
@@ -214,6 +224,23 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     if authorization.startswith("Bearer "):
         token = authorization[7:]
 
+    try:
+        return _authenticate_mcp_token(token)
+    except google_api_exceptions.GoogleAPIError as exc:
+        logger.warning("MCP auth lookup failed against the token store: %s", exc)
+        raise mcp_auth_store_unavailable_exception() from exc
+
+
+def mcp_auth_store_unavailable_exception() -> HTTPException:
+    """Return a retryable failure for an unreachable MCP token store."""
+    return HTTPException(
+        status_code=503,
+        detail="MCP authentication is temporarily unavailable. Please retry shortly.",
+        headers={"Retry-After": str(MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS)},
+    )
+
+
+def _authenticate_mcp_token(token: str) -> Optional[MCPAuthContext]:
     if token.startswith("omi_mcp_"):
         auth_result = mcp_api_key_db.get_api_key_auth_result(token)
         record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
@@ -731,9 +758,9 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "get_screen_activity",
         "description": (
-            "Retrieve the user's desktop screen activity (Rewind) — what apps and windows they used and the OCR'd "
-            "on-screen text, ordered by time. Pass summary=true for an aggregated per-app usage breakdown instead "
-            "of raw rows. High-signal context on what the user actually does day to day."
+            "Retrieve synced desktop screen observations (Rewind): apps, windows and OCR text ordered by time. "
+            "Use summary=true for per-app counts and coverage; check coverage.truncated. Counts do not measure "
+            "usage duration or intent. Capture and sync completeness are unknown."
         ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": SCREEN_ACTIVITY_READ_SECURITY,
@@ -745,7 +772,7 @@ MCP_TOOLS: List[Dict[str, Any]] = [
                 "app": {"type": "string", "description": "Filter to a single app name"},
                 "summary": {
                     "type": "boolean",
-                    "description": "Return an aggregated per-app usage summary instead of raw rows",
+                    "description": "Return per-app observation counts and coverage instead of raw rows",
                     "default": False,
                 },
                 "limit": {
@@ -1659,6 +1686,16 @@ class McpTokenResponse(BaseModel):
     scope: str
 
 
+def _effective_resource(resource: Optional[str]) -> str:
+    # RFC 8707 resource indicators are optional; connector clients such as claude.ai
+    # omit the parameter entirely. An omitted indicator at the authorization step binds
+    # the grant to this deployment's canonical resource — the audience advertised in
+    # the protected-resource metadata. Cross-plane clients with a second allowed
+    # resource must keep sending it explicitly, and a present-but-invalid value
+    # (an empty string included) still fails validate_resource exactly as before.
+    return MCP_RESOURCE_URL if resource is None else resource
+
+
 def _validate_authorize_request(
     response_type: str,
     client_id: str,
@@ -1710,13 +1747,14 @@ def mcp_authorize(
     response_type: str,
     client_id: str,
     redirect_uri: str,
-    resource: str,
+    resource: Optional[str] = None,
     state: Optional[str] = None,
     scope: Optional[str] = None,
     code_challenge: Optional[str] = None,
     code_challenge_method: Optional[str] = None,
 ):
     """OAuth authorize endpoint."""
+    resource = _effective_resource(resource)
     try:
         client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
@@ -1756,13 +1794,14 @@ async def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
-    resource: str = Form(...),
+    resource: Optional[str] = Form(None),
     firebase_id_token: str = Form(...),
     state: Optional[str] = Form(None),
     scope: Optional[str] = Form(None),
     code_challenge: Optional[str] = Form(None),
     code_challenge_method: Optional[str] = Form(None),
 ):
+    resource = _effective_resource(resource)
     try:
         _, scopes = await run_blocking(
             db_executor,
@@ -1821,6 +1860,9 @@ async def mcp_token(request: Request):
     grant_type = request_data.get("grant_type")
     code = request_data.get("code")
     redirect_uri = request_data.get("redirect_uri")
+    # RFC 8707: at the token endpoint an omitted resource indicator keeps the audience
+    # stored on the code / refresh-token document, so no server-side default here —
+    # None flows through and only an explicit value is validated and matched.
     resource = request_data.get("resource")
     code_verifier = request_data.get("code_verifier")
     refresh_token = request_data.get("refresh_token")
@@ -1835,9 +1877,11 @@ async def mcp_token(request: Request):
         return _oauth_error("invalid_client", "Invalid client", status_code=401)
 
     if grant_type == "authorization_code":
-        if not code or not redirect_uri or not code_verifier or not resource:
-            return _oauth_error("invalid_request", "code, redirect_uri, resource, and code_verifier are required")
-        if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
+        if not code or not redirect_uri or not code_verifier:
+            return _oauth_error("invalid_request", "code, redirect_uri, and code_verifier are required")
+        if resource is not None and not await run_blocking(
+            db_executor, mcp_oauth_db.validate_resource, client, resource
+        ):
             return _oauth_error("invalid_target", "Invalid resource")
         token_pair = await run_blocking(
             db_executor,
@@ -1853,9 +1897,11 @@ async def mcp_token(request: Request):
         return token_pair
 
     if grant_type == "refresh_token":
-        if not refresh_token or not resource:
-            return _oauth_error("invalid_request", "refresh_token and resource are required")
-        if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
+        if not refresh_token:
+            return _oauth_error("invalid_request", "refresh_token is required")
+        if resource is not None and not await run_blocking(
+            db_executor, mcp_oauth_db.validate_resource, client, resource
+        ):
             return _oauth_error("invalid_target", "Invalid resource")
         token_pair = await run_blocking(
             db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope

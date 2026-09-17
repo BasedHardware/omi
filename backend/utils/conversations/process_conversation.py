@@ -40,7 +40,7 @@ from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
-from models.memories import MemoryDB, Memory, MemoryCategory, SubjectAttribution
+from models.memories import MemoryCaptureContext, MemoryDB, Memory, MemoryCategory, SubjectAttribution
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.memory_contracts import L1MemoryArchiveClass, deterministic_contract_id
 from models.workstream_association import AssociationEvidence
@@ -1334,6 +1334,32 @@ def _grounded_l1_evidence_quotes(evidence_quotes: List[str], segments: List[Any]
     return grounded
 
 
+def _l1_owner_spoken_for_grounded_quotes(evidence_quotes: List[str], segments: List[Any]) -> bool:
+    """Return true only when every grounded quote is spoken by the owner.
+
+    Subject resolution may conservatively fall back to ``about=user`` when a
+    transcript has a uniquely identified owner but no quote-bound speaker. That
+    is enough to scope a claim, but it is not evidence that the owner uttered
+    the source text. Source attribution therefore requires quote-level binding
+    to the owner's cluster.
+    """
+
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
+    if not evidence_quotes or not may_attribute_to_owner(owner_evidence):
+        return False
+    for raw_quote in evidence_quotes:
+        normalized_quote = _normalized_l1_evidence_quote(raw_quote)
+        matched_segments = [
+            segment
+            for segment in segments
+            if normalized_quote
+            and f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
+        ]
+        if len(matched_segments) != 1 or not may_attribute_to_owner(owner_evidence, segment=matched_segments[0]):
+            return False
+    return True
+
+
 def _canonical_quote_ref(
     *,
     quote: str,
@@ -1448,6 +1474,7 @@ def _extract_memories_canonical(
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
+    source_captured_at = getattr(conversation, "started_at", None) or getattr(conversation, "created_at", None)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
     capture_decisions_by_memory_object: Dict[int, Tuple[str, bool]] = {}
 
@@ -1551,6 +1578,32 @@ def _extract_memories_canonical(
                 visibility="private",
                 subject_entity_id=subject_entity_id,
                 subject_attribution=subject_attribution,
+            )
+            # Carry the candidate's proposition shape onto the persisted
+            # memory: object qualifiers and decision states must not be
+            # silently dropped by canonical conversation capture. Arguments
+            # are already scoped/bounded by the extractor.
+            memory.predicate = getattr(candidate, "predicate", None)
+            memory.arguments = dict(getattr(candidate, "arguments", None) or {})
+            # The transcript is the original evidence family for this
+            # candidate. Build capture context from the server-owned
+            # conversation and the resolved speaker attribution; never trust
+            # source identifiers emitted by the model. The canonical adapter
+            # preserves this context on MemoryEvidence.
+            source_attribution = (
+                "user_spoken"
+                if _l1_owner_spoken_for_grounded_quotes(evidence_quotes, conversation.transcript_segments)
+                else "third_party" if subject_attribution == SubjectAttribution.third_party else "unknown"
+            )
+            memory.capture_context = MemoryCaptureContext(
+                source_type="conversation",
+                captured_at=source_captured_at,
+                source_id=conversation.id,
+                source_version="v1",
+                source_signal="transcription",
+                independence_group=conversation.id,
+                lineage_id=conversation.id,
+                attribution=source_attribution,
             )
             if belief_model_enabled():
                 resolved_scope = subject_scope_from_extraction(
@@ -1662,6 +1715,7 @@ def _extract_memories_canonical(
             artifact_ref=_transcript_artifact_ref(conversation),
             extractor_id="canonical_l1_memory_extractor" if has_candidate_subject else "new_memories_extractor",
             extractor_version="v1",
+            source_captured_at=source_captured_at,
             subject_entity_id=candidate_subject_entity_id,
             subject_attribution=memory.subject_attribution if has_candidate_subject else subject_attribution,
             client_device_id=getattr(conversation, "client_device_id", None),
@@ -2259,6 +2313,47 @@ def _store_projected_conversation(
     return _store_deterministic_minimum(uid, conversation, plan, client_projection=client_projection)
 
 
+def _flag_off_identified_basic_deny(
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    *,
+    client_projection: Optional[ClientProcessing],
+) -> Optional[FreeTierProcessingPlan]:
+    """Identified-basic deny for flag-off eager desktop enrichment.
+
+    Capture-side deferral (the legacy branch above) already keeps free-tier
+    desktop off managed providers at ingest; first-open (force_process) and
+    manual reprocess are the remaining eager spend. This reuses the S6 policy
+    — the same resolve_free_tier_processing_plan + managed-compute decision
+    the flag-on branch consults — so there is no second pipeline. Only an
+    *identified* basic deny is returned; identification failure and
+    authorization outages fail open to normal processing, matching
+    should_defer_desktop_processing's documented fail-open contract (a
+    Firestore blip must not strip a paid user's enrichment). A request that
+    carries a validated BYOK key for conv_structure's provider is allowed by
+    the same decision_for closure the flag-on path uses.
+    """
+    source = getattr(conversation, 'source', None)
+    source_value = getattr(source, 'value', source)
+    effective_projection = (
+        client_projection if client_projection is not None else getattr(conversation, 'client_processing', None)
+    )
+    plan = resolve_free_tier_processing_plan(
+        uid=uid,
+        source=str(source_value),
+        force_process=True,
+        is_reprocess=True,
+        has_projection=effective_projection is not None,
+        decision_for=_managed_compute_decision_for(uid),
+    )
+    decision = plan.decision
+    if plan.managed_calls_allowed or decision is None:
+        return None
+    if not decision.plan_resolved or decision.plan != 'basic':
+        return None
+    return plan
+
+
 def _stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
     direct = getattr(conversation, 'calendar_meeting_context', None)
     if isinstance(direct, CalendarMeetingContext):
@@ -2572,6 +2667,31 @@ def process_conversation(
         # Do not change this onto the flag-off path — it must stay byte-identical.
         report_persistence(False)
         return deferred
+    # Eager-extraction gate (S14 proactivity half, flag-off): first-open
+    # (force_process) and manual reprocess are the remaining eager managed
+    # spend for desktop conversations. An identified-basic deny lands at the
+    # same deterministic minimum the flag-on branch uses — no second pipeline;
+    # identification failure fails open above it. Non-desktop sources never
+    # reach this branch (the summary flip is a separate, held decision).
+    elif (
+        (force_process or is_reprocess)
+        and hasattr(conversation, 'source')
+        and conversation.source == ConversationSource.desktop
+    ):
+        eager_basic_deny = _flag_off_identified_basic_deny(uid, conversation, client_projection=client_projection)
+        if eager_basic_deny is not None:
+            stored, persisted = _store_deterministic_minimum(
+                uid, conversation, eager_basic_deny, client_projection=client_projection
+            )
+            report_persistence(
+                persisted,
+                derived_effects=(
+                    DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+                    if persisted
+                    else DerivedEffectsDisposition.RUN
+                ),
+            )
+            return stored
 
     _enrich_meeting_context(uid, conversation)
 

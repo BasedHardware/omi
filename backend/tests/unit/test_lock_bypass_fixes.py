@@ -708,6 +708,105 @@ class TestMemoryToolFiltering:
             call('test-uid', limit=500, offset=2),
         ]
 
+    def test_get_memories_temporal_view_filters_suppressed_rows(self):
+        """Model-facing temporal reads must never format owner-use suppression."""
+        from models.memories import MemoryDB
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        suppressed_payload = _make_memory(memory_id='suppressed')
+        suppressed_payload['content'] = 'SUPPRESSED_MODEL_SECRET'
+        suppressed_payload['arguments'] = {'memory_use': {'suppressed': True}}
+        visible_payload = _make_memory(locked=False, memory_id='visible')
+        visible_payload['content'] = 'VISIBLE_TEMPORAL_MEMORY'
+        suppressed = MemoryDB.model_validate(suppressed_payload)
+        visible = MemoryDB.model_validate(visible_payload)
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+        ):
+            memory_service.return_value.read_page.return_value = SimpleNamespace(
+                memories=(suppressed, visible), next_cursor=None, truncated=False
+            )
+            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'useful_now'}, config=config)
+
+        assert 'VISIBLE_TEMPORAL_MEMORY' in result
+        assert 'SUPPRESSED_MODEL_SECRET' not in result
+        memory_service.return_value.read_page.assert_called_once()
+
+    def test_get_memories_temporal_empty_continuation_is_bounded(self):
+        """Filtered empty cursor pages must stop at the fixed scan budget."""
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+        ):
+            memory_service.return_value.read_page.side_effect = lambda *args, **kwargs: SimpleNamespace(
+                memories=(), next_cursor='still-more', truncated=False
+            )
+            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'history'}, config=config)
+
+        assert 'bounded scan reached its safety limit' in result
+        assert memory_service.return_value.read_page.call_count == 10
+
+    def test_get_memories_temporal_truncated_page_without_cursor_is_disclosed(self):
+        """A budget-truncated page with no continuation cursor must surface an
+        honest partial-scan note instead of a silently complete result."""
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+        ):
+            memory_service.return_value.read_page.side_effect = lambda *args, **kwargs: SimpleNamespace(
+                memories=(), next_cursor=None, truncated=True
+            )
+            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'history'}, config=config)
+
+        assert 'bounded scan reached its safety limit' in result
+        memory_service.return_value.read_page.assert_called_once()
+
+    def test_get_memories_temporal_ranges_use_evidence_date(self):
+        """A delayed extraction is found by capture date, not processing date."""
+        from models.memories import MemoryDB
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        delayed_payload = _make_memory(locked=False, memory_id='delayed')
+        delayed_payload['content'] = 'CAPTURED_IN_JULY'
+        delayed_payload['created_at'] = '2026-09-14T00:00:00+00:00'
+        delayed_payload['updated_at'] = '2026-09-14T00:00:00+00:00'
+        delayed_payload['as_of'] = '2026-07-10T00:00:00+00:00'
+        delayed = MemoryDB.model_validate(delayed_payload)
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+            patch.object(memory_tools.MemoryDB, 'get_memories_as_str', return_value='CAPTURED_IN_JULY'),
+        ):
+            memory_service.return_value.read_page.return_value = SimpleNamespace(
+                memories=(delayed,), next_cursor=None, truncated=False
+            )
+            result = get_memories_tool.invoke(
+                {
+                    'limit': 10,
+                    'view': 'history',
+                    'start_date': '2026-07-01T00:00:00+00:00',
+                    'end_date': '2026-07-31T23:59:59+00:00',
+                },
+                config=config,
+            )
+
+        assert 'CAPTURED_IN_JULY' in result
+
     def test_search_memories_filters_locked(self):
         """search_memories_tool must exclude locked memories from results."""
         from models.memories import MemoryDB

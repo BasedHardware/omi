@@ -509,10 +509,20 @@ def _record_pt_target_observation(ready: bool) -> None:
 
 def _provisioned_model() -> str:
     """The model that currently owns prepaid capacity."""
-    return ptr.resolve_pt_model(
-        target_dedicated_ready=_pt_target_is_ready(),
-        override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''),
-    )
+    try:
+        return ptr.resolve_pt_model(
+            target_dedicated_ready=_pt_target_is_ready(),
+            override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''),
+        )
+    except ValueError as exc:
+        # A prohibited or undeclared operator pin (e.g. a Pro/image-output
+        # model) must never become a served model. Fail the request closed
+        # instead of dispatching PayGo (SCA-481).
+        raise RoutingFailure(
+            code='routing_invalid_operator_pin',
+            message=str(exc),
+            phase='routing',
+        ) from exc
 
 
 def _overflow_enabled() -> bool:
@@ -1625,12 +1635,15 @@ async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> 
 
 # Gen-1 Gemini generate/stream is the screen-intelligence spend path (free-tier S14).
 # screen_frame_judge is the configured Gemini-provider feature, so a request-scoped
-# Gemini BYOK key satisfies authorize_managed_compute. embedContent stays ungated
-# here (TBD-4 / S24). desktop_proactivity completions are the JIT/context-bucket
-# lane and are intentionally not gated in this shard — a blanket 402 there would
-# kill the ambient nano triage (S24) and the shipped completion lane
-# (test_legacy_clients_are_not_gated_by_jit_rollout).
-_PLAN_GATED_PROXY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent'})
+# Gemini BYOK key satisfies authorize_managed_compute. Embed actions (TBD-4) are the
+# remaining company-paid surface (Vertex :predict single embed, AI Studio batch):
+# basic non-BYOK gets the same 402 plan_gated. They share screen_frame_judge's
+# Gemini provider binding, so the BYOK exemption stays provider-exact without a
+# second configured feature. desktop_proactivity completions are gated in their own
+# router (S14 proactivity half).
+_PLAN_GATED_PROXY_ACTIONS = frozenset(
+    {'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'}
+)
 _PLAN_GATED_PROXY_FEATURE = 'screen_frame_judge'
 
 

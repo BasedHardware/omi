@@ -2042,6 +2042,15 @@ class AppLocalizationsSl extends AppLocalizations {
   String get memoryHistoryPartial => 'Del zgodovine spominov ni na voljo. Prikazana je doslej prejeta zgodovina.';
 
   @override
+  String get memoryHistory => 'Zgodovina';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Razveljavi';
 
   @override
@@ -10012,4 +10021,8 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.';
 }

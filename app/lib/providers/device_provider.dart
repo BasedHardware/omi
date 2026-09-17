@@ -101,26 +101,46 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
     ServiceManager.instance().device.subscribe(this, this);
-    BleBridge.instance.pairingLostCallback = _showPairingLostDialog;
+    BleBridge.instance.pairingLostCallback = _handlePairingLost;
+  }
+
+  void _handlePairingLost() {
+    ServiceManager.instance().device.requireStaleBondRecovery();
+    _discoveryTimer?.cancel();
+    updateConnectingStatus(false);
+    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+    if (pairedDeviceId.isNotEmpty) {
+      unawaited(ServiceManager.instance().device.disconnectDevice(pairedDeviceId));
+    }
+    _showPairingLostDialog();
   }
 
   void _showPairingLostDialog() {
     if (_pairingLostDialogShowing) return;
-    final context = globalNavigatorKey.currentContext;
-    if (context == null || !context.mounted) return;
 
-    _pairingLostDialogShowing = true;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => ConfirmationDialog(
-        title: dialogContext.l10n.bluetooth,
-        description: dialogContext.l10n.deviceUnpairedMessage,
-        confirmText: dialogContext.l10n.gotIt,
-        onConfirm: () => Navigator.of(dialogContext).pop(),
-        onCancel: () {},
-      ),
-    ).whenComplete(() => _pairingLostDialogShowing = false);
+    void present() {
+      if (_pairingLostDialogShowing) return;
+      final context = globalNavigatorKey.currentContext;
+      if (context == null || !context.mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => present());
+        return;
+      }
+
+      _pairingLostDialogShowing = true;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => ConfirmationDialog(
+          title: dialogContext.l10n.bluetooth,
+          description: dialogContext.l10n.deviceUnpairedMessage,
+          confirmText: dialogContext.l10n.gotIt,
+          onConfirm: () => Navigator.of(dialogContext).pop(),
+          onCancel: () {},
+        ),
+      ).whenComplete(() => _pairingLostDialogShowing = false);
+    }
+
+    present();
   }
 
   void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
@@ -422,6 +442,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
 
+    if (ServiceManager.instance().device.staleBondRecoveryRequired) {
+      Logger.debug('initiateConnection ($caller): blocked until stale bond recovery');
+      return;
+    }
+
     // Already connected — nothing to do
     if (isConnected || connectedDevice != null) return;
 
@@ -473,6 +498,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
+    ServiceManager.instance().device.clearStaleBondRecoveryRequirement();
+
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
     if (pairedDeviceId.isEmpty) {
       updateConnectingStatus(false);
@@ -511,7 +538,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   @override
   void dispose() {
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
-    if (BleBridge.instance.pairingLostCallback == _showPairingLostDialog) {
+    if (BleBridge.instance.pairingLostCallback == _handlePairingLost) {
       BleBridge.instance.pairingLostCallback = null;
     }
     _bleBatteryLevelListener?.cancel();

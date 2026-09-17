@@ -67,7 +67,6 @@ class SlackClient:
                         print(f"⚠️  Check Slack app settings - ensure User Token Scopes are set", flush=True)
                     else:
                         print("✅ Using USER token (messages will appear as user)", flush=True)
-                        print(f"✅ User token starts with: {user_token[:15]}...", flush=True)
                     
                     return {
                         "access_token": user_token,
@@ -187,9 +186,8 @@ class SlackClient:
         client = WebClient(token=access_token)
         
         # Debug: Check token type
-        token_prefix = access_token[:15] if access_token else "None"
         token_type = "USER" if access_token and access_token.startswith("xoxp-") else "BOT" if access_token and access_token.startswith("xoxb-") else "UNKNOWN"
-        print(f"🔑 Sending with {token_type} token: {token_prefix}...", flush=True)
+        print(f"🔑 Sending with {token_type} token", flush=True)
         
         try:
             # Note: as_user parameter is deprecated and not needed with user tokens
