@@ -217,6 +217,126 @@ def test_reprocess_route_persists_deterministic_processing_result(client, auth_h
     assert kg_calls == []
 
 
+def test_reprocess_transcription_route_replaces_segments_then_enriches(client, auth_headers, monkeypatch):
+    _patch_process_conversation_boundaries(monkeypatch)
+    conv_id = "deterministic-transcription-001"
+    seed_conversation(
+        "123",
+        {
+            "id": conv_id,
+            "created_at": "2025-01-15T12:00:00Z",
+            "started_at": "2025-01-15T12:00:00Z",
+            "finished_at": "2025-01-15T12:05:00Z",
+            "source": "omi",
+            "language": "en",
+            "structured": {
+                "title": "Before Transcription Reprocess",
+                "overview": "",
+                "emoji": "🧠",
+                "category": "other",
+                "action_items": [],
+                "events": [],
+            },
+            "transcript_segments": [
+                {
+                    "id": "seg-old",
+                    "text": "Live sync dropped most of this sentence.",
+                    "speaker": "SPEAKER_00",
+                    "is_user": True,
+                    "start": 0.0,
+                    "end": 2.0,
+                }
+            ],
+            "discarded": False,
+            "status": "completed",
+            "is_locked": False,
+            "data_protection_level": "standard",
+        },
+    )
+
+    import routers.conversations as conv_router
+
+    monkeypatch.setattr(
+        conv_router,
+        "transcribe_stored_conversation_audio",
+        lambda uid, conversation, language_code: [
+            TranscriptSegment(
+                id="seg-new",
+                text="We should ship deterministic conversation lifecycle coverage.",
+                speaker="SPEAKER_00",
+                is_user=True,
+                start=0.0,
+                end=2.0,
+            )
+        ],
+    )
+
+    response = client.post(f"/v1/conversations/{conv_id}/reprocess-transcription", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["id"] == conv_id
+    assert body["transcript_segments"][0]["text"] == "We should ship deterministic conversation lifecycle coverage."
+    assert body["structured"]["title"] == "Hermetic Conversation Lifecycle Reprocessed"
+
+    persisted = client.get(f"/v1/conversations/{conv_id}", headers=auth_headers)
+    assert persisted.status_code == 200, persisted.text
+    persisted_body = persisted.json()
+    assert persisted_body["transcript_segments"][0]["text"] == (
+        "We should ship deterministic conversation lifecycle coverage."
+    )
+    assert persisted_body["structured"]["title"] == "Hermetic Conversation Lifecycle Reprocessed"
+
+
+def test_reprocess_transcription_route_returns_400_without_audio(client, auth_headers, monkeypatch):
+    _patch_process_conversation_boundaries(monkeypatch)
+    conv_id = "deterministic-transcription-no-audio"
+    seed_conversation(
+        "123",
+        {
+            "id": conv_id,
+            "created_at": "2025-01-15T12:00:00Z",
+            "started_at": "2025-01-15T12:00:00Z",
+            "finished_at": "2025-01-15T12:05:00Z",
+            "source": "omi",
+            "language": "en",
+            "structured": {
+                "title": "No Audio",
+                "overview": "",
+                "emoji": "🧠",
+                "category": "other",
+                "action_items": [],
+                "events": [],
+            },
+            "transcript_segments": [
+                {
+                    "id": "seg-1",
+                    "text": "No stored audio exists for this conversation.",
+                    "speaker": "SPEAKER_00",
+                    "is_user": True,
+                    "start": 0.0,
+                    "end": 2.0,
+                }
+            ],
+            "discarded": False,
+            "status": "completed",
+            "is_locked": False,
+            "data_protection_level": "standard",
+        },
+    )
+
+    import routers.conversations as conv_router
+    from utils.conversations.reprocess_transcription import StoredAudioUnavailableError
+
+    def _no_audio(*_args, **_kwargs):
+        raise StoredAudioUnavailableError("No stored audio available to retranscribe")
+
+    monkeypatch.setattr(conv_router, "transcribe_stored_conversation_audio", _no_audio)
+
+    response = client.post(f"/v1/conversations/{conv_id}/reprocess-transcription", headers=auth_headers)
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "No stored audio available to retranscribe"
+
+
 def test_seed_and_read_conversation(client, auth_headers, conversation_fixture):
     conv_data = dict(conversation_fixture["current_format_conversation"])
     seed_conversation("123", conv_data)

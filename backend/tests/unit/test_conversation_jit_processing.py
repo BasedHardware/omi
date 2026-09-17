@@ -864,6 +864,13 @@ def test_running_now_still_defers_first_open_when_rollout_admits() -> None:
     reprocess_kwargs = _call_keywords(conversations, "reprocess_conversation", "process_conversation")
     assert _attribute_name(reprocess_kwargs.get("trigger")) == "USER_REPROCESS"
 
+    transcription_kwargs = _call_keywords(
+        conversations, "reprocess_conversation_transcription", "process_conversation"
+    )
+    assert _constant_bool(transcription_kwargs.get("force_process")) is True
+    assert _constant_bool(transcription_kwargs.get("is_reprocess")) is True
+    assert _constant_bool(transcription_kwargs.get("bypass_jit_first_open")) is True
+
     finalize_kwargs = _call_keywords(conversations, "finalize_conversation", "request_finalization")
     assert _attribute_name(finalize_kwargs.get("trigger")) == "CLIENT_FINALIZE"
 
