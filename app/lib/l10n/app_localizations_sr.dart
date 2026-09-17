@@ -10015,4 +10015,16 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Неуспешно ажурирање основног статуса.';
+
+  @override
+  String get unstarConversation => 'Уклони звездицу са разговора';
+
+  @override
+  String get moreOptions => 'Више опција';
+
+  @override
+  String get filterByDate => 'Филтрирај по датуму';
+
+  @override
+  String get memoryGraph => 'Граф сећања';
 }

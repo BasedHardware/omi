@@ -3276,5 +3276,9 @@
     "home": "Главная",
     "failedToUpdateBaselineStatus": "Не удалось обновить базовый статус.",
     "memoryAllowUse": "Разрешить использование",
-    "memoryDontUse": "Не использовать"
+    "memoryDontUse": "Не использовать",
+    "unstarConversation": "Убрать звезду с разговора",
+    "moreOptions": "Дополнительные параметры",
+    "filterByDate": "Фильтровать по дате",
+    "memoryGraph": "Граф воспоминаний"
 }

@@ -10828,5 +10828,9 @@
     "home": "Почетна",
     "failedToUpdateBaselineStatus": "Неуспешно ажурирање на основниот статус.",
     "memoryAllowUse": "Дозволи употреба",
-    "memoryDontUse": "Не користи"
+    "memoryDontUse": "Не користи",
+    "unstarConversation": "Отстрани ѕвезда од разговорот",
+    "moreOptions": "Повеќе опции",
+    "filterByDate": "Филтрирај по датум",
+    "memoryGraph": "Граф на спомени"
 }

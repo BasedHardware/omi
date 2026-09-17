@@ -10010,4 +10010,16 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'बेसलाइन स्थिती अद्यतनित करणे अयशस्वी.';
+
+  @override
+  String get unstarConversation => 'संभाषणावरील तारा काढा';
+
+  @override
+  String get moreOptions => 'अधिक पर्याय';
+
+  @override
+  String get filterByDate => 'तारखेनुसार फिल्टर करा';
+
+  @override
+  String get memoryGraph => 'स्मृती आलेख';
 }

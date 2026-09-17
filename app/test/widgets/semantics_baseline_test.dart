@@ -79,6 +79,28 @@ void main() {
     }
   });
 
+  testWidgets('harness does not treat a SearchBar focus wrapper as an unnamed control', (tester) async {
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SearchBar(hintText: 'Search memories...'),
+          ),
+        ),
+      );
+
+      final dump = dumpSemanticsTree(tester);
+      expect(
+        dump.interactive.where((node) => node.isTextField && node.accessibleName == 'Search memories...'),
+        isNotEmpty,
+      );
+      expect(dump.unnamedInteractive, isEmpty, reason: dump.treeText);
+    } finally {
+      handle.dispose();
+    }
+  });
+
   testWidgets('harness treats Semantics.identifier as machine-only, not a spoken name', (tester) async {
     final handle = tester.ensureSemantics();
     try {
@@ -121,43 +143,72 @@ void main() {
   });
 
   testWidgets('inventory: home', (tester) async {
-    _printReport(await _measureHome(tester));
+    final report = await _measureHome(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 
   testWidgets('inventory: conversations', (tester) async {
-    _printReport(await _measureConversations(tester));
+    final report = await _measureConversations(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 
   testWidgets('inventory: conversation_detail', (tester) async {
-    _printReport(await _measureConversationDetail(tester));
+    final report = await _measureConversationDetail(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 
   testWidgets('inventory: memories', (tester) async {
-    _printReport(await _measureMemories(tester));
+    final report = await _measureMemories(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 
   testWidgets('inventory: tasks', (tester) async {
-    _printReport(await _measureTasks(tester));
+    final report = await _measureTasks(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 
   testWidgets('inventory: settings', (tester) async {
-    _printReport(await _measureSettings(tester));
+    final report = await _measureSettings(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 
   testWidgets('inventory: onboarding', (tester) async {
-    _printReport(await _measureOnboarding(tester));
+    final report = await _measureOnboarding(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 
   testWidgets('inventory: devices', (tester) async {
-    _printReport(await _measureDevices(tester));
+    final report = await _measureDevices(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 
   testWidgets('inventory: chat', (tester) async {
-    _printReport(await _measureChat(tester));
+    final report = await _measureChat(tester);
+    _printReport(report);
+    _expectNoUnnamedActivateControls(report);
   });
 }
 
 String _quote(String value) => '"${value.replaceAll('"', r'\"')}"';
+
+void _expectNoUnnamedActivateControls(SurfaceSemanticsReport report) {
+  expect(report.pumped, isTrue, reason: '${report.surface} did not pump: ${report.failureReason}');
+  expect(
+    report.dump!.unnamedInteractive,
+    isEmpty,
+    reason: '${report.surface} unnamed activate-controls:\n'
+        '${report.dump!.unnamedInteractive.map((node) => node.line).join('\n')}\n'
+        'tree:\n${report.dump!.treeText}',
+  );
+}
 
 void _printReport(SurfaceSemanticsReport report) {
   final buffer = StringBuffer(report.summary);
@@ -281,6 +332,7 @@ Future<SurfaceSemanticsReport> _measureConversations(WidgetTester tester) async 
     pumpedWidget: 'SearchWidget + FolderTabs + ConversationListItem + EmptyConversationsWidget',
     notes: [
       'ConversationsPage not pumped: it reads CaptureProvider, LocalRecordingsProvider, and refreshes folders/goals on pull.',
+      'Calendar IconButton tooltip is l10n.filterByDate; Speaker already had phoneSpeaker.',
     ],
     app: _app(
       Scaffold(
@@ -336,8 +388,8 @@ Future<SurfaceSemanticsReport> _measureConversationDetail(WidgetTester tester) a
     surface: 'conversation_detail',
     pumpedWidget: 'ConversationDetailPage',
     notes: [
-      'Back IconButton has no tooltip and no Semantics.label.',
-      'Ask IconButton tooltip is l10n askAboutThisConversation.',
+      'AppBar back uses MaterialLocalizations.backButtonTooltip on the existing circle IconButton (BackButton would change the 36pt FaIcon chrome).',
+      'Body/Summary/Transcript GestureDetectors dismiss empty search; they are excludeFromSemantics, not named.',
     ],
     app: _app(
       ConversationDetailPage(conversation: item),
@@ -387,7 +439,7 @@ Future<SurfaceSemanticsReport> _measureMemories(WidgetTester tester) async {
     surface: 'memories',
     pumpedWidget: 'MemoriesPage (empty fetch)',
     notes: [
-      'Graph and management header buttons are ElevatedButton wrapping FaIcon with no semanticLabel.',
+      'Graph and management header buttons are named via Semantics.label from l10n; SearchBar InkWell is a focus wrapper around the named field.',
       'Empty-state retry lives in MemoriesLoadError; this pump is the loaded-empty page after init().',
     ],
     app: _app(
@@ -417,6 +469,7 @@ Future<SurfaceSemanticsReport> _measureTasks(WidgetTester tester) async {
     surface: 'tasks',
     pumpedWidget: 'ActionItemsPage (empty list)',
     notes: [
+      'The body GestureDetector(onTap: () {}) is a no-op hit absorber; it is excludeFromSemantics, not named.',
       'HeaderCircleButton on the goals row uses l10n addGoal when goals exist; empty list shows the empty-state pill.',
     ],
     app: _app(
@@ -441,7 +494,7 @@ Future<SurfaceSemanticsReport> _measureSettings(WidgetTester tester) async {
     surface: 'settings',
     pumpedWidget: 'SettingsDrawer',
     notes: [
-      'Rows are GestureDetector wrapping title Text; search is Icon-only GestureDetector with no tooltip.',
+      'Search icon is Semantics.label from l10n.search. Rows wrap visible title Text.',
       'Done has visible text. Device settings row hides when disconnected.',
     ],
     app: _app(
@@ -483,7 +536,7 @@ Future<SurfaceSemanticsReport> _measureDevices(WidgetTester tester) async {
     pumpedWidget: 'DeviceSettings',
     notes: [
       'ConnectDevicePage not pumped: FindDevicesPage.scanDevices requires ServiceManager.instance.',
-      'DeviceSettings is the production devices settings surface and is reachable hermetically.',
+      'DeviceSettings leading chevron uses MaterialLocalizations.backButtonTooltip; BackButton would replace the FaIcon.',
       'Connect chrome (back chevron, gear IconButton without tooltip, store TextButton, guide GestureDetector) lives on ConnectDevicePage.',
     ],
     app: _app(

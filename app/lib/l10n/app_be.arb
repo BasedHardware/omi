@@ -10828,5 +10828,9 @@
     "home": "Галоўная",
     "failedToUpdateBaselineStatus": "Не атрымалася абнавіць статус базовай памяці.",
     "memoryAllowUse": "Дазволіць выкарыстанне",
-    "memoryDontUse": "Не выкарыстоўваць"
+    "memoryDontUse": "Не выкарыстоўваць",
+    "unstarConversation": "Зняць зорку з размовы",
+    "moreOptions": "Дадатковыя параметры",
+    "filterByDate": "Фільтр па даце",
+    "memoryGraph": "Граф успамінаў"
 }

@@ -10828,5 +10828,9 @@
     "home": "முகப்பு",
     "failedToUpdateBaselineStatus": "அடிப்படை நிலையைப் புதுப்பிக்க முடியவில்லை.",
     "memoryAllowUse": "பயன்படுத்த அனுமதி",
-    "memoryDontUse": "பயன்படுத்தாதே"
+    "memoryDontUse": "பயன்படுத்தாதே",
+    "unstarConversation": "உரையாடல் நட்சத்திரத்தை அகற்று",
+    "moreOptions": "மேலும் விருப்பங்கள்",
+    "filterByDate": "தேதியின்படி வடிகட்டு",
+    "memoryGraph": "நினைவு வரைபடம்"
 }

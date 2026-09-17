@@ -10828,5 +10828,9 @@
     "home": "হোম",
     "failedToUpdateBaselineStatus": "বেসলাইন স্থিতি আপডেট করতে ব্যর্থ হয়েছে।",
     "memoryAllowUse": "ব্যবহারের অনুমতি দিন",
-    "memoryDontUse": "ব্যবহার করবেন না"
+    "memoryDontUse": "ব্যবহার করবেন না",
+    "unstarConversation": "কথোপকথন আনস্টার করুন",
+    "moreOptions": "আরও বিকল্প",
+    "filterByDate": "তারিখ অনুসারে ফিল্টার করুন",
+    "memoryGraph": "স্মৃতির গ্রাফ"
 }

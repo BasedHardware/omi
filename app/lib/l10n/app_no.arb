@@ -3241,5 +3241,9 @@
     "home": "Hjem",
     "failedToUpdateBaselineStatus": "Kunne ikke oppdatere baseline-status.",
     "memoryAllowUse": "Tillat bruk",
-    "memoryDontUse": "Ikke bruk"
+    "memoryDontUse": "Ikke bruk",
+    "unstarConversation": "Fjern stjerne fra samtale",
+    "moreOptions": "Flere alternativer",
+    "filterByDate": "Filtrer etter dato",
+    "memoryGraph": "Minnegraf"
 }

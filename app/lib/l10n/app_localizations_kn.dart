@@ -10033,4 +10033,16 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'ಬೇಸ್‌ಲೈನ್ ಸ್ಥಿತಿಯನ್ನು ನವೀಕರಿಸಲು ವಿಫಲವಾಗಿದೆ.';
+
+  @override
+  String get unstarConversation => 'ಸಂಭಾಷಣೆಯ ನಕ್ಷತ್ರ ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String get moreOptions => 'ಹೆಚ್ಚಿನ ಆಯ್ಕೆಗಳು';
+
+  @override
+  String get filterByDate => 'ದಿನಾಂಕದ ಪ್ರಕಾರ ಫಿಲ್ಟರ್ ಮಾಡಿ';
+
+  @override
+  String get memoryGraph => 'ಸ್ಮೃತಿ ಗ್ರಾಫ್';
 }

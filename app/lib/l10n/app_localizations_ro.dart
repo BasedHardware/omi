@@ -10048,4 +10048,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Nu s-a putut actualiza starea de referință.';
+
+  @override
+  String get unstarConversation => 'Elimină steaua conversației';
+
+  @override
+  String get moreOptions => 'Mai multe opțiuni';
+
+  @override
+  String get filterByDate => 'Filtrează după dată';
+
+  @override
+  String get memoryGraph => 'Graful amintirilor';
 }

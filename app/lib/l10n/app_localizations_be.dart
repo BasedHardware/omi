@@ -10031,4 +10031,16 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Не атрымалася абнавіць статус базовай памяці.';
+
+  @override
+  String get unstarConversation => 'Зняць зорку з размовы';
+
+  @override
+  String get moreOptions => 'Дадатковыя параметры';
+
+  @override
+  String get filterByDate => 'Фільтр па даце';
+
+  @override
+  String get memoryGraph => 'Граф успамінаў';
 }

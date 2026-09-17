@@ -3241,5 +3241,9 @@
     "home": "Hem",
     "failedToUpdateBaselineStatus": "Det gick inte att uppdatera baslinjestatus.",
     "memoryAllowUse": "Tillåt användning",
-    "memoryDontUse": "Använd inte"
+    "memoryDontUse": "Använd inte",
+    "unstarConversation": "Ta bort stjärna från konversation",
+    "moreOptions": "Fler alternativ",
+    "filterByDate": "Filtrera efter datum",
+    "memoryGraph": "Minnesgraf"
 }

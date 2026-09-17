@@ -10050,4 +10050,16 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'బేస్‌లైన్ స్థితిని నవీకరించడం విఫలమైంది.';
+
+  @override
+  String get unstarConversation => 'సంభాషణ నక్షత్రాన్ని తీసివేయండి';
+
+  @override
+  String get moreOptions => 'మరిన్ని ఎంపికలు';
+
+  @override
+  String get filterByDate => 'తేదీ ప్రకారం ఫిల్టర్ చేయండి';
+
+  @override
+  String get memoryGraph => 'జ్ఞాపకాల గ్రాఫ్';
 }

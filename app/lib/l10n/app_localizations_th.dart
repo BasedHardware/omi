@@ -9943,4 +9943,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'ไม่สามารถอัปเดตสถานะเส้นฐานได้';
+
+  @override
+  String get unstarConversation => 'เอาดาวออกจากบทสนทนา';
+
+  @override
+  String get moreOptions => 'ตัวเลือกเพิ่มเติม';
+
+  @override
+  String get filterByDate => 'กรองตามวันที่';
+
+  @override
+  String get memoryGraph => 'กราฟความทรงจำ';
 }

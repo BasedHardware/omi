@@ -9992,4 +9992,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Nepodarilo sa aktualizovať stav základnej pamäte.';
+
+  @override
+  String get unstarConversation => 'Odstrániť hviezdu z konverzácie';
+
+  @override
+  String get moreOptions => 'Ďalšie možnosti';
+
+  @override
+  String get filterByDate => 'Filtrovať podľa dátumu';
+
+  @override
+  String get memoryGraph => 'Graf spomienok';
 }

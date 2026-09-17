@@ -10038,4 +10038,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Не удалось обновить базовый статус.';
+
+  @override
+  String get unstarConversation => 'Убрать звезду с разговора';
+
+  @override
+  String get moreOptions => 'Дополнительные параметры';
+
+  @override
+  String get filterByDate => 'Фильтровать по дате';
+
+  @override
+  String get memoryGraph => 'Граф воспоминаний';
 }

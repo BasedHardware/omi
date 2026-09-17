@@ -3241,5 +3241,9 @@
     "home": "홈",
     "failedToUpdateBaselineStatus": "베이스라인 상태 업데이트에 실패했습니다.",
     "memoryAllowUse": "사용 허용",
-    "memoryDontUse": "사용 안 함"
+    "memoryDontUse": "사용 안 함",
+    "unstarConversation": "대화 별표 해제",
+    "moreOptions": "추가 옵션",
+    "filterByDate": "날짜별 필터",
+    "memoryGraph": "기억 그래프"
 }

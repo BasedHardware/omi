@@ -9999,4 +9999,16 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Kunne ikke oppdatere baseline-status.';
+
+  @override
+  String get unstarConversation => 'Fjern stjerne fra samtale';
+
+  @override
+  String get moreOptions => 'Flere alternativer';
+
+  @override
+  String get filterByDate => 'Filtrer etter dato';
+
+  @override
+  String get memoryGraph => 'Minnegraf';
 }

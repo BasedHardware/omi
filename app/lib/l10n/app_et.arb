@@ -3241,5 +3241,9 @@
     "home": "Avaleht",
     "failedToUpdateBaselineStatus": "Baasoleku värskendamine ebaõnnestus.",
     "memoryAllowUse": "Luba kasutamine",
-    "memoryDontUse": "Ära kasuta"
+    "memoryDontUse": "Ära kasuta",
+    "unstarConversation": "Eemalda vestluselt tärn",
+    "moreOptions": "Rohkem valikuid",
+    "filterByDate": "Filtreeri kuupäeva järgi",
+    "memoryGraph": "Mälude graaf"
 }

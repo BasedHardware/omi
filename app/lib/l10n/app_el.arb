@@ -3241,5 +3241,9 @@
     "home": "Αρχική",
     "failedToUpdateBaselineStatus": "Αποτυχία ενημέρωσης της βασικής κατάστασης.",
     "memoryAllowUse": "Να επιτρέπεται η χρήση",
-    "memoryDontUse": "Να μην χρησιμοποιείται"
+    "memoryDontUse": "Να μην χρησιμοποιείται",
+    "unstarConversation": "Αφαίρεση αστεριού από τη συνομιλία",
+    "moreOptions": "Περισσότερες επιλογές",
+    "filterByDate": "Φιλτράρισμα κατά ημερομηνία",
+    "memoryGraph": "Γράφος αναμνήσεων"
 }

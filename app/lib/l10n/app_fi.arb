@@ -3241,5 +3241,9 @@
     "home": "Koti",
     "failedToUpdateBaselineStatus": "Perustilan päivitys epäonnistui.",
     "memoryAllowUse": "Salli käyttö",
-    "memoryDontUse": "Älä käytä"
+    "memoryDontUse": "Älä käytä",
+    "unstarConversation": "Poista keskustelun tähti",
+    "moreOptions": "Lisää vaihtoehtoja",
+    "filterByDate": "Suodata päivämäärän mukaan",
+    "memoryGraph": "Muistigraafi"
 }

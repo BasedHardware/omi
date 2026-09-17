@@ -118,8 +118,29 @@ class SemanticsTreeDump {
 
   List<SemanticsNodeDump> get interactive => nodes.where((node) => node.isInteractive).toList();
 
-  List<SemanticsNodeDump> get unnamedInteractive =>
-      interactive.where((node) => node.isActivateControl && !node.hasAccessibleName).toList();
+  /// Material [SearchBar] (and similar) wrap the named text field in an InkWell
+  /// whose only job is to focus it. That wrapper is a tap node with no name; it
+  /// is not a second control a screen reader should announce.
+  bool isFocusWrapperForNamedField(SemanticsNodeDump node) {
+    if (node.hasAccessibleName) return false;
+    if (node.isButton || node.isTextField || node.isLink) return false;
+    if (node.flags.contains('slider') || node.flags.contains('checked') || node.flags.contains('toggled')) {
+      return false;
+    }
+    if (!node.actions.contains('tap')) return false;
+    final start = nodes.indexOf(node);
+    if (start < 0) return false;
+    for (var i = start + 1; i < nodes.length; i++) {
+      final child = nodes[i];
+      if (child.depth <= node.depth) break;
+      if (child.isTextField && child.hasAccessibleName) return true;
+    }
+    return false;
+  }
+
+  List<SemanticsNodeDump> get unnamedInteractive => interactive
+      .where((node) => node.isActivateControl && !node.hasAccessibleName && !isFocusWrapperForNamedField(node))
+      .toList();
 
   List<SemanticsNodeDump> get unnamedScrollables =>
       nodes.where((node) => node.isScrollable && !node.isActivateControl && !node.hasAccessibleName).toList();

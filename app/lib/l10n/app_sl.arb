@@ -10828,5 +10828,9 @@
     "home": "Domov",
     "failedToUpdateBaselineStatus": "Posodobitev osnovnega statusa je spodletela.",
     "memoryAllowUse": "Dovoli uporabo",
-    "memoryDontUse": "Ne uporabljaj"
+    "memoryDontUse": "Ne uporabljaj",
+    "unstarConversation": "Odstrani zvezdico s pogovora",
+    "moreOptions": "Več možnosti",
+    "filterByDate": "Filtriraj po datumu",
+    "memoryGraph": "Graf spominov"
 }

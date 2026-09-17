@@ -10011,4 +10011,16 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Gagal memperbarui status baseline.';
+
+  @override
+  String get unstarConversation => 'Hapus bintang percakapan';
+
+  @override
+  String get moreOptions => 'Opsi lainnya';
+
+  @override
+  String get filterByDate => 'Filter berdasarkan tanggal';
+
+  @override
+  String get memoryGraph => 'Graf memori';
 }

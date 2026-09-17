@@ -10006,4 +10006,16 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'বেসলাইন স্থিতি আপডেট করতে ব্যর্থ হয়েছে।';
+
+  @override
+  String get unstarConversation => 'কথোপকথন আনস্টার করুন';
+
+  @override
+  String get moreOptions => 'আরও বিকল্প';
+
+  @override
+  String get filterByDate => 'তারিখ অনুসারে ফিল্টার করুন';
+
+  @override
+  String get memoryGraph => 'স্মৃতির গ্রাফ';
 }

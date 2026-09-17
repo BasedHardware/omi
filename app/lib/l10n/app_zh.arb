@@ -3241,5 +3241,9 @@
     "home": "首页",
     "failedToUpdateBaselineStatus": "无法更新基线状态。",
     "memoryAllowUse": "允许使用",
-    "memoryDontUse": "不使用"
+    "memoryDontUse": "不使用",
+    "unstarConversation": "取消星标对话",
+    "moreOptions": "更多选项",
+    "filterByDate": "按日期筛选",
+    "memoryGraph": "记忆图谱"
 }

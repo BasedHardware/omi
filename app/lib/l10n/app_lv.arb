@@ -3241,5 +3241,9 @@
     "home": "Sākums",
     "failedToUpdateBaselineStatus": "Neizdevās atjaunināt bāzes statusu.",
     "memoryAllowUse": "Atļaut lietošanu",
-    "memoryDontUse": "Nelietot"
+    "memoryDontUse": "Nelietot",
+    "unstarConversation": "Noņemt zvaigzni no sarunas",
+    "moreOptions": "Vairāk opciju",
+    "filterByDate": "Filtrēt pēc datuma",
+    "memoryGraph": "Atmiņu grafs"
 }

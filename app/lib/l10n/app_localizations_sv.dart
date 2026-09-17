@@ -10005,4 +10005,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Det gick inte att uppdatera baslinjestatus.';
+
+  @override
+  String get unstarConversation => 'Ta bort stjärna från konversation';
+
+  @override
+  String get moreOptions => 'Fler alternativ';
+
+  @override
+  String get filterByDate => 'Filtrera efter datum';
+
+  @override
+  String get memoryGraph => 'Minnesgraf';
 }

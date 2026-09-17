@@ -3241,5 +3241,9 @@
     "home": "ホーム",
     "failedToUpdateBaselineStatus": "ベースライン状態の更新に失敗しました。",
     "memoryAllowUse": "使用を許可",
-    "memoryDontUse": "使用しない"
+    "memoryDontUse": "使用しない",
+    "unstarConversation": "会話のスターを解除",
+    "moreOptions": "その他のオプション",
+    "filterByDate": "日付で絞り込む",
+    "memoryGraph": "メモリグラフ"
 }

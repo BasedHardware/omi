@@ -3241,5 +3241,9 @@
     "home": "Начало",
     "failedToUpdateBaselineStatus": "Неуспешна актуализация на базовия статус.",
     "memoryAllowUse": "Разреши използване",
-    "memoryDontUse": "Не използвай"
+    "memoryDontUse": "Не използвай",
+    "unstarConversation": "Премахни звездата от разговора",
+    "moreOptions": "Още опции",
+    "filterByDate": "Филтриране по дата",
+    "memoryGraph": "Граф на спомените"
 }

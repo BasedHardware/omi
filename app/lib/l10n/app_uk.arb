@@ -3241,5 +3241,9 @@
     "home": "Головна",
     "failedToUpdateBaselineStatus": "Не вдалося оновити базовий статус.",
     "memoryAllowUse": "Дозволити використання",
-    "memoryDontUse": "Не використовувати"
+    "memoryDontUse": "Не використовувати",
+    "unstarConversation": "Зняти позначку з розмови",
+    "moreOptions": "Інші параметри",
+    "filterByDate": "Фільтрувати за датою",
+    "memoryGraph": "Граф спогадів"
 }

@@ -10828,5 +10828,9 @@
     "home": "ہوم",
     "failedToUpdateBaselineStatus": "بیس لائن کی حالت اپ ڈیٹ نہیں ہو سکی۔",
     "memoryAllowUse": "استعمال کی اجازت دیں",
-    "memoryDontUse": "استعمال نہ کریں"
+    "memoryDontUse": "استعمال نہ کریں",
+    "unstarConversation": "گفتگو سے ستارہ ہٹائیں",
+    "moreOptions": "مزید اختیارات",
+    "filterByDate": "تاریخ کے مطابق فلٹر کریں",
+    "memoryGraph": "یادداشت کا گراف"
 }
