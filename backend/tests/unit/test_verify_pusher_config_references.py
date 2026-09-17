@@ -182,6 +182,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
+        "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED": "true",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",

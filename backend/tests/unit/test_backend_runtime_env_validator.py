@@ -108,10 +108,11 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        flags,
+        flags + r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -444,6 +445,24 @@ def test_conversation_finalization_capability_contract_rejects_normalized_but_no
         and "'true'" in error.message
         for error in errors
     )
+
+
+@pytest.mark.parametrize('literal', ['on', '1', 'yes', ' true ', 'True', ''])
+def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal):
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+    # utils.free_tier_basic_gates lights a gate only on an untrimmed,
+    # case-insensitive 'true'. A uniform 'on' would pass co-host agreement and
+    # the loose summary-flag literal set while every host ran ungated.
+    flag = 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'
+    env_config['gke']['backend-listen']['env'][flag]['value'] = literal
+    env_config['gke']['pusher']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend-sync']['env'][flag]['value'] = literal
+
+    errors = validator.validate_conversation_finalization_capabilities('dev', env_config)
+
+    assert any(f"{flag} must be exactly 'true' or 'false'" in error.message for error in errors)
 
 
 def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal():

@@ -20,6 +20,12 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/header_circle_button.dart';
+
+/// The header pills paint 36pt tall; this transparent margin, inside an opaque
+/// GestureDetector, makes the touch target [kMinTapTarget] without moving them
+/// (the app bar centers the row, and the toolbar is taller than the target).
+const EdgeInsets _pillTargetMargin = EdgeInsets.symmetric(vertical: (kMinTapTarget - 36) / 2);
 
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
@@ -48,12 +54,14 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
             final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
             if (connectedDevice != null) {
               final batteryPill = GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   routeToPage(context, const ConnectedDevice());
                   PlatformManager.instance.analytics.batteryIndicatorClicked();
                 },
                 child: Container(
                   height: 36,
+                  margin: _pillTargetMargin,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
                   child: Row(
@@ -106,32 +114,29 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   batteryPill,
-                  const SizedBox(width: 8),
-                  GestureDetector(
+                  // 8pt between the painted shapes; the button's 44pt target overhangs
+                  // its 36pt circle by 4pt.
+                  const SizedBox(width: 4),
+                  HeaderCircleButton(
+                    semanticLabel: context.l10n.phoneCallsWithOmi,
+                    icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
                     onTap: () {
                       HapticFeedback.lightImpact();
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
                     },
-                    child: Container(
-                      height: 36,
-                      width: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
-                    ),
                   ),
                 ],
               );
             } else if (pairedDevice != null && pairedDevice.id.isNotEmpty) {
               // Device is paired but disconnected
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () async {
                   await routeToPage(context, const ConnectedDevice());
                 },
                 child: Container(
                   height: 36,
+                  margin: _pillTargetMargin,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
                   child: Row(
@@ -164,6 +169,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () async {
                       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
                         routeToPage(context, const ConnectDevicePage());
@@ -174,6 +180,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     },
                     child: Container(
                       height: 36,
+                      margin: _pillTargetMargin,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                       decoration: BoxDecoration(
                         color: const Color(0xFF1F1F25),

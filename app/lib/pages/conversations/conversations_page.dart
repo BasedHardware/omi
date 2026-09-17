@@ -35,6 +35,7 @@ import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 enum _ConversationListRowKind {
   topSpacer,
@@ -845,7 +846,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     }
                   }),
                 ),
-              SliverToBoxAdapter(child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100)),
+              // Clears the nav bar, or the taller merge action bar that covers it in
+              // selection mode; both sit on top of the same system inset.
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: convoProvider.isSelectionModeActive
+                      ? 160 + bottomNavBarReservedInset(context)
+                      : bottomNavBarClearance(context),
+                ),
+              ),
             ],
           ),
         );

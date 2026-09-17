@@ -9804,4 +9804,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
+
+  @override
+  String get home => '首页';
 }
