@@ -55,7 +55,11 @@ def _bound_env_names(values: dict) -> set[str]:
             continue
         for field in ('secretKeyRef', 'configMapKeyRef'):
             ref = value_from.get(field)
-            if isinstance(ref, dict) and ref.get('name') and ref.get('key'):
+            # The referenced key must carry the env var's own name. A provider
+            # key wired to some other existing key (SONIOX_API_KEY <- MODULATE_API_KEY)
+            # is non-empty, so startup admission passes and the provider then
+            # fails authentication on its first failover.
+            if isinstance(ref, dict) and ref.get('name') and ref.get('key') == name:
                 bound.add(name)
                 break
     return bound
@@ -119,3 +123,16 @@ def test_listen_and_pusher_stt_models_bind_startup_keys(values_path: Path) -> No
     detail = ', '.join(f'{model} requires {key}' for model, key in missing)
     relative = values_path.relative_to(ROOT)
     assert missing == [], f'{relative} lists streaming providers whose startup keys are unbound: {detail}'
+
+
+def test_a_provider_key_wired_to_a_different_secret_key_is_not_bound():
+    values = {
+        'env': [
+            {
+                'name': 'SONIOX_API_KEY',
+                'valueFrom': {'secretKeyRef': {'name': 'dev-omi-backend-secrets', 'key': 'MODULATE_API_KEY'}},
+            }
+        ]
+    }
+
+    assert 'SONIOX_API_KEY' not in _bound_env_names(values)
