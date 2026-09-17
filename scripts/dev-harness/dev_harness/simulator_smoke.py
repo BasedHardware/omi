@@ -223,8 +223,7 @@ def ensure_generated_env(app_dir: Path, repo_root: Path, *, runner: Callable[...
             "run",
             "build_runner",
             "build",
-            "--build-filter=lib/env/dev_env.dart",
-            "--build-filter=lib/env/prod_env.dart",
+            "--build-filter=lib/env/*",
         ],
         cwd=app_dir,
         timeout=300,
@@ -235,6 +234,13 @@ def ensure_generated_env(app_dir: Path, repo_root: Path, *, runner: Callable[...
             "codegen invoked --delete-conflicting-outputs",
             remedy="rerun build_runner without that flag; restore tracked *.g.dart",
             payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
+        )
+    output = f"{completed.stdout or ''}{completed.stderr or ''}"
+    if completed.returncode not in (0, None) or "wrote 0 outputs" in (completed.stdout or ""):
+        raise SmokeBlocked(
+            "envied codegen wrote no files",
+            remedy="flutter pub run build_runner build --build-filter=lib/env/*  (no --delete-conflicting-outputs)",
+            payload={"classification": mobile_doctor.AGENT_REMEDIABLE, "codegen_tail": output[-2000:]},
         )
     deleted = subprocess.run(
         ["git", "-C", str(repo_root), "ls-files", "-d"],
@@ -248,8 +254,7 @@ def ensure_generated_env(app_dir: Path, repo_root: Path, *, runner: Callable[...
     if not all(path.is_file() for path in envied):
         raise SmokeBlocked(
             "envied generated files are still missing after build_runner",
-            remedy="flutter pub run build_runner build --build-filter=lib/env/dev_env.dart "
-            "--build-filter=lib/env/prod_env.dart  (no --delete-conflicting-outputs)",
+            remedy="flutter pub run build_runner build --build-filter=lib/env/*  (no --delete-conflicting-outputs)",
             payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
         )
 
@@ -391,10 +396,14 @@ class SimulatorSmoke:
             self._timings["total_s"] = round(time.monotonic() - started, 1)
             self._stop_child()
             if self._acquired_id:
+                old_stdout = sys.stdout
                 try:
+                    sys.stdout = sys.stderr
                     self._release(self._acquired_id)
                 except Exception:
                     pass
+                finally:
+                    sys.stdout = old_stdout
 
     def _run(self, *, session_id: str | None, name: str) -> dict[str, Any]:
         report = self._doctor(platforms=("ios-simulator",), skip_capacity=False)

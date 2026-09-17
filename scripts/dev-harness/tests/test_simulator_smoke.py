@@ -120,7 +120,7 @@ def _engine(tmp_path: Path, *, mode="ok", start_raises=None, **overrides):
         path.write_bytes(b"\x89PNG\r\n\x1a\nsmoke")
 
     def codegen(app_dir: Path, repo_root: Path):
-        codegen_argv.append("flutter pub run build_runner build --build-filter=lib/env/dev_env.dart")
+        codegen_argv.append("flutter pub run build_runner build --build-filter=lib/env/*")
 
     def factory(spec):
         engine_state["spec"] = spec
@@ -272,7 +272,7 @@ def test_codegen_refuses_delete_conflicting_outputs(tmp_path: Path) -> None:
         mp.setattr(smoke.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0] if a else [], 0, "", ""))
         smoke.ensure_generated_env(app, tmp_path, runner=runner)
     assert "--delete-conflicting-outputs" not in recorded["argv"]
-    assert "--build-filter=lib/env/dev_env.dart" in recorded["argv"]
+    assert "--build-filter=lib/env/*" in recorded["argv"]
 
 
 def test_cmd_smoke_uses_injected_engine_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
