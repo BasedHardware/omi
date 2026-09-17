@@ -76,7 +76,13 @@ void main() {
       tester,
       page: ConversationDetailPage(conversation: seeded),
       providers: [
-        ChangeNotifierProvider<ConversationDetailProvider>.value(value: ConversationDetailProvider()),
+        // The detail provider resolves through groupedConversations[selectedDate]
+        // and validates the same local day key, with selectedDate defaulting to
+        // DateTime.now() — pin it to the seed's local day so the journey is
+        // independent of the calendar day and timezone it runs in.
+        ChangeNotifierProvider<ConversationDetailProvider>.value(
+          value: ConversationDetailProvider()..selectedDate = conversationLocalDayKey(seeded.createdAt),
+        ),
         ChangeNotifierProvider<ConversationProvider>.value(value: conversationProvider),
       ],
     );
