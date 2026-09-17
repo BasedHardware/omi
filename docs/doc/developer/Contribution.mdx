@@ -36,6 +36,15 @@ Maintainers declining a PR for direction or taste will cite an invariant ID or o
 
 ---
 
+## Mobile capture changes
+
+The [capture ownership contract](https://github.com/BasedHardware/Omi/blob/main/app/lib/services/capture/OWNERSHIP.md)
+defines constructor seams, session generations and the single owners of recovery,
+foreground service and socket lifecycle. New singleton wakes and unowned capture
+resources fail a changed-file ratchet; its diagnostic names the request interface
+to use. Run `TZ=UTC bash app/test.sh` for the protected contracts. Pending tests
+execute and fail on unexpected success; builders remove only their pending marker.
+
 ## Pull Request Quality
 
 Good PRs are easy to review and come with evidence that the change works.
