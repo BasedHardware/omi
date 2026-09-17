@@ -66,9 +66,10 @@ else
   echo "lane-bootstrap: cheap-gate imports (yaml, dotenv) already succeed — skipping pip"
 fi
 
-echo "lane-bootstrap: skipping full backend install (make setup-backend)."
-echo "lane-bootstrap: PRs that touch backend/ need 'make setup-backend' before git push —"
+echo "lane-bootstrap: skipping full backend install (make lane-backend / make setup-backend)."
+echo "lane-bootstrap: PRs that touch backend/ need 'make lane-backend' before git push —"
 echo "lane-bootstrap:   otherwise check_backend_typecheck_if_needed fails (pyright missing)."
+echo "lane-bootstrap:   (make lane-backend is the wheel install; make setup-backend is the locked pylock sync.)"
 echo "lane-bootstrap: the Flutter generated-output gate needs 'flutter pub get' in app/"
 echo "lane-bootstrap:   (this command already ran it; re-run after adding Dart deps)."
 
@@ -109,12 +110,10 @@ fi
 (
   cd app
   flutter pub get
-  if [[ ! -f lib/env/dev_env.g.dart || ! -f lib/env/prod_env.g.dart ]]; then
-    flutter pub run build_runner build --delete-conflicting-outputs
-  fi
 )
+bash scripts/dev-harness/generate-app-env.sh
 
 elapsed=$((SECONDS - STARTED))
 echo "lane-bootstrap: done in ${elapsed}s"
 echo "lane-bootstrap: next: bash app/test.sh   # or scripts/pre-push for cheap gates"
-echo "lane-bootstrap: full backend (uvicorn/pyright) remains opt-in: make setup-backend"
+echo "lane-bootstrap: full backend (uvicorn/pyright) remains opt-in: make lane-backend"

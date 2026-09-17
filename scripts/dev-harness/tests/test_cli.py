@@ -120,7 +120,7 @@ def test_missing_uvicorn_names_setup_backend(monkeypatch: pytest.MonkeyPatch, tm
 
     missing, _warnings = cli.prerequisite_report(cfg)
 
-    assert any("uvicorn" in item and "make setup-backend" in item for item in missing)
+    assert any("uvicorn" in item and "make lane-backend" in item for item in missing)
 
 
 def test_pre_21_java_is_reported_as_a_prerequisite(

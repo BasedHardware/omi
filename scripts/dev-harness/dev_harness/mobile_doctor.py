@@ -186,7 +186,7 @@ def _check_backend_runtime(repo_root: Path, runner: Runner) -> CheckResult:
         return _agent(
             "backend-runtime",
             "backend/.venv missing; mobile-session start and the pre-push typecheck need uvicorn/pyright",
-            "make setup-backend",
+            "make lane-backend",
             (LANE_BACKEND,),
         )
     probe_code, probe_out = runner.run([str(venv_python), "-c", BACKEND_RUNTIME_PROBE])
@@ -195,7 +195,7 @@ def _check_backend_runtime(repo_root: Path, runner: Runner) -> CheckResult:
         return _agent(
             "backend-runtime",
             f"backend/.venv cannot import uvicorn/pyright/google.auth (mobile-session start / typecheck): {hint}",
-            "make setup-backend",
+            "make lane-backend",
             (LANE_BACKEND,),
         )
     return _ok(

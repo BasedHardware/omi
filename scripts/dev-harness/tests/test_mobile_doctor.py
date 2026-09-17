@@ -198,7 +198,7 @@ class TestIndividualChecks:
         report = md.run_doctor(tmp_path, runner=runner, env={})
         runtime = next(c for c in report.checks if c.check == "backend-runtime")
         assert runtime.status == md.AGENT_REMEDIABLE
-        assert runtime.remedy == "make setup-backend"
+        assert runtime.remedy == "make lane-backend"
         assert "uvicorn" in runtime.detail
         assert report.overall == "degraded"
 
