@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Height of the gradient that fades page content out above the tab row. It is
 /// paint only: nothing in it is tappable.
@@ -99,10 +100,11 @@ class _BottomNavBarState extends State<BottomNavBar> {
             ),
             child: Row(
               children: [
-                _buildTab(context, selectedIndex, 0, FontAwesomeIcons.house, 'Home'),
-                _buildTab(context, selectedIndex, 1, FontAwesomeIcons.comments, 'Conversations'),
-                _buildTab(context, selectedIndex, 2, FontAwesomeIcons.listCheck, 'Tasks'),
-                _buildTab(context, selectedIndex, 3, FontAwesomeIcons.puzzlePiece, 'Apps'),
+                _buildTab(context, selectedIndex, 0, FontAwesomeIcons.house, 'Home', context.l10n.home),
+                _buildTab(
+                    context, selectedIndex, 1, FontAwesomeIcons.comments, 'Conversations', context.l10n.conversations),
+                _buildTab(context, selectedIndex, 2, FontAwesomeIcons.listCheck, 'Tasks', context.l10n.tasks),
+                _buildTab(context, selectedIndex, 3, FontAwesomeIcons.puzzlePiece, 'Apps', context.l10n.apps),
               ],
             ),
           ),
@@ -114,24 +116,38 @@ class _BottomNavBarState extends State<BottomNavBar> {
   @override
   Widget build(BuildContext context) => _navigation;
 
-  Widget _buildTab(BuildContext context, int selectedIndex, int index, FaIconData icon, String label) {
+  /// [label] is the stable analytics name; [semanticLabel] is what a screen
+  /// reader announces, since the tabs are icon-only.
+  Widget _buildTab(
+    BuildContext context,
+    int selectedIndex,
+    int index,
+    FaIconData icon,
+    String label,
+    String semanticLabel,
+  ) {
     return Expanded(
-      child: InkWell(
-        onTapDown: (_) => widget.onTabWarmup?.call(index),
-        onTap: () {
-          // Switch the visible page before crossing the platform channel for
-          // haptics or analytics. Both can be delayed when the device is busy,
-          // but neither should delay visual acknowledgement of the tap.
-          widget.onTabTap(index, context.read<HomeProvider>().selectedIndex == index);
-          primaryFocus?.unfocus();
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            HapticFeedback.selectionClick();
-            PlatformManager.instance.analytics.bottomNavigationTabClicked(label);
-          });
-        },
-        child: SizedBox(
-          height: kBottomNavRowHeight,
-          child: Center(child: FaIcon(icon, color: selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
+      child: Semantics(
+        button: true,
+        selected: selectedIndex == index,
+        label: semanticLabel,
+        child: InkWell(
+          onTapDown: (_) => widget.onTabWarmup?.call(index),
+          onTap: () {
+            // Switch the visible page before crossing the platform channel for
+            // haptics or analytics. Both can be delayed when the device is busy,
+            // but neither should delay visual acknowledgement of the tap.
+            widget.onTabTap(index, context.read<HomeProvider>().selectedIndex == index);
+            primaryFocus?.unfocus();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              HapticFeedback.selectionClick();
+              PlatformManager.instance.analytics.bottomNavigationTabClicked(label);
+            });
+          },
+          child: SizedBox(
+            height: kBottomNavRowHeight,
+            child: Center(child: FaIcon(icon, color: selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
+          ),
         ),
       ),
     );

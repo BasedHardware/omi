@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 
@@ -34,6 +36,8 @@ void main() {
       ChangeNotifierProvider<HomeProvider>.value(
         value: provider,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: BottomNavBar(
               onTabWarmup: warmups.add,
@@ -64,6 +68,34 @@ void main() {
 
     expect(taps, [(2, false), (2, true)]);
     expect(warmups, [2, 2]);
+  });
+
+  testWidgets('announces each icon-only tab to screen readers', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final provider = HomeProvider();
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<HomeProvider>.value(
+        value: provider,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: BottomNavBar(onTabTap: (_, __) {})),
+        ),
+      ),
+    );
+
+    for (final label in ['Home', 'Conversations', 'Tasks', 'Apps']) {
+      expect(find.bySemanticsLabel(label), findsOneWidget, reason: 'the $label tab has no visible text');
+    }
+    final home = tester.getSemantics(find.bySemanticsLabel('Home')).getSemanticsData();
+    expect(home.flagsCollection.isButton, isTrue);
+    expect(home.flagsCollection.isSelected.toBoolOrNull(), isTrue);
+    expect(home.hasAction(SemanticsAction.tap), isTrue);
+    final tasks = tester.getSemantics(find.bySemanticsLabel('Tasks')).getSemanticsData();
+    expect(tasks.flagsCollection.isSelected.toBoolOrNull(), isFalse);
+    semantics.dispose();
   });
 
   testWidgets('keeps the tab row clear of the system navigation bar inset', (tester) async {
@@ -211,6 +243,8 @@ Future<({double screenBottom, double barHeight, Map<String, double> iconBottoms,
     ChangeNotifierProvider<HomeProvider>.value(
       value: provider,
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => MediaQuery(
             // viewPadding is what survives a keyboard; the home Scaffold sets
