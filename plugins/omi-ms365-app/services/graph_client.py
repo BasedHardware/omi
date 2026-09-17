@@ -143,7 +143,7 @@ class GraphClient:
                 log.warning("Graph pagination hit MAX_PAGES=%d on %s", MAX_PAGES, path)
                 break
             seen.add(key)
-            data = await self._request("GET", url, params=params)
+            data = await self.get(url, params=params)
             # A nextLink already carries the query options; repeating them is
             # a Graph error, so params go with the first request only.
             params = None
