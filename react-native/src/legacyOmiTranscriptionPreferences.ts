@@ -30,6 +30,15 @@ function presentNullableDate(value: unknown): void {
   }
 }
 
+function presentNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
+    throw new TranscriptionPreferencesError();
+  }
+}
+
 function vocabulary(value: unknown): string[] {
   if (!Array.isArray(value)) {
     throw new TranscriptionPreferencesError();
@@ -54,6 +63,7 @@ export function parseOmiTranscriptionPreferences(
 ): OmiTranscriptionPreferences {
   const record = object(JSON.parse(body));
   presentNullableDate(record.custom_stt_since);
+  presentNullableString(record.language);
   if (
     record.single_language_mode !== undefined &&
     typeof record.single_language_mode !== 'boolean'

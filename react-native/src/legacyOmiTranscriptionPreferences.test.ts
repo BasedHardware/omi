@@ -143,6 +143,68 @@ test('old transcription preferences name Flutter TranscriptionPreferences fromJs
   }
 });
 
+test('old transcription preferences name Flutter TranscriptionPreferences fromJson type-wrong GET language instead of remapping to a language chip', () => {
+  expect(
+    parseOmiTranscriptionPreferences(
+      JSON.stringify({
+        vocabulary: ['Omi'],
+        single_language_mode: true,
+        language: 'en',
+      }),
+    ),
+  ).toEqual({
+    singleLanguageMode: true,
+    vocabulary: ['Omi'],
+  });
+  expect(
+    parseOmiTranscriptionPreferences(
+      JSON.stringify({
+        vocabulary: ['Omi'],
+        single_language_mode: true,
+        language: null,
+      }),
+    ),
+  ).toEqual({
+    singleLanguageMode: true,
+    vocabulary: ['Omi'],
+  });
+  expect(
+    parseOmiTranscriptionPreferences(
+      JSON.stringify({
+        vocabulary: ['Omi'],
+        single_language_mode: true,
+        language: '',
+      }),
+    ),
+  ).toEqual({
+    singleLanguageMode: true,
+    vocabulary: ['Omi'],
+  });
+  expect(
+    parseOmiTranscriptionPreferences(
+      JSON.stringify({
+        vocabulary: ['Omi'],
+        single_language_mode: true,
+        language: '  en  ',
+      }),
+    ),
+  ).toEqual({
+    singleLanguageMode: true,
+    vocabulary: ['Omi'],
+  });
+  for (const language of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiTranscriptionPreferences(
+        JSON.stringify({
+          vocabulary: ['Omi'],
+          single_language_mode: true,
+          language,
+        }),
+      ),
+    ).toThrow('Omi transcription preferences are malformed');
+  }
+});
+
 test('fails closed for malformed GET transcription preferences', () => {
   expect(() => parseOmiTranscriptionPreferences(JSON.stringify([]))).toThrow();
   expect(() =>
@@ -191,6 +253,16 @@ test('loadOmiTranscriptionPreferences names resolved GET preferences and omits f
       vocabulary: ['Omi'],
       single_language_mode: true,
       custom_stt_since: 1,
+    }),
+  });
+  expect(await loadOmiTranscriptionPreferences(backend)).toBeNull();
+  request.mockResolvedValueOnce({
+    id: 'prefs',
+    status: 200,
+    body: JSON.stringify({
+      vocabulary: ['Omi'],
+      single_language_mode: true,
+      language: 1,
     }),
   });
   expect(await loadOmiTranscriptionPreferences(backend)).toBeNull();
