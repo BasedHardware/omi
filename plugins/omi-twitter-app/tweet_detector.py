@@ -63,8 +63,12 @@ class TweetDetector:
         if trigger_index == -1:
             return None
         
-        # Extract content after trigger
-        start_index = trigger_index + len(matched_trigger)
+        # Extract content after trigger. The trigger was located inside the
+        # lowercased, stripped copy; anchor the slice in the ORIGINAL text
+        # (case-insensitive match) so leading whitespace or case changes
+        # cannot shift the cut back into the trigger phrase.
+        trigger_match = re.search(re.escape(matched_trigger), text, flags=re.IGNORECASE)
+        start_index = trigger_match.end() if trigger_match else len(text)
         content = text[start_index:].strip()
         
         # Remove explicit end phrases if present

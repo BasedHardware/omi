@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-normalized-copy-offset-applied-to-original-text",
+  "violated_contract": "An index computed on a normalized copy of a string (lowercased, stripped) must not be applied to the original text: every transformation that changes offsets (leading/trailing strip, case-folding length changes) shifts the cut, so the extracted value silently starts mid-trigger. omi-twitter-app's extract_tweet_content located the trigger in text.lower().strip() but sliced the original, turning '  Tweet now hello' into 'ow hello' (issue #14351); the webhook's ' '.join(segment_texts) makes a leading-space or empty first segment reachable in production.",
+  "canonical_prevention": "Anchor the slice in the original text with a case-insensitive search of the located phrase (re.search(re.escape(phrase), text, re.IGNORECASE)) and cut after the match; a manifest-registered hermetic suite pins extraction for leading whitespace, tabs, case differences, end-phrase stripping, and the no-trigger contract.",
+  "canonical_prevention_artifact": [
+    "plugins/test_tweet_content_offsets.py",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["plugins/**"],
+  "status": "open"
+}
