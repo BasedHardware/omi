@@ -429,6 +429,7 @@ function discardedTranscriptSegments(value: unknown): {
   }
   return value.map(raw => {
     const segment = object(raw);
+    presentNullableString(segment.id);
     const personId =
       segment.person_id === undefined || segment.person_id === null
         ? undefined

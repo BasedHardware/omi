@@ -667,6 +667,132 @@ test('old conversations name Flutter ConversationListItem fromJson padded GET tr
   }
 });
 
+test('old conversations name Flutter ConversationListItem fromJson type-wrong GET transcript_segments id instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    transcript_segments: [
+      {
+        text: 'Hello from the recording',
+        speaker: 'SPEAKER_00',
+        is_user: true,
+        start: 0,
+        end: 2,
+        id: 'seg-1',
+      },
+    ],
+  };
+  const keptExact = await loadConversations(backend([row, neighbor]).api);
+  expect(keptExact.items.map(item => item.id)).toEqual(['located', 'named']);
+  expect(keptExact.items.map(item => item.title)).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  const keptOmitted = await loadConversations(
+    backend([
+      {
+        ...row,
+        transcript_segments: [
+          {
+            text: 'Hello from the recording',
+            speaker: 'SPEAKER_00',
+            is_user: true,
+            start: 0,
+            end: 2,
+          },
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptOmitted.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptNull = await loadConversations(
+    backend([
+      {
+        ...row,
+        transcript_segments: [
+          {
+            text: 'Hello from the recording',
+            speaker: 'SPEAKER_00',
+            is_user: true,
+            start: 0,
+            end: 2,
+            id: null,
+          },
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptNull.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptEmpty = await loadConversations(
+    backend([
+      {
+        ...row,
+        transcript_segments: [
+          {
+            text: 'Hello from the recording',
+            speaker: 'SPEAKER_00',
+            is_user: true,
+            start: 0,
+            end: 2,
+            id: '',
+          },
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptEmpty.items.map(item => item.id)).toEqual(['located', 'named']);
+  const keptPadded = await loadConversations(
+    backend([
+      {
+        ...row,
+        transcript_segments: [
+          {
+            text: 'Hello from the recording',
+            speaker: 'SPEAKER_00',
+            is_user: true,
+            start: 0,
+            end: 2,
+            id: '  seg-1  ',
+          },
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptPadded.items.map(item => item.id)).toEqual(['located', 'named']);
+  for (const extra of [1, true, [], {}]) {
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            transcript_segments: [
+              {
+                text: 'Hello from the recording',
+                speaker: 'SPEAKER_00',
+                is_user: true,
+                start: 0,
+                end: 2,
+                id: extra,
+              },
+            ],
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+});
+
 test('old discarded conversations name GET transcript_segments as the list title', async () => {
   const {api} = backend([
     {
