@@ -66,7 +66,7 @@
     },
     "app/lib/backend/http/api/action_items.dart": {
       "legacy-nullable-http": 11,
-      "null-swallow-patterns": 16
+      "null-swallow-patterns": 17
     },
     "app/lib/backend/http/api/imports.dart": {
       "legacy-nullable-http": 2,
@@ -152,5 +152,9 @@
       "null-swallow-patterns": 7
     }
   },
-  "adopted": {}
+  "adopted": {
+    "app/lib/backend/http/action_items_api_contract.dart": [
+      "legacy-nullable-http"
+    ]
+  }
 }

@@ -1,4 +1,5 @@
 {
+  "app/test/spine/c3_action_items_test.dart": "C3",
   "app/test/spine/c3_conversation_test.dart": "C3",
   "app/test/spine/c3_execution_test.dart": "C3",
   "app/test/spine/c3_fixture.dart": "C3",

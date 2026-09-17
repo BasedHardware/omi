@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
+import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -82,7 +84,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!mounted) return;
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-      if (provider.actionItems.isEmpty) {
+      final phase = provider.apiViewState.phase;
+      final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
+          phase == ApiViewPhase.locked ||
+          phase == ApiViewPhase.terminal ||
+          phase == ApiViewPhase.authenticationRequired ||
+          phase == ApiViewPhase.empty;
+      if (provider.actionItems.isEmpty && !typedResultAlreadyProjected) {
         provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -519,6 +527,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       builder: (context, provider, child) {
         final showCompleted = provider.showCompletedView;
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
+        final apiPhase = provider.apiViewState.phase;
+        final showTypedStatus = apiPhase == ApiViewPhase.error ||
+            apiPhase == ApiViewPhase.locked ||
+            apiPhase == ApiViewPhase.terminal ||
+            apiPhase == ApiViewPhase.authenticationRequired ||
+            apiPhase == ApiViewPhase.empty;
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -535,9 +549,20 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   backgroundColor: Colors.white,
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
-                      : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
-                          : _buildTasksList(categorizedItems, provider),
+                      : showTypedStatus
+                          ? CustomScrollView(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
+                                ),
+                              ],
+                            )
+                          : categorizedItems.values.every((l) => l.isEmpty)
+                              ? _buildEmptyTasksList()
+                              : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // Hide the purple corner FAB when the empty-state already
@@ -583,6 +608,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
       child: Column(
+        key: const ValueKey('omi.action_items.empty'),
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
