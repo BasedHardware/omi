@@ -51,7 +51,7 @@ import {color as uiColor, tokens} from './tokens';
 const DOTS_SIZE = 104;
 
 type PermissionKind = 'notifications' | 'microphone' | 'bluetooth';
-type PermissionState = 'unknown' | 'granted' | 'denied';
+type PermissionState = 'unknown' | 'granted' | 'denied' | 'unsupported';
 
 function openLink(url: string) {
   Linking.openURL(url).catch(() => undefined);
@@ -368,13 +368,19 @@ export function Onboarding({
         ? 'Asking…'
         : granted
         ? 'Granted'
+        : permissions[kind] === 'unsupported'
+        ? 'Unavailable'
         : permissions[kind] === 'denied'
         ? 'Open Settings'
         : 'Allow';
     return (
       <PermissionRow
         key={kind}
-        disabled={pendingPermission !== null}
+        disabled={
+          pendingPermission !== null ||
+          permissions[kind] === 'unsupported' ||
+          granted
+        }
         granted={granted}
         onPress={() => {
           request(kind);

@@ -1,5 +1,4 @@
 export type HarnessKind = 'agent' | 'context';
-export type HarnessState = 'idle' | 'connecting' | 'on';
 
 export type OnboardingHarness = {
   id: string;
@@ -80,9 +79,4 @@ export const ONBOARDING_HARNESSES: readonly OnboardingHarness[] = [
     detail: 'Paste a memory export into Omi.',
     mark: 'GPT',
   },
-];
-
-export const HARNESS_GROUPS: {title: string; kind: HarnessKind}[] = [
-  {title: 'AI assistants', kind: 'agent'},
-  {title: 'Connect data', kind: 'context'},
 ];

@@ -95,12 +95,16 @@ import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
 import {tokens} from './tokens';
 import {Onboarding} from './Onboarding';
+import {PermissionRow} from './PermissionRow';
+import {omiNative} from '../omiNative';
 import {
+  OmiAvatar,
   OMI_MARK_INK,
   omiDotColor,
   omiMarkBrightness,
   omiMarkDotCenter,
   omiMarkGeometry,
+  omiMarkMotionPose,
 } from './OmiAvatar';
 
 function render(element: React.ReactElement) {
@@ -349,6 +353,7 @@ describe('Onboarding chrome', () => {
 
   async function finishMobileSetup(
     renderer: ReactTestRenderer.ReactTestRenderer,
+    checkPermissions?: () => Promise<void>,
   ) {
     const press = async (label: string) => {
       await act(async () => {
@@ -367,6 +372,7 @@ describe('Onboarding chrome', () => {
     await press('Continue');
     await press('TikTok');
     await press('Continue');
+    await checkPermissions?.();
     await press("I'll do these later");
     await press('Skip for now');
     await press('Continue');
@@ -383,7 +389,21 @@ describe('Onboarding chrome', () => {
         onCompleteSetup={complete}
       />,
     );
-    await finishMobileSetup(renderer);
+    await finishMobileSetup(renderer, async () => {
+      (omiNative!.requestPermissions as jest.Mock).mockResolvedValueOnce({
+        microphone: 'granted',
+        notifications: 'unsupported',
+      });
+      await act(async () =>
+        renderer.root.findAllByType(PermissionRow)[0].props.onPress(),
+      );
+      const rows = renderer.root.findAllByType(PermissionRow);
+      expect(rows.map(row => row.props.status)).toEqual([
+        'Unavailable',
+        'Granted',
+      ]);
+      expect(rows.every(row => row.props.disabled)).toBe(true);
+    });
     expect(
       renderer.root.findAll(
         node => node.props.accessibilityLabel === 'Agree and connect Omi',
@@ -471,22 +491,22 @@ describe('Onboarding chrome', () => {
       node => node.props.accessibilityRole === 'header',
     );
     expect(Object.assign({}, ...flattenStyle(title.props.style)).color).toBe(
-      'rgba(0, 0, 0, 0.92)',
+      '#242622',
     );
     const dots = findOmiDots(renderer);
-    expect(dots.props.inkColor).toBe('rgba(0, 0, 0, 0.92)');
+    expect(dots.props.inkColor).toBe('#242622');
     const hosts = dots.findAll(node => String(node.type) === 'Animated.View');
     expect(hosts).toHaveLength(8);
     for (const host of hosts) {
       expect(
         Object.assign({}, ...flattenStyle(host.props.style)).backgroundColor,
-      ).toBe('rgba(0, 0, 0, 0.92)');
+      ).toBe('#242622');
     }
     const error = renderer.root.find(
       node => node.props.accessibilityLabel === 'Sign-in error',
     );
     expect(Object.assign({}, ...flattenStyle(error.props.style)).color).toBe(
-      'rgba(0, 0, 0, 0.64)',
+      '#666a62',
     );
   });
 
@@ -563,6 +583,75 @@ describe('extracted modules', () => {
   test('omiDotColor stays in the avatar module', () => {
     expect(omiDotColor('omi', 0)).toBe(omiDotColor('omi', 0));
     expect(omiDotColor('omi', 0)).not.toBe(omiDotColor('other', 0));
+  });
+});
+
+describe('event-driven Omi mark motion', () => {
+  test('arrival is staggered; gather contracts then releases; success scatters outwards', () => {
+    expect(omiMarkMotionPose('arrive', 0, 0.25).opacity).toBeGreaterThan(
+      omiMarkMotionPose('arrive', 7, 0.25).opacity,
+    );
+    expect(omiMarkMotionPose('gather', 0, 0.25).y).toBeGreaterThan(0);
+    expect(omiMarkMotionPose('gather', 0, 0.75).y).toBeLessThan(0);
+    expect(omiMarkMotionPose('success', 0, 0.5).y).toBeCloseTo(-34);
+    expect(omiMarkMotionPose('success', 2, 0.5).x).toBeCloseTo(34);
+    for (const motion of ['arrive', 'gather', 'success'] as const) {
+      for (let index = 0; index < 8; index++) {
+        const pose = omiMarkMotionPose(motion, index, 1);
+        expect(pose.x).toBeCloseTo(0);
+        expect(pose.y).toBeCloseTo(0);
+        expect(pose.scale).toBeCloseTo(1);
+        expect(pose.opacity).toBe(1);
+      }
+    }
+    for (let index = 0; index < 8; index++) {
+      const start = omiMarkMotionPose('breathe', index, 0);
+      const end = omiMarkMotionPose('breathe', index, 1);
+      expect(end.x).toBeCloseTo(start.x);
+      expect(end.y).toBeCloseTo(start.y);
+      expect(end.opacity).toBeCloseTo(start.opacity);
+    }
+  });
+
+  test('gestures stop on replacement, stable grant renders do not replay, and Reduce Motion stays static', () => {
+    jest.mocked(Animated.timing).mockClear();
+    jest.mocked(Animated.loop).mockClear();
+    const renderer = render(
+      <OmiAvatar tone="ink" motion="breathe" motionKey="screen" />,
+    );
+    const waiting = jest.mocked(Animated.loop).mock.results[0].value;
+    expect(waiting.start).toHaveBeenCalledTimes(1);
+    act(() =>
+      renderer.update(
+        <OmiAvatar tone="ink" motion="success" motionKey="screen" />,
+      ),
+    );
+    expect(waiting.stop).toHaveBeenCalledTimes(1);
+    expect(Animated.timing).toHaveBeenCalledTimes(2);
+    const success = jest.mocked(Animated.timing).mock.results[1].value;
+    act(() =>
+      renderer.update(
+        <OmiAvatar tone="ink" motion="success" motionKey="screen" />,
+      ),
+    );
+    expect(Animated.timing).toHaveBeenCalledTimes(2);
+    act(() =>
+      renderer.update(
+        <OmiAvatar
+          tone="ink"
+          motion="success"
+          motionKey="screen"
+          reduceMotion
+        />,
+      ),
+    );
+    expect(success.stop).toHaveBeenCalledTimes(1);
+    expect(Animated.timing).toHaveBeenCalledTimes(2);
+    for (const dot of omiInkDotHosts(renderer)) {
+      expect(dot.props.style.opacity).toBe(1);
+      expect(dot.props.style.transform).toBeUndefined();
+    }
+    act(() => renderer.unmount());
   });
 });
 
