@@ -1395,3 +1395,12 @@ exempt:
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
     reason: "OpenAPI generation contract has component dependencies"
+  - id: plugin-oauth-error-params-escaped-tests
+    command: ["python3", "plugins/test_oauth_error_params_escaped.py"]
+    triggers:
+      - "plugins/test_oauth_error_params_escaped.py"
+      - "plugins/omi-dropbox-app/**"
+      - "plugins/omi-notion-app/**"
+      - "plugins/omi-ms365-app/**"
+    lanes: ["local", "ci"]
+    reason: "#14503: the OAuth callback error branches of dropbox, ms365, and notion rendered the client-controlled error/error_description params raw into HTML; a crafted callback URL is a reflected-XSS vector on an unauthenticated route"

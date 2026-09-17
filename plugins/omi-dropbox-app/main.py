@@ -12,6 +12,9 @@ import wave
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+from datetime import datetime, timedelta
+from typing import Dict, Optional
+import html
 from urllib.parse import urlencode
 
 import requests
@@ -415,7 +418,7 @@ async def auth_callback(
 <head><title>Authorization Failed</title></head>
 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
     <h1 style="color: #dc3545;">Authorization Failed</h1>
-    <p>{error_description or error}</p>
+    <p>{html.escape(error_description or error, quote=True)}</p>
 </body>
 </html>
 """,
