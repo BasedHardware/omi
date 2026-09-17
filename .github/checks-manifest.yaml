@@ -94,7 +94,7 @@ checks:
     command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/capture/boundary-baseline.json"]
     triggers: ["app/lib/**/*.dart", "app/contracts/capture/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "WAL wake races edc8683e80/97ec3d9cea and late timer 05c43c014d: no new singleton wake or unowned capture resource in changed files"
+    reason: "WAL wake races edc8683e80/97ec3d9cea and late timer 05c43c014d: prevent regression in adopted capture files and debt in new files"
 
   - id: mobile-boundary-check-tests
     command: ["python3", "scripts/test_check_mobile_boundaries.py"]

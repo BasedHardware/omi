@@ -85,5 +85,6 @@
     "app/lib/pages/conversations/auto_sync_page.dart": {
       "global-wake": 1
     }
-  }
+  },
+  "adopted": {}
 }

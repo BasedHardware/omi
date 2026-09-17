@@ -2,17 +2,22 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+
+/// Only the BLE listener operations capture owns; adapter wraps existing BleBridge.
+abstract interface class CaptureBleListeners {
+  void addBatchRecordingFinalizedListener(void Function(String) callback);
+  void removeBatchRecordingFinalizedListener(void Function(String) callback);
+}
 
 typedef CaptureSocketOpen = Future<TranscriptSegmentSocketService?> Function({
   required BleAudioCodec codec,
@@ -46,10 +51,8 @@ class CaptureDependencies {
     required this.refreshConversation,
     required this.telemetry,
     required this.ensureDeviceConnection,
-    required this.analytics,
   });
   final Future<DeviceConnection?> Function(String) ensureDeviceConnection;
-  final AnalyticsManager analytics;
   final RecordingLifecycleTelemetry telemetry;
   final IWalService wal;
   final IMicRecorderService phoneMic;
@@ -59,7 +62,7 @@ class CaptureDependencies {
   final DateTime Function() now;
   final CaptureScheduling scheduling;
   final SharedPreferencesUtil preferences;
-  final BleBridge ble;
+  final CaptureBleListeners ble;
   final CaptureSocketOpen openSocket;
   final CaptureSessionOwner owner;
   final ConversationLocationCapture location;
@@ -75,4 +78,6 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) =>
 
 /// Composition entry signature for main.dart. Builder must resolve defaults
 /// ONLY here, after refusing FLUTTER_TEST; no static/eager default evaluation.
-CaptureProvider composeProductionCaptureProvider() => throw UnimplementedError('C1 production composition root');
+CaptureProvider composeProductionCaptureProvider(
+        {LocalSegmentStore? localSegmentStore, CaptureExternalActions? externalActions}) =>
+    throw UnimplementedError('C1 production composition root');

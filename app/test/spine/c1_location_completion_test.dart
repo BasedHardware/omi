@@ -81,8 +81,8 @@ void main() {
           microphonePermission: d.microphonePermission,
           refreshConversation: d.refreshConversation,
           telemetry: d.telemetry,
-          ensureDeviceConnection: d.ensureDeviceConnection,
-          analytics: d.analytics);
+          ensureDeviceConnection: d.ensureDeviceConnection);
+
       final p = composeCaptureProvider(deps);
       await p.streamRecording();
       await pumpEventQueue();
@@ -157,8 +157,8 @@ void main() {
           microphonePermission: d.microphonePermission,
           refreshConversation: d.refreshConversation,
           telemetry: d.telemetry,
-          ensureDeviceConnection: d.ensureDeviceConnection,
-          analytics: d.analytics);
+          ensureDeviceConnection: d.ensureDeviceConnection);
+
       final p = composeCaptureProvider(deps);
       await p.changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
       phone.finalizeGate = Completer<void>();

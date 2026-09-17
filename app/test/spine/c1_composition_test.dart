@@ -6,7 +6,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
@@ -18,16 +17,10 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 
 import '../support/capture/capture_replay_world.dart';
 import '../support/capture/virtual_capture_time.dart';
 import '../support/spine/contract.dart';
-
-class InertAnalytics implements AnalyticsManager {
-  @override
-  dynamic noSuchMethod(Invocation i) => null;
-}
 
 class MemoryPrefs implements SharedPreferencesUtil {
   @override
@@ -46,7 +39,7 @@ class InertMic implements IMicRecorderService {
   dynamic noSuchMethod(Invocation i) => throw StateError('Construction must not start mic: ${i.memberName}');
 }
 
-class TrackedBle implements BleBridge {
+class TrackedBle implements CaptureBleListeners {
   final callbacks = <void Function(String)>[];
   @override
   void addBatchRecordingFinalizedListener(void Function(String) callback) => callbacks.add(callback);
@@ -72,11 +65,11 @@ CaptureDependencies dependencies(
     TrackedBle? ble,
     StreamController<bool>? changes,
     ConversationLocationCapture? location,
-    CaptureAuthBoundary? auth}) {
+    CaptureAuthBoundary? auth,
+    CaptureSessionOwner? owner}) {
   final clock = world?.clock ?? VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
     ensureDeviceConnection: (_) async => null,
-    analytics: InertAnalytics(),
     wal: world?.wal ?? InertWal(),
     phoneMic: world?.mic ?? InertMic(),
     batchSupported: false,
@@ -97,8 +90,11 @@ CaptureDependencies dependencies(
                 clientConversationId,
                 customSttConfig}) async =>
             null,
-    owner: CaptureSessionOwner(
-        coordinator: world?.coordinator ?? coordinator(), startForeground: () async {}, stopForeground: () async {}),
+    owner: owner ??
+        CaptureSessionOwner(
+            coordinator: world?.coordinator ?? coordinator(),
+            startForeground: () async {},
+            stopForeground: () async {}),
     location: location ??
         ConversationLocationCapture(
             isLocationServiceEnabled: () async => false,
@@ -236,6 +232,12 @@ void main() {
       gate.complete();
       await connect;
       expect(transports, hasLength(1));
+      // Positive control: keepalive itself must reconnect, with no explicit call.
+      p.onClosed();
+      world.scheduler.elapse(const Duration(seconds: 30));
+      await pumpEventQueue();
+      expect(opens, 2);
+      expect(transports, hasLength(2));
       p.dispose();
       await pumpEventQueue();
       final calls = opens;
@@ -245,7 +247,7 @@ void main() {
       // WAL owns its own timers; stop it before checking whole-world quiescence.
       await world.wal.stop();
       expect(world.scheduler.pendingTimers, isEmpty);
-      expect(transports.single.closeCalls, 1);
+      expect(transports.map((socket) => socket.closeCalls), everyElement(1));
     } finally {
       await world.dispose();
       await dir.delete(recursive: true);

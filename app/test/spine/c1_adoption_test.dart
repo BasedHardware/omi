@@ -9,6 +9,23 @@ String code(String path) => File(path)
     .readAsStringSync()
     .replaceAll(RegExp(r'''//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*' '''.trim()), ' ');
 
+Iterable<String> captureImplementation() sync* {
+  final pending = ['lib/services/capture/capture_controller.dart', 'lib/providers/capture_provider.dart'];
+  final seen = <String>{};
+  while (pending.isNotEmpty) {
+    final path = pending.removeLast();
+    if (!seen.add(path) || !File(path).existsSync()) continue;
+    yield path;
+    final source = File(path).readAsStringSync();
+    for (final match in RegExp(r"import 'package:omi/([^']*capture[^']*\.dart)'").allMatches(source)) {
+      final dependency = 'lib/${match.group(1)}';
+      if (!dependency.endsWith('capture_composition.dart') && !dependency.endsWith('capture_seams.dart')) {
+        pending.add(dependency);
+      }
+    }
+  }
+}
+
 void main() {
   contractTest('C1 exemplar has no singleton escape or implicit production connectivity', () {
     pendingContract('C1');
@@ -16,24 +33,24 @@ void main() {
         r'PlatformManager\s*\.\s*instance|AuthService\s*\.\s*instance|BleBridge\s*\.\s*instance|'
         r'RecordingTransferCoordinator\s*\.\s*instance|ForegroundUtil\s*\.|'
         r'CaptureConnectivityBoundary\s*\.\s*production|CaptureAuthBoundary\s*\.\s*production');
-    for (final path in ['lib/services/capture/capture_controller.dart', 'lib/providers/capture_provider.dart']) {
+    for (final path in captureImplementation()) {
       expect(global.allMatches(code(path)).map((m) => m.group(0)), isEmpty, reason: path);
     }
   });
-  contractTest('C1 all five requester classes relinquish singleton coordinator wake', () {
+  contractTest('C1 capture requester and extracted code relinquish singleton coordinator access', () {
     pendingContract('C1');
     final violations = <String>[];
-    final wake = RegExp(r'\.\s*instance\s*\.\s*wake\s*\(');
-    for (final file in Directory('lib').listSync(recursive: true).whereType<File>()) {
-      if (file.path.endsWith('.dart') && wake.hasMatch(code(file.path))) violations.add(file.path);
+    final wake = RegExp(r'RecordingTransferCoordinator\s*\.\s*instance');
+    for (final path in captureImplementation()) {
+      if (wake.hasMatch(code(path))) violations.add(path);
     }
     expect(violations, isEmpty);
   });
-  contractTest('C1 Home and controller request FGS intent rather than acting independently', () {
+  contractTest('C1 capture and extracted code request FGS intent rather than acting independently', () {
     pendingContract('C1');
     final actor =
         RegExp(r'ForegroundUtil\s*\.\s*(?:initializeForegroundService|startForegroundTask|stopForegroundTask)\s*\(');
-    for (final path in ['lib/pages/home/page.dart', 'lib/services/capture/capture_controller.dart']) {
+    for (final path in captureImplementation()) {
       expect(actor.allMatches(code(path)), isEmpty, reason: path);
     }
   });

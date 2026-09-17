@@ -43,7 +43,6 @@ void main() {
       final store = HeldStore();
       final deps = CaptureDependencies(
           ensureDeviceConnection: d.ensureDeviceConnection,
-          analytics: d.analytics,
           wal: d.wal,
           phoneMic: d.phoneMic,
           batchSupported: d.batchSupported,

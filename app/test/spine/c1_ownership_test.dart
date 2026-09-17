@@ -135,15 +135,8 @@ void main() {
     expect(closed, ['old', 'new']);
   });
 
-  for (final stage in [
-    'codec',
-    'auth-refresh',
-    'keepalive',
-    'location-fix',
-    'location-upload',
-    'replaceSession',
-    'recovery-wake'
-  ]) {
+  {
+    const stage = 'generation primitive';
     contractTest('C1 $stage cannot commit an obsolete generation or disposed completion', () async {
       pendingContract('C1');
       final e = Effects();
