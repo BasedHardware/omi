@@ -28,6 +28,18 @@ function presentNullableString(value: unknown): void {
   text(value, 1_000_000);
 }
 
+function presentUnusedStringListItems(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const item of value) {
+    text(item, 1_000_000);
+  }
+}
+
 function firmwareChangelog(value: unknown): string[] | undefined {
   if (value === undefined || value === null || typeof value === 'string') {
     return undefined;
@@ -87,6 +99,7 @@ export function parseOmiLatestFirmware(
   presentNullableString(record.min_app_version);
   presentNullableString(record.min_app_version_code);
   presentNullableString(record.zip_url);
+  presentUnusedStringListItems(record.ota_update_steps);
   if (record.draft !== undefined && typeof record.draft !== 'boolean') {
     throw new FirmwareError();
   }

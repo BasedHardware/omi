@@ -343,6 +343,71 @@ test('old firmware names Flutter FirmwareUpdate type-wrong GET zip_url instead o
   }
 });
 
+test('old firmware names Flutter FirmwareUpdate type-wrong GET ota_update_steps item instead of remapping to a Latest Version chip', () => {
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({
+        version: '1.3.0',
+        ota_update_steps: ['Connect device', 'Install'],
+      }),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(JSON.stringify({version: '1.3.0'})),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '1.3.0', ota_update_steps: null}),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '1.3.0', ota_update_steps: 1}),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '1.3.0', ota_update_steps: []}),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '1.3.0', ota_update_steps: ['']}),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  for (const extra of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiLatestFirmware(
+        JSON.stringify({version: '1.3.0', ota_update_steps: [extra]}),
+      ),
+    ).toThrow('Omi firmware is malformed');
+  }
+});
+
 test('loadOmiLatestFirmware names resolved GET version and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'firmware',
@@ -404,6 +469,23 @@ test('loadOmiLatestFirmware names resolved GET version and omits failures', asyn
       manufacturer: 'Based Hardware',
     }),
   ).toBeNull();
+});
+
+test('old firmware names Flutter FirmwareUpdate type-wrong GET ota_update_steps item instead of empty latest', async () => {
+  const request = jest.fn(async () => ({
+    id: 'firmware',
+    status: 200,
+    body: JSON.stringify({version: '1.3.0', ota_update_steps: [1]}),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(
+    loadOmiLatestFirmware(backend, {
+      model: 'Omi Dev Kit',
+      firmware: '1.2.3',
+      hardware: '1',
+      manufacturer: 'Based Hardware',
+    }),
+  ).rejects.toThrow('Omi firmware is malformed');
 });
 
 test('old firmware names Flutter FirmwareUpdate type-wrong GET zip_url instead of empty latest', async () => {
