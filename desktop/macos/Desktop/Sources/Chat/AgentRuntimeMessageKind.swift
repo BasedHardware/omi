@@ -2,6 +2,7 @@ extension AgentRuntimeProcess.RuntimeMessage {
   /// Closed routing taxonomy for messages received from the JSONL runtime.
   /// Kept beside the protocol boundary instead of growing the process owner.
   enum Kind: Equatable {
+    case modelHeadersRequest
     case initMessage
     case textDelta
     case thinkingDelta

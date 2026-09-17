@@ -649,7 +649,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{count} selected'**
-  String selectedCount(int count, Object s);
+  String selectedCount(int count);
 
   /// Merge button label
   ///
@@ -18614,6 +18614,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Home'**
   String get home;
+
+  /// Snackbar when toggling a memory's baseline flag fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update baseline status'**
+  String get failedToUpdateBaselineStatus;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

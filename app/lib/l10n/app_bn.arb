@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "অন্য কিছু নাম পেতে চান?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "আপনার নাম কি?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -10829,5 +10825,8 @@
     "tapPlusToStartRecording": "রেকর্ডিং শুরু করতে + চাপুন",
     "processingTakingLonger": "এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।",
     "speechProfileEnrollmentPrompt": "Omi যেন আপনার কণ্ঠ চিনতে পারে — যেকোনো বিষয়ে প্রায় ৫ সেকেন্ড কথা বলুন।",
-    "home": "হোম"
+    "home": "হোম",
+    "failedToUpdateBaselineStatus": "বেসলাইন স্থিতি আপডেট করতে ব্যর্থ হয়েছে।",
+    "memoryAllowUse": "ব্যবহারের অনুমতি দিন",
+    "memoryDontUse": "ব্যবহার করবেন না"
 }

@@ -243,7 +243,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get searchConversations => 'بات چیتوں کو تلاش کریں...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count منتخب';
   }
 
@@ -2045,10 +2045,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get memoryHistory => 'تاریخ';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'استعمال کی اجازت دیں';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'استعمال نہ کریں';
 
   @override
   String get undo => 'واپس لیں';
@@ -10010,4 +10010,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get home => 'ہوم';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'بیس لائن کی حالت اپ ڈیٹ نہیں ہو سکی۔';
 }
