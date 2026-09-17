@@ -22,6 +22,8 @@ def test_child_env_for_offline_mode() -> None:
     assert child["OMI_HARNESS_INSTANCE"] == "default"
     assert child["FIREBASE_API_KEY"] == config.LOCAL_FIREBASE_API_KEY
     assert child["OMI_LLM_GATEWAY_FEATURE_MODE"] == "off"
+    assert child["STT_SERVICE_MODELS"] == "parakeet"
+    assert "soniox" not in child["STT_SERVICE_MODELS"]
 
 
 def test_local_storage_links_use_dev_host_for_physical_devices() -> None:

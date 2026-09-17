@@ -5,6 +5,7 @@ remains an importable alias. Registers ``/memory/*`` product paths.
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -17,6 +18,7 @@ from models.memory_product import (
     VectorMemorySearchResponse,
 )
 from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH
+from utils.memory.belief_model import belief_model_enabled
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_product_memory_route,
@@ -93,14 +95,17 @@ def search_product_memory(
     query: str = Query(''),
     limit: int = Query(100),
     offset: int = Query(0),
+    view: Optional[str] = Query(None),
+    as_of: Optional[datetime] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Search default-visible memory product memory for the authenticated user.
 
     This product endpoint constructs the default Omi-chat access policy explicitly
     and delegates Firestore reads/filtering to the memory product read service. It
-    never enables Archive capability, so Archive and stale Short-term records are
-    excluded from default responses.
+    never enables Archive capability; beta useful-now reads admit current, fading,
+    and unknown records while an explicit history view retrieves dated non-Archive
+    records under the same grant.
     """
 
     _validate_search_pagination(limit, offset)
@@ -110,6 +115,9 @@ def search_product_memory(
     global_read_gate = _global_read_gate_observability(authz.global_gate)
     rollout_observability = authz.observability
     policy = authz.policy or _default_omi_chat_policy()
+    effective_view = (view or 'useful_now') if belief_model_enabled() else 'released'
+    if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
+        raise HTTPException(status_code=400, detail='as_of must be timezone-aware')
     try:
         response = fetch_default_product_memory_search(
             uid=uid,
@@ -119,6 +127,8 @@ def search_product_memory(
             now=_current_time(),
             limit=limit,
             offset=offset,
+            view=effective_view,
+            as_of=as_of if effective_view != 'released' else None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -63,6 +63,10 @@ class UniversalListCursorState:
     canonical_exhausted: bool
     historical_updated_exhausted: bool
     historical_created_exhausted: bool
+    # Additive temporal-read binding.  Defaults preserve decoding of cursors
+    # minted before the belief beta shipped.
+    view: str = 'released'
+    as_of: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +159,8 @@ def encode_universal_list_cursor(
         'canonical_exhausted': bool(state.canonical_exhausted),
         'historical_updated_exhausted': bool(state.historical_updated_exhausted),
         'historical_created_exhausted': bool(state.historical_created_exhausted),
+        'view': state.view,
+        'as_of': state.as_of,
         'expires_at_epoch_seconds': now + max(1, ttl),
     }
     payload_segment = _b64encode(_canonical_json(payload))
@@ -170,6 +176,8 @@ def decode_universal_list_cursor(
     device_scope: str,
     client_device_id: Optional[str],
     secret: bytes,
+    view: str = 'released',
+    as_of: Optional[str] = None,
     now_epoch_seconds: Optional[int] = None,
 ) -> UniversalListCursorClaims:
     parts = cursor.split('.') if cursor else []
@@ -230,6 +238,8 @@ def decode_universal_list_cursor(
             canonical_exhausted=bool(data.get('canonical_exhausted')),
             historical_updated_exhausted=bool(data.get('historical_updated_exhausted')),
             historical_created_exhausted=bool(data.get('historical_created_exhausted')),
+            view=str(data.get('view') or 'released'),
+            as_of=data.get('as_of') if isinstance(data.get('as_of'), str) else None,
         )
     except UniversalListCursorError:
         raise
@@ -249,6 +259,12 @@ def decode_universal_list_cursor(
         raise UniversalListCursorError('device_scope_mismatch')
     if (state.client_device_id or None) != (client_device_id or None):
         raise UniversalListCursorError('device_scope_mismatch')
+    if state.view != view:
+        raise UniversalListCursorError('view_mismatch')
+    # A continuation may carry the server-issued snapshot anchor in the
+    # token; callers may omit the redundant query value on later pages.
+    if as_of is not None and (state.as_of or None) != as_of:
+        raise UniversalListCursorError('as_of_mismatch')
     return UniversalListCursorClaims(state=state, expires_at_epoch_seconds=expires_at)
 
 

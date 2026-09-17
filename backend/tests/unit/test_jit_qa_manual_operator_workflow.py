@@ -98,6 +98,25 @@ def test_sweep_verify_joins_server_run_to_real_job_and_content_free_output():
     assert "poll_deadline" in command
 
 
+def test_sweep_repair_step_is_qa_fenced_and_content_free():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    step = _step("Repair one tombstoned QA sweep model invocation")
+    command = step["run"]
+    assert step["if"] == "${{ inputs.operation == 'sweep-repair' }}"
+    assert step["env"]["OMI_JIT_QA_AUTH_ONLY"] == "true"
+    assert step["env"]["OMI_JIT_QA_UID_ALLOWLIST"] == "${{ env.QA_UID }}"
+    assert step["env"]["FIRESTORE_DATABASE_ID"] == "${{ env.QA_DATABASE }}"
+    assert "jit_qa_sweep_repair.py list" in command
+    assert "jit_qa_sweep_repair.py repair" in command
+    assert '--invocation-id "$INVOCATION_ID"' in command
+    assert "sweep-repair-receipt.json" in command
+    assert "run jobs execute" not in command
+    assert '"model_calls": False' in command
+    assert '"scheduler_mutation": False' in command
+    assert "sweep-repair" in text
+    assert "SWEEP_REPAIR_QA" in text
+
+
 def test_every_workflow_shell_block_is_valid_bash():
     for step in _workflow_steps():
         command = step.get("run")

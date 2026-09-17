@@ -3234,6 +3234,11 @@
     "speechProfileTopicGoal": "Каква е дългосрочната ви цел?",
     "speechToTextUnavailableDesc": "Преобразуването на реч в текст не е налично в момента. Проверете интернет връзката и настройките за разпознаване на реч на устройството си, след което опитайте отново.",
     "memoryHistoryPartial": "Част от историята на спомените не е налична. Показва се получената досега история.",
+    "memoryHistory": "История",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Докоснете +, за да започнете запис",
-    "processingTakingLonger": "Все още работи — отнема повече време от обичайното."
+    "processingTakingLonger": "Все още работи — отнема повече време от обичайното.",
+    "speechProfileEnrollmentPrompt": "За да знае Omi кой глас е вашият — говорете за каквото искате около 5 секунди."
 }

@@ -31,6 +31,7 @@ LOCAL_CHECK_ORDER = (
 PHASE_ORDER = (
     *LOCAL_CHECK_ORDER,
     "app-analysis-tests",
+    "app-journeys-hermetic",
     "app-compile-smoke",
     "desktop-agent-runtime",
     "desktop-swift-tests",
@@ -266,6 +267,30 @@ def _is_app_compile_smoke_input(path: str) -> bool:
     }
 
 
+def _is_app_journey_input(path: str) -> bool:
+    """Wake the hermetic seeded-journey lane (SCA-490).
+
+    Journey definitions and their support, the C3 replay world, the dev
+    controls harness, and non-generated app/lib production Dart (which runs
+    the full small suite as its conservative fallback) all select the lane.
+    Generated Dart and l10n template files stay owned by the codegen/l10n
+    lanes; native Android/iOS trees stay owned by the compile smoke.
+    """
+    if path.startswith("app/lib/l10n/app_") and (path.endswith(".arb") or path.endswith(".dart")):
+        return False
+    if _is_generated_dart(path):
+        return False
+    if path.startswith("app/lib/") and path.endswith(".dart"):
+        return True
+    return path.startswith(
+        ("app/integration_test/journeys/", "app/test/support/capture/", "app/lib/services/dev_controls/")
+    ) or path in {
+        "contracts/session/session-evidence-v1.schema.json",
+        "scripts/dev-harness/mobile-verify.sh",
+        "scripts/dev-harness/dev_harness/mobile_verify.py",
+    }
+
+
 def _matches_desktop_release_pathspec(path: str, pathspec: str) -> bool:
     """Match a changed file against one planner git pathspec."""
     if path == pathspec:
@@ -348,6 +373,11 @@ def resolve_impact(
     )
 
     for path in normalized_paths:
+        # The hermetic journey lane owns inputs beyond app/ (the evidence
+        # contract and the verify entrypoint), so it is resolved per path
+        # before the component blocks.
+        if _is_app_journey_input(path):
+            selected.add("app-journeys-hermetic")
         if path.startswith("app/"):
             # Unknown paths within a component remain conservative: they wake
             # its normal analyzer/test lane rather than silently doing nothing.
@@ -394,6 +424,7 @@ def resolve_impact(
             {
                 "app-ci-only",
                 "app-analysis-tests",
+                "app-journeys-hermetic",
                 "app-compile-smoke",
                 "desktop-ci-only",
                 "desktop-flow-lint",
@@ -452,6 +483,7 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_flutter_generated": str(plan.includes("flutter-codegen") or plan.includes("flutter-l10n")).lower(),
         "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
         "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
+        "has_app_journeys": str(plan.includes("app-journeys-hermetic")).lower(),
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-unbounded-noncooperative-dependency-await",
+  "violated_contract": "A user-facing or automation operation with a bounded response contract must not directly await a dependency that can ignore task cancellation. Cancellation is cooperative, so a decoder blocked in first-use model loading can keep the caller open indefinitely even after the client has given up.",
+  "canonical_prevention": "Enforce the response deadline at the dependency boundary with DeadlinedOperation, abandon any result that arrives after the deadline, and preserve timeout versus caller-cancellation as distinct typed outcomes. Exercise the production boundary with a fake dependency that deliberately ignores cancellation and assert both the bounded return and the automation error code.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationTranscriber.swift",
+    "desktop/macos/Desktop/Tests/VoiceTypingTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/**",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift"
+  ],
+  "status": "open"
+}

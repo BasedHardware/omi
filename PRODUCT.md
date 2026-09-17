@@ -54,6 +54,15 @@ privacy, lineage, graph, and outbox rules. The complete convergence and removal
 ledger lives in
 [`backend/docs/epics/universal_memory_task_convergence.md`](backend/docs/epics/universal_memory_task_convergence.md).
 
+## Mobile own-voice enrollment direction
+
+Keep speech-profile enrollment in first-run onboarding. Explain why Omi needs
+its user's voice, ask for a brief sample about any topic, and retain Skip as an
+escape. Personal-life questions are not enrollment requirements. A successful
+upload, not navigation through All Done, is the enrollment outcome. The
+[approach and measurement plan](.github/agent-docs/mobile-voice-enrollment.md)
+describes the current duration estimate and longer-term quality work.
+
 ## Before you build
 
 - Large or ambiguous features start as a GitHub issue

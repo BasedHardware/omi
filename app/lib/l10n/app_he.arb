@@ -10822,6 +10822,11 @@
     "speechProfileTopicGoal": "מה המטרה שלכם לטווח הארוך?",
     "speechToTextUnavailableDesc": "המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.",
     "memoryHistoryPartial": "חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.",
+    "memoryHistory": "היסטוריה",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "הקישו על + כדי להתחיל להקליט",
-    "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל."
+    "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל.",
+    "speechProfileEnrollmentPrompt": "כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות."
 }

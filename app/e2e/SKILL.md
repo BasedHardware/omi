@@ -8,6 +8,16 @@ allowed-tools: Bash, Read, Glob, Grep
 
 This skill teaches you the Omi Flutter mobile app's navigation structure, screen architecture, and widget patterns. Use it when developing features (to understand how the app works), fixing bugs (to navigate to the affected screen), or verifying changes (to confirm your code works in the live app).
 
+> **Verifying changes (agents and contributors):** this skill drives a *live*
+> app on an emulator/device and assumes a manually-authenticated session
+> against a real or local backend — it is an exploration and physical-device
+> tool. The canonical fast verification path is the seeded local lane with
+> synthetic auth: `make mobile-verify ARGS="fast --paths <changed-file>"` —
+> no device, no OAuth, loopback fixtures. See
+> [`scripts/dev-harness/MOBILE_VERIFY.md`](../../scripts/dev-harness/MOBILE_VERIFY.md)
+> and [`MOBILE_SESSIONS.md`](../../scripts/dev-harness/MOBILE_SESSIONS.md).
+> Physical-device evidence remains a separately reported lane (SCA-491).
+
 ## How to Explore the App
 
 You can interact with the running app via `agent-flutter` — a CLI that taps widgets, reads the widget tree, and captures screenshots through Flutter's Marionette debug protocol.

@@ -2047,6 +2047,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryHistoryPartial => 'Časť histórie spomienok nie je dostupná. Zobrazuje sa doteraz prijatá história.';
 
   @override
+  String get memoryHistory => 'História';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Vrátiť späť';
 
   @override
@@ -9974,4 +9983,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Stále prebieha — trvá to dlhšie ako zvyčajne.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek.';
 }

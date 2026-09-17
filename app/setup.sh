@@ -90,8 +90,13 @@ function warn_ios_debug_build_untethered() {
 
 ######################################
 # Generate device suffix from hostname
-######################################
 function generate_device_suffix() {
+  # Use hostname or a hash of it as suffix; a session harness (or two
+  # checkouts on one host) can inject a unique per-session suffix instead.
+  if [[ -n "${OMI_DEVICE_SUFFIX:-}" ]]; then
+    echo "${OMI_DEVICE_SUFFIX}"
+    return
+  fi
   # Use hostname or a hash of it as suffix
   HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')
   echo "${HOSTNAME}"
@@ -408,6 +413,21 @@ function select_ios_device() {
   ios_devices=$(echo "$devices_json" | jq -c '[.[] | select(.targetPlatform == "ios")]')
   local count
   count=$(echo "$ios_devices" | jq 'length')
+
+  # Explicit non-interactive selection (mobile-session harnesses, CI, nested
+  # agents): pin the exact device id instead of enumerating and prompting.
+  # Fails precisely when the pinned device is absent rather than falling back
+  # to another destination.
+  local pinned="${OMI_IOS_DEVICE_ID:-}"
+  if [[ -n "$pinned" ]]; then
+    if echo "$ios_devices" | jq -e --arg id "$pinned" 'any(.[]; .id == $id)' >/dev/null; then
+      echo "$pinned"
+      return 0
+    fi
+    echo "❌ OMI_IOS_DEVICE_ID='$pinned' matches no connected iOS device or simulator." >&2
+    echo "   Available: $(echo "$ios_devices" | jq -r 'map("\(.id) \(.name)") | join(", ")')" >&2
+    return 1
+  fi
 
   if [[ "$count" -eq 0 ]]; then
     echo "❌ No iOS device or simulator found." >&2

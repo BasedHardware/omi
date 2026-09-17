@@ -651,6 +651,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                               ),
                                                             ),
                                                             child: TextField(
+                                                              key: const ValueKey('omi.chat.input'),
                                                               enabled: true,
                                                               controller: textController,
                                                               focusNode: textFieldFocusNode,
@@ -761,6 +762,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                         connectivityProvider.isConnected;
 
                                                     return GestureDetector(
+                                                      key: const ValueKey('omi.chat.send'),
                                                       onTap: canSend
                                                           ? () {
                                                               HapticFeedback.mediumImpact();

@@ -2065,6 +2065,18 @@
     "@memoryHistoryPartial": {
         "description": "Notice shown when the memory history response is truncated"
     },
+    "memoryHistory": "History",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "memoryAllowUse": "Allow use",
+    "@memoryAllowUse": {
+        "description": "Button that clears suppression so this memory may be used"
+    },
+    "memoryDontUse": "Don't use",
+    "@memoryDontUse": {
+        "description": "Button that suppresses this memory from future use"
+    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
@@ -11829,5 +11841,9 @@
     "processingTakingLonger": "Still working — this is taking longer than usual.",
     "@processingTakingLonger": {
         "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
+    },
+    "speechProfileEnrollmentPrompt": "So Omi knows which voice is yours — talk for about 5 seconds about anything.",
+    "@speechProfileEnrollmentPrompt": {
+        "description": "First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration."
     }
 }
