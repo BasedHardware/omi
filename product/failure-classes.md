@@ -14,7 +14,7 @@ covers it and runs in the `failure-class-cli-tests` manifest lane.
 | `canonical_prevention` | yes | Prose: the shape of the fix that removes the class. |
 | `canonical_prevention_artifact` | no | Repository-relative paths to the **reusable guard surface** — a checker, shared fixture, or behavioral contract test. Every listed path must exist; a rename that orphans one fails validation. |
 | `evidence_prs` | yes | Merged PRs that evidence the class. May be `[]` — a class added alongside its first fix has no merged PR to cite, and the adding commit is recoverable evidence. |
-| `scope_hints` | no | Advisory globs; never used to classify a change. |
+| `scope_hints` | no | Advisory globs; never used to classify a change. A trailing `/` is a directory prefix (`dir/` matches `dir/**`). |
 | `status` | yes | `open` or `dormant`. |
 | `dormant_since` | dormant only | ISO-8601 timestamp of the dormant transition. |
 
