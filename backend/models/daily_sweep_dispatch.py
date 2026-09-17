@@ -21,7 +21,8 @@ class SweepPreDispatchError(MemoryExtractionError):
 
 
 class SweepDispatchScope:
-    def __init__(self) -> None:
+    def __init__(self, *, before_provider_dispatch: Callable[[], None] | None = None) -> None:
+        self._before_provider_dispatch = before_provider_dispatch
         self._dispatched = False
         self._issued: SweepPreDispatchError | None = None
         self._reason: str | None = None
@@ -46,6 +47,8 @@ class SweepDispatchScope:
         """Latch before recording request evidence or entering any provider call."""
         scope = _active.get()
         if scope is not None:
+            if scope._before_provider_dispatch is not None:
+                scope._before_provider_dispatch()
             scope._dispatched = True
 
     @staticmethod
@@ -61,7 +64,12 @@ class SweepDispatchScope:
                 if scope is None or scope._dispatched:
                     raise
                 reason = error.extractor if isinstance(error, MemoryExtractionError) else 'daily_sweep_summary_agent'
-                if reason not in {'daily_sweep_summary_input_budget', 'daily_sweep_summary_agent'}:
+                if reason not in {
+                    'daily_sweep_summary_input_budget',
+                    'daily_sweep_summary_agent',
+                    'source_locked_before_dispatch',
+                    'source_lock_check_unavailable',
+                }:
                     reason = 'daily_sweep_summary_agent'
                 certified = SweepPreDispatchError(reason)
                 scope._issued = certified
