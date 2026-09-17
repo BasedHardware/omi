@@ -41,7 +41,6 @@ void main() {
   tearDown(AnalyticsManager.resetForTesting);
 
   contractTest('C7 complete example batch emits byte-identical names/properties through existing queue', () async {
-    pendingContract('C7');
     final adapter = RecordingAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
@@ -80,7 +79,6 @@ void main() {
   });
 
   contractTest('C7 typed event uses existing pre-init queue and flushes exactly once', () async {
-    pendingContract('C7');
     final adapter = RecordingAdapter();
     AnalyticsManager.configure(adapter);
     const TypedEvents().emit(const TranscribeLaterToggled(enabled: false));
@@ -95,7 +93,6 @@ void main() {
   });
 
   contractTest('C7 missing analytics configuration remains a no-op without a second sink', () async {
-    pendingContract('C7');
     const TypedEvents().emit(const PhoneMicRecordingStarted());
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
     expect(AnalyticsManager.droppedEventCountForTesting, 0);
