@@ -7,6 +7,14 @@
     {
       "path": "app/lib/phone_mic_interface.dart",
       "reason": "codegen contract inputs, unimported by design"
+    },
+    {
+      "path": "app/lib/services/capture/scenarios/capture_scenario.dart",
+      "reason": "SCA-489/C3 replay contracts: consumed by tests now and by the C2/C4 lanes when they integrate; no app-import until then"
+    },
+    {
+      "path": "app/lib/services/capture/scenarios/native_event_vector.dart",
+      "reason": "SCA-489/C3 native event vector schema replayed through tests now and C5 Swift/Kotlin seams later; no app-import until then"
     }
   ]
 }
