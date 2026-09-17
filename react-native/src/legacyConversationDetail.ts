@@ -86,6 +86,12 @@ function omittedText(value: unknown, limit = 6 * 1024 * 1024): string {
   }
   return text(value, limit);
 }
+function presentNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  text(value);
+}
 function boolean(value: unknown): boolean {
   if (typeof value !== 'boolean') {
     throw new DetailError('invalid');
@@ -245,6 +251,9 @@ function locationChrome(value: unknown): {
   const longitude = finite(geo.longitude);
   presentOptionalFinite(geo.accuracy);
   presentOptionalFinite(geo.altitude);
+  presentNullableString(geo.capture_source);
+  presentNullableString(geo.google_place_id);
+  presentNullableString(geo.location_type);
   if (geo.captured_at !== undefined && geo.captured_at !== null) {
     calendarEventTimeCopy(geo.captured_at);
   }
@@ -375,6 +384,8 @@ function conversationPhotos(value: unknown):
     if (photo.created_at !== undefined && photo.created_at !== null) {
       calendarEventTimeCopy(photo.created_at);
     }
+    presentNullableString(photo.data_protection_level);
+    presentNullableString(photo.id);
     const discarded =
       photo.discarded === undefined || photo.discarded === null
         ? false
@@ -465,7 +476,22 @@ export async function loadLegacyConversationDetail(
   if (value.id !== id) {
     throw new DetailError('invalid');
   }
+  presentNullableString(value.app_id);
+  presentNullableString(value.call_id);
+  presentNullableString(value.client_device_id);
+  presentNullableString(value.client_platform);
+  presentNullableString(value.data_protection_level);
+  presentNullableString(value.language);
+  presentNullableString(value.meeting_treatment_reason);
+  presentNullableString(value.processing_conversation_id);
+  presentNullableString(value.processing_memory_id);
+  presentNullableString(value.processing_state);
+  presentNullableString(value.source);
+  presentNullableString(value.status);
+  presentNullableString(value.visibility);
   const structured = object(value.structured);
+  presentNullableString(structured.category);
+  presentNullableString(structured.emoji);
   const locked = boolean(value.is_locked ?? false);
   const sections: LegacyConversationDetail['sections'] = [];
   for (const raw of optionalArray(structured.sections)) {
@@ -501,6 +527,14 @@ export async function loadLegacyConversationDetail(
     const item = raw as Record<string, unknown>;
     presentOptionalFinite(item.capture_confidence);
     presentOptionalFinite(item.ownership_confidence);
+    presentNullableString(item.candidate_action);
+    presentNullableString(item.capture_kind);
+    presentNullableString(item.capture_owner);
+    presentNullableString(item.context);
+    presentNullableString(item.conversation_id);
+    presentNullableString(item.due_certainty);
+    presentNullableString(item.owner_name);
+    presentNullableString(item.target_task_id);
     if (item.completed_at !== undefined && item.completed_at !== null) {
       calendarEventTimeCopy(item.completed_at);
     }
@@ -615,6 +649,10 @@ export async function loadLegacyConversationDetail(
     for (const raw of value.audio_files) {
       const file = object(raw);
       presentOptionalFinite(file.duration);
+      presentNullableString(file.conversation_id);
+      presentNullableString(file.id);
+      presentNullableString(file.provider);
+      presentNullableString(file.uid);
       if (file.started_at !== undefined && file.started_at !== null) {
         calendarEventTimeCopy(file.started_at);
       }
@@ -633,6 +671,8 @@ export async function loadLegacyConversationDetail(
     const audio = object(value.conversation_audio);
     presentOptionalFinite(audio.duration);
     presentOptionalFinite(audio.captured_duration);
+    presentNullableString(audio.audio_files_fingerprint);
+    presentNullableString(audio.content_type);
     if (audio.built_at !== undefined && audio.built_at !== null) {
       calendarEventTimeCopy(audio.built_at);
     }

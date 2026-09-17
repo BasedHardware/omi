@@ -112,6 +112,120 @@ test('uses the actual old detail wire and retains full notes and transcript', as
   });
 });
 
+test('old conversation details name Flutter Conversation.fromGenerated type-wrong GET language instead of remapping to a recap chip', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      language: 'en',
+      app_id: 'notes',
+      call_id: 'call-1',
+      source: 'omi',
+      status: 'completed',
+      visibility: 'private',
+      structured: {
+        ...fixture.structured,
+        category: 'other',
+        emoji: '🧠',
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      language: null,
+      app_id: null,
+      call_id: null,
+      source: null,
+      status: null,
+      visibility: null,
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      language: '',
+      source: '  omi  ',
+      status: 'completed\n',
+      visibility: ' private ',
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  for (const extra of [1, true, [], {}]) {
+    mockRequest.mockResolvedValue(response({...fixture, language: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, app_id: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, call_id: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, source: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, status: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, visibility: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        structured: {...fixture.structured, category: extra},
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        structured: {...fixture.structured, emoji: extra},
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        structured: {
+          ...fixture.structured,
+          action_items: [
+            {
+              description: 'Call Alex',
+              completed: false,
+              candidate_action: extra,
+            },
+          ],
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
 test('names GET transcript start/end numeric strings', async () => {
   mockRequest.mockResolvedValue(
     response({
