@@ -201,12 +201,15 @@ QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
 # The deployed memories route is gpt-5.6-luna at $0.20/M input and $1.20/M
-# output.  The parser instructions alone are about 9.6K UTF-8 bytes, so an
-# 8K input cap would reject every real QA request.  12K input + 256 output
-# reserves about $0.0028, below the $0.05 run envelope; the gateway enforces
-# these same headers against the provider request and settles actual usage.
-QA_SWEEP_MAX_INPUT_TOKENS = 12_288
-QA_SWEEP_MAX_OUTPUT_TOKENS = 256
+# output.  The parser instructions alone are about 9.6K UTF-8 bytes and the
+# profile context adds up to ~3.2K, so the earlier 12K cap rejected any QA day
+# with a real profile before dispatch (sweep-verify 2026-09-15 stalled on it),
+# and 256 completion tokens cannot hold a reasoning model's structured output.
+# 16K input + 2K output (the gateway's own per-attempt output ceiling)
+# reserves about $0.0058, still far below the $0.05 run envelope; the gateway
+# enforces these same headers against the provider request and settles usage.
+QA_SWEEP_MAX_INPUT_TOKENS = 16_384
+QA_SWEEP_MAX_OUTPUT_TOKENS = 2_048
 QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
 QA_SWEEP_JIT_CONTRACT_VERSION = "jit-cloud-qa-v1"
 QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
@@ -5661,7 +5664,11 @@ def run_daily_memory_sweep_scheduler(
                     # packets.
                     blocked_users += 1
                     failed_uids.append(uid)
-                    errors.append(f"uid={uid}:source_incomplete:{local_date.isoformat()}")
+                    incomplete_error = f"uid={uid}:source_incomplete:{local_date.isoformat()}"
+                    failure_reason = sources.model_dispatch_evidence.get("failure_reason")
+                    if isinstance(failure_reason, str) and re.fullmatch(r"^[a-z][a-z0-9_]{0,80}$", failure_reason):
+                        incomplete_error = f"{incomplete_error}:{failure_reason}"
+                    errors.append(incomplete_error)
                     return ProcessOutcome.reject("source_incomplete", reason="source_incomplete")
                 packets[local_date] = build_daily_sweep_input(
                     uid,
