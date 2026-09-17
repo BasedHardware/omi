@@ -224,10 +224,15 @@ returns an authorized command.
 
 Automatic / idle / launch warming of a **managed** (ephemeral) session consults
 `SubscriptionEntitlement.decision` via `ManagedPlanGateLatch` (shared with
-LiveNotes). Identified basic without BYOK skips keep-warm; unknown plans fail
-open. `ensureWarm(userInitiated: true)` (PTT) still attempts. A typed server
-`plan_gated` denial latches automatic retries for ten minutes or until the
-decision becomes allow.
+LiveNotes). Identified basic without a **realtime** BYOK key skips keep-warm;
+unknown plans fail open. Warming is governed by
+`selectedRealtimeBYOKKey(chosenForVoice:)`, not text-lane
+`APIKeyService.isByokActive` — a basic user can hold a Gemini voice key while
+the selected text provider is OpenRouter or unset. `ensureWarm(userInitiated:
+true)` (PTT) still attempts. Launch uses `prepareAutomaticWarm()` so an existing
+away deferral cannot block an entitled re-entrant `setup`. A typed server
+`plan_gated` denial latches automatic retries for ten minutes (one bounded
+re-drive) or until the decision becomes allow / the owner changes.
 
 ## Verification
 

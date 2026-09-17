@@ -38,7 +38,9 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     XCTAssertEqual(admitted, [false])
   }
 
-  func testEntitledPresenceRewarmCadenceUnchanged() {
+  /// Pins the presence policy numbers and that an entitled poll tick still
+  /// admits a warm. Idle-close scheduling is `testEntitledIdleCloseSchedulesRewarm`.
+  func testEntitledPresencePollTickStillAdmitsWarm() {
     XCTAssertEqual(RealtimeHubWarmPresencePolicy.idleThreshold, 10 * 60)
     XCTAssertEqual(RealtimeHubWarmPresencePolicy.presencePollInterval, 10)
     XCTAssertTrue(
@@ -58,6 +60,136 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     XCTAssertFalse(controller.warmDeferredForUserAway)
   }
 
+  func testLaunchPrepareAutomaticWarmSkipsWhenPlanGated() {
+    let controller = gatedController(decision: .planGated)
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+
+    controller.prepareAutomaticWarm()
+
+    XCTAssertEqual(admitted, [])
+  }
+
+  func testLaunchPrepareAutomaticWarmAdmitsWhenEntitled() {
+    let controller = gatedController(decision: .allowManagedProactivity)
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+
+    controller.prepareAutomaticWarm()
+
+    XCTAssertEqual(admitted, [false])
+  }
+
+  /// Re-entrant `PushToTalkManager.setup` while HID still looks idle: launch
+  /// is not `userInitiated`, but it must still clear the away deferral.
+  func testReentrantLaunchClearsAwayDeferralForEntitledUser() {
+    let controller = gatedController(decision: .allowManagedProactivity)
+    controller.warmDeferredForUserAway = true
+    controller.presenceIdleProvider = { RealtimeHubWarmPresencePolicy.idleThreshold * 2 }
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+
+    controller.prepareAutomaticWarm()
+
+    XCTAssertEqual(admitted, [false])
+    XCTAssertFalse(controller.warmDeferredForUserAway)
+  }
+
+  func testReentrantLaunchStillGatesPlanGatedUser() {
+    let controller = gatedController(decision: .planGated)
+    controller.warmDeferredForUserAway = true
+    controller.presenceIdleProvider = { RealtimeHubWarmPresencePolicy.idleThreshold * 2 }
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+
+    controller.prepareAutomaticWarm()
+
+    XCTAssertEqual(admitted, [])
+    XCTAssertFalse(controller.warmDeferredForUserAway)
+  }
+
+  func testRealtimeBYOKAutomaticWarmIsNeverPlanGated() {
+    let controller = gatedController(decision: .planGated)
+    controller.realtimeBYOKKeyResolver = { "AIza-test-gemini-voice-key" }
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+
+    controller.ensureWarm()
+    controller.prepareAutomaticWarm()
+
+    XCTAssertEqual(admitted, [false, false])
+  }
+
+  func testRealtimeBYOKIdleCloseIsNeverPlanGated() {
+    let controller = gatedController(decision: .planGated)
+    controller.realtimeBYOKKeyResolver = { "AIza-test-gemini-voice-key" }
+    controller.presenceIdleProvider = { 0 }
+    controller.testingWarmAfterDrain = {}
+
+    let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
+
+    XCTAssertEqual(result, .started)
+  }
+
+  func testPlanGatedIdleCloseDoesNotScheduleRewarm() {
+    let controller = gatedController(decision: .planGated)
+    var drainStarted = false
+    controller.testingWarmAfterDrain = { drainStarted = true }
+
+    let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
+
+    XCTAssertEqual(result, .deferredPlanGated)
+    XCTAssertFalse(drainStarted)
+  }
+
+  func testEntitledIdleCloseSchedulesRewarm() async {
+    let controller = gatedController(decision: .allowManagedProactivity)
+    controller.presenceIdleProvider = { 0 }
+    controller.lifecycleRewarmDelayNanoseconds = 0
+    let rewarmed = expectation(description: "idle close rewarm")
+    controller.testingWarmAfterDrain = { rewarmed.fulfill() }
+
+    let result = controller.continueWarmAfterLifecycleClose(closeCategory: .expectedIdleTeardown)
+
+    XCTAssertEqual(result, .started)
+    await fulfillment(of: [rewarmed], timeout: 1)
+  }
+
+  func testOwnerChangeDoesNotCarryPlanGateLatchOntoNextAccount() {
+    let owner = OwnerBox(value: "user-a")
+    let controller = gatedController(decision: .allowManagedProactivity)
+    controller.managedPlanGateOwnerID = { owner.value }
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+
+    controller.ensureWarm()
+    XCTAssertEqual(admitted, [false])
+
+    controller.noteManagedPlanGateFromWarmFailure(Self.planGatedMintError())
+    controller.ensureWarm()
+    XCTAssertEqual(admitted, [false])
+    XCTAssertTrue(controller.managedPlanGateLatch.serverDenied)
+
+    owner.value = "user-b"
+    controller.ensureWarm()
+    XCTAssertEqual(admitted, [false, false])
+    XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
+  }
+
+  func testDiscardSessionAfterOwnerChangeClearsPlanGateLatch() {
+    let controller = gatedController(decision: .allowManagedProactivity)
+    controller.planGateRetryDelayNanoseconds = 3_600_000_000_000
+    controller.testingWarmAfterDrain = {}
+
+    controller.noteManagedPlanGateFromWarmFailure(Self.planGatedMintError())
+    XCTAssertTrue(controller.managedPlanGateLatch.serverDenied)
+    XCTAssertNotNil(controller.planGateRetryTask)
+
+    controller.discardSessionAfterOwnerChange()
+    XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
+    XCTAssertNil(controller.planGateRetryTask)
+  }
+
   func testServerPlanGatedDenialStopsSubsequentAutomaticWarms() {
     let controller = gatedController(decision: .allowManagedProactivity)
     var admitted: [Bool] = []
@@ -74,6 +206,27 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     XCTAssertTrue(controller.managedPlanGateLatch.serverDenied)
   }
 
+  func testServerDenialSchedulesBoundedRetryAndRewarmAfterLifetime() {
+    var now = Date(timeIntervalSince1970: 1_800_000_000)
+    let controller = gatedController(decision: .allowManagedProactivity)
+    controller.entitlementNow = { now }
+    controller.planGateRetryDelayNanoseconds = 3_600_000_000_000
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+
+    controller.ensureWarm(userInitiated: true)
+    controller.noteManagedPlanGateFromWarmFailure(Self.planGatedMintError())
+    XCTAssertNotNil(controller.planGateRetryTask)
+    controller.ensureWarm()
+    XCTAssertEqual(admitted, [true])
+
+    now = now.addingTimeInterval(ManagedPlanGateLatch.defaultLifetime)
+    controller.performScheduledManagedWarmRetry()
+    XCTAssertEqual(admitted, [true, false])
+    XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
+    controller.resetManagedPlanGateForOwnerChange()
+  }
+
   func testLatchClearsWhenDecisionChangesToAllow() {
     let decision = DecisionBox(value: SubscriptionEntitlementDecision.planGated)
     let controller = gatedController(decisionProvider: { decision.value })
@@ -88,6 +241,22 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     controller.ensureWarm()
     XCTAssertEqual(admitted, [false])
     XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
+  }
+
+  func testEntitlementRefreshRewarmsWhenDecisionBecomesAllow() async {
+    let decision = DecisionBox(value: SubscriptionEntitlementDecision.planGated)
+    let controller = gatedController(decisionProvider: { decision.value })
+    let rewarmed = expectation(description: "refresh rewarm")
+    controller.warmAdmissionProbe = { userInitiated in
+      XCTAssertFalse(userInitiated)
+      rewarmed.fulfill()
+    }
+    controller.refreshEntitlement = {
+      decision.value = .allowManagedProactivity
+    }
+
+    controller.ensureWarm()
+    await fulfillment(of: [rewarmed], timeout: 1)
   }
 
   func testLatchClearsAfterBoundedLifetime() {
@@ -147,6 +316,36 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
   }
 
+  func testProsePlanGatedIn402BodyDoesNotLatch() {
+    let controller = gatedController(decision: .allowManagedProactivity)
+    var admitted: [Bool] = []
+    controller.warmAdmissionProbe = { admitted.append($0) }
+
+    let prose = RealtimeTokenMintError(
+      statusCode: 402,
+      healthError: .paywalled(message: "trial_expired"),
+      payload: APIErrorPayload(
+        error: "trial_expired",
+        code: nil,
+        message: nil,
+        detail: "This failure is not plan_gated; the chat trial expired.",
+        provider: nil,
+        reason: nil,
+        backendRoute: nil,
+        upstreamStatusCode: nil,
+        retryable: nil,
+        retryAfterSeconds: nil),
+      responseBody: Data(
+        #"{"error":"trial_expired","detail":"This failure is not plan_gated; the chat trial expired."}"#
+          .utf8))
+    controller.noteManagedPlanGateFromWarmFailure(prose)
+    controller.ensureWarm()
+
+    XCTAssertEqual(admitted, [false])
+    XCTAssertFalse(controller.managedPlanGateLatch.serverDenied)
+    XCTAssertNil(controller.planGateRetryTask)
+  }
+
   private func gatedController(
     decision: SubscriptionEntitlementDecision
   ) -> RealtimeHubController {
@@ -159,6 +358,9 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
     let controller = RealtimeHubController()
     controller.entitlementDecision = decisionProvider
     controller.refreshEntitlement = nil
+    controller.planGateRetryDelayNanoseconds = nil
+    controller.managedPlanGateOwnerID = { "test-owner" }
+    controller.lifecycleRewarmDelayNanoseconds = 0
     return controller
   }
 
@@ -175,6 +377,13 @@ final class RealtimeHubIdleWarmPlanGateTests: XCTestCase {
 private final class DecisionBox: @unchecked Sendable {
   var value: SubscriptionEntitlementDecision
   init(value: SubscriptionEntitlementDecision) {
+    self.value = value
+  }
+}
+
+private final class OwnerBox: @unchecked Sendable {
+  var value: String?
+  init(value: String?) {
     self.value = value
   }
 }

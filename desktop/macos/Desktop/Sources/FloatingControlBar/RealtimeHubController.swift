@@ -380,6 +380,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var entitlementRefreshInFlight = false
   /// Test/automation observation after presence + plan admission, before mint.
   var warmAdmissionProbe: ((Bool) -> Void)?
+  /// Owner identity for the plan-gate latch. Defaults to the runtime owner so
+  /// a fail-open `.allow` on A cannot suppress B.
+  var managedPlanGateOwnerID: () -> String? = { RuntimeOwnerIdentity.currentOwnerId() }
+  /// Realtime BYOK key this warm would actually use. Tests pin it.
+  var realtimeBYOKKeyResolver: (() -> String?)?
+  /// One bounded re-drive after a typed server denial. `nil` disables (tests).
+  var planGateRetryDelayNanoseconds: UInt64? = UInt64(
+    ManagedPlanGateLatch.defaultLifetime * 1_000_000_000)
+  var planGateRetryTask: Task<Void, Never>?
+  /// Idle-close reconnect delay. Tests set 0 so drain is deterministic.
+  var lifecycleRewarmDelayNanoseconds: UInt64 = 1_500_000_000
 
   var fallbackProvider: RealtimeHubProvider?
   /// Reason passed to ``failoverToAlternateProvider``; cleared after a successful connect on the alternate.
@@ -441,6 +452,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceSemanticGuidance = ""
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
+    resetManagedPlanGateForOwnerChange()
     replaceSessionAfterDrain()
   }
 
@@ -528,6 +540,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceSemanticGuidance = ""
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
+    resetManagedPlanGateForOwnerChange()
 
     if let detachedSession = detachPhysicalSessionForTeardown() {
       schedulePhysicalSessionTeardown(detachedSession)

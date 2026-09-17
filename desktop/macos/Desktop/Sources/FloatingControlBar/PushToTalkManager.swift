@@ -422,7 +422,7 @@ class PushToTalkManager: ObservableObject {
     // Launch is not a key press: plan-gated accounts must not mint a managed
     // session just because the app started. PTT still uses `userInitiated: true`.
     if !DesktopLocalProfile.isEnabled {
-      RealtimeHubController.shared.ensureWarm()
+      RealtimeHubController.shared.prepareAutomaticWarm()
     }
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
