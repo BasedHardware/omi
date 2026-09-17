@@ -7622,6 +7622,91 @@ test('parseCloudProfile names Flutter UserProfile fromJson type-wrong GET time_z
   }
 });
 
+test('parseCloudProfile names Flutter UserProfile fromJson type-wrong GET migration_status instead of remapping to a Name chip', () => {
+  const ada = {
+    uid: 'user-1',
+    name: 'Ada',
+    email: 'ada@example.test',
+    company: null,
+    job: null,
+    dataProtectionLevel: null,
+  };
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        migration_status: {status: 'ok'},
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {uid: 'user-1', name: 'Ada', email: 'ada@example.test'},
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        migration_status: null,
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        migration_status: {},
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        migration_status: {text: 1},
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        extra: 1,
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  for (const extra of [1, true, []]) {
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          migration_status: extra,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+  }
+});
+
 test('loadAccountSettings names malformed GET subscription Flutter load-error', async () => {
   const backend = backendFor(request => {
     if (request.path === '/v1/users/profile') {

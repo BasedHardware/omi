@@ -137,6 +137,13 @@ function presentNullableString(value: unknown, label: string): void {
   }
 }
 
+function presentNullableMap(value: unknown, label: string): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  object(value, label);
+}
+
 function optionalBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
 }
@@ -322,6 +329,7 @@ export function parseCloudProfile(value: unknown, label: string): CloudProfile {
   presentNullableString(record.data_protection_level, label);
   presentNullableString(record.email, label);
   presentNullableString(record.job, label);
+  presentNullableMap(record.migration_status, label);
   presentNullableString(record.motivation, label);
   presentNullableString(record.name, label);
   presentNullableString(record.time_zone, label);
