@@ -562,6 +562,156 @@ test('old conversation details name Flutter GeneratedProjectedStructure fromJson
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('old conversation details name Flutter GeneratedProjectedSection fromJson type-wrong GET heading instead of remapping to a recap chip', async () => {
+  const processing = {
+    transcript_sha256: 'abc',
+    schema_version: 1,
+    provenance: {
+      device_class: 'phone',
+      generated_at: '2026-09-07T00:00:00.000Z',
+      model_id: 'm1',
+      runtime: 'ios',
+    },
+    structure: {
+      title: 'Projected',
+      sections: [{heading: 'Notes', body_markdown: 'Full notes'}],
+    },
+    action_items: [{description: 'Call Sam', completed: false}],
+  };
+  mockRequest.mockResolvedValue(
+    response({...fixture, client_processing: processing}),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: {
+        ...processing,
+        structure: {title: 'Projected'},
+        action_items: undefined,
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({...fixture, client_processing: null}),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: {
+        ...processing,
+        structure: {
+          title: 'Projected',
+          sections: [{heading: '', body_markdown: ''}],
+        },
+        action_items: [{description: '', completed: false}],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: {
+        ...processing,
+        structure: {
+          title: 'Projected',
+          sections: [{heading: '  Notes  ', body_markdown: '  Full notes  '}],
+        },
+        action_items: [{description: '  Call Sam  ', completed: false}],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  for (const extra of [1, true, [], {}]) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        client_processing: {
+          ...processing,
+          structure: {
+            title: 'Projected',
+            sections: [{heading: extra, body_markdown: 'Full notes'}],
+          },
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        client_processing: {
+          ...processing,
+          structure: {
+            title: 'Projected',
+            sections: [{heading: 'Notes', body_markdown: extra}],
+          },
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        client_processing: {
+          ...processing,
+          action_items: [{description: extra, completed: false}],
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: {
+        ...processing,
+        structure: {
+          title: 'Projected',
+          sections: [{heading: null, body_markdown: 'Full notes'}],
+        },
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      client_processing: {
+        ...processing,
+        action_items: [{description: null, completed: false}],
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('names GET transcript start/end numeric strings', async () => {
   mockRequest.mockResolvedValue(
     response({

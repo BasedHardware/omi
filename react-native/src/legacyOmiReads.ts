@@ -258,14 +258,32 @@ function presentClientProcessing(value: unknown): void {
   presentDefaultString(structure.category);
   presentDefaultString(structure.emoji);
   presentDefaultString(structure.overview);
-  if (structure.events === undefined || structure.events === null) return;
-  if (!Array.isArray(structure.events)) throw new Error('Omi list is malformed');
-  for (const item of structure.events) {
-    const event = object(item);
-    text(event.title);
-    presentDefaultString(event.description);
-    presentRequiredDate(event.start);
-    presentRequiredInt(event.duration);
+  if (structure.sections !== undefined && structure.sections !== null) {
+    if (Array.isArray(structure.sections)) {
+      for (const item of structure.sections) {
+        const section = object(item);
+        text(section.heading);
+        text(section.body_markdown);
+      }
+    }
+  }
+  if (structure.events !== undefined && structure.events !== null) {
+    if (!Array.isArray(structure.events)) throw new Error('Omi list is malformed');
+    for (const item of structure.events) {
+      const event = object(item);
+      text(event.title);
+      presentDefaultString(event.description);
+      presentRequiredDate(event.start);
+      presentRequiredInt(event.duration);
+    }
+  }
+  if (processing.action_items !== undefined && processing.action_items !== null) {
+    if (Array.isArray(processing.action_items)) {
+      for (const item of processing.action_items) {
+        const action = object(item);
+        text(action.description);
+      }
+    }
   }
 }
 function presentNullableStringList(value: unknown): void {
