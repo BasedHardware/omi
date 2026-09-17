@@ -12,6 +12,8 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'true'
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omiapi.com
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -70,6 +72,8 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'true'
         MEMORY_BELIEF_MODEL_ENABLED:
           value: 'true'
           category: rollout
@@ -109,6 +113,10 @@ overlay:
           secret:
             name: dev-omi-backend-secrets
             key: MODULATE_API_KEY
+        SONIOX_API_KEY:
+          secret:
+            name: dev-omi-backend-secrets
+            key: SONIOX_API_KEY
         GOOGLE_MAPS_API_KEY:
           secret:
             name: dev-omi-backend-secrets
@@ -220,6 +228,10 @@ overlay:
     env:
       MEMORY_BELIEF_MODEL_ENABLED:
         value: 'true'
+      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+        value: 'true'
+      BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+        value: 'true'
       MEMORY_BELIEF_AUTOMATION_PAUSED:
         value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -242,6 +254,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'true'
+          BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
             value: 'true'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
@@ -312,6 +328,8 @@ overlay:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'true'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
@@ -362,6 +380,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'true'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           MEMORY_BELIEF_MODEL_ENABLED:

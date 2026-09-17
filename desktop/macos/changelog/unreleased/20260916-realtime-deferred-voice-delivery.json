@@ -1,0 +1,3 @@
+{
+  "change": "Fixed deferred realtime answers completing silently instead of becoming available to the next voice turn."
+}

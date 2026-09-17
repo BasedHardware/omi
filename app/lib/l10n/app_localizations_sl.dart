@@ -10025,4 +10025,7 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.';
+
+  @override
+  String get home => 'Domov';
 }

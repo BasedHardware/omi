@@ -10,6 +10,7 @@ import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 class DailySummariesList extends StatefulWidget {
   const DailySummariesList({super.key});
@@ -146,7 +147,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
               ),
             );
           }
-          return const SizedBox(height: 100);
+          return SizedBox(height: bottomNavBarClearance(context));
         }
 
         // Prefetch more when approaching end

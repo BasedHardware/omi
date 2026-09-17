@@ -10052,4 +10052,7 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons.';
+
+  @override
+  String get home => 'Inici';
 }

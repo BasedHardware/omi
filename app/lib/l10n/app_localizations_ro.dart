@@ -10042,4 +10042,7 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.';
+
+  @override
+  String get home => 'Acasă';
 }

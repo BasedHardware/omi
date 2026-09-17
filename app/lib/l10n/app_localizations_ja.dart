@@ -9823,4 +9823,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。';
+
+  @override
+  String get home => 'ホーム';
 }

@@ -10032,4 +10032,7 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд.';
+
+  @override
+  String get home => 'Главная';
 }

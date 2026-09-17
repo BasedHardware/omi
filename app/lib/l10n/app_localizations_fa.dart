@@ -9995,4 +9995,7 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.';
+
+  @override
+  String get home => 'خانه';
 }
