@@ -139,9 +139,7 @@ def build_conversation_prompt_prefix(
         if photo_descriptions != 'None':
             context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
 
-    source_ids = frozenset(
-        segment_id for segment_id in (transcript_segment_ids or ()) if isinstance(segment_id, str) and segment_id
-    )
+    source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
         context='\n\n'.join(context_parts),
