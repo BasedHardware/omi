@@ -58,7 +58,10 @@ def create_fact(user_id: str, text: str, source: str = "other", source_spec: Opt
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    url = f"{API_BASE_URL}/{APP_ID}/user/facts?uid={user_id}"
+    # Integration Import API (backend/routers/integration.py): memories are created via
+    # POST /v2/integrations/{app_id}/user/memories. The former ".../user/facts" path is
+    # not served and answered every request with 404.
+    url = f"{API_BASE_URL}/{APP_ID}/user/memories?uid={user_id}"
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
     payload = {
