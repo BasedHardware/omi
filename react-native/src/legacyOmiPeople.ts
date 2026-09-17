@@ -72,9 +72,5 @@ export async function loadOmiPeopleNames(
   ) {
     return null;
   }
-  try {
-    return parseOmiPeopleNames(response.body);
-  } catch {
-    return null;
-  }
+  return parseOmiPeopleNames(response.body);
 }

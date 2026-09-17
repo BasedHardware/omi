@@ -234,7 +234,7 @@ test('loadOmiPeopleNames names resolved GET people and omits failures', async ()
   request.mockResolvedValueOnce({id: 'people', status: 500, body: '[]'});
   expect(await loadOmiPeopleNames(backend)).toBeNull();
   request.mockResolvedValueOnce({id: 'people', status: 200, body: '{'});
-  expect(await loadOmiPeopleNames(backend)).toBeNull();
+  await expect(loadOmiPeopleNames(backend)).rejects.toThrow();
 });
 
 test('loadOmiPeopleNames keeps honest GET empty people', async () => {
@@ -255,4 +255,22 @@ test('loadOmiPeopleNames omits HTTP 404 people instead of empty success', async 
   }));
   const backend = {request} as unknown as OmiBackend;
   expect(await loadOmiPeopleNames(backend)).toBeNull();
+});
+
+test('old people names name Flutter Person.fromGenerated padded GET created_at instead of omitting People', async () => {
+  const request = jest.fn(async () => ({
+    id: 'people',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'person-alex',
+        name: 'Alex Chen',
+        created_at: '  2026-09-07T00:00:00.000Z  ',
+      },
+    ]),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiPeopleNames(backend)).rejects.toThrow(
+    'Omi people are malformed',
+  );
 });
