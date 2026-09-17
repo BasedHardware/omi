@@ -78,6 +78,18 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reprocessConversation => 'உரையாடலை மீண்டும் செயல்படுத்தவும்';
 
   @override
+  String get reprocessTranscription => 'படியெடுப்பை மீண்டும் செயல்படுத்தவும்';
+
+  @override
+  String get retranscribingConversation => 'உரையாடல் மீண்டும் படியெடுக்கப்படுகிறது...\nஇதற்கு சில விநாடிகள் ஆகலாம்';
+
+  @override
+  String get errorReprocessingTranscription => 'படியெடுப்பை மீண்டும் செயல்படுத்தும்போது பிழை. பின்னர் மீண்டும் முயலவும்.';
+
+  @override
+  String get errorNoStoredAudio => 'இந்த உரையாடலுக்கு சேமிக்கப்பட்ட ஆடியோ இல்லை.';
+
+  @override
   String get deleteConversation => 'உரையாடலை நீக்கவும்';
 
   @override

@@ -47,6 +47,28 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final transcriptionProvider = context.watch<ConversationDetailProvider>();
+    final conversationId = transcriptionProvider.conversationOrNull?.id;
+    if (transcriptionProvider.loadingReprocessTranscription &&
+        conversationId != null &&
+        transcriptionProvider.reprocessConversationId == conversationId) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 18.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+              const SizedBox(width: 16),
+              Text(
+                context.l10n.retranscribingConversation,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return GestureDetector(
       excludeFromSemantics: true,
       behavior: HitTestBehavior.translucent,
@@ -85,6 +107,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                 !_isEditing &&
                 !provider.isLoading &&
                 !provider.loadingReprocessConversation &&
+                !provider.loadingReprocessTranscription &&
                 conversation?.status == ConversationStatus.completed &&
                 !discarded &&
                 provider.getSummarySelection().content.trim().isNotEmpty,

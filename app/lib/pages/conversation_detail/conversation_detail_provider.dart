@@ -44,6 +44,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final target = conversation;
     if (_savingSpeaker ||
         loadingReprocessConversation ||
+        loadingReprocessTranscription ||
         segmentIds.isEmpty ||
         (expectedConversationId != null && target.id != expectedConversationId)) return false;
     final selected = target.transcriptSegments
@@ -93,6 +94,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool isLoading = false;
   bool loadingReprocessConversation = false;
+  bool loadingReprocessTranscription = false;
   String reprocessConversationId = '';
   App? selectedAppForReprocessing;
 
@@ -314,6 +316,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  void updateReprocessTranscriptionLoadingState(bool loading) {
+    loadingReprocessTranscription = loading;
+    notifyListeners();
+  }
+
   void setSelectedAppForReprocessing(App app) {
     selectedAppForReprocessing = app;
     notifyListeners();
@@ -443,7 +450,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   Future<bool> reprocessConversation({String? appId}) async {
-    if (loadingReprocessConversation || _savingSpeaker) return false;
+    if (loadingReprocessConversation || loadingReprocessTranscription || _savingSpeaker) return false;
     final target = conversation;
     final generation = _speakerEditGeneration;
     Logger.debug('_reProcessConversation with appId: $appId');
@@ -497,6 +504,43 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       );
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
+      updateReprocessConversationId('');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> reprocessTranscription({
+    Future<TranscriptionReprocessResult> Function(String id)? client,
+  }) async {
+    if (loadingReprocessConversation || loadingReprocessTranscription || _savingSpeaker) return false;
+    final target = conversation;
+    updateReprocessTranscriptionLoadingState(true);
+    updateReprocessConversationId(target.id);
+    try {
+      final result = await (client ?? reProcessTranscriptionServer)(target.id);
+      if (_isDisposed) return false;
+      updateReprocessTranscriptionLoadingState(false);
+      updateReprocessConversationId('');
+      if (result.conversation == null) {
+        notifyError(
+          result.errorCode == 'no_audio' ? 'REPROCESS_TRANSCRIPTION_NO_AUDIO' : 'REPROCESS_TRANSCRIPTION_FAILED',
+        );
+        notifyListeners();
+        return false;
+      }
+
+      conversationProvider?.updateConversation(result.conversation!);
+      SharedPreferencesUtil().modifiedConversationDetails = result.conversation;
+      if (conversationOrNull?.id == target.id) _cachedConversation = result.conversation;
+      notifyInfo('REPROCESS_TRANSCRIPTION_SUCCESS');
+      notifyListeners();
+      return true;
+    } catch (err, stacktrace) {
+      print(err);
+      await PlatformManager.instance.crashReporter.reportCrash(err, stacktrace);
+      notifyError('REPROCESS_TRANSCRIPTION_FAILED');
+      updateReprocessTranscriptionLoadingState(false);
       updateReprocessConversationId('');
       notifyListeners();
       return false;

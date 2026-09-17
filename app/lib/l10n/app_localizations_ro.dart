@@ -78,6 +78,18 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reprocessConversation => 'Reprocesează conversația';
 
   @override
+  String get reprocessTranscription => 'Reprocesează transcrierea';
+
+  @override
+  String get retranscribingConversation => 'Retranscriere conversație...\nAceasta poate dura câteva secunde';
+
+  @override
+  String get errorReprocessingTranscription => 'Eroare la reprocesarea transcrierii. Încearcă din nou mai târziu.';
+
+  @override
+  String get errorNoStoredAudio => 'Nu există audio stocat pentru această conversație.';
+
+  @override
   String get deleteConversation => 'Șterge conversația';
 
   @override

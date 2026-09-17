@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేయండి",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "సంభాషణను తిరిగి ట్రాన్స్‌క్రైబ్ చేస్తున్నాం...\nఇది కొన్ని సెకన్లు తీసుకోవచ్చు",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేసేటప్పుడు త్రుటి. దయచేసి తరువాత మళ్లీ ప్రయత్నించండి.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "ఈ సంభాషణకు నిల్వ చేసిన ఆడియో లేదు.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "సంభాషణను తొలగించు",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

@@ -78,6 +78,18 @@ class AppLocalizationsBg extends AppLocalizations {
   String get reprocessConversation => 'Преработи разговор';
 
   @override
+  String get reprocessTranscription => 'Преработи транскрипцията';
+
+  @override
+  String get retranscribingConversation => 'Повторно транскрибиране на разговора...\nТова може да отнеме няколко секунди';
+
+  @override
+  String get errorReprocessingTranscription => 'Грешка при повторна обработка на транскрипцията. Опитайте отново по-късно.';
+
+  @override
+  String get errorNoStoredAudio => 'Няма запазено аудио за този разговор.';
+
+  @override
   String get deleteConversation => 'Изтриване на разговор';
 
   @override

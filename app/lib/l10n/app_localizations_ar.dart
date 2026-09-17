@@ -78,6 +78,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reprocessConversation => 'إعادة معالجة المحادثة';
 
   @override
+  String get reprocessTranscription => 'إعادة معالجة التفريغ النصي';
+
+  @override
+  String get retranscribingConversation => 'جارٍ إعادة تفريغ المحادثة...\nقد يستغرق هذا بضع ثوانٍ';
+
+  @override
+  String get errorReprocessingTranscription => 'حدث خطأ أثناء إعادة معالجة التفريغ النصي. يرجى المحاولة لاحقًا.';
+
+  @override
+  String get errorNoStoredAudio => 'لا يوجد صوت محفوظ لهذه المحادثة.';
+
+  @override
   String get deleteConversation => 'حذف المحادثة';
 
   @override

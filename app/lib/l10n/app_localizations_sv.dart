@@ -78,6 +78,18 @@ class AppLocalizationsSv extends AppLocalizations {
   String get reprocessConversation => 'Bearbeta konversation igen';
 
   @override
+  String get reprocessTranscription => 'Bearbeta transkription igen';
+
+  @override
+  String get retranscribingConversation => 'Transkriberar konversationen igen...\nDetta kan ta några sekunder';
+
+  @override
+  String get errorReprocessingTranscription => 'Fel vid ominbearbetning av transkriptionen. Försök igen senare.';
+
+  @override
+  String get errorNoStoredAudio => 'Ingen sparad ljudfil finns för den här konversationen.';
+
+  @override
   String get deleteConversation => 'Radera konversation';
 
   @override

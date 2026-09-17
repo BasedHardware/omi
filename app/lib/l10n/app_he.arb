@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "עבד מחדש תמלול",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "מתמלל את השיחה מחדש...\nזה עשוי לקחת כמה שניות",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "שגיאה בעיבוד מחדש של התמלול. נסה שוב מאוחר יותר.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "אין שמע שמור לשיחה זו.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "מחק שיחה",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

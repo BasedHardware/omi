@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "படியெடுப்பை மீண்டும் செயல்படுத்தவும்",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "உரையாடல் மீண்டும் படியெடுக்கப்படுகிறது...\nஇதற்கு சில விநாடிகள் ஆகலாம்",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "படியெடுப்பை மீண்டும் செயல்படுத்தும்போது பிழை. பின்னர் மீண்டும் முயலவும்.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "இந்த உரையாடலுக்கு சேமிக்கப்பட்ட ஆடியோ இல்லை.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "உரையாடலை நீக்கவும்",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

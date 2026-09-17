@@ -78,6 +78,18 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reprocessConversation => 'پردازش مجدد گفتگو';
 
   @override
+  String get reprocessTranscription => 'پردازش مجدد رونویسی';
+
+  @override
+  String get retranscribingConversation => 'در حال رونویسی مجدد گفتگو...\nممکن است چند ثانیه طول بکشد';
+
+  @override
+  String get errorReprocessingTranscription => 'خطا در پردازش مجدد رونویسی. لطفاً بعداً دوباره تلاش کنید.';
+
+  @override
+  String get errorNoStoredAudio => 'برای این گفتگو صوت ذخیره‌شده‌ای وجود ندارد.';
+
+  @override
   String get deleteConversation => 'حذف گفتگو';
 
   @override
