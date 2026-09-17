@@ -19,6 +19,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsMuteCharacteristicUuid = '19b10014-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -874,6 +875,33 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting mic gain: $e');
+      return null;
+    }
+  }
+
+  /// Write the persistent capture mute flag. Old firmware without the
+  /// characteristic / feature bit is a no-op (caller keeps the local pref).
+  Future<void> setCaptureMuted(bool muted) async {
+    try {
+      final features = await getFeatures();
+      if ((features & OmiFeatures.captureMute) == 0) return;
+      await transport.writeCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid, [muted ? 1 : 0]);
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting capture mute: $e');
+    }
+  }
+
+  /// Read the pendant mute flag. Returns null when the characteristic is
+  /// missing (legacy firmware) so the app can fall back to local prefs.
+  Future<bool?> getCaptureMuted() async {
+    try {
+      final features = await getFeatures();
+      if ((features & OmiFeatures.captureMute) == 0) return null;
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid);
+      if (value.isEmpty) return null;
+      return value[0] != 0;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting capture mute: $e');
       return null;
     }
   }
