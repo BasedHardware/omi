@@ -45,7 +45,7 @@ omi --help
 | **OAuth pelayar (Google/Apple)** | PC / komputer riba pembangun | `omi auth login --browser` |
 
 ### Log masuk interaktif
-Tanpa pilihan, anda akan ditanya untuk memilih antara log masuk pelayar atau输入 kunci API.
+Tanpa pilihan, anda akan ditanya untuk memilih antara log masuk pelayar atau **memasukkan** kunci API.
 
 ```bash
 omi auth login
