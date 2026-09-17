@@ -66,6 +66,18 @@ OmiDeviceConnection _connection(_MuteTransport transport) {
 }
 
 void main() {
+  test('capture mute owns 19B10015 / feature bit 10, not the device-name slot', () {
+    // #13704 allocated 19B10014 / bit 9 for device name first. Mute must not
+    // collide (BasedHardware/omi#14293 vs #13704).
+    expect(
+      OmiDeviceConnection.settingsMuteCharacteristicUuid,
+      '19b10015-e8f2-537e-4f6c-d104768a1214',
+    );
+    expect(OmiDeviceConnection.settingsMuteCharacteristicUuid, isNot('19b10014-e8f2-537e-4f6c-d104768a1214'));
+    expect(OmiFeatures.captureMute, 1 << 10);
+    expect(OmiFeatures.captureMute, isNot(1 << 9));
+  });
+
   test('writes capture mute to the pendant settings characteristic', () async {
     final transport = _MuteTransport();
     final connection = _connection(transport);
