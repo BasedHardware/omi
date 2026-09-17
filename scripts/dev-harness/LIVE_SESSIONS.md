@@ -126,13 +126,17 @@ Explicit `fast --session` attaches; absent flag preserves the hermetic lane.
 Resolve normal path selection first (unknown filter remains exit 65). Refuse
 stale generation/source/input digest, missing cold artifact, wrong profile,
 unready state, unsupported selected journey, or zero execution; no cold fallback.
-Hold the mutation lease for the full selected run. The host journey adapter
-must drive the owned controls and execute the existing journey assertions,
-write ordinary per-journey receipts, and use existing accounting/aggregation.
-Current v1 does not expose every journey action (even advertised `action` is
-not registered): unsupported journeys must explicitly block until their controls
-exist; do not add an arbitrary Dart-execution extension to make them pass.
-The builder must report supported journeys and missing action dependencies.
+V1 ships **no supported live journeys**: after selection/admission it refuses
+with exit 2 naming the selected journeys and missing adapter. The current
+`integration_test` Dart programs run in a test binding; they cannot attach to
+an arbitrary resident `flutter run` app. Do not duplicate their assertions in
+Python or count controls/screenshot operations as journey execution. B1 adds
+addressability but does not provide this adapter. A later reviewed package must
+extract a shared executable journey specification and host driver, with the
+same positive/negative oracles, before any live journey is advertised. Until
+then the regular hermetic `fast` lane is the executable journey authority.
+The reserved adapter holds the mutation lease for the full run and uses the
+existing per-journey receipt accounting; no arbitrary Dart-execution extension.
 
 Out of scope: B1 routes/keys/v2 controls, singleton/API/analytics migrations,
 physical phones, auto-restart/retry, arbitrary evaluation, full UI catalog,
