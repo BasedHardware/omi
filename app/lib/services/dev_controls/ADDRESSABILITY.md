@@ -42,7 +42,10 @@ is ready. `deferred_pages` inventories existing other page/helper files as
 entry (split non-screen helpers outside pages). `navigation_sites` inventories navigation calls per file. Existing sites have
 frozen legacy IDs; each added call must reference a real route ID, never another
 legacy entry. Additions to deferred_pages are rejected after this baseline.
-The check is a static inventory, not proof that computed destinations execute.
+`deferred_widgets` also freezes existing Page/Screen/Drawer/Sheet widget classes:
+adding a new screen inside an old file still requires a route. This is a static
+inventory, not proof that computed destinations execute; unconventional class
+names/base classes remain a documented scanner limit.
 
 Do not migrate routers. `AppAddressability` is the sole production adapter.
 Home uses HomeProvider.selectedIndex and the existing lazy IndexedStack slots

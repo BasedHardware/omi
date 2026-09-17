@@ -12,7 +12,8 @@
     "keys",
     "routes",
     "deferred_pages",
-    "navigation_sites"
+    "navigation_sites",
+    "deferred_widgets"
   ],
   "properties": {
     "version": {
@@ -150,6 +151,16 @@
       "additionalProperties": {
         "type": "array",
         "minItems": 1,
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "deferred_widgets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "uniqueItems": true,
         "items": {
           "type": "string"
         }

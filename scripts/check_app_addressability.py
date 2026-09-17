@@ -100,6 +100,14 @@ def read_base(base, path):
     return p.stdout if p.returncode == 0 else None
 
 
+def screen_classes(source):
+    # Conventional screen declarations, including screens added to old files.
+    # Tokenization removes comments/literals before matching declarations.
+    return set(re.findall(
+        r'\bclass\s+(\w+(?:Page|Screen|Drawer|Sheet))\s+extends\s+(?:StatefulWidget|StatelessWidget)\b',
+        ' '.join(tokens(source))))
+
+
 def validate_catalog(catalog, sources):
     errors = []
     ids, roots = set(), set()
@@ -131,6 +139,10 @@ def validate_catalog(catalog, sources):
             errors.append(f'{rid}: unknown fixture')
     known_pages = set(catalog['deferred_pages']) | {r['source'] for r in catalog['routes']}
     for path, source in sources.items():
+        registered_widgets = {r['widget'] for r in catalog['routes'] if r['source'] == path}
+        registered_widgets.update(catalog.get('deferred_widgets', {}).get(path, []))
+        for widget in screen_classes(source) - registered_widgets:
+            errors.append(f'{path}: new screen class {widget} needs a route registry entry')
         if path.startswith('app/lib/pages/') and path not in known_pages:
             errors.append(f'{path}: new page file needs a route registry entry')
         actual = len(list(calls(source, ROUTES)))
@@ -150,6 +162,9 @@ def inventory_growth(catalog, previous):
     errors = []
     if set(catalog['deferred_pages']) - set(previous['deferred_pages']):
         errors.append('new pages cannot be deferred; register their route')
+    for path, widgets in catalog.get('deferred_widgets', {}).items():
+        if set(widgets) - set(previous.get('deferred_widgets', {}).get(path, [])):
+            errors.append(f'{path}: legacy screen-class inventory cannot grow; register routes')
     for path, sites in catalog['navigation_sites'].items():
         old_sites = previous['navigation_sites'].get(path, [])
         for legacy in (site for site in sites if site.startswith('legacy:')):

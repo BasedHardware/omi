@@ -1029,5 +1029,305 @@
     "app/lib/widgets/upgrade_alert.dart": [
       "legacy:1"
     ]
+  },
+  "deferred_widgets": {
+    "app/lib/pages/action_items/action_items_page.dart": [
+      "_GoalCreateSheet",
+      "_GoalEditSheet"
+    ],
+    "app/lib/pages/action_items/widgets/accept_shared_tasks_sheet.dart": [
+      "AcceptSharedTasksSheet"
+    ],
+    "app/lib/pages/action_items/widgets/action_item_form_sheet.dart": [
+      "ActionItemFormSheet",
+      "DateTimePickerSheet"
+    ],
+    "app/lib/pages/announcements/changelog_sheet.dart": [
+      "ChangelogSheet"
+    ],
+    "app/lib/pages/announcements/feature_screen.dart": [
+      "FeatureScreen"
+    ],
+    "app/lib/pages/apps/add_app.dart": [
+      "AddAppPage"
+    ],
+    "app/lib/pages/apps/add_mcp_server_page.dart": [
+      "AddMcpServerPage"
+    ],
+    "app/lib/pages/apps/app_detail/app_detail.dart": [
+      "AppDetailPage"
+    ],
+    "app/lib/pages/apps/app_detail/reviews_list_page.dart": [
+      "ReviewsListPage"
+    ],
+    "app/lib/pages/apps/app_home_web_page.dart": [
+      "AppHomeWebPage"
+    ],
+    "app/lib/pages/apps/explore_install_page.dart": [
+      "ExploreInstallPage"
+    ],
+    "app/lib/pages/apps/page.dart": [
+      "AppsPage"
+    ],
+    "app/lib/pages/apps/update_app.dart": [
+      "UpdateAppPage"
+    ],
+    "app/lib/pages/apps/widgets/capability_apps_page.dart": [
+      "CapabilityAppsPage"
+    ],
+    "app/lib/pages/apps/widgets/category_apps_page.dart": [
+      "CategoryAppsPage"
+    ],
+    "app/lib/pages/apps/widgets/filter_sheet.dart": [
+      "FilterBottomSheet"
+    ],
+    "app/lib/pages/apps/widgets/show_app_options_sheet.dart": [
+      "ShowAppOptionsSheet"
+    ],
+    "app/lib/pages/chat/widgets/ai_message.dart": [
+      "FeedbackBottomSheet"
+    ],
+    "app/lib/pages/conversation_capturing/page.dart": [
+      "ConversationCapturingPage"
+    ],
+    "app/lib/pages/conversation_detail/page.dart": [
+      "CalendarEventPickerSheet"
+    ],
+    "app/lib/pages/conversation_detail/test_prompts.dart": [
+      "TestPromptsPage"
+    ],
+    "app/lib/pages/conversation_detail/widgets.dart": [
+      "CalendarEventDetailsSheet"
+    ],
+    "app/lib/pages/conversation_detail/widgets/audio_download_progress_sheet.dart": [
+      "AudioDownloadProgressSheet"
+    ],
+    "app/lib/pages/conversation_detail/widgets/create_template_bottom_sheet.dart": [
+      "CreateTemplateBottomSheet"
+    ],
+    "app/lib/pages/conversation_detail/widgets/edit_segment_sheet.dart": [
+      "_EditSegmentSheet"
+    ],
+    "app/lib/pages/conversation_detail/widgets/name_speaker_sheet.dart": [
+      "NameSpeakerBottomSheet"
+    ],
+    "app/lib/pages/conversation_detail/widgets/share_to_contacts_sheet.dart": [
+      "ShareToContactsBottomSheet"
+    ],
+    "app/lib/pages/conversation_detail/widgets/summarized_apps_sheet.dart": [
+      "SummarizedAppsBottomSheet"
+    ],
+    "app/lib/pages/conversations/auto_sync_page.dart": [
+      "AutoSyncPage",
+      "_ManageStorageSheet"
+    ],
+    "app/lib/pages/conversations/conversation_map_page.dart": [
+      "ConversationMapPage"
+    ],
+    "app/lib/pages/conversations/local_storage_page.dart": [
+      "LocalStoragePage"
+    ],
+    "app/lib/pages/conversations/private_cloud_sync_page.dart": [
+      "PrivateCloudSyncPage"
+    ],
+    "app/lib/pages/conversations/recording_detail/recording_detail_sheet.dart": [
+      "_RecordingDetailSheet"
+    ],
+    "app/lib/pages/conversations/sync_page.dart": [
+      "SyncPage",
+      "_ManageStorageSheet"
+    ],
+    "app/lib/pages/conversations/synced_conversations_page.dart": [
+      "SyncedConversationsPage"
+    ],
+    "app/lib/pages/conversations/wal_item_detail/wal_item_detail_page.dart": [
+      "WalItemDetailPage"
+    ],
+    "app/lib/pages/conversations/widgets/create_folder_sheet.dart": [
+      "CreateFolderBottomSheet"
+    ],
+    "app/lib/pages/conversations/widgets/folder_tabs.dart": [
+      "_DeleteFolderSheet"
+    ],
+    "app/lib/pages/conversations/widgets/move_to_folder_sheet.dart": [
+      "MoveToFolderSheet"
+    ],
+    "app/lib/pages/conversations/widgets/speaker_filter_sheet.dart": [
+      "SpeakerFilterSheet"
+    ],
+    "app/lib/pages/home/firmware_update_dialog.dart": [
+      "FirmwareUpdateSheet"
+    ],
+    "app/lib/pages/home/page.dart": [
+      "HomePage"
+    ],
+    "app/lib/pages/home/widgets/battery_info_widget.dart": [
+      "RecordOptionsSheet"
+    ],
+    "app/lib/pages/memories/widgets/memory_edit_sheet.dart": [
+      "MemoryEditSheet"
+    ],
+    "app/lib/pages/memories/widgets/memory_graph_page.dart": [
+      "MemoryGraphPage"
+    ],
+    "app/lib/pages/memories/widgets/memory_management_sheet.dart": [
+      "MemoryManagementSheet"
+    ],
+    "app/lib/pages/onboarding/apple_watch_permission_page.dart": [
+      "AppleWatchPermissionPage"
+    ],
+    "app/lib/pages/onboarding/complete_screen.dart": [
+      "OnboardingCompleteScreen"
+    ],
+    "app/lib/pages/onboarding/device_selection.dart": [
+      "DeviceSelectionPage"
+    ],
+    "app/lib/pages/onboarding/find_device/page.dart": [
+      "FindDevicesPage"
+    ],
+    "app/lib/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart": [
+      "OnboardingIntroScreen"
+    ],
+    "app/lib/pages/onboarding/permissions/permissions_checker.dart": [
+      "PermissionsInterstitialPage"
+    ],
+    "app/lib/pages/payments/payments_page.dart": [
+      "PaymentsPage"
+    ],
+    "app/lib/pages/payments/widgets/country_bottom_sheet.dart": [
+      "CountryBottomSheet"
+    ],
+    "app/lib/pages/phone_calls/active_call_page.dart": [
+      "ActiveCallPage",
+      "_AudioRouteSheet",
+      "_DtmfDialpadSheet"
+    ],
+    "app/lib/pages/phone_calls/phone_calls_page.dart": [
+      "PhoneCallsPage"
+    ],
+    "app/lib/pages/phone_calls/phone_setup_intro_page.dart": [
+      "PhoneSetupIntroPage"
+    ],
+    "app/lib/pages/phone_calls/phone_setup_number_page.dart": [
+      "PhoneSetupNumberPage",
+      "_CountryPickerSheet"
+    ],
+    "app/lib/pages/phone_calls/phone_setup_verify_page.dart": [
+      "PhoneSetupVerifyPage"
+    ],
+    "app/lib/pages/processing_conversations/page.dart": [
+      "ProcessingConversationPage"
+    ],
+    "app/lib/pages/referral/referral_page.dart": [
+      "ReferralPage"
+    ],
+    "app/lib/pages/settings/ai_app_generator_page.dart": [
+      "AiAppGeneratorPage"
+    ],
+    "app/lib/pages/settings/apple_health_detail_page.dart": [
+      "AppleHealthDetailPage"
+    ],
+    "app/lib/pages/settings/asana_settings_page.dart": [
+      "AsanaSettingsPage"
+    ],
+    "app/lib/pages/settings/clickup_settings_page.dart": [
+      "ClickUpSettingsPage"
+    ],
+    "app/lib/pages/settings/custom_vocabulary_page.dart": [
+      "CustomVocabularyPage"
+    ],
+    "app/lib/pages/settings/daily_summary_detail_page.dart": [
+      "DailySummaryDetailPage"
+    ],
+    "app/lib/pages/settings/data_privacy_page.dart": [
+      "DataPrivacyPage"
+    ],
+    "app/lib/pages/settings/developer.dart": [
+      "DeveloperSettingsPage",
+      "_ManualFirmwareFlashPage"
+    ],
+    "app/lib/pages/settings/fair_use_page.dart": [
+      "FairUsePage"
+    ],
+    "app/lib/pages/settings/google_tasks_settings_page.dart": [
+      "GoogleTasksSettingsPage"
+    ],
+    "app/lib/pages/settings/import_history_page.dart": [
+      "ImportHistoryPage"
+    ],
+    "app/lib/pages/settings/integration_settings_page.dart": [
+      "IntegrationSettingsPage"
+    ],
+    "app/lib/pages/settings/integrations_page.dart": [
+      "IntegrationsPage"
+    ],
+    "app/lib/pages/settings/language_settings_page.dart": [
+      "LanguageSettingsPage"
+    ],
+    "app/lib/pages/settings/notifications_settings_page.dart": [
+      "NotificationsSettingsPage"
+    ],
+    "app/lib/pages/settings/payment_webview_page.dart": [
+      "PaymentWebViewPage"
+    ],
+    "app/lib/pages/settings/people.dart": [
+      "UserPeoplePage",
+      "_UserPeoplePage"
+    ],
+    "app/lib/pages/settings/permissions_page.dart": [
+      "PermissionsPage"
+    ],
+    "app/lib/pages/settings/phone_call_settings_page.dart": [
+      "PhoneCallSettingsPage"
+    ],
+    "app/lib/pages/settings/profile.dart": [
+      "ProfilePage"
+    ],
+    "app/lib/pages/settings/task_integrations_page.dart": [
+      "TaskIntegrationsPage"
+    ],
+    "app/lib/pages/settings/todoist_settings_page.dart": [
+      "TodoistSettingsPage"
+    ],
+    "app/lib/pages/settings/transcription_settings_page.dart": [
+      "TranscriptionSettingsPage",
+      "_JsonEditorPage"
+    ],
+    "app/lib/pages/settings/usage_page.dart": [
+      "UsagePage"
+    ],
+    "app/lib/pages/settings/widgets/create_dev_api_key_sheet.dart": [
+      "CreateDevApiKeySheet"
+    ],
+    "app/lib/pages/settings/widgets/dev_api_key_created_dialog.dart": [
+      "DevApiKeyCreatedSheet"
+    ],
+    "app/lib/pages/settings/widgets/plans_sheet.dart": [
+      "PlansSheet"
+    ],
+    "app/lib/pages/settings/wrapped_2025_page.dart": [
+      "Wrapped2025Page"
+    ],
+    "app/lib/pages/speech_profile/page.dart": [
+      "SpeechProfilePage"
+    ],
+    "app/lib/widgets/apple_watch_setup_bottom_sheet.dart": [
+      "AppleWatchSetupBottomSheet"
+    ],
+    "app/lib/widgets/connection_guide_sheet.dart": [
+      "ConnectionGuideSheet"
+    ],
+    "app/lib/widgets/device_pairing_sheet.dart": [
+      "DevicePairingSheet"
+    ],
+    "app/lib/widgets/media_viewer_page.dart": [
+      "MediaViewerPage"
+    ],
+    "app/lib/widgets/rayban_meta_input_picker_sheet.dart": [
+      "RayBanMetaInputPickerSheet"
+    ],
+    "app/lib/widgets/rayban_meta_setup_sheet.dart": [
+      "RayBanMetaSetupSheet"
+    ]
   }
 }

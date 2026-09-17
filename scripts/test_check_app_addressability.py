@@ -49,6 +49,17 @@ class AddressabilityCheckTests(unittest.TestCase):
         self.assertTrue(validate_catalog(catalog, {'app/lib/pages/new.dart': 'class New {}'}))
         self.assertTrue(validate_catalog(catalog, {'app/lib/pages/old.dart': 'MaterialPageRoute(builder: f)'}))
 
+    def test_new_screen_in_old_file_cannot_hide_behind_page_file_inventory(self):
+        catalog = dict(routes=[], keys={}, fixtures={}, deferred_pages=['app/lib/pages/old.dart'], navigation_sites={})
+        source = 'class UnregisteredPage extends StatefulWidget {}'
+        errors = validate_catalog(catalog, {'app/lib/pages/old.dart': source})
+        self.assertEqual(len(errors), 1)
+        self.assertIn('UnregisteredPage', errors[0])
+        legacy = {**catalog, 'deferred_widgets': {'app/lib/pages/old.dart': ['UnregisteredPage']}}
+        self.assertEqual(validate_catalog(legacy, {'app/lib/pages/old.dart': source}), [])
+        self.assertTrue(check.inventory_growth(legacy, catalog))
+        self.assertEqual(check.screen_classes('// class HiddenPage extends StatelessWidget {}'), set())
+
     def test_registry_cannot_claim_nonexistent_source_or_unknown_fixture(self):
         route = dict(id='chat', root='omi.chat.root', source='missing', reach={'kind': 'push'},
                      profile='local_dev', auth='signed_in', fixture='unknown', widget='ChatPage', ready_provider='messages')
