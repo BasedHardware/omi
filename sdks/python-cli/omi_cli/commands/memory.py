@@ -6,11 +6,11 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional
 
 import typer
 
-from omi_cli.errors import NotFoundError, UsageError, CliError
+from omi_cli.errors import NotFoundError, UsageError, CliError, EXIT_SERVER
 from omi_cli.models import MemoryCategory, MemoryVisibility
 from omi_cli.output import shorten
 
@@ -221,7 +221,8 @@ def export_memories(
                     if offset == 0:
                         break
                     raise CliError(
-                        f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write."
+                        f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write.",
+                        exit_code=EXIT_SERVER,
                     )
 
                 # Normalize categories to a list for client-side filtering

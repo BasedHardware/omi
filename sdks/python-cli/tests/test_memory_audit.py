@@ -1,15 +1,12 @@
 
 import json
-import pytest
 import httpx
-import respx
-from pathlib import Path
 from omi_cli.main import app
 from typer.testing import CliRunner
 
 def test_export_none_at_offset_0(authed_profile, respx_mock, cli_runner, tmp_path):
     # Mock API returning None instead of [] for empty user
-    respx_mock.get("/v1/dev/user/memories").mock(side_effect=[None])
+    respx_mock.get("/v1/dev/user/memories").mock(side_effect=[httpx.Response(204)])
     out_file = tmp_path / "none_0.json"
     result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
     assert result.exit_code == 0

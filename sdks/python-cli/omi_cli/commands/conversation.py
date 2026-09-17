@@ -49,7 +49,7 @@ def list_conversations(
     """
     List conversations for the current user.
     
-    Supports pagination, date range filtering, and category filtering.
+    Supports pagination and category filtering.
     """
     server_page_size = 25 if include_transcript else 100
     ctx = _ctx(typer_ctx)
