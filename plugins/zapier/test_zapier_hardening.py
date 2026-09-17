@@ -94,10 +94,18 @@ def _stub_fastapi():
     def Form(default=None, **kwargs):
         return default
 
+    def Depends(dependency=None, **kwargs):
+        return dependency
+
+    def Query(default=None, **kwargs):
+        return default
+
     fa.HTTPException = HTTPException
     fa.APIRouter = APIRouter
     fa.Request = Request
     fa.Form = Form
+    fa.Depends = Depends
+    fa.Query = Query
     sys.modules["fastapi"] = fa
 
     far = types.ModuleType("fastapi.responses")
