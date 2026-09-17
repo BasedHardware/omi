@@ -114,3 +114,10 @@ full app. Missing infrastructure exits `2` with the remedy — CI never runs it.
 `mobile-session device` plus `scripts/dev-harness/PHYSICAL_DEVICES.md`;
 hardware evidence comes only from that trusted device path on provisioned
 phones and is reported separately from simulator/hermetic results.
+
+## Live attachment (V1 skeleton)
+
+`fast --session oms-<id>` is reserved for attachment to the owned live broker.
+It currently exits 2 (not implemented), with no cold fallback. The existing
+flag-free hermetic lane is unchanged. Admission and unsupported-journey rules:
+[LIVE_SESSIONS.md](LIVE_SESSIONS.md).

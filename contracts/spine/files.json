@@ -1,0 +1,10 @@
+{
+  "app/test/spine/pending_mechanism_test.dart": "MECHANISM",
+  "app/test/support/spine/contract.dart": "MECHANISM",
+  "scripts/dev-harness/tests/spine/__init__.py": "MECHANISM",
+  "scripts/dev-harness/tests/spine/fake_flutter.py": "V1",
+  "scripts/dev-harness/tests/spine/pending.py": "MECHANISM",
+  "scripts/dev-harness/tests/spine/test_evidence_freeze.py": "V8",
+  "scripts/dev-harness/tests/spine/test_live_session.py": "V1",
+  "scripts/dev-harness/tests/spine/test_live_revision.py": "V1"
+}

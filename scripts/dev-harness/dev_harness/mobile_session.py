@@ -843,6 +843,12 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "start":
             command.add_argument("--no-device", action="store_true", help="services only; skip the device lease")
 
+    live = sub.add_parser("live", help="V1 live Flutter broker (pending implementation)")
+    live.add_argument("operation", choices=("start", "reload", "restart", "screenshot", "logs", "controls", "status", "stop"))
+    live.add_argument("session_id")
+    live.add_argument("--params", type=json.loads, default={}, help="operation-specific JSON object")
+    live.add_argument("--json", action="store_true")
+
     ev = sub.add_parser("evidence", help="emit/refresh the session-evidence-v1 receipt")
     ev.add_argument("session_id")
     ev.add_argument("--artifact", type=Path, default=None, help="built app (apk/bundle) to bind")
@@ -905,6 +911,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     repo_root = _repo_root_from_cwd()
     try:
+        if args.command == "live":
+            from . import live_session
+
+            if not isinstance(args.params, dict):
+                raise SessionError("live --params must be a JSON object")
+            try:
+                result = live_session.dispatch(repo_root, args.session_id, args.operation, args.params)
+            except live_session.SessionError as exc:
+                # `python -m` loads this module as __main__; the broker imports
+                # its canonical module identity. Normalize across that boundary.
+                raise SessionError(str(exc)) from None
+            _emit(result, as_json=args.json)
+            return {"ok": 0, "rejected": 1, "restart-required": 2, "blocked": 2}.get(result.get("outcome"), 2)
         if args.command == "doctor":
             report = mobile_doctor.run_doctor(
                 repo_root,
