@@ -5,7 +5,7 @@ Incident window: 2026-08-31 → 09-01 (backend-listen, Loop S sensor).
 was the #3 error signature (×11/30m), with `Unable to complete the request.
 Please try again.` at #10 (×5/30m); the sensor logged 62 more over the
 following 6 hours. Modulate-Velma-2 is the streaming **primary**
-(`modulate-velma-2,dg-nova-3,parakeet`), so during such an outage
+(`modulate-velma-2,soniox,dg-nova-3,parakeet`), so during such an outage
 every new session is handed to Velma, serves briefly, takes the error frame
 mid-session, and fails over.
 

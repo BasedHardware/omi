@@ -1314,7 +1314,7 @@ class ChatProvider: ObservableObject {
   var messageRatingWriteChain: [String: Task<Void, Never>] = [:]
   var persistMessageRatingHandler: ((String, Int?) async throws -> Void)?
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
-  private var agentBridgeStarted = false
+  var agentBridgeStarted = false
   /// The root shell supplies one server-authoritative sample before this
   /// provider resolves Main Chat. This is process-local only: a different
   /// owner, a failed sample, and every non-main surface receive no extension.
@@ -1414,6 +1414,7 @@ class ChatProvider: ObservableObject {
   private var runtimeOwnerObserver: AnyCancellable?
   private var signOutObserver: AnyCancellable?
   private var sessionInvalidateObserver: AnyCancellable?
+  var authSessionNotificationChain: Task<Void, Never>?
 
   private var refreshAllObserver: AnyCancellable?
   private var userSkillsObserver: AnyCancellable?
@@ -1574,28 +1575,14 @@ class ChatProvider: ObservableObject {
         Task { @MainActor in
           guard let self = self else { return }
           log("ChatProvider: userDidSignOut — clearing chat state so the next user gets fresh context")
-          if self.agentBridgeStarted {
-            await self.resolvedAgentClient().stop()
-            self.agentBridgeStarted = false
-          }
+          await self.stopAgentBridgeIfStarted()
           self.resetSessionStateForAuthChange()
           self.resetDraftAfterSignOut()
           AgentRuntimeStatusStore.shared.reset()
         }
       }
 
-    // Light session invalidation (expired creds) — stop bridge only; preserve chat draft/state.
-    sessionInvalidateObserver = NotificationCenter.default.publisher(for: .sessionDidInvalidate)
-      .sink { [weak self] _ in
-        Task { @MainActor in
-          guard let self else { return }
-          log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
-          if self.agentBridgeStarted {
-            await self.resolvedAgentClient().stop()
-            self.agentBridgeStarted = false
-          }
-        }
-      }
+    sessionInvalidateObserver = makeAuthSessionNotificationObserver()
 
     // Cmd+R: refresh messages on demand
     refreshAllObserver = NotificationCenter.default.publisher(for: .refreshAllData)
@@ -3655,9 +3642,20 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Kernel Journal Refresh
 
+  func stopAgentBridgeIfStarted() async {
+    guard agentBridgeStarted else { return }
+    await resolvedAgentClient().stop()
+    agentBridgeStarted = false
+  }
+
+  func stopAgentBridgeAfterSessionInvalidation() async {
+    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
+    await stopAgentBridgeIfStarted()
+  }
+
   /// Activation/notification is only a wakeup. Ordered range replay in
   /// KernelTurnProjection is the sole source of new or updated messages.
-  private func refreshJournalProjection() async {
+  func refreshJournalProjection() async {
     guard await ensureBridgeStartedForKernel() else { return }
     await kernelTurnProjection.refresh(surface: mainChatSurfaceReference())
   }

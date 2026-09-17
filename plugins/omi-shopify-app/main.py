@@ -423,6 +423,22 @@ def parse_date(date_str: str) -> Optional[datetime]:
     return None
 
 
+def _coerce_int(
+    value: Any,
+    default: int = 10,
+    minimum: int = 1,
+    maximum: int = 50,
+) -> int:
+    """Coerce an untyped input (e.g. from JSON) to a clamped integer."""
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return default
+    return max(minimum, min(parsed, maximum))
+
+
 @app.post("/tools/get_analytics", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_get_analytics(request: Request):
     """
@@ -432,8 +448,10 @@ async def tool_get_analytics(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
-        period = body.get("period", "today")
+        period = body.get("period") or "today"
         custom_start_date = body.get("start_date")  # Custom start date
         custom_end_date = body.get("end_date")      # Custom end date
         
@@ -744,10 +762,12 @@ async def tool_get_orders(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
-        status = body.get("status", "any")
+        status = body.get("status") or "any"
         financial_status = body.get("financial_status")
-        limit = min(body.get("limit", 10), 50)
+        limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -816,6 +836,8 @@ async def tool_get_order_details(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
         order_id = body.get("order_id")
         order_number = body.get("order_number")
@@ -925,6 +947,93 @@ async def tool_get_order_details(request: Request):
         return ChatToolResponse(error=f"Failed to get order details: {str(e)}")
 
 
+def match_products_by_title(all_products, title):
+    """Collect every product hit at the first non-empty fuzzy tier.
+
+    Tiers (first non-empty tier wins, all its hits returned):
+    exact (case-insensitive), request-inside-title, title-inside-request,
+    shared word (>= 2 chars). Returns a list of products, possibly empty.
+    Selling must only happen on exactly one hit; several hits mean the
+    request is ambiguous and nothing may be posted.
+    """
+    search_title = (title or "").lower().strip()
+    if not search_title:
+        return []
+
+    exact = [
+        p for p in all_products
+        if (p.get("title", "") or "").lower().strip() == search_title
+    ]
+    if exact:
+        return exact
+
+    contains = [
+        p for p in all_products
+        if search_title in ((p.get("title", "") or "").lower())
+    ]
+    if contains:
+        return contains
+
+    reverse = [
+        p for p in all_products
+        if ((p.get("title", "") or "").lower().strip()) in search_title
+    ]
+    if reverse:
+        return reverse
+
+    search_words = search_title.split()
+    word_hits = []
+    for product in all_products:
+        product_title = (product.get("title", "") or "").lower()
+        if any(len(w) >= 2 and w in product_title for w in search_words):
+            word_hits.append(product)
+    return word_hits
+
+
+def format_product_candidates(candidates):
+    """Render a disambiguation list for ambiguous product matches."""
+    lines = ["Multiple products match. Please specify which one:\n"]
+    for i, p in enumerate(candidates[:10], 1):
+        variants = p.get("variants") or []
+        price = variants[0].get("price", "0") if variants else "0"
+        lines.append(f"{i}. **{p.get('title', 'Unknown')}** @ ${price}")
+    lines.append("\nReply with the exact product name.")
+    return "\n".join(lines)
+
+
+def format_variant_choices(product):
+    """Render a variant picker for a multi-variant product."""
+    lines = [f"**{product.get('title', 'Unknown')}** has multiple variants. "
+             "Please specify which one:\n"]
+    for v in (product.get("variants") or [])[:10]:
+        label = v.get("title", f"variant {v.get('id')}")
+        sku = f" (SKU: {v.get('sku')})" if v.get("sku") else ""
+        lines.append(f"   - **{label}** @ ${v.get('price', '0')}{sku} "
+                     f"[variant_id: {v.get('id')}]")
+    lines.append("\nReply with the variant name, SKU, or variant_id.")
+    return "\n".join(lines)
+
+
+def select_product_variant(product, sku=None):
+    """Pick a variant from an already-matched product.
+
+    Returns (variant, ask_message). A single-variant product sells
+    directly. A multi-variant product needs a matching sku
+    (case-insensitive) or the caller must ask via ask_message.
+    """
+    variants = product.get("variants") or []
+    if not variants:
+        return None, None
+    if len(variants) == 1:
+        return variants[0], None
+    if sku:
+        wanted = str(sku).lower().strip()
+        for v in variants:
+            if str(v.get("sku", "")).lower().strip() == wanted:
+                return v, None
+    return None, format_variant_choices(product)
+
+
 @app.post("/tools/create_order", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_create_order(request: Request):
     """
@@ -934,23 +1043,28 @@ async def tool_create_order(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         print(f"🛒 CREATE ORDER - Received request: {body}")
         
         uid = body.get("uid")
         customer_email = body.get("customer_email")
-        customer_name = body.get("customer_name", "")  # Can search by name
-        customer_first_name = body.get("customer_first_name", "")
-        customer_last_name = body.get("customer_last_name", "")
-        customer_phone = body.get("customer_phone", "")
+        customer_name = body.get("customer_name") or ""  # Can search by name
+        customer_first_name = body.get("customer_first_name") or ""
+        customer_last_name = body.get("customer_last_name") or ""
+        customer_phone = body.get("customer_phone") or ""
         customer_id_provided = body.get("customer_id")  # Direct customer ID selection
-        line_items = body.get("line_items", [])
+        line_items = body.get("line_items") or []
+        if not isinstance(line_items, list):
+            line_items = []
         shipping_address = body.get("shipping_address")
-        note = body.get("note", "")
-        tags = body.get("tags", "")
-        send_receipt = body.get("send_receipt", True)
-        financial_status = body.get("financial_status", "pending")
-        discount_code = body.get("discount_code", "")  # Coupon/discount code
-        free_shipping = body.get("free_shipping", False)  # Skip shipping charges
+        note = body.get("note") or ""
+        tags = body.get("tags") or ""
+        raw_send_receipt = body.get("send_receipt")
+        send_receipt = True if raw_send_receipt is None else bool(raw_send_receipt)
+        financial_status = body.get("financial_status") or "pending"
+        discount_code = body.get("discount_code") or ""  # Coupon/discount code
+        free_shipping = bool(body.get("free_shipping")) if body.get("free_shipping") is not None else False  # Skip shipping charges
         
         # Check if discount code implies free shipping
         if discount_code and "freeshipping" in discount_code.lower().replace("_", "").replace("-", "").replace(" ", ""):
@@ -1173,86 +1287,30 @@ async def tool_create_order(request: Request):
                 if provided_price:
                     order_item["price"] = str(provided_price)
             else:
-                # Fuzzy search for the product by title
-                print(f"🔍 Searching for product: '{title}'")
-                search_title = title.lower().strip()
-                found_variant = None
-                
-                # Try exact match first (case-insensitive)
-                for product in all_products:
-                    product_title = product.get("title", "").lower().strip()
-                    if product_title == search_title:
-                        if product.get("variants"):
-                            found_variant = product["variants"][0]
-                            matched_product = product["title"]
-                            print(f"✅ Exact match: '{title}' → {product['title']}")
-                            break
-                
-                # Try "contains" match - search term in product title
-                if not found_variant:
-                    for product in all_products:
-                        product_title = product.get("title", "").lower()
-                        if search_title in product_title:
-                            if product.get("variants"):
-                                found_variant = product["variants"][0]
-                                matched_product = product["title"]
-                                print(f"✅ Contains match: '{title}' found in '{product['title']}'")
-                                break
-                
-                # Try reverse "contains" - product title in search term
-                if not found_variant:
-                    for product in all_products:
-                        product_title = product.get("title", "").lower().strip()
-                        if product_title in search_title:
-                            if product.get("variants"):
-                                found_variant = product["variants"][0]
-                                matched_product = product["title"]
-                                print(f"✅ Reverse match: product '{product['title']}' in search '{title}'")
-                                break
-                
-                # Try word-by-word fuzzy match
-                if not found_variant:
-                    search_words = search_title.split()
-                    for product in all_products:
-                        product_title = product.get("title", "").lower()
-                        # Check if any search word matches any word in product title
-                        for word in search_words:
-                            if len(word) >= 2 and word in product_title:
-                                if product.get("variants"):
-                                    found_variant = product["variants"][0]
-                                    matched_product = product["title"]
-                                    print(f"✅ Word match: '{word}' found in '{product['title']}'")
-                                    break
-                        if found_variant:
-                            break
-                
-                if found_variant:
-                    # Get product price from variant
-                    product_price = found_variant.get("price", "0")
-                    order_item = {
-                        "variant_id": found_variant["id"],
-                        "quantity": quantity
-                    }
-                    # Only override price if explicitly provided, otherwise use product price
-                    if provided_price:
-                        order_item["price"] = str(provided_price)
-                        product_matches.append(f"'{title}' → **{matched_product}** @ ${provided_price} (custom price)")
-                    else:
-                        product_matches.append(f"'{title}' → **{matched_product}** @ ${product_price}")
-                    print(f"✅ Using product: {matched_product} at ${product_price}/unit")
-                else:
+                # Collect every hit at the first matching tier; never sell
+                # on an ambiguous match (several hits) or a guess.
+                print(f"Searching for product: '{title}'")
+                candidates = match_products_by_title(all_products, title)
+
+                if len(candidates) > 1:
+                    print(f"Ambiguous product '{title}': "
+                          f"{len(candidates)} candidates, asking user")
+                    return ChatToolResponse(
+                        result=format_product_candidates(candidates))
+
+                if not candidates:
                     # No product found - show available products
-                    print(f"⚠️ No product found for: '{title}'")
-                    
+                    print(f"No product found for: '{title}'")
+
                     if all_products:
-                        lines = [f"❌ **Product '{title}' not found in your store.**\n"]
-                        lines.append("📦 **Available products:**")
+                        lines = [f"Product '{title}' not found in your store.\n"]
+                        lines.append("Available products:")
                         for p in all_products[:10]:
                             price = p.get("variants", [{}])[0].get("price", "0") if p.get("variants") else "0"
-                            lines.append(f"   • {p['title']} - ${price}")
-                        lines.append(f"\n💡 Try: 'create order for [customer] for 3 {all_products[0]['title']}'")
+                            lines.append(f"   - {p['title']} - ${price}")
+                        lines.append(f"\nTry: 'create order for [customer] for 3 {all_products[0]['title']}'")
                         return ChatToolResponse(result="\n".join(lines))
-                    
+
                     # Fall back to custom line item if price provided
                     if provided_price:
                         order_item = {
@@ -1262,10 +1320,35 @@ async def tool_create_order(request: Request):
                         }
                         if sku:
                             order_item["sku"] = sku
-                        product_matches.append(f"'{title}' → ⚠️ Custom item @ ${provided_price}")
+                        product_matches.append(f"'{title}' -> Custom item @ ${provided_price}")
                     else:
                         return ChatToolResponse(error=f"Product '{title}' not found in your store and no price provided. Please use an existing product name.")
-            
+                else:
+                    product = candidates[0]
+                    matched_product = product["title"]
+                    found_variant, ask_variants = select_product_variant(
+                        product, sku=sku)
+                    if ask_variants:
+                        print(f"Multi-variant product '{matched_product}': "
+                              "asking user to choose a variant")
+                        return ChatToolResponse(result=ask_variants)
+                    if not found_variant:
+                        return ChatToolResponse(error=f"Product '{matched_product}' has no variants and cannot be ordered.")
+                    print(f"Using product: {matched_product} "
+                          f"(variant {found_variant['id']})")
+                    # Get product price from variant
+                    product_price = found_variant.get("price", "0")
+                    order_item = {
+                        "variant_id": found_variant["id"],
+                        "quantity": quantity
+                    }
+                    # Only override price if explicitly provided, otherwise use product price
+                    if provided_price:
+                        order_item["price"] = str(provided_price)
+                        product_matches.append(f"'{title}' -> **{matched_product}** @ ${provided_price} (custom price)")
+                    else:
+                        product_matches.append(f"'{title}' -> **{matched_product}** @ ${product_price}")
+
             order_line_items.append(order_item)
         
         order_data = {
@@ -1612,9 +1695,11 @@ async def tool_get_customers(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
-        query = body.get("query", "")
-        limit = min(body.get("limit", 10), 50)
+        query = body.get("query") or ""
+        limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -1669,16 +1754,18 @@ async def tool_create_customer(request: Request):
     """
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         print(f"👤 CREATE CUSTOMER - Received request: {body}")
         
         uid = body.get("uid")
         email = body.get("email")
-        first_name = body.get("first_name", "")
-        last_name = body.get("last_name", "")
-        phone = body.get("phone", "")
-        tags = body.get("tags", "")
-        note = body.get("note", "")
-        accepts_marketing = body.get("accepts_marketing", False)
+        first_name = body.get("first_name") or ""
+        last_name = body.get("last_name") or ""
+        phone = body.get("phone") or ""
+        tags = body.get("tags") or ""
+        note = body.get("note") or ""
+        accepts_marketing = bool(body.get("accepts_marketing")) if body.get("accepts_marketing") is not None else False
         
         if not uid:
             return ChatToolResponse(error="User ID is required")

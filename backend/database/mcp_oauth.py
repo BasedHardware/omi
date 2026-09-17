@@ -13,6 +13,7 @@ from urllib.parse import unquote, urlsplit
 from google.cloud import firestore
 
 from database._client import data_plane_db as db
+from database.mcp_auth_read import mcp_auth_read
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.memory_app_key_grants import (
     APP_KEY_MEMORY_GRANT_DOC_ID,
@@ -26,6 +27,7 @@ PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp/sse"
 # OAuth authority and its production Firestore grants.
 BETA_MCP_RESOURCE_URL = "https://api.omiapi.com/v1/mcp/sse"
 MCP_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", PRODUCTION_MCP_RESOURCE_URL)
+
 DEFAULT_CLIENT_ID = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_ID", "omi-chatgpt-prod")
 DEFAULT_CLIENT_NAME = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_NAME", "ChatGPT")
 DEFAULT_CLAUDE_CLIENT_ID = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_ID", "omi-claude-prod")
@@ -657,7 +659,7 @@ def exchange_authorization_code_for_tokens(
     code: str,
     client_id: str,
     redirect_uri: str,
-    resource: str,
+    resource: Optional[str],
     code_verifier: str,
 ) -> Optional[Dict[str, Any]]:
     code_ref = db.collection("mcp_oauth_authorization_codes").document(hash_secret(code))
@@ -675,7 +677,9 @@ def exchange_authorization_code_for_tokens(
         if (
             code_data.get("client_id") != client_id
             or code_data.get("redirect_uri") != redirect_uri
-            or code_data.get("resource") != resource
+            # RFC 8707: an omitted resource indicator keeps the audience the code
+            # was bound to at consent; only an explicit value must match it.
+            or (resource is not None and code_data.get("resource") != resource)
         ):
             return None
         try:
@@ -782,7 +786,7 @@ def _token_pair_response(access_token: str, refresh_token: str, scopes: List[str
 def get_active_grant(grant_id: str) -> Optional[Dict[str, Any]]:
     if not grant_id.strip():
         return None
-    doc = db.collection("mcp_oauth_grants").document(grant_id).get()
+    doc = mcp_auth_read(db.collection("mcp_oauth_grants").document(grant_id))
     if not doc.exists:
         return None
     data: Dict[str, Any] = _typed_doc(doc)
@@ -867,7 +871,7 @@ def _validated_access_token_identity(
 
 
 def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[Dict[str, Any]]:
-    doc = db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token)).get()
+    doc = mcp_auth_read(db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token)))
     if not doc.exists:
         return None
     data: Dict[str, Any] = _typed_doc(doc)
@@ -886,7 +890,7 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
 
 
 def rotate_refresh_token(
-    refresh_token: str, client_id: str, resource: str, scope: Optional[str] = None
+    refresh_token: str, client_id: str, resource: Optional[str], scope: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     ref = db.collection("mcp_oauth_refresh_tokens").document(hash_secret(refresh_token))
     transaction = db.transaction()
@@ -906,7 +910,9 @@ def rotate_refresh_token(
         grant: Optional[Dict[str, Any]] = _typed_doc(grant_doc) if grant_doc.exists else None
         if (
             data.get("client_id") != client_id
-            or data.get("resource") != resource
+            # RFC 8707: an omitted resource indicator keeps the token family's
+            # stored audience; only an explicit value must match it.
+            or (resource is not None and data.get("resource") != resource)
             or data.get("revoked_at")
             or (expires_at and expires_at <= now)
             or not grant

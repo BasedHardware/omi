@@ -1,29 +1,46 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-Future<Memory?> createMemoryServer(String content, String visibility, String category) async {
+Future<Memory?> createMemoryServer(
+  String content,
+  String visibility,
+  String category,
+) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories',
     headers: {},
     method: 'POST',
-    body: json.encode({'content': content, 'visibility': visibility, 'category': category}),
+    body: json.encode({
+      'content': content,
+      'visibility': visibility,
+      'category': category,
+    }),
   );
   if (response == null) return null;
   Logger.debug('createMemory response: ${response.body}');
   if (response.statusCode == 200) {
-    return Memory.fromGeneratedWireJson(json.decode(response.body) as Map<String, dynamic>);
+    return Memory.fromGeneratedWireJson(
+      json.decode(response.body) as Map<String, dynamic>,
+    );
   }
   return null;
 }
 
-Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) async {
+Future<bool> updateMemoryVisibilityServer(
+  String memoryId,
+  String visibility,
+) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId/visibility?value=$visibility',
     headers: {},
@@ -33,6 +50,96 @@ Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) as
   if (response == null) return false;
   Logger.debug('updateMemoryVisibility response: ${response.body}');
   return response.statusCode == 200;
+}
+
+/// Opt-in header for the memory-belief read policy. The mobile beta and local
+/// development profiles use the server's temporal views; stable production
+/// keeps the existing response and ordering semantics until the release gate
+/// is explicitly advanced.
+const memoryBeliefBetaHeaderName = 'X-Omi-Memory-Belief-Enabled';
+
+bool get memoryBeliefBetaEnabled => Env.profile != AppEnvironmentProfile.production;
+
+Map<String, String> get memoryBeliefBetaHeaders =>
+    memoryBeliefBetaEnabled ? const {memoryBeliefBetaHeaderName: 'true'} : const {};
+
+String _memoryBeliefCapabilityKey() {
+  final owner = SharedPreferencesUtil().uid;
+  String servingEnvironment = Env.profile.name;
+  try {
+    servingEnvironment = '${Env.profile.name}:${Env.apiBaseUrl ?? ''}';
+  } catch (_) {
+    // Unit tests may inspect the capability before Env.init; the profile is
+    // still a stable scope in that case.
+  }
+  return 'memoryBeliefCapability:$owner:$servingEnvironment';
+}
+
+/// Server-advertised capability, scoped to the authenticated owner and the
+/// serving environment so a dev/beta response cannot enable stable data paths.
+bool? get memoryBeliefCapability {
+  if (!memoryBeliefBetaEnabled || SharedPreferencesUtil().uid.isEmpty) return null;
+  final value = SharedPreferencesUtil().getString(_memoryBeliefCapabilityKey());
+  if (value == 'true') return true;
+  if (value == 'false') return false;
+  return null;
+}
+
+void _rememberMemoryBeliefCapability(bool? enabled) {
+  if (!memoryBeliefBetaEnabled || SharedPreferencesUtil().uid.isEmpty) return;
+  if (enabled == null) {
+    unawaited(SharedPreferencesUtil().remove(_memoryBeliefCapabilityKey()));
+    return;
+  }
+  unawaited(SharedPreferencesUtil().saveString(_memoryBeliefCapabilityKey(), enabled ? 'true' : 'false'));
+}
+
+enum MemoryReadView {
+  usefulNow('useful_now'),
+  history('history'),
+  all('all');
+
+  const MemoryReadView(this.apiValue);
+  final String apiValue;
+}
+
+/// Owner feedback actions for an individual memory's agent-use policy.
+enum MemoryUseAction {
+  suppress('suppress'),
+  allow('allow'),
+  useful('useful');
+
+  const MemoryUseAction(this.apiValue);
+  final String apiValue;
+}
+
+/// The server's receipt for an owner memory-use action.
+///
+/// The endpoint intentionally returns the policy state rather than a full
+/// memory document. Callers use this receipt to update the local row and then
+/// refresh the list through the normal authenticated read path.
+class MemoryUseResult {
+  final bool persisted;
+  final String? status;
+  final String? memoryId;
+  final MemoryUseAction? action;
+  final String? feedbackId;
+  final int? itemRevision;
+  final bool? suppressed;
+  final int? curationWeight;
+  final int? statusCode;
+
+  const MemoryUseResult({
+    required this.persisted,
+    this.status,
+    this.memoryId,
+    this.action,
+    this.feedbackId,
+    this.itemRevision,
+    this.suppressed,
+    this.curationWeight,
+    this.statusCode,
+  });
 }
 
 /// Why a [GetMemoriesResult] is not a successful read.
@@ -47,6 +154,8 @@ class GetMemoriesResult {
   final List<Memory> memories;
   final bool deviceScopeSupported;
   final bool truncated;
+  final String? nextCursor;
+  final bool? beliefEnabled;
   final int? statusCode;
   final MemoriesFetchFailureReason? failureReason;
 
@@ -54,6 +163,8 @@ class GetMemoriesResult {
     this.memories,
     this.deviceScopeSupported, {
     this.truncated = false,
+    this.nextCursor,
+    this.beliefEnabled,
     this.statusCode,
     this.failureReason,
   });
@@ -69,25 +180,105 @@ class GetMemoriesResult {
 /// [GetMemoriesResult.deviceScopeSupported] true so a 503 cannot be mistaken
 /// for "device_scope unsupported".
 @visibleForTesting
-GetMemoriesResult memoriesResultFromHttp({required int? statusCode, String? body, bool truncated = false}) {
+GetMemoriesResult memoriesResultFromHttp({
+  required int? statusCode,
+  String? body,
+  bool truncated = false,
+  String? nextCursor,
+  bool? beliefEnabled,
+}) {
   if (statusCode == null) {
-    return const GetMemoriesResult([], true, failureReason: MemoriesFetchFailureReason.noResponse);
+    return const GetMemoriesResult(
+      [],
+      true,
+      failureReason: MemoriesFetchFailureReason.noResponse,
+    );
   }
   if (statusCode == 200) {
     try {
-      return GetMemoriesResult(_decodeMemoriesResponse(body ?? ''), true, truncated: truncated, statusCode: 200);
+      return GetMemoriesResult(
+        _decodeMemoriesResponse(body ?? ''),
+        true,
+        truncated: truncated,
+        nextCursor: nextCursor,
+        beliefEnabled: beliefEnabled,
+        statusCode: 200,
+      );
     } catch (_) {
-      return const GetMemoriesResult([], true, statusCode: 200, failureReason: MemoriesFetchFailureReason.decodeError);
+      return const GetMemoriesResult(
+        [],
+        true,
+        statusCode: 200,
+        failureReason: MemoriesFetchFailureReason.decodeError,
+      );
     }
   }
-  return GetMemoriesResult(const [], true, statusCode: statusCode, failureReason: MemoriesFetchFailureReason.httpError);
+  return GetMemoriesResult(
+    const [],
+    true,
+    statusCode: statusCode,
+    failureReason: MemoriesFetchFailureReason.httpError,
+  );
+}
+
+/// Builds the query used by GET /v3/memories.
+///
+/// The backend treats cursor and offset paging as separate protocols. Keeping
+/// that distinction here prevents a continuation request from accidentally
+/// sending the previous offset alongside its cursor.
+@visibleForTesting
+String buildMemoriesListUrl({
+  required String baseUrl,
+  int limit = 100,
+  int offset = 0,
+  String? cursor,
+  bool thisDeviceOnly = false,
+  MemoryReadView? view,
+}) {
+  final base = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  final query = <String, String>{'limit': '$limit'};
+  if (cursor != null) {
+    query['cursor'] = cursor;
+  } else {
+    query['offset'] = '$offset';
+  }
+  if (thisDeviceOnly) query['device_scope'] = 'current';
+  if (view != null) query['view'] = view.apiValue;
+  return Uri.parse('${base}v3/memories').replace(queryParameters: query).toString();
+}
+
+/// Builds the owner history route. Offset is used for the initial page and a
+/// server-issued cursor takes over only when the response supplies one.
+@visibleForTesting
+String buildLedgerHistoryUrl({
+  required String baseUrl,
+  int limit = 500,
+  int offset = 0,
+  String? cursor,
+}) {
+  final base = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  final query = <String, String>{'limit': '$limit'};
+  if (cursor == null) {
+    query['offset'] = '$offset';
+  } else {
+    query['cursor'] = cursor;
+  }
+  return Uri.parse('${base}v3/memories/ledger-history')
+      .replace(
+        queryParameters: query,
+      )
+      .toString();
 }
 
 void _reportMemoriesFetchFailure(GetMemoriesResult result) {
-  Logger.error('Failed to fetch memories: status=${result.statusCode} reason=${result.failureReason}');
+  Logger.error(
+    'Failed to fetch memories: status=${result.statusCode} reason=${result.failureReason}',
+  );
   if (result.failureReason == MemoriesFetchFailureReason.noResponse) return;
   PlatformManager.instance.crashReporter.reportCrash(
-    Exception('Failed to fetch memories: ${result.statusCode} ${result.failureReason}'),
+    Exception(
+      'Failed to fetch memories: ${result.statusCode} ${result.failureReason}',
+    ),
     StackTrace.current,
     userAttributes: {
       'response_status_code': result.statusCode?.toString() ?? '',
@@ -98,37 +289,75 @@ void _reportMemoriesFetchFailure(GetMemoriesResult result) {
 
 List<Memory> _decodeMemoriesResponse(String body) {
   return (json.decode(body) as List<dynamic>)
-      .map((memory) => Memory.fromGeneratedWireJson(Map<String, dynamic>.from(memory as Map)))
+      .map(
+        (memory) => Memory.fromGeneratedWireJson(
+          Map<String, dynamic>.from(memory as Map),
+        ),
+      )
       .toList();
 }
 
-Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
-  var url = '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset';
-  if (thisDeviceOnly) {
-    url += '&device_scope=current';
-  }
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+Future<GetMemoriesResult> getMemoriesResult({
+  int limit = 100,
+  int offset = 0,
+  String? cursor,
+  bool thisDeviceOnly = false,
+  MemoryReadView? view,
+  bool forceView = false,
+}) async {
+  // Probe once per owner/environment before sending temporal query params.
+  // The response header becomes the source of truth for later beta requests.
+  final beliefCapability = memoryBeliefCapability;
+  final requestedView =
+      memoryBeliefBetaEnabled && (beliefCapability == true || forceView) ? (view ?? MemoryReadView.usefulNow) : null;
+  final url = buildMemoriesListUrl(
+    baseUrl: Env.apiBaseUrl ?? '',
+    limit: limit,
+    offset: offset,
+    cursor: cursor,
+    thisDeviceOnly: thisDeviceOnly,
+    view: requestedView,
+  );
+  var response = await makeApiCall(
+    url: url,
+    headers: memoryBeliefBetaHeaders,
+    method: 'GET',
+    body: '',
+  );
   // Legacy memory users cannot use server-side device_scope; fetch all and
   // signal that local device filtering should be skipped to avoid hiding
   // legacy rows that have no primary_capture_device/capture_device_ids.
   if (thisDeviceOnly && response != null && response.statusCode == 400) {
-    final fallback = await getMemoriesResult(limit: limit, offset: offset);
+    final fallback = await getMemoriesResult(
+      limit: limit,
+      offset: offset,
+      cursor: cursor,
+      view: view,
+      forceView: forceView,
+    );
     return GetMemoriesResult(
       fallback.memories,
       false,
       truncated: fallback.truncated,
+      nextCursor: fallback.nextCursor,
+      beliefEnabled: fallback.beliefEnabled,
       statusCode: fallback.statusCode,
       failureReason: fallback.failureReason,
     );
   }
   if (response != null && response.statusCode != 200) {
-    Logger.debug('getMemories error ${response.statusCode} body=${response.body}');
+    Logger.debug(
+      'getMemories error ${response.statusCode} body=${response.body}',
+    );
   }
   final result = memoriesResultFromHttp(
     statusCode: response?.statusCode,
     body: response?.body,
     truncated: isOmiListTruncated(response),
+    nextCursor: _nextMemoryCursor(response),
+    beliefEnabled: _memoryBeliefCapabilityFromResponse(response),
   );
+  _rememberMemoryBeliefCapability(result.beliefEnabled);
   if (!result.ok) {
     if (result.failureReason == MemoriesFetchFailureReason.decodeError) {
       Logger.error('Failed to decode memories 200 response');
@@ -139,8 +368,20 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
 }
 
 /// Convenience wrapper for callers that do not need the device_scope support flag.
-Future<List<Memory>> getMemories({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
-  final result = await getMemoriesResult(limit: limit, offset: offset, thisDeviceOnly: thisDeviceOnly);
+Future<List<Memory>> getMemories({
+  int limit = 100,
+  int offset = 0,
+  String? cursor,
+  bool thisDeviceOnly = false,
+  MemoryReadView? view,
+}) async {
+  final result = await getMemoriesResult(
+    limit: limit,
+    offset: offset,
+    cursor: cursor,
+    thisDeviceOnly: thisDeviceOnly,
+    view: view,
+  );
   return result.memories;
 }
 
@@ -148,8 +389,16 @@ class GetLedgerHistoryResult {
   final List<Memory> memories;
   final bool supported;
   final bool truncated;
+  final String? nextCursor;
+  final bool? beliefEnabled;
 
-  const GetLedgerHistoryResult(this.memories, {required this.supported, this.truncated = false});
+  const GetLedgerHistoryResult(
+    this.memories, {
+    required this.supported,
+    this.truncated = false,
+    this.nextCursor,
+    this.beliefEnabled,
+  });
 }
 
 /// Fetch owner-scoped, non-current canonical ledger rows for review/history.
@@ -157,26 +406,64 @@ class GetLedgerHistoryResult {
 /// Older backends do not expose this additive route; any non-200 response is
 /// therefore treated as an unavailable history projection while the current
 /// memories list remains usable.
-Future<GetLedgerHistoryResult> getLedgerHistory({int limit = 500, int offset = 0}) async {
+Future<GetLedgerHistoryResult> getLedgerHistory({
+  int limit = 500,
+  int offset = 0,
+  String? cursor,
+}) async {
   final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories/ledger-history?limit=$limit&offset=$offset',
-    headers: {},
+    url: buildLedgerHistoryUrl(
+      baseUrl: Env.apiBaseUrl ?? '',
+      limit: limit,
+      offset: offset,
+      cursor: cursor,
+    ),
+    headers: memoryBeliefBetaHeaders,
     method: 'GET',
     body: '',
   );
   if (response == null || response.statusCode != 200) {
+    // A missing/unsupported history response must not leave a prior beta
+    // capability cached for this owner and serving environment.
+    _rememberMemoryBeliefCapability(null);
     return const GetLedgerHistoryResult([], supported: false);
   }
   try {
-    return GetLedgerHistoryResult(
+    final result = GetLedgerHistoryResult(
       _decodeMemoriesResponse(response.body),
       supported: true,
       truncated: isOmiListTruncated(response),
+      nextCursor: _nextMemoryCursor(response),
+      beliefEnabled: _memoryBeliefCapabilityFromResponse(response),
     );
+    _rememberMemoryBeliefCapability(result.beliefEnabled);
+    return result;
   } catch (error) {
     Logger.error('Failed to decode ledger history 200 response: $error');
+    _rememberMemoryBeliefCapability(null);
     return const GetLedgerHistoryResult([], supported: false);
   }
+}
+
+String? _nextMemoryCursor(http.Response? response) {
+  if (response == null) return null;
+  for (final entry in response.headers.entries) {
+    if (entry.key.toLowerCase() == 'x-omi-memory-next-cursor' && entry.value.isNotEmpty) {
+      return entry.value;
+    }
+  }
+  return null;
+}
+
+bool? _memoryBeliefCapabilityFromResponse(http.Response? response) {
+  if (response == null) return null;
+  for (final entry in response.headers.entries) {
+    if (entry.key.toLowerCase() != memoryBeliefBetaHeaderName.toLowerCase()) continue;
+    final raw = entry.value.trim().toLowerCase();
+    if (raw == 'true') return true;
+    if (raw == 'false') return false;
+  }
+  return null;
 }
 
 Future<bool> deleteMemoryServer(String memoryId) async {
@@ -192,7 +479,12 @@ Future<bool> deleteMemoryServer(String memoryId) async {
 }
 
 Future<bool> deleteAllMemoriesServer() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v3/memories', headers: {}, method: 'DELETE', body: '');
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/memories',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
   if (response == null) return false;
   Logger.debug('deleteAllMemories response: ${response.body}');
   return response.statusCode == 200;
@@ -217,23 +509,33 @@ class RevertMemoryResult {
 /// [operationId] is minted once by the provider for the user tap and remains
 /// stable for this request. The response must carry the appended authoritative
 /// replacement; callers must not infer success from the status code alone.
-Future<RevertMemoryResult> revertMemoryServer(String memoryId, String operationId) async {
+Future<RevertMemoryResult> revertMemoryServer(
+  String memoryId,
+  String operationId,
+) async {
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId/revert',
     headers: {},
     method: 'POST',
-    body: json.encode(wire.GeneratedMemoryRevertRequest(operationId: operationId).toJson()),
+    body: json.encode(
+      wire.GeneratedMemoryRevertRequest(operationId: operationId).toJson(),
+    ),
   );
   if (response == null || response.statusCode != 200) {
     return const RevertMemoryResult(persisted: false);
   }
   try {
-    final payload = wire.GeneratedMemoryEditResponse.fromJson(json.decode(response.body) as Map<String, dynamic>);
+    final payload = wire.GeneratedMemoryEditResponse.fromJson(
+      json.decode(response.body) as Map<String, dynamic>,
+    );
     if (payload.status != 'ok') {
       return const RevertMemoryResult(persisted: false);
     }
     final authoritativeMemory = payload.memory == null ? null : Memory.fromGeneratedWireJson(payload.memory!.toJson());
-    return RevertMemoryResult(persisted: authoritativeMemory != null, authoritativeMemory: authoritativeMemory);
+    return RevertMemoryResult(
+      persisted: authoritativeMemory != null,
+      authoritativeMemory: authoritativeMemory,
+    );
   } catch (error) {
     Logger.warning('revertMemory response decode failed: $error');
     return const RevertMemoryResult(persisted: false);
@@ -255,8 +557,13 @@ Future<EditMemoryResult> editMemoryServer(String memoryId, String value) async {
     final rawMemory = payload['memory'];
     final authoritativeMemory =
         rawMemory is Map ? Memory.fromGeneratedWireJson(Map<String, dynamic>.from(rawMemory)) : null;
-    Logger.debug('editMemory persisted; authoritativeReplacement=${authoritativeMemory != null}');
-    return EditMemoryResult(persisted: true, authoritativeMemory: authoritativeMemory);
+    Logger.debug(
+      'editMemory persisted; authoritativeReplacement=${authoritativeMemory != null}',
+    );
+    return EditMemoryResult(
+      persisted: true,
+      authoritativeMemory: authoritativeMemory,
+    );
   } catch (error) {
     Logger.warning('editMemory response decode failed: $error');
     return const EditMemoryResult(persisted: false);
@@ -290,4 +597,81 @@ Future<bool> reviewMemoryServer(String memoryId, bool value) async {
   if (response == null) return false;
   Logger.debug('reviewMemory response: ${response.body}');
   return response.statusCode == 200;
+}
+
+/// Record one retry-stable owner decision about whether a memory may be used
+/// by agents.  The caller owns [feedbackId] and must reuse it when the
+/// response is ambiguous or the request is retried.
+Future<MemoryUseResult> useMemoryServer({
+  required String memoryId,
+  required MemoryUseAction action,
+  required String feedbackId,
+}) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId/use',
+    headers: memoryBeliefBetaHeaders,
+    method: 'POST',
+    body: json.encode(
+      wire.GeneratedMemoryUseRequest(
+        action: _generatedMemoryUseAction(action),
+        feedbackId: feedbackId,
+      ).toJson(),
+    ),
+  );
+  if (response == null) return const MemoryUseResult(persisted: false);
+
+  if (response.statusCode != 200) {
+    Logger.debug(
+      'useMemory response ${response.statusCode} body=${response.body}',
+    );
+    return MemoryUseResult(persisted: false, statusCode: response.statusCode);
+  }
+  try {
+    final payload = wire.GeneratedMemoryUseResponse.fromJson(
+      json.decode(response.body) as Map<String, dynamic>,
+    );
+    final persisted = payload.status == 'ok' || payload.status == 'idempotent';
+    final confirmedAction = _memoryUseActionFromGenerated(payload.action);
+    if (!persisted || confirmedAction == null) {
+      return MemoryUseResult(persisted: false, statusCode: response.statusCode, status: payload.status);
+    }
+    return MemoryUseResult(
+      persisted: true,
+      status: payload.status,
+      memoryId: payload.memoryId,
+      action: confirmedAction,
+      feedbackId: payload.feedbackId,
+      itemRevision: payload.itemRevision,
+      suppressed: payload.suppressed,
+      curationWeight: payload.curationWeight,
+      statusCode: response.statusCode,
+    );
+  } catch (error) {
+    Logger.warning('useMemory response decode failed: $error');
+    return MemoryUseResult(persisted: false, statusCode: response.statusCode);
+  }
+}
+
+wire.GeneratedMemoryUseAction _generatedMemoryUseAction(MemoryUseAction action) {
+  switch (action) {
+    case MemoryUseAction.suppress:
+      return wire.GeneratedMemoryUseAction.suppress;
+    case MemoryUseAction.allow:
+      return wire.GeneratedMemoryUseAction.allow;
+    case MemoryUseAction.useful:
+      return wire.GeneratedMemoryUseAction.useful;
+  }
+}
+
+MemoryUseAction? _memoryUseActionFromGenerated(wire.GeneratedMemoryUseAction action) {
+  switch (action.value) {
+    case 'suppress':
+      return MemoryUseAction.suppress;
+    case 'allow':
+      return MemoryUseAction.allow;
+    case 'useful':
+      return MemoryUseAction.useful;
+    default:
+      return null;
+  }
 }

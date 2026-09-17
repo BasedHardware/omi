@@ -450,7 +450,12 @@ def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
 
     pinned_version = re.search(r"flutter-version:\s*([^\s#]+)", repo_checks)
     assert pinned_version is not None
-    assert mobile_checks.count(f"flutter-version: {pinned_version.group(1)}") == 3
+    pinned = f"flutter-version: {pinned_version.group(1)}"
+    # Four Flutter jobs share the repo pin: generated-files, analyze-and-test,
+    # journeys-hermetic, and android-compile-smoke. A job that installs Flutter
+    # without this pin (or a mismatched version) must fail this contract.
+    assert mobile_checks.count(pinned) == 4
+    assert mobile_checks.count("uses: subosito/flutter-action") == 4
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():

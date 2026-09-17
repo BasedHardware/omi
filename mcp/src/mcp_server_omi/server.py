@@ -157,6 +157,18 @@ def _parse_categories(categories, category_cls: type, logger: logging.Logger) ->
     return parsed
 
 
+def _parse_date_only(value: str, field: str) -> datetime:
+    """Parse a YYYY-MM-DD date filter, naming the field when it is malformed.
+
+    A date filter that cannot be parsed must surface as an error to the model
+    instead of being silently dropped (which would return unfiltered results).
+    """
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"Invalid {field} '{value}'. Expected YYYY-MM-DD.") from None
+
+
 def get_memories(
     logger: logging.Logger,
     api_key: str,
@@ -233,16 +245,10 @@ def get_conversations(
 ) -> List:
     params = {"limit": limit, "offset": offset}
     if start_date:
-        try:
-            params["start_date"] = datetime.strptime(start_date, "%Y-%m-%d").isoformat()
-        except ValueError:
-            logger.warning(f"Could not parse start date: {start_date}")
+        params["start_date"] = _parse_date_only(start_date, "start_date").isoformat()
     if end_date:
-        try:
-            # Set to end of day (23:59:59) so the entire day is included
-            params["end_date"] = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)).isoformat()
-        except ValueError:
-            logger.warning(f"Could not parse end date: {end_date}")
+        # Set to end of day (23:59:59) so the entire day is included
+        params["end_date"] = (_parse_date_only(end_date, "end_date") + timedelta(days=1) - timedelta(seconds=1)).isoformat()
     if categories:
         params["categories"] = ",".join([c.value for c in categories])
 
@@ -273,9 +279,12 @@ def search_conversations(
 ) -> List:
     params = {"query": query, "limit": limit}
     if start_date:
-        params["start_date"] = start_date
+        # The backend's /v1/mcp/conversations/search parses YYYY-MM-DD and 400s
+        # on anything else; validate here so the error names the bad argument
+        # instead of surfacing as an opaque HTTP 400.
+        params["start_date"] = _parse_date_only(start_date, "start_date").strftime("%Y-%m-%d")
     if end_date:
-        params["end_date"] = end_date
+        params["end_date"] = _parse_date_only(end_date, "end_date").strftime("%Y-%m-%d")
 
     logger.info(f"Searching conversations with limit={limit}")
     response = requests.get(

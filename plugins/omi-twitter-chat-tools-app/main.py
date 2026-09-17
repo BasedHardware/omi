@@ -133,7 +133,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return None
     except Exception as e:
         log(f"Error refreshing token: {e}")
@@ -167,12 +167,33 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
         elif response.status_code == 204:
             return {"success": True}
         else:
-            log(f"Twitter API error: {response.status_code} - {response.text}")
+            log(f"Twitter API error: {response.status_code}")
             return {"error": response.text, "status_code": response.status_code}
 
     except Exception as e:
         log(f"Twitter API request error: {e}")
         return {"error": str(e)}
+
+
+# X API v2 rejects max_results below the endpoint's floor with HTTP 400, so a
+# request for fewer posts than the floor is sent at the floor and trimmed here.
+# Floors: search/recent 10, users/:id/tweets and users/:id/mentions 5,
+# users/:id/timelines/reverse_chronological 1. Ceiling is 100 everywhere.
+MAX_RESULTS_CEILING = 100
+
+
+def requested_count(body: dict, default: int = 10) -> int:
+    """How many posts the caller asked for, as a positive int bounded by the API ceiling."""
+    try:
+        count = int(body.get("max_results", default))
+    except (TypeError, ValueError, OverflowError):
+        count = default
+    return max(1, min(count, MAX_RESULTS_CEILING))
+
+
+def page_size(count: int, floor: int) -> int:
+    """The max_results value the endpoint accepts for a request of ``count`` posts."""
+    return max(floor, min(count, MAX_RESULTS_CEILING))
 
 
 def format_tweet(tweet: dict, includes: dict = None) -> str:
@@ -511,7 +532,7 @@ async def tool_get_timeline(request: Request):
         log(f"=== GET_TIMELINE ===")
 
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        count = requested_count(body)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -525,7 +546,7 @@ async def tool_get_timeline(request: Request):
             return ChatToolResponse(error="Could not get your Twitter user ID.")
 
         result = twitter_api_request(uid, "GET", f"/users/{twitter_user_id}/timelines/reverse_chronological", params={
-            "max_results": max_results,
+            "max_results": page_size(count, floor=1),
             "tweet.fields": "created_at,public_metrics,author_id",
             "expansions": "author_id",
             "user.fields": "name,username"
@@ -534,7 +555,7 @@ async def tool_get_timeline(request: Request):
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get timeline: {result.get('error', 'Unknown error')}")
 
-        tweets = result.get("data", [])
+        tweets = result.get("data", [])[:count]
         includes = result.get("includes", {})
 
         if not tweets:
@@ -563,7 +584,7 @@ async def tool_get_my_tweets(request: Request):
         log(f"=== GET_MY_TWEETS ===")
 
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        count = requested_count(body)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -577,14 +598,14 @@ async def tool_get_my_tweets(request: Request):
             return ChatToolResponse(error="Could not get your Twitter user ID.")
 
         result = twitter_api_request(uid, "GET", f"/users/{twitter_user_id}/tweets", params={
-            "max_results": max_results,
+            "max_results": page_size(count, floor=5),
             "tweet.fields": "created_at,public_metrics"
         })
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get tweets: {result.get('error', 'Unknown error')}")
 
-        tweets = result.get("data", [])
+        tweets = result.get("data", [])[:count]
 
         if not tweets:
             return ChatToolResponse(result="You haven't posted any tweets yet.")
@@ -627,7 +648,7 @@ async def tool_get_mentions(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        count = requested_count(body)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -641,7 +662,7 @@ async def tool_get_mentions(request: Request):
             return ChatToolResponse(error="Could not get your Twitter user ID.")
 
         result = twitter_api_request(uid, "GET", f"/users/{twitter_user_id}/mentions", params={
-            "max_results": max_results,
+            "max_results": page_size(count, floor=5),
             "tweet.fields": "created_at,public_metrics,author_id",
             "expansions": "author_id",
             "user.fields": "name,username"
@@ -650,7 +671,7 @@ async def tool_get_mentions(request: Request):
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get mentions: {result.get('error', 'Unknown error')}")
 
-        tweets = result.get("data", [])
+        tweets = result.get("data", [])[:count]
         includes = result.get("includes", {})
 
         if not tweets:
@@ -678,7 +699,7 @@ async def tool_search_tweets(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query = body.get("query")
-        max_results = min(body.get("max_results", 10), 100)
+        count = requested_count(body)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -692,7 +713,7 @@ async def tool_search_tweets(request: Request):
 
         result = twitter_api_request(uid, "GET", "/tweets/search/recent", params={
             "query": query,
-            "max_results": max_results,
+            "max_results": page_size(count, floor=10),
             "tweet.fields": "created_at,public_metrics,author_id",
             "expansions": "author_id",
             "user.fields": "name,username"
@@ -701,7 +722,7 @@ async def tool_search_tweets(request: Request):
         if not result or "error" in result:
             return ChatToolResponse(error=f"Search failed: {result.get('error', 'Unknown error')}")
 
-        tweets = result.get("data", [])
+        tweets = result.get("data", [])[:count]
         includes = result.get("includes", {})
 
         if not tweets:
@@ -1132,7 +1153,7 @@ async def twitter_callback(
             )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
+            log(f"Token exchange failed: {response.status_code}")
             return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
 
         token_response = response.json()

@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -47,6 +48,7 @@ class MemoryItem extends StatelessWidget {
       primaryCaptureDevice: memory.primaryCaptureDevice,
     );
     final provenanceLabel = _resolveProvenanceLabel(context, provenanceType);
+    final temporalLabel = _temporalLabel(context, memory);
     final Widget memoryWidget = GestureDetector(
       onTap: _canEditMemory(memory) ? () => onTap(context, memory, provider) : null,
       child: Container(
@@ -55,7 +57,13 @@ class MemoryItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppStyles.backgroundSecondary,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Stack(
           children: [
@@ -81,7 +89,12 @@ class MemoryItem extends StatelessWidget {
                               ),
                             ),
                           ],
-                          Expanded(child: Text(memory.content.decodeString, style: AppStyles.body)),
+                          Expanded(
+                            child: Text(
+                              memory.content.decodeString,
+                              style: AppStyles.body,
+                            ),
+                          ),
                         ],
                       ),
                       if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty)
@@ -89,7 +102,10 @@ class MemoryItem extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
                             memory.ledgerSlot!,
-                            style: TextStyle(fontSize: 11, color: AppStyles.textTertiary),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppStyles.textTertiary,
+                            ),
                           ),
                         ),
                       if (memory.isLedgerPlaybook && (memory.ledgerBody ?? '').trim().isNotEmpty)
@@ -99,13 +115,33 @@ class MemoryItem extends StatelessWidget {
                             memory.ledgerBody!.trim(),
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: AppStyles.textSecondary),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppStyles.textSecondary,
+                            ),
                           ),
                         ),
                       if (provenanceLabel != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: Text(provenanceLabel, style: TextStyle(fontSize: 11, color: AppStyles.textTertiary)),
+                          child: Text(
+                            provenanceLabel,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppStyles.textTertiary,
+                            ),
+                          ),
+                        ),
+                      if (temporalLabel != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            temporalLabel,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppStyles.textTertiary,
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -128,6 +164,10 @@ class MemoryItem extends StatelessWidget {
                       _buildReviewButton(context, accepted: false),
                       const SizedBox(width: AppStyles.spacingS),
                     ],
+                    if (provider.memoryBeliefEnabled && _canSetMemoryUse(memory)) ...[
+                      _buildMemoryUseButton(context),
+                      const SizedBox(width: AppStyles.spacingS),
+                    ],
                     if (provider.canRevertSupersededFact(memory)) ...[
                       _buildRevertButton(context),
                       const SizedBox(width: AppStyles.spacingS),
@@ -144,21 +184,34 @@ class MemoryItem extends StatelessWidget {
                     filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
                     child: GestureDetector(
                       onTap: () {
-                        if (!context.read<UsageProvider>().showSubscriptionUI) return;
-                        PlatformManager.instance.analytics.paywallOpened('Action Item');
-                        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                        if (!context.read<UsageProvider>().showSubscriptionUI) {
+                          return;
+                        }
+                        PlatformManager.instance.analytics.paywallOpened(
+                          'Action Item',
+                        );
+                        routeToPage(
+                          context,
+                          const UsagePage(showUpgradeDialog: true),
+                        );
                         return;
                       },
                       child: Container(
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.01),
-                          borderRadius: const BorderRadius.all(Radius.circular(8)),
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(8),
+                          ),
                         ),
                         child: context.watch<UsageProvider>().showSubscriptionUI
                             ? const Text(
                                 'Upgrade to unlimited',
-                                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               )
                             : const SizedBox.shrink(),
                       ),
@@ -193,7 +246,10 @@ class MemoryItem extends StatelessWidget {
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(color: AppStyles.error, borderRadius: BorderRadius.circular(24)),
+        decoration: BoxDecoration(
+          color: AppStyles.error,
+          borderRadius: BorderRadius.circular(24),
+        ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
@@ -216,6 +272,16 @@ class MemoryItem extends StatelessWidget {
     }
   }
 
+  static String? _temporalLabel(BuildContext context, Memory memory) {
+    final asOf = memory.asOf;
+    if (asOf == null) return null;
+    final date = asOf.toLocal().toIso8601String().split('T').first;
+    if (memory.currencyBand == 'current') {
+      return '${context.l10n.current} · $date';
+    }
+    return date;
+  }
+
   static bool _canReviewLedgerRow(Memory memory) {
     return memory.isKnowledgeLedger &&
         !memory.isLocked &&
@@ -230,6 +296,70 @@ class MemoryItem extends StatelessWidget {
         (memory.supersededBy ?? '').trim().isEmpty &&
         memory.ledgerKind == KnowledgeLedgerKind.fact &&
         !memory.isLocked;
+  }
+
+  static bool _canSetMemoryUse(Memory memory) {
+    if (memory.isLocked || memory.deleted || memory.invalidAt != null) return false;
+    if ((memory.supersededBy ?? '').trim().isNotEmpty) return false;
+    if (memory.ledgerStatus != null && memory.ledgerStatus != 'active') return false;
+    if (memory.isKnowledgeLedger && !memory.isCurrentKnowledgeLedgerRow) return false;
+    return true;
+  }
+
+  Widget _buildMemoryUseButton(BuildContext context) {
+    return ListenableBuilder(
+      listenable: provider,
+      builder: (context, _) {
+        final suppressed = memory.memoryUseSuppressed == true;
+        final inFlight = provider.isApplyingMemoryUse(memory.id);
+        // The Allow use control clears suppression. The backend's `useful`
+        // receipt is a separate positive rating and intentionally preserves a
+        // suppression, so it must never back this control.
+        final action = suppressed ? MemoryUseAction.allow : MemoryUseAction.suppress;
+        final label = suppressed ? context.l10n.memoryAllowUse : context.l10n.memoryDontUse;
+        return Semantics(
+          container: true,
+          button: true,
+          label: label,
+          enabled: !inFlight,
+          child: TextButton(
+            key: Key('memory_use_${action.apiValue}_${memory.id}'),
+            onPressed: inFlight
+                ? null
+                : () async {
+                    final persisted = await provider.setMemoryUse(
+                      memory,
+                      action,
+                    );
+                    if (!persisted && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.l10n.somethingWentWrong),
+                        ),
+                      );
+                    }
+                  },
+            style: TextButton.styleFrom(
+              minimumSize: const Size(0, 32),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: inFlight
+                ? const SizedBox.square(
+                    dimension: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppStyles.textTertiary,
+                    ),
+                  ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildReviewButton(BuildContext context, {required bool accepted}) {
@@ -274,10 +404,14 @@ class MemoryItem extends StatelessWidget {
             onPressed: inFlight
                 ? null
                 : () async {
-                    final persisted = await provider.revertSupersededFact(memory);
+                    final persisted = await provider.revertSupersededFact(
+                      memory,
+                    );
                     if (!persisted && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(context.l10n.somethingWentWrong)),
+                        SnackBar(
+                          content: Text(context.l10n.somethingWentWrong),
+                        ),
                       );
                     }
                   },
@@ -297,7 +431,10 @@ class MemoryItem extends StatelessWidget {
   }
 
   /// Resolves a [DeviceProvenanceType] to a localized label, or null if none.
-  String? _resolveProvenanceLabel(BuildContext context, DeviceProvenanceType? type) {
+  String? _resolveProvenanceLabel(
+    BuildContext context,
+    DeviceProvenanceType? type,
+  ) {
     switch (type) {
       case DeviceProvenanceType.thisDevice:
         return context.l10n.memoryThisDevice;
@@ -328,7 +465,13 @@ class MemoryItem extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
-        child: const Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
+        child: const Center(
+          child: FaIcon(
+            FontAwesomeIcons.message,
+            size: 16,
+            color: Colors.white70,
+          ),
+        ),
       ),
     );
   }
@@ -348,26 +491,39 @@ class MemoryItem extends StatelessWidget {
     Navigator.of(context).pop();
 
     if (conversation != null) {
-      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
-      final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
+      final conversationProvider = Provider.of<ConversationProvider>(
+        context,
+        listen: false,
+      );
+      final detailProvider = Provider.of<ConversationDetailProvider>(
+        context,
+        listen: false,
+      );
 
       // One derivation for both the group insert and the selected day, in local
       // time — inserting under the UTC day and selecting another key opened the
       // detail page on a day nothing was grouped under (#10980).
-      final conversationDate = conversationProvider.ensureConversationInGroup(conversation);
+      final conversationDate = conversationProvider.ensureConversationInGroup(
+        conversation,
+      );
       detailProvider.updateConversation(conversation.id, conversationDate);
 
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (context) => ConversationDetailPage(conversation: conversation)));
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ConversationDetailPage(conversation: conversation),
+        ),
+      );
     } else {
       _showConversationNotFoundError(context);
     }
   }
 
   void _showConversationNotFoundError(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(context.l10n.conversationNotFoundOrDeleted), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(context.l10n.conversationNotFoundOrDeleted),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 }

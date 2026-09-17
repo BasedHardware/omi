@@ -1,14 +1,17 @@
-"""Hermetic regression tests for question extraction in plugins/notifications/hey_omi.py.
+"""Hermetic regression tests for question extraction and hardening in plugins/notifications/hey_omi.py.
 
 Standard library only: third-party imports (fastapi, pydantic, openai,
 requests, tenacity) are replaced with minimal stubs before importing the
 module under test so the suite runs without site-packages.
 
-Covers the dropped-question defect: the webhook extracted the question
-spoken after "hey omi" by splitting the segment on the literal 'omi,' —
-so a user who says "hey omi what is the weather" without the comma lost
-every word of the question, and the next segment's text was answered
-instead (or nothing was answered at all).
+Covers:
+1. Question extraction with and without commas across triggers.
+2. Safe lazy credential handling without import-time crashes.
+3. Memory leak defense in session buffer and cooldown dictionary pruning.
+4. Malformed and None segment input guards.
+5. Defensive OpenAI response fallbacks and timeout protection.
+6. Validation and exception classification in OMI notification delivery.
+7. Health, status, and setup-status endpoints.
 """
 
 import asyncio
@@ -18,10 +21,6 @@ import types
 import unittest
 from unittest import mock
 
-os.environ.setdefault("OPENAI_API_KEY", "sk-test-key")
-os.environ.setdefault("HEY_OMI_APP_ID", "test-app-id")
-os.environ.setdefault("HEY_OMI_APP_SECRET", "test-app-secret")
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -30,7 +29,13 @@ def _install_module_stubs():
 
     class _OpenAI:
         def __init__(self, *args, **kwargs):
-            pass
+            self.chat = types.SimpleNamespace(
+                completions=types.SimpleNamespace(
+                    create=lambda *a, **k: types.SimpleNamespace(
+                        choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="stubbed answer"))]
+                    )
+                )
+            )
 
     openai.OpenAI = _OpenAI
     sys.modules["openai"] = openai
@@ -44,6 +49,11 @@ def _install_module_stubs():
     requests = types.ModuleType("requests")
     requests.post = lambda *a, **k: types.SimpleNamespace(
         status_code=200, raise_for_status=lambda: None
+    )
+    requests.exceptions = types.SimpleNamespace(
+        RequestException=Exception,
+        Timeout=Exception,
+        HTTPError=Exception,
     )
     sys.modules["requests"] = requests
 
@@ -143,8 +153,6 @@ class HeyOmiQuestionExtractionTests(unittest.TestCase):
         return hey_omi.message_buffer.buffers[session_id]
 
     def test_question_without_comma_is_collected(self):
-        # "hey omi <question>" with no comma is the common spoken form; the
-        # words after the trigger must reach collected_question.
         self._post("s1", ["hey omi what is the weather"])
         self.assertTrue(self._buffer("s1")["trigger_detected"])
         self.assertEqual(
@@ -169,7 +177,6 @@ class HeyOmiQuestionExtractionTests(unittest.TestCase):
         self.assertEqual(self._buffer("s1")["collected_question"], [])
 
     def test_partial_trigger_question_without_comma_is_collected(self):
-        # Trigger split across two segments: "hey" then "omi <question>".
         self._post("s1", ["hey", "omi what is the plan"])
         self.assertTrue(self._buffer("s1")["trigger_detected"])
         self.assertEqual(
@@ -184,12 +191,138 @@ class HeyOmiQuestionExtractionTests(unittest.TestCase):
         self.assertEqual(self.notifications, [("u1", "test answer")])
 
     def test_leading_omi_does_not_pollute_trigger_question(self):
-        # A stray 'omi' earlier in the segment must not anchor extraction:
-        # the question lives after the trigger phrase itself.
         self._post("s1", ["omi hey omi, what time is it"])
         self.assertEqual(
             self._buffer("s1")["collected_question"], ["what time is it"]
         )
+
+
+class HeyOmiHardeningTests(unittest.TestCase):
+    def setUp(self):
+        hey_omi.message_buffer.buffers.clear()
+        hey_omi.notification_cooldowns.clear()
+        self.clock = _Clock(2000.0)
+        self.patch_time = mock.patch.object(hey_omi.time, "time", self.clock)
+        self.patch_time.start()
+        self.addCleanup(self.patch_time.stop)
+
+    def test_credential_helpers_without_env_vars(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            key = hey_omi.get_openai_api_key()
+            app_id, app_secret = hey_omi.get_omi_credentials()
+            self.assertIsInstance(key, str)
+            self.assertIsInstance(app_id, str)
+            self.assertIsInstance(app_secret, str)
+
+    def test_unconfigured_openai_returns_fallback_immediately(self):
+        with mock.patch.object(hey_omi, "get_openai_client", return_value=None):
+            answer = hey_omi.get_openai_response("what is the time?")
+            self.assertEqual(answer, hey_omi.FALLBACK_OPENAI_RESPONSE)
+
+    def test_openai_response_empty_text_returns_fallback(self):
+        answer = hey_omi.get_openai_response("")
+        self.assertEqual(answer, hey_omi.FALLBACK_OPENAI_RESPONSE)
+        whitespace_answer = hey_omi.get_openai_response("   ")
+        self.assertEqual(whitespace_answer, hey_omi.FALLBACK_OPENAI_RESPONSE)
+
+    def test_openai_response_handles_api_exception(self):
+        fake_client = mock.MagicMock()
+        fake_client.chat.completions.create.side_effect = RuntimeError("API unavailable")
+        with mock.patch.object(hey_omi, "get_openai_client", return_value=fake_client):
+            answer = hey_omi.get_openai_response("query")
+            self.assertEqual(answer, hey_omi.FALLBACK_OPENAI_RESPONSE)
+
+    def test_send_omi_notification_missing_args(self):
+        self.assertFalse(hey_omi.send_omi_notification("", "hello"))
+        self.assertFalse(hey_omi.send_omi_notification("   ", "hello"))
+        self.assertFalse(hey_omi.send_omi_notification("uid-1", ""))
+        self.assertFalse(hey_omi.send_omi_notification("uid-1", "   "))
+
+    def test_send_omi_notification_missing_credentials(self):
+        with mock.patch.object(hey_omi, "get_omi_credentials", return_value=("", "")):
+            result = hey_omi.send_omi_notification("uid-1", "test alert")
+            self.assertFalse(result)
+
+    def test_send_omi_notification_network_failure(self):
+        with mock.patch.object(hey_omi, "get_omi_credentials", return_value=("app-1", "secret-1")), \
+             mock.patch.object(hey_omi.requests, "post", side_effect=ConnectionError("Failed")):
+            result = hey_omi.send_omi_notification("uid-1", "test alert")
+            self.assertFalse(result)
+
+    def test_send_omi_notification_success(self):
+        fake_resp = mock.MagicMock(status_code=200)
+        fake_resp.raise_for_status.return_value = None
+        with mock.patch.object(hey_omi, "get_omi_credentials", return_value=("app-1", "secret-1")), \
+             mock.patch.object(hey_omi.requests, "post", return_value=fake_resp) as mock_post:
+            result = hey_omi.send_omi_notification("uid-1", "test alert")
+            self.assertTrue(result)
+            mock_post.assert_called_once()
+
+    def test_malformed_segments_gracefully_skipped(self):
+        malformed = [None, 12345, "invalid", {}, {"text": None}, {"text": ""}, {"text": "   "}]
+        cleaned = hey_omi._extract_segments_text(malformed)
+        self.assertEqual(cleaned, [])
+
+        req = hey_omi.WebhookRequest(session_id="s-malformed", segments=malformed, uid="u1")
+        resp = asyncio.run(hey_omi.webhook(req))
+        self.assertEqual(resp.status, "success")
+
+    def test_missing_session_id_raises_http_400(self):
+        req = hey_omi.WebhookRequest(session_id="", segments=[], uid="u1")
+        with self.assertRaises(hey_omi.HTTPException) as ctx:
+            asyncio.run(hey_omi.webhook(req))
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_cooldown_blocks_rapid_duplicate_dispatch(self):
+        session_id = "s-cooldown"
+        buf = hey_omi.message_buffer.get_buffer(session_id)
+        buf["trigger_detected"] = True
+        buf["response_sent"] = False
+        hey_omi.notification_cooldowns[session_id] = self.clock.now - 5.0  # 5s ago (cooldown is 15s)
+
+        req = hey_omi.WebhookRequest(session_id=session_id, segments=[{"text": "more words"}], uid="u1")
+        resp = asyncio.run(hey_omi.webhook(req))
+        self.assertEqual(resp.status, "success")
+        self.assertTrue(buf["trigger_detected"])
+
+    def test_cleanup_old_sessions_evicts_buffers_and_cooldowns(self):
+        hey_omi.message_buffer.get_buffer("active-sess")
+        buf_old = hey_omi.message_buffer.get_buffer("old-sess")
+        buf_old["last_activity"] = self.clock.now - 4000  # > 1 hour old
+
+        hey_omi.notification_cooldowns["active-sess"] = self.clock.now
+        hey_omi.notification_cooldowns["old-sess"] = self.clock.now - 4000
+        hey_omi.notification_cooldowns["orphan-cooldown"] = self.clock.now - 5000
+
+        hey_omi.message_buffer.cleanup_old_sessions()
+
+        self.assertIn("active-sess", hey_omi.message_buffer.buffers)
+        self.assertNotIn("old-sess", hey_omi.message_buffer.buffers)
+        self.assertIn("active-sess", hey_omi.notification_cooldowns)
+        self.assertNotIn("old-sess", hey_omi.notification_cooldowns)
+        self.assertNotIn("orphan-cooldown", hey_omi.notification_cooldowns)
+
+    def test_health_endpoint(self):
+        res = asyncio.run(hey_omi.health())
+        self.assertEqual(res["status"], "healthy")
+        self.assertEqual(res["service"], "notifications")
+        self.assertIn("configured", res)
+
+    def test_status_endpoint(self):
+        res = asyncio.run(hey_omi.status())
+        self.assertIn("active_sessions", res)
+        self.assertIn("uptime", res)
+        self.assertIn("configured", res)
+
+    def test_setup_status_endpoint_success_and_error(self):
+        res = asyncio.run(hey_omi.setup_status())
+        self.assertTrue(res["is_setup_completed"])
+
+        with mock.patch.object(hey_omi, "get_omi_credentials", side_effect=RuntimeError("DB unreachable")):
+            with self.assertRaises(hey_omi.HTTPException) as ctx:
+                asyncio.run(hey_omi.setup_status())
+            self.assertEqual(ctx.exception.status_code, 500)
+            self.assertEqual(ctx.exception.detail, "Internal setup error")
 
 
 if __name__ == "__main__":

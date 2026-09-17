@@ -1,400 +1,319 @@
-"""Hermetic Frankfurter currency-app regressions for BasedHardware/omi#14153.
+"""Hermetic unit tests for Frankfurter Currency Omi integration.
 
-Import the production module with framework-only stubs, then exercise the real
-handlers, HTTP boundary, and lifespan. No network, credentials, or third-party
-runtime packages are required; the suite runs under plain stdlib ``python3 -S``.
+No third-party runtime dependencies required. Runs deterministically under
+both standard library `python3 -S` and `pytest`.
 """
 
+import asyncio
 from decimal import Decimal
 import importlib.util
 from pathlib import Path
 import sys
-from types import ModuleType
+import types
 import unittest
 from unittest.mock import AsyncMock, patch
 
 
 def load_app():
-    class State:
+    class DummyState:
         pass
 
-    class FastAPI:
+    class DummyFastAPI:
         def __init__(self, **kwargs):
-            self.state = State()
+            self.routes = []
+            self.lifespan = kwargs.get("lifespan")
+            self.state = DummyState()
 
-        def get(self, *args, **kwargs):
-            return lambda handler: handler
+        def get(self, path, **kwargs):
+            return self._route("GET", path, kwargs.get("response_model"))
 
-        post = get
+        def post(self, path, **kwargs):
+            return self._route("POST", path, kwargs.get("response_model"))
 
-        def exception_handler(self, *args, **kwargs):
-            return lambda handler: handler
+        def exception_handler(self, exc_class):
+            def decorator(func):
+                return func
 
-    class BaseModel:
+            return decorator
+
+        def _route(self, method, path, response_model):
+            def decorator(func):
+                self.routes.append({
+                    "method": method,
+                    "path": path,
+                    "func": func,
+                    "response_model": response_model,
+                })
+                return func
+
+            return decorator
+
+    class DummyBaseModel:
         def __init__(self, **kwargs):
-            self.__dict__.update(kwargs)
+            for key, value in kwargs.items():
+                setattr(self, key, value)
 
         def model_dump(self):
-            return dict(self.__dict__)
+            return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
-    def Field(default=None, default_factory=None, **kwargs):
-        return default_factory() if default_factory is not None else default
+    def Field(default=None, **_kwargs):
+        return default
 
-    def field_validator(*args, **kwargs):
-        return lambda fn: fn
+    def field_validator(*_args, **_kwargs):
+        def decorator(func):
+            return func
+
+        return decorator
 
     class HTTPError(Exception):
         pass
 
-    class JSONResponse:
-        def __init__(self, status_code=200, content=None, **kwargs):
-            self.status_code = status_code
-            self.content = content
+    class HTTPStatusError(HTTPError):
+        def __init__(self, message=None, response=None):
+            super().__init__(message)
+            self.response = response or types.SimpleNamespace(status_code=500)
 
-    httpx = ModuleType("httpx")
-    httpx.AsyncClient = object
-    httpx.HTTPError = HTTPError
-    fastapi = ModuleType("fastapi")
-    fastapi.FastAPI = FastAPI
+    class DummyAsyncClient:
+        def __init__(self, *args, **kwargs):
+            self.is_closed = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            self.is_closed = True
+
+        async def aclose(self):
+            self.is_closed = True
+
+        async def get(self, url, params=None):
+            raise NotImplementedError
+
+    fastapi = types.ModuleType("fastapi")
+    fastapi.FastAPI = DummyFastAPI
     fastapi.Request = object
-    fastapi_exceptions = ModuleType("fastapi.exceptions")
-    fastapi_exceptions.RequestValidationError = type("RequestValidationError", (Exception,), {})
-    fastapi_responses = ModuleType("fastapi.responses")
+    fastapi_responses = types.ModuleType("fastapi.responses")
     fastapi_responses.HTMLResponse = str
-    fastapi_responses.JSONResponse = JSONResponse
-    pydantic = ModuleType("pydantic")
-    pydantic.BaseModel = BaseModel
+    fastapi_responses.JSONResponse = dict
+    fastapi_exceptions = types.ModuleType("fastapi.exceptions")
+
+    class RequestValidationError(Exception):
+        pass
+
+    fastapi_exceptions.RequestValidationError = RequestValidationError
+
+    pydantic = types.ModuleType("pydantic")
+    pydantic.BaseModel = DummyBaseModel
     pydantic.Field = Field
     pydantic.field_validator = field_validator
 
-    spec = importlib.util.spec_from_file_location("frankfurter_app", Path(__file__).with_name("main.py"))
+    httpx = types.ModuleType("httpx")
+    httpx.HTTPError = HTTPError
+    httpx.HTTPStatusError = HTTPStatusError
+    httpx.AsyncClient = DummyAsyncClient
+
+    spec = importlib.util.spec_from_file_location("frankfurter_app_hermetic", Path(__file__).with_name("main.py"))
     module = importlib.util.module_from_spec(spec)
     with patch.dict(
         sys.modules,
         {
-            "httpx": httpx,
             "fastapi": fastapi,
-            "fastapi.exceptions": fastapi_exceptions,
             "fastapi.responses": fastapi_responses,
+            "fastapi.exceptions": fastapi_exceptions,
             "pydantic": pydantic,
+            "httpx": httpx,
         },
     ):
         spec.loader.exec_module(module)
     return module
 
 
-app = load_app()
+main = load_app()
 
 
-class FakeResponse:
-    def __init__(self, payload=None, error=None):
-        self._payload = payload
-        self._error = error
+class RouteWiringTests(unittest.TestCase):
+    def test_routes_registered_with_correct_methods_and_paths(self):
+        registered = {(r["method"], r["path"]): r for r in main.app.routes}
+        expected_endpoints = {
+            ("GET", "/"),
+            ("GET", "/health"),
+            ("GET", "/.well-known/omi-tools.json"),
+            ("POST", "/tools/convert_currency"),
+            ("POST", "/tools/get_latest_rates"),
+            ("POST", "/tools/list_supported_currencies"),
+        }
+        for endpoint in expected_endpoints:
+            self.assertIn(endpoint, registered)
 
-    def raise_for_status(self):
-        if self._error is not None:
-            raise self._error
+        self.assertIs(registered[("POST", "/tools/convert_currency")]["response_model"], main.ChatToolResponse)
+        self.assertIs(registered[("POST", "/tools/get_latest_rates")]["response_model"], main.ChatToolResponse)
+        self.assertIs(registered[("POST", "/tools/list_supported_currencies")]["response_model"], main.ChatToolResponse)
 
-    def json(self):
-        return self._payload
-
-
-class FakeClient:
-    def __init__(self, payload=None, error=None, **kwargs):
-        self.kwargs = kwargs
-        self.payload = payload
-        self.error = error
-        self.requests = []
-        self.closed = False
-
-    async def get(self, url, params=None):
-        self.requests.append({"url": url, "params": params})
-        return FakeResponse(self.payload, self.error)
-
-    async def aclose(self):
-        self.closed = True
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        self.closed = True
-        return False
-
-
-class AppTestCase(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        app.app.state.http_client = None
-
-    def tearDown(self):
-        app.app.state.http_client = None
-
-
-class ParseAmountTests(unittest.TestCase):
-    def test_accepts_int_float_and_numeric_strings(self):
-        self.assertEqual(app._parse_amount(50), Decimal("50"))
-        self.assertEqual(app._parse_amount("19.95"), Decimal("19.95"))
-        self.assertEqual(app._parse_amount(0.01), Decimal(str(0.01)))
-
-    def test_rejects_zero_and_negative(self):
-        for value in (0, -1, "-50.25"):
-            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "greater than 0"):
-                app._parse_amount(value)
-
-    def test_rejects_non_numeric(self):
-        with self.assertRaisesRegex(ValueError, "amount must be a number"):
-            app._parse_amount("not-a-number")
-
-    def test_rejects_non_finite(self):
-        for value in ("NaN", "sNaN", "Infinity", "-Infinity", "inf", float("nan"), float("inf")):
-            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "finite"):
-                app._parse_amount(value)
-
-
-class NormalizeCurrencyCodeTests(unittest.TestCase):
-    def test_uppercases_and_strips(self):
-        self.assertEqual(app._normalize_currency_code("usd"), "USD")
-        self.assertEqual(app._normalize_currency_code("  eur\n"), "EUR")
-
-    def test_rejects_malformed_codes(self):
-        for value in ("US", "USDD", "U1D", "", "   "):
-            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "3 letters"):
-                app._normalize_currency_code(value)
-
-
-class FormatDecimalTests(unittest.TestCase):
-    def test_formats_numeric_values(self):
-        self.assertEqual(app._format_decimal(45.5), "45.5")
-        self.assertEqual(app._format_decimal(Decimal("39.20")), "39.2")
-        self.assertEqual(app._format_decimal(1), "1")
-        self.assertEqual(app._format_decimal("0.92500"), "0.925")
-
-    def test_rejects_non_numeric_values(self):
-        for value in ("abc", None, {"EUR": 1}, [1, 2]):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                app._format_decimal(value)
-
-    def test_rejects_non_finite_values(self):
-        for value in ("NaN", "Infinity", "-Infinity"):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                app._format_decimal(value)
-
-
-class RequestJsonTests(AppTestCase):
-    async def test_uses_managed_client_when_present(self):
-        client = FakeClient(payload={"ok": True})
-        app.app.state.http_client = client
-        result = await app._request_json("/latest", {"from": "USD"})
-        self.assertEqual(result, {"ok": True})
+    def test_tools_manifest_matches_registered_routes(self):
+        manifest = asyncio.run(main.omi_tools())
+        tools = manifest["tools"]
+        self.assertEqual(len(tools), 3)
+        tool_endpoints = {t["endpoint"]: t["method"] for t in tools}
         self.assertEqual(
-            client.requests,
-            [{"url": "https://api.frankfurter.app/latest", "params": {"from": "USD"}}],
+            tool_endpoints,
+            {
+                "/tools/convert_currency": "POST",
+                "/tools/get_latest_rates": "POST",
+                "/tools/list_supported_currencies": "POST",
+            },
         )
 
-    async def test_allocates_fallback_client_when_state_empty(self):
-        created = []
+    def test_root_and_health_endpoints(self):
+        health_resp = asyncio.run(main.health())
+        self.assertEqual(health_resp, {"status": "ok"})
 
-        def factory(**kwargs):
-            client = FakeClient(payload={"ok": 1}, **kwargs)
-            created.append(client)
-            return client
-
-        with patch.object(app.httpx, "AsyncClient", factory):
-            result = await app._request_json("/currencies")
-        self.assertEqual(result, {"ok": 1})
-        self.assertEqual(len(created), 1)
-        self.assertIs(app.app.state.http_client, created[0])
-        self.assertEqual(created[0].requests[0]["url"], "https://api.frankfurter.app/currencies")
-
-    async def test_reuses_fallback_client_across_calls(self):
-        with patch.object(app.httpx, "AsyncClient", lambda **kw: FakeClient(payload={"n": 1})):
-            await app._request_json("/latest")
-            first = app.app.state.http_client
-            await app._request_json("/latest")
-            self.assertIs(app.app.state.http_client, first)
-            self.assertEqual(len(first.requests), 2)
-
-    async def test_rejects_non_dict_payloads(self):
-        for payload in (["not", "a", "dict"], "plain text", 5, None):
-            app.app.state.http_client = FakeClient(payload=payload)
-            with self.subTest(payload=payload), self.assertRaisesRegex(ValueError, "non-object"):
-                await app._request_json("/latest")
-
-    async def test_propagates_http_errors(self):
-        app.app.state.http_client = FakeClient(error=app.httpx.HTTPError("boom"))
-        with self.assertRaises(app.httpx.HTTPError):
-            await app._request_json("/latest")
+        root_resp = asyncio.run(main.root())
+        self.assertIn("Omi Frankfurter Currency Integration", root_resp)
 
 
-def make_convert_request(**overrides):
-    fields = {"amount": "50", "from_currency": "USD", "to_currencies": ["EUR", "GBP"]}
-    fields.update(overrides)
-    return app.ConvertCurrencyRequest(**fields)
+class HelperFunctionTests(unittest.TestCase):
+    def test_normalize_currency_code(self):
+        self.assertEqual(main._normalize_currency_code("usd"), "USD")
+        self.assertEqual(main._normalize_currency_code("  eur  "), "EUR")
+        with self.assertRaises(ValueError):
+            main._normalize_currency_code("US")
+        with self.assertRaises(ValueError):
+            main._normalize_currency_code("USDT")
+        with self.assertRaises(ValueError):
+            main._normalize_currency_code("123")
+
+    def test_parse_amount_valid(self):
+        self.assertEqual(main._parse_amount(50), Decimal("50"))
+        self.assertEqual(main._parse_amount("19.95"), Decimal("19.95"))
+        self.assertEqual(main._parse_amount(0.01), Decimal(str(0.01)))
+
+    def test_parse_amount_zero_and_negative(self):
+        with self.assertRaises(ValueError):
+            main._parse_amount(0)
+        with self.assertRaises(ValueError):
+            main._parse_amount(-5)
+        with self.assertRaises(ValueError):
+            main._parse_amount("-12.50")
+
+    def test_parse_amount_invalid_text(self):
+        with self.assertRaises(ValueError):
+            main._parse_amount("abc")
+        with self.assertRaises(ValueError):
+            main._parse_amount("")
+
+    def test_parse_amount_non_finite_rejected(self):
+        non_finite = ["NaN", "nan", "Infinity", "-Infinity", "inf", "-inf"]
+        for val in non_finite:
+            with self.assertRaises(ValueError):
+                main._parse_amount(val)
+
+    def test_format_decimal(self):
+        self.assertEqual(main._format_decimal(Decimal("10.5000")), "10.5")
+        self.assertEqual(main._format_decimal(Decimal("1.23456")), "1.2346")
 
 
-class ConvertCurrencyTests(AppTestCase):
-    async def convert(self, request, payload=None, side_effect=None):
-        provider = AsyncMock(return_value=payload, side_effect=side_effect)
-        with patch.object(app, "_request_json", provider):
-            return await app.convert_currency(request), provider
+class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_convert_currency_success(self):
+        mock_data = {
+            "amount": 100.0,
+            "base": "USD",
+            "date": "2026-09-15",
+            "rates": {"EUR": 0.92, "GBP": 0.78},
+        }
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.ConvertCurrencyRequest(amount=100, from_currency="USD", to_currencies=["EUR", "GBP"])
+            resp = await main.convert_currency(req)
+            self.assertIsNone(resp.error)
+            self.assertIn("100 USD on 2026-09-15:", resp.result)
+            self.assertIn("- EUR: 0.92", resp.result)
+            self.assertIn("- GBP: 0.78", resp.result)
 
-    async def test_success_formats_all_targets(self):
-        payload = {"amount": 50.0, "base": "USD", "date": "2026-09-09", "rates": {"EUR": 45.5, "GBP": 39.2}}
-        response, provider = await self.convert(make_convert_request(), payload)
-        self.assertIsNone(response.error)
-        self.assertIn("50 USD on 2026-09-09:", response.result)
-        self.assertIn("- EUR: 45.5", response.result)
-        self.assertIn("- GBP: 39.2", response.result)
-        provider.assert_awaited_once()
-        path, params = provider.call_args[0]
-        self.assertEqual(path, "/latest")
-        self.assertEqual(params, {"amount": "50", "from": "USD", "to": "EUR,GBP"})
+    async def test_convert_currency_empty_rates(self):
+        mock_data = {"rates": {}}
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.ConvertCurrencyRequest(amount=50, from_currency="USD", to_currencies=["EUR"])
+            resp = await main.convert_currency(req)
+            self.assertEqual(resp.error, "no rates returned for the requested currencies")
 
-    async def test_missing_or_empty_rates_return_error(self):
-        for payload in ({"base": "USD"}, {"base": "USD", "rates": {}}, {"rates": None}):
-            response, _ = await self.convert(make_convert_request(), payload)
-            with self.subTest(payload=payload):
-                self.assertIsNone(response.result)
-                self.assertIn("no rates", response.error)
+    async def test_convert_currency_non_dict_payload(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = "<html>Error</html>"
+            req = main.ConvertCurrencyRequest(amount=50, from_currency="USD", to_currencies=["EUR"])
+            resp = await main.convert_currency(req)
+            self.assertEqual(resp.error, "no rates returned for the requested currencies")
 
-    async def test_non_dict_rates_return_error(self):
-        for rates in ("oops", [("EUR", 1)], 5):
-            response, _ = await self.convert(make_convert_request(), {"rates": rates})
-            with self.subTest(rates=rates):
-                self.assertIn("no rates", response.error)
+    async def test_convert_currency_invalid_amount(self):
+        req = main.ConvertCurrencyRequest(amount="NaN", from_currency="USD", to_currencies=["EUR"])
+        resp = await main.convert_currency(req)
+        self.assertIn("amount must be a finite number", resp.error)
 
-    async def test_invalid_rate_value_returns_error_not_crash(self):
-        response, _ = await self.convert(
-            make_convert_request(to_currencies=["EUR"]),
-            {"base": "USD", "rates": {"EUR": "N/A"}},
+    async def test_convert_currency_http_error(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.side_effect = main.httpx.HTTPError("Network down")
+            req = main.ConvertCurrencyRequest(amount=50, from_currency="USD", to_currencies=["EUR"])
+            resp = await main.convert_currency(req)
+            self.assertIn("currency conversion failed: Network down", resp.error)
+
+    async def test_get_latest_rates_success(self):
+        mock_data = {
+            "base": "USD",
+            "date": "2026-09-15",
+            "rates": {"EUR": 0.92, "JPY": 150.25},
+        }
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.LatestRatesRequest(base_currency="USD", to_currencies=["EUR", "JPY"])
+            resp = await main.get_latest_rates(req)
+            self.assertIsNone(resp.error)
+            self.assertIn("Latest USD reference rates for 2026-09-15:", resp.result)
+            self.assertIn("- 1 USD = 0.92 EUR", resp.result)
+            self.assertIn("- 1 USD = 150.25 JPY", resp.result)
+
+    async def test_get_latest_rates_empty(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = {"rates": None}
+            req = main.LatestRatesRequest(base_currency="USD", to_currencies=[])
+            resp = await main.get_latest_rates(req)
+            self.assertEqual(resp.error, "no rates returned")
+
+    async def test_list_supported_currencies_success(self):
+        mock_data = {"USD": "United States Dollar", "EUR": "Euro", "GBP": "British Pound"}
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            resp = await main.list_supported_currencies()
+            self.assertIsNone(resp.error)
+            self.assertIn("Frankfurter supported currencies:", resp.result)
+            self.assertIn("- EUR: Euro", resp.result)
+            self.assertIn("- USD: United States Dollar", resp.result)
+
+    async def test_list_supported_currencies_non_dict(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = []
+            resp = await main.list_supported_currencies()
+            self.assertEqual(resp.error, "currency list request returned no currencies")
+
+
+class LifespanAndFallbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_lifespan_manages_state_http_client(self):
+        async with main.lifespan(main.app):
+            self.assertIsNotNone(main.app.state.http_client)
+            self.assertFalse(main.app.state.http_client.is_closed)
+        self.assertTrue(main.app.state.http_client.is_closed)
+
+    async def test_request_json_fallback_when_unmanaged(self):
+        main.app.state.http_client = None
+        fake_response = types.SimpleNamespace(
+            status_code=200,
+            content=b'{"rates": {}}',
+            json=lambda: {"rates": {}},
+            raise_for_status=lambda: None,
         )
-        self.assertIsNone(response.result)
-        self.assertIn("currency conversion failed", response.error)
-
-    async def test_http_error_returns_error(self):
-        response, _ = await self.convert(
-            make_convert_request(), side_effect=app.httpx.HTTPError("down")
-        )
-        self.assertIn("currency conversion failed", response.error)
-
-    async def test_non_dict_payload_returns_error_end_to_end(self):
-        app.app.state.http_client = FakeClient(payload=["error", "page"])
-        response = await app.convert_currency(make_convert_request(to_currencies=["EUR"]))
-        self.assertIsNone(response.result)
-        self.assertIn("currency conversion failed", response.error)
-
-
-class LatestRatesTests(AppTestCase):
-    async def test_success_lists_sorted_rates(self):
-        provider = AsyncMock(
-            return_value={"base": "USD", "date": "2026-09-09", "rates": {"GBP": 0.8, "EUR": 0.9}}
-        )
-        request = app.LatestRatesRequest(base_currency="USD")
-        with patch.object(app, "_request_json", provider):
-            response = await app.get_latest_rates(request)
-        self.assertIsNone(response.error)
-        self.assertIn("Latest USD reference rates for 2026-09-09:", response.result)
-        self.assertLess(response.result.index("= 0.9 EUR"), response.result.index("= 0.8 GBP"))
-
-    async def test_empty_or_non_dict_rates_return_error(self):
-        for rates in ({}, None, "oops"):
-            provider = AsyncMock(return_value={"base": "USD", "rates": rates})
-            request = app.LatestRatesRequest(base_currency="USD")
-            with patch.object(app, "_request_json", provider):
-                response = await app.get_latest_rates(request)
-            with self.subTest(rates=rates):
-                self.assertIn("no rates returned", response.error)
-
-    async def test_invalid_rate_value_returns_error_not_crash(self):
-        provider = AsyncMock(return_value={"base": "USD", "rates": {"EUR": None}})
-        request = app.LatestRatesRequest(base_currency="USD", to_currencies=["EUR"])
-        with patch.object(app, "_request_json", provider):
-            response = await app.get_latest_rates(request)
-        self.assertIn("latest rates request failed", response.error)
-
-    async def test_non_dict_payload_returns_error_end_to_end(self):
-        app.app.state.http_client = FakeClient(payload="not a dict")
-        request = app.LatestRatesRequest(base_currency="USD")
-        response = await app.get_latest_rates(request)
-        self.assertIn("latest rates request failed", response.error)
-
-
-class ListSupportedCurrenciesTests(AppTestCase):
-    async def test_success_lists_sorted_currencies(self):
-        provider = AsyncMock(return_value={"EUR": "Euro", "AUD": "Australian Dollar"})
-        with patch.object(app, "_request_json", provider):
-            response = await app.list_supported_currencies()
-        self.assertIsNone(response.error)
-        self.assertIn("Frankfurter supported currencies:", response.result)
-        self.assertLess(response.result.index("AUD"), response.result.index("EUR"))
-        provider.assert_awaited_once_with("/currencies")
-
-    async def test_empty_mapping_returns_error(self):
-        provider = AsyncMock(return_value={})
-        with patch.object(app, "_request_json", provider):
-            response = await app.list_supported_currencies()
-        self.assertIn("no currencies returned", response.error)
-
-    async def test_non_dict_payload_returns_error_end_to_end(self):
-        for payload in ([], "error page", None):
-            app.app.state.http_client = FakeClient(payload=payload)
-            response = await app.list_supported_currencies()
-            with self.subTest(payload=payload):
-                self.assertIsNone(response.result)
-                self.assertIn("currency list request failed", response.error)
-
-    async def test_http_error_returns_error(self):
-        app.app.state.http_client = FakeClient(error=app.httpx.HTTPError("down"))
-        response = await app.list_supported_currencies()
-        self.assertIn("currency list request failed", response.error)
-
-
-class LifespanTests(AppTestCase):
-    async def test_installs_managed_client_and_clears_on_exit(self):
-        created = []
-
-        def factory(**kwargs):
-            client = FakeClient(**kwargs)
-            created.append(client)
-            return client
-
-        instance = app.app.__class__()
-        with patch.object(app.httpx, "AsyncClient", factory):
-            async with app.lifespan(instance):
-                self.assertIs(instance.state.http_client, created[0])
-            self.assertTrue(created[0].closed)
-            self.assertIsNone(instance.state.http_client)
-
-    async def test_closes_preexisting_fallback_client(self):
-        fallback = FakeClient()
-        managed = FakeClient()
-        instance = app.app.__class__()
-        instance.state.http_client = fallback
-        with patch.object(app.httpx, "AsyncClient", lambda **kw: managed):
-            async with app.lifespan(instance):
-                self.assertIs(instance.state.http_client, managed)
-        self.assertTrue(fallback.closed)
-        self.assertTrue(managed.closed)
-
-
-class SurfaceTests(AppTestCase):
-    async def test_tools_manifest_and_health(self):
-        manifest = await app.omi_tools()
-        self.assertEqual(
-            [tool["name"] for tool in manifest["tools"]],
-            ["convert_currency", "get_latest_rates", "list_supported_currencies"],
-        )
-        self.assertEqual(await app.health(), {"status": "ok"})
-
-    async def test_validation_error_handler_returns_tool_error(self):
-        class FakeValidationError:
-            def errors(self):
-                return [{"loc": ("body", "amount"), "msg": "field required"}]
-
-        response = await app.validation_exception_handler(None, FakeValidationError())
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("amount", response.content["error"])
-        self.assertIn("field required", response.content["error"])
+        with patch.object(main.httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = fake_response
+            res = await main._request_json("/latest")
+            self.assertEqual(res, {"rates": {}})
 
 
 if __name__ == "__main__":

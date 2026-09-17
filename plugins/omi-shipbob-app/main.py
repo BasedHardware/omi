@@ -4,10 +4,12 @@ ShipBob Integration App for Omi
 This app provides ShipBob integration through OAuth2 authentication
 and chat tools for managing inventory, WROs, and orders.
 """
+
 import os
 import sys
 import secrets
 import urllib.parse
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
@@ -17,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.exceptions import RequestValidationError
 
 from db import (
     store_shipbob_tokens,
@@ -28,7 +31,16 @@ from db import (
     update_shipbob_channel,
     get_user_settings,
 )
-from models import ChatToolResponse
+from models import (
+    ChatToolResponse,
+    GetInventoryRequest,
+    GetProductsRequest,
+    CreateWroRequest,
+    GetWrosRequest,
+    CancelWroRequest,
+    GetOrdersRequest,
+    GetFulfillmentCentersRequest,
+)
 
 
 def log(msg: str):
@@ -60,7 +72,7 @@ SHIPBOB_SCOPES = "openid offline_access channels_read inventory_read inventory_w
 app = FastAPI(
     title="ShipBob Omi Integration",
     description="ShipBob integration for Omi - Manage inventory and fulfillment with voice",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Mount static files and templates
@@ -72,9 +84,59 @@ if os.path.exists(templates_dir):
 templates = Jinja2Templates(directory=templates_dir)
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Gracefully envelope validation errors for chat tool endpoints."""
+    return JSONResponse(status_code=200, content={"error": f"Invalid request payload: {exc.errors()}"})
+
+
 # ============================================
 # Helper Functions
 # ============================================
+
+
+def _safe_dict(val: Any) -> dict:
+    """Ensure val is a dictionary."""
+    return val if isinstance(val, dict) else {}
+
+
+async def _safe_body(request: Any) -> dict:
+    """Extract json dict safely from request or return empty dict."""
+    if isinstance(request, dict):
+        return request
+    if hasattr(request, "json"):
+        try:
+            res = request.json()
+            if asyncio.iscoroutine(res):
+                res = await res
+            return res if isinstance(res, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _clean_str(val: Any) -> str:
+    """Strip whitespace from string and return clean str."""
+    if val is None:
+        return ""
+    return str(val).strip()
+
+
+def _clean_id(val: Any) -> str:
+    """Clean ID, stripping leading # and spaces."""
+    return _clean_str(val).lstrip("#").strip()
+
+
+def _coerce_int_bounds(val: Any, default: int = 10, min_val: int = 1, max_val: int = 100) -> int:
+    """Coerce value to integer and clamp within bounds."""
+    try:
+        if val is None:
+            return default
+        num = int(val)
+        return max(min_val, min(num, max_val))
+    except (ValueError, TypeError):
+        return default
+
 
 def get_shipbob_headers(uid: str) -> Optional[Dict[str, str]]:
     """Get headers for ShipBob API requests."""
@@ -82,10 +144,7 @@ def get_shipbob_headers(uid: str) -> Optional[Dict[str, str]]:
     if not tokens:
         return None
 
-    headers = {
-        "Authorization": f"Bearer {tokens['access_token']}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {tokens['access_token']}", "Content-Type": "application/json"}
 
     # Add channel ID if available
     if tokens.get("channel_id"):
@@ -116,8 +175,8 @@ def refresh_token_if_needed(uid: str) -> bool:
                 "grant_type": "refresh_token",
                 "refresh_token": tokens["refresh_token"],
                 "client_id": SHIPBOB_CLIENT_ID,
-                "client_secret": SHIPBOB_CLIENT_SECRET
-            }
+                "client_secret": SHIPBOB_CLIENT_SECRET,
+            },
         )
 
         if response.status_code == 200:
@@ -128,12 +187,12 @@ def refresh_token_if_needed(uid: str) -> bool:
                 token_data.get("refresh_token", tokens["refresh_token"]),
                 token_data.get("token_type", "Bearer"),
                 token_data.get("expires_in"),
-                tokens.get("channel_id")
+                tokens.get("channel_id"),
             )
             log(f"Token refreshed for user {uid}")
             return True
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return False
     except Exception as e:
         log(f"Token refresh error: {e}")
@@ -141,11 +200,7 @@ def refresh_token_if_needed(uid: str) -> bool:
 
 
 def make_shipbob_request(
-    uid: str,
-    method: str,
-    endpoint: str,
-    data: Optional[Dict] = None,
-    params: Optional[Dict] = None
+    uid: str, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None
 ) -> Optional[Dict]:
     """Make an authenticated request to ShipBob API."""
     refresh_token_if_needed(uid)
@@ -171,7 +226,7 @@ def make_shipbob_request(
         if response.status_code in [200, 201]:
             return response.json()
         else:
-            log(f"ShipBob API error: {response.status_code} - {response.text[:200]}")
+            log(f"ShipBob API error: {response.status_code}")
             return {"error": response.text, "status_code": response.status_code}
     except Exception as e:
         log(f"ShipBob API exception: {e}")
@@ -220,30 +275,78 @@ def get_products(uid: str, page: int = 1, limit: int = 50) -> List[Dict]:
     return []
 
 
-def search_product_by_name(uid: str, name: str) -> Optional[Dict]:
-    """Search for a product by name."""
-    # Try products endpoint first
+def match_name_candidates(items, name, key="name"):
+    """Return (exact_hits, partial_hits) for a name query.
+
+    Exact hits compare case-insensitively on the full string. Partial
+    hits match either containment direction. Callers must only act on
+    a single total hit; several hits are ambiguous and nothing may be
+    posted for them.
+    """
+    wanted = (name or "").lower().strip()
+    if not wanted or not isinstance(items, (list, tuple)):
+        return [], []
+    exact = [item for item in items if isinstance(item, dict) and (item.get(key, "") or "").lower().strip() == wanted]
+    if exact:
+        return exact, []
+    partial = [
+        item
+        for item in items
+        if isinstance(item, dict)
+        and (wanted in (item.get(key, "") or "").lower() or (item.get(key, "") or "").lower().strip() in wanted)
+    ]
+    return [], partial
+
+
+def format_name_candidates(candidates, what="product"):
+    """Render a disambiguation list with SKU and id."""
+    lines = [f"Multiple {what}s match. Please specify which one:\n"]
+    for raw_item in (candidates or [])[:10]:
+        item = _safe_dict(raw_item)
+        lines.append(
+            f"- **{item.get('name', 'Unknown')}**" f" (SKU: {item.get('sku', 'N/A')}, id: {item.get('id', 'N/A')})"
+        )
+    lines.append("\nReply with the exact name.")
+    return "\n".join(lines)
+
+
+def find_product_candidates(uid: str, name: str):
+    """All product hits for a name: exact hits, else partial hits."""
     products = get_products(uid, limit=100)
-    name_lower = name.lower()
+    exact, partial = match_name_candidates(products, name)
+    return exact or partial
 
-    for product in products:
-        product_name = product.get("name", "").lower()
-        if name_lower in product_name or product_name in name_lower:
-            return product
 
+def find_inventory_candidates(uid: str, name: str):
+    """All inventory hits for a name: exact hits, else partial hits."""
+    inventory = get_inventory(uid, limit=100)
+    exact, partial = match_name_candidates(inventory, name)
+    return exact or partial
+
+
+def search_product_by_name(uid: str, name: str) -> Optional[Dict]:
+    """Search for a product by name.
+
+    Exact name first, else a single partial match. Returns None when
+    there is no hit or several hits (ambiguous); use
+    find_product_candidates to list the candidates.
+    """
+    candidates = find_product_candidates(uid, name)
+    if len(candidates) == 1:
+        return candidates[0]
     return None
 
 
 def search_inventory_by_name(uid: str, name: str) -> Optional[Dict]:
-    """Search for an inventory item by name."""
-    inventory = get_inventory(uid, limit=100)
-    name_lower = name.lower()
+    """Search for an inventory item by name.
 
-    for item in inventory:
-        item_name = item.get("name", "").lower()
-        if name_lower in item_name or item_name in name_lower:
-            return item
-
+    Exact name first, else a single partial match. Returns None when
+    there is no hit or several hits (ambiguous); use
+    find_inventory_candidates to list the candidates.
+    """
+    candidates = find_inventory_candidates(uid, name)
+    if len(candidates) == 1:
+        return candidates[0]
     return None
 
 
@@ -273,15 +376,14 @@ def get_inventory_by_product(uid: str, product_name: str) -> Optional[Dict]:
 # OAuth Endpoints
 # ============================================
 
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, uid: Optional[str] = None):
     """Home page / App settings page."""
     if not uid:
-        return templates.TemplateResponse("setup.html", {
-            "request": request,
-            "authenticated": False,
-            "error": "Missing user ID"
-        })
+        return templates.TemplateResponse(
+            "setup.html", {"request": request, "authenticated": False, "error": "Missing user ID"}
+        )
 
     tokens = get_shipbob_tokens(uid)
     authenticated = tokens is not None
@@ -296,13 +398,16 @@ async def home(request: Request, uid: Optional[str] = None):
                     selected_channel = ch
                     break
 
-    return templates.TemplateResponse("setup.html", {
-        "request": request,
-        "uid": uid,
-        "authenticated": authenticated,
-        "channels": channels,
-        "selected_channel": selected_channel,
-    })
+    return templates.TemplateResponse(
+        "setup.html",
+        {
+            "request": request,
+            "uid": uid,
+            "authenticated": authenticated,
+            "channels": channels,
+            "selected_channel": selected_channel,
+        },
+    )
 
 
 @app.get("/health")
@@ -332,7 +437,7 @@ async def shipbob_auth(uid: str):
         "redirect_uri": SHIPBOB_REDIRECT_URI,
         "scope": SHIPBOB_SCOPES,
         "state": state,
-        "integration_name": "Omi Voice Assistant"
+        "integration_name": "Omi Voice Assistant",
     }
 
     auth_url = f"{SHIPBOB_AUTH_URL}?{urllib.parse.urlencode(params)}"
@@ -346,7 +451,7 @@ async def handle_shipbob_callback(
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
-    error_description: Optional[str] = None
+    error_description: Optional[str] = None,
 ):
     """Handle ShipBob OAuth2 callback (supports both GET and POST for form_post mode)."""
     # For POST requests, extract from form data
@@ -358,37 +463,34 @@ async def handle_shipbob_callback(
         error_description = error_description or form_data.get("error_description")
 
     if error:
-        return templates.TemplateResponse("setup.html", {
-            "request": request,
-            "authenticated": False,
-            "error": f"Authorization failed: {error_description or error}"
-        })
+        return templates.TemplateResponse(
+            "setup.html",
+            {
+                "request": request,
+                "authenticated": False,
+                "error": f"Authorization failed: {error_description or error}",
+            },
+        )
 
     if not code or not state:
-        return templates.TemplateResponse("setup.html", {
-            "request": request,
-            "authenticated": False,
-            "error": "Invalid callback parameters"
-        })
+        return templates.TemplateResponse(
+            "setup.html", {"request": request, "authenticated": False, "error": "Invalid callback parameters"}
+        )
 
     # Extract uid from state
     try:
         uid, _ = state.split(":", 1)
     except ValueError:
-        return templates.TemplateResponse("setup.html", {
-            "request": request,
-            "authenticated": False,
-            "error": "Invalid state parameter"
-        })
+        return templates.TemplateResponse(
+            "setup.html", {"request": request, "authenticated": False, "error": "Invalid state parameter"}
+        )
 
     # Verify state matches what we stored
     stored_state = get_oauth_state(uid)
     if stored_state != state:
-        return templates.TemplateResponse("setup.html", {
-            "request": request,
-            "authenticated": False,
-            "error": "State mismatch - possible CSRF attack"
-        })
+        return templates.TemplateResponse(
+            "setup.html", {"request": request, "authenticated": False, "error": "State mismatch - possible CSRF attack"}
+        )
 
     # Clean up state
     delete_oauth_state(uid)
@@ -402,17 +504,20 @@ async def handle_shipbob_callback(
                 "code": code,
                 "redirect_uri": SHIPBOB_REDIRECT_URI,
                 "client_id": SHIPBOB_CLIENT_ID,
-                "client_secret": SHIPBOB_CLIENT_SECRET
-            }
+                "client_secret": SHIPBOB_CLIENT_SECRET,
+            },
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.status_code} - {response.text}")
-            return templates.TemplateResponse("setup.html", {
-                "request": request,
-                "authenticated": False,
-                "error": f"Failed to exchange authorization code: {response.text}"
-            })
+            log(f"Token exchange failed: {response.status_code}")
+            return templates.TemplateResponse(
+                "setup.html",
+                {
+                    "request": request,
+                    "authenticated": False,
+                    "error": f"Failed to exchange authorization code: {response.text}",
+                },
+            )
 
         token_data = response.json()
 
@@ -422,7 +527,7 @@ async def handle_shipbob_callback(
             token_data["access_token"],
             token_data.get("refresh_token"),
             token_data.get("token_type", "Bearer"),
-            token_data.get("expires_in")
+            token_data.get("expires_in"),
         )
 
         # Try to get and store the first channel
@@ -447,11 +552,10 @@ async def handle_shipbob_callback(
 
     except Exception as e:
         log(f"OAuth error: {e}")
-        return templates.TemplateResponse("setup.html", {
-            "request": request,
-            "authenticated": False,
-            "error": f"Failed to exchange authorization code: {str(e)}"
-        })
+        return templates.TemplateResponse(
+            "setup.html",
+            {"request": request, "authenticated": False, "error": f"Failed to exchange authorization code: {str(e)}"},
+        )
 
 
 @app.get("/setup/shipbob", tags=["setup"])
@@ -471,14 +575,19 @@ async def disconnect_shipbob(uid: str):
 @app.post("/select-channel")
 async def select_channel(request: Request):
     """Select a channel for the user."""
-    body = await request.json()
-    uid = body.get("uid")
-    channel_id = body.get("channel_id")
+    body = await _safe_body(request)
+    uid = _clean_str(body.get("uid"))
+    channel_id_raw = body.get("channel_id")
 
-    if not uid or not channel_id:
+    if not uid or channel_id_raw is None:
         raise HTTPException(status_code=400, detail="Missing uid or channel_id")
 
-    update_shipbob_channel(uid, int(channel_id))
+    try:
+        channel_id = int(channel_id_raw)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="channel_id must be a valid integer")
+
+    update_shipbob_channel(uid, channel_id)
     return {"success": True}
 
 
@@ -486,16 +595,17 @@ async def select_channel(request: Request):
 # Chat Tool Endpoints
 # ============================================
 
+
 @app.post("/tools/get_inventory", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_get_inventory(request: Request):
     """
     Get inventory levels for all items or a specific product.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        product_name = body.get("product_name")
-        limit = body.get("limit", 10)
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        product_name = _clean_str(body.get("product_name"))
+        limit = _coerce_int_bounds(body.get("limit"), default=10, min_val=1, max_val=100)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -505,8 +615,12 @@ async def tool_get_inventory(request: Request):
             return ChatToolResponse(error="Please connect your ShipBob account first in the app settings.")
 
         if product_name:
-            # Search inventory directly by name
-            inv = search_inventory_by_name(uid, product_name)
+            # Search inventory directly by name; never report another
+            # item's counts when the name is ambiguous.
+            candidates = find_inventory_candidates(uid, product_name)
+            if len(candidates) > 1:
+                return ChatToolResponse(result=format_name_candidates(candidates, what="inventory item"))
+            inv = _safe_dict(candidates[0]) if candidates else None
             if not inv:
                 return ChatToolResponse(error=f"Could not find inventory item '{product_name}'")
 
@@ -528,7 +642,8 @@ async def tool_get_inventory(request: Request):
                 return ChatToolResponse(result="No inventory items found.")
 
             result_parts = [f"**Inventory Items ({len(inventory)})**", ""]
-            for item in inventory[:limit]:
+            for raw_item in inventory[:limit]:
+                item = _safe_dict(raw_item)
                 name = item.get("name", "Unknown")
                 sku = item.get("sku", "N/A")
                 fulfillable = item.get("fulfillable_quantity", item.get("total_fulfillable_quantity", 0))
@@ -547,10 +662,10 @@ async def tool_get_products(request: Request):
     Get list of products.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        limit = body.get("limit", 10)
-        search = body.get("search")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        limit = _coerce_int_bounds(body.get("limit"), default=10, min_val=1, max_val=100)
+        search = _clean_str(body.get("search"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -563,13 +678,14 @@ async def tool_get_products(request: Request):
 
         if search:
             search_lower = search.lower()
-            products = [p for p in products if search_lower in p.get("name", "").lower()]
+            products = [p for p in products if isinstance(p, dict) and search_lower in str(p.get("name", "")).lower()]
 
         if not products:
             return ChatToolResponse(result="No products found.")
 
         result_parts = [f"**Products ({len(products[:limit])})**", ""]
-        for product in products[:limit]:
+        for raw_product in products[:limit]:
+            product = _safe_dict(raw_product)
             name = product.get("name", "Unknown")
             sku = product.get("sku", "N/A")
             ref_id = product.get("reference_id", "")
@@ -590,19 +706,19 @@ async def tool_create_wro(request: Request):
     Create a Warehouse Receiving Order (WRO).
     """
     try:
-        body = await request.json()
+        body = await _safe_body(request)
         log(f"=== CREATE_WRO START ===")
         log(f"Request: {body}")
 
-        uid = body.get("uid")
-        product_name = body.get("product_name")
-        quantity = body.get("quantity")
-        fulfillment_center_id = body.get("fulfillment_center_id")
-        expected_arrival_date = body.get("expected_arrival_date")
-        tracking_number = body.get("tracking_number")
-        purchase_order_number = body.get("purchase_order_number")
-        packaging_type = body.get("packaging_type", "EverythingInOneBox")
-        package_type = body.get("package_type", "Package")
+        uid = _clean_str(body.get("uid"))
+        product_name = _clean_str(body.get("product_name"))
+        quantity_raw = body.get("quantity")
+        fc_id_raw = body.get("fulfillment_center_id")
+        expected_arrival_date = _clean_str(body.get("expected_arrival_date")) or None
+        tracking_number = _clean_str(body.get("tracking_number"))
+        purchase_order_number = _clean_str(body.get("purchase_order_number")) or None
+        packaging_type = _clean_str(body.get("packaging_type")) or "EverythingInOneBox"
+        package_type = _clean_str(body.get("package_type")) or "Package"
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -610,15 +726,32 @@ async def tool_create_wro(request: Request):
         if not product_name:
             return ChatToolResponse(error="Product name is required")
 
-        if not quantity or int(quantity) <= 0:
-            return ChatToolResponse(error="Quantity must be greater than zero")
+        try:
+            quantity = int(quantity_raw)
+            if quantity <= 0:
+                return ChatToolResponse(error="Quantity must be greater than zero")
+        except (ValueError, TypeError):
+            return ChatToolResponse(error="Quantity must be a valid positive integer")
+
+        fulfillment_center_id = None
+        if fc_id_raw is not None and str(fc_id_raw).strip():
+            try:
+                fulfillment_center_id = int(fc_id_raw)
+            except (ValueError, TypeError):
+                return ChatToolResponse(error="fulfillment_center_id must be a valid integer")
 
         headers = get_shipbob_headers(uid)
         if not headers:
             return ChatToolResponse(error="Please connect your ShipBob account first in the app settings.")
 
-        # Find the product and get inventory_id
-        product = search_product_by_name(uid, product_name)
+        # Find the product and get inventory_id. Never open a WRO
+        # for a different SKU than the one named: an ambiguous name
+        # lists the candidates and posts nothing.
+        candidates = find_product_candidates(uid, product_name)
+        if len(candidates) > 1:
+            log(f"Ambiguous product '{product_name}': " f"{len(candidates)} candidates, asking user")
+            return ChatToolResponse(result=format_name_candidates(candidates))
+        product = _safe_dict(candidates[0]) if candidates else None
         if not product:
             return ChatToolResponse(error=f"Could not find product '{product_name}'. Please check the product name.")
 
@@ -626,15 +759,16 @@ async def tool_create_wro(request: Request):
         inventory_id = None
         if "fulfillable_inventory_items" in product:
             items = product["fulfillable_inventory_items"]
-            if items:
-                inventory_id = items[0].get("id")
+            if isinstance(items, list) and items:
+                first_item = _safe_dict(items[0])
+                inventory_id = first_item.get("id")
 
         if not inventory_id:
             # Try to get from inventory list
             inventory = get_inventory(uid, limit=100)
-            product_name_lower = product.get("name", "").lower()
+            product_name_lower = str(product.get("name", "")).lower()
             for inv in inventory:
-                if inv.get("name", "").lower() == product_name_lower:
+                if isinstance(inv, dict) and str(inv.get("name", "")).lower() == product_name_lower:
                     inventory_id = inv.get("id")
                     break
 
@@ -642,12 +776,15 @@ async def tool_create_wro(request: Request):
             return ChatToolResponse(error=f"Could not find inventory ID for product '{product_name}'")
 
         # Get fulfillment center if not provided
-        if not fulfillment_center_id:
+        if fulfillment_center_id is None:
             fcs = get_fulfillment_centers(uid)
             if fcs:
-                fulfillment_center_id = fcs[0].get("id")
+                first_fc = _safe_dict(fcs[0])
+                fulfillment_center_id = first_fc.get("id")
             else:
-                return ChatToolResponse(error="No fulfillment centers available. Please specify a fulfillment_center_id.")
+                return ChatToolResponse(
+                    error="No fulfillment centers available. Please specify a fulfillment_center_id."
+                )
 
         # Parse expected arrival date
         if not expected_arrival_date:
@@ -659,7 +796,7 @@ async def tool_create_wro(request: Request):
             try:
                 parsed = datetime.strptime(expected_arrival_date, "%Y-%m-%d")
                 expected_arrival_date = parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
-            except:
+            except Exception:
                 pass
 
         # Build WRO request
@@ -670,15 +807,10 @@ async def tool_create_wro(request: Request):
             "expected_arrival_date": expected_arrival_date,
             "boxes": [
                 {
-                    "tracking_number": tracking_number or "",
-                    "box_items": [
-                        {
-                            "inventory_id": inventory_id,
-                            "quantity": int(quantity)
-                        }
-                    ]
+                    "tracking_number": tracking_number,
+                    "box_items": [{"inventory_id": inventory_id, "quantity": quantity}],
                 }
-            ]
+            ],
         }
 
         if purchase_order_number:
@@ -695,8 +827,8 @@ async def tool_create_wro(request: Request):
         if isinstance(result, dict) and result.get("error"):
             return ChatToolResponse(error=f"Failed to create WRO: {result.get('error')}")
 
-        wro_id = result.get("id", "Unknown")
-        status = result.get("status", "Unknown")
+        wro_id = result.get("id", "Unknown") if isinstance(result, dict) else "Unknown"
+        status = result.get("status", "Unknown") if isinstance(result, dict) else "Unknown"
 
         result_parts = [
             "**WRO Created Successfully!**",
@@ -711,13 +843,14 @@ async def tool_create_wro(request: Request):
         if purchase_order_number:
             result_parts.append(f"**PO Number:** {purchase_order_number}")
 
-        if result.get("box_labels_uri"):
+        if isinstance(result, dict) and result.get("box_labels_uri"):
             result_parts.append(f"\n**Box Labels:** {result['box_labels_uri']}")
 
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
         import traceback
+
         log(f"Error creating WRO: {e}")
         log(traceback.format_exc())
         return ChatToolResponse(error=f"Failed to create WRO: {str(e)}")
@@ -729,10 +862,10 @@ async def tool_get_wros(request: Request):
     Get Warehouse Receiving Orders.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        limit = body.get("limit", 10)
-        status_filter = body.get("status")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        limit = _coerce_int_bounds(body.get("limit"), default=10, min_val=1, max_val=100)
+        status_filter = _clean_str(body.get("status")) or None
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -759,13 +892,14 @@ async def tool_get_wros(request: Request):
             return ChatToolResponse(result="No Warehouse Receiving Orders found.")
 
         result_parts = [f"**Warehouse Receiving Orders ({len(wros)})**", ""]
-        for wro in wros[:limit]:
+        for raw_wro in wros[:limit]:
+            wro = _safe_dict(raw_wro)
             wro_id = wro.get("id", "Unknown")
             status = wro.get("status", "Unknown")
-            po_num = wro.get("purchase_order_number", "N/A")
-            arrival = wro.get("expected_arrival_date", "N/A")
-            if arrival and len(arrival) > 10:
-                arrival = arrival[:10]
+            po_num = wro.get("purchase_order_number") or "N/A"
+            arrival = wro.get("expected_arrival_date") or "N/A"
+            if arrival != "N/A" and len(str(arrival)) > 10:
+                arrival = str(arrival)[:10]
 
             result_parts.append(f"- **WRO #{wro_id}** - Status: {status}")
             if po_num != "N/A":
@@ -785,9 +919,9 @@ async def tool_cancel_wro(request: Request):
     Cancel a Warehouse Receiving Order.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        wro_id = body.get("wro_id")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        wro_id = _clean_id(body.get("wro_id"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -825,10 +959,10 @@ async def tool_get_orders(request: Request):
     Get recent orders.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        limit = body.get("limit", 10)
-        status = body.get("status")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
+        limit = _coerce_int_bounds(body.get("limit"), default=10, min_val=1, max_val=100)
+        status = _clean_str(body.get("status")) or None
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -847,7 +981,9 @@ async def tool_get_orders(request: Request):
             params["ChannelId"] = tokens["channel_id"]
 
         result = make_shipbob_request(uid, "GET", "/1.0/order", params=params)
-        log(f"Orders API: channel={tokens.get('channel_id') if tokens else 'N/A'}, result_type={type(result).__name__}, len={len(result) if isinstance(result, list) else 'N/A'}")
+        log(
+            f"Orders API: channel={tokens.get('channel_id') if tokens else 'N/A'}, result_type={type(result).__name__}, len={len(result) if isinstance(result, list) else 'N/A'}"
+        )
 
         if not result:
             return ChatToolResponse(result="No orders found.")
@@ -861,15 +997,16 @@ async def tool_get_orders(request: Request):
             return ChatToolResponse(result="No orders found. (API returned empty list)")
 
         result_parts = [f"**Recent Orders ({len(orders)})**", ""]
-        for order in orders[:limit]:
+        for raw_order in orders[:limit]:
+            order = _safe_dict(raw_order)
             order_id = order.get("id", "Unknown")
             order_num = order.get("order_number", order_id)
-            status = order.get("status", "Unknown")
-            created = order.get("created_date", "N/A")
-            if created and len(created) > 10:
-                created = created[:10]
+            status_val = order.get("status", "Unknown")
+            created = order.get("created_date") or "N/A"
+            if created != "N/A" and len(str(created)) > 10:
+                created = str(created)[:10]
 
-            result_parts.append(f"- **Order #{order_num}** - {status} ({created})")
+            result_parts.append(f"- **Order #{order_num}** - {status_val} ({created})")
 
         return ChatToolResponse(result="\n".join(result_parts))
 
@@ -884,8 +1021,8 @@ async def tool_get_fulfillment_centers(request: Request):
     Get available fulfillment centers.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
+        body = await _safe_body(request)
+        uid = _clean_str(body.get("uid"))
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -900,13 +1037,14 @@ async def tool_get_fulfillment_centers(request: Request):
             return ChatToolResponse(result="No fulfillment centers found.")
 
         result_parts = [f"**Fulfillment Centers ({len(fcs)})**", ""]
-        for fc in fcs:
+        for raw_fc in fcs:
+            fc = _safe_dict(raw_fc)
             fc_id = fc.get("id", "Unknown")
             name = fc.get("name", "Unknown")
-            address = fc.get("address", {})
+            address = _safe_dict(fc.get("address"))
             city = address.get("city", "")
             state = address.get("state", "")
-            location = f"{city}, {state}" if city else ""
+            location = f"{city}, {state}" if city and state else (city or state or "")
 
             result_parts.append(f"- **{name}** (ID: {fc_id})")
             if location:
@@ -922,6 +1060,7 @@ async def tool_get_fulfillment_centers(request: Request):
 # ============================================
 # Omi Chat Tools Manifest
 # ============================================
+
 
 @app.get("/.well-known/omi-tools.json")
 async def get_omi_tools_manifest():
@@ -939,17 +1078,14 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "product_name": {
                             "type": "string",
-                            "description": "Name of a specific product to check inventory for. If not provided, returns all inventory items."
+                            "description": "Name of a specific product to check inventory for. If not provided, returns all inventory items.",
                         },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of items to return (default: 10)"
-                        }
+                        "limit": {"type": "integer", "description": "Maximum number of items to return (default: 10)"},
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Checking inventory levels..."
+                "status_message": "Checking inventory levels...",
             },
             {
                 "name": "get_products",
@@ -958,19 +1094,16 @@ async def get_omi_tools_manifest():
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "search": {
-                            "type": "string",
-                            "description": "Search term to filter products by name"
-                        },
+                        "search": {"type": "string", "description": "Search term to filter products by name"},
                         "limit": {
                             "type": "integer",
-                            "description": "Maximum number of products to return (default: 10)"
-                        }
+                            "description": "Maximum number of products to return (default: 10)",
+                        },
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Getting products..."
+                "status_message": "Getting products...",
             },
             {
                 "name": "create_wro",
@@ -981,37 +1114,34 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "product_name": {
                             "type": "string",
-                            "description": "Name of the product being received. Required."
+                            "description": "Name of the product being received. Required.",
                         },
-                        "quantity": {
-                            "type": "integer",
-                            "description": "Quantity of units being sent. Required."
-                        },
+                        "quantity": {"type": "integer", "description": "Quantity of units being sent. Required."},
                         "expected_arrival_date": {
                             "type": "string",
-                            "description": "Expected arrival date (YYYY-MM-DD format). Defaults to 7 days from now."
+                            "description": "Expected arrival date (YYYY-MM-DD format). Defaults to 7 days from now.",
                         },
                         "tracking_number": {
                             "type": "string",
-                            "description": "Tracking number for the shipment (optional)"
+                            "description": "Tracking number for the shipment (optional)",
                         },
                         "purchase_order_number": {
                             "type": "string",
-                            "description": "Purchase order number for reference (optional)"
+                            "description": "Purchase order number for reference (optional)",
                         },
                         "fulfillment_center_id": {
                             "type": "integer",
-                            "description": "ID of the fulfillment center. If not provided, uses the first available FC."
+                            "description": "ID of the fulfillment center. If not provided, uses the first available FC.",
                         },
                         "packaging_type": {
                             "type": "string",
-                            "description": "Box packaging type: 'EverythingInOneBox', 'OneSkuPerBox', or 'MultipleSkuPerBox'. Default: 'EverythingInOneBox'"
-                        }
+                            "description": "Box packaging type: 'EverythingInOneBox', 'OneSkuPerBox', or 'MultipleSkuPerBox'. Default: 'EverythingInOneBox'",
+                        },
                     },
-                    "required": ["product_name", "quantity"]
+                    "required": ["product_name", "quantity"],
                 },
                 "auth_required": True,
-                "status_message": "Creating Warehouse Receiving Order..."
+                "status_message": "Creating Warehouse Receiving Order...",
             },
             {
                 "name": "get_wros",
@@ -1022,17 +1152,14 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "status": {
                             "type": "string",
-                            "description": "Filter by status: 'Awaiting', 'PartiallyArrived', 'Processing', 'Completed'"
+                            "description": "Filter by status: 'Awaiting', 'PartiallyArrived', 'Processing', 'Completed'",
                         },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of WROs to return (default: 10)"
-                        }
+                        "limit": {"type": "integer", "description": "Maximum number of WROs to return (default: 10)"},
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Getting Warehouse Receiving Orders..."
+                "status_message": "Getting Warehouse Receiving Orders...",
             },
             {
                 "name": "cancel_wro",
@@ -1040,16 +1167,11 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/cancel_wro",
                 "method": "POST",
                 "parameters": {
-                    "properties": {
-                        "wro_id": {
-                            "type": "integer",
-                            "description": "The WRO ID to cancel. Required."
-                        }
-                    },
-                    "required": ["wro_id"]
+                    "properties": {"wro_id": {"type": "integer", "description": "The WRO ID to cancel. Required."}},
+                    "required": ["wro_id"],
                 },
                 "auth_required": True,
-                "status_message": "Cancelling WRO..."
+                "status_message": "Cancelling WRO...",
             },
             {
                 "name": "get_orders",
@@ -1058,32 +1180,23 @@ async def get_omi_tools_manifest():
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "status": {
-                            "type": "string",
-                            "description": "Filter by order status"
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of orders to return (default: 10)"
-                        }
+                        "status": {"type": "string", "description": "Filter by order status"},
+                        "limit": {"type": "integer", "description": "Maximum number of orders to return (default: 10)"},
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Getting orders..."
+                "status_message": "Getting orders...",
             },
             {
                 "name": "get_fulfillment_centers",
                 "description": "Get available ShipBob fulfillment centers. Use this when the user wants to see warehouse locations, FC options, or needs a fulfillment center ID for creating WROs.",
                 "endpoint": "/tools/get_fulfillment_centers",
                 "method": "POST",
-                "parameters": {
-                    "properties": {},
-                    "required": []
-                },
+                "parameters": {"properties": {}, "required": []},
                 "auth_required": True,
-                "status_message": "Getting fulfillment centers..."
-            }
+                "status_message": "Getting fulfillment centers...",
+            },
         ]
     }
 
@@ -1094,5 +1207,6 @@ async def get_omi_tools_manifest():
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)
