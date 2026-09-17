@@ -14,8 +14,9 @@ Build logic lives in `omi/firmware/scripts/ci/`.
 
 ## Mute / pause persistence (issue #5054)
 
-Pause/mute is stored in NVS (`omi/muted`) and exposed on settings characteristic
-`19b10014-e8f2-537e-4f6c-d104768a1214` (feature bit `OMI_FEATURE_CAPTURE_MUTE`).
+Pause/mute is stored in NVS under the settings key `muted` and exposed on settings
+characteristic `19b10014-e8f2-537e-4f6c-d104768a1214` (feature bit
+`OMI_FEATURE_CAPTURE_MUTE`).
 The pendant is the source of truth: disconnect must not resume capture; the
 pusher drops TX and offline storage while muted. Offline double-tap toggles
 mute when there is no BLE connection. The app writes this characteristic on
