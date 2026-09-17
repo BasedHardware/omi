@@ -3557,24 +3557,21 @@ def test_completed_day_subset_prefers_structured_then_longest_and_is_stable():
         _day_source("struct-short", "aa", has_structured_summary=True, started_at=started),
         _day_source("struct-long", "bbbb", has_structured_summary=True, started_at=started),
     ]
-    first, truncated, reason = _select_completed_day_source_rows(
-        rows, max_conversations=2, max_summary_characters=1_000
-    )
-    shuffled, truncated_again, reason_again = _select_completed_day_source_rows(
+    first_selection = _select_completed_day_source_rows(rows, max_conversations=2, max_summary_characters=1_000)
+    shuffled_selection = _select_completed_day_source_rows(
         list(reversed(rows)), max_conversations=2, max_summary_characters=1_000
     )
-    assert truncated is True
-    assert reason == "conversation_page_over_budget"
-    assert [row.conversation_id for row in first] == ["struct-long", "struct-short"]
-    assert [row.conversation_id for row in shuffled] == [row.conversation_id for row in first]
-    assert truncated_again is True and reason_again == reason
+    assert first_selection.truncated is True
+    assert first_selection.truncation_reason == "conversation_page_over_budget"
+    assert [row.conversation_id for row in first_selection.rows] == ["struct-long", "struct-short"]
+    assert shuffled_selection == first_selection
 
-    chars_only, char_truncated, char_reason = _select_completed_day_source_rows(
+    chars_only_selection = _select_completed_day_source_rows(
         rows, max_conversations=8, max_summary_characters=len("bbbb")
     )
-    assert char_truncated is True
-    assert char_reason == "summary_characters_over_budget"
-    assert [row.conversation_id for row in chars_only] == ["struct-long"]
+    assert chars_only_selection.truncated is True
+    assert chars_only_selection.truncation_reason == "summary_characters_over_budget"
+    assert [row.conversation_id for row in chars_only_selection.rows] == ["struct-long"]
 
 
 def test_completed_day_reader_truncates_over_count_instead_of_stalling():
