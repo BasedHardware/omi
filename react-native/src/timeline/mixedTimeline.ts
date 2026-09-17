@@ -1,0 +1,88 @@
+export type TimelineConversation = {
+  kind: 'conversation';
+  id: string;
+  title: string;
+  summary: string;
+  searchableText: string;
+  atMs: number | null;
+};
+
+export type TimelineRecall = {
+  kind: 'recall';
+  id: string;
+  appName: string;
+  windowTitle: string;
+  searchableText: string;
+  atMs: number | null;
+  source: 'captured' | 'shipping' | 'backend';
+  local: boolean;
+};
+
+export type MixedTimelineItem = TimelineConversation | TimelineRecall;
+
+export type MixedTimelineGroup = {
+  label: string;
+  items: MixedTimelineItem[];
+};
+
+function compareNewest(left: MixedTimelineItem, right: MixedTimelineItem): number {
+  const leftTs = left.atMs ?? Number.NEGATIVE_INFINITY;
+  const rightTs = right.atMs ?? Number.NEGATIVE_INFINITY;
+  if (rightTs !== leftTs) {
+    return rightTs - leftTs;
+  }
+  if (left.kind !== right.kind) {
+    return left.kind === 'conversation' ? -1 : 1;
+  }
+  return left.id.localeCompare(right.id);
+}
+
+export function mergeMixedTimeline(input: {
+  conversations: readonly TimelineConversation[];
+  recall: readonly TimelineRecall[];
+}): MixedTimelineItem[] {
+  const recallById = new Map<string, TimelineRecall>();
+  for (const item of input.recall) {
+    const existing = recallById.get(item.id);
+    if (existing === undefined) {
+      recallById.set(item.id, item);
+      continue;
+    }
+    recallById.set(item.id, existing.local ? existing : item);
+  }
+  return [...input.conversations, ...recallById.values()].sort(compareNewest);
+}
+
+export function filterMixedTimeline(
+  items: readonly MixedTimelineItem[],
+  query: string,
+): MixedTimelineItem[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (normalized === '') {
+    return [...items];
+  }
+  return items.filter(item =>
+    item.searchableText.toLocaleLowerCase().includes(normalized),
+  );
+}
+
+export function groupMixedTimeline(
+  items: readonly MixedTimelineItem[],
+  nowEpochMilliseconds: number,
+  dayLabel: (iso: string, now: number) => string,
+): MixedTimelineGroup[] {
+  const groups: MixedTimelineGroup[] = [];
+  for (const item of items) {
+    const label =
+      item.atMs === null || !Number.isFinite(item.atMs)
+        ? 'Date unavailable'
+        : dayLabel(new Date(item.atMs).toISOString(), nowEpochMilliseconds);
+    const current = groups[groups.length - 1];
+    if (current !== undefined && current.label === label) {
+      current.items.push(item);
+    } else {
+      groups.push({label, items: [item]});
+    }
+  }
+  return groups;
+}
