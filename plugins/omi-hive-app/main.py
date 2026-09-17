@@ -5,7 +5,7 @@ This app provides Hive project management integration through API key authentica
 and chat tools for managing projects, tasks, actions, and searching.
 """
 import os
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import requests
 from dotenv import load_dotenv
@@ -387,22 +387,28 @@ def get_user_projects(uid: str, workspace_id: Optional[str] = None) -> List[Hive
     return projects
 
 
-def find_project_by_name(uid: str, name: str) -> Optional[HiveProject]:
-    """Find a project by name (case-insensitive partial match)."""
+def find_project_by_name(uid: str, name: str) -> Tuple[Optional[HiveProject], List[HiveProject]]:
+    """Find a project by name.
+
+    Returns (project, candidates). An exact (case-insensitive) name wins;
+    a partial match is used only when it is the single candidate, so a
+    name like "Q3" in a workspace with both "Q3 Marketing" and "Q3 Sales"
+    refuses instead of silently creating the task in whichever project
+    happened to be listed first.
+    """
     projects = get_user_projects(uid)
     name_lower = name.lower()
 
-    # First try exact match
-    for project in projects:
-        if project.name.lower() == name_lower:
-            return project
+    exact = [p for p in projects if p.name.lower() == name_lower]
+    if len(exact) == 1:
+        return exact[0], exact
+    if len(exact) > 1:
+        return None, exact
 
-    # Then try partial match
-    for project in projects:
-        if name_lower in project.name.lower():
-            return project
-
-    return None
+    partial = [p for p in projects if name_lower in p.name.lower()]
+    if len(partial) == 1:
+        return partial[0], partial
+    return None, partial
 
 
 def get_project_tasks(uid: str, project_id: str, limit: int = 20) -> List[HiveTask]:
@@ -661,8 +667,11 @@ async def tool_hive_get_tasks(request: Request):
         if project_id:
             target_project = HiveProject(id=project_id, name=project_name or "Unknown")
         elif project_name:
-            target_project = find_project_by_name(uid, project_name)
+            target_project, candidates = find_project_by_name(uid, project_name)
             if not target_project:
+                if candidates:
+                    names = ", ".join(f"'{p.name}'" for p in candidates)
+                    return ChatToolResponse(error=f"'{project_name}' matches more than one project: {names}. Say the full project name.")
                 return ChatToolResponse(error=f"Could not find project: {project_name}")
         else:
             # Use default project
@@ -724,8 +733,11 @@ async def tool_hive_create_task(request: Request):
         if project_id:
             target_project = HiveProject(id=project_id, name=project_name or "Unknown")
         elif project_name:
-            target_project = find_project_by_name(uid, project_name)
+            target_project, candidates = find_project_by_name(uid, project_name)
             if not target_project:
+                if candidates:
+                    names = ", ".join(f"'{p.name}'" for p in candidates)
+                    return ChatToolResponse(error=f"'{project_name}' matches more than one project: {names}. Say the full project name.")
                 return ChatToolResponse(error=f"Could not find project: {project_name}")
         else:
             # Use default project
@@ -750,18 +762,18 @@ async def tool_hive_create_task(request: Request):
             # For now global search_tasks is what we have
             found_tasks = search_tasks(uid, parent_task_name, limit=5)
 
-            # Filter by project if possible to be more accurate
+            # Restrict to the target project: a subtask belongs to its
+            # parent's project, so a same-named task in a different project
+            # is not a candidate, not a fallback.
             project_tasks = [t for t in found_tasks if t.project_id == target_project.id]
 
-            if project_tasks:
+            if len(project_tasks) == 1:
                 parent_id = project_tasks[0].id
-            elif found_tasks:
-                # If not found in project, maybe user meant a task in another project?
-                # But subtasks usually belong to the same project context implicitly.
-                # We'll use the best match.
-                parent_id = found_tasks[0].id
+            elif len(project_tasks) > 1:
+                names = ", ".join(f"'{t.name}'" for t in project_tasks)
+                return ChatToolResponse(error=f"'{parent_task_name}' matches more than one task in **{target_project.name}**: {names}. Say the full task name or pass parent_task_id.")
             else:
-                return ChatToolResponse(error=f"Could not find parent task: {parent_task_name}")
+                return ChatToolResponse(error=f"Could not find parent task '{parent_task_name}' in project **{target_project.name}**.")
 
         # Create the task via REST API - endpoint is /actions/create
         # Body params: workspace, title, projectId, description
