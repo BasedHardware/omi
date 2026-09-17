@@ -800,6 +800,75 @@ test('old chat history name Flutter ServerMessage.fromGenerated type-wrong GET f
   }
 });
 
+test('old chat history name Flutter ServerMessage.fromGenerated type-wrong GET memories_id item instead of remapping to a chat chip', () => {
+  const neighbor = {
+    id: 'neighbor',
+    sender: 'ai',
+    text: 'Neighbor stays.',
+    created_at: '2026-09-07T01:02:04Z',
+    type: 'text',
+  };
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('memory-exact'),
+          memories_id: ['mem-1'],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'memory-exact']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('memory-parent'),
+          memories_id: 1,
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'memory-parent']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('memory-null'),
+          memories_id: null,
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'memory-null']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('memory-empty'),
+          memories_id: [],
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'memory-empty']);
+  for (const extra of [1, true, []]) {
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {...message('memory-item-wrong'), memories_id: [extra]},
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat message is malformed');
+  }
+});
+
 test('old chat history name Flutter ServerMessage.fromGenerated type-wrong GET files item instead of remapping to a chat chip', () => {
   const neighbor = {
     id: 'neighbor',

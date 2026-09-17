@@ -57,6 +57,20 @@ function presentNullableString(value: unknown, malformed: string): void {
   }
 }
 
+function presentUnusedStringListItems(value: unknown, malformed: string): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new Error(malformed);
+    }
+  }
+}
+
 function timestampMs(value: unknown): number {
   return typeof value === 'string'
     ? Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'))
@@ -878,6 +892,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   presentNullableString(row.report_reason, 'Omi chat message is malformed');
   presentNullableString(row.session_id, 'Omi chat message is malformed');
   presentNullableString(row.type, 'Omi chat message is malformed');
+  presentUnusedStringListItems(row.memories_id, 'Omi chat message is malformed');
   const memories = parseOmiChatMemories(row.memories);
   const attachments = parseOmiChatFiles(row.files, row.files_id);
   const chart = parseOmiChatChart(row.chart_data);
