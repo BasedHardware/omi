@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -53,6 +54,14 @@ import 'package:omi/backend/preferences.dart';
 // import 'share.dart';
 // import 'package:omi/pages/settings/developer.dart';
 // import 'package:omi/backend/http/webhooks.dart';
+
+/// Offset of the floating bottom bar from the bottom of the screen.
+///
+/// 32pt is the bar's resting position and already clears the iPhone home
+/// indicator. Android 16 draws a 3-button navigation bar up to 48dp tall over
+/// this edge-to-edge body, which covered the lower part of the bar's buttons,
+/// so the bar never sits lower than the inset the window reports.
+double detailFloatingBarBottom(double bottomSystemInset) => math.max(32, bottomSystemInset);
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -1101,7 +1110,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   // slot when the keyboard rose, tearing down the search
                   // TextField subtree and dropping the IME mid-frame.
                   key: const ValueKey('detail_floating_bottom_bar'),
-                  bottom: 32,
+                  bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
                   left: 0,
                   right: 0,
                   child: Consumer<ConversationDetailProvider>(

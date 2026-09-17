@@ -9996,4 +9996,7 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.';
+
+  @override
+  String get home => 'Koti';
 }

@@ -99,6 +99,7 @@ from utils.observability.finalization import FinalizationFailureReason, record_f
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.free_tier_basic_gates import basic_plan_gate_eager_extraction_enabled
 from utils.free_tier_memory_policy import (
     free_tier_memory_suppression_enabled,
     memory_formation_verdict,
@@ -2692,7 +2693,9 @@ def process_conversation(
         return deferred
     # Eager-extraction gate (S14 proactivity half, flag-off): first-open
     # (force_process) and manual reprocess are the remaining eager managed
-    # spend for desktop conversations. An identified-basic deny lands at the
+    # spend for desktop conversations. Default off
+    # (``BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED``): no authorize call and
+    # no new terminal marker. When on, an identified-basic deny lands at the
     # same deterministic minimum the flag-on branch uses — no second pipeline;
     # identification failure fails open above it. Non-desktop sources never
     # reach this branch (the summary flip is a separate, held decision).
@@ -2700,6 +2703,7 @@ def process_conversation(
         (force_process or is_reprocess)
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and basic_plan_gate_eager_extraction_enabled()
     ):
         eager_basic_deny = _flag_off_identified_basic_deny(uid, conversation, client_projection=client_projection)
         if eager_basic_deny is not None:

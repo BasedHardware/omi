@@ -2283,6 +2283,7 @@ async function main(): Promise<void> {
             clientId,
             ownerId,
             sessionId: result.sessionId,
+            surfaceKind: result.surfaceKind,
             turnId: result.turnId,
             ok: true,
             runId: result.runId,

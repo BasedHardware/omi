@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:clock/clock.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 
@@ -27,7 +28,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   // late ServerConversation memory;
 
-  DateTime selectedDate = DateTime.now();
+  DateTime selectedDate = clock.now();
   String? _cachedConversationId;
 
   bool isLoading = false;

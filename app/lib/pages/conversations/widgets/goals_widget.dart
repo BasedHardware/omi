@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/header_circle_button.dart';
 
 /// Keep integer stepping for small goals without asking RenderSlider to paint
 /// one division per unit for arbitrarily large targets.
@@ -540,13 +541,15 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
         return Container(
           margin: const EdgeInsets.only(left: 16, right: 16),
-          padding: const EdgeInsets.only(top: 16, bottom: 20),
+          // The header row is as tall as its 44pt add button; the paddings around it
+          // give back the 6pt it gained on each side over the 32pt circle it paints.
+          padding: const EdgeInsets.only(top: 10, bottom: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 12),
+                padding: const EdgeInsets.only(left: 8, bottom: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -555,13 +558,15 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     if (goals.length < _maxGoals)
-                      GestureDetector(
-                        onTap: addGoal,
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
-                          child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+                      Transform.translate(
+                        // Keeps the painted circle on the card's right edge.
+                        offset: const Offset((kMinTapTarget - 32) / 2, 0),
+                        child: HeaderCircleButton(
+                          semanticLabel: context.l10n.addGoal,
+                          onTap: addGoal,
+                          diameter: 32,
+                          color: Colors.grey.withValues(alpha: 0.12),
+                          icon: Icon(Icons.add, size: 18, color: Colors.grey[400]),
                         ),
                       ),
                   ],
