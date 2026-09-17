@@ -38,6 +38,26 @@ REVISIONS = "contracts/spine/revisions"
 SCOPE = "contracts/spine/revision-scope.json"
 
 
+def grandfathered_oracle(root: Path, path: str, current: str, policy: dict) -> bool:
+    """A pinned pre-policy correction is already an accepted oracle, even if
+    main squash-merged its older parent while the corrected child was open.
+    New records cannot add to this immutable set.
+    """
+    for name, hashes in policy.get("grandfathered_revisions", {}).items():
+        file = root / name
+        if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() not in hashes:
+            continue
+        record = json.loads(file.read_text())
+        if record["path"] != path:
+            continue
+        commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", name, root=root).splitlines()
+        for commit in commits:
+            oracle = git("show", f"{commit}:{path}", root=root)
+            if digest(oracle) == record["after"] and allowed(oracle, current):
+                return True
+    return False
+
+
 def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
     """A revision is an oracle-only PR, including unstaged/untracked edits.
 
@@ -64,7 +84,10 @@ def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
                 old = git("show", f"{base}:{path}", root=root)
             except subprocess.CalledProcessError:
                 continue  # introducing a new contract is not revising one
-            if not (root / path).is_file() or not allowed(old, (root / path).read_text()):
+            file = root / path
+            if not file.is_file():
+                needs_revision = True
+            elif not allowed(old, file.read_text()) and not grandfathered_oracle(root, path, file.read_text(), policy):
                 needs_revision = True
     if not needs_revision:
         return []
