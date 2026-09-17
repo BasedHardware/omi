@@ -18,15 +18,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from models import (
     DEFAULT_SITE,
-    MAX_LIMIT,
     ChatToolResponse,
     GetQuestionRequest,
     GetTopAnswersRequest,
     SearchQuestionsRequest,
-    _coerce_bool,
-    _safe_limit,
-    _safe_site,
-    _safe_tags,
 )
 
 

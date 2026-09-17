@@ -92,9 +92,11 @@ if "fastapi" not in sys.modules:
         sys.modules["fastapi.responses"] = responses
         fastapi.responses = responses
 
+HAVE_REAL_PYDANTIC = False
 if "pydantic" not in sys.modules:
     try:
         import pydantic  # type: ignore
+        HAVE_REAL_PYDANTIC = True
     except ImportError:
         pydantic = types.ModuleType("pydantic")
 
@@ -113,6 +115,8 @@ if "pydantic" not in sys.modules:
         pydantic.Field = Field
         pydantic.field_validator = field_validator
         sys.modules["pydantic"] = pydantic
+else:
+    HAVE_REAL_PYDANTIC = getattr(sys.modules["pydantic"], "__file__", None) is not None
 
 PLUGIN_DIR = Path(__file__).resolve().parent
 if str(PLUGIN_DIR) not in sys.path:
@@ -165,6 +169,7 @@ class StackOverflowModelTests(unittest.TestCase):
         self.assertIsNone(models._coerce_bool(""))
         self.assertIsNone(models._coerce_bool("maybe"))
 
+    @unittest.skipUnless(HAVE_REAL_PYDANTIC, "Requires real pydantic package with validator support")
     def test_search_questions_request_validation(self):
         req = models.SearchQuestionsRequest(query="python asyncio", limit=8, site="superuser")
         self.assertEqual(req.query, "python asyncio")
@@ -183,6 +188,7 @@ class StackOverflowModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             models.SearchQuestionsRequest(query="   ")
 
+    @unittest.skipUnless(HAVE_REAL_PYDANTIC, "Requires real pydantic package with validator support")
     def test_get_question_request_validation(self):
         req = models.GetQuestionRequest(question_id=12345)
         self.assertEqual(req.question_id, 12345)
@@ -197,6 +203,7 @@ class StackOverflowModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             models.GetQuestionRequest(question_id="not_an_int")
 
+    @unittest.skipUnless(HAVE_REAL_PYDANTIC, "Requires real pydantic package with validator support")
     def test_get_top_answers_request_validation(self):
         req = models.GetTopAnswersRequest(question_id=55, limit=5)
         self.assertEqual(req.question_id, 55)
