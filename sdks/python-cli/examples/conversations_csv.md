@@ -20,6 +20,7 @@ Save the following as `conversations_to_csv.py`:
 
 ```python
 import csv
+import io
 import json
 import sys
 from pathlib import Path
@@ -61,11 +62,26 @@ def convert(source, destination):
         values = (item.get("id"), structured.get("title"), structured.get("category"),
                   item.get("started_at"), item.get("source"))
         rows.append([spreadsheet_text(value) for value in values])
-    # Exclusive creation protects existing exports; UTF-8 BOM helps Excel.
-    with Path(destination).open("x", encoding="utf-8-sig", newline="") as output:
-        writer = csv.writer(output)
-        writer.writerow(FIELDS)
-        writer.writerows(rows)
+    # Format and encode the whole export before touching the filesystem, so a
+    # conversion failure cannot leave a truncated CSV behind for the next run.
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(FIELDS)
+    writer.writerows(rows)
+    payload = buffer.getvalue().encode("utf-8-sig")
+    output_path = Path(destination)
+    # Exclusive creation still protects an existing export.
+    try:
+        output = output_path.open("xb")
+    except FileExistsError:
+        raise FileExistsError(f"Refusing to overwrite existing {output_path}") from None
+    try:
+        with output:
+            output.write(payload)
+    except OSError:
+        # Leave no partial export behind when the write itself fails.
+        output_path.unlink(missing_ok=True)
+        raise
 
 
 if __name__ == "__main__":
@@ -87,6 +103,7 @@ Import the result as UTF-8, comma-delimited text in Excel or another
 spreadsheet application. The converter preserves complete IDs, accents, quoted
 text and embedded newlines. Missing fields become empty cells; an empty list
 produces the column header only. It refuses to overwrite an existing
-destination. Treat the exported file as private conversation data. For exact
+destination, and a failed write leaves no partial file behind. Treat the
+exported file as private conversation data. For exact
 unmodified values, retain the source JSON; the CSV adds an apostrophe to common
 formula-like values to make their intended text interpretation explicit.
