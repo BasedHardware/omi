@@ -103,3 +103,15 @@ def test_fake_flutter_advertises_only_b0_registered_extensions(tmp_path):
     response = next(message['result'] for message in messages if message.get('id') == 1)
     assert response == {'contract_version': 'semantic-controls/v1',
                         'capabilities': ['capabilities', 'state', 'wait_ready', 'navigate', 'fault']}
+
+
+def test_revision_cannot_restore_one_marker_by_retiring_another():
+    old = '@pending("V1")\ndef test_first():\n    assert visible\n@pending("V1")\ndef test_second():\n    assert ready\n'
+    revised = old.replace('assert visible', 'assert onstage')
+    base = old.replace('@pending("V1")\n', '', 1)
+    wrong = revised.rsplit('@pending("V1")\n', 1)
+    wrong = ''.join(wrong)
+    assert checker.allowed(revised, wrong)
+    assert not checker.retirement_allowed([old, revised], base, wrong)
+    assert checker.retirement_allowed([old, revised], base, revised.replace('@pending("V1")\n', '', 1))
+    assert checker.retirement_allowed([old, revised], base, revised.replace('@pending("V1")\n', ''))
