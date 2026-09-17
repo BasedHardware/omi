@@ -1539,6 +1539,14 @@ extension RealtimeHubController {
       fallbackProvider = nil
       pendingFailoverReason = nil
     }
+    if shouldSkipAutomaticManagedWarm() {
+      teardownSession()
+      recordCloseResolution(
+        turnOutcome: turnOutcome,
+        recoveryAction: .sessionRewarm,
+        recoveryResult: .deferredPlanGated)
+      return
+    }
     if deferIdleRewarmIfUserAway(closeCategory: closeCategory) {
       recordCloseResolution(
         turnOutcome: turnOutcome,

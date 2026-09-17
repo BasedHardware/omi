@@ -60,16 +60,61 @@ extension RealtimeHubController {
           elapsedSincePreviousSample) + RealtimeHubWarmPresencePolicy.presencePollSlack)
     else { return false }
     log("RealtimeHub: user input resumed — re-warming deferred hub session")
-    ensureWarm(userInitiated: true)
+    // Presence return is not a key press. Clear the away deferral so a later
+    // PTT is not stuck, then keep-warm (plan-gated accounts skip the mint).
+    clearPresenceWarmDeferral()
+    ensureWarm()
     return true
   }
 
+  /// Skip idle/reconnect/launch mint when the cached decision is `.planGated`
+  /// or after a typed server `plan_gated`. User-initiated PTT still attempts.
+  /// Same latch as LiveNotes `shouldSkipManagedAINotes`.
+  func shouldSkipAutomaticManagedWarm() -> Bool {
+    let decision = entitlementDecision()
+    let skip = managedPlanGateLatch.shouldSkipAutomaticManagedWork(
+      decision: decision,
+      now: entitlementNow())
+    if decision == .allowManagedProactivity, !managedPlanGateLatch.serverDenied {
+      didLogPlanGateSkip = false
+    }
+    if skip {
+      logPlanGateSkipOnce()
+      requestEntitlementRefresh()
+    }
+    return skip
+  }
+
+  func noteManagedPlanGateFromWarmFailure(_ error: Error) {
+    guard ManagedPlanGateHTTP.isPlanGatedWarmFailure(error) else { return }
+    managedPlanGateLatch.latchServerDenial(at: entitlementNow())
+    logPlanGateSkipOnce()
+    requestEntitlementRefresh()
+    log("RealtimeHub: server plan_gated — stopping automatic managed re-warm")
+  }
+
+  private func logPlanGateSkipOnce() {
+    guard !didLogPlanGateSkip else { return }
+    didLogPlanGateSkip = true
+    log("RealtimeHub: managed realtime unavailable on this plan; skipping automatic warm")
+  }
+
+  private func requestEntitlementRefresh() {
+    guard let refreshEntitlement, !entitlementRefreshInFlight else { return }
+    entitlementRefreshInFlight = true
+    Task { [weak self] in
+      await refreshEntitlement()
+      await MainActor.run {
+        self?.entitlementRefreshInFlight = false
+      }
+    }
+  }
+
   /// Gate on every `ensureWarm` entry. A path carrying direct user intent
-  /// (PTT press, app launch, the presence poll's input-return) always clears
-  /// an away deferral. Passive lifecycle callers (mint completions,
-  /// owner-change recovery, barge-in cleanup) keep it unless the HID sample
-  /// shows the user actually returned — otherwise background churn would
-  /// silently defeat the quota gate.
+  /// (PTT press, automation) always clears an away deferral. Passive
+  /// lifecycle callers (mint completions, owner-change recovery, barge-in
+  /// cleanup) keep it unless the HID sample shows the user actually returned
+  /// — otherwise background churn would silently defeat the quota gate.
   func admitWarmRequest(userInitiated: Bool) -> Bool {
     guard warmDeferredForUserAway else { return true }
     guard

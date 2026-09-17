@@ -365,6 +365,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Seam so tests/automation can substitute the HID idle sample.
   var presenceIdleProvider: () -> TimeInterval? = { UserInputPresence.secondsSinceLastInput() }
 
+  /// Cached `/v1/users/me/subscription` decision. Unknown/missing plan fails
+  /// open (the enum's own contract). Tests pin this; production reads the cache.
+  var entitlementDecision: () -> SubscriptionEntitlementDecision = {
+    SubscriptionEntitlementService.shared.cachedDecisionForManagedProactivity()
+  }
+  var entitlementNow: () -> Date = { Date() }
+  /// Optional cache refresh so an upgrade/BYOK change can unlatch without a
+  /// restart. Production `setup()` installs it; tests leave it nil (no network).
+  var refreshEntitlement: (@Sendable () async -> Void)?
+  /// Shared with LiveNotes — see `ManagedPlanGateLatch`.
+  var managedPlanGateLatch = ManagedPlanGateLatch()
+  var didLogPlanGateSkip = false
+  var entitlementRefreshInFlight = false
+  /// Test/automation observation after presence + plan admission, before mint.
+  var warmAdmissionProbe: ((Bool) -> Void)?
+
   var fallbackProvider: RealtimeHubProvider?
   /// Reason passed to ``failoverToAlternateProvider``; cleared after a successful connect on the alternate.
   var pendingFailoverReason: String?
@@ -985,6 +1001,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     NotificationCenter.default.addObserver(
       self, selector: #selector(voiceLanguagesChanged),
       name: .voiceLanguagesDidChange, object: nil)
+    if refreshEntitlement == nil {
+      refreshEntitlement = {
+        _ = await SubscriptionEntitlementService.shared.snapshot()
+      }
+    }
     // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
     RealtimeHubTestHarness.registerAutomationAction()
     registerPTTLanguageTestAction()

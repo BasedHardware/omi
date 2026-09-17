@@ -206,8 +206,79 @@ enum ManagedPlanGateHTTP {
     return body.contains("plan_gated")
   }
 
+  static func isPlanGated(status: Int, payload: APIErrorPayload?) -> Bool {
+    guard status == 402, let payload else { return false }
+    let fields = [payload.error, payload.code, payload.reason, payload.message, payload.detail]
+    return fields.contains { $0?.lowercased().contains("plan_gated") == true }
+  }
+
+  static func isPlanGatedMint(_ error: RealtimeTokenMintError) -> Bool {
+    isPlanGated(status: error.statusCode, data: error.responseBody)
+      || isPlanGated(status: error.statusCode, payload: error.payload)
+  }
+
+  /// Typed 402 `plan_gated` from the managed proxy, or a client that already
+  /// classified it. Distinct from chat-quota / trial-expired 402.
+  static func isPlanGatedWarmFailure(_ error: Error) -> Bool {
+    if case GeminiClient.GeminiClientError.planGated = error {
+      return true
+    }
+    if case ProactiveLaneClientError.planGated = error {
+      return true
+    }
+    if let mint = error as? RealtimeTokenMintError {
+      return isPlanGatedMint(mint)
+    }
+    return false
+  }
+
   private static func errorField(_ object: Any) -> String? {
     (object as? [String: Any])?["error"] as? String
+  }
+}
+
+/// Bounded server-denial latch for managed proactivity.
+///
+/// Cached unknown plans fail open to `.allowManagedProactivity`, so an upgrade
+/// that never changes the decision would otherwise retry forever after a typed
+/// 402 `plan_gated`. Clear when the decision becomes allow, or after
+/// `defaultLifetime` (one probe per window). LiveNotes (`shouldSkipManagedAINotes`
+/// on `fix/desktop-livenotes-respects-plan-gate`) and the realtime hub both use
+/// this so the two call sites cannot drift.
+struct ManagedPlanGateLatch: Equatable, Sendable {
+  static let defaultLifetime: TimeInterval = 10 * 60
+
+  private(set) var lastDecision: SubscriptionEntitlementDecision?
+  private(set) var serverDenied = false
+  private(set) var deniedAt: Date?
+
+  /// Returns whether automatic managed work should skip. User-initiated PTT is
+  /// a separate admission decision and must not consult this for a key press.
+  mutating func shouldSkipAutomaticManagedWork(
+    decision: SubscriptionEntitlementDecision,
+    now: Date,
+    lifetime: TimeInterval = Self.defaultLifetime
+  ) -> Bool {
+    if lastDecision != decision {
+      lastDecision = decision
+      if decision == .allowManagedProactivity {
+        clearServerDenial()
+      }
+    }
+    if serverDenied, let deniedAt, now.timeIntervalSince(deniedAt) >= lifetime {
+      clearServerDenial()
+    }
+    return decision == .planGated || serverDenied
+  }
+
+  mutating func latchServerDenial(at now: Date) {
+    serverDenied = true
+    deniedAt = now
+  }
+
+  mutating func clearServerDenial() {
+    serverDenied = false
+    deniedAt = nil
   }
 }
 

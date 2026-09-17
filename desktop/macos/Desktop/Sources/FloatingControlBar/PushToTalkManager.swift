@@ -419,8 +419,10 @@ class PushToTalkManager: ObservableObject {
     // so the persistent socket is ready before the first PTT (and stays warm after).
     RealtimeHubController.shared.setup()
     // Hermetic local harness has no Firebase SDK and no live realtime providers.
+    // Launch is not a key press: plan-gated accounts must not mint a managed
+    // session just because the app started. PTT still uses `userInitiated: true`.
     if !DesktopLocalProfile.isEnabled {
-      RealtimeHubController.shared.ensureWarm(userInitiated: true)
+      RealtimeHubController.shared.ensureWarm()
     }
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }

@@ -222,6 +222,13 @@ journal operations, but it must not reach directly into `ChatProvider` or make
 agent-routing decisions. Provider tools remain untrusted until the kernel
 returns an authorized command.
 
+Automatic / idle / launch warming of a **managed** (ephemeral) session consults
+`SubscriptionEntitlement.decision` via `ManagedPlanGateLatch` (shared with
+LiveNotes). Identified basic without BYOK skips keep-warm; unknown plans fail
+open. `ensureWarm(userInitiated: true)` (PTT) still attempts. A typed server
+`plan_gated` denial latches automatic retries for ten minutes or until the
+decision becomes allow.
+
 ## Verification
 
 Run the focused Swift tests with `xcrun swift test --package-path Desktop`, then
