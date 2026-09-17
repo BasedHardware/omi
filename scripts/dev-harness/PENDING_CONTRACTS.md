@@ -56,3 +56,7 @@ All spine ratchets constrain only files already migrated to that pattern (no
 regression after adoption), plus at most brand-new files. Legacy debt growth in
 unmigrated files never blocks ordinary work. Record adoption explicitly with the
 behavioral acceptance tests; inventory counts alone do not imply adoption.
+
+The immutable snapshot also pins pre-policy corrected oracle bytes: they remain
+accepted when main merges an older parent. Further assertion changes are new
+revisions, even at the same path. Marker retirement remains monotonic.

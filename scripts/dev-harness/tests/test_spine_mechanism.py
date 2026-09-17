@@ -148,7 +148,7 @@ def test_squashed_spine_revision_keeps_the_corrected_oracle(tmp_path):
     assert checker.check(tmp_path)
 
 
-def scope_repo(root):
+def scope_repo(root, grandfather=False):
     import json
     def git(*args):
         return subprocess.check_output(['git', '-C', str(root), *args], text=True, stderr=subprocess.DEVNULL)
@@ -166,8 +166,12 @@ def scope_repo(root):
     runtime = root / 'app/lib/example.dart'
     runtime.parent.mkdir(parents=True)
     runtime.write_text('throw UnimplementedError();\n')
-    (root / checker.SCOPE).write_text(json.dumps({'scaffolding': {
-        'app/lib/example.dart': [checker.digest(runtime.read_text())]}}))
+    policy = {'scaffolding': {'app/lib/example.dart': [checker.digest(runtime.read_text())]}}
+    if grandfather:
+        record = json.dumps(dict(path=path, owner='V1', before=checker.digest(old),
+            after=checker.digest(new), reason='wire evidence'))
+        policy['grandfathered_revisions'] = {checker.REVISIONS + '/001.json': [checker.digest(record)]}
+    (root / checker.SCOPE).write_text(json.dumps(policy))
     git('add', '.')
     git('commit', '-qm', 'accepted contract')
     git('branch', 'origin/main')
@@ -216,3 +220,30 @@ def test_real_squash_merge_and_child_merge_preserve_corrected_oracle(tmp_path):
     assert checker.check(tmp_path) == []
     file.write_text(old)
     assert checker.check(tmp_path)
+
+
+def test_pinned_legacy_correction_survives_old_parent_merge_without_authorizing_new_revision(tmp_path):
+    import json
+    git, file, runtime, old, new, revise = scope_repo(tmp_path, grandfather=True)
+    git('switch', '-qc', 'child')
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'pinned reviewed correction')
+    git('switch', '-q', 'main')
+    (tmp_path / 'unrelated.md').write_text('new main work')
+    git('add', '.')
+    git('commit', '-qm', 'main retains older oracle')
+    git('branch', '-f', 'origin/main', 'HEAD')  # isolated fixture only
+    git('switch', '-q', 'child')
+    git('merge', '--no-edit', 'main')
+    runtime.write_text('return 1;\n')
+    file.write_text(new.replace("pendingContract('V1');\n", ''))
+    assert checker.check(tmp_path) == []
+    changed = new.replace('local_dev', 'invented')
+    file.write_text(changed)
+    record = dict(path='app/test/spine/example.dart', owner='V1', before=checker.digest(new),
+        after=checker.digest(changed), reason='builder self-authorization')
+    (tmp_path / checker.REVISIONS / '002.json').write_text(json.dumps(record))
+    git('add', '.')
+    git('commit', '-qm', 'new self-approved revision')
+    assert any('mixed with implementation' in error for error in checker.check(tmp_path))
