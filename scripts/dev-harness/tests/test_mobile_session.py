@@ -6,11 +6,13 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Sequence
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from dev_harness import mobile_doctor as md
 from dev_harness import mobile_session as ms
 from dev_harness import session_evidence as se
 
@@ -373,6 +375,80 @@ def test_default_device_runner_missing_binary_is_127_not_a_traceback(monkeypatch
     code, out = ms._default_device_runner(["adb", "devices"])
     assert code == 127
     assert "adb" in out
+
+
+def _android_sdk(tmp_path: Path, *, emulator: bool = True, sdkmanager: bool = True, image: bool = False) -> Path:
+    home = tmp_path / "android-sdk"
+    if emulator:
+        (home / "emulator").mkdir(parents=True)
+        (home / "emulator" / "emulator").write_text("x\n", encoding="utf-8")
+    if sdkmanager:
+        bin_dir = home / "cmdline-tools" / "latest" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "sdkmanager").write_text("x\n", encoding="utf-8")
+    if image:
+        image_dir = home.joinpath(*md.PREFERRED_ANDROID_IMAGE_DIR)
+        image_dir.mkdir(parents=True)
+        (image_dir / "kernel-ranchu").write_text("k\n", encoding="utf-8")
+    return home
+
+
+class TestAndroidReady:
+    def test_missing_emulator_binary_is_engine_absent(self, tmp_path: Path) -> None:
+        home = _android_sdk(tmp_path, emulator=False, sdkmanager=True)
+        ready, detail = ms.DeviceController(lambda _cmd: (0, "")).android_ready(str(home))
+        assert ready is False
+        assert "emulator engine missing" in detail
+
+    def test_nonzero_inventory_without_an_image_is_undetermined_not_ready(self, tmp_path: Path) -> None:
+        """Fails on origin/main: nonzero sdkmanager was reported as engine present."""
+        home = _android_sdk(tmp_path)
+        ready, detail = ms.DeviceController(lambda _cmd: (1, "WARNING: deprecated\n")).android_ready(str(home))
+        assert ready is False
+        assert "cannot determine" in detail
+        assert "not a finding that the emulator engine is absent" in detail
+        assert "engine present" not in detail
+        assert "engine missing" not in detail
+        assert "no Android system image installed" not in detail
+
+    def test_exit_zero_slash_path_listing_is_ready(self, tmp_path: Path) -> None:
+        """Fails on origin/main: cmdline-tools 23 slash paths missed startswith('system-images;')."""
+        home = _android_sdk(tmp_path)
+        listing = "  system-images/android-36/google_apis/arm64-v8a         7.0.0             Google APIs ARM 64 v8a System Image\n"
+
+        def runner(command: Sequence[str]) -> tuple[int, str]:
+            assert "--list_installed" in command
+            return 0, listing
+
+        ready, detail = ms.DeviceController(runner).android_ready(str(home))
+        assert ready is True
+        assert "system-images;android-36;google_apis;arm64-v8a" in detail
+
+    def test_noisy_nonzero_sdkmanager_with_slash_path_is_ready(self, tmp_path: Path) -> None:
+        home = _android_sdk(tmp_path)
+        listing = (
+            "WARNING: The SDK Manager CLI tool (sdkmanager) is deprecated.\n"
+            "  system-images/android-36/google_apis/arm64-v8a\n"
+        )
+        ready, detail = ms.DeviceController(lambda _cmd: (1, listing)).android_ready(str(home))
+        assert ready is True
+        assert "system-images;android-36;google_apis;arm64-v8a" in detail
+
+    def test_on_disk_image_is_ready_when_inventory_fails(self, tmp_path: Path) -> None:
+        home = _android_sdk(tmp_path, image=True)
+        ready, detail = ms.DeviceController(lambda _cmd: (1, "java.lang.RuntimeException\n")).android_ready(str(home))
+        assert ready is True
+        assert "system-images;android-36;google_apis;arm64-v8a" in detail
+
+    def test_successful_empty_inventory_is_image_absent(self, tmp_path: Path) -> None:
+        home = _android_sdk(tmp_path)
+        ready, detail = ms.DeviceController(lambda _cmd: (0, "platform-tools\nplatforms;android-36\n")).android_ready(
+            str(home)
+        )
+        assert ready is False
+        assert "no Android system image installed" in detail
+        assert "cannot determine" not in detail
+        assert "engine missing" not in detail
 
 
 def test_device_controller_default_runner_missing_binary_is_127(monkeypatch: pytest.MonkeyPatch) -> None:
