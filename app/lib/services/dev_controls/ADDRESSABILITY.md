@@ -1,131 +1,130 @@
-# B1: address existing screens, preserve their navigation
+# B1: address existing screens, preserve navigation
 
-Builder: App UI, after [B0](REGISTRATION.md). This is a skeleton; no bootstrap
-hook is installed. Implement chat first (existing input/send keys and j2 oracle),
-then home, conversations, conversation detail, memories, tasks, settings,
-onboarding, devices. Each surface removes its own pending marker only after
-both platform variants pass. The spine does not edit the hot files.
+Builder: App UI after [B0](REGISTRATION.md). Skeleton only; no bootstrap hook.
+Migrate chat first (existing input/send keys and j2 oracle), then home,
+conversations, conversation detail, memories, tasks, settings, onboarding, devices.
+The spine leaves hot-file hooks to the builder. No router migration.
 
-## Keys and accessibility
+## One catalog, bounded acceptance
 
-`app/contracts/addressability/catalog.json` is the source for routes and static
-keys. `python3 scripts/check_app_addressability.py --generate` emits Dart
-`OmiKeys`; the check rejects drift. Host tools read the same JSON. Grammar:
-`omi.<surface>.<control>[.<qualifier>]`; lower snake case surface/control,
-qualifier `[a-z0-9][a-z0-9_-]*`. Dynamic rows use `AddressKey.row(surface,id)`:
-`omi.<surface>.row.r` + SHA256(UTF8 opaque backend id), all 64 lowercase hex
-characters. Reject empty/>256-byte ids and unknown surfaces. Never list index,
-text, email, transcript, or position. Sorting must not change a row's key.
-Static keys must be unique within the visible route; lists may reuse control
-names only under distinct row keys. Preserve stateful GlobalKeys; put the root
-ValueKey on a wrapper instead of replacing those handles.
+`app/contracts/addressability/catalog.json` owns routes, keys, required controls,
+and the interactive constructor/callback vocabulary. Run
+`python3 scripts/check_app_addressability.py --generate` for Dart constants and
+the widget predicate; host tooling reads JSON. Generated drift fails the check.
 
-A Key alone suffices for noninteractive roots/layout. Each focusable/actionable
-control also needs a Semantics identifier equal to its key, a localized human
-label, its real role, enabled/selected state, and the same standard accessibility
-actions as touch. This applies in **every build**, including physical profile
-builds without a VM service. Do not speak `omi.*` or fixture IDs as labels.
-Merge decorative icons; avoid duplicate focus stops. Protected surface tests
-inspect real semantics actions, nonempty human labels, identifiers and unique
-visible keys on iOS/Android target platforms; chat pins the English labels
-`Message` and `Send message`. The builder adds corresponding translations through
-App UI's normal localization path. Widget tests do not replace device VoiceOver/
-TalkBack review, which must be reported separately.
+Initial scope is **15 controls**, not nine directories of accessibility debt:
 
-## Registry and production hooks
+| Surface | Count | Controls |
+| --- | ---: | --- |
+| chat | 2 | message input, send |
+| home | 3 | home tab, conversations tab, tasks tab |
+| conversations | 1 | seeded conversation row |
+| conversation_detail | 2 | back, ask about conversation |
+| memories | 1 | create memory |
+| tasks | 1 | create action item |
+| settings | 2 | profile, done |
+| onboarding | 1 | Google sign-in |
+| devices | 2 | back, connection guide |
 
-`routes` contains the nine intended addressable destinations, with source class,
-root, reach method, fixture and auth/profile preconditions. Entries are promises,
-not proof of readiness: capabilities advertise only routes whose implementation
-is ready. `deferred_pages` inventories existing other page/helper files as
-**unaddressable**; it is not a walker target. New page files must have a route
-entry (split non-screen helpers outside pages). `navigation_sites` inventories navigation calls per file. Existing sites have
-frozen legacy IDs; each added call must reference a real route ID, never another
-legacy entry. Additions to deferred_pages are rejected after this baseline.
-`deferred_widgets` also freezes existing Page/Screen/Drawer/Sheet widget classes:
-adding a new screen inside an old file still requires a route. This is a static
-inventory, not proof that computed destinations execute; unconventional class
-names/base classes remain a documented scanner limit.
+These are initial entry-state handles, not complete workflows. Add a control when
+a reviewed journey/agent task needs it: add key, source, scope, English label,
+role/action and fixture scenario to the catalog; implement localized semantics;
+add an interaction assertion. New states need a separate scenario test. Never
+remove a catalog obligation to pass a surface. Dynamic row entries identify the
+synthetic fixture record; production keys derive from each actual record; row labels include its human title.
 
-Do not migrate routers. `AppAddressability` is the sole production adapter.
-Home uses HomeProvider.selectedIndex and the existing lazy IndexedStack slots
-0/1/2; chat/memories/detail/devices use the same page constructors and Navigator
-push path as their UI; settings calls SettingsDrawer.show. Onboarding opens its
-existing wrapper with signed-out fixture state. Preserve back/pop behavior and
-refuse unknown routes, unmet auth, nonlocal profile, missing/foreign record id,
-concurrent navigation and unmounted owners before changing the stack. Refusals
-are AddressabilityRefused codes: ineligible, unmounted, unknown-route,
-auth-required, record-required, record-unavailable, busy. Admission order starts
-with eligibility/owner; no navigation mutation or content-bearing error on refusal.
-Navigate completes after the visible root is ready, not after that route pops. A detail
-record is fetched through the real provider/API and checked for fixture ownership;
-never construct an empty page to pretend a destination exists.
+Keys use `omi.<surface>.<control>[.<qualifier>]`: lower snake case surface/control,
+qualifier `[a-z0-9][a-z0-9_-]*`. `AddressKey.row(surface,id)` is
+`omi.<surface>.row.r` + all 64 lowercase SHA256(UTF8 opaque id) hex characters.
+Reject empty/>256-byte IDs and unknown surfaces. Never use position, email or text.
+A root/layout needs only a key. **Catalogued controls** require that key on the
+actual interactive widget, matching Semantics identifier, localized human label,
+real role/enabled/selected state and standard accessibility action parity with
+touch, in every build. No `omi.*` or fixture IDs spoken; merge decoration and
+avoid duplicate focus stops. `label_en` pins the English fixture, not production
+hardcoded English. Other controls retain normal accessibility standards and the
+no-growth ratchet, but are not B1's acceptance scope. Device VoiceOver/TalkBack
+review remains separate from widget evidence.
 
-Builder hooks: eligible main bootstrap connects the adapter to the existing
-navigator/provider scope; home exports tab selection through its existing owner;
-pages mount catalog root keys and accessible controls; a NavigatorObserver plus
-tab/sheet completion updates visible route. Mounted offstage tabs are not visible
-routes. `buildShell()` returns the actual HomePage shell used by the adapter;
-protected tests pump it via JourneyHermeticBoot, never a second test-only table.
-The fixture catalog binds identity to harness `mobile/v1.json` and data to
-JourneyFixtureBackend: conversation-one uses j1's exact id, chat/memories begin
-empty, other signed-in surfaces use empty data, onboarding uses no principal.
-The fixture helper returns additional real auth/capture/device/memories/tasks/
-onboarding providers to JourneyHermeticBoot. External plugin/auth/BLE I/O may
-be faked; route decisions/providers stay real. No duplicate production bootstrap.
+## Existing owners and transitions
+
+`AppAddressability` adapts the existing Navigator, HomeProvider and providers.
+Home uses lazy IndexedStack slots 0/1/2; pushed pages use existing constructors;
+settings uses SettingsDrawer.show. Put `OmiKeys.homeRoot` on a stable
+KeyedSubtree **inside slot 0**, wrapping HomeContentPage; retain its existing
+GlobalKey on HomeContentPage itself. The same applies to other tab roots. A key
+on the whole shell would incorrectly remain visible on every tab. Shell-scoped
+catalog controls (bottom bar) stay outside the tab root. Wrapping is allowed;
+replacing GlobalKeys or discarding cached tabs is not.
+
+`buildShell(initialRoute: 'home')` returns the real signed-in shell.
+`buildShell(initialRoute: 'onboarding')` returns the real OnboardingWrapper with
+the signed-out fixture; never construct HomePage first. `navigate('onboarding')`
+from a signed-in shell refuses `auth-required`; navigation never signs out.
+Real sign-out uses the existing auth owner to replace the shell. During auth
+cutover/navigation, visibleRoute is null and routed is false; publish onboarding
+only after signed-out auth and its root are ready. Signing in follows the same rule.
+
+Admission checks eligibility/owner first, then route/auth/record. Refusal codes:
+ineligible, unmounted, unknown-route, auth-required, record-required,
+record-unavailable, busy. All refusals are **failed Futures**, never synchronous
+throws. Reserve the mutation slot synchronously before the first await; a second
+call returns a failed busy Future without interleaving. Navigate completes at
+visible-root readiness, not route pop. Fetch detail through the real provider/API
+and check fixture ownership; foreign/missing records cannot open placeholder pages.
+
+Eligible bootstrap connects the adapter to the existing navigator/provider scope.
+An observer plus tab/sheet completion maintains visibleRoute. Fixtures replace
+external auth/plugin/BLE I/O only (including host platform detection); providers and navigation remain real.
+JourneyHermeticBoot uses harness `mobile/v1.json` identity and JourneyFixtureBackend:
+j1's seeded detail, empty chat/memories/tasks, signed-out onboarding. Surface tests
+exercise registered VM handlers, actual page Types, roots, controls and transitions
+on iOS/Android widget targets. Cached tabs must disappear from onstage finders,
+remain in all-element finders, and retain element identity on return.
 
 ## semantic-controls/v2
 
-Keep the five B0 extension names. An omitted `version` wire parameter negotiates v1; explicit
-`semantic-controls/v2` selects v2; any other version returns unsupported-version.
-Never silently downgrade. v2 navigate takes `destination` (registry id) and
-optional `record_id`, returning `{ok:true}` only after readiness; refusals are
-service-extension errors with bounded codes, never successful no-ops. v1's existing state contract stays available to the
-V1 broker; in-tree new consumers request v2 explicitly. Capabilities are exact
-registered suffixes, supported_versions, selected contract_version, routes,
-and readiness names. **No generic action** in B1: a key alone establishes neither
-permission nor safe side effects. UI/accessibility remains the action channel.
+Keep B0's five extensions. Omitted version selects v1; explicit
+`semantic-controls/v2` selects v2; unknown version refuses unsupported-version.
+v2 navigate accepts destination=registry id plus optional record_id; returns
+`{ok:true}` after readiness. Errors are bounded extension errors. No generic
+action: keys establish neither permission nor safe side effects.
 
-The v2 snapshot has only: version, route (id/null), auth/capture/ble/wal enum
-states, wal_pending (0..1000 saturated; unavailable WAL => null), providers
-(`messages`, `conversations`, `memories`, `tasks`: LoadPhase), flags (sorted
-registered id/effective/override booleans, max 64; unique IDs matching
-`[a-z][a-z0-9_]{0,47}`), flags_hydrated and readiness.
-No uid/email, device names/addresses, recording IDs, text, timestamps, exceptions,
-preferences or arbitrary maps. Missing providers are unavailable, never ready; an unregistered visible route
-projects null rather than echoing an arbitrary route string.
-Reject negative counts, unknown provider/flag IDs and >64 flags. The typed
-ControlStateSource is a read-only seam over AuthenticationProvider, CaptureProvider,
-DeviceProvider, capture-owned WAL, Message/Conversation/Memory/ActionItem providers.
-Spine B owns flag registration and override policy; B1 only reads FlagState.
+`state` returns the snapshot object directly, with **no envelope**. Exact example:
 
-Readiness predicates: signedIn, routed (visible registered root mounted, no
-transition), captureIdle (known idle), appReady (all three, WAL ready, BLE not
-unavailable/connecting, flags hydrated, active route's required provider ready).
-Never infer state from navigator.mounted alone or catch errors into readiness.
-waitReady rejects unknown predicates and nonpositive/>30s deadlines, polls boundedly,
-returns a fresh snapshot or a typed timeout, and rechecks across navigation/auth
-cutover. VM install remains debug + local_dev + OMI_DEV_CONTROLS=1; the existing
-guard test remains authoritative. Pure projection types grant no VM access.
+```json
+{"contract_version":"semantic-controls/v2","route":"chat","auth":"signedIn","capture":"idle","ble":"disconnected","wal":"ready","wal_pending":3,"providers":{"messages":"ready","conversations":"unavailable","memories":"unavailable","tasks":"unavailable"},"flags":[{"id":"voice","effective":false,"override":null}],"flags_hydrated":true,"readiness":{"signedIn":true,"routed":true,"captureIdle":true,"appReady":true}}
+```
 
-## Enforcement and per-surface done
+Use enum `.name` spelling from addressability.dart; route is registry id/null,
+never a path. Surface wire equality compares this JSON-decoded map to snapshot().
+Schema: `semantic-controls-v2.schema.json`; exact projection oracle:
+`b1_controls_test.dart`. WAL count saturates at 1000, unavailable => null.
+Flags are sorted unique registered IDs, max64, effective bool/override nullable
+bool; Spine B owns policy. No transcripts, memories, identity, device addresses,
+preferences, timestamps, exceptions or arbitrary provider maps. Missing providers
+are unavailable; unknown visible routes project null. Reject invalid counts/IDs.
 
-`check_app_addressability.py` runs in local/CI manifest lanes. It tokenizes Dart,
-balances constructor arguments, and counts the named interactive constructors
-in its INTERACTIVE set; a child's key cannot cover its parent. Only changed
-files are held to min(committed baseline, base revision count). No-growth is
-per-file, so replacement of one debt item by another can escape. Custom wrappers,
-aliased constructors and computed route factories can escape; disabled controls
-and gesture-only detectors can be conservative positives. Review those cases;
-do not claim analyzer precision. This adds no plugin/dependency to the Dart job.
+Readiness: signedIn, routed (registered visible root, no transition), captureIdle
+(known idle); appReady requires all three plus WAL ready, BLE known/not connecting,
+flags hydrated and active route's required provider ready. waitReady polls fresh
+state, rejects unknown predicates/nonpositive/>30s deadlines, and times out typed.
+Capabilities list actual extensions, versions, implemented routes and predicates.
+Guard remains debug + local_dev + OMI_DEV_CONTROLS=1; existing guard tests govern.
+B1 alone does not enable V1 live journey attachment.
 
-`b1_*_surface_test.dart` + `b1_surface_contract.dart` is the executable template, instantiated for all nine
-routes on iOS and Android. It uses the real adapter/shell, checks actual page
-Type + enclosing root, state through actual registered v2 handlers (equal to
-the live projection), unique keys and semantics, then a real
-back/tab transition. Duplicate/offstage roots, fake registry-only navigation,
-and identifier-only Semantics fail. Builder adds scenario-specific coverage and
-zeroes that surface's static debt before removing the marker. Unit contracts
-also pin key stability, privacy projection, readiness and negotiation.
-Live verify still needs a separate executable journey adapter; B1 alone does
-not enable V1 `fast --session`. No router, flags, singleton or HTTP migration here.
+## Honest enforcement
+
+The lexical checker cannot distinguish screens from helpers/dialogs. Page-file,
+class-name and navigation-count inventories are removed. New addressable screens
+must declare `// omi-route: id` beside their class and register it; changed-file
+checks catch undeclared registry IDs, **not unmarked new screens**. Review catches
+omitted declarations. No whole-tree source walk on ordinary contributor diffs.
+
+Changed files retain min(baseline, base-source) unkeyed debt limits; baseline stays
+unchanged. Constructor/callback names come from the same catalog as widget tests.
+Static callback presence conservatively counts disabled callbacks; runtime checks
+can include disabled controls. Aliases/custom wrappers escape; per-file debt swaps
+can escape. No analyzer dependency. `--surface` checks only catalog declarations/
+references; widget contracts prove placement, semantics and reachability. It never
+zeroes directory debt. Complete both platform scenarios before retiring a marker.

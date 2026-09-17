@@ -92,14 +92,14 @@ checks:
     reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
   - id: app-addressability
     command: ["python3", "scripts/check_app_addressability.py", "--changed-files", "{changed_files}", "--base", "{base}"]
-    triggers: ["app/lib/**/*.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
+    triggers: ["app/lib/**/*.dart", "app/test/support/addressability_widgets.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; shared catalog plus no-growth debt prevents new invisible routes/controls"
+    reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; explicit route declarations plus changed-file no-growth debt protect catalogued navigation and control keys"
   - id: app-addressability-check-tests
     command: ["python3", "scripts/test_check_app_addressability.py"]
     triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "Token scan must reject child-key laundering and detect new page/navigation inventory without a Dart analyzer dependency"
+    reason: "Token scan must reject child-key laundering and unknown explicit route declarations without taxing helpers or dialogs"
   - id: spine-contracts
     command: ["python3", "scripts/check_spine_contracts.py"]
     triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", ".github/checks-manifest.yaml"]

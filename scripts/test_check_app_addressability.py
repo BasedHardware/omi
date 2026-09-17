@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Hermetic tests of the constrained token scan, not widget behavior."""
-import copy
 import contextlib
 import io
 import json
@@ -11,7 +10,7 @@ from unittest.mock import patch
 import check_app_addressability as check
 import unittest
 
-from check_app_addressability import calls, debt, validate_catalog, ROUTES
+from check_app_addressability import calls, debt, validate_catalog
 
 
 class AddressabilityCheckTests(unittest.TestCase):
@@ -40,44 +39,43 @@ class AddressabilityCheckTests(unittest.TestCase):
                          ['TextField', 'IconButton', 'InkWell'])
         self.assertEqual(debt('ListTile(title: Text("heading")); GestureDetector(child: Text("x"));', {}), [])
 
-    def test_navigation_calls_ignore_prose(self):
-        self.assertEqual(len(list(calls('MaterialPageRoute<void>(builder: (_) => Page()); // pushNamed()', ROUTES))), 1)
+    def test_helpers_dialogs_and_unmarked_screens_are_not_inventoried(self):
+        catalog = dict(routes=[], keys={}, fixtures={}, controls={}, interactive_widgets=check.INTERACTIVE)
+        for source in ['class ProbeHelper {}', 'showDialog(builder: f)', 'showModalBottomSheet(builder: f)',
+                       'class ConfirmationSheet extends StatelessWidget {}', 'class NewPage extends StatefulWidget {}']:
+            self.assertEqual(validate_catalog(catalog, {'app/lib/pages/new.dart': source}), [])
 
-    def test_new_page_and_unregistered_navigation_fail(self):
-        catalog = dict(routes=[], keys={}, fixtures={}, deferred_pages=['app/lib/pages/old.dart'], navigation_sites={})
-        self.assertEqual(validate_catalog(catalog, {'app/lib/pages/old.dart': 'class Old {}'}), [])
-        errors = validate_catalog(catalog, {'app/lib/pages/new.dart': 'class New {}'})
-        self.assertTrue(errors)
-        for remedy in (check.CATALOG, 'routes entry', 'navigation_sites[file]', '--generate', 'ADDRESSABILITY.md'):
-            self.assertIn(remedy, errors[0])
-        self.assertTrue(validate_catalog(catalog, {'app/lib/pages/old.dart': 'MaterialPageRoute(builder: f)'}))
-
-    def test_new_screen_in_old_file_cannot_hide_behind_page_file_inventory(self):
-        catalog = dict(routes=[], keys={}, fixtures={}, deferred_pages=['app/lib/pages/old.dart'], navigation_sites={})
-        source = 'class UnregisteredPage extends StatefulWidget {}'
-        errors = validate_catalog(catalog, {'app/lib/pages/old.dart': source})
+    def test_explicit_route_declaration_requires_registration_with_actionable_remedy(self):
+        catalog = dict(routes=[], keys={}, fixtures={}, controls={}, interactive_widgets=check.INTERACTIVE)
+        errors = validate_catalog(catalog, {'app/lib/pages/new.dart': '// omi-route: new_screen\nclass NewScreen {}'})
         self.assertEqual(len(errors), 1)
-        self.assertIn('UnregisteredPage', errors[0])
-        legacy = {**catalog, 'deferred_widgets': {'app/lib/pages/old.dart': ['UnregisteredPage']}}
-        self.assertEqual(validate_catalog(legacy, {'app/lib/pages/old.dart': source}), [])
-        self.assertTrue(check.inventory_growth(legacy, catalog))
-        self.assertEqual(check.screen_classes('// class HiddenPage extends StatelessWidget {}'), set())
+        for remedy in (check.CATALOG, 'routes entry', 'controls[route_id]', '--generate', 'ADDRESSABILITY.md'):
+            self.assertIn(remedy, errors[0])
 
-    def test_registry_cannot_claim_nonexistent_source_or_unknown_fixture(self):
-        route = dict(id='chat', root='omi.chat.root', source='missing', reach={'kind': 'push'},
-                     profile='local_dev', auth='signed_in', fixture='unknown', widget='ChatPage', ready_provider='messages')
-        catalog = dict(routes=[route], keys={'root': 'omi.chat.root'}, fixtures={}, deferred_pages=[], navigation_sites={})
-        self.assertEqual(len(validate_catalog(catalog, {})), 2)
-        duplicate = copy.deepcopy(catalog)
-        duplicate['routes'].append(route)
-        self.assertIn('duplicate route/root: chat', validate_catalog(duplicate, {}))
+    def test_catalog_validation_does_not_require_untouched_route_source(self):
+        catalog = json.loads((check.ROOT / check.CATALOG).read_text())
+        self.assertEqual(validate_catalog(catalog, {'app/lib/pages/helper.dart': 'class Helper {}'}), [])
+        route = catalog['routes'][0]
+        self.assertTrue(validate_catalog(catalog, {route['source']: 'class WrongPage {}'}))
 
-    def test_inventory_debt_can_shrink_but_new_sites_need_route_ids(self):
-        previous = dict(deferred_pages=['old'], navigation_sites={'old': ['legacy:1']})
-        self.assertEqual(check.inventory_growth(previous, previous), [])
-        self.assertEqual(check.inventory_growth(dict(deferred_pages=[], navigation_sites={}), previous), [])
-        added = dict(deferred_pages=['old', 'new'], navigation_sites={'old': ['legacy:1', 'legacy:2']})
-        self.assertEqual(len(check.inventory_growth(added, previous)), 2)
+    def test_surface_acceptance_does_not_zero_directory_debt(self):
+        catalog = json.loads((check.ROOT / check.CATALOG).read_text())
+        route = next(r for r in catalog['routes'] if r['id'] == 'chat')
+        sources = {route['source']: '// omi-route: chat\nTextField(key: OmiKeys.chatInput); GestureDetector(key: OmiKeys.chatSend); TextField();',
+                   'app/lib/pages/chat/unrelated.dart': 'TextField();' * 300}
+        self.assertEqual(check.surface_errors(catalog, 'chat', sources), [])
+        sources[route['source']] = '// omi-route: chat\nTextField(key: OmiKeys.chatInput);'
+        self.assertTrue(check.surface_errors(catalog, 'chat', sources))
+
+    def test_constructor_vocabulary_is_generated_from_one_catalog(self):
+        catalog = json.loads((check.ROOT / check.CATALOG).read_text())
+        generated = check.generated_interactive(catalog)
+        self.assertEqual(set(check.INTERACTIVE), set(catalog['interactive_widgets']))
+        for name, callbacks in check.INTERACTIVE.items():
+            self.assertIn(f'widget is {name})', generated)
+            args = '' if callbacks is None else f'{callbacks[0]}: () {{}}'
+            self.assertEqual(debt(f'{name}({args})', {}), [name])
+        self.assertEqual((check.ROOT / check.INTERACTIVE_GENERATED).read_text(), generated)
 
     def test_only_changed_files_are_held_to_debt_and_baseline_cannot_increase(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -85,12 +83,14 @@ class AddressabilityCheckTests(unittest.TestCase):
             path = 'app/lib/widgets/old.dart'
             (root / path).parent.mkdir(parents=True)
             (root / path).write_text('TextField(); TextField();')
-            catalog = dict(routes=[], keys={'input': 'omi.chat.input'}, fixtures={}, deferred_pages=[], navigation_sites={})
+            catalog = dict(routes=[], keys={'input': 'omi.chat.input'}, fixtures={}, controls={}, interactive_widgets=check.INTERACTIVE)
             for filename, value in [(check.CATALOG, catalog), (check.BASELINE, {path: 1})]:
                 (root / filename).parent.mkdir(parents=True, exist_ok=True)
                 (root / filename).write_text(json.dumps(value))
             (root / check.GENERATED).parent.mkdir(parents=True)
             (root / check.GENERATED).write_text(check.generated(catalog))
+            (root / check.INTERACTIVE_GENERATED).parent.mkdir(parents=True, exist_ok=True)
+            (root / check.INTERACTIVE_GENERATED).write_text(check.generated_interactive(catalog))
             changes = root / 'changes'
             changes.write_text('unrelated.dart')
             def base(_ref, filename):
@@ -107,6 +107,40 @@ class AddressabilityCheckTests(unittest.TestCase):
                 (root / path).write_text("TextField(key: ValueKey('omi.chat.input'));")
                 self.assertEqual(check.main(), 0)
                 (root / check.BASELINE).write_text(json.dumps({path: 2}))
+                self.assertEqual(check.main(), 1)
+
+    def test_default_scan_ignores_incoming_main_changes_but_includes_untracked_helpers(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], text=True)
+            git('init', '-q')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.test')
+            catalog = dict(routes=[], keys={}, fixtures={}, controls={}, interactive_widgets=check.INTERACTIVE)
+            path = 'app/lib/pages/old.dart'
+            for filename, content in [(check.CATALOG, json.dumps(catalog)), (check.BASELINE, json.dumps({path: 1})),
+                                      (check.GENERATED, check.generated(catalog)),
+                                      (check.INTERACTIVE_GENERATED, check.generated_interactive(catalog)),
+                                      (path, 'TextField();')]:
+                file = root / filename
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(content)
+            git('add', '.')
+            git('commit', '-qm', 'shared base')
+            git('branch', 'fixture-task')
+            (root / path).write_text('')
+            git('add', '.')
+            git('commit', '-qm', 'incoming main retires debt')
+            git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+            git('switch', '-q', 'fixture-task')
+            helper = root / 'app/lib/pages/helper.dart'
+            helper.write_text('class Helper {}')
+            with patch.object(check, 'ROOT', root), patch('sys.argv', ['check']), \
+                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(check.main(), 0)
+                helper.write_text('// omi-route: missing\nclass MissingPage extends StatelessWidget {}')
                 self.assertEqual(check.main(), 1)
 
     def test_catalog_identity_uses_existing_harness_and_journey_fixture(self):
