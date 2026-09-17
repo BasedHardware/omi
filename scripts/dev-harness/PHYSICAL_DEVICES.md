@@ -28,7 +28,8 @@ make mobile-session ARGS="device release --platform android --device-id <serial>
 ```
 
 Direct form: `scripts/dev-harness/mobile-session.sh device <op> …` (add
-`--json` on `doctor`/`list`/`acquire`/`run` for machine-readable output).
+`--json` right after `device` — e.g. `device --json doctor` — for
+machine-readable output).
 `device doctor` exits 2 while anything is `operator-action-needed` or
 `agent-remediable` — the message names the exact smallest step.
 
@@ -45,12 +46,12 @@ Direct form: `scripts/dev-harness/mobile-session.sh device <op> …` (add
   Cross-host/cross-user leases are NEVER auto-recovered (operator matter).
 - **Stale recovery**: same-host + same-user + provably dead pid is recovered
   under a guard directory (exactly one concurrent winner), generation bumps.
-  `device recover` is the explicit form; `heartbeat` refreshes liveness on
-  long runs.
+  `device recover` is the explicit form; `device heartbeat` refreshes liveness
+  on long runs.
 - **Release never touches device data**: no factory reset, wipe, or unenroll
   exists in this lane. The runner's only device-state mutations are permission
   toggles for the harness app id (`com.friend.ios.dev` /
-  `com.friend-app-withearable.ios12.development.*`); foreign app ids are
+  `com.friend-app-with-wearable.ios12.development.*`); foreign app ids are
   refused.
 
 ## Device-runner adapter
@@ -96,7 +97,8 @@ Record: source SHA + dirty state, artifact path + sha256, flavor/profile.
 
 ```bash
 make mobile-session ARGS="doctor"                       # everything ready before continuing
-make mobile-session ARGS="start oms-c5-phys --platform android --no-device"  # local services only
+make mobile-session ARGS="acquire --name c5-phys --platform android"  # session lease (id: oms-c5-phys)
+make mobile-session ARGS="start oms-c5-phys --no-device" # local services only
 make mobile-session ARGS="seed oms-c5-phys"             # synthetic Auth-emulator user (fixture v1)
 make mobile-session ARGS="device doctor"                # device visible + registration state
 make mobile-session ARGS="device register --platform android --device-id <serial> \
