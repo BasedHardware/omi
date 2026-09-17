@@ -2041,6 +2041,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String get memoryHistoryPartial => 'Osa mälestuste ajaloost pole saadaval. Kuvatakse seni saadud ajalugu.';
 
   @override
+  String get memoryHistory => 'Ajalugu';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Tühista';
 
   @override
@@ -9975,4 +9984,8 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.';
 }

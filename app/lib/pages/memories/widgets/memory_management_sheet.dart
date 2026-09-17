@@ -73,6 +73,30 @@ class MemoryManagementSheet extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: Divider(height: 1, color: Colors.white10),
         ),
+        if (provider.memoryBeliefEnabled) ...[
+          _buildFilterOption(
+            context,
+            context.l10n.current,
+            isSelected: provider.collectionView == MemoryCollectionView.usefulNow,
+            onTap: () => provider.setCollectionView(MemoryCollectionView.usefulNow),
+          ),
+          _buildFilterOption(
+            context,
+            context.l10n.memoryHistory,
+            isSelected: provider.collectionView == MemoryCollectionView.history,
+            onTap: () => provider.setCollectionView(MemoryCollectionView.history),
+          ),
+          _buildFilterOption(
+            context,
+            context.l10n.allMemories,
+            isSelected: provider.collectionView == MemoryCollectionView.all,
+            onTap: () => provider.setCollectionView(MemoryCollectionView.all),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Divider(height: 1, color: Colors.white10),
+          ),
+        ],
         _buildFilterOption(
           context,
           context.l10n.memoryThisDevice,

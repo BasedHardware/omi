@@ -19,6 +19,8 @@ from config.stt_provider_policy import (
     provider_for_service,
 )
 from routers.listen.receiver import MAX_STT_FAILOVERS, ListenReceiver
+from utils.metrics import OMI_LIVE_STT_ACCEPTED_TOTAL
+from utils.observability.transcription import _deployment_environment
 from utils.stt.streaming import STTService, get_stt_service_for_language
 
 
@@ -123,6 +125,32 @@ async def test_a_dead_primary_moves_the_session_to_the_next_provider(monkeypatch
     # The dead socket is released rather than leaked for the session's lifetime.
     assert dead.finished is True
     assert MODULATE_PROVIDER in receiver._stt_failed_providers
+
+
+@pytest.mark.asyncio
+async def test_a_successful_failover_counts_as_accepted_for_the_replacement_provider(monkeypatch):
+    """Soniox only ever serves as the hop behind Velma, so session-start acceptance
+    never names it. #13384 read that accepted=0 as an empty key and dropped a
+    provider that was carrying live failover traffic (#13662)."""
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
+    receiver.host.client_device_context.platform = 'ios'
+    before = _accepted_total('soniox', 'ios')
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'en', 'soniox'),
+    ):
+        assert await receiver._failover_stt_socket() is True
+
+    assert _accepted_total('soniox', 'ios') == before + 1
+
+
+def _accepted_total(provider: str, platform: str) -> float:
+    return OMI_LIVE_STT_ACCEPTED_TOTAL.labels(
+        provider=provider,
+        client_platform=platform,
+        deployment_environment=_deployment_environment(),
+    )._value.get()
 
 
 @pytest.mark.asyncio

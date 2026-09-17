@@ -408,6 +408,19 @@ def build_platform_board(base, scope: str) -> dict:
     })
     if scope == "mobile":
         placeholder_panels(dash, DESKTOP_ONLY_TITLES)
+        # Mobile has the saved-conversation event but does not emit the
+        # macOS-only transcript-output or assistant-completion events. Remove
+        # those series instead of turning missing telemetry into zeros.
+        usage = panel_by_title(dash, "Successful usage / capture output")
+        usage["description"] = (
+            "Saved conversation creators from Memory Created (mobile PostHog telemetry). "
+            "The transcribed-speech and completed-assistant series are macOS-only and "
+            "are intentionally omitted from this board; Recording Started is not a success metric."
+        )
+        usage["targets"][0]["columns"] = [
+            column for column in usage["targets"][0]["columns"]
+            if column.get("selector") in {"date", "conversationCreators"}
+        ]
 
     ticker = panel_by_title(dash, "Total users")
     ticker["title"] = f"{label} users (all-time)"

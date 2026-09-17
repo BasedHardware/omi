@@ -1,14 +1,118 @@
 # Belief model implementation plan
 
-Weights, not deletion. Flag off = today’s behavior. No new collections.
+Weights, not deletion. The source default is off; the Beta runtime explicitly
+enables the read and client contract. No new collections.
+
+> **Current PR contract.** The accepted Beta contract is recorded in
+> [Current Beta implementation contract](#current-beta-implementation-contract)
+> below. The older rule, seam, and implementation-report sections preserve the
+> original design history and dated pre-PR evidence; where they differ, the
+> current contract wins. This file is code-coupled architecture documentation,
+> not a deployment or all-user rollout approval.
 
 Flag: `MEMORY_BELIEF_MODEL_ENABLED` (`true`/`false`, default `false`).
 Reader: `utils/memory/belief_model.py:belief_model_enabled()` — `os.getenv` at the
 call boundary, never import-time. Same shape as
 `canonical_consolidation.consolidation_enabled` (`os.getenv(..., "true")` at
 `:452–454`) and `canonical_short_term_maintenance_cron` (`:473`).
-Register `false` on request-path hosts and `memory-maintenance-job` in
-`backend/deploy/runtime_env/_base.yaml` (compose; overlays stay unset = off).
+Register the source default on request-path hosts and the maintenance job in
+`backend/deploy/runtime_env/_base.yaml`. The Beta environment sets the flag to
+`true` on every supported first-party surface; production remains `false`
+until the separate release gate is approved.
+
+---
+
+## Current Beta implementation contract
+
+This is the contract for the current implementation PR. It applies to the
+backend and the first-party macOS, Flutter, web, and Windows clients. The
+client-facing page is [First-party memory clients](/doc/developer/memory-clients)
+and is intentionally separate from the Developer API documentation.
+
+### Capability and views
+
+- Beta advertises the deployment capability with the exact response header
+  `X-Omi-Memory-Belief-Enabled: true` or `false`.
+- The header is present on `/v3/memories` and
+  `/v3/memories/ledger-history`, including empty responses, and is exposed to
+  browser clients through CORS. Clients cache the capability by owner and
+  backend environment and clear Beta-only state when the header is missing,
+  malformed, or not exactly `true`.
+- The optional `view` selector accepts `useful_now`, `history`, or `all`.
+  Omitting it preserves the released list semantics for older callers. Beta
+  first-party surfaces request `useful_now` for the default list and provide a
+  discoverable history path. History access does not grant blanket authority
+  over the Archive storage tier.
+- The optional `as_of` query parameter pins the evaluation clock for the whole
+  bounded traversal. It is separate from the per-record `as_of` response field,
+  which is the original evidence clock; `belief_computed_at` is the assessment
+  clock for that response.
+- Historical semantic search supplements current-only indexes with one
+  authorized newest-first canonical scan of at most 60 raw rows, keyword
+  matching and interleaving provider IDs before rehydrating at most 60 unique
+  memories. This bounded supplement does not search every retained version or
+  guarantee complete old semantic recall; explicit paged history remains the
+  deeper inspection path.
+
+### Currency, evidence, and provenance
+
+- Currency is a read-side projection. It never changes truth, status, tier, or
+  deletion state. The existing `short_term`, `long_term`, and `archive`
+  storage/wire tiers remain unchanged.
+- `as_of` is the original evidence timestamp (the last evidence clock), while
+  `belief_computed_at` is the time at which the read-side assessment was made.
+  An unclassified or otherwise unknown row may return `currency: null` and
+  `currency_band: null`; a present `belief_computed_at` tells a client that the
+  current policy was applied even though no half-life was known.
+- Original capture lineage and evidence families are retained. Similarity,
+  retrieval, display, citation, and time alone are never corroboration. A
+  screen/OCR observation cannot become independent corroboration merely because
+  it was captured at a different time.
+- When supplied, the evidence `captured_at` is preserved as the original
+  capture time. It is distinct from item creation time and does not rewrite
+  creation timestamps or introduce a new TTL/status transition.
+- Evidence authority follows the original source: direct owner input, the
+  owner's writing, the owner's speech, screen/OCR, then third-party or inferred
+  material. Unknown or assistant-generated material cannot overpower an owner
+  fact. Explicit owner review and correction remain the authoritative mutation
+  path.
+- Legacy evidence with missing attribution remains unknown even when its
+  transport is typed as transcription or its subject is the owner. Transport
+  metadata alone does not establish source authority.
+- Manual saves preserve the owner's authority and the record. A temporary
+  manual claim can still become dated when its class or explicit horizon says
+  it should; a standing instruction or timeless identity claim may remain
+  current. Forgetting is weighting, not deletion.
+
+### Owner use and safe pause
+
+- Suppression is additive owner-use state at `arguments.memory_use`. It removes
+  a row from default reliance while keeping the owner record inspectable; it
+  never changes truth, currency, evidence, or storage tier.
+- `POST /v3/memories/{memory_id}/use` accepts
+  `{ "action": "suppress" | "allow" | "useful", "feedback_id": "..." }`.
+  `feedback_id` is the retry-stable owner receipt identity. The canonical
+  mutation transaction writes the item change and the unified global feedback
+  receipt atomically; replaying the same receipt is idempotent, while reusing
+  it for a different action is a conflict. `useful` does not undo an existing
+  suppression; `allow` does.
+- Evidence-event audits use a typed patch with rationale JSON in
+  `journal.mutation_metadata`. They do not put opaque event data into logical
+  metadata or alter the operation digest contract.
+- `MEMORY_BELIEF_AUTOMATION_PAUSED=true` is a deployment-wide incident stop for
+  automated evidence/admission/enrichment/backfill writers. It leaves the
+  read-side contract available and preserves explicit owner corrections. It is
+  separate from the belief capability flag and is never a per-user cohort
+  switch.
+
+### Beta release boundary
+
+Beta qualification requires the same response header, view behavior, cache
+behavior, provenance, suppression, and owner-use receipt contract on all four
+first-party clients. It does not authorize production activation, shared-data
+backfill, merge, or distribution by itself. Runtime routing facts in the older
+readiness report remain dated evidence and must be refreshed before a broad
+release discussion. No time-only read assessment makes a new status claim.
 
 ---
 
@@ -36,7 +140,11 @@ status/layer only (`canonical_visibility_filter.py`).
 | Prompt/profile bar | `utils/llms/memory.py:110–128` | slotted `primary_user` facts only |
 | JIT/proactive bar | `jit_trigger_contract.py:717–721` already requires `primary_user` | no currency band |
 
-**Priors (extractor may override from wording; `user_asserted` / “remember this” → null):**
+**Priors (the extractor may override from wording).** `user_asserted` and
+“remember this” strengthen authority; they do not by themselves make a
+temporary claim timeless. A supplied class or explicit horizon remains in
+force. Standing instructions and timeless identity/relationship claims use a
+null half-life.
 
 | class | `half_life_days` |
 | --- | --- |
@@ -48,8 +156,10 @@ status/layer only (`canonical_visibility_filter.py`).
 | meta / standing instruction | null |
 
 Rows that predate this change have no `half_life_days`. **Derive the prior at
-read time** from `user_asserted`, `kind`, `slot`, `tier`, `category` — no
-backfill. Stored `half_life_days` wins when present.
+read time** from the stored class and evidence context; unknown rows remain
+unknown rather than receiving an invented currentness claim. Stored
+`half_life_days` wins when present. Class-only enrichment is bounded and
+replay-safe; it is not a prerequisite for reading existing rows.
 
 ---
 
@@ -178,7 +288,7 @@ Consolidation into a gist that keeps source rows as evidence stays allowed.
 
 ---
 
-## Deliberately out of scope
+## Deliberately out of scope in the historical pre-PR plan
 
 - Backfill of `half_life_days` (read-side prior is enough).
 - Learned truth scores, use-weight, retrieval-count loops.
@@ -190,7 +300,12 @@ Consolidation into a gist that keeps source rows as evidence stays allowed.
 
 ---
 
-## Implementation report
+## Dated pre-PR implementation report
+
+The following report records the earlier implementation state and its test
+receipts. It is retained for archaeological context; it is not the current
+Beta rollout status. The current contract above supersedes its unresolved
+questions and its client-UI/API-only boundary.
 
 Branch `feat/memory-belief-model`. Flag `MEMORY_BELIEF_MODEL_ENABLED`, unset = off.
 

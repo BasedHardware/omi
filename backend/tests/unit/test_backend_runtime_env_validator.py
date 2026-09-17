@@ -216,7 +216,7 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 
 def with_belief_model_env(payload: str) -> str:
-    """MEMORY_BELIEF_MODEL_ENABLED is declared beside every dev MEMORY_ENABLED site.
+    """Belief processing and its deployment-wide pause are declared together.
 
     The belief model gates writes in process_conversation (backend-listen, pusher, and
     the Cloud Run backend for reprocess), API memory create (backend-integration), and
@@ -225,7 +225,9 @@ def with_belief_model_env(payload: str) -> str:
     """
     return payload.replace(
         '{"name": "MEMORY_ENABLED", "value": "on"},',
-        '{"name": "MEMORY_ENABLED", "value": "on"},\n        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},',
+        '{"name": "MEMORY_ENABLED", "value": "on"},\n'
+        '        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},\n'
+        '        {"name": "MEMORY_BELIEF_AUTOMATION_PAUSED", "value": "false"},',
     )
 
 
@@ -1242,7 +1244,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,dg-nova-3,parakeet', got 'modulate-velma-2'",
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,soniox,dg-nova-3,parakeet', got 'modulate-velma-2'",
         ),
     ]
 

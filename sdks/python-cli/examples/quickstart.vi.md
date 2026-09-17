@@ -1,325 +1,108 @@
-# omi-cli — hướng dẫn nhanh bằng tiếng Việt
+# Bắt đầu với omi-cli
 
-> Hướng dẫn thực hành làm việc với Omi từ terminal. Phù hợp cho cả con người lẫn AI agent.
+Tài liệu này giải thích các lệnh cơ bản bằng tiếng Việt. Tên lệnh và thông báo
+của chương trình vẫn giữ nguyên bằng tiếng Anh. Các ví dụ truy vấn ở đây không
+làm thay đổi ký ức, cuộc trò chuyện, công việc hay mục tiêu của bạn.
 
-`omi-cli` là giao diện dòng lệnh chính thức cho API dành cho nhà phát triển của [Omi](https://omi.me).
-Nó cho phép truy cập nhanh, dễ viết script tới bốn thực thể chính của Omi:
-memories (ký ức), conversations (hội thoại), action items (việc cần làm) và goals (mục tiêu).
+## Cài đặt chương trình
 
-* **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
-* **Tài liệu:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
-* **Mã nguồn:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
+Yêu cầu: Python 3.10 trở lên và tài khoản Omi.
 
----
+Nếu bạn đã cài đặt `pipx`:
 
-## 1. Cài đặt
-
-Cách được khuyến nghị là `pipx`: nó cài tiện ích vào một môi trường cô lập,
-nên các phụ thuộc của nó sẽ không xung đột với các dự án của bạn.
-
-```bash
-# khuyến nghị: cài qua pipx
+```sh
 pipx install omi-cli
-
-# hoặc qua pip
-pip install omi-cli
-```
-
-> **Lưu ý: tên gói và tên lệnh khác nhau.**
-> * Gói được cài là **`omi-cli`** (gói riêng `omi` là một dự án khác, không liên quan).
-> * Sau khi cài, lệnh chạy là **`omi`**.
-
-Kiểm tra cài đặt:
-
-```bash
-omi --version
 omi --help
 ```
 
----
+Ngoài ra, bạn có thể cài đặt trong môi trường ảo Python đã kích hoạt:
 
-## 2. Xác thực
-
-`omi-cli` hỗ trợ hai cách đăng nhập.
-
-| Cách | Khi nào phù hợp | Lệnh |
-| :--- | :--- | :--- |
-| **Developer key (`omi_dev_*`)** | CI/CD, script, AI agent | `omi auth login --api-key ...` hoặc biến môi trường |
-| **Đăng nhập qua trình duyệt (Google/Apple)** | Làm việc trên máy cá nhân | `omi auth login --browser` |
-
-### Đăng nhập tương tác
-
-Không có flag nào, lệnh sẽ tự hỏi bạn muốn đăng nhập theo cách nào:
-
-```bash
-omi auth login
-# 1) Browser — đăng nhập qua Google hoặc Apple (tiện cho con người)
-# 2) API key — dán developer key từ app.omi.me (tiện cho agent và CI)
+```sh
+python -m pip install omi-cli
+omi --help
 ```
 
-Khi chọn API key, phần nhập sẽ bị che nên key không lưu lại trong lịch sử terminal.
+Nếu terminal không tìm thấy `omi`, hãy kiểm tra xem môi trường ảo đã được kích hoạt
+chưa hoặc thư mục mà `pipx` cài đặt file thực thi đã có trong `PATH` của bạn chưa.
 
-### Thẳng qua trình duyệt
+## Kết nối tài khoản của bạn
 
-```bash
+Khởi chạy trình hướng dẫn tương tác:
+
+```sh
+omi auth login
+```
+
+Chọn đăng nhập qua trình duyệt hoặc dán API key dành cho nhà phát triển Omi.
+Đầu vào tương tác sẽ ẩn key; tránh viết key trong lệnh vì nó sẽ lưu lại trong lịch sử terminal.
+
+Để chuyển trực tiếp đến trình duyệt:
+
+```sh
 omi auth login --browser
 ```
 
-### Bằng developer key
+Đăng nhập trên cùng một máy tính đang chạy terminal: phản hồi xác thực sử dụng
+địa chỉ cục bộ. Làm theo hướng dẫn hiển thị trên màn hình.
 
-Lấy key tại [app.omi.me](https://app.omi.me) trong mục **Developer → API Keys**.
+Sau đó, xác minh cấu hình và quyền truy cập API:
 
-```bash
-# lưu key vào cấu hình
-omi auth login --api-key omi_dev_...
-
-# hoặc truyền qua môi trường — nên dùng cho CI/CD và container
-export OMI_API_KEY=omi_dev_...
+```sh
+omi auth status
+omi auth whoami
 ```
 
-Biến `OMI_API_KEY` được dùng khi profile đang hoạt động chưa lưu key,
-nên trong container bạn không cần ghi gì ra đĩa. Nếu profile đã có key,
-key đó sẽ được ưu tiên hơn biến môi trường.
+`status` hiển thị trạng thái cục bộ và ẩn khóa bí mật, nhưng không kiểm tra tính hợp lệ trên server.
+`whoami` gửi một yêu cầu đã xác thực; nếu thành công, nó xác nhận thông tin đăng nhập hoạt động mà không nhất thiết phải hiển thị tên của bạn.
 
-### Kiểm tra đăng nhập
+Cấu hình được lưu mặc định tại `~/.omi/config.toml`. Không chia sẻ file này:
+nó có thể chứa thông tin xác thực bảo mật của bạn.
 
-Hai lệnh trả lời hai câu hỏi khác nhau, đừng nhầm lẫn:
+## Xem dữ liệu của bạn
 
-* `omi auth status` — xem cái gì đang nằm **trên máy**: profile, key bị che, hạn dùng.
-  Chạy được không cần mạng.
-* `omi auth whoami` — gọi **tới server Omi**: kiểm tra key có thực sự
-  được chấp nhận không. Cần mạng.
-
-```bash
-omi auth status    # kiểm tra cục bộ, offline
-omi auth whoami    # kiểm tra trên server
+```sh
+omi memory list --limit 5
+omi conversation list --limit 5
+omi action-item list --open
+omi goal list
 ```
 
-Làm mới phiên OAuth sắp hết hạn mà không cần đăng nhập lại — chỉ áp dụng cho đăng nhập qua trình duyệt (OAuth). Với khóa `omi_dev_*` lệnh này không làm mới được; hãy xoay khóa trong ứng dụng web tại `Developer → API Keys`:
+Danh sách trống có thể chỉ đơn giản là không có mục nào khớp với truy vấn.
+Sử dụng trợ giúp để xem các bộ lọc của từng lệnh:
 
-```bash
-omi auth refresh
+```sh
+omi memory list --help
+omi action-item list --help
 ```
 
-Đăng xuất:
+## Lấy định dạng JSON và phân trang
 
-```bash
+Đặt tùy chọn toàn cục `--json` **trước** nhóm lệnh:
+
+```sh
+omi --json memory list --limit 25 --offset 0
+omi --json memory list --limit 25 --offset 25
+```
+
+Lệnh đầu tiên yêu cầu 25 ký ức đầu tiên; lệnh thứ hai yêu cầu 25 ký ức tiếp theo.
+Do đó, một trang đơn lẻ không phải là bản sao lưu đầy đủ. Đầu ra JSON giữ nguyên các ID đầy đủ, trong khi bảng hiển thị có thể rút ngắn chúng.
+
+Để lưu một trang vào file:
+
+```sh
+omi --json memory list --limit 25 --offset 0 > ky-uc-trang-1.json
+```
+
+Chuyển hướng này tạo hoặc ghi đè file cục bộ. Hãy chắc chắn rằng lệnh đã hoàn tất thành công trước khi sử dụng nội dung.
+Lỗi được ghi vào đầu ra lỗi (stderr); file trống không đảm bảo rằng không có dữ liệu. File xuất ra có thể chứa thông tin cá nhân: hãy giữ nó riêng tư.
+
+## Đăng xuất (Logout)
+
+```sh
 omi auth logout
 ```
 
----
+Lệnh này xóa thông tin xác thực được lưu cục bộ. Để thu hồi key trên server,
+hãy sử dụng trang quản lý developer keys trên tài khoản của bạn.
 
-## 3. Các lệnh chính
-
-### Memories (ký ức)
-
-Những sự kiện và kiến thức hệ thống đã ghi nhớ về bạn.
-
-```bash
-# liệt kê memories
-omi memory list
-
-# tạo mới
-omi memory create "Người dùng thích giao diện tối" --category lifestyle
-
-# xem một memory cụ thể
-omi memory get <MEMORY_ID>
-```
-
-### Conversations (hội thoại)
-
-Lịch sử lời nói và văn bản từ thiết bị hoặc từ ứng dụng.
-
-```bash
-# 5 hội thoại gần nhất
-omi conversation list --limit 5
-
-# toàn bộ hội thoại kèm bản ghi
-omi conversation get <CONVERSATION_ID> --include-transcript
-```
-
-### Action items (việc cần làm)
-
-Những việc Omi trích ra từ các hội thoại.
-
-```bash
-# chỉ những việc chưa xong
-omi action-item list --open
-
-# đánh dấu đã hoàn thành
-omi action-item complete <ACTION_ITEM_ID>
-```
-
-### Goals (mục tiêu)
-
-```bash
-# liệt kê mục tiêu
-omi goal list
-
-# ghi giá trị tiến độ mới (cần CẢ HAI tham số: mục tiêu và giá trị)
-omi goal progress <GOAL_ID> 25
-
-# lịch sử thay đổi
-omi goal history <GOAL_ID>
-```
-
----
-
-## Hỏi bằng ngôn ngữ tự nhiên (`ask`)
-
-Lệnh cấp cao riêng: đặt câu hỏi bằng ngôn ngữ thường,
-câu trả lời được dựng từ chính các hội thoại của bạn.
-
-```bash
-omi ask "tôi đã quyết định gì về việc chuyển nhà"
-omi --json ask "tuần này tôi hứa hoàn thành những việc gì"
-```
-
----
-
-## 4. JSON và script (`--json`)
-
-`omi-cli` có thể trả về JSON máy đọc được. Flag `--json` là **toàn cục**,
-nên phải đặt **trước** lệnh con.
-
-```bash
-# memories: lấy id, nội dung và category
-omi --json memory list | jq '.[] | {id, content, category}'
-
-# tiêu đề các hội thoại gần nhất
-omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
-
-# các việc chưa xong
-omi --json action-item list --open | jq '.'
-```
-
-> **Lỗi thường gặp.** `--json` đi trước lệnh con, không phải sau.
-> * Đúng: `omi --json memory list`
-> * Sai: `omi memory list --json`
-
-Ở chế độ `--json`, standard output chỉ chứa JSON —
-script có thể dựa vào điều đó.
-
----
-
-## 5. Exit code
-
-Các mã này ổn định, nên có thể dùng để rẽ nhánh logic trong script và CI.
-
-| Mã | Ý nghĩa | Khi nào xảy ra |
-| :---: | :--- | :--- |
-| `0` | Thành công | Lệnh chạy xong |
-| `1` | Lỗi gọi lệnh | Kiểm tra của chính omi-cli (ví dụ dùng đồng thời `--browser` và `--api-key`, lựa chọn không hợp lệ, đầu vào rỗng) |
-| `2` | Lỗi truy cập hoặc tham số | Chưa đăng nhập, key sai hoặc hết hạn — cũng gồm lỗi phân tích cú pháp (flag không rõ, thiếu tham số) |
-| `3` | Lỗi server | Phản hồi 5xx, timeout, mất kết nối |
-| `4` | Quá nhiều request | 429 Too Many Requests |
-| `5` | Không tìm thấy | 404, id được chỉ định không tồn tại |
-
-Ví dụ kiểm tra trong Bash:
-
-```bash
-if omi --json auth whoami > /dev/null 2>&1; then
-  echo "key hoạt động"
-else
-  code=$?
-  [ "$code" -eq 2 ] && echo "cần đăng nhập lại"
-  [ "$code" -eq 3 ] && echo "server không truy cập được, thử lại sau"
-fi
-```
-
----
-
-## 6. Biến môi trường
-
-### Bash / Zsh (Linux, macOS)
-
-```bash
-export OMI_API_KEY="omi_dev_key_cua_ban"
-
-omi --json memory list --limit 10
-```
-
-Để key được nạp trong các phiên mới, thêm dòng đó vào `~/.bashrc` hoặc `~/.zshrc`.
-
-### PowerShell (Windows)
-
-```powershell
-$env:OMI_API_KEY = "omi_dev_key_cua_ban"
-
-# phân tích JSON bằng PowerShell
-(omi --json memory list | ConvertFrom-Json) | Select-Object id, content
-```
-
-Cài đặt vĩnh viễn:
-
-```powershell
-[Environment]::SetEnvironmentVariable("OMI_API_KEY", "omi_dev_key_cua_ban", "User")
-```
-
----
-
-## 7. Ứng dụng Omi Desktop chạy local
-
-Nếu ứng dụng desktop Omi đang chạy, một phần dữ liệu có thể truy cập trực tiếp,
-không qua cloud.
-
-```bash
-# chỉ định địa chỉ API local
-omi local configure --url http://127.0.0.1:47778 --token TOKEN_CUA_BAN
-
-# kiểm tra nó có phản hồi không
-omi --json local status
-
-# tìm trong lịch sử màn hình
-omi --json local search-screen "bảng giá" --days 7 --app Safari
-
-# chụp màn hình theo id
-omi --json local screenshot 123 --output /tmp/omi-shot.jpg
-
-# truy vấn SQL tùy ý trên database local
-omi --json local sql "SELECT appName, COUNT(*) FROM screenshots GROUP BY appName"
-```
-
-Quy trình làm việc: trước tiên `local status`, rồi `local tools` — để biết các
-công cụ khả dụng và tham số của chúng — sau đó mới gọi.
-
----
-
-## 8. Profiles
-
-Nếu có nhiều tài khoản hoặc môi trường, hãy tách bằng profiles.
-Cấu hình lưu trong `~/.omi/config.toml`.
-
-```bash
-# đăng nhập profile cá nhân
-omi --profile personal auth login
-
-# đăng nhập profile công việc
-omi --profile work auth login
-
-# chạy lệnh trong một profile cụ thể
-omi --profile work memory list
-```
-
-Nếu không chỉ định, CLI dùng profile từ biến môi trường `OMI_PROFILE` trước, rồi đến profile đang hoạt động trong tệp cấu hình, rồi `default`. Thứ tự ưu tiên: `--profile` → `OMI_PROFILE` → profile hoạt động trong `~/.omi/config.toml` → `default`.
-
-Xem và sửa chính cấu hình:
-
-```bash
-# đang cấu hình gì
-omi config show
-
-# file cấu hình nằm đâu
-omi config path
-
-# đổi một giá trị
-omi config set api_base https://api.omi.me
-```
-
----
-
-## 9. Bước tiếp theo
-
-* [`agent_quickstart.md`](./agent_quickstart.md) — cách nối `omi-cli` với một AI agent.
-* [`shell_examples.sh`](./shell_examples.sh) — các ví dụ shell chạy được.
-* [Tài liệu Omi](https://docs.omi.me/doc/developer/cli/introduction) — tham chiếu đầy đủ các lệnh.
+Đối với các lệnh khác và tùy chọn nâng cao, hãy xem [hướng dẫn chính bằng tiếng Anh](../README.md) và `omi --help`.

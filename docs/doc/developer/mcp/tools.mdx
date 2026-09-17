@@ -174,6 +174,27 @@ in the first two sections below; the additional tools are hosted-server tools.
 Dates use `YYYY-MM-DD`. `get_screen_activity` defaults to 200 raw rows; `limit` is ignored
 when `summary` is true.
 
+Screen summaries count **synced observations**, not elapsed app usage. OCR gating,
+frame deduplication, privacy exclusions, and sync compaction mean a row cannot be
+converted to a fixed number of seconds or treated as proof of the user's intent.
+The same summary contract serves hosted MCP, REST MCP, and
+`GET /v1/screen-activity/summary`:
+
+- `total_screenshots` and per-app `count` count only the summarized rows.
+- `coverage.source` is `synced_screen_activity`; `coverage.row_limit` is 5000.
+- `coverage.truncated` is true only when a lookahead row proves more matching
+  rows exist. Only the earliest 5000 rows contribute to the summary. Narrow the
+  date range to inspect later observations.
+- `coverage.first_observed_at` and `last_observed_at` bound the summarized rows,
+  in UTC (`YYYY-MM-DD HH:MM:SS.mmm`), and are null for an empty result. They do
+  not establish continuous activity or the device's latest capture time.
+- `coverage.capture_completeness` is `unknown`, even when `truncated` is false:
+  the cloud query cannot attest to device capture status, excluded activity,
+  retention, or pending sync. An empty result does not prove inactivity.
+
+Window titles are samples, not a ranking by dwell time. Summaries remain derived
+views of screen evidence; they do not create or promote semantic memories.
+
 ---
 
 ## Action Item Tools

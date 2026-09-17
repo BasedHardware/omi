@@ -68,11 +68,13 @@ The fuller recovery, insertion, and notch contract lives in
      offline even if a path comes back mid-hold. A route that already
      produced a backend transcript (omni STT, batch STT after a warm-wait)
      hands it in as `knownTranscript` so the audio is not transcribed twice.
-     Every fallback is recorded (`area=voice_typing`). The 12 s cap (and the
-     polisher's 6 s) is enforced at the boundary by `DeadlinedOperation`: a
-     request stuck before its first cancellation check is abandoned at the
-     cap, not waited for. Cancelling the turn cancels the transcription and
-     tries no fallback.
+     Every fallback is recorded (`area=voice_typing`). Both recognizers have a
+     12 s cap (and the polisher has 6 s), enforced at the boundary by
+     `DeadlinedOperation`: a request or first model load stuck before its first
+     cancellation check is abandoned at the cap, not waited for. Cancelling the
+     turn cancels the transcription and tries no fallback. The automation
+     result names `on_device_transcription_timeout` so a cold signed-out slot
+     finishes with a typed unavailable result instead of holding its client.
   2. **No chat corrector.** `PTTTranscriptContextualCorrector` is not run on
      a dictation. Its greeting rule respells the first word of "<word>, …"
      from on-screen text; live it turned "So, this is a test" into "Sil, …"

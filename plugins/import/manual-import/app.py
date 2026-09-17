@@ -127,7 +127,7 @@ def extract_memories_with_gpt(text):
         return processed_memories
 
     except Exception as e:
-        print(f"  ❌ Error using GPT for memory extraction: {str(e)}")
+        print(f"  ❌ Error using GPT for memory extraction: {type(e).__name__}")
         print("  ⚠️ Falling back to rule-based extraction")
         # Fallback to the rule-based approach
         return extract_memories_consolidated(text)
@@ -327,11 +327,10 @@ def submit_memories():
                     else:
                         print("📥 Response: Empty response body (success)")
                 except:
-                    print(f"📥 Response: {response.text}")
+                    print("📥 Response: unparseable body")
             else:
                 error_count += 1
                 print(f"❌ ERROR: Status code {response.status_code}")
-                print(f"📥 Response: {response.text}")
                 result["error"] = response.text
 
             results.append(result)
@@ -360,7 +359,7 @@ def submit_memories():
         )
 
     except Exception as e:
-        print(f"❌ EXCEPTION: {str(e)}")
+        print(f"❌ EXCEPTION: {type(e).__name__}")
         import traceback
 
         print(traceback.format_exc())
