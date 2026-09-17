@@ -59,6 +59,13 @@ struct AgentSurfaceReference: Hashable, Sendable {
     )
   }
 
+  /// Run-scoped projection for externally owned realtime work on the shared
+  /// floating-chat session. Keeping the run in the key prevents its lifecycle
+  /// wakeup from overwriting the visible floating-chat request projection.
+  static func externalRun(surfaceKind: String, runId: String) -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: surfaceKind, externalRefKind: "run", externalRefId: runId)
+  }
+
   static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
     AgentSurfaceReference(surfaceKind: "floating_bar", externalRefKind: "pill", externalRefId: pillId.uuidString)
   }
@@ -276,6 +283,35 @@ final class AgentRuntimeStatusStore: ObservableObject {
     update(surface: surface, status: .running, statusText: statusText, terminal: false, payload: payload)
   }
 
+  /// Projects a terminal receipt already committed by the kernel. This is a
+  /// wakeup only: the kernel remains the lifecycle and completion-content owner.
+  func recordConfirmedTerminalRun(
+    surface: AgentSurfaceReference,
+    sessionId: String,
+    runId: String,
+    attemptId: String?,
+    status: AgentRunProjectionStatus,
+    statusText: String? = nil,
+    errorMessage: String? = nil
+  ) {
+    guard status.isTerminal else { return }
+    var payload: [String: Any] = [
+      "sessionId": sessionId,
+      "runId": runId,
+      "completedAtMs": Int(Date().timeIntervalSince1970 * 1_000),
+    ]
+    if let attemptId, !attemptId.isEmpty {
+      payload["attemptId"] = attemptId
+    }
+    update(
+      surface: surface,
+      status: status,
+      statusText: statusText,
+      errorMessage: errorMessage,
+      terminal: true,
+      payload: payload)
+  }
+
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {
     switch message.kind {
     case .textDelta, .thinkingDelta, .turnActivity:
@@ -329,7 +365,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .authorizedToolExecution,
+    case .initMessage, .modelHeadersRequest, .toolUse, .authorizedToolExecution,
       .authRequired, .authSuccess, .controlToolResult,
       .journalOperationResult, .journalTurnChanged, .journalBackendSync, .journalBackendDelete,
       .journalBackendReconcile, .chatFirstDeferralDelivery,

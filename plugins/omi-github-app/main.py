@@ -470,7 +470,11 @@ async def tool_create_issue(request: Request):
             labels = [str(l).strip() for l in raw_labels if l is not None and str(l).strip()]
         else:
             labels = []
-        auto_labels = body.get("auto_labels", True)
+        # The backend sends JSON null for an omitted optional parameter, and
+        # dict.get returns that null rather than the default, so fall back to
+        # the schema's documented default of true only when nothing was sent.
+        raw_auto_labels = body.get("auto_labels")
+        auto_labels = True if raw_auto_labels is None else bool(raw_auto_labels)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
