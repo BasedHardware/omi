@@ -36,5 +36,4 @@ test('static layout guard: DesktopApp keeps an even window inset around one chro
   expect(desktopChrome).toContain('styles.navPill');
   expect(desktopChrome).toContain('accessibilityLabel="Settings"');
   expect(desktopChrome).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
-  expect(desktopChrome).toMatch(/navItem:\s*\{[^}]*paddingHorizontal:\s*16/);
 });

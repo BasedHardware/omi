@@ -1,4 +1,4 @@
-import React, {useMemo} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -16,7 +16,15 @@ import {FocusPressable} from '../ui/Pressable';
 import {ScrollFade} from './ScrollFade';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
-import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
+import History from 'lucide-react-native/icons/rotate-ccw-clock';
+import ArrowUpRight from 'lucide-react-native/icons/arrow-up-right';
+import {
+  EmptyCopy,
+  PageHeading,
+  ReadRow,
+  SectionTitle,
+  TaskRow,
+} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
 
 type Props = {
@@ -90,6 +98,7 @@ export function DesktopHome({
   reads,
   readsPhase,
 }: Props) {
+  const [wide, setWide] = useState(false);
   const query = draft.trim();
   const normalized = query.toLocaleLowerCase();
   const currents = useMemo(() => {
@@ -146,96 +155,125 @@ export function DesktopHome({
           scrollEventThrottle={16}
           contentContainerStyle={styles.listContent}
           style={styles.list}>
+          <PageHeading
+            eyebrow="YOUR PERSONAL CONTEXT"
+            title={
+              query
+                ? 'A little easier to find.'
+                : 'A little space for your day.'
+            }
+            subtitle={
+              query
+                ? `Results from loaded history for “${query}”`
+                : 'Pick up a thought. Follow through. Find your way back.'
+            }
+          />
           <View
-            accessibilityLabel="Home tasks"
-            style={[styles.section, styles.sectionSpaced]}>
-            <View style={styles.sectionHeader}>
-              <SectionTitle>Tasks</SectionTitle>
-              {visibleTasks.length > 0 &&
-              tasksOutcome?.status === 'success' &&
-              readsPhase !== 'initial-loading' &&
-              readsPhase !== 'refreshing' ? (
-                <FocusPressable
-                  accessibilityRole="button"
-                  accessibilityLabel={query ? 'Open tasks' : 'Show more tasks'}
-                  onPress={onOpenTasks}>
-                  <Text style={styles.bannerAction}>
-                    {query ? 'Open tasks' : 'Show more'}
-                  </Text>
-                </FocusPressable>
+            onLayout={event => setWide(event.nativeEvent.layout.width >= 760)}
+            style={[styles.columns, wide && styles.columnsWide]}>
+            <View
+              accessibilityLabel="Home tasks"
+              style={[styles.section, wide && styles.column]}>
+              <View style={styles.sectionHeader}>
+                <SectionTitle>Tasks</SectionTitle>
+                {visibleTasks.length > 0 &&
+                tasksOutcome?.status === 'success' &&
+                readsPhase !== 'initial-loading' &&
+                readsPhase !== 'refreshing' ? (
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      query ? 'Open tasks' : 'Show more tasks'
+                    }
+                    onPress={onOpenTasks}>
+                    <Text style={styles.bannerAction}>
+                      {query ? 'Open tasks' : 'Show more'}
+                    </Text>
+                  </FocusPressable>
+                ) : null}
+              </View>
+              {visibleTasks.length > 0 ? (
+                visibleTasks.slice(0, 3).map(item => (
+                  <ShippingListInsert itemKey={item.id} key={item.id}>
+                    <TaskRow item={item} />
+                  </ShippingListInsert>
+                ))
+              ) : (
+                <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
+              )}
+              {tasksOutcome?.status === 'success' &&
+              !tasksOutcome.value.page.hasMore ? (
+                <ReadStatus label="Tasks" mac page={tasksOutcome.value.page} />
               ) : null}
             </View>
-            {visibleTasks.length > 0 ? (
-              visibleTasks.slice(0, 3).map(item => (
-                <ShippingListInsert itemKey={item.id} key={item.id}>
-                  <TaskRow item={item} />
-                </ShippingListInsert>
-              ))
-            ) : (
-              <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
-            )}
-            {tasksOutcome?.status === 'success' &&
-            !tasksOutcome.value.page.hasMore ? (
-              <ReadStatus label="Tasks" mac page={tasksOutcome.value.page} />
-            ) : null}
-          </View>
-          <View
-            accessibilityLabel="Home currents"
-            style={[styles.section, styles.sectionSpaced]}>
-            <View style={styles.sectionHeader}>
-              <SectionTitle>Conversations & memories</SectionTitle>
-              {currents.length > 0 &&
-              conversationsOutcome?.status === 'success' &&
-              !currentsError &&
-              readsPhase !== 'initial-loading' &&
-              readsPhase !== 'refreshing' ? (
-                <FocusPressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    query ? 'Open conversations' : 'Show more conversations'
-                  }
-                  onPress={onOpenConversations}>
-                  <Text style={styles.bannerAction}>
-                    {query ? 'Open conversations' : 'Show more'}
-                  </Text>
-                </FocusPressable>
+            <View
+              accessibilityLabel="Home currents"
+              style={[styles.section, wide && styles.column]}>
+              <View style={styles.sectionHeader}>
+                <SectionTitle>Conversations & memories</SectionTitle>
+                {currents.length > 0 &&
+                conversationsOutcome?.status === 'success' &&
+                !currentsError &&
+                readsPhase !== 'initial-loading' &&
+                readsPhase !== 'refreshing' ? (
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      query ? 'Open conversations' : 'Show more conversations'
+                    }
+                    onPress={onOpenConversations}>
+                    <Text style={styles.bannerAction}>
+                      {query ? 'Open conversations' : 'Show more'}
+                    </Text>
+                  </FocusPressable>
+                ) : null}
+              </View>
+              {currents.length > 0 ? (
+                currents.slice(0, 3).map(item => (
+                  <ShippingListInsert
+                    itemKey={`${item.kind}-${item.id}`}
+                    key={`${item.kind}-${item.id}`}>
+                    <ReadRow item={item} />
+                  </ShippingListInsert>
+                ))
+              ) : (
+                <EmptyCopy>{currentsEmptyCopy}</EmptyCopy>
+              )}
+              {conversationsOutcome?.status === 'success' &&
+              !conversationsOutcome.value.page.hasMore ? (
+                <ReadStatus
+                  label="Conversations"
+                  mac
+                  page={conversationsOutcome.value.page}
+                />
+              ) : null}
+              {memoriesOutcome?.status === 'success' &&
+              !memoriesOutcome.value.page.hasMore ? (
+                <ReadStatus
+                  label="Memories"
+                  mac
+                  page={memoriesOutcome.value.page}
+                />
               ) : null}
             </View>
-            {currents.length > 0 ? (
-              currents.slice(0, 3).map(item => (
-                <ShippingListInsert
-                  itemKey={`${item.kind}-${item.id}`}
-                  key={`${item.kind}-${item.id}`}>
-                  <ReadRow item={item} />
-                </ShippingListInsert>
-              ))
-            ) : (
-              <EmptyCopy>{currentsEmptyCopy}</EmptyCopy>
-            )}
-            {conversationsOutcome?.status === 'success' &&
-            !conversationsOutcome.value.page.hasMore ? (
-              <ReadStatus
-                label="Conversations"
-                mac
-                page={conversationsOutcome.value.page}
-              />
-            ) : null}
-            {memoriesOutcome?.status === 'success' &&
-            !memoriesOutcome.value.page.hasMore ? (
-              <ReadStatus
-                label="Memories"
-                mac
-                page={memoriesOutcome.value.page}
-              />
-            ) : null}
           </View>
           <View accessibilityLabel="Home rewind" style={styles.section}>
-            <SectionTitle>Screen history</SectionTitle>
             <FocusPressable
               accessibilityRole="button"
               accessibilityLabel="Open Recall"
-              onPress={onOpenRewind}>
+              onPress={onOpenRewind}
+              style={styles.recallRow}>
+              <View style={styles.recallIcon}>
+                <History size={22} color={token.color.inkMuted} />
+              </View>
+              <View style={styles.column}>
+                <SectionTitle>Screen history</SectionTitle>
+                <Text style={styles.recallCopy}>
+                  Find your way back to something you saw.
+                </Text>
+              </View>
               <Text style={styles.bannerAction}>Open Recall</Text>
+              <ArrowUpRight size={16} color={token.color.inkMuted} />
             </FocusPressable>
           </View>
         </ScrollView>
@@ -247,6 +285,24 @@ export function DesktopHome({
 const styles = StyleSheet.create({
   scroll: {flex: 1},
   home: {flex: 1, gap: 12},
+  columns: {gap: 16, marginBottom: 16},
+  columnsWide: {flexDirection: 'row'},
+  column: {flex: 1, minWidth: 0},
+  recallRow: {flexDirection: 'row', alignItems: 'center', gap: 14},
+  recallIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: token.color.glassQuiet,
+  },
+  recallCopy: {
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 5,
+    color: token.color.inkMuted,
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -260,6 +316,8 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 32,
     width: '100%',
+    paddingHorizontal: 24,
+    paddingVertical: 6,
   },
   bannerText: {
     color: token.color.inkMuted,
@@ -277,12 +335,20 @@ const styles = StyleSheet.create({
   },
   pressed: {opacity: 0.78},
   list: {flex: 1},
-  sectionSpaced: {marginBottom: 14},
   section: {
-    backgroundColor: token.color.glassQuiet,
-    borderRadius: 16,
-    gap: 8,
-    padding: 16,
+    backgroundColor: token.color.glassStrong,
+    borderWidth: 1,
+    borderColor: token.color.line,
+    borderRadius: 18,
+    gap: 12,
+    padding: 24,
   },
-  listContent: {paddingBottom: 32},
+  listContent: {
+    paddingTop: 8,
+    paddingBottom: 32,
+    paddingHorizontal: 24,
+    maxWidth: 1040,
+    width: '100%',
+    alignSelf: 'center',
+  },
 });

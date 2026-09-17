@@ -65,8 +65,8 @@ export function ShippingStage({
       translateY.setValue(0);
       return undefined;
     }
-    opacity.setValue(0.92);
-    translateY.setValue(fromY === 0 ? 8 : fromY);
+    opacity.setValue(0.65);
+    translateY.setValue(fromY === 0 ? 10 : fromY);
     const animation = Animated.parallel(
       [
         runShippingTiming(opacity, 1, duration, true),

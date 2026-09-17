@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 import {FocusPressable} from '../ui/Pressable';
+import Monitor from 'lucide-react-native/icons/monitor';
+import {DesktopEmptyState, PageHeading} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
 import {ScrollFade, useScrollFade} from './ScrollFade';
 import {createRewindTimeline} from './rewindTimeline';
@@ -246,27 +248,48 @@ export function DesktopRewind({
   };
   return (
     <View style={styles.root} accessibilityLabel="Recall screen history">
-      {error !== null ? (
+      <PageHeading
+        title="Find your way back."
+        subtitle="Your screen history, kept on this Mac."
+        eyebrow="RECALL"
+      />
+      {error !== null && frames.length > 0 ? (
         <Text accessibilityRole="alert" style={styles.text}>
           {error}
         </Text>
       ) : null}
-      <View style={styles.content}>
-        <ScrollFade visible style={styles.list}>
-          <ScrollView
-            onLayout={fade.onLayout}
-            onScroll={fade.onScroll}
-            onContentSizeChange={fade.onContentSizeChange}
-            scrollEventThrottle={16}
-            contentContainerStyle={styles.rows}>
-            {frames.length === 0 && !busy && error === null ? (
-              <Text style={styles.text}>
-                {query
+      {frames.length === 0 ? (
+        <DesktopEmptyState
+          icon={Monitor}
+          error={!busy && error !== null}
+          title={
+            busy
+              ? 'Finding your moments…'
+              : error
+              ? 'Screen history is unavailable'
+              : query
+              ? 'Nothing matches yet'
+              : 'A place for what you saw.'
+          }
+          detail={
+            busy
+              ? 'Loading screen history…'
+              : error ??
+                (query
                   ? 'No captures match this search.'
-                  : 'No captures saved yet.'}
-              </Text>
-            ) : (
-              frames.map(frame => (
+                  : 'No captures saved yet.')
+          }
+        />
+      ) : (
+        <View style={styles.content}>
+          <ScrollFade visible style={styles.list}>
+            <ScrollView
+              onLayout={fade.onLayout}
+              onScroll={fade.onScroll}
+              onContentSizeChange={fade.onContentSizeChange}
+              scrollEventThrottle={16}
+              contentContainerStyle={styles.rows}>
+              {frames.map(frame => (
                 <FocusPressable
                   key={frame.id}
                   accessibilityRole="button"
@@ -287,72 +310,75 @@ export function DesktopRewind({
                     {new Date(frame.capturedAtMs).toLocaleString()}
                   </Text>
                 </FocusPressable>
-              ))
+              ))}
+              {busy ? (
+                <Text style={styles.meta}>Loading screen history…</Text>
+              ) : null}
+            </ScrollView>
+          </ScrollFade>
+          <View style={styles.preview}>
+            {selected === null ? (
+              <View style={styles.previewPrompt}>
+                <Monitor size={32} color={token.color.inkFaint} />
+                <Text style={styles.meta}>Select a capture to view it.</Text>
+              </View>
+            ) : imageError !== null ? (
+              <Text accessibilityRole="alert" style={styles.text}>
+                {imageError}
+              </Text>
+            ) : image === null ? (
+              <Text style={styles.meta}>Loading captured frame…</Text>
+            ) : (
+              <Image
+                key={selected.id}
+                accessibilityLabel={`Captured screen from ${selected.appName}`}
+                source={{uri: image}}
+                resizeMode="contain"
+                style={styles.image}
+                onError={() => {
+                  setImage(null);
+                  setImageError('This captured frame could not be opened.');
+                }}
+              />
             )}
-            {busy ? (
-              <Text style={styles.meta}>Loading screen history…</Text>
-            ) : null}
-            {hasMore ? (
-              <FocusPressable
-                accessibilityRole="button"
-                accessibilityLabel="Load more history"
-                disabled={busy}
-                onPress={() => void more()}
-                style={styles.button}>
-                <Text style={styles.text}>Load more</Text>
-              </FocusPressable>
-            ) : null}
-          </ScrollView>
-        </ScrollFade>
-        <View style={styles.preview}>
-          {selected === null ? (
-            frames.length > 0 ? (
-              <Text style={styles.meta}>Select a capture to view it.</Text>
-            ) : null
-          ) : imageError !== null ? (
-            <Text accessibilityRole="alert" style={styles.text}>
-              {imageError}
-            </Text>
-          ) : image === null ? (
-            <Text style={styles.meta}>Loading captured frame…</Text>
-          ) : (
-            <Image
-              key={selected.id}
-              accessibilityLabel={`Captured screen from ${selected.appName}`}
-              source={{uri: image}}
-              resizeMode="contain"
-              style={styles.image}
-              onError={() => {
-                setImage(null);
-                setImageError('This captured frame could not be opened.');
-              }}
-            />
-          )}
+          </View>
         </View>
-      </View>
+      )}
+      {hasMore ? (
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Load more history"
+          disabled={busy}
+          onPress={() => void more()}
+          style={styles.button}>
+          <Text style={styles.text}>Load more</Text>
+        </FocusPressable>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, gap: 12, padding: 12},
+  root: {flex: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12},
   toolbar: {flexDirection: 'row', gap: 8, alignItems: 'center'},
   button: {
     padding: 12,
     borderRadius: 12,
     backgroundColor: token.color.glassQuiet,
   },
-  text: {color: token.color.ink, fontSize: 14},
-  meta: {color: token.color.inkMuted, fontSize: 12},
+  text: {color: token.color.ink, fontSize: 14, lineHeight: 21},
+  meta: {color: token.color.inkMuted, fontSize: 12, lineHeight: 19},
   status: {flex: 1},
   content: {flex: 1, flexDirection: 'row', gap: 16},
   list: {width: 280, flexBasis: 280, flexGrow: 0, flexShrink: 1},
   rows: {gap: 8, paddingBottom: 12},
   row: {
-    padding: 12,
+    padding: 16,
     gap: 6,
     borderRadius: 12,
-    backgroundColor: token.color.glassQuiet,
+    backgroundColor: token.color.glassStrong,
+    borderWidth: 1,
+    borderColor: token.color.line,
   },
   selected: {backgroundColor: token.color.glassSelected},
   preview: {
@@ -361,7 +387,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 16,
-    backgroundColor: 'transparent',
+    backgroundColor: token.color.glassQuiet,
+    borderWidth: 1,
+    borderColor: token.color.line,
+    overflow: 'hidden',
   },
+  previewPrompt: {alignItems: 'center', gap: 16, padding: 24},
   image: {width: '100%', height: '100%'},
 });

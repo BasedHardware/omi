@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
+import {StyleSheet} from 'react-native';
 import {TasksPage} from './DesktopPages';
 import type {DesktopReadOutcomes} from '../desktopReadClient';
 
@@ -76,6 +77,9 @@ test('legacy tasks without revisions toggle and save edited descriptions', () =>
   act(() => toggle.props.onPress());
   expect(props.onTaskToggle).toHaveBeenCalledWith('task-1');
   act(() => label(view, 'Edit task: Review notes').props.onPress());
+  expect(
+    StyleSheet.flatten(label(view, 'Task description').props.style).color,
+  ).toBe('#242622');
   act(() =>
     label(view, 'Task description').props.onChangeText('Review all notes'),
   );

@@ -274,6 +274,11 @@ export function DesktopApp({
             messages={messages}
             busy={chatBusy || activeGenerationId !== null}
             onClose={closeChat}
+            onSuggest={prompt => {
+              setMode('Ask');
+              onDraftChange(prompt);
+              omnibarRef.current?.focus();
+            }}
             error={chatNotice}
             hasOlder={hasOlderChat}
             loadingOlder={loadingOlderChat}
@@ -322,7 +327,7 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: 'transparent',
     flex: 1,
-    gap: 8,
+    gap: 16,
     padding: desktopWindowInset,
   },
   probe: {flex: 1},

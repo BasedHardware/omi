@@ -54,6 +54,50 @@ export function EmptyCopy({children}: {children: string}) {
   return <Text style={styles.emptyCopy}>{children}</Text>;
 }
 
+export function PageHeading({
+  title,
+  subtitle,
+  eyebrow,
+}: {
+  title: string;
+  subtitle: string;
+  eyebrow?: string;
+}) {
+  return (
+    <View style={styles.heading}>
+      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+      <Text accessibilityRole="header" style={styles.pageTitle}>
+        {title}
+      </Text>
+      <Text style={styles.subtitle}>{subtitle}</Text>
+    </View>
+  );
+}
+
+export function DesktopEmptyState({
+  title,
+  detail,
+  icon: Icon = MessageCircle,
+  error = false,
+}: {
+  title: string;
+  detail: string;
+  icon?: typeof MessageCircle;
+  error?: boolean;
+}) {
+  return (
+    <View
+      style={styles.emptyState}
+      accessibilityRole={error ? 'alert' : undefined}>
+      <View style={styles.emptyGlyph}>
+        <Icon size={24} color={token.color.inkMuted} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyDetail}>{detail}</Text>
+    </View>
+  );
+}
+
 export const ReadRow = memo(function ReadRow({
   item,
 }: {
@@ -72,7 +116,7 @@ export const ReadRow = memo(function ReadRow({
         <Text numberOfLines={1} style={styles.rowTitle}>
           {item.kind === 'conversation' ? conversationTitle(item) : item.title}
         </Text>
-        <Text numberOfLines={1} style={styles.rowMeta}>
+        <Text numberOfLines={2} style={styles.rowMeta}>
           {meta.filter(part => part !== '').join(' · ')}
         </Text>
       </View>
@@ -92,7 +136,7 @@ export const ConversationRow = memo(function ConversationRow({
         <Text numberOfLines={1} style={styles.rowTitle}>
           {conversationTitle(item)}
         </Text>
-        <Text numberOfLines={1} style={styles.rowMeta}>
+        <Text numberOfLines={2} style={styles.rowMeta}>
           {[timeLabel(item), item.summary]
             .filter(part => part !== '')
             .join(' · ')}
@@ -135,11 +179,61 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
 });
 
 const styles = StyleSheet.create({
+  heading: {gap: 10, paddingBottom: 24},
+  eyebrow: {
+    fontSize: 10,
+    letterSpacing: 1.4,
+    fontWeight: '600',
+    color: token.color.inkMuted,
+  },
+  pageTitle: {
+    fontSize: 29,
+    lineHeight: 36,
+    letterSpacing: -0.9,
+    fontWeight: '500',
+    color: token.color.ink,
+  },
+  subtitle: {fontSize: 14, lineHeight: 22, color: token.color.inkMuted},
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    minHeight: 240,
+    gap: 12,
+    backgroundColor: token.color.glassStrong,
+    borderWidth: 1,
+    borderColor: token.color.line,
+    borderRadius: 18,
+  },
+  emptyGlyph: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: token.color.glassQuiet,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  emptyTitle: {
+    fontSize: 19,
+    lineHeight: 26,
+    color: token.color.ink,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  emptyDetail: {
+    fontSize: 13,
+    lineHeight: 21,
+    color: token.color.inkMuted,
+    textAlign: 'center',
+    maxWidth: 380,
+  },
   row: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
-    minHeight: 52,
+    minHeight: 64,
+    paddingVertical: 8,
   },
   glyph: {
     alignItems: 'center',
@@ -153,13 +247,14 @@ const styles = StyleSheet.create({
   rowTitle: {
     color: token.color.ink,
     fontFamily: token.font,
-    fontSize: token.type.title,
+    fontSize: 14,
     fontWeight: '500',
   },
   rowMeta: {
     color: token.color.inkMuted,
     fontFamily: token.font,
     fontSize: token.type.meta,
+    lineHeight: 19,
     marginTop: 2,
   },
   sectionTitle: {
@@ -203,6 +298,8 @@ const styles = StyleSheet.create({
   },
   taskCircleDone: {backgroundColor: token.color.ink},
   taskText: {
+    flex: 1,
+    lineHeight: 22,
     color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.body,
