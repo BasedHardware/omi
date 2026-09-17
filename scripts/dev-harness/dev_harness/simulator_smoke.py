@@ -298,7 +298,10 @@ def _parse_machine(line: str) -> dict[str, Any] | None:
     stripped = line.strip()
     if not stripped.startswith("["):
         return None
-    payload = json.loads(stripped)
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
     if isinstance(payload, list):
         if len(payload) != 1 or not isinstance(payload[0], dict):
             return None
@@ -349,6 +352,7 @@ class SimulatorSmoke:
         uvicorn_ok: Callable[[Path], bool] | None = None,
         startup_timeout_s: float = DEFAULT_STARTUP_TIMEOUT_S,
         env: Mapping[str, str] | None = None,
+        keep_dir: Path | None = None,
     ) -> None:
         if startup_timeout_s < MIN_STARTUP_TIMEOUT_S:
             raise SmokeBlocked(
@@ -381,6 +385,7 @@ class SimulatorSmoke:
         )
         self._uvicorn_ok = uvicorn_ok or uvicorn_importable
         self._startup_timeout_s = float(startup_timeout_s)
+        self._keep_dir = Path(keep_dir) if keep_dir else None
         self._child: MachineProcess | None = None
         self._app_id: str | None = None
         self._rpc_id = 0
@@ -392,6 +397,14 @@ class SimulatorSmoke:
         started = time.monotonic()
         try:
             return self._run(session_id=session_id, name=name)
+        except (SmokeBlocked, SessionError):
+            raise
+        except Exception as exc:
+            raise SmokeBlocked(
+                f"simulator smoke crashed: {type(exc).__name__}: {exc}",
+                remedy="inspect flutter.stderr.log and the session machine.jsonl",
+                payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
+            ) from exc
         finally:
             self._timings["total_s"] = round(time.monotonic() - started, 1)
             self._stop_child()
@@ -499,17 +512,35 @@ class SimulatorSmoke:
                 remedy="inspect the session evidence.json and screenshot path",
                 payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
             )
+        kept_shot = shot
+        kept_evidence = directory / ms.EVIDENCE_FILENAME
+        if self._keep_dir is not None:
+            self._keep_dir.mkdir(parents=True, exist_ok=True)
+            kept_shot = self._keep_dir / "screenshots" / "smoke.png"
+            kept_shot.parent.mkdir(parents=True, exist_ok=True)
+            if shot != kept_shot:
+                shutil.copy2(shot, kept_shot)
+            kept_evidence = self._keep_dir / "evidence.json"
+            session_evidence_path = directory / ms.EVIDENCE_FILENAME
+            if session_evidence_path.is_file():
+                shutil.copy2(session_evidence_path, kept_evidence)
+            else:
+                kept_evidence.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+            for name in ("machine.jsonl", "flutter.stderr.log"):
+                src = directory / name
+                if src.is_file():
+                    shutil.copy2(src, self._keep_dir / name)
         return {
             "outcome": "passed",
             "session_id": session_id,
             "device": device,
             "timings": dict(self._timings),
             "controls": {"capabilities": capabilities, "state": state},
-            "screenshot": str(shot),
-            "screenshot_sha256": se.file_sha256(shot),
+            "screenshot": str(kept_shot),
+            "screenshot_sha256": se.file_sha256(kept_shot),
             "artifact": None if artifact is None else str(artifact),
             "evidence": document,
-            "evidence_path": str(directory / ms.EVIDENCE_FILENAME),
+            "evidence_path": str(kept_evidence),
         }
 
     def _assert_signed_out_ready(self, state: Mapping[str, Any]) -> None:
@@ -728,7 +759,9 @@ def run_smoke(repo_root: Path, args: Any) -> int:
     timeout = float(getattr(args, "journey_timeout", None) or DEFAULT_STARTUP_TIMEOUT_S)
     if timeout < MIN_STARTUP_TIMEOUT_S:
         timeout = DEFAULT_STARTUP_TIMEOUT_S
-    engine = SimulatorSmoke(repo_root, startup_timeout_s=timeout)
+    evidence_dir = Path(getattr(args, "evidence_dir", None) or (Path(repo_root) / ".local" / "v2-sim-smoke"))
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    engine = SimulatorSmoke(repo_root, startup_timeout_s=timeout, keep_dir=evidence_dir)
     try:
         result = engine.run(session_id=getattr(args, "session", None) or None)
     except SmokeBlocked as exc:
@@ -747,8 +780,6 @@ def run_smoke(repo_root: Path, args: Any) -> int:
         verify._emit(payload, as_json=getattr(args, "json", False))
         print(f"blocked: {exc}", file=sys.stderr)
         return verify.EXIT_BLOCKED
-    evidence_dir = Path(getattr(args, "evidence_dir", None) or Path(result["evidence_path"]).parent)
-    evidence_dir.mkdir(parents=True, exist_ok=True)
     receipt = {
         "schema": "mobile-verify/v1",
         "command": "smoke",

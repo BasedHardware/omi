@@ -237,6 +237,16 @@ def test_fake_flutter_signed_out_ready_and_screenshot(tmp_path: Path) -> None:
     assert engine._timings["app_started_s"] >= 0
 
 
+def test_keep_dir_outlives_session_release(tmp_path: Path) -> None:
+    keep = tmp_path / "keep"
+    engine = _engine(tmp_path, keep_dir=keep)
+    result = engine.run()
+    assert Path(result["screenshot"]).is_file()
+    assert Path(result["evidence_path"]).is_file()
+    assert Path(result["screenshot"]).resolve().is_relative_to(keep.resolve())
+    assert engine._released == ["oms-v2smoke"]
+
+
 def test_signed_in_is_blocked_not_worked_around(tmp_path: Path) -> None:
     engine = _engine(tmp_path, mode="signed-in")
     with pytest.raises(smoke.SmokeBlocked, match="signedIn=false"):
@@ -249,6 +259,12 @@ def test_start_failure_still_releases(tmp_path: Path) -> None:
     with pytest.raises(smoke.SmokeBlocked, match="backend down"):
         engine.run()
     assert engine._released == ["oms-v2smoke"]
+
+
+def test_parse_machine_skips_xcode_bracket_noise() -> None:
+    assert smoke._parse_machine("[") is None
+    assert smoke._parse_machine("[ +12 ms] Running Xcode build...") is None
+    assert smoke._parse_machine('[{"event": "app.started", "params": {}}]')["event"] == "app.started"
 
 
 def test_startup_timeout_cannot_go_below_measured_cold_start(tmp_path: Path) -> None:
