@@ -506,7 +506,11 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     assert "app/build/app/outputs/flutter-apk/app-dev-debug.apk" in android
     assert "retention-days: 5" in android
     assert "${{ secrets." not in android
-    assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" in android
+    # Compile-smoke is the wall: restore-only so main does not pay Gradle
+    # save+cleanup after the APK, and so it does not race the JVM writer
+    # for the same content keys (runs 35256814704 / 35268313733).
+    assert "cache-read-only: true" in android
+    assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" not in android
 
     assert "./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64" in unit_tests
     unit_run_lines = {line.strip() for line in unit_tests.splitlines()}
