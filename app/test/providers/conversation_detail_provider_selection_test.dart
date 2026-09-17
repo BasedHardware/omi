@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,10 +8,22 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
+import '../support/local_day.dart';
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+
+  test('selectedDate defaults to the injected clock, not a later wall-clock now', () {
+    final frozen = localCalendarDay(2026, 8, 12, 15);
+    withClock(Clock.fixed(frozen), () {
+      final detailProvider = ConversationDetailProvider();
+      addTearDown(detailProvider.dispose);
+      expect(detailProvider.selectedDate, frozen);
+      expect(conversationLocalDayKey(detailProvider.selectedDate), conversationLocalDayKey(frozen));
+    });
   });
 
   test('conversation getter resolves at every hour of the day, whatever the viewer timezone', () {
@@ -126,7 +139,7 @@ void main() {
 /// fixtures meant to share one day-group stay in the same group at any UTC
 /// offset. Pinning the UTC hour instead split them across two local days at
 /// extreme offsets (UTC+14, UTC-11) and blew up on `keys.single`.
-DateTime _localHourOnFixedDay(int hour) => DateTime(2026, 7, 18, hour).toUtc();
+DateTime _localHourOnFixedDay(int hour) => localCalendarDay(2026, 7, 18, hour).toUtc();
 
 ServerConversation _conversationAt(String id, DateTime startedAt) {
   return ServerConversation(

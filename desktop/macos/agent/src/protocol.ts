@@ -780,6 +780,7 @@ export interface ExternalSurfaceRunBeginResultMessage extends OutboundEnvelope {
   type: "external_surface_run_begin_result";
   ownerId: string;
   sessionId: string;
+  surfaceKind?: string;
   turnId: string;
   ok: boolean;
   runId?: string;
