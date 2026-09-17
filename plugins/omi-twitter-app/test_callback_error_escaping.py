@@ -5,6 +5,7 @@ GET /auth/callback?code=x&state=<value> renders an error page whose "Try again"
 link was built as f'<a href="/auth?uid={state}">'. A state such as
 "><script>alert(1)</script> closed the attribute and ran as script (reflected
 XSS), and an & or # in the value corrupted the query instead of being carried.
+The setup page at GET /?uid=<value> built its Connect link the same way.
 
 Run: python3 plugins/omi-twitter-app/test_callback_error_escaping.py
 """
@@ -169,6 +170,17 @@ def test_missing_state_falls_back_to_unknown(app):
     assert 'href="/auth?uid=unknown"' in response.content, response.content
 
 
+def test_setup_page_encodes_uid_in_connect_link(app):
+    body = asyncio.run(app.root(uid=XSS_STATE)).content
+    scan = _scan(body)
+    hrefs = [h for h in scan.hrefs if h and h.startswith("/auth?")]
+    assert "<script" not in body.lower(), hrefs
+    assert scan.script_tags == 0, hrefs
+    assert len(hrefs) == 1, hrefs
+    assert _uid_from_href(hrefs[0]) == XSS_STATE, hrefs[0]
+    assert f'href="/auth?uid={XSS_STATE_ENCODED}"' in body, hrefs
+
+
 def main():
     _install_stubs()
     app = _load_app()
@@ -177,6 +189,7 @@ def main():
         test_try_again_link_round_trips_state,
         test_plain_state_link_is_unchanged,
         test_missing_state_falls_back_to_unknown,
+        test_setup_page_encodes_uid_in_connect_link,
     ]
     failures = 0
     for test in tests:

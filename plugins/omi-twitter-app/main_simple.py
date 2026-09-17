@@ -31,7 +31,9 @@ async def root(uid: str = Query(None)):
     """Root endpoint with setup instructions."""
     # If uid provided, show personalized setup page
     if uid:
-        auth_url = f"/auth?uid={uid}"
+        # uid is client-controlled; percent-encode it for the query and escape
+        # the result for the attribute so it cannot break out of the href.
+        auth_url = "/auth?uid=" + html.escape(quote(uid, safe=""), quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>

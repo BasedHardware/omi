@@ -1153,7 +1153,7 @@ checks:
     command: ["python3", "plugins/omi-twitter-app/test_callback_error_escaping.py"]
     triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the OAuth callback error page interpolated the client-controlled state query param raw into its Try again href, so a quote plus script tag in state ran as script (reflected XSS) and & or # corrupted the query; the suite renders the real handler's error page and pins a percent-encoded, round-trippable uid"
+    reason: "the OAuth callback error page interpolated the client-controlled state query param raw into its Try again href, so a quote plus script tag in state ran as script (reflected XSS) and & or # corrupted the query; the suite renders the real callback error page and the setup page's Connect link and pins a percent-encoded, round-trippable uid"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
