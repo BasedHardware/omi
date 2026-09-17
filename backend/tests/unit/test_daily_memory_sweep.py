@@ -26,8 +26,11 @@ from utils.memory.daily_memory_sweep import (
     QA_SWEEP_MAX_SDK_RETRIES,
     QA_SWEEP_MAX_MEMORY_LOOKUPS,
     QA_SWEEP_MAX_MODEL_COST_USD,
+    QA_SWEEP_MAX_MODEL_CANDIDATES,
     QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
     QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS,
+    QA_SWEEP_MAX_INPUT_TOKENS,
+    QA_SWEEP_MAX_OUTPUT_TOKENS,
     QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
     SweepAuthority,
     SweepAuthorityState,
@@ -65,6 +68,7 @@ from utils.memory.daily_memory_sweep import (
     run_daily_memory_sweep_scheduler,
     produce_completed_day_daily_summary_sources,
     firestore_daily_sweep_source_provider,
+    _read_cursor,
 )
 from models.product_memory import normalized_memory_content_key, MemorySubjectScope
 from utils.conversations.owner_attribution import OwnerAttributionEvidence
@@ -1721,7 +1725,21 @@ def test_onboarding_malformed_stage_fails_closed_without_reextracting(monkeypatc
     )
 
 
-def _day_source(conversation_id, summary, transcript="", needs_folder=False, segments=None):
+def _day_read(*sources, status="complete", **kwargs):
+    from utils.memory.daily_memory_sweep import CompletedDaySourceRead
+
+    return CompletedDaySourceRead(rows=tuple(sources), status=status, **kwargs)
+
+
+def _day_source(
+    conversation_id,
+    summary,
+    transcript="",
+    needs_folder=False,
+    segments=None,
+    started_at=None,
+    has_structured_summary=False,
+):
     from utils.memory.daily_memory_sweep import CompletedDayConversationSource
 
     return CompletedDayConversationSource(
@@ -1732,6 +1750,8 @@ def _day_source(conversation_id, summary, transcript="", needs_folder=False, seg
         owner_evidence=OwnerAttributionEvidence.from_segments(
             segments if segments is not None else [SimpleNamespace(speaker_id=0, is_user=True)]
         ),
+        started_at=started_at,
+        has_structured_summary=has_structured_summary,
     )
 
 
@@ -1751,7 +1771,7 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
     calls = []
@@ -1815,7 +1835,7 @@ def test_qa_completed_day_rejects_a_stage_from_another_run(monkeypatch):
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -1851,6 +1871,7 @@ def test_qa_completed_day_rejects_a_stage_from_another_run(monkeypatch):
         qa_run_id="qa-run-1",
     )
     assert second.source_status == "incomplete"
+    assert second.model_dispatch_evidence.get("failure_reason") == "daily_summary_stage_unavailable"
 
 
 def test_qa_source_provider_rejects_a_preexisting_packet(monkeypatch):
@@ -1880,10 +1901,7 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **kwargs: (
-            (_day_source("conversation-1", "stable summary"),),
-            "complete",
-        ),
+        lambda *_args, **kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(
         enabled=True,
@@ -1928,8 +1946,11 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
     assert seen["usage_context"].feature == "memories"
     assert get_current_context() is None
     assert QA_SWEEP_MAX_CATCH_UP_DAYS == 1
-    assert QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 1
-    assert QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 2_000
+    assert QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 8
+    assert QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 8_000
+    assert QA_SWEEP_MAX_MODEL_CANDIDATES == 3
+    assert QA_SWEEP_MAX_INPUT_TOKENS == 24_576
+    assert QA_SWEEP_MAX_OUTPUT_TOKENS == 2_048
 
 
 def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypatch):
@@ -1948,12 +1969,9 @@ def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypa
     )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: (
-            (
-                _day_source("conversation-1", "planning summary", needs_folder=True),
-                _day_source("conversation-2", "second summary"),
-            ),
-            "complete",
+        lambda *_args, **_kwargs: _day_read(
+            _day_source("conversation-1", "planning summary", needs_folder=True),
+            _day_source("conversation-2", "second summary"),
         ),
     )
     monkeypatch.setattr(
@@ -2046,7 +2064,7 @@ def test_completed_day_memory_without_valid_citation_is_dropped(monkeypatch):
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -2107,7 +2125,7 @@ def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeyp
     )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -2125,6 +2143,7 @@ def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeyp
         window_override=window,
     )
     assert result.source_status == "incomplete"
+    assert result.model_dispatch_evidence.get("failure_reason") == "daily_summary_stage_unavailable"
 
 
 def test_legacy_compatibility_proof_allows_more_than_two_unslotted_facts():
@@ -2202,7 +2221,7 @@ def test_completed_day_agent_slot_reaches_the_candidate(monkeypatch):
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -2261,7 +2280,7 @@ def test_completed_day_stale_schema_stage_attests_empty_and_advances(monkeypatch
     )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -2740,7 +2759,7 @@ def test_completed_day_owner_gate_and_basis(monkeypatch, owners, about, basis, e
     ]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'summary', segments=segments),), 'complete'),
+        lambda *_args, **_kwargs: _day_read(_day_source('conversation-1', 'summary', segments=segments)),
     )
     result = produce_completed_day_daily_summary_sources(
         'user-1',
@@ -2794,7 +2813,7 @@ def test_completed_day_typed_proposal_is_preserved_without_a_standing_slot(monke
     segments = [TranscriptSegment(text='I may move to Boston.', speaker_id=0, is_user=True, start=0, end=1)]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'summary', segments=segments),), 'complete'),
+        lambda *_args, **_kwargs: _day_read(_day_source('conversation-1', 'summary', segments=segments)),
     )
     result = produce_completed_day_daily_summary_sources(
         'user-1',
@@ -2878,20 +2897,20 @@ def test_completed_day_reader_carries_evidence_and_safe_phase_b_transcript(owner
         def stream(self):
             return [snapshot]
 
-    rows, status = _read_completed_day_conversation_sources(
+    read = _read_completed_day_conversation_sources(
         'u',
         completed_local_day_window(date(2026, 8, 23), 'UTC'),
         db_client=SimpleNamespace(collection=lambda _path: Query()),
         max_conversations=8,
         max_summary_characters=1000,
     )
-    assert status == 'complete'
-    assert len(rows) == 1
-    assert rows[0].owner_evidence.trust == trust
-    assert ('UNTRUSTED' in rows[0].transcript_text) == (trust != 'unique_owner')
+    assert read.status == 'complete'
+    assert len(read.rows) == 1
+    assert read.rows[0].owner_evidence.trust == trust
+    assert ('UNTRUSTED' in read.rows[0].transcript_text) == (trust != 'unique_owner')
     if trust != 'unique_owner':
-        assert 'Speaker 0:' in rows[0].transcript_text and 'Speaker 1:' in rows[0].transcript_text
-        assert 'User:' not in rows[0].transcript_text
+        assert 'Speaker 0:' in read.rows[0].transcript_text and 'Speaker 1:' in read.rows[0].transcript_text
+        assert 'User:' not in read.rows[0].transcript_text
 
 
 def test_daily_sweep_ledger_searcher_prefixes_active_memory_ids(monkeypatch):
@@ -2923,7 +2942,7 @@ def test_completed_day_lookup_duplicate_is_skipped_not_staged_as_sibling(monkeyp
     segments = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'gym', segments=segments),), 'complete'),
+        lambda *_args, **_kwargs: _day_read(_day_source('conversation-1', 'gym', segments=segments)),
     )
     result = produce_completed_day_daily_summary_sources(
         'user-1',
@@ -2972,12 +2991,9 @@ def test_completed_day_gate_emits_decision_path_drop_counters(monkeypatch, caplo
     ]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: (
-            (
-                _day_source('conversation-1', 'gym', segments=trusted),
-                _day_source('conversation-2', 'guest', segments=untrusted),
-            ),
-            'complete',
+        lambda *_args, **_kwargs: _day_read(
+            _day_source('conversation-1', 'gym', segments=trusted),
+            _day_source('conversation-2', 'guest', segments=untrusted),
         ),
     )
     with caplog.at_level(logging.INFO):
@@ -3066,7 +3082,7 @@ def test_completed_day_omitted_about_is_dropped_subjectless_not_a_parse_failure(
     trusted = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'gym', segments=trusted),), 'complete'),
+        lambda *_args, **_kwargs: _day_read(_day_source('conversation-1', 'gym', segments=trusted)),
     )
     with caplog.at_level(logging.INFO):
         result = produce_completed_day_daily_summary_sources(
@@ -3119,12 +3135,9 @@ def test_completed_day_owner_name_in_about_still_hits_the_owner_gate(monkeypatch
     ]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: (
-            (
-                _day_source('conversation-1', 'gym', segments=trusted),
-                _day_source('conversation-2', 'guest', segments=untrusted),
-            ),
-            'complete',
+        lambda *_args, **_kwargs: _day_read(
+            _day_source('conversation-1', 'gym', segments=trusted),
+            _day_source('conversation-2', 'guest', segments=untrusted),
         ),
     )
     with caplog.at_level(logging.INFO):
@@ -3457,3 +3470,451 @@ def test_generation_close_cannot_mark_a_newer_claim_indeterminate(fenced_summary
     assert db.rows[path]["claim_id"] == "claim-b"
     assert db.rows[path]["state"] == "pending"
     assert "indeterminate_at" not in db.rows[path]
+
+
+class _LimitedQuery:
+    def __init__(self, snapshots, *, error=None):
+        self._snapshots = list(snapshots)
+        self.limit_count = None
+        self._error = error
+
+    def where(self, *args, **kwargs):
+        if self._error is not None:
+            raise self._error
+        return self
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+    def limit(self, count):
+        self.limit_count = count
+        return self
+
+    def stream(self):
+        if self._error is not None:
+            raise self._error
+        if self.limit_count is None:
+            return list(self._snapshots)
+        return self._snapshots[: self.limit_count]
+
+
+class _ConversationDb(_Db):
+    def __init__(self, snapshots, *, error=None):
+        super().__init__()
+        self.conversation_query = _LimitedQuery(snapshots, error=error)
+
+    def collection(self, path):
+        if str(path).endswith("/conversations"):
+            return self.conversation_query
+        return _EmptyCollection()
+
+
+def _conversation_snapshot(
+    conversation_id,
+    *,
+    started,
+    title="Meeting",
+    overview="Planning",
+    transcript="hello",
+    status="completed",
+    finished=True,
+    discarded=False,
+):
+    payload = {
+        "id": conversation_id,
+        "created_at": started,
+        "started_at": started,
+        "status": status,
+        "structured": {"title": title, "overview": overview, "category": "personal"},
+        "transcript_segments": [{"text": transcript, "speaker_id": 0, "is_user": True, "start": 0, "end": 1}],
+        "discarded": discarded,
+    }
+    if finished:
+        payload["finished_at"] = started + timedelta(minutes=1)
+    snapshot = _Snapshot(payload)
+    snapshot.id = conversation_id
+    return snapshot
+
+
+def test_completed_day_source_fetch_limit_is_twice_the_spine_and_hard_capped():
+    from utils.memory.daily_memory_sweep import (
+        COMPLETED_DAY_SOURCE_PAGE_CAP,
+        _completed_day_source_fetch_limit,
+    )
+
+    assert _completed_day_source_fetch_limit(QA_SWEEP_MAX_SUMMARY_CONVERSATIONS) == 16
+    assert _completed_day_source_fetch_limit(200) == COMPLETED_DAY_SOURCE_PAGE_CAP
+    assert _completed_day_source_fetch_limit(300) == COMPLETED_DAY_SOURCE_PAGE_CAP
+
+
+def test_completed_day_subset_prefers_structured_then_longest_and_is_stable():
+    from utils.memory.daily_memory_sweep import _select_completed_day_source_rows
+
+    started = datetime(2026, 8, 23, 10, tzinfo=timezone.utc)
+    later = started + timedelta(hours=2)
+    rows = [
+        _day_source("raw-long", "z" * 40, has_structured_summary=False, started_at=later),
+        _day_source("struct-short", "aa", has_structured_summary=True, started_at=started),
+        _day_source("struct-long", "bbbb", has_structured_summary=True, started_at=started),
+    ]
+    first, truncated, reason = _select_completed_day_source_rows(
+        rows, max_conversations=2, max_summary_characters=1_000
+    )
+    shuffled, truncated_again, reason_again = _select_completed_day_source_rows(
+        list(reversed(rows)), max_conversations=2, max_summary_characters=1_000
+    )
+    assert truncated is True
+    assert reason == "conversation_page_over_budget"
+    assert [row.conversation_id for row in first] == ["struct-long", "struct-short"]
+    assert [row.conversation_id for row in shuffled] == [row.conversation_id for row in first]
+    assert truncated_again is True and reason_again == reason
+
+    chars_only, char_truncated, char_reason = _select_completed_day_source_rows(
+        rows, max_conversations=8, max_summary_characters=len("bbbb")
+    )
+    assert char_truncated is True
+    assert char_reason == "summary_characters_over_budget"
+    assert [row.conversation_id for row in chars_only] == ["struct-long"]
+
+
+def test_completed_day_reader_truncates_over_count_instead_of_stalling():
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    snapshots = [
+        _conversation_snapshot("raw", started=started, title="", overview="", transcript="raw transcript"),
+        _conversation_snapshot("short", started=started + timedelta(hours=1), title="Short", overview="A"),
+        _conversation_snapshot(
+            "long", started=started + timedelta(hours=2), title="LongerTitle", overview="Overview text"
+        ),
+    ]
+    db = _ConversationDb(snapshots)
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+    first = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=db,
+        max_conversations=2,
+        max_summary_characters=5_000,
+    )
+    second = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=db,
+        max_conversations=2,
+        max_summary_characters=5_000,
+    )
+    assert first.status == "complete"
+    assert first.truncated is True
+    assert first.reason == "conversation_page_over_budget"
+    assert first.rows_seen == 3
+    assert first.rows_used == 2
+    assert [row.conversation_id for row in first.rows] == ["long", "short"]
+    assert [row.conversation_id for row in second.rows] == [row.conversation_id for row in first.rows]
+    assert db.conversation_query.limit_count == 4
+
+
+def test_completed_day_reader_truncates_over_characters_instead_of_stalling():
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    snapshots = [
+        _conversation_snapshot("alpha", started=started, title="Alpha", overview="x"),
+        _conversation_snapshot("bravo", started=started + timedelta(hours=1), title="Bravo", overview="yyyy"),
+    ]
+    db = _ConversationDb(snapshots)
+    first = _read_completed_day_conversation_sources(
+        "u",
+        completed_local_day_window(date(2026, 8, 23), "UTC"),
+        db_client=db,
+        max_conversations=8,
+        max_summary_characters=40,
+    )
+    second = _read_completed_day_conversation_sources(
+        "u",
+        completed_local_day_window(date(2026, 8, 23), "UTC"),
+        db_client=db,
+        max_conversations=8,
+        max_summary_characters=40,
+    )
+    assert first.status == "complete"
+    assert first.truncated is True
+    assert first.reason == "summary_characters_over_budget"
+    assert first.rows_used >= 1
+    assert first.rows_used < first.rows_seen
+    assert [row.conversation_id for row in second.rows] == [row.conversation_id for row in first.rows]
+
+
+def test_completed_day_reader_keeps_ineligible_and_undecodable_incomplete():
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+    processing = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=_ConversationDb(
+            [
+                _conversation_snapshot("done", started=started),
+                _conversation_snapshot("live", started=started + timedelta(hours=1), status="processing"),
+            ]
+        ),
+        max_conversations=8,
+        max_summary_characters=5_000,
+    )
+    assert processing.status == "incomplete"
+    assert processing.reason == "row_not_eligible"
+
+    in_progress = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=_ConversationDb(
+            [_conversation_snapshot("live", started=started, status="in_progress", finished=False)]
+        ),
+        max_conversations=8,
+        max_summary_characters=5_000,
+    )
+    assert in_progress.status == "incomplete"
+    assert in_progress.reason == "row_not_eligible"
+
+    missing_id = _conversation_snapshot("gone", started=started)
+    missing_id.id = ""
+    undecodable = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=_ConversationDb([missing_id]),
+        max_conversations=8,
+        max_summary_characters=5_000,
+    )
+    assert undecodable.status == "incomplete"
+    assert undecodable.reason == "row_undecodable"
+
+    query_failed = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=_ConversationDb([], error=RuntimeError("unavailable")),
+        max_conversations=8,
+        max_summary_characters=5_000,
+    )
+    assert query_failed.status == "incomplete"
+    assert query_failed.reason == "query_failed"
+
+
+def test_completed_day_producer_attaches_truncated_evidence_and_records_fallback(monkeypatch):
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(
+                "one",
+                started=datetime(2026, 8, 23, 8, tzinfo=timezone.utc),
+                title="One",
+                overview="A",
+            ),
+            _conversation_snapshot(
+                "two",
+                started=datetime(2026, 8, 23, 10, tzinfo=timezone.utc),
+                title="Two",
+                overview="B",
+            ),
+            _conversation_snapshot(
+                "three",
+                started=datetime(2026, 8, 23, 12, tzinfo=timezone.utc),
+                title="Three",
+                overview="C",
+            ),
+        ]
+    )
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    fallbacks = []
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.record_fallback",
+        lambda **kwargs: fallbacks.append(kwargs),
+    )
+    seen_ids = []
+
+    def agent(_uid, summary_rows, _lookup, **_kwargs):
+        seen_ids.extend(conversation_id for conversation_id, _text in summary_rows)
+        return _agent_output(
+            memories=[
+                SimpleNamespace(
+                    about="user",
+                    basis="decided",
+                    content="fact from truncated day",
+                    conversation_ids=[summary_rows[0][0]],
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS",
+        2,
+    )
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0),
+        agent_runner=agent,
+        window_override=completed_local_day_window(date(2026, 8, 23), "UTC"),
+    )
+    assert result.source_status == "complete"
+    assert result.complete is True
+    assert result.model_dispatch_evidence["truncated"] is True
+    assert result.model_dispatch_evidence["rows_seen"] == 3
+    assert result.model_dispatch_evidence["rows_used"] == 2
+    assert result.model_dispatch_evidence["truncation_reason"] == "conversation_page_over_budget"
+    assert fallbacks[0]["component"] == "daily_summary"
+    assert fallbacks[0]["from_mode"] == "full_source"
+    assert fallbacks[0]["to_mode"] == "truncated_source"
+    assert fallbacks[0]["reason"] == "capacity_full"
+    assert fallbacks[0]["outcome"] == "degraded"
+    assert len(seen_ids) == 2
+    assert "fact" not in str(result.model_dispatch_evidence)
+
+
+def test_completed_day_producer_keeps_processing_row_incomplete(monkeypatch):
+    db = _ConversationDb(
+        [
+            _conversation_snapshot("done", started=datetime(2026, 8, 23, 8, tzinfo=timezone.utc)),
+            _conversation_snapshot(
+                "live",
+                started=datetime(2026, 8, 23, 10, tzinfo=timezone.utc),
+                status="processing",
+            ),
+        ]
+    )
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0),
+        agent_runner=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not dispatch")),
+        window_override=completed_local_day_window(date(2026, 8, 23), "UTC"),
+    )
+    assert result.source_status == "incomplete"
+    assert result.complete is False
+    assert result.model_dispatch_evidence["failure_reason"] == "row_not_eligible"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    (
+        "query_failed",
+        "row_not_eligible",
+        "row_undecodable",
+        "qa_cached_summary_rejected",
+        "cached_summary_missing_candidates",
+        "cached_summary_identity_mismatch",
+        "cached_summary_not_attested",
+        "model_route_not_budgeted",
+        "model_name_not_configured",
+        "qa_rate_card_unavailable",
+        "model_cost_over_budget",
+        "daily_summary_stage_unavailable",
+    ),
+)
+def test_scheduler_source_incomplete_reasons_reach_the_error_string(monkeypatch, reason):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=_Db(),
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence={"failure_reason": reason},
+        ),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    assert summary.errors == (f"uid=user-1:source_incomplete:2026-08-23:{reason}",)
+    assert "fact" not in "".join(summary.errors)
+    assert "conversation" not in "".join(summary.errors)
+
+
+def test_scheduler_advances_cursor_for_truncated_over_budget_day(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.read_account_deletion_projection_fence",
+        lambda _uid, db_client: type("Fence", (), {"blocks_projection_writes": False})(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.firestore.transactional",
+        lambda function: lambda transaction, *args: function(transaction, *args),
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._apply_candidate",
+        lambda *_args, **_kwargs: ("mem-1", None),
+    )
+    monkeypatch.setattr("utils.memory.daily_memory_sweep._finish_receipt", lambda *_args, **_kwargs: None)
+    db = _Db()
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    source_calls = []
+
+    def source_provider(*_args, **_kwargs):
+        source_calls.append(True)
+        return DailySweepRuntimeSources.from_iterables(
+            daily_summary=(_candidate(),),
+            complete=True,
+            source_status="complete",
+            eligibility_proof="completed_transcript_v1",
+            model_dispatch_evidence={
+                "truncated": True,
+                "rows_seen": 6,
+                "rows_used": 2,
+                "truncation_reason": "conversation_page_over_budget",
+            },
+        )
+
+    kwargs = dict(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=source_provider,
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    first = run_daily_memory_sweep_scheduler(**kwargs)
+    assert first.committed_users == 1
+    assert first.errors == ()
+    cursor = _read_cursor(db, "user-1", control)
+    assert cursor.last_completed_local_date == date(2026, 8, 23)
+    second = run_daily_memory_sweep_scheduler(**kwargs)
+    assert source_calls == [True]
+    assert second.committed_users == 0
+    assert second.errors == ()

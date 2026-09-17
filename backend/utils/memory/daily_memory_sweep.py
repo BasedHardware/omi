@@ -99,6 +99,7 @@ from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
 from utils.memory.decision_path_telemetry import emit_memory_sweep_decision
 from utils.llm.usage_tracker import Features, track_usage
+from utils.observability.fallback import record_fallback
 
 # These budgets are deliberately separate from the canonical write budget.  A
 # completed-day producer must prove that it read the whole bounded source
@@ -106,12 +107,15 @@ from utils.llm.usage_tracker import Features, track_usage
 # into an empty day.
 MAX_COMPLETED_DAY_CONVERSATIONS = 32
 MAX_COMPLETED_DAY_INPUT_CHARACTERS = 48_000
-# The summary spine bounds the whole-day agent pass.  Summaries are two orders
-# of magnitude smaller than transcripts, so these ceilings are effectively
-# unreachable for real days; they exist so an over-budget page is still a
-# provable incomplete source rather than a silent truncation.
+# The summary spine bounds the whole-day agent pass.  An over-count or
+# over-character day is processed as a deterministic truncated subset rather
+# than stalling the cursor; eligibility incompleteness (a row still
+# processing or unfinished) still fails closed.  The fetch cap is 2x the
+# admitted spine, hard-capped so Firestore reads stay bounded even when a day
+# has far more rows than the spine budget.
 MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS = 200
 MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS = 120_000
+COMPLETED_DAY_SOURCE_PAGE_CAP = 400
 MAX_DAILY_TRANSCRIPT_FETCHES = 8
 MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS = 8_000
 MAX_DAILY_MEMORY_LOOKUPS = 4
@@ -191,15 +195,17 @@ QA_SWEEP_DATABASE = "jit-qa"
 QA_SWEEP_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 QA_SWEEP_COHORT = "jit-qa-sweep-v1"
 QA_SWEEP_MODEL_NAME = "gpt-5.6-luna"
-QA_SWEEP_MAX_MODEL_CANDIDATES = 1
+QA_SWEEP_MAX_MODEL_CANDIDATES = 3
 QA_SWEEP_MAX_MODEL_COST_USD = 0.05
 # Qualification uses the same completed-day producer with an explicit tighter
 # envelope.  Zero phase-B requests/lookups makes one provider call the real
 # maximum for one completed day, instead of pricing the production envelope as
 # if it were a cheap single call.
 QA_SWEEP_MAX_CATCH_UP_DAYS = 1
-QA_SWEEP_MAX_SUMMARY_CONVERSATIONS = 1
-QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 2_000
+# A real desktop day is six 4-hour conversations; 8 rows hold that day
+# without forcing truncation on the qualification account.
+QA_SWEEP_MAX_SUMMARY_CONVERSATIONS = 8
+QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 8_000
 QA_SWEEP_MAX_TRANSCRIPT_FETCHES = 0
 QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS = 0
 QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
@@ -211,10 +217,14 @@ QA_SWEEP_MAX_PROVIDER_CALLS = 1
 # profile context adds up to ~3.2K, so the earlier 12K cap rejected any QA day
 # with a real profile before dispatch (sweep-verify 2026-09-15 stalled on it),
 # and 256 completion tokens cannot hold a reasoning model's structured output.
-# 16K input + 2K output (the gateway's own per-attempt output ceiling)
-# reserves about $0.0058, still far below the $0.05 run envelope; the gateway
-# enforces these same headers against the provider request and settles usage.
-QA_SWEEP_MAX_INPUT_TOKENS = 16_384
+# Gateway ceiling is 32_768.  24_576 input leaves room for parser ~9.6K +
+# profile ~3.2K + 8K spine + envelope.  Worst-case reserve at Luna rates:
+#   24_576 * $0.20 / 1e6 + 2_048 * $1.20 / 1e6
+#   = $0.0049152 + $0.0024576 = $0.0073728
+# still under the $0.05 run envelope (QA_SWEEP_MAX_SPEND_MICRO_USD).  The
+# gateway enforces these same headers against the provider request and
+# settles usage.
+QA_SWEEP_MAX_INPUT_TOKENS = 24_576
 QA_SWEEP_MAX_OUTPUT_TOKENS = 2_048
 QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
 QA_SWEEP_JIT_CONTRACT_VERSION = "jit-cloud-qa-v1"
@@ -238,6 +248,7 @@ _POSTHOG_CLIENTS_LOCK = threading.RLock()
 _MODEL_INVOCATION_LOCK = threading.RLock()
 
 _ID_RE = re.compile(r"[a-z0-9][a-z0-9._:-]{0,127}")
+_CONTENT_FREE_REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,80}$")
 _FORBIDDEN_SOURCE_MARKERS = (
     "base64",
     "data:image",
@@ -3783,6 +3794,125 @@ class CompletedDayConversationSource:
     transcript_text: str
     needs_folder: bool
     owner_evidence: OwnerAttributionEvidence
+    started_at: Optional[datetime] = None
+    has_structured_summary: bool = False
+
+
+@dataclass(frozen=True)
+class CompletedDaySourceRead:
+    """Bounded completed-day conversation page, including truncation evidence."""
+
+    rows: Tuple[CompletedDayConversationSource, ...] = ()
+    status: Literal["complete", "incomplete"] = "incomplete"
+    reason: str = ""
+    truncated: bool = False
+    rows_seen: int = 0
+    rows_used: int = 0
+
+
+def _content_free_reason(reason: str) -> str:
+    """Return ``reason`` only when it is a content-free snake_case token."""
+
+    if _CONTENT_FREE_REASON_RE.fullmatch(reason):
+        return reason
+    return "source_incomplete"
+
+
+def _incomplete_runtime_sources(
+    reason: str,
+    *,
+    model_dispatch_evidence: Optional[Mapping[str, Any]] = None,
+) -> DailySweepRuntimeSources:
+    evidence = dict(model_dispatch_evidence or {})
+    evidence["failure_reason"] = _content_free_reason(reason)
+    return DailySweepRuntimeSources.from_iterables(
+        source_status="incomplete",
+        model_dispatch_evidence=evidence,
+    )
+
+
+def _completed_day_source_fetch_limit(max_conversations: int) -> int:
+    """How many conversation docs to read for one local day.
+
+    The query used to fetch ``max_conversations + 1`` only to detect overflow,
+    then discarded the whole day.  Ranking a meaningful subset needs more than
+    one extra row, but the read must stay bounded: 2x the admitted spine, hard
+    capped at ``COMPLETED_DAY_SOURCE_PAGE_CAP`` (400).  Production's 200-row
+    spine therefore reads at most 400 docs; QA's 8-row spine reads 16.  The
+    page is ordered by ``started_at`` ascending so the existing range index
+    still applies; ranking then prefers structured / longer / more recent rows
+    inside that page.
+    """
+
+    admitted = max(int(max_conversations), 0)
+    if admitted <= 0:
+        return 1
+    return min(max(admitted * 2, admitted + 1), COMPLETED_DAY_SOURCE_PAGE_CAP)
+
+
+def _completed_day_source_rank_key(row: CompletedDayConversationSource) -> Tuple[int, int, float, str]:
+    """Deterministic rank: structured first, then longest, then most recent."""
+
+    structured_rank = 0 if row.has_structured_summary else 1
+    started = row.started_at
+    if started is None:
+        recency = float("-inf")
+    else:
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        recency = started.timestamp()
+    return (structured_rank, -len(row.summary_text), -recency, row.conversation_id)
+
+
+def _select_completed_day_source_rows(
+    rows: Sequence[CompletedDayConversationSource],
+    *,
+    max_conversations: int,
+    max_summary_characters: int,
+) -> Tuple[Tuple[CompletedDayConversationSource, ...], bool, str]:
+    """Take a deterministic prefix of ``rows`` that fits both budgets.
+
+    Rank is a function of the stored rows only (structured before unstructured
+    fallback, then longer summary, then later ``started_at``, then
+    ``conversation_id``), so two runs over the same page select the same set
+    and the at-most-once invocation identity stays stable.  Selected rows are
+    then ordered by ``conversation_id`` so the transcript digest does not
+    depend on rank order.
+
+    A single row whose summary exceeds the character budget is skipped rather
+    than emptying the day; walking then stops at the first remaining row that
+    does not fit, so the selected set is still a deterministic prefix of the
+    ranked list after dropping individually impossible rows.
+    """
+
+    ranked = sorted(rows, key=_completed_day_source_rank_key)
+    selected: List[CompletedDayConversationSource] = []
+    total_characters = 0
+    truncation_reason = ""
+    skipped_oversize = False
+    for row in ranked:
+        if len(selected) >= max_conversations:
+            truncation_reason = "conversation_page_over_budget"
+            break
+        row_characters = len(row.summary_text)
+        if total_characters + row_characters > max_summary_characters:
+            if not selected and row_characters > max_summary_characters:
+                skipped_oversize = True
+                continue
+            truncation_reason = "summary_characters_over_budget"
+            break
+        selected.append(row)
+        total_characters += row_characters
+    unused = len(selected) < len(rows)
+    truncated = bool(truncation_reason) or unused or skipped_oversize
+    if truncated and not truncation_reason:
+        truncation_reason = "summary_characters_over_budget" if skipped_oversize else "conversation_page_over_budget"
+    selected.sort(key=lambda item: item.conversation_id)
+    return tuple(selected), truncated, truncation_reason
+
+
+def _incomplete_day_read(reason: str) -> CompletedDaySourceRead:
+    return CompletedDaySourceRead(status="incomplete", reason=_content_free_reason(reason))
 
 
 def _owner_about_aliases(uid: str) -> frozenset[str]:
@@ -3813,20 +3943,23 @@ def _read_completed_day_conversation_sources(
     db_client: Any,
     max_conversations: int,
     max_summary_characters: int,
-) -> Tuple[Tuple[CompletedDayConversationSource, ...], Literal["complete", "incomplete"]]:
+) -> CompletedDaySourceRead:
     """Read bounded conversation summaries (plus transcripts) in one UTC window.
 
     The SUMMARY texts form the agent's spine and are what the character budget
     bounds; transcripts ride along only for the bounded verification lookup.
-    Photos and other media are stripped by construction.  A query failure, an
-    over-budget page, or an undecodable conversation is incomplete rather than
-    an empty source, so callers cannot move the cursor past unprocessed data.
+    Photos and other media are stripped by construction.  A query failure,
+    an undecodable row, or an ineligible (processing / in-progress /
+    unfinished) row is incomplete so callers cannot move the cursor past a
+    transcript that may still change.  A day that is merely too big is
+    truncated to a deterministic subset and returned complete.
     """
 
     collection = db_client.collection(f"users/{uid}/conversations")
     where = getattr(collection, "where", None)
     if not callable(where):
-        return (), "incomplete"
+        return _incomplete_day_read("query_failed")
+    fetch_limit = _completed_day_source_fetch_limit(max_conversations)
     try:
         try:
             query: Any = where(filter=FieldFilter("started_at", ">=", window.start_utc))
@@ -3841,24 +3974,22 @@ def _read_completed_day_conversation_sources(
             # identity and bounded page still hold, and model output is sorted
             # below by the stable document id.
             pass
-        snapshots = list(query.limit(max_conversations + 1).stream())
+        snapshots = list(query.limit(fetch_limit).stream())
     except Exception:
-        return (), "incomplete"
-    if len(snapshots) > max_conversations:
-        return (), "incomplete"
+        return _incomplete_day_read("query_failed")
+    page_capped = len(snapshots) >= fetch_limit
 
     from database.conversations import (  # pyright: ignore[reportPrivateUsage]
         _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
     )
     from models.conversation import Conversation
 
-    rows: List[CompletedDayConversationSource] = []
-    total_characters = 0
+    decoded: List[CompletedDayConversationSource] = []
     for snapshot in snapshots:
         conversation_id = str(getattr(snapshot, "id", "") or "")
         raw = snapshot.to_dict() or {}
         if not conversation_id or not isinstance(raw, dict):
-            return (), "incomplete"
+            return _incomplete_day_read("row_undecodable")
         # A timestamp range is not an eligibility proof.  Discarded rows are
         # intentionally excluded, while processing/in-progress/unfinished
         # rows keep the source incomplete so a later retry cannot advance the
@@ -3867,7 +3998,7 @@ def _read_completed_day_conversation_sources(
         if eligibility == "discarded":
             continue
         if eligibility != "eligible":
-            return (), "incomplete"
+            return _incomplete_day_read("row_not_eligible")
         try:
             conversation = parse_snapshot_or_none(
                 Conversation,
@@ -3875,7 +4006,7 @@ def _read_completed_day_conversation_sources(
                 payload_from_snapshot=lambda _snapshot: prepare_conversation_for_read(raw, uid) or {},
             )
             if conversation is None:
-                return (), "incomplete"
+                return _incomplete_day_read("row_undecodable")
             owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
             transcript = memory_transcript_from_segments(conversation.transcript_segments)
             structured = conversation.structured
@@ -3885,8 +4016,9 @@ def _read_completed_day_conversation_sources(
             started = getattr(conversation, "started_at", None)
             started_label = started.astimezone(timezone.utc).strftime("%H:%M") if started else ""
         except Exception:
-            return (), "incomplete"
-        if title or overview:
+            return _incomplete_day_read("row_undecodable")
+        has_structured_summary = bool(title or overview)
+        if has_structured_summary:
             summary = " ".join(
                 part for part in (started_label, f"({category})" if category else "", title, "—", overview) if part
             )
@@ -3901,20 +4033,34 @@ def _read_completed_day_conversation_sources(
         summary = summary.strip()
         if not summary and not transcript:
             continue
-        total_characters += len(summary)
-        if total_characters > max_summary_characters:
-            return (), "incomplete"
-        rows.append(
+        decoded.append(
             CompletedDayConversationSource(
                 conversation_id=conversation_id,
                 summary_text=summary,
                 transcript_text=transcript,
                 owner_evidence=owner_evidence,
                 needs_folder=not (raw.get("folder_id") or "") and isinstance(raw.get("jit_first_open"), Mapping),
+                started_at=started if isinstance(started, datetime) else None,
+                has_structured_summary=has_structured_summary,
             )
         )
-    rows.sort(key=lambda row: row.conversation_id)
-    return tuple(rows), "complete"
+    selected, truncated, truncation_reason = _select_completed_day_source_rows(
+        decoded,
+        max_conversations=max_conversations,
+        max_summary_characters=max_summary_characters,
+    )
+    if page_capped:
+        truncated = True
+        if not truncation_reason:
+            truncation_reason = "conversation_page_over_budget"
+    return CompletedDaySourceRead(
+        rows=selected,
+        status="complete",
+        reason=truncation_reason if truncated else "",
+        truncated=truncated,
+        rows_seen=len(decoded),
+        rows_used=len(selected),
+    )
 
 
 def _completed_day_row_eligibility(raw: Mapping[str, Any]) -> Literal["eligible", "discarded", "unfinished"]:
@@ -5050,21 +5196,23 @@ def produce_completed_day_daily_summary_sources(
             # QA must observe a fresh, bounded gateway request. A historical
             # summary cache is a producer artifact from another run and cannot
             # prove this run's request, usage, or spend.
-            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+            return _incomplete_runtime_sources("qa_cached_summary_rejected")
         raw_candidates = payload.get("memory_candidates")
+        if raw_candidates is None:
+            return _incomplete_runtime_sources("cached_summary_missing_candidates")
         if (
-            raw_candidates is None
-            or payload.get("uid") != uid
+            payload.get("uid") != uid
             or payload.get("account_generation") != control.account_generation
             or payload.get("source_generation") != control.source_generation
             or payload.get("timezone_name") != timezone_name
-            or not _cached_summary_eligibility_attested(
-                payload, local_date=local_date, window=window, timezone_name=timezone_name
-            )
         ):
-            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+            return _incomplete_runtime_sources("cached_summary_identity_mismatch")
+        if not _cached_summary_eligibility_attested(
+            payload, local_date=local_date, window=window, timezone_name=timezone_name
+        ):
+            return _incomplete_runtime_sources("cached_summary_not_attested")
         if not model.route_is_budgeted:
-            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+            return _incomplete_runtime_sources("model_route_not_budgeted")
         persisted_candidates = _bounded_candidate_channel(
             raw_candidates,
             source_type="daily_summary",
@@ -5089,15 +5237,31 @@ def produce_completed_day_daily_summary_sources(
         QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS if is_qa_run else MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS
     )
     max_memory_lookups = QA_SWEEP_MAX_MEMORY_LOOKUPS if is_qa_run else MAX_DAILY_MEMORY_LOOKUPS
-    conversation_rows, conversation_status = _read_completed_day_conversation_sources(
+    source_read = _read_completed_day_conversation_sources(
         uid,
         window,
         db_client=db_client,
         max_conversations=max_summary_conversations,
         max_summary_characters=max_summary_characters,
     )
-    if conversation_status == "incomplete":
-        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+    if source_read.status == "incomplete":
+        return _incomplete_runtime_sources(source_read.reason or "source_incomplete")
+    conversation_rows = source_read.rows
+    dispatch_evidence: Dict[str, Any] = {}
+    if source_read.truncated:
+        dispatch_evidence["truncated"] = True
+        dispatch_evidence["rows_seen"] = source_read.rows_seen
+        dispatch_evidence["rows_used"] = source_read.rows_used
+        if source_read.reason:
+            dispatch_evidence["truncation_reason"] = _content_free_reason(source_read.reason)
+        record_fallback(
+            component="daily_summary",
+            from_mode="full_source",
+            to_mode="truncated_source",
+            reason="capacity_full",
+            outcome="degraded",
+            log=logger,
+        )
     if not conversation_rows:
         # The query itself is the producer's complete-zero attestation.  A
         # missing summary is therefore safe only after this proof, never from
@@ -5106,12 +5270,12 @@ def produce_completed_day_daily_summary_sources(
             complete=True,
             source_status="complete_zero",
             eligibility_proof="completed_transcript_v1",
+            model_dispatch_evidence=dispatch_evidence or None,
         )
     if not model.route_is_budgeted:
-        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        return _incomplete_runtime_sources("model_route_not_budgeted")
 
     runner = agent_runner
-    dispatch_evidence: Dict[str, Any] = {}
     if runner is None:
         # The deployment may only name the model configured for the existing
         # memory route.  It cannot select an arbitrary model through a source
@@ -5119,7 +5283,7 @@ def produce_completed_day_daily_summary_sources(
         from utils.llm.model_config import get_model
 
         if model.model_name != get_model("memories"):
-            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+            return _incomplete_runtime_sources("model_name_not_configured")
         from utils.llm.memories import run_daily_sweep_summary_agent
 
         runner = run_daily_sweep_summary_agent
@@ -5156,7 +5320,7 @@ def produce_completed_day_daily_summary_sources(
 
         rate_card = rate_card_for("openai", QA_SWEEP_MODEL_NAME)
         if rate_card is None:
-            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+            return _incomplete_runtime_sources("qa_rate_card_unavailable")
         rates = rate_card.effective_rates(QA_SWEEP_MAX_INPUT_TOKENS)
         envelope_cost_usd = (
             rounded_micro_usd(
@@ -5167,7 +5331,7 @@ def produce_completed_day_daily_summary_sources(
         )
         estimated_cost = max(estimated_cost, envelope_cost_usd)
     if estimated_cost > model.max_cost_usd:
-        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        return _incomplete_runtime_sources("model_cost_over_budget")
     folder_options = (
         _read_daily_sweep_folder_options(uid, db_client=db_client)
         if any(row.needs_folder for row in conversation_rows)
@@ -5201,9 +5365,11 @@ def produce_completed_day_daily_summary_sources(
         # dispatch evidence still carries the admitted request identities and
         # any observed usage: a consumed gateway attempt must stay joinable to
         # this run even when its output never staged.
+        if not dispatch_evidence.get("failure_reason"):
+            dispatch_evidence["failure_reason"] = "daily_summary_stage_unavailable"
         return DailySweepRuntimeSources.from_iterables(
             source_status="incomplete",
-            model_dispatch_evidence=dispatch_evidence if dispatch_evidence else None,
+            model_dispatch_evidence=dispatch_evidence,
         )
     candidates, folder_assignments = staged
     if folder_assignments:
@@ -5836,7 +6002,7 @@ def run_daily_memory_sweep_scheduler(
                     failed_uids.append(uid)
                     incomplete_error = f"uid={uid}:source_incomplete:{local_date.isoformat()}"
                     failure_reason = sources.model_dispatch_evidence.get("failure_reason")
-                    if isinstance(failure_reason, str) and re.fullmatch(r"^[a-z][a-z0-9_]{0,80}$", failure_reason):
+                    if isinstance(failure_reason, str) and _CONTENT_FREE_REASON_RE.fullmatch(failure_reason):
                         incomplete_error = f"{incomplete_error}:{failure_reason}"
                     errors.append(incomplete_error)
                     return ProcessOutcome.reject("source_incomplete", reason="source_incomplete")
@@ -5911,9 +6077,11 @@ __all__ = [
     "MAX_COMPLETED_DAY_INPUT_CHARACTERS",
     "MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS",
     "MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS",
+    "COMPLETED_DAY_SOURCE_PAGE_CAP",
     "MAX_DAILY_TRANSCRIPT_FETCHES",
     "MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS",
     "CompletedDayConversationSource",
+    "CompletedDaySourceRead",
     "MAX_ONBOARDING_CONVERSATIONS",
     "MAX_ONBOARDING_RECEIPT_KEYS",
     "MAX_ONBOARDING_SOURCE_KEYS_PER_PACKET",
