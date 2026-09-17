@@ -4217,6 +4217,77 @@ test('conversation list names Flutter Folder.fromGenerated type-wrong GET create
     }
     return {id: request.id, status: 404, body: null};
   });
+
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                kind: 'conversation',
+                id: 'chat:work',
+                title: 'Standup',
+                summary: 'Notes',
+                searchableText: 'Standup\nNotes',
+                createdAt: '2026-09-07T00:00:00.000Z',
+                updatedAt: '2026-09-07T00:01:00.000Z',
+                startedAt: '2026-09-07T00:00:00.000Z',
+                finishedAt: null,
+                starred: false,
+                status: 'in_progress',
+                source: 'chat',
+                visibility: 'private',
+                locked: false,
+                discarded: false,
+                folderId: 'folder-work',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi folders are malformed')),
+  );
+  expect(tree).toContain('Folders');
+  expect(tree).toContain('Standup');
+  expect(tree).not.toContain('Neighbor');
+});
+
+test('conversation list names Flutter Folder.fromGenerated type-wrong GET description instead of empty folder chips', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'folder-work',
+            name: 'Neighbor',
+            description: 1,
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = ReactTestRenderer.create(

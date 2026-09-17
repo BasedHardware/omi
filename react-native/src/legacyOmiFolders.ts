@@ -41,6 +41,13 @@ function presentNullableDate(value: unknown): void {
   }
 }
 
+function presentNullableString(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  text(value, 1_000_000);
+}
+
 function presentDefaultInt(value: unknown): void {
   if (value === undefined || value === null) {
     return;
@@ -151,6 +158,8 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     presentNullableDate(folder.updated_at);
     presentDefaultInt(folder.conversation_count);
     presentDefaultInt(folder.order);
+    presentNullableString(folder.description);
+    presentNullableString(folder.category_mapping);
     folders.push({
       id,
       name,
