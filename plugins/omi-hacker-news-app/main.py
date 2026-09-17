@@ -52,8 +52,14 @@ def _clean_text(value: Optional[str]) -> str:
     return text.strip()
 
 
+def _safe_payload(payload: Any) -> dict[str, Any]:
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
 def _safe_limit(limit: Any) -> int:
-    if limit is None or limit == "":
+    if limit is None or limit == "" or isinstance(limit, bool):
         return 10
     try:
         limit = int(limit)
@@ -75,14 +81,18 @@ def _format_story(hit: dict[str, Any], index: int) -> str:
     points = hit.get("points") or 0
     comments = hit.get("num_comments") or 0
     object_id = hit.get("objectID") or hit.get("story_id")
-    url = hit.get("url") or hit.get("story_url") or f"https://news.ycombinator.com/item?id={object_id}"
+    hn_url = f"https://news.ycombinator.com/item?id={object_id}" if object_id else "https://news.ycombinator.com"
+    url = hit.get("url") or hit.get("story_url") or hn_url
 
-    return (
-        f"{index}. {title}\n"
-        f"   by {author} | {points} points | {comments} comments\n"
-        f"   {url}\n"
-        f"   HN: https://news.ycombinator.com/item?id={object_id}"
-    )
+    lines = [
+        f"{index}. {title}",
+        f"   by {author} | {points} points | {comments} comments",
+        f"   {url}"
+    ]
+    if object_id:
+        lines.append(f"   HN: {hn_url}")
+
+    return "\n".join(lines)
 
 
 @app.get("/")
@@ -182,7 +192,8 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/get_front_page", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_front_page(payload: dict[str, Any]):
+async def get_front_page(payload: Any = None):
+    payload = _safe_payload(payload)
     try:
         limit = _safe_limit(payload.get("limit"))
         data = await _request_json("/search", {"tags": "front_page", "hitsPerPage": limit})
@@ -198,7 +209,8 @@ async def get_front_page(payload: dict[str, Any]):
 
 
 @app.post("/tools/search_stories", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_stories(payload: dict[str, Any]):
+async def search_stories(payload: Any = None):
+    payload = _safe_payload(payload)
     query = (payload.get("query") or "").strip()
     if not query:
         return ChatToolResponse(error="Missing required field: query")
@@ -220,14 +232,18 @@ async def search_stories(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_discussion", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_discussion(payload: dict[str, Any]):
+async def get_discussion(payload: Any = None):
+    payload = _safe_payload(payload)
     item_id = payload.get("item_id")
-    if item_id is None:
+    if item_id is None or item_id == "" or isinstance(item_id, bool):
         return ChatToolResponse(error="Missing required field: item_id")
 
     try:
+        item_id_int = int(item_id)
+        if item_id_int <= 0:
+            return ChatToolResponse(error="item_id must be a positive integer")
         comment_limit = _safe_limit(payload.get("comment_limit"))
-        item = await _request_json(f"/items/{int(item_id)}")
+        item = await _request_json(f"/items/{item_id_int}")
 
         title = item.get("title") or "(untitled)"
         author = item.get("author") or "unknown"
