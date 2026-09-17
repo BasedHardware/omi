@@ -74,6 +74,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**"]
     lanes: ["local", "ci"]
     reason: "list_upcoming read one calendarView page and ignored @odata.nextLink, so a window with more than 50 events silently dropped every later event"
+  - id: ms365-services-hardening-tests
+    command: ["python3", "plugins/omi-ms365-app/test_services_hardening.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Graph null collections and HTTP-date Retry-After crashed mail/teams/sharepoint/calendar tools (#14247)"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
