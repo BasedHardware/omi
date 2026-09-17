@@ -89,7 +89,7 @@ def test_revision_pins_exact_bytes_and_preserves_marker_contract(tmp_path):
     with pytest.raises(ValueError, match='broken revision chain'):
         checker.revised_original(old, [({**record, 'before': '0' * 64}, new)])
     with pytest.raises(ValueError, match='preserve pending'):
-        checker.revised_original(old, [(record, new.replace("pendingContract('B1');\n", ''))])
+        checker.revised_original(old, [({**record, 'after': checker.digest(new.replace("pendingContract('B1');\n", ''))}, new.replace("pendingContract('B1');\n", ''))])
 
 
 def test_fake_flutter_advertises_only_b0_registered_extensions(tmp_path):
@@ -115,3 +115,34 @@ def test_revision_cannot_restore_one_marker_by_retiring_another():
     assert not checker.retirement_allowed([old, revised], base, wrong)
     assert checker.retirement_allowed([old, revised], base, revised.replace('@pending("V1")\n', '', 1))
     assert checker.retirement_allowed([old, revised], base, revised.replace('@pending("V1")\n', ''))
+
+
+def test_squashed_spine_revision_keeps_the_corrected_oracle(tmp_path):
+    import json
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True)
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.test')
+    target = 'app/test/spine/example.dart'
+    old = 'assert absent;\n'
+    intermediate = 'assert offstage;\n'
+    revised = 'assert offstageAndRetained;\n'
+    file = tmp_path / target
+    file.parent.mkdir(parents=True)
+    file.write_text(revised)
+    (tmp_path / checker.REGISTRY).parent.mkdir(parents=True)
+    (tmp_path / checker.REGISTRY).write_text(json.dumps({target: 'B1'}))
+    directory = tmp_path / checker.REVISIONS
+    directory.mkdir()
+    for index, (before, after) in enumerate([(old, intermediate), (intermediate, revised)]):
+        (directory / f'{index:03}.json').write_text(json.dumps(dict(
+            path=target, owner='B1', before=checker.digest(before), after=checker.digest(after), reason='spine review')))
+    git('add', '.')
+    git('commit', '-qm', 'squash of spine plus reviewed corrections')
+    git('branch', 'origin/main')
+    assert checker.check(tmp_path) == []
+    file.write_text(old)
+    assert checker.check(tmp_path)  # the old assertion cannot be restored
+    file.write_text(revised.replace('offstageAndRetained', 'true'))
+    assert checker.check(tmp_path)

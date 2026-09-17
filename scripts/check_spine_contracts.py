@@ -60,14 +60,24 @@ def revisions(root: Path, registry: dict) -> dict:
         if registry.get(target) != record["owner"]:
             raise ValueError(f"{path}: revision owner differs from registry")
         revised = git("show", f"{commits[-1]}:{target}", root=root) if commits else (root / target).read_text()
-        if digest(revised) != record["after"]:
-            raise ValueError(f"{path}: revised bytes do not match pinned digest")
         result.setdefault(target, []).append((record, revised))
     return result
 
 
 def revised_original(original: str, records: list) -> str:
-    for record, revised in records:
+    for (previous, _), (following, _) in zip(records, records[1:]):
+        if previous["after"] != following["before"]:
+            raise ValueError(f"{following['path']}: broken revision chain")
+    # A squash introduces the corrected file and its review records together.
+    # That introducing commit is already the accepted oracle. Absorb only a
+    # prefix ending at its exact digest; later revisions still need exact bytes.
+    absorbed = 0
+    for index, (record, _) in enumerate(records):
+        if record["after"] == digest(original):
+            absorbed = index + 1
+    for record, revised in records[absorbed:]:
+        if digest(revised) != record["after"]:
+            raise ValueError(f"{record['path']}: revised bytes do not match pinned digest")
         if digest(original) != record["before"]:
             raise ValueError(f"{record['path']}: broken revision chain")
         before = [line for line in original.splitlines() if MARKER.fullmatch(line)]

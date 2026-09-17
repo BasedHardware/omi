@@ -25,7 +25,7 @@ The check resolves the file's **introducing Git commit**, reads its bytes with
 `git show`, and permits only deletion of whole pending-marker lines. Removing,
 renaming, editing assertions, re-adding a removed marker, or changing an existing
 registry owner fails. New contracts can be added; no baseline update flag exists.
-The introducing commit is the spine commit (regular merges retain it).
+The introducing commit is the spine commit; squash merges pin its final bytes.
 A shallow checkout missing that commit must fetch history, never rebaseline.
 New files not yet in HEAD can be checked before their first local commit.
 
@@ -37,7 +37,8 @@ it is not a general exemption from the repository's regression-test rules.
 Spine-only corrections append `contracts/spine/revisions/NNN-description.json`
 with path, owner, before/after SHA256 and review reason, in the same commit as
 exact corrected bytes. The check pins that commit automatically, validates the
-hash chain and forbids editing/deleting committed records. Pending markers must
+hash chain and forbids editing/deleting committed records. A squash absorbs only
+a revision prefix ending at the introducing file's exact digest. Pending markers must
 stay unchanged in that revision; retire them separately. Builders cannot use
 revision records to accept their implementation: the owning spine and coordinator
 review the changed oracle, just as changes to this checker require review. Git
