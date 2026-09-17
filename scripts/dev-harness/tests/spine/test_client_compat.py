@@ -82,6 +82,7 @@ def test_no_execution_cannot_report_compatibility():
 def test_two_confirmed_releases_cover_first_four_endpoint_families():
     catalog = json.loads((ROOT / 'contracts/client-compat/catalog.json').read_text())
     assert len(catalog['releases']) >= 2, 'C10: build tags are not confirmed distributed fixtures'
+    assert len({row['build'] for row in catalog['releases'][:2]}) == 2, 'two captures of one build are not two releases'
     cases = compat.registered_cases(ROOT, supported_only=False)
     for row in catalog['releases'][:2]:
         assert row['distribution']['kind'] == 'distributed'

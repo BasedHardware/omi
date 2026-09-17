@@ -150,7 +150,11 @@ def main():
     for error in errors:
         print(error)
     if not errors:
-        print(f"C10: {len(catalog['releases'])} captured releases; " + ('PENDING C10 capture/replay (no historical coverage claimed)' if not catalog['releases'] else 'adopted projections compatible'))
+        active = sum(supported(row, policy) for row in catalog['releases'])
+        state = ('PENDING C10 capture/replay (no historical coverage claimed)' if not catalog['releases']
+                 else 'adopted projections compatible' if active
+                 else 'out of scope under server minimum; no compatibility claim')
+        print(f"C10: {len(catalog['releases'])} captured bundles, {active} supported; {state}")
     return bool(errors)
 
 

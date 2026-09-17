@@ -4,7 +4,7 @@ Design: [CLIENT_COMPAT.md](../../scripts/dev-harness/CLIENT_COMPAT.md).
 `catalog.json` currently has no captured release. Strict pending C10 tests expose
 that absence; candidate-source.json is provenance research, not coverage.
 
-App core adds immutable `releases/<release-id>/` inputs with these catalog fields:
+App core adds immutable `releases/<capture-id>/` bundles with these catalog fields:
 
 - id, build (integer), platforms (`ios`, `android`), resolved 40-character commit;
 - distribution: kind=`distributed`, receipt_url (store/distribution receipt);
@@ -13,8 +13,14 @@ App core adds immutable `releases/<release-id>/` inputs with these catalog field
 - projection, cases, decoder: paths present in files. Projection is OpenAPI 3.1
   reduced to the requests/fields actually used. Cases use the schema below.
 
+An id names a capture bundle, not just a build. Widen coverage by appending a new
+bundle for the same commit/build; preserve earlier bundles and case attribution.
+Reuse the Dart process for identical decoder hashes. Bootstrap rows name two distinct build identities.
+
 Keep copied decoder sources, their runner, observations and minimal dependency
-closure in files. CI validates hashes and Git provenance; backend replay invokes pinned Dart with
+closure in files. The replay job must fetch admitted commit objects (its test-job
+checkout is shallow today); repo-checks already has full history. CI validates
+hashes and Git provenance; backend replay invokes pinned Dart with
 the absolute frozen entrypoint path. Stdin JSON has status, headers, body_base64;
 stdout is the observation object. Nonzero exit, malformed output or a 10-second
 deadline is a failed replay, never empty data. A receipt URL records reviewed evidence, not automated proof

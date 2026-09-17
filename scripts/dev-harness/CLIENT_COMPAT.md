@@ -20,7 +20,8 @@ enum/date/default coercion helpers. If isolating a handwritten decoder requires
 extraction glue, prove its boundary vectors against the original released decoder
 once during capture; preserve that receipt. Never regenerate it from head.
 
-A release row references an immutable fixture directory: source-files with
+Each row is an immutable capture bundle; widen a build’s coverage by appending
+a new bundle for that commit/build, never rewriting one. Its inputs are: source-files with
 commit/path/SHA256, consumer OpenAPI projection, synthetic request vectors,
 expected observations and a standalone Dart decoder entrypoint. Requests retain
 method, path, repeated/empty query values, header names and body encoding; replace
@@ -39,7 +40,8 @@ fake-Firestore/Redis/storage app. Use its network guard and synthetic auth depen
 never load the app through default production wiring. Capture returned HTTP bytes,
 then run the frozen decoder, asserting nonempty sentinel ids and semantic values.
 A fake server returning fixtures is not acceptance. The protected integration
-contract wraps the real route callable and proves replay traverses it. Shared
+contract checks active cases traverse real routes and decodes their exact bytes.
+The separate bootstrap test retains the first two builds/four endpoints historically. Shared
 fixtures do not prove live-session sign-in: backend principal, anonymous app and
 signed-in app remain distinct; C10 tests authenticated and rejected requests
 without designing token delivery.
@@ -61,8 +63,8 @@ a server minimum; firmware minimum_app_version is unrelated. Retirement needs a
 server enforcement rollout receipt (policy revision, platform minima, rejection
 proof for the old client), reviewed by backend/release owners. Keep immutable
 fixtures archived after retirement; stop executing them only when that receipt
-validates. Raising the minimum is a product/server change, never a compatibility
-check's automatic escape hatch.
+validates; zero supported cases reports out-of-scope, not compatibility. Raising
+the minimum is a product/server decision, never an automatic escape hatch.
 
 The active stdlib catalog check is in repo-checks.yml's manifest local/ci lane.
 It compares adopted consumer projections using the existing directional OpenAPI

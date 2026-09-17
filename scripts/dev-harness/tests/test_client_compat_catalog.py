@@ -116,9 +116,27 @@ def test_fixture_bytes_and_released_source_are_pinned(tmp_path):
     doc = {'releases': [row]}
     policy = json.loads((ROOT / catalog.POLICY).read_text())
     assert catalog.validate_catalog(doc, policy, tmp_path) == []
+    widened = copy.deepcopy(doc)
+    extra = copy.deepcopy(row)
+    extra['id'] = 'synthetic-second-capture'
+    widened['releases'].append(extra)
+    assert catalog.validate_catalog(widened, policy, tmp_path, prior=doc) == []
     (directory / 'decoder.dart').write_text('void main() { print("fake success"); }')
     assert any('hash mismatch' in e for e in catalog.validate_catalog(doc, policy, tmp_path))
     row['files'][paths['decoder.dart']] = hashlib.sha256((directory / 'decoder.dart').read_bytes()).hexdigest()
     old = copy.deepcopy(doc)
     row['commit'] = '0' * 40
     assert catalog.validate_catalog(doc, policy, tmp_path, prior=old)
+
+
+def test_retired_shapes_do_not_constrain_head_but_one_supported_platform_does(tmp_path):
+    directory = tmp_path / 'contracts/client-compat'
+    directory.mkdir(parents=True)
+    (directory / 'projection.json').write_text(json.dumps(projection()))
+    doc = {'releases': [{'id': 'captured', 'build': 990, 'platforms': ['ios', 'android'],
+                         'projection': 'contracts/client-compat/projection.json'}]}
+    policy = {'minimum_build': {'ios': 991, 'android': 991}}
+    incompatible = {'openapi': '3.1.0', 'paths': {}}
+    assert catalog.check_against_head(doc, policy, tmp_path, incompatible) == []
+    policy['minimum_build']['android'] = None
+    assert catalog.check_against_head(doc, policy, tmp_path, incompatible)
