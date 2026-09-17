@@ -2048,6 +2048,15 @@ class AppLocalizationsTr extends AppLocalizations {
       'Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.';
 
   @override
+  String get memoryHistory => 'Geçmiş';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Geri Al';
 
   @override
@@ -9994,4 +10003,8 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi\'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.';
 }

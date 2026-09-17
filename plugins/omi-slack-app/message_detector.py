@@ -1,5 +1,4 @@
 import re
-import difflib
 from typing import Optional, Tuple
 from openai import AsyncOpenAI
 import os
@@ -7,53 +6,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-
-def resolve_channel(spoken_name: str, channel_map: dict) -> Optional[Tuple[str, str]]:
-    """Resolve a spoken/AI-extracted channel name to a workspace channel.
-
-    Returns (channel_id, canonical_channel_name), or None when the name is
-    unknown or ambiguous.
-
-    Resolution order:
-    1. An exact (case-insensitive) match wins outright.
-    2. Otherwise every candidate that substring-matches the spoken name in
-       either direction is scored by difflib.SequenceMatcher ratio against the
-       spoken name, and the single closest candidate wins.
-    3. A genuine tie between equally-close candidates resolves to "not found"
-       rather than whichever channel the Slack API happened to list first —
-       callers send immediately with no confirmation step, so an arbitrary
-       pick can deliver the message to a channel the user never named.
-    """
-    if not spoken_name:
-        return None
-
-    spoken_lower = spoken_name.lower()
-
-    # 1. Exact match wins outright.
-    for name, channel_id in channel_map.items():
-        if name.lower() == spoken_lower:
-            return channel_id, name
-
-    # 2. Score every substring-matching candidate and keep the closest.
-    best_score = 0.0
-    best_matches = []
-    for name, channel_id in channel_map.items():
-        name_lower = name.lower()
-        if not name_lower:
-            continue
-        if spoken_lower in name_lower or name_lower in spoken_lower:
-            score = difflib.SequenceMatcher(None, spoken_lower, name_lower).ratio()
-            if score > best_score:
-                best_score = score
-                best_matches = [(channel_id, name)]
-            elif score == best_score:
-                best_matches.append((channel_id, name))
-
-    # 3. A unique closest match resolves; a tie is "not found".
-    if len(best_matches) == 1:
-        return best_matches[0]
-    return None
 
 
 class MessageDetector:
@@ -70,6 +22,28 @@ class MessageDetector:
         """Normalize text for comparison."""
         return text.lower().strip()
     
+    @staticmethod
+    def resolve_channel(channel_name: str, channel_map: dict) -> Tuple[Optional[str], Optional[str], list]:
+        """Map a spoken channel name to exactly one channel id.
+
+        An exact (case insensitive) name wins. Otherwise a fuzzy match is
+        accepted only when a single channel contains the spoken name or is
+        contained by it; "dev" in a workspace with #dev-ops and #frontend-dev
+        must not post to whichever came first. Returns (id, name, candidates):
+        id and name are None when nothing or several channels matched, and
+        candidates lists the fuzzy matches so the caller can say why.
+        """
+        spoken = channel_name.lstrip('#').strip().lower()
+        if not spoken:
+            return None, None, []
+        for name, channel_id in channel_map.items():
+            if name.lower() == spoken:
+                return channel_id, name, [name]
+        candidates = [name for name in channel_map if spoken in name.lower() or name.lower() in spoken]
+        if len(candidates) == 1:
+            return channel_map[candidates[0]], candidates[0], candidates
+        return None, None, candidates
+
     @classmethod
     def detect_trigger(cls, text: str) -> bool:
         """Check if text contains a Slack message trigger phrase."""
@@ -190,20 +164,18 @@ MESSAGE: Hello everyone, this is a test message"""
             # Remove # if present
             channel_name = channel_name.lstrip('#')
             
-            # Resolve to a workspace channel: an exact match wins, otherwise
-            # the single closest substring match. An ambiguous tie resolves to
-            # "not found" so the caller falls back to the user's default
-            # channel instead of sending to a channel the user never named.
-            resolved = resolve_channel(channel_name, channel_map)
-
-            if not resolved:
-                print(f"⚠️  Channel '{channel_name}' not found or ambiguous in workspace", flush=True)
+            channel_id, resolved_name, candidates = cls.resolve_channel(channel_name, channel_map)
+            
+            if not channel_id:
+                if candidates:
+                    print(f"⚠️  Channel '{channel_name}' is ambiguous, matches: {', '.join('#' + c for c in candidates)}", flush=True)
+                else:
+                    print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
                 return None, channel_name, message
-
-            channel_id, canonical_name = resolved
-            if canonical_name.lower() != channel_name.lower():
-                print(f"🔍 Fuzzy matched '{channel_name}' to '{canonical_name}'", flush=True)
-            channel_name = canonical_name
+            
+            if resolved_name.lower() != channel_name.lower():
+                print(f"🔍 Fuzzy matched '{channel_name}' to '{resolved_name}'", flush=True)
+            channel_name = resolved_name  # Use exact name from map
 
             print(f"✅ Extracted - Channel: #{channel_name}, Message: '{message}'", flush=True)
             return channel_id, channel_name, message

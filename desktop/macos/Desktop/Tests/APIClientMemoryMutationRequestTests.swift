@@ -56,6 +56,10 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
     if request.httpMethod == "GET", request.url?.path == "/v1/users/transcription-preferences" {
       payload = Data(
         "{\"single_language_mode\":false,\"vocabulary\":[\"Omi\",\"Codex\"],\"language\":\"en\"}".utf8)
+    } else if request.httpMethod == "POST", request.url?.path == "/v3/memories" {
+      payload = Data(
+        "{\"id\":\"memory-created\",\"content\":\"screen claim\",\"category\":\"system\",\"created_at\":\"2026-06-21T10:00:00Z\",\"updated_at\":\"2026-06-21T10:00:00Z\"}"
+          .utf8)
     } else {
       payload = Data("{\"status\":\"ok\"}".utf8)
     }
@@ -132,6 +136,47 @@ final class APIClientMemoryMutationRequestTests: XCTestCase {
     let request = try XCTUnwrap(MemoryMutationURLCapture.request)
     XCTAssertEqual(request.url?.path, "/v3/memories/memory-2/review")
     XCTAssertEqual(request.url?.query, "value=true")
+  }
+
+  func testCreateMemorySendsScreenCaptureContextWithoutInventedLineage() async throws {
+    let client = await makeClient()
+    let context = APIClient.MemoryCaptureContext(
+      sourceType: "screen",
+      capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+      sourceId: "42",
+      sourceSignal: "ocr",
+      sourceVersion: nil,
+      attribution: "screen"
+    )
+
+    _ = try await client.createMemory(
+      content: "screen claim",
+      source: "screenshot",
+      captureContext: context)
+
+    let body = try XCTUnwrap(MemoryMutationURLCapture.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let capture = try XCTUnwrap(json["capture_context"] as? [String: Any])
+    XCTAssertEqual(capture["source_type"] as? String, "screen")
+    XCTAssertEqual(capture["captured_at"] as? String, "2023-11-14T22:13:20.000Z")
+    XCTAssertEqual(capture["source_id"] as? String, "42")
+    XCTAssertEqual(capture["source_signal"] as? String, "ocr")
+    XCTAssertEqual(capture["attribution"] as? String, "screen")
+    XCTAssertNil(capture["source_version"])
+    XCTAssertNil(capture["independence_group"])
+    XCTAssertNil(capture["lineage_id"])
+  }
+
+  func testMemoryUseSendsActionAndStableFeedbackID() async throws {
+    let client = await makeClient()
+
+    try await client.recordMemoryUse(id: "memory-3", action: .suppress, feedbackId: "feedback-1")
+
+    let request = try XCTUnwrap(MemoryMutationURLCapture.request)
+    XCTAssertEqual(request.httpMethod, "POST")
+    XCTAssertEqual(request.url?.path, "/v3/memories/memory-3/use")
+    XCTAssertEqual(try requestJSON()["action"] as? String, "suppress")
+    XCTAssertEqual(try requestJSON()["feedback_id"] as? String, "feedback-1")
   }
 
   func testEditMemorySendsValueInJSONBody() async throws {
