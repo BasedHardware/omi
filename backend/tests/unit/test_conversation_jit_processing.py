@@ -865,9 +865,7 @@ def test_force_process_still_defers_first_open_when_rollout_admits() -> None:
     assert _constant_bool(reprocess_kwargs.get("force_process")) is True
     assert _constant_bool(reprocess_kwargs.get("bypass_jit_first_open")) is True
 
-    transcription_kwargs = _call_keywords(
-        conversations, "reprocess_conversation_transcription", "process_conversation"
-    )
+    transcription_kwargs = _call_keywords(conversations, "reprocess_conversation_transcription", "process_conversation")
     assert _constant_bool(transcription_kwargs.get("force_process")) is True
     assert _constant_bool(transcription_kwargs.get("is_reprocess")) is True
     assert _constant_bool(transcription_kwargs.get("bypass_jit_first_open")) is True

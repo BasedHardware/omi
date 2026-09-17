@@ -129,7 +129,9 @@ class TestReprocessTranscriptionRoute:
             conv_router,
             'transcribe_stored_conversation_audio',
             side_effect=StoredAudioUnavailableError('No stored audio available to retranscribe'),
-        ), patch.object(conv_router, 'process_conversation') as process:
+        ), patch.object(
+            conv_router, 'process_conversation'
+        ) as process:
             with pytest.raises(HTTPException) as exc:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 400
@@ -145,7 +147,9 @@ class TestReprocessTranscriptionRoute:
             conv_router,
             'transcribe_stored_conversation_audio',
             side_effect=StoredAudioEmptyTranscriptError('Transcription produced no speech'),
-        ), patch.object(conv_router, 'process_conversation') as process:
+        ), patch.object(
+            conv_router, 'process_conversation'
+        ) as process:
             with pytest.raises(HTTPException) as exc:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 400
@@ -161,7 +165,9 @@ class TestReprocessTranscriptionRoute:
             conv_router,
             'transcribe_stored_conversation_audio',
             side_effect=StoredAudioTranscriptionFailedError('Transcription provider failed'),
-        ), patch.object(conv_router, 'process_conversation') as process:
+        ), patch.object(
+            conv_router, 'process_conversation'
+        ) as process:
             with pytest.raises(HTTPException) as exc:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 502
@@ -175,7 +181,9 @@ class TestReprocessTranscriptionRoute:
             conv_router.conversations_db, 'is_soft_deleted', return_value=False
         ), patch.object(conv_router, 'deserialize_conversation', return_value=model), patch.object(
             conv_router, 'transcribe_stored_conversation_audio', return_value=new_segments
-        ), patch.object(conv_router, 'process_conversation', return_value=model) as process:
+        ), patch.object(
+            conv_router, 'process_conversation', return_value=model
+        ) as process:
             result = conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert result is model
         assert model.transcript_segments is new_segments
