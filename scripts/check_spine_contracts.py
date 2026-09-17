@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import argparse
 import json
 from pathlib import Path
 import re
@@ -34,6 +35,53 @@ def allowed(original: str, current: str) -> bool:
 
 
 REVISIONS = "contracts/spine/revisions"
+SCOPE = "contracts/spine/revision-scope.json"
+
+
+def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
+    """A revision is an oracle-only PR, including unstaged/untracked edits.
+
+    Frozen scaffolding permits existing stacked spine PRs, never subsequent
+    implementation at those paths. The policy is pinned at introduction.
+    """
+    policy_file = root / SCOPE
+    commits = git("log", "--diff-filter=A", "--format=%H", "HEAD", "--", SCOPE, root=root).splitlines()
+    policy = json.loads(policy_file.read_text()) if policy_file.is_file() else {}
+    if commits:
+        original = git("show", f"{commits[-1]}:{SCOPE}", root=root)
+        if not policy_file.is_file() or policy_file.read_text() != original:
+            return [f"{SCOPE}: the initial scope snapshot is immutable; it cannot authorize a builder's edit"]
+    changed = set(git("diff", "--name-only", base, "--", root=root).splitlines())
+    changed.update(git("ls-files", "--others", "--exclude-standard", root=root).splitlines())
+    needs_revision = False
+    for path in changed:
+        if path.startswith(REVISIONS + "/"):
+            file = root / path
+            if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() not in policy.get("grandfathered_revisions", {}).get(path, []):
+                needs_revision = True
+        elif path in registry:
+            try:
+                old = git("show", f"{base}:{path}", root=root)
+            except subprocess.CalledProcessError:
+                continue  # introducing a new contract is not revising one
+            if not (root / path).is_file() or not allowed(old, (root / path).read_text()):
+                needs_revision = True
+    if not needs_revision:
+        return []
+    permitted = set(policy.get("oracle_paths", [])) | {"scripts/check_spine_contracts.py", "scripts/dev-harness/tests/test_spine_mechanism.py"}
+    rejected = []
+    for path in sorted(changed):
+        if path.startswith(ROOTS + ("contracts/spine/", "app/test/support/spine/")) or path in permitted:
+            continue
+        file = root / path
+        if file.is_file() and hashlib.sha256(file.read_bytes()).hexdigest() in policy.get("scaffolding", {}).get(path, []):
+            continue
+        rejected.append(path)
+    if not rejected:
+        return []
+    return ["Spine revision mixed with implementation/non-oracle paths: " + ", ".join(rejected)
+            + ". Restore the oracle and remove the revision record from the builder PR; send its reproduction to the spine. "
+            "Land the oracle-only revision separately, then base the implementation on it. Separate commits in one PR do not satisfy this rule."]
 
 
 def digest(value: str) -> str:
@@ -114,12 +162,13 @@ def retirement_allowed(anchors: list[str], base: str, current: str) -> bool:
     return False
 
 
-def check(root: Path = ROOT) -> list[str]:
+def check(root: Path = ROOT, base_ref: str = "origin/main") -> list[str]:
     errors = []
     registry = json.loads((root / REGISTRY).read_text())
     if git("rev-parse", "--is-shallow-repository", root=root).strip() == "true":
         return ["Spine protection needs full history: git fetch --unshallow origin"]
-    base = git("merge-base", "HEAD", "origin/main", root=root).strip()
+    base = git("merge-base", "HEAD", base_ref, root=root).strip()
+    errors.extend(revision_scope(root, base, registry))
     try:
         previous = json.loads(git("show", f"{base}:{REGISTRY}", root=root))
     except subprocess.CalledProcessError:
@@ -180,8 +229,11 @@ def check(root: Path = ROOT) -> list[str]:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", default="origin/main", help="actual PR target; supplied by the checks manifest")
+    args = parser.parse_args()
     try:
-        problems = check()
+        problems = check(base_ref=args.base)
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         problems = [str(exc)]
     for problem in problems:

@@ -33,15 +33,24 @@ builder rewrite. This mechanism is for the explicitly requested mobile program;
 it is not a general exemption from the repository's regression-test rules.
 
 Spine-only corrections append `contracts/spine/revisions/NNN-description.json`
-with path, owner, before/after SHA256 and review reason, in the same commit as
-exact corrected bytes. The check pins that commit automatically, validates the
-hash chain and forbids editing/deleting committed records. A squash absorbs only
-a revision prefix ending at the introducing file's exact digest. Pending markers must
-stay unchanged in that revision; retire them separately. Builders cannot use
-revision records to accept their implementation: the owning spine and coordinator
-review the changed oracle, just as changes to this checker require review. Git
-cannot authenticate reviewer roles; this explicit review boundary is not a bypass
-flag. Subsequent edits still permit only marker removal against the revised oracle.
+with path, owner, before/after SHA256 and review reason. Exact corrected bytes
+and record land together; pending markers stay unchanged. The checker pins the
+introducing commit and hash chain; a squash absorbs only a prefix ending at its
+exact oracle digest. Retire markers separately.
+
+A revision PR may change only oracle paths: spine tests/fixtures, design notes,
+the registry and check machinery. The manifest supplies the actual PR base
+(`--base`); splitting revision and implementation into two commits in one PR
+still fails. `revision-scope.json` is an immutable introduction snapshot: already
+reviewed stacked scaffolding is allowed only at those exact bytes, never an
+implementation merely because its path once held a skeleton. Its legacy records
+are grandfathered; a builder cannot extend that list. Ordinary marker retirement
+with implementation stays allowed. Restore the oracle on a builder PR and send
+the reproduction to the spine for a separate revision PR.
+
+This separates changes, not people: a builder can propose an oracle-only PR,
+and someone modifying this checker could defeat it. Coordinator review of pure
+oracle/check changes is still required; no Git rule authenticates reviewer roles.
 
 All spine ratchets constrain only files already migrated to that pattern (no
 regression after adoption), plus at most brand-new files. Legacy debt growth in
