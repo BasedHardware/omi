@@ -1234,6 +1234,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
         settingsContent={
           <SettingsPage
+            onOpenApps={() => setRoute('Connectors')}
             onSignIn={signInAndRefresh}
             onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
             signingIn={signingIn}

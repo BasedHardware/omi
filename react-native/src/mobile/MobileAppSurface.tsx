@@ -17,7 +17,7 @@ import {
 import House from 'lucide-react-native/icons/house';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';
-import Puzzle from 'lucide-react-native/icons/puzzle';
+import ListChecks from 'lucide-react-native/icons/list-checks';
 import Settings from 'lucide-react-native/icons/settings';
 import Check from 'lucide-react-native/icons/check';
 import Pencil from 'lucide-react-native/icons/pencil';
@@ -217,7 +217,7 @@ const ConversationRow = memo(function ConversationRow({
 const tabItems = [
   {route: 'home' as const, label: 'Home', Icon: House},
   {route: 'chat' as const, label: 'Conversations', Icon: MessageCircle},
-  {route: 'apps' as const, label: 'Apps', Icon: Puzzle},
+  {route: 'tasks' as const, label: 'Tasks', Icon: ListChecks},
   {route: 'settings' as const, label: 'Settings', Icon: Settings},
 ];
 
@@ -228,7 +228,7 @@ function MobileTabBar({
   activeRoute: MobileRoute;
   onRouteChange: (route: MobileRoute) => void;
 }) {
-  const selectedRoute = activeRoute === 'tasks' ? 'home' : activeRoute;
+  const selectedRoute = activeRoute === 'apps' ? 'settings' : activeRoute;
   return (
     <View accessibilityRole="tablist" style={styles.tabBar}>
       {tabItems.map(({route, label, Icon}) => (
@@ -445,17 +445,17 @@ export function MobileAppSurface({
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.flex}>
-          {activeRoute === 'tasks' && !chatContent && (
+          {activeRoute === 'apps' && !chatContent && (
             <View style={styles.topBar}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Back to Home"
-                onPress={() => onRouteChange('home')}
+                accessibilityLabel="Back to Settings"
+                onPress={() => onRouteChange('settings')}
                 style={styles.backButton}>
                 <ChevronLeft size={20} color={mobileColor.text} />
-                <Text style={styles.quietButtonText}>Home</Text>
+                <Text style={styles.quietButtonText}>Settings</Text>
               </Pressable>
-              <Text style={styles.sectionTitle}>Action items</Text>
+              <Text style={styles.sectionTitle}>Apps</Text>
             </View>
           )}
           <View style={[styles.flex, styles.stage]}>

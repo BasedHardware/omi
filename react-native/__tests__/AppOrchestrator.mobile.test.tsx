@@ -86,10 +86,7 @@ afterEach(() => {
   act(() => renderers.splice(0).forEach(renderer => renderer.unmount()));
 });
 
-test.each([
-  ['Settings', 'Settings stage'],
-  ['Apps', 'Connectors stage'],
-])(
+test.each([['Settings', 'Settings stage']])(
   'mobile %s opens its real destination and can return home',
   async (label, stage) => {
     const renderer = await renderApp();
@@ -160,22 +157,25 @@ test('saved memories appear in matching Search results, not as a Home shortcut',
   }
 });
 
-test('action items open from Home and return without a bottom Tasks destination', async () => {
+test('action items open from Home or the restored Tasks tab', async () => {
   const renderer = await renderApp();
-  expect(control(renderer, 'Tasks')).toBeUndefined();
+  expect(control(renderer, 'Tasks')).toBeDefined();
   expect(control(renderer, 'Open calls')).toBeUndefined();
   expect(control(renderer, 'Start Live voice')).toBeUndefined();
   await act(async () =>
     control(renderer, 'See all action items').props.onPress(),
   );
-  expect(control(renderer, 'Back to Home')).toBeDefined();
-  expect(control(renderer, 'Home').props.accessibilityState.selected).toBe(
+  expect(control(renderer, 'Tasks').props.accessibilityState.selected).toBe(
     true,
   );
   expect(control(renderer, 'Start Live voice')).toBeUndefined();
-  await act(async () => control(renderer, 'Back to Home').props.onPress());
+  await act(async () => control(renderer, 'Home').props.onPress());
   expect(control(renderer, 'See all action items')).toBeDefined();
   expect(control(renderer, 'Start Live voice')).toBeUndefined();
+  await act(async () => control(renderer, 'Tasks').props.onPress());
+  expect(control(renderer, 'Tasks').props.accessibilityState.selected).toBe(
+    true,
+  );
 });
 
 test('mobile Ask Omi opens the actual chat and reports a missing backend', async () => {
@@ -309,6 +309,8 @@ test.each([true, false])(
 
 test('Settings remains a selected bottom destination and keeps Apps reachable', async () => {
   const renderer = await renderApp();
+  expect(control(renderer, 'Apps')).toBeUndefined();
+  expect(control(renderer, 'Open apps')).toBeUndefined();
   await act(async () => control(renderer, 'Settings').props.onPress());
   expect(control(renderer, 'Settings stage')).toBeDefined();
   expect(control(renderer, 'Open settings')).toBeUndefined();
@@ -316,11 +318,14 @@ test('Settings remains a selected bottom destination and keeps Apps reachable', 
     true,
   );
   expect(control(renderer, 'Account settings')).toBeDefined();
-  await act(async () => control(renderer, 'Apps').props.onPress());
+  await act(async () => control(renderer, 'Open apps').props.onPress());
   expect(control(renderer, 'Connectors stage')).toBeDefined();
-  expect(control(renderer, 'Apps').props.accessibilityState.selected).toBe(
+  expect(control(renderer, 'Settings').props.accessibilityState.selected).toBe(
     true,
   );
+  await act(async () => control(renderer, 'Back to Settings').props.onPress());
+  expect(control(renderer, 'Settings stage')).toBeDefined();
+  expect(control(renderer, 'Open apps')).toBeDefined();
   await act(async () => control(renderer, 'Home').props.onPress());
   expect(control(renderer, 'Ask Omi')).toBeDefined();
 });

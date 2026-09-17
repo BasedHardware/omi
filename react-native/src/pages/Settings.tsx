@@ -177,10 +177,12 @@ function LiveVoiceRow({
 export function SettingsPage({
   onSignIn,
   onSignOut,
+  onOpenApps,
   signingIn = false,
 }: {
   onSignIn?: () => Promise<void>;
   onSignOut?: () => Promise<void>;
+  onOpenApps?: () => void;
   signingIn?: boolean;
 }) {
   const browser = Platform.OS === 'web';
@@ -591,6 +593,14 @@ export function SettingsPage({
   return (
     <ScrollView
       contentContainerStyle={[styles.destinationPage, settingsStyles.page]}>
+      {onOpenApps && (
+        <SettingRow
+          title="Apps"
+          copy="Manage your apps and connected services."
+          actionLabel="Open apps"
+          action={onOpenApps}
+        />
+      )}
       <View accessibilityRole="tablist" style={settingsStyles.tabs}>
         {sections
           .filter(label => !browser || label !== 'Developer')

@@ -457,7 +457,9 @@ function Preview() {
                         error: "Conversations unavailable in this preview.",
                       },
               }),
-              settingsContent: h(SettingsPage),
+              settingsContent: h(SettingsPage, {
+                onOpenApps: () => setRoute("apps"),
+              }),
               appsContent: h(ConnectorsPage),
               onOpenDevice: () => setDeviceOpen((open) => !open),
               onViewTasks: () => setRoute("tasks"),
