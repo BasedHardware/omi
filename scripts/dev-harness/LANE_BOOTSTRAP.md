@@ -24,14 +24,27 @@ Never touches another worktree. Never rewrites a pre-existing `app/.dev.env`.
 - Copies git-ignored mobile build inputs when missing (same files `app/test.sh`
   bootstraps). If `app/.dev.env` already exists with a non-loopback
   `API_BASE_URL`, the command **refuses** and does not rewrite the file.
-- Runs `flutter pub get` in `app/` (shared `PUB_CACHE`) and `build_runner`
-  only when `lib/env/*.g.dart` is missing.
+- Runs `flutter pub get` in `app/` (shared `PUB_CACHE`) and
+  `scripts/dev-harness/generate-app-env.sh` when `lib/env/*.g.dart` is missing
+  (full `build_runner`, never a filtered env-only run).
 - Installs git hooks when the pre-commit hook is missing.
 
 ## What it does not do
 
-- `uv pip sync` of the full backend lock (llvmlite/scipy/av/pyarrow). Run
-  `make setup-backend` only when the change touches backend code.
+- Install uvicorn / pyright / google.* (needed by `mobile-session start` and
+  `check_backend_typecheck_if_needed`). After bootstrap, PRs that touch
+  `backend/` must run **`make lane-backend`** before `git push` or the
+  typecheck gate fails with a missing pyright. That command uses
+  `uv pip install -r backend/requirements.txt` (index wheels, ~1 min) and is
+  **not lock-hash identical**. `make setup` / `make setup-backend` remain
+  the locked environment (`uv pip sync pylock.macos.toml`). The pylock lists
+  hashed sdist+wheel for av/llvmlite/scipy/pyarrow and can stall ~20 min.
+- Envied generation goes through `scripts/dev-harness/generate-app-env.sh`:
+  no `--delete-conflicting-outputs`, no `--build-filter`. A filtered env-only
+  build_runner run deleted tracked `lib/utils/manifest/manifest.g.dart`.
+- The Flutter generated-output pre-push gate needs **`flutter pub get` in `app/`**.
+  This command already runs it; re-run after adding Dart deps. Skipping
+  bootstrap surfaces only as a failed push.
 - `git fetch` / fast-forward of `main` in another worktree.
 
 ## Why yaml + dotenv

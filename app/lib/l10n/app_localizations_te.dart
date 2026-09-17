@@ -244,7 +244,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get searchConversations => 'సంభాషణలను శోధించండి...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count ఎంచుకోబడింది';
   }
 
@@ -2055,10 +2055,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryHistory => 'చరిత్ర';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'ఉపయోగాన్ని అనుమతించు';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'ఉపయోగించవద్దు';
 
   @override
   String get undo => 'మరలుచేయండి';
@@ -10047,4 +10047,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get home => 'హోమ్';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'బేస్‌లైన్ స్థితిని నవీకరించడం విఫలమైంది.';
 }
