@@ -23,6 +23,8 @@ def clamp_max_results(value: int) -> int:
 
 
 _JATS_TAG = re.compile(r"</?jats:[^>]+>")
+# Known Crossref face-markup tags stripped unconditionally while preserving inner text (#14307).
+_FACE_TAG = re.compile(r"</?(?:b|i|u|sub|sup|scp|tt|font|sc|strike)(?:\s+[^>]*)?>", re.IGNORECASE)
 # Closing tags are never inequalities; strip them unconditionally.
 _CLOSE_TAG = re.compile(r"</[a-zA-Z][^>]*>")
 # Open tags need a non-word char before "<" so inequalities like a<b survive.
@@ -35,6 +37,7 @@ def clean(text: Any) -> str:
     value = html.unescape(str(text)).strip()
     # Crossref abstracts often carry JATS markup; chat tools want plain text.
     value = _JATS_TAG.sub("", value)
+    value = _FACE_TAG.sub("", value)
     value = _CLOSE_TAG.sub("", value)
     value = _OPEN_TAG.sub("", value)
     return value.strip()
