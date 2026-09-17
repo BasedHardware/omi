@@ -5518,6 +5518,36 @@ test('Settings names Flutter developer_mode_provider fromJson GET url instead of
   expect(tree).not.toContain('Conversation Events');
 });
 
+test('Settings names Flutter Person.fromGenerated type-wrong GET created_at instead of omitting People', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'person-alex',
+            name: 'Alex Chen',
+            created_at: 1,
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('People');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi people are malformed')),
+  );
+  expect(tree).not.toContain('Alex Chen');
+  expect(tree).not.toContain(
+    'Create a new person and train Omi to recognize their speech too!',
+  );
+});
+
 test('Settings names Flutter Person.fromGenerated padded GET created_at instead of omitting People', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -25,10 +25,39 @@ function array(value: unknown): unknown[] {
   return value;
 }
 
-function presentPaddedKnown(value: unknown): void {
-  if (typeof value === 'string' && visibleDisplayText(value) !== value) {
+function presentNullableDate(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
     throw new PeopleError();
   }
+  if (visibleDisplayText(value) !== value) {
+    throw new PeopleError();
+  }
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (value === '' || !Number.isFinite(parsed)) {
+    throw new PeopleError();
+  }
+}
+
+function presentDefaultInt(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (visibleDisplayText(value) !== value) {
+      throw new PeopleError();
+    }
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new PeopleError();
+    }
+    return;
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    return;
+  }
+  throw new PeopleError();
 }
 
 export function parseOmiPeopleNames(body: string): Map<string, string> {
@@ -41,9 +70,9 @@ export function parseOmiPeopleNames(body: string): Map<string, string> {
       throw new PeopleError();
     }
     const name = text(person.name, 1_000_000);
-    presentPaddedKnown(person.created_at);
-    presentPaddedKnown(person.updated_at);
-    presentPaddedKnown(person.speech_samples_version);
+    presentNullableDate(person.created_at);
+    presentNullableDate(person.updated_at);
+    presentDefaultInt(person.speech_samples_version);
     names.set(id, name);
   }
   return names;

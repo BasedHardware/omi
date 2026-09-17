@@ -135,6 +135,83 @@ test('old people names name Flutter Person.fromGenerated padded GET created_at i
   ).toThrow('Omi people are malformed');
 });
 
+test('old people names name Flutter Person.fromGenerated type-wrong GET created_at instead of remapping to a person chip', () => {
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          created_at: '2026-09-07T00:00:00.000Z',
+          updated_at: '2026-09-07T00:00:00.000Z',
+          speech_samples_version: '3',
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          created_at: null,
+          updated_at: null,
+          speech_samples_version: null,
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  for (const created_at of ['', 'not-a-date', 1, true, [], {}]) {
+    expect(() =>
+      parseOmiPeopleNames(
+        JSON.stringify([
+          {id: 'person-alex', name: 'Alex Chen', created_at},
+          {id: 'person-kept', name: 'Neighbor'},
+        ]),
+      ),
+    ).toThrow('Omi people are malformed');
+  }
+  expect(() =>
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {id: 'person-alex', name: 'Alex Chen', updated_at: ''},
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toThrow('Omi people are malformed');
+  expect(() =>
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {id: 'person-alex', name: 'Alex Chen', updated_at: 1},
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toThrow('Omi people are malformed');
+  for (const speech_samples_version of ['', 'abc', true, [], {}]) {
+    expect(() =>
+      parseOmiPeopleNames(
+        JSON.stringify([
+          {id: 'person-alex', name: 'Alex Chen', speech_samples_version},
+          {id: 'person-kept', name: 'Neighbor'},
+        ]),
+      ),
+    ).toThrow('Omi people are malformed');
+  }
+});
+
 test('keeps GET people names when a person id exceeds 256', () => {
   const id = 'p'.repeat(257);
   const names = parseOmiPeopleNames(
@@ -266,6 +343,24 @@ test('old people names name Flutter Person.fromGenerated padded GET created_at i
         id: 'person-alex',
         name: 'Alex Chen',
         created_at: '  2026-09-07T00:00:00.000Z  ',
+      },
+    ]),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiPeopleNames(backend)).rejects.toThrow(
+    'Omi people are malformed',
+  );
+});
+
+test('old people names name Flutter Person.fromGenerated type-wrong GET created_at instead of omitting People', async () => {
+  const request = jest.fn(async () => ({
+    id: 'people',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'person-alex',
+        name: 'Alex Chen',
+        created_at: 1,
       },
     ]),
   }));
