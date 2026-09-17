@@ -109,15 +109,15 @@ def _load_module():
 
 def test_create_fact_posts_to_v2_user_memories_route(mod, posts):
     posts.clear()
-    ok = mod.create_fact("user-42", "Prefers async updates over meetings", source="notion", source_spec="page")
+    ok = mod.create_fact("user-42", "Prefers async updates over meetings", source="other", source_spec="notion:page")
     assert ok is True
     assert len(posts) == 1, posts
     assert posts[0]["url"] == "https://api.omi.me/v2/integrations/app123/user/memories?uid=user-42", posts[0]["url"]
     assert posts[0]["headers"]["Authorization"] == "Bearer secret-key", posts[0]["headers"]
     assert posts[0]["json"] == {
         "text": "Prefers async updates over meetings",
-        "text_source": "notion",
-        "text_source_spec": "page",
+        "text_source": "other",
+        "text_source_spec": "notion:page",
     }, posts[0]["json"]
 
 
@@ -144,6 +144,25 @@ def test_missing_credentials_raise_without_request(mod, posts):
     assert posts == [], posts
 
 
+def test_non_enum_source_is_clamped_to_other_with_provenance(mod, posts):
+    posts.clear()
+    # process_pending_memories forwards the DB source ("notion_page") with spec "notion";
+    # the backend enum only accepts email | social_post | other.
+    mod.create_fact("u", "text", source="notion_page", source_spec="notion")
+    assert posts[0]["json"]["text_source"] == "other", posts[0]["json"]
+    assert posts[0]["json"]["text_source_spec"] == "notion_page:notion", posts[0]["json"]
+    posts.clear()
+    mod.create_fact("u", "text", source="notion")
+    assert posts[0]["json"] == {"text": "text", "text_source": "other", "text_source_spec": "notion"}, posts[0]["json"]
+
+
+def test_enum_sources_pass_through_unchanged(mod, posts):
+    for source in ("email", "social_post", "other"):
+        posts.clear()
+        mod.create_fact("u", "text", source=source)
+        assert posts[0]["json"] == {"text": "text", "text_source": source}, posts[0]["json"]
+
+
 def main():
     posts = _install_stubs()
     mod = _load_module()
@@ -151,6 +170,8 @@ def main():
         test_create_fact_posts_to_v2_user_memories_route,
         test_retired_facts_route_is_never_used,
         test_missing_credentials_raise_without_request,
+        test_non_enum_source_is_clamped_to_other_with_provenance,
+        test_enum_sources_pass_through_unchanged,
     ]
     failures = 0
     for test in tests:

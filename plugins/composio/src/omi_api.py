@@ -39,6 +39,11 @@ class MemoryBatch(BaseModel):
     memories: List[str]
 
 
+# Memory sources the backend accepts (backend/models/integrations.py:
+# ExternalIntegrationMemorySource); anything else is rejected with 422.
+ALLOWED_MEMORY_SOURCES = ("email", "social_post", "other")
+
+
 # Helper function to create a fact in OMI
 def create_fact(user_id: str, text: str, source: str = "other", source_spec: Optional[str] = None) -> bool:
     """
@@ -63,6 +68,13 @@ def create_fact(user_id: str, text: str, source: str = "other", source_spec: Opt
     # not served and answered every request with 404.
     url = f"{API_BASE_URL}/{APP_ID}/user/memories?uid={user_id}"
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+
+    # Callers pass provenance such as "notion_page" as the source; the backend
+    # only accepts the enum above, so clamp to "other" and keep the original
+    # value in text_source_spec instead of letting the request 422.
+    if source not in ALLOWED_MEMORY_SOURCES:
+        source_spec = f"{source}:{source_spec}" if source_spec else source
+        source = "other"
 
     payload = {
         "text": text,
