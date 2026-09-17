@@ -134,6 +134,10 @@ function presentGeolocation(value: unknown): void {
   presentNullableDouble(geolocation.accuracy);
   presentNullableDouble(geolocation.altitude);
   presentNullableDate(geolocation.captured_at);
+  presentNullableString(geolocation.address);
+  presentNullableString(geolocation.capture_source);
+  presentNullableString(geolocation.google_place_id);
+  presentNullableString(geolocation.location_type);
 }
 function presentRequiredDate(value: unknown): void {
   if (date(value) === null) {
@@ -153,6 +157,7 @@ function presentCalendarEvent(value: unknown): void {
   text(event.title);
   presentRequiredDate(event.start_time);
   presentRequiredDate(event.end_time);
+  presentNullableString(event.html_link);
 }
 function presentAudioFiles(value: unknown): void {
   if (value === undefined) return;
@@ -162,6 +167,7 @@ function presentAudioFiles(value: unknown): void {
     text(file.id);
     text(file.uid);
     text(file.conversation_id);
+    presentNullableString(file.provider);
     presentRequiredDouble(file.duration);
     presentRequiredDoubleList(file.chunk_timestamps);
     presentNullableDate(file.started_at);
@@ -171,6 +177,7 @@ function presentConversationAudio(value: unknown): void {
   if (value === undefined || value === null) return;
   const audio = object(value);
   text(audio.audio_files_fingerprint);
+  presentNullableString(audio.content_type);
   presentRequiredDouble(audio.duration);
   presentRequiredDouble(audio.captured_duration);
   presentNullableDate(audio.built_at);
@@ -190,6 +197,11 @@ function presentPhotos(value: unknown): void {
   for (const item of value) {
     const photo = object(item);
     presentNullableDate(photo.created_at);
+    presentNullableString(photo.content_type);
+    presentNullableString(photo.data_protection_level);
+    presentNullableString(photo.description);
+    presentNullableString(photo.id);
+    presentNullableString(photo.storage_id);
   }
 }
 function presentActionItems(value: unknown): void {
@@ -198,6 +210,14 @@ function presentActionItems(value: unknown): void {
   for (const item of value) {
     const action = object(item);
     text(action.description);
+    presentNullableString(action.candidate_action);
+    presentNullableString(action.capture_kind);
+    presentNullableString(action.capture_owner);
+    presentNullableString(action.context);
+    presentNullableString(action.conversation_id);
+    presentNullableString(action.due_certainty);
+    presentNullableString(action.owner_name);
+    presentNullableString(action.target_task_id);
     presentNullableDouble(action.capture_confidence);
     presentNullableDouble(action.ownership_confidence);
     presentNullableDate(action.completed_at);
@@ -212,6 +232,7 @@ function presentStructuredEvents(value: unknown): void {
   for (const item of value) {
     const event = object(item);
     text(event.title);
+    presentNullableString(event.description);
     presentRequiredDate(event.start);
     presentDefaultInt(event.duration);
   }
@@ -430,6 +451,7 @@ function discardedTranscriptSegments(value: unknown): {
   return value.map(raw => {
     const segment = object(raw);
     presentNullableString(segment.id);
+    presentNullableString(segment.stt_provider);
     const personId =
       segment.person_id === undefined || segment.person_id === null
         ? undefined

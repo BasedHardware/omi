@@ -914,6 +914,295 @@ test('old conversations name Flutter ConversationListItem fromJson type-wrong GE
   }
 });
 
+test('old conversations name Flutter ConversationListItem fromJson type-wrong GET capture_source instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {
+      title: 'Market street',
+      overview: 'Located recap',
+      action_items: [
+        {
+          description: 'Send the agenda',
+          candidate_action: 'create',
+        },
+      ],
+      events: [
+        {
+          title: 'Standup',
+          start: '2026-09-07T15:00:00.000Z',
+          duration: 30,
+          description: 'Notes',
+        },
+      ],
+    },
+    geolocation: {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      capture_source: 'gps',
+      address: 'Market St',
+      google_place_id: 'place-1',
+      location_type: 'street',
+    },
+    calendar_event: {
+      event_id: 'evt-1',
+      title: 'Standup',
+      start_time: '2026-09-07T15:00:00.000Z',
+      end_time: '2026-09-07T15:30:00.000Z',
+      html_link: 'https://cal.example/evt-1',
+    },
+    photos: [
+      {
+        id: 'photo-1',
+        description: 'Storefront',
+        data_protection_level: 'standard',
+        content_type: 'image/jpeg',
+        storage_id: 'store-1',
+      },
+    ],
+    conversation_audio: {
+      audio_files_fingerprint: 'fp-1',
+      duration: 60,
+      captured_duration: 55,
+      content_type: 'audio/mpeg',
+    },
+    audio_files: [
+      {
+        id: 'audio-1',
+        uid: 'user-1',
+        conversation_id: 'located',
+        chunk_timestamps: [0, 1.5],
+        duration: 12.5,
+        provider: 'gcp',
+      },
+    ],
+    transcript_segments: [
+      {
+        text: 'Hello from the recording',
+        speaker: 'SPEAKER_00',
+        is_user: true,
+        start: 0,
+        end: 2,
+        stt_provider: 'deepgram',
+      },
+    ],
+  };
+  const keptExact = await loadConversations(backend([row, neighbor]).api);
+  expect(keptExact.items.map(item => item.title)).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  const keptOmitted = await loadConversations(
+    backend([conversation, neighbor]).api,
+  );
+  expect(keptOmitted.items.map(item => item.title)).toEqual([
+    'Real title',
+    'Neighbor walk',
+  ]);
+  const keptNull = await loadConversations(
+    backend([
+      {
+        ...row,
+        geolocation: {
+          latitude: 37.7749,
+          longitude: -122.4194,
+          capture_source: null,
+          address: null,
+          google_place_id: null,
+          location_type: null,
+        },
+        calendar_event: {...row.calendar_event, html_link: null},
+        photos: [
+          {
+            id: 'photo-1',
+            description: null,
+            data_protection_level: null,
+            content_type: null,
+            storage_id: null,
+          },
+        ],
+        conversation_audio: {...row.conversation_audio, content_type: null},
+        audio_files: [{...row.audio_files[0], provider: null}],
+        structured: {
+          ...row.structured,
+          action_items: [
+            {
+              description: 'Send the agenda',
+              candidate_action: null,
+            },
+          ],
+          events: [{...row.structured.events[0], description: null}],
+        },
+        transcript_segments: [
+          {...row.transcript_segments[0], stt_provider: null},
+        ],
+      },
+      neighbor,
+    ]).api,
+  );
+  expect(keptNull.items.map(item => item.title)).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  for (const extra of [1, true, [], {}]) {
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            geolocation: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              capture_source: extra,
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            geolocation: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              address: extra,
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            geolocation: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              google_place_id: extra,
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            geolocation: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              location_type: extra,
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            calendar_event: {...row.calendar_event, html_link: extra},
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            structured: {
+              ...row.structured,
+              action_items: [
+                {description: 'Send the agenda', candidate_action: extra},
+              ],
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            structured: {
+              ...row.structured,
+              events: [{...row.structured.events[0], description: extra}],
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            photos: [{id: 'photo-1', description: extra}],
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            conversation_audio: {
+              ...row.conversation_audio,
+              content_type: extra,
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            audio_files: [{...row.audio_files[0], provider: extra}],
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            transcript_segments: [
+              {...row.transcript_segments[0], stt_provider: extra},
+            ],
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi text is malformed');
+  }
+});
+
 test('old discarded conversations name GET transcript_segments as the list title', async () => {
   const {api} = backend([
     {
