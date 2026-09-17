@@ -315,6 +315,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           MEMORY_BELIEF_MODEL_ENABLED:

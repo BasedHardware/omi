@@ -376,6 +376,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'true'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           MEMORY_BELIEF_MODEL_ENABLED:

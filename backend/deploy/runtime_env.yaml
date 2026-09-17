@@ -812,6 +812,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'true'
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -2130,6 +2133,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'false'
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
