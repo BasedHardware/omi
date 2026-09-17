@@ -7441,6 +7441,150 @@ test('parseCloudProfile names Flutter UserProfile fromJson type-wrong GET create
   }
 });
 
+test('parseCloudProfile names Flutter UserProfile fromJson type-wrong GET time_zone instead of remapping to a Name chip', () => {
+  const ada = {
+    uid: 'user-1',
+    name: 'Ada',
+    email: 'ada@example.test',
+    company: null,
+    job: null,
+    dataProtectionLevel: null,
+  };
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        time_zone: 'UTC',
+        motivation: 'learn',
+        use_case: 'notes',
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {uid: 'user-1', name: 'Ada', email: 'ada@example.test'},
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        time_zone: null,
+        motivation: null,
+        use_case: null,
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  expect(
+    parseCloudProfile(
+      {
+        uid: 'user-1',
+        name: 'Ada',
+        email: 'ada@example.test',
+        time_zone: '',
+        motivation: '  learn  ',
+        use_case: 'notes\n',
+      },
+      'Profile',
+    ),
+  ).toEqual(ada);
+  for (const extra of [1, true, [], {}]) {
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          time_zone: extra,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          motivation: extra,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          use_case: extra,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: extra,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: extra,
+          email: 'ada@example.test',
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          company: extra,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          job: extra,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+    expect(() =>
+      parseCloudProfile(
+        {
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.test',
+          data_protection_level: extra,
+        },
+        'Profile',
+      ),
+    ).toThrow('Profile is malformed');
+  }
+});
+
 test('loadAccountSettings names malformed GET subscription Flutter load-error', async () => {
   const backend = backendFor(request => {
     if (request.path === '/v1/users/profile') {

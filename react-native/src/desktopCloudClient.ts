@@ -128,6 +128,15 @@ function presentNullableDate(value: unknown, label: string): void {
   }
 }
 
+function presentNullableString(value: unknown, label: string): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
+    throw new Error(`${label} is malformed`);
+  }
+}
+
 function optionalBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
 }
@@ -309,6 +318,14 @@ export function parseCloudProfile(value: unknown, label: string): CloudProfile {
     throw new Error(`${label} is malformed`);
   }
   presentNullableDate(record.created_at, label);
+  presentNullableString(record.company, label);
+  presentNullableString(record.data_protection_level, label);
+  presentNullableString(record.email, label);
+  presentNullableString(record.job, label);
+  presentNullableString(record.motivation, label);
+  presentNullableString(record.name, label);
+  presentNullableString(record.time_zone, label);
+  presentNullableString(record.use_case, label);
   return {
     uid,
     name: optionalString(record.name),
