@@ -607,6 +607,30 @@ async def disconnect_hive(uid: str):
 # Chat Tool Endpoints
 # ============================================
 
+
+def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int = 50) -> int:
+    """Coerce a caller-supplied limit to an int clamped between min_val and max_val.
+
+    Chat tool parameters arrive as loosely-typed JSON: the Omi backend sends an
+    explicit null for an omitted optional parameter, and LLM callers send strings
+    like "10". ``dict.get(key, default)`` returns None - not the default - when
+    the key is present with a null, and ``items[:None]`` is a legal slice that
+    silently returns *every* row instead of the documented page size. Anything
+    non-numeric falls back to the default instead of reaching a slice.
+    """
+    if value is None:
+        return default
+    try:
+        val = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return default
+    if val < min_val:
+        return min_val
+    if val > max_val:
+        return max_val
+    return val
+
+
 @app.post("/tools/hive_get_projects", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_hive_get_projects(request: Request):
     """
@@ -616,7 +640,7 @@ async def tool_hive_get_projects(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        limit = body.get("limit", 10)
+        limit = coerce_limit(body.get("limit"), default=10, min_val=1, max_val=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -653,7 +677,7 @@ async def tool_hive_get_tasks(request: Request):
         uid = body.get("uid")
         project_name = body.get("project_name")
         project_id = body.get("project_id")
-        limit = body.get("limit", 10)
+        limit = coerce_limit(body.get("limit"), default=10, min_val=1, max_val=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -817,7 +841,7 @@ async def tool_hive_search(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query = body.get("query", "")
-        limit = body.get("limit", 10)
+        limit = coerce_limit(body.get("limit"), default=10, min_val=1, max_val=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
