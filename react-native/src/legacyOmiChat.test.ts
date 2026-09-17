@@ -495,6 +495,136 @@ test('old chat history name Flutter ServerMessage.fromGenerated type-wrong GET r
   }
 });
 
+test('old chat history name Flutter ServerMessage.fromGenerated type-wrong GET metadata instead of remapping to a chat chip', () => {
+  const neighbor = {
+    id: 'neighbor',
+    sender: 'ai',
+    text: 'Neighbor stays.',
+    created_at: '2026-09-07T01:02:04Z',
+    type: 'text',
+  };
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('meta-exact'),
+          metadata: '{"ok":true}',
+          chat_session_id: 'session-1',
+          plugin_id: 'notes',
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'meta-exact']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('meta-null'),
+          metadata: null,
+          chat_session_id: null,
+          plugin_id: null,
+          type: null,
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'meta-null']);
+  expect(
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          ...message('meta-empty'),
+          metadata: '',
+          chat_session_id: '  session-1  ',
+          type: 'plugin_event',
+        },
+        neighbor,
+      ]),
+      0,
+    ).messages.map(row => row.id),
+  ).toEqual(['neighbor', 'meta-empty']);
+  for (const extra of [1, true, [], {}]) {
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([{...message('meta-wrong'), metadata: extra}, neighbor]),
+        0,
+      ),
+    ).toThrow('Omi chat message is malformed');
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {...message('session-wrong'), chat_session_id: extra},
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat message is malformed');
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([{...message('type-wrong'), type: extra}, neighbor]),
+        0,
+      ),
+    ).toThrow('Omi chat message is malformed');
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {...message('plugin-wrong'), plugin_id: extra},
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat message is malformed');
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([{...message('app-wrong'), app_id: extra}, neighbor]),
+        0,
+      ),
+    ).toThrow('Omi chat message is malformed');
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {
+            ...message('thumb-wrong'),
+            files: [
+              {
+                id: 'att-notes',
+                name: 'notes.txt',
+                mime_type: 'text/plain',
+                openai_file_id: 'file-abc',
+                created_at: '2026-09-07T01:00:00Z',
+                thumb_name: extra,
+              },
+            ],
+          },
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat files are malformed');
+    expect(() =>
+      parseOmiHistory(
+        JSON.stringify([
+          {
+            ...message('memory-id-wrong'),
+            memories: [
+              {
+                id: extra,
+                created_at: '2026-09-07T00:00:00.000Z',
+                structured: {title: 'Morning standup', emoji: '🚀'},
+              },
+            ],
+          },
+          neighbor,
+        ]),
+        0,
+      ),
+    ).toThrow('Omi chat memories are malformed');
+  }
+});
+
 test('old chat history keeps GET files when files_id is present', () => {
   const page = parseOmiHistory(
     JSON.stringify([

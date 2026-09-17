@@ -48,6 +48,15 @@ function presentDefaultInt(value: unknown, malformed: string): void {
   throw new Error(malformed);
 }
 
+function presentNullableString(value: unknown, malformed: string): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string') {
+    throw new Error(malformed);
+  }
+}
+
 function timestampMs(value: unknown): number {
   return typeof value === 'string'
     ? Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'))
@@ -89,6 +98,10 @@ function parseOmiChatFiles(
     presentNullableDate(
       (raw as Record<string, unknown>).created_at,
       'Omi chat message is malformed',
+    );
+    presentNullableString(
+      (raw as Record<string, unknown>).thumb_name,
+      'Omi chat files are malformed',
     );
   }
   if (files.length === 0 || ids.length === 0) {
@@ -136,6 +149,7 @@ function parseOmiChatMemories(
   return value.map(raw => {
     const row = object(raw);
     presentNullableDate(row.created_at, 'Omi chat memories are malformed');
+    presentNullableString(row.id, 'Omi chat memories are malformed');
     const structured = object(row.structured);
     if (
       typeof structured.title !== 'string' ||
@@ -852,6 +866,22 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   }
   presentDefaultInt(row.rating, 'Omi chat message is malformed');
   presentDefaultInt(row.journal_revision, 'Omi chat message is malformed');
+  presentNullableString(row.app_id, 'Omi chat message is malformed');
+  presentNullableString(row.chat_session_id, 'Omi chat message is malformed');
+  presentNullableString(row.client_message_id, 'Omi chat message is malformed');
+  presentNullableString(
+    row.data_protection_level,
+    'Omi chat message is malformed',
+  );
+  presentNullableString(row.langsmith_run_id, 'Omi chat message is malformed');
+  presentNullableString(row.message_source, 'Omi chat message is malformed');
+  presentNullableString(row.metadata, 'Omi chat message is malformed');
+  presentNullableString(row.plugin_id, 'Omi chat message is malformed');
+  presentNullableString(row.prompt_commit, 'Omi chat message is malformed');
+  presentNullableString(row.prompt_name, 'Omi chat message is malformed');
+  presentNullableString(row.report_reason, 'Omi chat message is malformed');
+  presentNullableString(row.session_id, 'Omi chat message is malformed');
+  presentNullableString(row.type, 'Omi chat message is malformed');
   const memories = parseOmiChatMemories(row.memories);
   const attachments = parseOmiChatFiles(row.files, row.files_id);
   const chart = parseOmiChatChart(row.chart_data);
