@@ -5,6 +5,7 @@ inputs, never CLI flags that could replace production safety checks.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -62,6 +63,7 @@ class LiveSession:
         factory: Callable[[LaunchSpec], MachineProcess],
         screenshot: Callable[[str, Path], None],
         startup_timeout_s: float = 900,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         raise LiveNotImplemented("V1 live-session engine is not implemented; Harness V1 owns this package")
 
