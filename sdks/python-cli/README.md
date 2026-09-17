@@ -373,3 +373,4 @@ bash release.sh --build-only
 MIT — see [`LICENSE`](LICENSE).
 
 - [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
+- [Malti (Maltese)](examples/quickstart.mt.md)
