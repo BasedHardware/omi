@@ -22,6 +22,7 @@ jest.mock('../omiNative', () => ({omiBackend: {}}));
 import {MemoriesPage} from './Memories';
 import {
   desktopBackendUnavailableCopy,
+  desktopReadErrorCopy,
   memoriesEmptyCopy,
   memoriesSearchEmptyCopy,
   memoriesLoadErrorCopy,
@@ -989,6 +990,67 @@ test('Memories rows name GET locked and omit unlocked rows', () => {
         node => node.props.accessibilityLabel === 'Locked memory',
       ),
     ).toHaveLength(0);
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
+test('Memories names Flutter MemoriesPage fromJson type-wrong GET capture_context as load-error instead of remapping Prefers concise recaps', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'error',
+          error: desktopReadErrorCopy(new Error('Omi response is malformed')),
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    const copy = textOf(view);
+    expect(copy).toContain(memoriesLoadErrorCopy());
+    expect(copy).toContain(
+      desktopReadErrorCopy(new Error('Omi response is malformed')),
+    );
+    expect(copy).not.toContain('Prefers concise recaps.');
+    expect(copy).not.toContain('Likes walking.');
+  } finally {
+    act(() => view.unmount());
+  }
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('fact'),
+                title: 'Prefers concise recaps.',
+                summary: 'Prefers concise recaps.',
+                searchableText: 'Prefers concise recaps.',
+              },
+              {
+                ...memory('named'),
+                title: 'Likes walking.',
+                summary: 'Likes walking.',
+                searchableText: 'Likes walking.',
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    const copy = textOf(view);
+    expect(copy).toContain('Prefers concise recaps.');
+    expect(copy).toContain('Likes walking.');
+    expect(copy).not.toContain(memoriesLoadErrorCopy());
   } finally {
     act(() => view.unmount());
   }

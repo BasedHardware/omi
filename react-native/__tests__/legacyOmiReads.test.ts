@@ -3759,6 +3759,232 @@ test('old memories name Flutter MemoriesPage fromJson padded GET belief_computed
   ]);
 });
 
+test('old memories name Flutter MemoriesPage fromJson type-wrong GET capture_context instead of remapping to a memory chip', async () => {
+  const neighbor = omiMemory({
+    id: 'named',
+    content: 'Likes walking.',
+    conversation_id: null,
+  });
+  const row = omiMemory({
+    id: 'fact',
+    content: 'Prefers concise recaps.',
+    conversation_id: null,
+  });
+  const ids = async (rows: unknown[]) =>
+    (await loadMemories(backend(rows).api)).items.map(item => item.id);
+  const context = {
+    source_type: 'conversation',
+    attribution: 'omi',
+    independence_group: 'g1',
+    lineage_id: 'lin-1',
+    source_id: 'src-1',
+    source_signal: 'mic',
+    source_version: '1',
+    quote_refs: [{text: 'quote'}],
+  };
+  expect(
+    await ids([
+      {...row, capture_context: context},
+      neighbor,
+    ]),
+  ).toEqual(['fact', 'named']);
+  expect(await ids([row, neighbor])).toEqual(['fact', 'named']);
+  expect(await ids([{...row, capture_context: null}, neighbor])).toEqual([
+    'fact',
+    'named',
+  ]);
+  expect(
+    await ids([
+      {
+        ...row,
+        capture_context: {source_type: 'conversation', quote_refs: []},
+      },
+      neighbor,
+    ]),
+  ).toEqual(['fact', 'named']);
+  expect(
+    await ids([
+      {
+        ...row,
+        capture_context: {source_type: 'conversation', quote_refs: 1},
+      },
+      neighbor,
+    ]),
+  ).toEqual(['fact', 'named']);
+  expect(
+    await ids([
+      {
+        ...row,
+        capture_context: {source_type: 'conversation', attribution: ''},
+      },
+      neighbor,
+    ]),
+  ).toEqual(['fact', 'named']);
+  expect(
+    await ids([
+      {
+        ...row,
+        capture_context: {
+          source_type: 'conversation',
+          quote_refs: [{text: 1}],
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['fact', 'named']);
+  expect(
+    await ids([
+      {
+        ...row,
+        capture_context: {source_type: 'conversation', quote_refs: [{}]},
+      },
+      neighbor,
+    ]),
+  ).toEqual(['fact', 'named']);
+  expect(
+    await ids([
+      {
+        ...row,
+        evidence: [
+          {
+            evidence_id: 'ev-1',
+            independence_group: 'g1',
+            attribution: 'omi',
+            lineage_id: 'lin-1',
+            source_version: '1',
+            quote_refs: [{text: 'quote'}],
+          },
+        ],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['fact', 'named']);
+  expect(
+    await ids([
+      {
+        ...row,
+        evidence: [
+          {
+            evidence_id: 'ev-1',
+            independence_group: 'g1',
+            quote_refs: 1,
+          },
+        ],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['fact', 'named']);
+  for (const extra of [1, true, []]) {
+    await expect(
+      ids([{...row, capture_context: extra}, neighbor]),
+    ).rejects.toThrow('Omi response is malformed');
+  }
+  await expect(
+    ids([{...row, capture_context: {}}, neighbor]),
+  ).rejects.toThrow('Omi text is malformed');
+  for (const extra of [1, true, []]) {
+    await expect(
+      ids([
+        {
+          ...row,
+          capture_context: {source_type: extra},
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    for (const key of [
+      'attribution',
+      'independence_group',
+      'lineage_id',
+      'source_id',
+      'source_signal',
+      'source_version',
+    ]) {
+      await expect(
+        ids([
+          {
+            ...row,
+            capture_context: {source_type: 'conversation', [key]: extra},
+          },
+          neighbor,
+        ]),
+      ).rejects.toThrow('Omi text is malformed');
+    }
+    await expect(
+      ids([
+        {
+          ...row,
+          capture_context: {
+            source_type: 'conversation',
+            quote_refs: [extra],
+          },
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi response is malformed');
+    await expect(
+      ids([
+        {
+          ...row,
+          evidence: [
+            {
+              evidence_id: 'ev-1',
+              independence_group: 'g1',
+              attribution: extra,
+            },
+          ],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      ids([
+        {
+          ...row,
+          evidence: [
+            {
+              evidence_id: 'ev-1',
+              independence_group: 'g1',
+              lineage_id: extra,
+            },
+          ],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      ids([
+        {
+          ...row,
+          evidence: [
+            {
+              evidence_id: 'ev-1',
+              independence_group: 'g1',
+              source_version: extra,
+            },
+          ],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi text is malformed');
+    await expect(
+      ids([
+        {
+          ...row,
+          evidence: [
+            {
+              evidence_id: 'ev-1',
+              independence_group: 'g1',
+              quote_refs: [extra],
+            },
+          ],
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi response is malformed');
+  }
+});
+
 test('names Flutter ActionItemsPage empty GET ids instead of omitting neighboring tasks', async () => {
   const {api} = backend({
     action_items: [

@@ -338,10 +338,25 @@ function presentNullableMap(value: unknown): void {
   if (value === undefined || value === null) return;
   object(value);
 }
+function presentUnusedMapListItems(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    object(item);
+  }
+}
 function presentCaptureContext(value: unknown): void {
   if (value === undefined || value === null) return;
-  if (typeof value !== 'object' || Array.isArray(value)) return;
-  presentNullableDate((value as Record<string, unknown>).captured_at);
+  const context = object(value);
+  presentNullableString(context.attribution);
+  presentNullableDate(context.captured_at);
+  presentNullableString(context.independence_group);
+  presentNullableString(context.lineage_id);
+  presentUnusedMapListItems(context.quote_refs);
+  presentNullableString(context.source_id);
+  presentNullableString(context.source_signal);
+  text(context.source_type);
+  presentNullableString(context.source_version);
 }
 function presentEvidence(value: unknown): void {
   if (value === undefined || value === null) return;
@@ -361,6 +376,10 @@ function presentEvidence(value: unknown): void {
     presentNullableString(evidence.source_id);
     presentDefaultString(evidence.source_signal);
     presentDefaultString(evidence.source_type);
+    presentNullableString(evidence.attribution);
+    presentNullableString(evidence.lineage_id);
+    presentNullableString(evidence.source_version);
+    presentUnusedMapListItems(evidence.quote_refs);
   }
 }
 function validateGeneratedMemory(row: Record<string, unknown>): void {
