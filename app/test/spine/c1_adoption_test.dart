@@ -19,7 +19,12 @@ Iterable<String> captureImplementation() sync* {
     final source = File(path).readAsStringSync();
     for (final match in RegExp(r"import 'package:omi/([^']*capture[^']*\.dart)'").allMatches(source)) {
       final dependency = 'lib/${match.group(1)}';
-      if (!dependency.endsWith('capture_composition.dart') && !dependency.endsWith('capture_seams.dart')) {
+      // Follow capture-owned extraction files; pre-existing STT policy/cache
+      // adapters have their own migration scope, not capture ownership.
+      final filename = dependency.split('/').last;
+      if (filename.startsWith('capture_') &&
+          !dependency.endsWith('capture_composition.dart') &&
+          !dependency.endsWith('capture_seams.dart')) {
         pending.add(dependency);
       }
     }

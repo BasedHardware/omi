@@ -33,8 +33,10 @@ Evidence: recovery `edc8683e80`, `97ec3d9cea`; FGS `9495f70852`; stale callbacks
 4. **Seams/defaults.** Reuse capture_seams.dart and CaptureReplayWorld. Required:
    socket, FGS effects, BLE listener boundary, preferences, connectivity, auth,
    WAL/mic, clock/scheduling, location, codec/permissions, segment store, telemetry,
-   device lookup. No AnalyticsManager dependency: existing recording telemetry is
-   the narrow sink. BLE exposes only add/remove finalized listener. Keep the
+   device lookup. No AnalyticsManager dependency: keep lifecycle telemetry; move
+   the three existing product-event operations (transcribeLaterToggled,
+   omiDoubleTap, conversationCreated) behind existing CaptureExternalActions,
+   whose production adapter preserves their current emissions. C7 owns naming. BLE exposes only add/remove finalized listener. Keep the
    existing preferences/store types as explicit objects: capture reads dozens of
    settings, not just mute. A mute-only replacement loses batch/STT/native config.
    Dart `implements` + overridden noSuchMethod IS valid (pinned analyzer passes);
@@ -66,7 +68,8 @@ Evidence: recovery `edc8683e80`, `97ec3d9cea`; FGS `9495f70852`; stale callbacks
    file/rule pairs in `app/contracts/capture/boundary-baseline.json` `adopted`.
    Legacy inventory is informational; new files start at zero. Composition is
    the global-read adapter; CaptureLifetime owns raw acquisition. Static adoption
-   scans capture plus extracted dependencies, not only the original two files.
+   scans capture_* ownership extractions, not pre-existing STT policy/cache
+   adapters. Those helpers are not an expanded C1 migration requirement.
    Lexical checks ignore comments/strings, may flag same-named unrelated calls,
    and can miss aliases/dynamic dispatch. They complement real-provider effects;
    they cannot prove transitive ownership or replace behavioral tests.
