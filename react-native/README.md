@@ -103,3 +103,67 @@ installing or upgrading that dependency, run `bundle exec pod install` inside
 `react-native/ios` on a Mac (CocoaPods / Xcode are required; this Linux CI host
 cannot run that step). macOS desktop builds intentionally do **not** link
 WebRTC — Live stays unsupported there.
+
+## UI review
+
+Run `bun run --cwd pwa dev` from the repository root. The development-only
+`/design-preview.html` mounts production React Native components without
+persisting onboarding or bypassing authentication in the actual app. It uses
+empty/unavailable data, not a live account. Use `?surface=desktop`,
+`?surface=mobile`, or `?surface=mobile-setup` for the other surfaces. The default
+is desktop onboarding; its Sign in action only advances the component preview.
+For populated layouts, use `?surface=desktop&data=example` or
+`?surface=mobile&data=example`; task edits and completion change only the
+explicitly labelled local fixtures. Use
+`data=empty` for successful empty reads. Neither mode makes account requests.
+This entry is not included in the PWA production build.
+
+Desktop setup separates the AI assistant gallery from Connect data. Both are
+browsable catalogs; until adapters exist, they explicitly say Coming soon and
+never claim a connection. Apps retains the real account catalog under Your apps.
+Permission requests remain user-initiated: the macOS command opens System
+Settings for denied permissions, and React refreshes actual status on app
+activation and every 1.5 seconds while the permission step is mounted.
+Neither a grant nor navigation starts capture. `DesktopWindow` is an inert
+React marker for the existing AppKit window: onboarding uses a compact glass
+window, and requesting a permission changes it to a small companion guide.
+Its text, confirmed-grant state, and Back to setup action remain React-owned.
+AppKit positions it beside the measured System Settings window, follows window
+movement, and floats it only while Omi or System Settings is active. When there
+is no room beside Settings it yields rather than covering the controls. It does
+not draw a replica switch, take screenshots, or require Accessibility access.
+Leaving onboarding restores the normal app window and stops guide placement.
+The existing native material honors Reduce Transparency; React transitions
+honor Reduce Motion. Browser glass is only a labeled approximation.
+
+The eight-dot mark assembles on arrival, gathers on step changes, breathes
+while waiting, and bursts once on a confirmed permission grant. Clicking the
+header mark replays its greeting without advancing setup. Reduced motion keeps
+the ring static and moves the progress indicator immediately. The web hook
+subscribes directly to `prefers-reduced-motion` so separate consumers cannot
+remove one another's listeners; native uses `AccessibilityInfo`.
+
+The main desktop keeps one shared Ask/Search/Recall field. Chat suggestions
+fill and focus it without submitting; they are hidden while busy, loading, or
+failed. General settings contains capture, audio, notifications, and the device
+slot; backend and live-voice choices belong to AI & Automation. Desktop task
+controls pass the desktop appearance explicitly, including browser previews.
+
+Mobile keeps the composer and tab dock in layout flow so neither covers the
+scrolling content. The Home mark replays its arrival greeting without changing
+capture or navigation; reduced motion keeps it static. Empty/whitespace drafts
+cannot submit from either the send button or the keyboard. Apps browses the
+existing catalog through Explore, Installed, My Apps, and Services; installation
+still waits for the backend. Native backend and live-voice choices live under
+Settings → Developer. The mobile preview now mounts the real Conversations,
+Settings, and Apps pages; browser-only capability restrictions still apply.
+
+Check shared UI with `bun run --cwd react-native test -- --runInBand` and
+`bun run --cwd pwa typecheck`. Review desktop at 1280×900 and compact widths,
+gallery details expanded and collapsed, permissions before/after request,
+mobile tabs and empty states, and reduced motion. Browser previews do not
+verify native System Settings or real phone behavior; permission-pane links
+and grants must also be exercised on macOS. For native review, use a dev bundle:
+request and deny each permission, grant it in Settings, move Settings between
+displays, switch to another app, return/skip, and sign out. Check that the guide
+never covers the Settings controls, steals focus after a grant, or starts capture.
