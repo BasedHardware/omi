@@ -23,6 +23,7 @@ import {mobileColor} from '../mobile/mobileTokens';
 type Props = {
   backend: OmiBackend | null | undefined;
   compact?: boolean;
+  dock?: boolean;
   desktop?: boolean;
   provider?: LiveVoiceProvider;
 };
@@ -34,6 +35,7 @@ type ActiveSession = {
 export function LiveVoiceButton({
   backend,
   compact = false,
+  dock = false,
   desktop = false,
   provider = 'gpt_live',
 }: Props) {
@@ -159,7 +161,12 @@ export function LiveVoiceButton({
   const on = phase === 'live';
   const label = active ? 'End Live' : 'Live';
   return (
-    <View style={[styles.root, compact && styles.rootCompact]}>
+    <View
+      style={[
+        styles.root,
+        compact && styles.rootCompact,
+        dock && styles.rootDock,
+      ]}>
       <FocusPressable
         accessibilityLabel={active ? 'End Live voice' : 'Start Live voice'}
         accessibilityRole="button"
@@ -168,17 +175,20 @@ export function LiveVoiceButton({
         style={({pressed}) => [
           styles.button,
           compact && styles.buttonCompact,
+          dock && styles.buttonDock,
           on && styles.buttonOn,
           pressed && styles.pressed,
         ]}>
         {active ? (
-          <PhoneOff color={on ? '#ffffff' : ink} size={16} />
+          <PhoneOff color={on ? '#ffffff' : ink} size={dock ? 18 : 16} />
         ) : (
-          <Mic color={ink} size={16} />
+          <Mic color={ink} size={dock ? 18 : 16} />
         )}
-        <Text style={[styles.label, on ? styles.labelOn : {color: ink}]}>
-          {label}
-        </Text>
+        {dock ? null : (
+          <Text style={[styles.label, on ? styles.labelOn : {color: ink}]}>
+            {label}
+          </Text>
+        )}
       </FocusPressable>
       {message !== null ? (
         <Text accessibilityRole="alert" style={styles.message}>
@@ -206,11 +216,21 @@ const styles = StyleSheet.create({
     minHeight: 32,
     paddingHorizontal: 12,
   },
+  rootDock: {flexShrink: 0},
   buttonCompact: {
     backgroundColor: mobileColor.surface,
     borderRadius: 18,
     minHeight: 48,
     paddingHorizontal: 14,
+  },
+  buttonDock: {
+    backgroundColor: 'transparent',
+    borderRadius: 16,
+    height: 44,
+    minHeight: 44,
+    paddingHorizontal: 0,
+    width: 44,
+    justifyContent: 'center',
   },
   buttonOn: {backgroundColor: '#e5484d'},
   pressed: {opacity: 0.6},

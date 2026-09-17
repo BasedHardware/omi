@@ -257,28 +257,6 @@ function Preview() {
       View,
       { style: { flex: 1 }, nativeID: "preview-desktop" },
       h(
-        Text,
-        {
-          nativeID: "preview-notice",
-          style: {
-            color: "#666a62",
-            backgroundColor: "#eeeee8",
-            textAlign: "center",
-            padding: 6,
-            fontSize: 11,
-          },
-        },
-        `${
-          example
-            ? "EXAMPLE DATA · Edits stay in this preview · "
-            : "COMPONENT PREVIEW · "
-        }${
-          surface.startsWith("mobile")
-            ? "Mobile browser preview · Simulated controls · Nothing sent or recorded"
-            : "Glass is approximated in the browser · Native windows require macOS"
-        }`
-      ),
-      h(
         View,
         { nativeID: "preview-window", style: { flex: 1 } },
         desktop
@@ -374,6 +352,10 @@ function Preview() {
                     )
                   );
                 },
+                liveControl: h(LiveVoiceButton, {
+                  backend: null,
+                  dock: true,
+                }),
               }),
               searchQuery: mode === "Search" ? draft : "",
               conversations:
@@ -403,10 +385,6 @@ function Preview() {
                     ]
                   : [],
               timelineStatus: outcomes ? "ready" : "offline",
-              timelineNotice:
-                example === "example"
-                  ? "Preview only — Recall is not saved from this browser."
-                  : null,
               capture: {
                 active:
                   deviceState !== null && previewDevice.capture === "recording",
@@ -436,10 +414,6 @@ function Preview() {
                       ),
                   })
                 : undefined,
-              liveVoiceControl: h(LiveVoiceButton, {
-                backend: null,
-                compact: true,
-              }),
               tasks:
                 outcomes?.tasks.status === "success"
                   ? outcomes.tasks.value.items

@@ -851,7 +851,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const mobileLiveControl = (
     <LiveVoiceButton
       backend={omiBackend}
-      compact
+      dock
       provider={liveVoiceProvider}
     />
   );
@@ -1188,6 +1188,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             inputRef={composerRef}
             busy={chatBusy}
             canStop={activeGenerationId !== null}
+            liveControl={mobileLiveControl}
             onStop={() => {
               void stopGeneration();
             }}
@@ -1255,7 +1256,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         appsContent={
           <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
         }
-        liveVoiceControl={mobileLiveControl}
         capture={{
           active: nativeSnapshot?.capture === 'recording',
           waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',

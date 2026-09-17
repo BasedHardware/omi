@@ -148,6 +148,21 @@ describe('MobileAppSurface', () => {
     expect(tree).not.toContain('Mind Map');
     expect(tree).not.toContain('Refresh');
     expect(tree).not.toContain('Find your way back');
+    expect(tree).toContain('Capture listening');
+    expect(tree).not.toContain('Capture is paused');
+    expect(tree).not.toContain('Start Live voice');
+  });
+
+  test('listening capture sits beside the device chip instead of a page card', () => {
+    const renderer = render({
+      capture: {active: true, transcript: 'Preparing the product demo'},
+    });
+    expect(
+      renderer.root.find(
+        node => node.props.accessibilityLabel === 'Capture listening',
+      ),
+    ).toBeDefined();
+    expect(renderedText(renderer)).not.toContain('Listening for speech');
   });
 
   test('search filters the already loaded timeline without sending', () => {

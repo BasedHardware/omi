@@ -63,7 +63,6 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   settingsContent?: React.ReactNode;
   conversationContent?: React.ReactNode;
   appsContent?: React.ReactNode;
-  liveVoiceControl?: React.ReactNode;
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
   conversations?: readonly TimelineConversation[];
@@ -82,9 +81,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
 };
 
 type HomeRow =
-  | {kind: 'capture'; key: 'capture'}
   | {kind: 'tasks'; key: 'tasks'}
-  | {kind: 'notice'; key: 'notice'}
   | {kind: 'day'; key: string; label: string; items: MixedTimelineItem[]};
 
 export function MobileAppSurface({
@@ -100,7 +97,7 @@ export function MobileAppSurface({
   settingsContent,
   conversationContent,
   appsContent,
-  liveVoiceControl,
+
   onOpenDevice,
   onOpenSettings,
   onRouteChange,
@@ -166,13 +163,7 @@ export function MobileAppSurface({
   );
 
   const rows = useMemo<HomeRow[]>(() => {
-    const next: HomeRow[] = [
-      {kind: 'capture', key: 'capture'},
-      {kind: 'tasks', key: 'tasks'},
-    ];
-    if (timelineNotice) {
-      next.push({kind: 'notice', key: 'notice'});
-    }
+    const next: HomeRow[] = [{kind: 'tasks', key: 'tasks'}];
     if (timelineStatus !== 'ready' || timelineItems.length === 0) {
       next.push({kind: 'day', key: 'timeline-state', label: '', items: []});
       return next;
@@ -199,48 +190,12 @@ export function MobileAppSurface({
     return next;
   }, [
     timelineItems,
-    timelineNotice,
     timelineStatus,
     nowEpochMilliseconds,
   ]);
 
   const renderRow = useCallback(
     ({item}: {item: HomeRow}) => {
-      if (item.kind === 'capture') {
-        return (
-          <View style={styles.captureCard}>
-            <View style={styles.captureHeader}>
-              <View style={styles.listeningBadge}>
-                <Text style={styles.listeningText}>
-                  {capture.active
-                    ? capture.waitingForAudio
-                      ? 'Waiting for audio'
-                      : 'Listening'
-                    : 'Paused'}
-                </Text>
-                <View
-                  style={[
-                    styles.captureDot,
-                    (!capture.active || capture.waitingForAudio) &&
-                      styles.captureDotPaused,
-                  ]}
-                />
-              </View>
-              <View style={styles.microphoneButton}>
-                <Mic color={mobileColor.text} size={18} />
-              </View>
-            </View>
-            <Text numberOfLines={2} style={styles.transcript}>
-              {capture.transcript ||
-                (capture.active
-                  ? capture.waitingForAudio
-                    ? 'Your Omi is connected. Waiting for audio…'
-                    : 'Listening for speech…'
-                  : 'Capture is paused')}
-            </Text>
-          </View>
-        );
-      }
       if (item.kind === 'tasks') {
         const openTasks = tasks.filter(task => !task.completed);
         return (
@@ -273,13 +228,6 @@ export function MobileAppSurface({
           </View>
         );
       }
-      if (item.kind === 'notice') {
-        return timelineNotice ? (
-          <Text accessibilityRole="alert" style={styles.notice}>
-            {timelineNotice}
-          </Text>
-        ) : null;
-      }
       if (timelineStatus !== 'ready') {
         return <TimelineStatePanel noun="timeline" status={timelineStatus} />;
       }
@@ -300,7 +248,6 @@ export function MobileAppSurface({
       );
     },
     [
-      capture,
       tasks,
       taskStatus,
       taskFeedback,
@@ -308,7 +255,6 @@ export function MobileAppSurface({
       onTaskToggle,
       onTaskEdit,
       busyTaskId,
-      timelineNotice,
       timelineStatus,
       onOpenTimelineItem,
     ],
@@ -392,6 +338,31 @@ export function MobileAppSurface({
                 {device.label}
               </Text>
             </Pressable>
+            <View
+              accessibilityLabel={
+                capture.active
+                  ? capture.waitingForAudio
+                    ? 'Capture waiting for audio'
+                    : 'Capture listening'
+                  : 'Capture paused'
+              }
+              style={styles.captureChip}>
+              <Mic
+                color={
+                  capture.active && !capture.waitingForAudio
+                    ? mobileColor.text
+                    : mobileColor.textMuted
+                }
+                size={16}
+              />
+              <View
+                style={[
+                  styles.captureDot,
+                  (!capture.active || capture.waitingForAudio) &&
+                    styles.captureDotPaused,
+                ]}
+              />
+            </View>
             <Pressable
               accessibilityLabel="Settings"
               accessibilityRole="button"
@@ -406,9 +377,6 @@ export function MobileAppSurface({
             </Pressable>
           </View>
         </View>
-        {liveVoiceControl && (
-          <View style={styles.liveVoiceRow}>{liveVoiceControl}</View>
-        )}
         {deviceMessage && (
           <Text accessibilityRole="alert" style={styles.deviceMessage}>
             {deviceMessage}
@@ -436,8 +404,7 @@ export function MobileAppSurface({
 
 const styles = StyleSheet.create({
   flex: {flex: 1},
-  stage: {paddingTop: 12},
-  liveVoiceRow: {paddingHorizontal: 16, paddingTop: 8},
+  stage: {paddingTop: 4},
   safeArea: {backgroundColor: mobileColor.background, flex: 1},
   topBar: {
     alignItems: 'center',
@@ -445,7 +412,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: mobileSpace.sm,
     paddingHorizontal: mobileSpace.md,
-    paddingTop: mobileSpace.sm,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   topBarActions: {flexDirection: 'row', flexShrink: 1, gap: mobileSpace.sm},
   deviceButton: {
@@ -495,33 +463,22 @@ const styles = StyleSheet.create({
     width: 48,
   },
   content: {
-    gap: mobileSpace.lg,
-    paddingBottom: 24,
+    gap: 10,
+    paddingBottom: 12,
     paddingHorizontal: mobileSpace.md,
-    paddingTop: mobileSpace.xl,
+    paddingTop: 8,
   },
-  captureCard: {
-    alignItems: 'stretch',
+  captureChip: {
+    alignItems: 'center',
     backgroundColor: mobileColor.surface,
-    borderWidth: 1,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.lg,
-    gap: mobileSpace.sm,
-    minHeight: 74,
-    padding: mobileSpace.md,
-  },
-  captureHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  listeningBadge: {
-    alignItems: 'center',
     borderRadius: mobileRadius.round,
     flexDirection: 'row',
-    gap: mobileSpace.sm,
+    flexShrink: 0,
+    gap: 6,
+    height: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
   },
-  listeningText: {...mobileType.caption, color: mobileColor.textMuted},
   captureDot: {
     backgroundColor: mobileColor.recording,
     borderRadius: mobileRadius.round,
@@ -529,15 +486,6 @@ const styles = StyleSheet.create({
     width: 8,
   },
   captureDotPaused: {backgroundColor: mobileColor.textSubtle},
-  transcript: {...mobileType.body, color: mobileColor.textMuted},
-  microphoneButton: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surfaceRaised,
-    borderRadius: mobileRadius.round,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
   section: {gap: mobileSpace.sm},
   sectionTitle: {
     fontSize: 15,
@@ -547,10 +495,6 @@ const styles = StyleSheet.create({
   },
   dayLabel: {
     ...mobileType.caption,
-    color: mobileColor.textMuted,
-  },
-  notice: {
-    ...mobileType.body,
     color: mobileColor.textMuted,
   },
   taskCard: {
