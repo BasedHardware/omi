@@ -5,6 +5,7 @@
   "app/test/spine/c1_composition_test.dart": "C1",
   "app/test/spine/c1_foreground_path_test.dart": "C1",
   "app/test/spine/c1_lifetime_review_test.dart": "C1",
+  "app/test/spine/c1_lifetime_terminal_test.dart": "C1",
   "app/test/spine/c1_lifetime_test.dart": "C1",
   "app/test/spine/c1_location_completion_test.dart": "C1",
   "app/test/spine/c1_ownership_test.dart": "C1",
