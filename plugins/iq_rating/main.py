@@ -1566,7 +1566,7 @@ PEOPLE_LIST_CONTENT = """
 
 <script>
     const uid = {uid};
-    const tokenParam = '{token_param}';
+    const tokenParam = {token_param};
     let peopleData = {people_data_json};
     let currentSort = 'dumbest';
     
@@ -1734,7 +1734,7 @@ async def iq_rating_page(request: Request, uid: Optional[str] = Depends(require_
         # Generate page with people data
         people_json = json.dumps(people_with_iq)
         query_token = request.query_params.get('iq_rating_token', '').strip()
-        token_param = f'iq_rating_token={query_token}&' if query_token else ''
+        token_param = json.dumps(f'iq_rating_token={query_token}&' if query_token else '')
         content = PEOPLE_LIST_CONTENT.format(
             uid=json.dumps(uid), token_param=token_param, people_data_json=people_json,
             total_people=len(people_with_iq))
