@@ -20,6 +20,7 @@ pinned_deps=(
   "httpx==0.28.1"
   "pydantic==2.13.4"
   "starlette==0.49.1"
+  "pytest==8.4.1"
 )
 
 if command -v uv >/dev/null 2>&1; then
@@ -32,8 +33,8 @@ fi
 # shellcheck source=dev-harness/_resolve_python.sh
 source "$repo_root/scripts/dev-harness/_resolve_python.sh"
 if venv_python="$(dev_harness_canonical_python 2>/dev/null || true)" && [[ -n "$venv_python" ]]; then
-  if ! "$venv_python" -c "from fastapi.testclient import TestClient" 2>/dev/null; then
-    echo "FAIL: $venv_python lacks fastapi/httpx; install deps or use uv." >&2
+  if ! "$venv_python" -c "import fastapi, httpx, pytest" 2>/dev/null; then
+    echo "FAIL: $venv_python lacks fastapi/httpx/pytest; install deps or use uv." >&2
     exit 1
   fi
   "$venv_python" -m pytest "${test_targets[@]}" -q
