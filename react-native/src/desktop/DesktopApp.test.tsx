@@ -23,6 +23,17 @@ jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
 }));
 
+jest.mock('../app/useRewindMoments', () => ({
+  useRewindMoments: () => ({
+    items: [],
+    status: 'ready',
+    error: null,
+    sync: 'idle',
+    syncError: null,
+    refresh: jest.fn(),
+  }),
+}));
+
 jest.mock('../omiNative', () => ({
   omiBackend: {request: jest.fn()},
   subscribeOmiBackendSessionInvalidated: jest.fn(() => () => undefined),
@@ -346,63 +357,46 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(renderer.root.findAllByType(ScrollView).length).toBeGreaterThan(0);
 });
 
-test.each(['tasks', 'conversations'] as const)(
-  'Home limits both previews to three and opens the full %s list',
-  section => {
-    const tasks = Array.from({length: 5}, (_, index) => ({
-      ...outcomes.tasks.value.items[0],
-      id: `preview-task-${index}`,
-      title: `Preview task ${index}`,
-    }));
-    const conversations = Array.from({length: 5}, (_, index) => ({
-      ...outcomes.conversations.value.items[0],
-      id: `preview-conversation-${index}`,
-      title: `Preview conversation ${index}`,
-    }));
-    const renderer = renderDesktop({
-      reads: [...conversations, ...tasks],
-      outcomes: {
-        ...outcomes,
-        tasks: {
-          ...outcomes.tasks,
-          value: {...outcomes.tasks.value, items: tasks},
-        },
-        conversations: {
-          ...outcomes.conversations,
-          value: {...outcomes.conversations.value, items: conversations},
-        },
+test('Home shows action items then the mixed timeline and opens the full task list', () => {
+  const tasks = Array.from({length: 5}, (_, index) => ({
+    ...outcomes.tasks.value.items[0],
+    id: `preview-task-${index}`,
+    title: `Preview task ${index}`,
+  }));
+  const conversations = Array.from({length: 5}, (_, index) => ({
+    ...outcomes.conversations.value.items[0],
+    id: `preview-conversation-${index}`,
+    title: `Preview conversation ${index}`,
+  }));
+  const renderer = renderDesktop({
+    reads: [...conversations, ...tasks],
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        ...outcomes.tasks,
+        value: {...outcomes.tasks.value, items: tasks},
       },
-    });
-    const home = renderedText(renderer);
-    for (const prefix of ['Preview task', 'Preview conversation']) {
-      for (let index = 0; index < 5; index++) {
-        if (index < 3) {
-          expect(home).toContain(`${prefix} ${index}`);
-        } else {
-          expect(home).not.toContain(`${prefix} ${index}`);
-        }
-      }
-    }
-    expect(home).toContain('Open Recall');
-    expect(
-      renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Open Recall',
-      ).length,
-    ).toBeGreaterThan(0);
-    act(() => {
-      renderer.root
-        .find(node => node.props.accessibilityLabel === `Show more ${section}`)
-        .props.onPress();
-    });
-    const page = renderedText(renderer);
-    const prefix =
-      section === 'tasks' ? 'Preview task' : 'Preview conversation';
-    for (let index = 0; index < 5; index++) {
-      expect(page).toContain(`${prefix} ${index}`);
-    }
-    expect(page).not.toContain('Open Recall');
-  },
-);
+      conversations: {
+        ...outcomes.conversations,
+        value: {...outcomes.conversations.value, items: conversations},
+      },
+    },
+  });
+  const home = renderedText(renderer);
+  expect(home).toContain('Action items');
+  expect(home).toContain('Preview task 0');
+  expect(home).toContain('Preview conversation 4');
+  expect(home).not.toContain('Conversations & memories');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Show more tasks')
+      .props.onPress();
+  });
+  const page = renderedText(renderer);
+  for (let index = 0; index < 5; index++) {
+    expect(page).toContain(`Preview task ${index}`);
+  }
+});
 
 test('persistent capture toggle uses the existing owner across Home, Recall and Chat', async () => {
   const capture = {
@@ -572,7 +566,7 @@ test('empty Ask is disabled and Enter cannot send, and Ask stays on Home', () =>
       node => node.props.accessibilityLabel === 'Chat with Omi',
     ),
   ).toHaveLength(0);
-  expect(renderedText(renderer)).toContain('Screen history');
+  expect(renderedText(renderer)).toContain('Action items');
 });
 
 test.each(['initial-loading', 'refreshing', 'unavailable'] as const)(
@@ -609,7 +603,10 @@ test('Home empty results have no more action and matching searches explicitly op
   ).toHaveLength(0);
   act(() =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Open conversations')
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open Conversation Product review',
+      )
       .props.onPress(),
   );
   expect(renderedText(renderer)).toContain('Product review');
@@ -1094,7 +1091,7 @@ test('the session probe holds an empty window with no product copy', () => {
   }
   expect(
     renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Home currents',
+      node => node.props.accessibilityLabel === 'Home timeline',
     ),
   ).toHaveLength(0);
   expect(
@@ -1403,17 +1400,15 @@ test('Home renders real memories alongside conversations', () => {
     reads: [...outcomes.conversations.value.items, memory],
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Conversations & memories');
-  expect(tree).toContain('Prefers concise release notes');
-  expect(tree).toContain('Memory');
+  expect(tree).toContain('Action items');
+  expect(tree).not.toContain('Conversations & memories');
 });
 
 test('Home opens the real Rewind destination', async () => {
   const renderer = renderDesktop();
-  expect(renderedText(renderer)).toContain('Open Recall');
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Open Recall')
+      .find(node => node.props.accessibilityLabel === 'Recall')
       .props.onPress();
     await Promise.resolve();
   });
@@ -1450,7 +1445,7 @@ test('static tripwire: desktop stage preserves real state copy and shared glass 
   expect(allKitSource).not.toContain('function GlassSurface');
   expect(allKitSource).not.toContain("I'm ready.");
   expect(allKitSource).not.toContain('Ask a follow-up');
-  expect(allKitSource).toContain('accessibilityLabel="Home currents"');
+  expect(allKitSource).toContain('accessibilityLabel="Home timeline"');
   expect(allKitSource).toContain('accessibilityLabel="Home tasks"');
   expect(allKitSource).toContain('visibleChatError');
   expect(allKitSource).not.toContain('omnibarError');
@@ -1578,7 +1573,7 @@ test('a successful empty read is the only path to the empty claims', async () =>
     readsPhase: 'ready',
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Nothing captured yet.');
+  expect(tree).toContain('Nothing on your timeline yet.');
   expect(tree).toContain('No tasks yet');
   expect(tree).not.toContain(
     'Conversations will show here when your day is loaded.',

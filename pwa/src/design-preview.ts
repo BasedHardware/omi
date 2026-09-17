@@ -14,7 +14,6 @@ import {
   MobileOmnibar,
   type MobileOmnibarMode,
 } from "../../react-native/src/mobile/MobileOmnibar";
-import { ProjectionList } from "../../react-native/src/ui/ProjectionList";
 import { LiveVoiceButton } from "../../react-native/src/ui/LiveVoiceButton";
 import {
   DeviceSession,
@@ -376,29 +375,38 @@ function Preview() {
                   );
                 },
               }),
-              searchContent:
-                mode === "Search" && draft.trim() !== ""
-                  ? h(ProjectionList, {
-                      items: Object.values(outcomes ?? {})
-                        .flatMap<DesktopReadProjection>((outcome) =>
-                          outcome.status === "success"
-                            ? outcome.value.items
-                            : []
-                        )
-                        .filter((item) =>
-                          item.searchableText
-                            .toLowerCase()
-                            .includes(draft.trim().toLowerCase())
-                        ),
-                      loading: false,
-                      error: outcomes
-                        ? null
-                        : "Saved data unavailable in this preview.",
-                      emptyTitle: "No loaded results match",
-                      emptyCopy:
-                        "Search covers data already loaded on this device.",
-                    })
-                  : undefined,
+              searchQuery: mode === "Search" ? draft : "",
+              conversations:
+                outcomes?.conversations.status === "success"
+                  ? outcomes.conversations.value.items.map((item) => ({
+                      kind: "conversation" as const,
+                      id: item.id,
+                      title: item.title,
+                      summary: item.summary,
+                      searchableText: item.searchableText,
+                      atMs: Date.parse(item.startedAt ?? item.createdAt),
+                    }))
+                  : [],
+              recall:
+                example === "example"
+                  ? [
+                      {
+                        kind: "recall" as const,
+                        id: "preview-recall-1",
+                        appName: "Notes",
+                        windowTitle: "Example screen history",
+                        searchableText: "Notes Example screen history",
+                        atMs: Date.parse("2026-09-17T09:12:00Z"),
+                        source: "captured" as const,
+                        local: true,
+                      },
+                    ]
+                  : [],
+              timelineStatus: outcomes ? "ready" : "offline",
+              timelineNotice:
+                example === "example"
+                  ? "Preview only — Recall is not saved from this browser."
+                  : null,
               capture: {
                 active:
                   deviceState !== null && previewDevice.capture === "recording",
@@ -437,16 +445,6 @@ function Preview() {
                   ? outcomes.tasks.value.items
                   : [],
               taskStatus: outcomes ? "ready" : "offline",
-              recaps:
-                outcomes?.conversations.status === "success"
-                  ? outcomes.conversations.value.items.map((item) => ({
-                      id: item.id,
-                      title: item.title,
-                      dateLabel: "Example recap",
-                    }))
-                  : [],
-              recapStatus: outcomes ? "ready" : "offline",
-              mindMapStatus: "empty",
               conversationContent: h(ConversationsPage, {
                 embedded: true,
                 search: {
@@ -456,10 +454,6 @@ function Preview() {
                   },
                 },
                 loading: conversationState === "loading",
-                onRefresh: () =>
-                  setConversationNotice(
-                    "Preview only — no account data is refreshed."
-                  ),
                 notice: conversationNotice,
                 outcome:
                   conversationState === "loading"
@@ -478,10 +472,7 @@ function Preview() {
               settingsContent: h(SettingsPage),
               appsContent: h(ConnectorsPage),
               onOpenDevice: () => setDeviceOpen((open) => !open),
-              onOpenCalls: noop,
-              onViewTasks: () => setRoute("tasks"),
-              onViewRecaps: () => setRoute("chat"),
-              onExpandMindMap: noop,
+              onOpenSettings: () => setRoute("settings"),
             })
           : h(surface === "mobile-setup" ? Onboarding : DesktopOnboarding, {
               onSignIn: () => setSignedIn(true),

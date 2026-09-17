@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import {FocusPressable} from '../ui/Pressable';
 import Monitor from 'lucide-react-native/icons/monitor';
-import {DesktopEmptyState, PageHeading} from './DesktopRows';
+import {DesktopEmptyState} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
 import {ScrollFade, useScrollFade} from './ScrollFade';
 import {createRewindTimeline} from './rewindTimeline';
@@ -248,11 +248,7 @@ export function DesktopRewind({
   };
   return (
     <View style={styles.root} accessibilityLabel="Recall screen history">
-      <PageHeading
-        title="Find your way back."
-        subtitle="Your screen history, kept on this Mac."
-        eyebrow="RECALL"
-      />
+
       {error !== null && frames.length > 0 ? (
         <Text accessibilityRole="alert" style={styles.text}>
           {error}

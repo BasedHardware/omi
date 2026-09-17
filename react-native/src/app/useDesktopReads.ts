@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {AppState} from 'react-native';
 import {
   loadDesktopReads,
   loadTasks,
@@ -405,6 +406,29 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       if (sequence === refreshSeqRef.current) refreshPendingRef.current = false;
     }
   }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    const appState = {current: AppState.currentState};
+    const tick = () => {
+      if (appState.current === 'active' && !refreshPendingRef.current) {
+        refreshReads(false).catch(() => undefined);
+      }
+    };
+    const listener = AppState.addEventListener('change', state => {
+      appState.current = state;
+      if (state === 'active') {
+        tick();
+      }
+    });
+    const timer = setInterval(tick, 15000);
+    return () => {
+      clearInterval(timer);
+      listener.remove();
+    };
+  }, [enabled, refreshReads]);
 
   useEffect(() => {
     if (!enabled) {

@@ -30,6 +30,7 @@ import type {DesktopPreferences} from '../desktopSettingsClient';
 import {DesktopChat} from './DesktopChat';
 import {DesktopRewind} from './DesktopRewind';
 import {useRewindCapture} from '../app/useRewindCapture';
+import {useRewindMoments} from '../app/useRewindMoments';
 import {ShippingStage} from './ShippingStage';
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {desktopTokens as token} from './tokens';
@@ -128,6 +129,7 @@ export function DesktopApp({
   const capture = useRewindCapture(session === 'ready', () =>
     setCaptureRevision(value => value + 1),
   );
+  const rewindMoments = useRewindMoments(session === 'ready');
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const [mode, setMode] = useState<OmnibarMode>('Ask');
   const [recallQuery, setRecallQuery] = useState('');
@@ -267,6 +269,19 @@ export function DesktopApp({
             postSetupHomeCue={postSetupHomeCue}
             reads={reads}
             readsPhase={readsPhase}
+            recall={rewindMoments.items}
+            recallStatus={
+              rewindMoments.status === 'idle'
+                ? 'ready'
+                : rewindMoments.status
+            }
+            recallNotice={
+              rewindMoments.sync === 'unavailable'
+                ? null
+                : [rewindMoments.error, rewindMoments.syncError]
+                    .filter(Boolean)
+                    .join(' ') || null
+            }
           />
         ) : route === 'Chat' ? (
           <DesktopChat

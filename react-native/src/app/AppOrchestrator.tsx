@@ -62,6 +62,7 @@ import {useOnboarding} from './useOnboarding';
 import {usePostSetupHomeCue} from './usePostSetupHomeCue';
 import {useNativeDevices} from './useNativeDevices';
 import {useReduceMotion} from './useReduceMotion';
+import {useRewindMoments} from './useRewindMoments';
 import {omiDotColor} from '../ui/OmiAvatar';
 import {OmiMark, bundledAssetSource} from '../ui/OmiMark';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
@@ -191,6 +192,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   } = useDesktopReads({
     enabled: onboardingRequired === false,
   });
+  const rewindMoments = useRewindMoments(onboardingRequired === false);
   const postSetupHomeCue = usePostSetupHomeCue(onboardingRequired, readsPhase);
 
   const taskMutations = useTaskMutations({
@@ -1132,14 +1134,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             title: task.title,
           }))
         : [];
-    const recapItems =
+    const timelineConversations =
       readOutcomes?.conversations.status === 'success'
         ? readOutcomes.conversations.value.items.map(item => ({
-            dateLabel: new Date(
-              item.startedAt ?? item.createdAt,
-            ).toLocaleDateString(undefined, {weekday: 'long'}),
+            kind: 'conversation' as const,
             id: item.id,
             title: item.title,
+            summary: item.summary,
+            searchableText: item.searchableText,
+            atMs: Number.isFinite(
+              Date.parse(item.startedAt ?? item.createdAt),
+            )
+              ? Date.parse(item.startedAt ?? item.createdAt)
+              : null,
           }))
         : [];
     const projectionStatus: MobileProjectionStatus =
@@ -1198,33 +1205,25 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             }}
           />
         }
-        searchContent={
-          mobileMode === 'Search' && draft.trim() !== '' ? (
-            <ProjectionList
-              accessibilityLabel="Search results"
-              items={[
-                ...reads,
-                ...(readOutcomes?.tasks.status === 'success'
-                  ? readOutcomes.tasks.value.items
-                  : []),
-              ].filter(item =>
-                item.searchableText
-                  .toLocaleLowerCase()
-                  .includes(draft.trim().toLocaleLowerCase()),
-              )}
-              loading={
-                readsPhase === 'initial-loading' || readsPhase === 'refreshing'
-              }
-              error={
-                readsPhase === 'unavailable' ||
-                readsPhase === 'saved-but-refresh-failed'
-                  ? 'Some saved data could not be loaded.'
-                  : null
-              }
-              emptyTitle="No loaded results match"
-              emptyCopy="Search covers data already loaded on this device."
-            />
-          ) : undefined
+        searchQuery={mobileMode === 'Search' ? draft : ''}
+        conversations={timelineConversations}
+        recall={rewindMoments.items}
+        timelineStatus={
+          rewindMoments.status === 'error' &&
+          readOutcomes?.conversations.status === 'error'
+            ? 'error'
+            : rewindMoments.status === 'loading' ||
+              projectionStatus === 'loading'
+            ? 'loading'
+            : rewindMoments.status === 'unavailable' ||
+              projectionStatus === 'offline'
+            ? 'offline'
+            : 'ready'
+        }
+        timelineNotice={
+          [rewindMoments.error, rewindMoments.syncError]
+            .filter(Boolean)
+            .join(' ') || null
         }
         conversationContent={
           <ConversationsPage
@@ -1233,9 +1232,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               onChange: value => {
                 if (mobileMode === 'Search') setDraft(value);
               },
-            }}
-            onRefresh={() => {
-              void refreshReads(false);
             }}
             onLoadMore={() => {
               void loadMoreConversations();
@@ -1283,12 +1279,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             />
           ) : null
         }
-        mindMapStatus={
-          readOutcomes?.memories.status === 'error' ? 'error' : projectionStatus
-        }
-        onExpandMindMap={() => setRoute('Memories')}
-        onOpenCalls={() => setRoute('Conversations')}
         onOpenDevice={() => setDevicePanelOpen(open => !open)}
+        onOpenSettings={() => {
+          setHomeChatOpen(false);
+          setRoute('Settings');
+        }}
         onRouteChange={destination => {
           setHomeChatOpen(false);
           setRoute(
@@ -1303,16 +1298,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               : 'Home',
           );
         }}
-        onViewRecaps={() => setRoute('Conversations')}
-        onViewTasks={() => setRoute('Tasks')}
-        recapStatus={
-          readOutcomes?.conversations.status === 'success'
-            ? 'ready'
-            : readOutcomes?.conversations.status === 'error'
-            ? 'error'
-            : projectionStatus
-        }
-        recaps={recapItems}
         tasks={taskItems}
         taskStatus={
           readOutcomes?.tasks.status === 'success'
@@ -1688,9 +1673,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   </ScrollView>
                 ) : route === 'Conversations' ? (
                   <ConversationsPage
-                    onRefresh={() => {
-                      void refreshReads(false);
-                    }}
                     onLoadMore={() => {
                       void loadMoreConversations();
                     }}

@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo} from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -12,19 +12,14 @@ import type {
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
+import type {TimelineRecall} from '../timeline/mixedTimeline';
+import {TimelineSections, buildTimelineItems} from '../timeline/TimelineHome';
 import {FocusPressable} from '../ui/Pressable';
 import {ScrollFade} from './ScrollFade';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
-import History from 'lucide-react-native/icons/rotate-ccw-clock';
-import ArrowUpRight from 'lucide-react-native/icons/arrow-up-right';
-import {
-  EmptyCopy,
-  PageHeading,
-  ReadRow,
-  SectionTitle,
-  TaskRow,
-} from './DesktopRows';
+
+import {EmptyCopy, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
 
 type Props = {
@@ -37,6 +32,9 @@ type Props = {
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
   postSetupHomeCue?: PostSetupHomeCue;
+  recall?: readonly TimelineRecall[];
+  recallStatus?: 'ready' | 'loading' | 'error' | 'unavailable';
+  recallNotice?: string | null;
 };
 
 export function DesktopReadBanner({
@@ -97,8 +95,10 @@ export function DesktopHome({
   postSetupHomeCue = null,
   reads,
   readsPhase,
+  recall = [],
+  recallStatus = 'ready',
+  recallNotice = null,
 }: Props) {
-  const [wide, setWide] = useState(false);
   const query = draft.trim();
   const normalized = query.toLocaleLowerCase();
   const currents = useMemo(() => {
@@ -135,14 +135,6 @@ export function DesktopHome({
   const currentsError = [conversationsOutcome, memoriesOutcome].find(
     outcome => outcome?.status === 'error',
   );
-  const currentsEmptyCopy =
-    conversationsOutcome === null || memoriesOutcome === null
-      ? 'Conversations and memories will show here when your day is loaded.'
-      : currentsError?.status === 'error'
-      ? currentsError.error
-      : query !== ''
-      ? 'Nothing captured matches this search.'
-      : 'Nothing captured yet.';
   return (
     <View style={styles.home}>
       <DesktopReadBanner
@@ -155,126 +147,83 @@ export function DesktopHome({
           scrollEventThrottle={16}
           contentContainerStyle={styles.listContent}
           style={styles.list}>
-          <PageHeading
-            eyebrow="YOUR PERSONAL CONTEXT"
-            title={
-              query
-                ? 'A little easier to find.'
-                : 'A little space for your day.'
-            }
-            subtitle={
-              query
-                ? `Results from loaded history for “${query}”`
-                : 'Pick up a thought. Follow through. Find your way back.'
-            }
-          />
-          <View
-            onLayout={event => setWide(event.nativeEvent.layout.width >= 760)}
-            style={[styles.columns, wide && styles.columnsWide]}>
-            <View
-              accessibilityLabel="Home tasks"
-              style={[styles.section, wide && styles.column]}>
-              <View style={styles.sectionHeader}>
-                <SectionTitle>Tasks</SectionTitle>
-                {visibleTasks.length > 0 &&
-                tasksOutcome?.status === 'success' &&
-                readsPhase !== 'initial-loading' &&
-                readsPhase !== 'refreshing' ? (
-                  <FocusPressable
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      query ? 'Open tasks' : 'Show more tasks'
-                    }
-                    onPress={onOpenTasks}>
-                    <Text style={styles.bannerAction}>
-                      {query ? 'Open tasks' : 'Show more'}
-                    </Text>
-                  </FocusPressable>
-                ) : null}
-              </View>
-              {visibleTasks.length > 0 ? (
-                visibleTasks.slice(0, 3).map(item => (
-                  <ShippingListInsert itemKey={item.id} key={item.id}>
-                    <TaskRow item={item} />
-                  </ShippingListInsert>
-                ))
-              ) : (
-                <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
-              )}
-              {tasksOutcome?.status === 'success' &&
-              !tasksOutcome.value.page.hasMore ? (
-                <ReadStatus label="Tasks" mac page={tasksOutcome.value.page} />
+          <View accessibilityLabel="Home tasks" style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <SectionTitle>Action items</SectionTitle>
+              {visibleTasks.length > 0 &&
+              tasksOutcome?.status === 'success' &&
+              readsPhase !== 'initial-loading' &&
+              readsPhase !== 'refreshing' ? (
+                <FocusPressable
+                  accessibilityRole="button"
+                  accessibilityLabel={query ? 'Open tasks' : 'Show more tasks'}
+                  onPress={onOpenTasks}>
+                  <Text style={styles.bannerAction}>
+                    {query ? 'Open tasks' : 'Show more'}
+                  </Text>
+                </FocusPressable>
               ) : null}
             </View>
-            <View
-              accessibilityLabel="Home currents"
-              style={[styles.section, wide && styles.column]}>
-              <View style={styles.sectionHeader}>
-                <SectionTitle>Conversations & memories</SectionTitle>
-                {currents.length > 0 &&
-                conversationsOutcome?.status === 'success' &&
-                !currentsError &&
-                readsPhase !== 'initial-loading' &&
-                readsPhase !== 'refreshing' ? (
-                  <FocusPressable
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      query ? 'Open conversations' : 'Show more conversations'
-                    }
-                    onPress={onOpenConversations}>
-                    <Text style={styles.bannerAction}>
-                      {query ? 'Open conversations' : 'Show more'}
-                    </Text>
-                  </FocusPressable>
-                ) : null}
-              </View>
-              {currents.length > 0 ? (
-                currents.slice(0, 3).map(item => (
-                  <ShippingListInsert
-                    itemKey={`${item.kind}-${item.id}`}
-                    key={`${item.kind}-${item.id}`}>
-                    <ReadRow item={item} />
-                  </ShippingListInsert>
-                ))
-              ) : (
-                <EmptyCopy>{currentsEmptyCopy}</EmptyCopy>
-              )}
-              {conversationsOutcome?.status === 'success' &&
-              !conversationsOutcome.value.page.hasMore ? (
-                <ReadStatus
-                  label="Conversations"
-                  mac
-                  page={conversationsOutcome.value.page}
-                />
-              ) : null}
-              {memoriesOutcome?.status === 'success' &&
-              !memoriesOutcome.value.page.hasMore ? (
-                <ReadStatus
-                  label="Memories"
-                  mac
-                  page={memoriesOutcome.value.page}
-                />
-              ) : null}
-            </View>
+            {visibleTasks.length > 0 ? (
+              visibleTasks.slice(0, 5).map(item => (
+                <ShippingListInsert itemKey={item.id} key={item.id}>
+                  <TaskRow item={item} />
+                </ShippingListInsert>
+              ))
+            ) : (
+              <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
+            )}
+            {tasksOutcome?.status === 'success' &&
+            !tasksOutcome.value.page.hasMore ? (
+              <ReadStatus label="Tasks" mac page={tasksOutcome.value.page} />
+            ) : null}
           </View>
-          <View accessibilityLabel="Home rewind" style={styles.section}>
-            <FocusPressable
-              accessibilityRole="button"
-              accessibilityLabel="Open Recall"
-              onPress={onOpenRewind}
-              style={styles.recallRow}>
-              <View style={styles.recallIcon}>
-                <History size={22} color={token.color.inkMuted} />
-              </View>
-              <View style={styles.column}>
-                <SectionTitle>Screen history</SectionTitle>
-                <Text style={styles.recallCopy}>
-                  Find your way back to something you saw.
-                </Text>
-              </View>
-              <Text style={styles.bannerAction}>Open Recall</Text>
-              <ArrowUpRight size={16} color={token.color.inkMuted} />
-            </FocusPressable>
+          {recallNotice ? (
+            <Text accessibilityRole="alert" style={styles.recallCopy}>
+              {recallNotice}
+            </Text>
+          ) : null}
+          <View accessibilityLabel="Home timeline" style={styles.section}>
+            <TimelineSections
+              items={buildTimelineItems({
+                conversations: currents
+                  .filter(
+                    (item): item is Extract<typeof item, {kind: 'conversation'}> =>
+                      item.kind === 'conversation',
+                  )
+                  .map(item => ({
+                    kind: 'conversation' as const,
+                    id: item.id,
+                    title: item.title,
+                    summary: item.summary,
+                    searchableText: item.searchableText,
+                    atMs: Number.isFinite(
+                      Date.parse(item.startedAt ?? item.createdAt),
+                    )
+                      ? Date.parse(item.startedAt ?? item.createdAt)
+                      : null,
+                  })),
+                recall,
+                query,
+              })}
+              nowEpochMilliseconds={Date.now()}
+              status={
+                recallStatus === 'error' && currentsError
+                  ? 'error'
+                  : readsPhase === 'initial-loading' ||
+                    readsPhase === 'refreshing' ||
+                    recallStatus === 'loading'
+                  ? 'loading'
+                  : 'ready'
+              }
+              onOpenItem={item => {
+                if (item.kind === 'conversation') {
+                  onOpenConversations?.();
+                } else {
+                  onOpenRewind?.();
+                }
+              }}
+            />
           </View>
         </ScrollView>
       </ScrollFade>

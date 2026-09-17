@@ -171,38 +171,32 @@ test('mobile detail Back stays outside the transcript and restores active search
 });
 
 test('loading uses the reduced-motion mark without claiming an empty library; retry stays available after failure', () => {
-  const refresh = jest.fn();
   let tree!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     tree = ReactTestRenderer.create(
-      <ConversationsPage embedded outcome={null} loading onRefresh={refresh} />,
+      <ConversationsPage embedded outcome={null} loading />,
     );
   });
   expect(textOf(tree)).toContain('Loading conversations…');
   expect(textOf(tree)).not.toContain('No conversations yet.');
   expect(tree.root.findByType(OmiAvatar).props.reduceMotion).toBe(true);
   expect(
-    tree.root.findAllByProps({accessibilityLabel: 'Refresh conversations'})[0]
-      .props.disabled,
-  ).toBe(true);
+    tree.root.findAllByProps({accessibilityLabel: 'Refresh conversations'}),
+  ).toHaveLength(0);
   act(() =>
     tree.update(
       <ConversationsPage
         embedded
         outcome={{status: 'error', error: 'Connection interrupted'}}
         loading={false}
-        onRefresh={refresh}
       />,
     ),
   );
-  const retry = tree.root.findAllByProps({
-    accessibilityLabel: 'Refresh conversations',
-  })[0];
-  expect(retry.props.disabled).toBe(false);
   expect(textOf(tree)).toContain('Connection interrupted');
   expect(textOf(tree)).not.toContain('No conversations yet.');
-  act(() => retry.props.onPress());
-  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(
+    tree.root.findAllByProps({accessibilityLabel: 'Refresh conversations'}),
+  ).toHaveLength(0);
   act(() => tree.unmount());
 });
 

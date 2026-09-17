@@ -89,7 +89,6 @@ export function ConversationsPage({
   outcome,
   loading,
   embedded = false,
-  onRefresh,
   onLoadMore,
   loadingMore = false,
   notice = null,
@@ -98,7 +97,6 @@ export function ConversationsPage({
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
   embedded?: boolean;
-  onRefresh?: () => void;
   onLoadMore?: () => void;
   loadingMore?: boolean;
   notice?: string | null;
@@ -272,25 +270,7 @@ export function ConversationsPage({
               embedded && mobileStyles.list,
             ]}
             style={styles.conversationListPane}>
-            {onRefresh && (
-              <FocusPressable
-                accessibilityRole="button"
-                accessibilityLabel="Refresh conversations"
-                disabled={loading || loadingMore}
-                onPress={onRefresh}
-                style={[
-                  mobileStyles.pageAction,
-                  embedded && mobileStyles.refresh,
-                ]}>
-                <Text
-                  style={[
-                    styles.projectionEmptyCopy,
-                    embedded && mobileStyles.actionText,
-                  ]}>
-                  {loading ? 'Refreshing…' : 'Refresh'}
-                </Text>
-              </FocusPressable>
-            )}
+
             {notice && (
               <Text
                 accessibilityRole="alert"

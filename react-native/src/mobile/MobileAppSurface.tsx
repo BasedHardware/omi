@@ -1,5 +1,5 @@
 import {FocusPressable as Pressable} from '../ui/Pressable';
-import React, {memo, useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -14,17 +14,23 @@ import {
   TaskMutationStatus,
   type TaskMutationProps,
 } from '../ui/TaskEditor';
-import House from 'lucide-react-native/icons/house';
-import ListFilter from 'lucide-react-native/icons/list-filter';
-import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Mic from 'lucide-react-native/icons/mic';
-import Phone from 'lucide-react-native/icons/phone';
-import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
-import Check from 'lucide-react-native/icons/check';
-import Pencil from 'lucide-react-native/icons/pencil';
 import {OmiAvatar} from '../ui/OmiAvatar';
-import {useReduceMotion} from '../app/useReduceMotion';
+import {conversationGroupLabel} from '../desktopReadClient';
+import {
+  TimelineEventRow,
+  TimelineStatePanel,
+  TimelineTaskRow,
+  buildTimelineItems,
+  type TimelineProjectionStatus,
+  type TimelineTask,
+} from '../timeline/TimelineHome';
+import type {
+  MixedTimelineItem,
+  TimelineConversation,
+  TimelineRecall,
+} from '../timeline/mixedTimeline';
 import {
   mobileColor,
   mobileRadius,
@@ -32,26 +38,9 @@ import {
   mobileType,
 } from './mobileTokens';
 
-export type MobileProjectionStatus =
-  | 'ready'
-  | 'loading'
-  | 'empty'
-  | 'offline'
-  | 'error';
-
+export type MobileProjectionStatus = TimelineProjectionStatus;
 export type MobileRoute = 'home' | 'chat' | 'tasks' | 'apps' | 'settings';
-
-export type MobileTask = {
-  id: string;
-  title: string;
-  completed: boolean;
-};
-
-export type MobileRecap = {
-  id: string;
-  title: string;
-  dateLabel: string;
-};
+export type MobileTask = TimelineTask;
 
 export type MobileDeviceState = {
   connected: boolean;
@@ -77,191 +66,33 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   liveVoiceControl?: React.ReactNode;
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
-  recaps: readonly MobileRecap[];
-  recapStatus: MobileProjectionStatus;
-  mindMapStatus: MobileProjectionStatus;
+  conversations?: readonly TimelineConversation[];
+  recall?: readonly TimelineRecall[];
+  timelineStatus?: MobileProjectionStatus;
+  timelineNotice?: string | null;
+  onOpenTimelineItem?: (item: MixedTimelineItem) => void;
   omnibar: React.ReactNode;
   chatContent?: React.ReactNode;
-  searchContent?: React.ReactNode;
+  searchQuery?: string;
   onOpenDevice: () => void;
-  onOpenCalls: () => void;
+  onOpenSettings?: () => void;
+  onOpenCalls?: () => void;
   onRouteChange: (route: MobileRoute) => void;
-  onViewTasks: () => void;
-  onViewRecaps: () => void;
-  onExpandMindMap: () => void;
+  onViewTasks?: () => void;
 };
 
-type DashboardRow =
+type HomeRow =
   | {kind: 'capture'; key: 'capture'}
   | {kind: 'tasks'; key: 'tasks'}
-  | {kind: 'recaps'; key: 'recaps'}
-  | {kind: 'mind-map'; key: 'mind-map'};
-
-const StatePanel = memo(function StatePanel({
-  status,
-  noun,
-}: {
-  status: Exclude<MobileProjectionStatus, 'ready'>;
-  noun: string;
-}) {
-  const copy = {
-    loading: `Loading ${noun}…`,
-    empty: noun === 'tasks' ? "Nothing's waiting on you." : `No ${noun} yet`,
-    offline: `Couldn’t refresh ${noun}`,
-    error: `Couldn’t load ${noun}`,
-  }[status];
-  return (
-    <View
-      accessibilityLabel={`${noun} ${status} state`}
-      accessibilityRole={
-        status === 'error' || status === 'offline' ? 'alert' : undefined
-      }
-      style={styles.statePanel}>
-      <Text style={styles.stateText}>{copy}</Text>
-    </View>
-  );
-});
-
-const TaskRow = memo(function TaskRow({
-  task,
-  onToggle,
-  onEdit,
-  busy,
-}: {
-  task: MobileTask;
-  onToggle?: (id: string) => void;
-  onEdit?: (id: string) => void;
-  busy: boolean;
-}) {
-  return (
-    <View style={styles.taskRow}>
-      <Pressable
-        accessibilityLabel={`${
-          onToggle
-            ? task.completed
-              ? 'Reopen'
-              : 'Complete'
-            : task.completed
-            ? 'Completed'
-            : 'Open'
-        } ${task.title}`}
-        accessibilityRole={onToggle ? 'checkbox' : 'text'}
-        accessibilityState={{
-          checked: task.completed,
-          disabled: !onToggle || busy,
-          busy,
-        }}
-        disabled={!onToggle || busy}
-        onPress={() => onToggle?.(task.id)}
-        style={styles.taskToggle}>
-        <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
-          {task.completed && <Check color={mobileColor.background} size={14} />}
-        </View>
-        <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
-          {task.title}
-        </Text>
-      </Pressable>
-      {onEdit && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Edit ${task.title}`}
-          disabled={busy}
-          onPress={() => onEdit(task.id)}
-          style={styles.taskEdit}>
-          <Pencil color={mobileColor.textMuted} size={16} />
-        </Pressable>
-      )}
-    </View>
-  );
-});
-
-const RecapCard = memo(function RecapCard({recap}: {recap: MobileRecap}) {
-  return (
-    <View style={styles.recapCard}>
-      <Text numberOfLines={3} style={styles.recapTitle}>
-        {recap.title}
-      </Text>
-      <Text style={styles.recapDate}>{recap.dateLabel}</Text>
-    </View>
-  );
-});
-
-const tabItems = [
-  {route: 'home' as const, label: 'Home', Icon: House},
-  {route: 'chat' as const, label: 'Conversations', Icon: MessageCircle},
-  {route: 'tasks' as const, label: 'Tasks', Icon: ListFilter},
-  {route: 'apps' as const, label: 'Apps', Icon: Puzzle},
-  {route: 'settings' as const, label: 'Settings', Icon: Settings},
-];
-
-function MobileTabBar({
-  activeRoute,
-  onRouteChange,
-}: {
-  activeRoute: MobileRoute;
-  onRouteChange: (route: MobileRoute) => void;
-}) {
-  return (
-    <View accessibilityRole="tablist" style={styles.tabBar}>
-      {tabItems.map(({route, label, Icon}) => (
-        <Pressable
-          accessibilityLabel={label}
-          accessibilityRole="tab"
-          accessibilityState={{selected: activeRoute === route}}
-          key={route}
-          onPress={() => onRouteChange(route)}
-          style={[styles.tabButton, activeRoute === route && styles.tabActive]}>
-          <View style={styles.tabIcon}>
-            <Icon
-              color={
-                activeRoute === route
-                  ? mobileColor.text
-                  : mobileColor.textSubtle
-              }
-              size={22}
-            />
-          </View>
-          <Text
-            style={[
-              styles.tabLabel,
-              activeRoute === route && styles.tabLabelActive,
-            ]}>
-            {label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-function SectionHeader({
-  action,
-  actionLabel,
-  title,
-}: {
-  action: () => void;
-  actionLabel: string;
-  title: string;
-}) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={action}
-        style={styles.quietButton}>
-        <Text style={styles.quietButtonText}>{actionLabel}</Text>
-      </Pressable>
-    </View>
-  );
-}
+  | {kind: 'notice'; key: 'notice'}
+  | {kind: 'day'; key: string; label: string; items: MixedTimelineItem[]};
 
 export function MobileAppSurface({
   taskPagination,
   activeRoute,
   omnibar,
   chatContent,
-  searchContent,
+  searchQuery = '',
   capture,
   device,
   deviceMessage,
@@ -270,10 +101,8 @@ export function MobileAppSurface({
   conversationContent,
   appsContent,
   liveVoiceControl,
-  mindMapStatus,
-  onExpandMindMap,
-  onOpenCalls,
   onOpenDevice,
+  onOpenSettings,
   onRouteChange,
   onTaskToggle,
   onTaskEdit,
@@ -282,16 +111,16 @@ export function MobileAppSurface({
   onRetryTaskMutation,
   onDismissTaskMutation,
   writesAvailable = false,
-  onViewRecaps,
-  onViewTasks,
-  recaps,
-  recapStatus,
+  conversations = [],
+  recall = [],
+  timelineStatus = 'ready',
+  timelineNotice = null,
+  onOpenTimelineItem,
   tasks,
   taskStatus,
 }: MobileAppSurfaceProps): React.JSX.Element {
-  const reduceMotion = useReduceMotion();
-  const [greeting, setGreeting] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const nowEpochMilliseconds = useRef(Date.now()).current;
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(
     () => (
@@ -325,18 +154,58 @@ export function MobileAppSurface({
       selectedTask,
     ],
   );
-  const rows = useMemo<DashboardRow[]>(
-    () => [
-      {kind: 'capture', key: 'capture'},
-      {kind: 'tasks', key: 'tasks'},
-      {kind: 'recaps', key: 'recaps'},
-      {kind: 'mind-map', key: 'mind-map'},
-    ],
-    [],
+
+  const timelineItems = useMemo(
+    () =>
+      buildTimelineItems({
+        conversations,
+        recall,
+        query: searchQuery,
+      }),
+    [conversations, recall, searchQuery],
   );
 
+  const rows = useMemo<HomeRow[]>(() => {
+    const next: HomeRow[] = [
+      {kind: 'capture', key: 'capture'},
+      {kind: 'tasks', key: 'tasks'},
+    ];
+    if (timelineNotice) {
+      next.push({kind: 'notice', key: 'notice'});
+    }
+    if (timelineStatus !== 'ready' || timelineItems.length === 0) {
+      next.push({kind: 'day', key: 'timeline-state', label: '', items: []});
+      return next;
+    }
+    const groups = new Map<string, MixedTimelineItem[]>();
+    for (const item of timelineItems) {
+      const label =
+        item.atMs === null || !Number.isFinite(item.atMs)
+          ? 'Date unavailable'
+          : conversationGroupLabel(
+              new Date(item.atMs).toISOString(),
+              nowEpochMilliseconds,
+            );
+      const bucket = groups.get(label);
+      if (bucket) {
+        bucket.push(item);
+      } else {
+        groups.set(label, [item]);
+      }
+    }
+    for (const [label, items] of groups) {
+      next.push({kind: 'day', key: `day:${label}`, label, items});
+    }
+    return next;
+  }, [
+    timelineItems,
+    timelineNotice,
+    timelineStatus,
+    nowEpochMilliseconds,
+  ]);
+
   const renderRow = useCallback(
-    ({item}: {item: DashboardRow}) => {
+    ({item}: {item: HomeRow}) => {
       if (item.kind === 'capture') {
         return (
           <View style={styles.captureCard}>
@@ -373,21 +242,18 @@ export function MobileAppSurface({
         );
       }
       if (item.kind === 'tasks') {
+        const openTasks = tasks.filter(task => !task.completed);
         return (
           <View style={styles.section}>
-            <SectionHeader
-              action={onViewTasks}
-              actionLabel="View All"
-              title="Tasks"
-            />
+            <Text style={styles.sectionTitle}>Action items</Text>
             {taskFeedback}
             {taskStatus === 'ready' ? (
-              tasks.length === 0 ? (
-                <StatePanel noun="tasks" status="empty" />
+              openTasks.length === 0 ? (
+                <TimelineStatePanel noun="action items" status="empty" />
               ) : (
                 <View style={styles.taskCard}>
-                  {tasks.slice(0, 3).map(task => (
-                    <TaskRow
+                  {openTasks.slice(0, 5).map(task => (
+                    <TimelineTaskRow
                       key={task.id}
                       onToggle={writesAvailable ? onTaskToggle : undefined}
                       onEdit={
@@ -402,146 +268,102 @@ export function MobileAppSurface({
                 </View>
               )
             ) : (
-              <StatePanel noun="tasks" status={taskStatus} />
+              <TimelineStatePanel noun="action items" status={taskStatus} />
             )}
           </View>
         );
       }
-      if (item.kind === 'recaps') {
-        return (
-          <View style={styles.section}>
-            <SectionHeader
-              action={onViewRecaps}
-              actionLabel="View All"
-              title="Daily Recaps"
-            />
-            {recapStatus === 'ready' ? (
-              recaps.length === 0 ? (
-                <StatePanel noun="recaps" status="empty" />
-              ) : (
-                <FlatList
-                  data={recaps}
-                  horizontal
-                  keyExtractor={recap => recap.id}
-                  renderItem={({item: recap}) => <RecapCard recap={recap} />}
-                  showsHorizontalScrollIndicator={false}
-                />
-              )
-            ) : (
-              <StatePanel noun="recaps" status={recapStatus} />
-            )}
-          </View>
-        );
+      if (item.kind === 'notice') {
+        return timelineNotice ? (
+          <Text accessibilityRole="alert" style={styles.notice}>
+            {timelineNotice}
+          </Text>
+        ) : null;
+      }
+      if (timelineStatus !== 'ready') {
+        return <TimelineStatePanel noun="timeline" status={timelineStatus} />;
+      }
+      if (item.items.length === 0) {
+        return <TimelineStatePanel noun="timeline" status="empty" />;
       }
       return (
         <View style={styles.section}>
-          <SectionHeader
-            action={onExpandMindMap}
-            actionLabel="Expand"
-            title="Mind Map"
-          />
-          {mindMapStatus === 'ready' ? (
-            <View accessibilityLabel="Mind map preview" style={styles.mapCard}>
-              <View style={styles.mapNodeLarge} />
-              <View style={[styles.mapNode, styles.mapNodeLeft]} />
-              <View style={[styles.mapNode, styles.mapNodeRight]} />
-              <View style={[styles.mapNode, styles.mapNodeBottom]} />
-            </View>
-          ) : (
-            <StatePanel noun="mind map" status={mindMapStatus} />
-          )}
+          <Text style={styles.dayLabel}>{item.label}</Text>
+          {item.items.map(event => (
+            <TimelineEventRow
+              key={`${event.kind}:${event.id}`}
+              item={event}
+              onPress={onOpenTimelineItem}
+            />
+          ))}
         </View>
       );
     },
     [
       capture,
-      mindMapStatus,
-      onExpandMindMap,
-      onTaskToggle,
-      onTaskEdit,
-      writesAvailable,
-      busyTaskId,
-      taskFeedback,
-      onViewRecaps,
-      onViewTasks,
-      recaps,
-      recapStatus,
       tasks,
       taskStatus,
+      taskFeedback,
+      writesAvailable,
+      onTaskToggle,
+      onTaskEdit,
+      busyTaskId,
+      timelineNotice,
+      timelineStatus,
+      onOpenTimelineItem,
     ],
   );
 
-  if (activeRoute !== 'home' || chatContent) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.flex}>
-          <View style={[styles.flex, styles.stage]}>
-            {chatContent ? (
-              chatContent
-            ) : activeRoute === 'settings' ? (
-              <View accessibilityLabel="Settings stage" style={styles.flex}>
-                {settingsContent}
-              </View>
-            ) : activeRoute === 'apps' && appsContent ? (
-              <View accessibilityLabel="Connectors stage" style={styles.flex}>
-                {appsContent}
-              </View>
-            ) : activeRoute === 'tasks' ? (
-              taskStatus === 'ready' ? (
-                <FlatList
-                  contentContainerStyle={styles.secondaryList}
-                  data={tasks}
-                  keyExtractor={task => task.id}
-                  ListFooterComponent={<>{taskPagination}</>}
-                  ListHeaderComponent={taskFeedback}
-                  ListEmptyComponent={
-                    <StatePanel noun="tasks" status="empty" />
-                  }
-                  renderItem={({item}) => (
-                    <TaskRow
-                      onToggle={writesAvailable ? onTaskToggle : undefined}
-                      onEdit={
-                        writesAvailable && onTaskEdit
-                          ? setSelectedTaskId
-                          : undefined
-                      }
-                      busy={busyTaskId !== null}
-                      task={item}
-                    />
-                  )}
-                />
-              ) : (
-                <View style={[styles.secondaryList, styles.flex]}>
-                  <StatePanel noun="tasks" status={taskStatus} />
-                  {taskPagination}
-                </View>
-              )
-            ) : activeRoute === 'chat' ? (
-              conversationContent ?? (
-                <StatePanel noun="conversations" status="error" />
-              )
-            ) : (
-              <View style={styles.secondaryEmpty}>
-                <Text style={styles.secondaryPrompt}>
-                  No apps connected yet
-                </Text>
-              </View>
-            )}
-          </View>
-          {liveVoiceControl && chatContent && (
-            <View style={styles.liveVoiceRow}>{liveVoiceControl}</View>
-          )}
-          {omnibar}
-          <MobileTabBar
-            activeRoute={activeRoute}
-            onRouteChange={onRouteChange}
+  const overlay =
+    chatContent ||
+    activeRoute === 'settings' ||
+    (activeRoute === 'apps' && appsContent) ||
+    activeRoute === 'tasks' ||
+    activeRoute === 'chat';
+
+  const stage = chatContent ? (
+    chatContent
+  ) : activeRoute === 'settings' ? (
+    <View accessibilityLabel="Settings stage" style={styles.flex}>
+      {settingsContent}
+    </View>
+  ) : activeRoute === 'apps' && appsContent ? (
+    <View accessibilityLabel="Connectors stage" style={styles.flex}>
+      {appsContent}
+    </View>
+  ) : activeRoute === 'tasks' ? (
+    taskStatus === 'ready' ? (
+      <FlatList
+        contentContainerStyle={styles.secondaryList}
+        data={tasks}
+        keyExtractor={task => task.id}
+        ListFooterComponent={<>{taskPagination}</>}
+        ListHeaderComponent={taskFeedback}
+        ListEmptyComponent={
+          <TimelineStatePanel noun="action items" status="empty" />
+        }
+        renderItem={({item}) => (
+          <TimelineTaskRow
+            onToggle={writesAvailable ? onTaskToggle : undefined}
+            onEdit={
+              writesAvailable && onTaskEdit ? setSelectedTaskId : undefined
+            }
+            busy={busyTaskId !== null}
+            task={item}
           />
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
+        )}
+      />
+    ) : (
+      <View style={[styles.secondaryList, styles.flex]}>
+        <TimelineStatePanel noun="action items" status={taskStatus} />
+        {taskPagination}
+      </View>
+    )
+  ) : activeRoute === 'chat' ? (
+    conversationContent ?? (
+      <TimelineStatePanel noun="conversations" status="error" />
+    )
+  ) : null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -549,6 +371,9 @@ export function MobileAppSurface({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}>
         <View style={styles.topBar}>
+          <View accessibilityLabel="Omi">
+            <OmiAvatar tone="ink" size={36} reduceMotion />
+          </View>
           <View style={styles.topBarActions}>
             <Pressable
               accessibilityLabel="Open Omi device"
@@ -568,26 +393,18 @@ export function MobileAppSurface({
               </Text>
             </Pressable>
             <Pressable
-              accessibilityLabel="Open calls"
+              accessibilityLabel="Settings"
               accessibilityRole="button"
-              onPress={onOpenCalls}
+              accessibilityState={{selected: activeRoute === 'settings'}}
+              onPress={() =>
+                onOpenSettings
+                  ? onOpenSettings()
+                  : onRouteChange('settings')
+              }
               style={styles.roundButton}>
-              <Phone color={mobileColor.text} size={20} />
+              <Settings color={mobileColor.text} size={20} />
             </Pressable>
           </View>
-          <Pressable
-            accessibilityLabel="Say hello to Omi"
-            accessibilityRole="button"
-            onPress={() => setGreeting(value => value + 1)}
-            style={styles.greeting}>
-            <OmiAvatar
-              tone="ink"
-              size={36}
-              motion="arrive"
-              motionKey={String(greeting)}
-              reduceMotion={reduceMotion}
-            />
-          </Pressable>
         </View>
         {liveVoiceControl && (
           <View style={styles.liveVoiceRow}>{liveVoiceControl}</View>
@@ -597,7 +414,9 @@ export function MobileAppSurface({
             {deviceMessage}
           </Text>
         )}
-        {searchContent ?? (
+        {overlay ? (
+          <View style={[styles.flex, styles.stage]}>{stage}</View>
+        ) : (
           <FlatList
             contentContainerStyle={styles.content}
             data={rows}
@@ -610,7 +429,6 @@ export function MobileAppSurface({
           />
         )}
         {omnibar}
-        <MobileTabBar activeRoute={activeRoute} onRouteChange={onRouteChange} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -621,12 +439,6 @@ const styles = StyleSheet.create({
   stage: {paddingTop: 12},
   liveVoiceRow: {paddingHorizontal: 16, paddingTop: 8},
   safeArea: {backgroundColor: mobileColor.background, flex: 1},
-  greeting: {
-    height: 48,
-    width: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   topBar: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -634,25 +446,6 @@ const styles = StyleSheet.create({
     gap: mobileSpace.sm,
     paddingHorizontal: mobileSpace.md,
     paddingTop: mobileSpace.sm,
-  },
-  secondaryList: {
-    flexGrow: 1,
-    paddingBottom: 24,
-    paddingHorizontal: mobileSpace.md,
-    paddingTop: mobileSpace.lg,
-  },
-  secondaryEmpty: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    padding: mobileSpace.xl,
-  },
-  secondaryPrompt: {...mobileType.title, color: mobileColor.text},
-  secondaryCopy: {
-    ...mobileType.body,
-    color: mobileColor.textMuted,
-    marginTop: mobileSpace.sm,
-    textAlign: 'center',
   },
   topBarActions: {flexDirection: 'row', flexShrink: 1, gap: mobileSpace.sm},
   deviceButton: {
@@ -701,7 +494,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 48,
   },
-  roundGlyph: {color: mobileColor.text, fontSize: 22},
   content: {
     gap: mobileSpace.lg,
     paddingBottom: 24,
@@ -746,28 +538,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 44,
   },
-  microphoneGlyph: {color: mobileColor.text, fontSize: 13},
   section: {gap: mobileSpace.sm},
-  sectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 2,
-  },
   sectionTitle: {
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '600',
     color: mobileColor.text,
   },
-  quietButton: {
-    borderRadius: mobileRadius.round,
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: mobileSpace.sm,
-    paddingVertical: mobileSpace.sm,
+  dayLabel: {
+    ...mobileType.caption,
+    color: mobileColor.textMuted,
   },
-  quietButtonText: {...mobileType.caption, color: mobileColor.textMuted},
+  notice: {
+    ...mobileType.body,
+    color: mobileColor.textMuted,
+  },
   taskCard: {
     backgroundColor: mobileColor.surface,
     borderWidth: StyleSheet.hairlineWidth,
@@ -776,137 +561,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: mobileSpace.md,
     paddingVertical: mobileSpace.sm,
   },
-  taskRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: mobileSpace.sm,
-    minHeight: 64,
-    paddingVertical: mobileSpace.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: mobileColor.border,
-  },
-  taskToggle: {
-    flex: 1,
-    minHeight: 44,
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-  },
-  taskEdit: {
-    minHeight: 44,
-    minWidth: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkbox: {
-    borderColor: mobileColor.textSubtle,
-    borderRadius: mobileRadius.round,
-    borderWidth: 1.5,
-    height: 22,
-    width: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxDone: {backgroundColor: mobileColor.textSubtle},
-  taskText: {fontSize: 15, lineHeight: 22, color: mobileColor.text, flex: 1},
-  taskTextDone: {
-    color: mobileColor.textSubtle,
-    textDecorationLine: 'line-through',
-  },
-  recapCard: {
-    backgroundColor: mobileColor.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.md,
-    minHeight: 136,
-    gap: 20,
-    justifyContent: 'space-between',
-    marginRight: mobileSpace.sm,
-    padding: mobileSpace.md,
-    width: 250,
-  },
-  recapTitle: {...mobileType.body, color: mobileColor.text},
-  recapDate: {
-    ...mobileType.caption,
-    alignSelf: 'flex-end',
-    backgroundColor: mobileColor.surfaceQuiet,
-    borderRadius: mobileRadius.round,
-    color: mobileColor.textMuted,
+  secondaryList: {
+    flexGrow: 1,
+    paddingBottom: 24,
     paddingHorizontal: mobileSpace.md,
-    paddingVertical: mobileSpace.xs,
+    paddingTop: mobileSpace.lg,
   },
-  mapCard: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surfaceQuiet,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 150,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  mapNodeLarge: {
-    backgroundColor: mobileColor.surfaceRaised,
-    borderColor: mobileColor.border,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 44,
-    width: 44,
-  },
-  mapNode: {
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
-    borderRadius: 11,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 22,
-    position: 'absolute',
-    width: 22,
-  },
-  mapNodeLeft: {left: '24%', top: '32%'},
-  mapNodeRight: {right: '22%', top: '26%'},
-  mapNodeBottom: {bottom: '18%', right: '35%'},
-  statePanel: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surface,
-    borderRadius: mobileRadius.md,
-    minHeight: 96,
-    justifyContent: 'center',
-    padding: mobileSpace.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: mobileColor.border,
-  },
-  stateText: {
-    ...mobileType.body,
-    color: mobileColor.textMuted,
-    textAlign: 'center',
-  },
-  tabBar: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surfaceQuiet,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.lg,
-    marginHorizontal: 10,
-    marginBottom: 8,
-    flexDirection: 'row',
-    minHeight: 68,
-    flexShrink: 0,
-    justifyContent: 'space-around',
-    padding: 4,
-    gap: 2,
-  },
-  tabButton: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 60,
-    gap: 3,
-    borderRadius: 18,
-  },
-  tabIcon: {paddingVertical: 4},
-  tabActive: {backgroundColor: mobileColor.surfaceRaised},
-  tabLabel: {fontSize: 9, color: mobileColor.textSubtle},
-  tabLabelActive: {color: mobileColor.text},
-  tabGlyph: {color: mobileColor.textSubtle, fontSize: 30},
-  tabGlyphActive: {color: mobileColor.text},
 });
