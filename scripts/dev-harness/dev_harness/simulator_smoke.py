@@ -1,8 +1,9 @@
-"""V2 iOS-simulator full-app smoke. Not the V1 live broker, not CI.
+"""V2/V3 iOS-simulator and Android-emulator full-app smoke. Not the V1 live broker, not CI.
 
-Boots one session simulator, launches the real debug/dev/local_dev app with
-OMI_DEV_CONTROLS=1, reads ext.omi.controls, screenshots, writes a
-session-evidence-v1 receipt, and releases everything this run acquired.
+Boots one session device (simulator or a session-owned AVD), launches the real
+debug/dev/local_dev app with OMI_DEV_CONTROLS=1, reads ext.omi.controls,
+screenshots, writes a session-evidence-v1 receipt, and releases everything
+this run acquired.
 
 Sign-in is out of this package. The app is signed out; smoke asserts
 signedIn=false rather than injecting a token.
@@ -319,6 +320,17 @@ def find_ios_app_bundle(app_dir: Path) -> Path | None:
     return None
 
 
+def find_android_apk(app_dir: Path) -> Path | None:
+    pinned = app_dir / "build" / "app" / "outputs" / "flutter-apk" / "app-dev-debug.apk"
+    if pinned.is_file():
+        return pinned
+    root = app_dir / "build" / "app" / "outputs"
+    if not root.is_dir():
+        return None
+    found = sorted(path for path in root.rglob("app-dev-debug.apk") if path.is_file())
+    return found[0] if found else None
+
+
 def default_simctl_screenshot(udid: str, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(
@@ -333,6 +345,39 @@ def default_simctl_screenshot(udid: str, path: Path) -> None:
             remedy=f"xcrun simctl io {udid} screenshot {path}",
             payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
         )
+
+
+def default_adb_screencap(serial: str, path: Path, *, adb: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    completed = subprocess.run(
+        [adb, "-s", serial, "exec-out", "screencap", "-p"],
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0 or not completed.stdout:
+        err = (completed.stderr or b"").decode("utf-8", "replace").strip()
+        raise SmokeBlocked(
+            err or "adb screencap failed",
+            remedy=f"{adb} -s {serial} exec-out screencap -p > {path}",
+            payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
+        )
+    path.write_bytes(completed.stdout)
+
+
+def grant_android_runtime_permissions(adb: str, serial: str, app_id: str) -> None:
+    for permission in ms.ANDROID_PERMISSIONS:
+        completed = subprocess.run(
+            [adb, "-s", serial, "shell", "pm", "grant", app_id, permission],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise SmokeBlocked(
+                f"pm grant {app_id} {permission} failed: {(completed.stdout or '') + (completed.stderr or '')}".strip()[:400],
+                remedy=f"{adb} -s {serial} shell pm grant {app_id} {permission}",
+                payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
+            )
 
 
 class SimulatorSmoke:
@@ -353,6 +398,8 @@ class SimulatorSmoke:
         startup_timeout_s: float = DEFAULT_STARTUP_TIMEOUT_S,
         env: Mapping[str, str] | None = None,
         keep_dir: Path | None = None,
+        platform: str = "ios-simulator",
+        grant: Callable[[str, str], None] | None = None,
     ) -> None:
         if startup_timeout_s < MIN_STARTUP_TIMEOUT_S:
             raise SmokeBlocked(
@@ -362,6 +409,7 @@ class SimulatorSmoke:
             )
         self.repo_root = Path(repo_root)
         self.env = dict(env or {})
+        self.platform = ms.normalize_session_platform(platform)
         self._doctor = doctor or (
             lambda **kwargs: mobile_doctor.run_doctor(self.repo_root, env=self.env or None, **kwargs)
         )
@@ -373,7 +421,8 @@ class SimulatorSmoke:
             lambda session_id, **kwargs: ms.evidence(self.repo_root, session_id, self.env or None, **kwargs)
         )
         self._factory = factory or FlutterChild
-        self._screenshot = screenshot or default_simctl_screenshot
+        self._screenshot = screenshot or self._screenshot_for_platform
+        self._grant = grant
         self._codegen = codegen or (
             lambda app, root: ensure_generated_env(
                 app,
@@ -393,6 +442,36 @@ class SimulatorSmoke:
         self._timings: dict[str, float] = {}
         self._machine_log: Path | None = None
 
+    def _android_home(self) -> str:
+        return (
+            self.env.get("ANDROID_HOME", "").strip()
+            or self.env.get("ANDROID_SDK_ROOT", "").strip()
+            or os.environ.get("ANDROID_HOME", "").strip()
+            or os.environ.get("ANDROID_SDK_ROOT", "").strip()
+        )
+
+    def _adb_bin(self) -> str:
+        home = self._android_home()
+        return str(Path(home) / "platform-tools" / "adb") if home else "adb"
+
+    def _screenshot_for_platform(self, device: str, path: Path) -> None:
+        if self.platform == "android":
+            default_adb_screencap(device, path, adb=self._adb_bin())
+            return
+        default_simctl_screenshot(device, path)
+
+    def _flutter_env(self) -> dict[str, str]:
+        env = {"PROVIDER_MODE": "offline"}
+        if self.platform != "android":
+            return env
+        home = self._android_home()
+        if home:
+            env["ANDROID_HOME"] = home
+            env["ANDROID_SDK_ROOT"] = home
+            extra = f"{Path(home) / 'platform-tools'}{os.pathsep}{Path(home) / 'emulator'}"
+            env["PATH"] = f"{extra}{os.pathsep}{os.environ.get('PATH', '')}"
+        return env
+
     def run(self, *, session_id: str | None = None, name: str = "v2smoke") -> dict[str, Any]:
         started = time.monotonic()
         try:
@@ -401,7 +480,7 @@ class SimulatorSmoke:
             raise
         except Exception as exc:
             raise SmokeBlocked(
-                f"simulator smoke crashed: {type(exc).__name__}: {exc}",
+                f"{self.platform} smoke crashed: {type(exc).__name__}: {exc}",
                 remedy="inspect flutter.stderr.log and the session machine.jsonl",
                 payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
             ) from exc
@@ -419,12 +498,16 @@ class SimulatorSmoke:
                     sys.stdout = old_stdout
 
     def _run(self, *, session_id: str | None, name: str) -> dict[str, Any]:
-        report = self._doctor(platforms=("ios-simulator",), skip_capacity=False)
+        report = self._doctor(platforms=(self.platform,), skip_capacity=False)
         if report.overall != "ready":
             first = next((c for c in getattr(report, "checks", ()) if getattr(c, "status", "") != mobile_doctor.READY), None)
             raise SmokeBlocked(
-                "simulator lane not ready (doctor)",
-                remedy=(first.remedy if first else "bash scripts/dev-harness/mobile-session.sh doctor --platform ios-simulator"),
+                f"{self.platform} lane not ready (doctor)",
+                remedy=(
+                    first.remedy
+                    if first
+                    else f'bash scripts/dev-harness/mobile-session.sh doctor --platform {self.platform}'
+                ),
                 payload={
                     "doctor": report.as_dict(),
                     "classification": first.status if first else mobile_doctor.AGENT_REMEDIABLE,
@@ -440,7 +523,7 @@ class SimulatorSmoke:
         if session_id:
             lease = ms._load_lease(ms.session_dir(self.repo_root, session_id, self.env or None) / ms.LEASE_FILENAME)
         else:
-            lease = dict(self._acquire(name=name, platform_name="ios-simulator"))
+            lease = dict(self._acquire(name=name, platform_name=self.platform))
             self._acquired_id = str(lease["session_id"])
             session_id = self._acquired_id
             started = self._start(session_id, json_stdout=True)
@@ -450,7 +533,7 @@ class SimulatorSmoke:
         device = (lease.get("device") or {}).get("udid") or ""
         if not device:
             raise SmokeBlocked(
-                f"session {session_id} has no attached simulator",
+                f"session {session_id} has no attached {'emulator' if self.platform == 'android' else 'simulator'}",
                 remedy=f'make mobile-session ARGS="start {session_id}"',
                 payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
             )
@@ -480,7 +563,7 @@ class SimulatorSmoke:
                 "--no-dds",
             ),
             cwd=app_dir,
-            env={"PROVIDER_MODE": "offline"},
+            env=self._flutter_env(),
             device_id=str(device),
             stderr_path=directory / "flutter.stderr.log",
         )
@@ -489,14 +572,27 @@ class SimulatorSmoke:
         self._child = self._factory(spec)
         self._drain_until_started(deadline)
         self._timings["app_started_s"] = round(time.monotonic() - boot, 1)
+        if self.platform == "android":
+            app_id = str(lease.get("app_id") or ms.DEFAULT_APP_IDS["android"])
+            grant = self._grant or (
+                lambda serial, package: grant_android_runtime_permissions(self._adb_bin(), serial, package)
+            )
+            grant(str(device), app_id)
         capabilities, state = self._wait_signed_out_ready(deadline)
         shot = directory / "screenshots" / "smoke.png"
         self._screenshot(str(device), shot)
-        artifact = find_ios_app_bundle(app_dir)
+        if self.platform == "android":
+            artifact = find_android_apk(app_dir)
+            missing = "no Android APK under app/build/app/outputs after app.started"
+            remedy = "inspect flutter.stderr.log; expected app/build/app/outputs/flutter-apk/app-dev-debug.apk"
+        else:
+            artifact = find_ios_app_bundle(app_dir)
+            missing = "no iOS .app bundle under app/build/ios after app.started"
+            remedy = "inspect flutter.stderr.log; expected app/build/ios/**/*.app"
         if artifact is None:
             raise SmokeBlocked(
-                "no iOS .app bundle under app/build/ios after app.started",
-                remedy="inspect flutter.stderr.log; expected app/build/ios/**/*.app",
+                missing,
+                remedy=remedy,
                 payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
             )
         document = self._evidence(
@@ -732,38 +828,75 @@ class SimulatorSmoke:
             self._child = None
 
 
-def block_android(repo_root: Path, args: Any) -> dict[str, Any]:
-    report = mobile_doctor.run_doctor(repo_root, platforms=("android",), skip_capacity=True)
-    android = next((c for c in report.checks if c.check == "android-sdk"), None)
-    payload = {
+def block_payload(repo_root: Path, platform_name: str, report: mobile_doctor.DoctorReport | None = None) -> dict[str, Any]:
+    report = report or mobile_doctor.run_doctor(repo_root, platforms=(platform_name,), skip_capacity=True)
+    failing = next((c for c in report.checks if c.status != mobile_doctor.READY), None)
+    return {
         "outcome": "blocked",
-        "lane": "android",
-        "reason": android.detail if android else "android SDK is not on this host",
-        "remedy": android.remedy if android else "do not install an SDK from this package; use the doctor's android-sdk message",
-        "classification": android.status if android else mobile_doctor.AGENT_REMEDIABLE,
+        "lane": platform_name,
+        "reason": failing.detail if failing else f"{platform_name} lane is not ready",
+        "remedy": failing.remedy if failing else f"bash scripts/dev-harness/mobile-session.sh doctor --platform {platform_name}",
+        "classification": failing.status if failing else mobile_doctor.AGENT_REMEDIABLE,
         "doctor": report.as_dict(),
         "ci_policy": "this package does not add the simulator or android lane to CI",
     }
-    return payload
 
 
-def run_smoke(repo_root: Path, args: Any) -> int:
+def block_android(repo_root: Path, args: Any) -> dict[str, Any]:
+    return block_payload(repo_root, "android")
+
+
+def _requested_platform(args: Any) -> str | None:
+    raw = getattr(args, "platform", None)
+    if raw in (None, "", "auto"):
+        return None
+    return ms.normalize_session_platform(str(raw))
+
+
+def _doctor_ready_platforms(
+    repo_root: Path,
+    *,
+    env: Mapping[str, str] | None,
+    doctor: Callable[..., mobile_doctor.DoctorReport],
+) -> tuple[list[str], list[tuple[str, mobile_doctor.DoctorReport]]]:
+    ready: list[str] = []
+    blocked: list[tuple[str, mobile_doctor.DoctorReport]] = []
+    for platform_name in ("ios-simulator", "android"):
+        report = doctor(repo_root, env=env or None, platforms=(platform_name,), skip_capacity=False)
+        if report.overall == "ready":
+            ready.append(platform_name)
+        else:
+            blocked.append((platform_name, report))
+    return ready, blocked
+
+
+def _default_evidence_dir(repo_root: Path, platform_name: str, *, multi: bool) -> Path:
+    if multi:
+        return Path(repo_root) / ".local" / "v3-mobile-smoke" / platform_name
+    if platform_name == "android":
+        return Path(repo_root) / ".local" / "v3-android-smoke"
+    return Path(repo_root) / ".local" / "v2-sim-smoke"
+
+
+def _run_one_platform(repo_root: Path, args: Any, platform_name: str, evidence_dir: Path) -> int:
     from . import mobile_verify as verify
 
-    platform_name = getattr(args, "platform", None) or "ios-simulator"
-    if platform_name == "android":
-        payload = block_android(repo_root, args)
-        verify._emit(payload, as_json=getattr(args, "json", False))
-        print(f"blocked: {payload['reason']} — {payload['remedy']}", file=sys.stderr)
-        return verify.EXIT_BLOCKED
     timeout = float(getattr(args, "journey_timeout", None) or DEFAULT_STARTUP_TIMEOUT_S)
     if timeout < MIN_STARTUP_TIMEOUT_S:
         timeout = DEFAULT_STARTUP_TIMEOUT_S
-    evidence_dir = Path(getattr(args, "evidence_dir", None) or (Path(repo_root) / ".local" / "v2-sim-smoke"))
     evidence_dir.mkdir(parents=True, exist_ok=True)
-    engine = SimulatorSmoke(repo_root, startup_timeout_s=timeout, keep_dir=evidence_dir)
+    engine = SimulatorSmoke(
+        repo_root,
+        startup_timeout_s=timeout,
+        keep_dir=evidence_dir,
+        platform=platform_name,
+        env=os.environ,
+    )
     try:
-        result = engine.run(session_id=getattr(args, "session", None) or None)
+        result = engine.run(
+            session_id=getattr(args, "session", None) or None,
+            name="v3android" if platform_name == "android" else "v2smoke",
+        )
     except SmokeBlocked as exc:
         payload = {"outcome": "blocked", "reason": str(exc), "remedy": exc.remedy, **exc.payload, "timings": engine._timings}
         verify._emit(payload, as_json=getattr(args, "json", False))
@@ -783,7 +916,8 @@ def run_smoke(repo_root: Path, args: Any) -> int:
     receipt = {
         "schema": "mobile-verify/v1",
         "command": "smoke",
-        "lane": "simulator",
+        "lane": "emulator" if platform_name == "android" else "simulator",
+        "platform": platform_name,
         "outcome": "passed",
         "session_id": result["session_id"],
         "screenshot": result["screenshot"],
@@ -796,3 +930,39 @@ def run_smoke(repo_root: Path, args: Any) -> int:
     (evidence_dir / "verify-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     verify._emit({**receipt, "controls_profile": (result["controls"]["state"] or {}).get("profile")}, as_json=getattr(args, "json", False))
     return verify.EXIT_OK
+
+
+def run_smoke(repo_root: Path, args: Any) -> int:
+    from . import mobile_verify as verify
+
+    requested = _requested_platform(args)
+    if requested is not None:
+        report = mobile_doctor.run_doctor(repo_root, platforms=(requested,), skip_capacity=False)
+        if report.overall != "ready":
+            payload = block_payload(repo_root, requested, report)
+            verify._emit(payload, as_json=getattr(args, "json", False))
+            print(f"blocked: {payload['reason']} — {payload['remedy']}", file=sys.stderr)
+            return verify.EXIT_BLOCKED
+        platforms = [requested]
+    else:
+        ready, blocked = _doctor_ready_platforms(repo_root, env=None, doctor=mobile_doctor.run_doctor)
+        if not ready:
+            platform_name, report = blocked[0] if blocked else ("ios-simulator", mobile_doctor.run_doctor(repo_root))
+            payload = block_payload(repo_root, platform_name, report)
+            verify._emit(payload, as_json=getattr(args, "json", False))
+            print(f"blocked: {payload['reason']} — {payload['remedy']}", file=sys.stderr)
+            return verify.EXIT_BLOCKED
+        platforms = ready
+    raw_dir = getattr(args, "evidence_dir", None)
+    override = Path(raw_dir) if raw_dir else None
+    last = verify.EXIT_OK
+    for platform_name in platforms:
+        if override:
+            evidence_dir = override if len(platforms) == 1 else override / platform_name
+        else:
+            evidence_dir = _default_evidence_dir(repo_root, platform_name, multi=len(platforms) > 1)
+        code = _run_one_platform(repo_root, args, platform_name, evidence_dir)
+        if code != verify.EXIT_OK:
+            return code
+        last = code
+    return last

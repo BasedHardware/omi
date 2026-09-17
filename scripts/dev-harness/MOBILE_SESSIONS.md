@@ -28,7 +28,7 @@ evidence receipt. Nothing is shared between concurrent sessions:
 | Ports | unique offset claimed in `<state>/mobile-sessions/ports/<offset>.json` (atomic `O_EXCL`); base ports belong to the default desktop harness |
 | Backend/Auth/Firestore/Redis/Typesense | separate harness instance state root per session (`OMI_LOCAL_INSTANCE`, existing harness semantics) |
 | Storage/logs/receipts | `<state>/mobile-sessions/<session-id>/` |
-| Device | Android: session-owned AVD lease; iOS: `simctl create/boot` of `omi-session-<id>`, deleted on stop |
+| Device | Android: session-owned AVD under `ANDROID_AVD_HOME=<session>/avd` (created from the installed image, deleted on release; never a shared template); iOS: `simctl create/boot` of `omi-session-<id>`, deleted on stop |
 | Evidence | `evidence.json` (session-evidence-v1, see `contracts/session/`) |
 
 Ownership is fail-closed: leases record owner host/user/pid; a **live foreign
@@ -64,7 +64,8 @@ emulator is the remaining acceptance for this seam.
 user (`omi-fixture-v1-user-1@local.test`, RFC-reserved domain so it can never
 collide with a real account). The fixture version is pinned in the lease and in
 every evidence receipt. No real Google/Apple user, provider key, or copied
-token is involved at any point.
+token is involved at any point. Phone-mic **content** is a separate corpus:
+see [FIXTURE_AUDIO.md](FIXTURE_AUDIO.md) (LibriSpeech release-probe WAV).
 
 ## Doctor
 
@@ -98,9 +99,10 @@ were not installed and shared capacity was ~15GiB — device-attach paths are
 implemented and unit-tested with injected runners, and the live Android lane
 fails closed through `doctor`/`start` with the exact remedy. iOS simulator
 attach is implemented (`simctl create/boot/shutdown/delete` of a session-owned
-device); live boots were deferred by the same capacity gate. Concurrency
-(two live sessions), physical-device and untethered-signing acceptance remain
-open and are tracked in SCA-487/SCA-491.
+device); live boots were deferred by the same capacity gate. Concurrency (two live sessions on iOS), physical-device and untethered-signing
+acceptance remain open and are tracked in SCA-487/SCA-491. Two session-owned
+Android AVDs are specified to coexist (disjoint serials and reverse mappings);
+see [LANE.md](LANE.md).
 
 ## Live session contract
 

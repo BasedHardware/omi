@@ -184,6 +184,46 @@ class TestIndividualChecks:
         assert "system-images;android-36;google_apis;arm64-v8a" in image.remedy
         assert "capacity-gated" in image.remedy
 
+    def test_android_image_on_disk_is_ready_even_when_sdkmanager_omits_it(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        sdk = tmp_path / "android-sdk"
+        image = sdk / "system-images" / "android-36" / "google_apis" / "arm64-v8a"
+        sdkmanager = sdk / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        runner.paths.update(
+            {sdk, sdk / "emulator" / "emulator", sdkmanager, sdk / "platform-tools" / "adb", image}
+        )
+        runner.outputs[(str(sdkmanager), "--list_installed")] = (0, "platform-tools\nplatforms;android-36\n")
+        report = md.run_doctor(
+            tmp_path,
+            env={"ANDROID_HOME": str(sdk)},
+            runner=runner,
+            platforms=("android",),
+            skip_capacity=True,
+        )
+        check = next(c for c in report.checks if c.check == "android-image")
+        assert check.status == md.READY
+        assert "system-images;android-36;google_apis;arm64-v8a" in check.detail
+
+    def test_android_image_slash_list_installed_is_ready(self, tmp_path: Path) -> None:
+        runner = _provisioned_runner(tmp_path)
+        sdk = tmp_path / "android-sdk"
+        sdkmanager = sdk / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        runner.paths.update({sdk, sdk / "emulator" / "emulator", sdkmanager, sdk / "platform-tools" / "adb"})
+        runner.outputs[(str(sdkmanager), "--list_installed")] = (
+            0,
+            "system-images/android-36/google_apis/arm64-v8a         7.0.0            Google APIs ARM 64 v8a System Image\n",
+        )
+        report = md.run_doctor(
+            tmp_path,
+            env={"ANDROID_HOME": str(sdk)},
+            runner=runner,
+            platforms=("android",),
+            skip_capacity=True,
+        )
+        check = next(c for c in report.checks if c.check == "android-image")
+        assert check.status == md.READY
+        assert "system-images;android-36;google_apis;arm64-v8a" in check.detail
+
 
 class TestFlutterPin:
     def test_pin_comes_from_the_repo_workflow(self) -> None:

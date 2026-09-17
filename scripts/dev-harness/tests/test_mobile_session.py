@@ -191,8 +191,8 @@ class TestSeedResetStop:
         calls: list[tuple[str, ...]] = []
 
         class FakeDevices:
-            def detach(self, platform_name: str, device_id: str) -> None:
-                calls.append((platform_name, device_id))
+            def detach(self, platform_name: str, device_id: str, device=None) -> None:
+                calls.append((platform_name, device_id, None if device is None else device.get("kind")))
 
         directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
         data = json.loads((directory / "lease.json").read_text("utf-8"))
@@ -201,10 +201,10 @@ class TestSeedResetStop:
 
         stopped = ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
         assert stopped["status"] == "stopped"
-        assert calls == [("ios-simulator", "AAA-BBB-CCC")]
+        assert calls == [("ios-simulator", "AAA-BBB-CCC", "simulator")]
         # Idempotent: stopping again does not fail or re-signal the device.
         ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
-        assert calls == [("ios-simulator", "AAA-BBB-CCC")]
+        assert calls == [("ios-simulator", "AAA-BBB-CCC", "simulator")]
 
 
 class TestStart:
@@ -241,7 +241,7 @@ class TestStart:
             def android_ready(self, home: str) -> tuple[bool, str]:
                 return True, "ready"
 
-            def detach(self, platform: str, device: str) -> None:
+            def detach(self, platform: str, device: str, attached=None) -> None:
                 pass
 
         started = ms.start(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
@@ -269,7 +269,7 @@ class TestStart:
             def android_ready(self, home: str) -> tuple[bool, str]:
                 return True, "ready"
 
-            def detach(self, platform: str, device: str) -> None:
+            def detach(self, platform: str, device: str, attached=None) -> None:
                 pass
 
         started = ms.start(REPO_ROOT, lease["session_id"], env, devices=FakeDevices(), json_stdout=True)
@@ -296,6 +296,99 @@ class TestStart:
         assert payload["session_id"] == lease["session_id"]
         assert payload["status"] == "running"
         assert "cmd_up: starting services" in captured.err
+
+    def test_start_android_attaches_a_session_owned_avd(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        env = {**env, "ANDROID_HOME": str(tmp_path / "sdk")}
+        lease = ms.acquire(REPO_ROOT, env, name="andup", platform_name="android", listeners=_no_listeners)
+        monkeypatch.setattr("dev_harness.cli.cmd_up", lambda namespace: 0)
+        seen: dict[str, object] = {}
+
+        class FakeDevices:
+            def android_ready(self, home: str) -> tuple[bool, str]:
+                return True, "ready"
+
+            def attach_android_emulator(self, sid: str, home: str, **kwargs):
+                seen["avd_home"] = kwargs["avd_home"]
+                seen["ports"] = kwargs["ports"]
+                seen["home"] = home
+                return {
+                    "kind": "emulator",
+                    "udid": "emulator-5554",
+                    "avd": f"omi-session-{sid}",
+                    "avd_home": str(kwargs["avd_home"]),
+                    "pid": 424242,
+                    "ownership_marker": "omi-dev-harness:andup:android-emulator:deadbeef",
+                    "owner": "session",
+                    "boot": "no-snapshot",
+                    "reverse": [
+                        {"device": kwargs["ports"]["backend"], "host": kwargs["ports"]["backend"], "name": "backend"},
+                        {"device": kwargs["ports"]["auth"], "host": kwargs["ports"]["auth"], "name": "auth"},
+                    ],
+                }
+
+        started = ms.start(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        assert started["status"] == "running"
+        assert started["device"]["kind"] == "emulator"
+        assert started["device"]["udid"] == "emulator-5554"
+        assert started["device"]["android_home"] == env["ANDROID_HOME"]
+        assert started["device"]["boot"] == "no-snapshot"
+        assert seen["avd_home"] == ms.session_dir(REPO_ROOT, lease["session_id"], env) / "avd"
+        assert "backend" in seen["ports"] and "auth" in seen["ports"]
+
+    def test_stop_tears_down_a_session_owned_emulator(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="emu-stop", platform_name="android", listeners=_no_listeners)
+        monkeypatch.setattr("dev_harness.cli.cmd_down", lambda namespace: 0)
+        calls: list[tuple] = []
+
+        class FakeDevices:
+            def detach(self, platform_name: str, device_id: str, device=None) -> None:
+                calls.append((platform_name, device_id, (device or {}).get("avd")))
+
+        directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
+        data = json.loads((directory / "lease.json").read_text("utf-8"))
+        data["device"] = {
+            "kind": "emulator",
+            "udid": "emulator-5554",
+            "avd": "omi-session-oms-emu-stop",
+            "owner": "session",
+        }
+        (directory / "lease.json").write_text(json.dumps(data), "utf-8")
+        stopped = ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        assert stopped["status"] == "stopped"
+        assert calls == [("android", "emulator-5554", "omi-session-oms-emu-stop")]
+
+    def test_failed_emulator_teardown_leaves_the_lease_unreleased(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="emu-keep", platform_name="android", listeners=_no_listeners)
+        monkeypatch.setattr("dev_harness.cli.cmd_down", lambda namespace: 0)
+
+        class FakeDevices:
+            def detach(self, platform_name: str, device_id: str, device=None) -> None:
+                raise ms.SessionError("emulator pid was not proven dead; AVD will not be deleted")
+
+        directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
+        data = json.loads((directory / "lease.json").read_text("utf-8"))
+        data["status"] = "running"
+        data["device"] = {
+            "kind": "emulator",
+            "udid": "emulator-5554",
+            "avd": "omi-session-oms-emu-keep",
+            "owner": "session",
+        }
+        (directory / "lease.json").write_text(json.dumps(data), "utf-8")
+        with pytest.raises(ms.SessionError, match="not proven dead"):
+            ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        kept = json.loads((directory / "lease.json").read_text("utf-8"))
+        assert kept["status"] == "running"
+        assert kept["device"]["avd"] == "omi-session-oms-emu-keep"
+        with pytest.raises(ms.SessionError, match="not proven dead"):
+            ms.release(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        assert (directory / "lease.json").is_file()
 
 
 class TestEvidence:

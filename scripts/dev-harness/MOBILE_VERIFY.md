@@ -11,7 +11,8 @@ make mobile-verify ARGS="select --paths app/lib/pages/chat/page.dart"
 make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"   # focused hermetic feedback
 make mobile-verify ARGS="fast --all"                # full hermetic suite
 make mobile-verify ARGS="fast --filter j2 --runs 5" # deterministic repeat signal
-make mobile-verify ARGS="smoke"                    # iOS simulator full-app smoke (fail-closed; not CI)
+make mobile-verify ARGS="smoke"                    # doctor-ready platforms (iOS sim and/or Android emu)
+make mobile-verify ARGS="smoke --platform android" # Android emulator full-app smoke (fail-closed; not CI)
 make mobile-verify ARGS="physical"                  # admission document (always blocked until user-run hardware evidence)
 ```
 
@@ -79,16 +80,34 @@ oracle rejects wrong behavior, not just accepts right behavior.
 
 ## Simulator smoke and physical qualification
 
-`smoke` acquires one C1 iOS-simulator session (or reuses `--session`), launches
-the real debug/dev/`local_dev` app with `OMI_DEV_CONTROLS=1` against that
-session's loopback backend, reads `ext.omi.controls.capabilities` and `state`,
-takes a simctl screenshot, writes a session-evidence-v1 receipt, and releases
-everything it acquired — including on failure. Sign-in is not part of this
-lane: the app is signed out (`signedIn=false`). The cold-start deadline is
-at least the measured host cold boot (412 s here); default 900 s. Android is
-blocked with the doctor's `android-sdk` message; this package does not install
-an SDK and does not add the lane to CI. Missing infrastructure exits `2` with
-the smallest next step, classified the way doctor classifies it.
+`smoke` acquires one C1 session (or reuses `--session`), launches the real
+debug/dev/`local_dev` app with `OMI_DEV_CONTROLS=1` against that session's
+loopback backend, reads `ext.omi.controls.capabilities` and `state`,
+screenshots, writes a session-evidence-v1 receipt, and releases everything it
+acquired — including on failure. `--platform android` uses a session-owned AVD
+(`ANDROID_AVD_HOME` under the session dir, deleted on release; never a shared
+template), boots the emulator headless with `-no-window -audio wav -no-snapshot`
+(the AVD dies with the lease, so a qemu snapshot would be leftover shared
+state; `-no-audio` cannot be labelled a microphone). A physical phone or a
+foreign emulator visible to `adb` does not block; only a still-running
+harness AVD with this session's name is refused. Two session-owned AVDs
+coexist with disjoint serials and reverse mappings. `adb reverse`s only the
+session backend and Auth ports, `pm grant`s
+runtime permissions, and captures `adb exec-out screencap -p`. `--platform
+ios-simulator` is the V2 simctl path. Omitting `--platform` runs every platform
+the doctor reports ready, sequentially. Sign-in is
+not part of this lane: the app is signed out (`signedIn=false`). The
+cold-start deadline is at least the measured host cold boot (412 s here);
+default 900 s. This package does not add the lane to CI. Missing
+infrastructure exits `2` with the smallest next step, classified the way
+doctor classifies it.
+
+cmdline-tools 23 `sdkmanager --list_installed` prints slash paths; doctor
+treats the on-disk `system-images/android-36/google_apis/arm64-v8a` tree as
+authoritative. Flutter may print `Android license status unknown` with these
+cmdline-tools even when `licenses/` is populated — Gradle reads the license
+files, so that doctor line is not a build gate. Do not re-run license
+acceptance loops.
 
 This tree may not have `make lane-backend`. Smoke detects that and prints the
 exact remedy (PR #14349) rather than vendoring the target.
