@@ -1,40 +1,56 @@
 import re
-from typing import Optional, Tuple, List
-from openai import AsyncOpenAI
+from typing import Optional, Tuple, List, Any
 import os
 from datetime import datetime
 from dotenv import load_dotenv
 
+try:
+    from openai import AsyncOpenAI
+except ImportError:
+    AsyncOpenAI = None
+
 load_dotenv()
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+def get_openai_client() -> Optional[Any]:
+    """Get AsyncOpenAI client lazily if API key is configured and library is available."""
+    if AsyncOpenAI is None:
+        return None
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        return AsyncOpenAI(api_key=api_key)
+    except Exception:
+        return None
 
 
 class TaskDetector:
     """Detects ClickUp task creation commands and extracts task details intelligently."""
-    
+
     TRIGGER_PHRASES = [
         "create clickup task",
         "create click up task",
         "add click up task",
         "add clickup task"
     ]
-    
+
     @staticmethod
     def normalize_text(text: str) -> str:
         """Normalize text for comparison."""
         return text.lower().strip()
-    
+
     @classmethod
     def detect_trigger(cls, text: str) -> bool:
         """Check if text contains a ClickUp task creation trigger phrase."""
         normalized = cls.normalize_text(text)
         return any(trigger in normalized for trigger in cls.TRIGGER_PHRASES)
-    
+
     @classmethod
     def extract_task_content(cls, text: str) -> Optional[str]:
         """Extract task content after trigger phrase."""
         normalized = cls.normalize_text(text)
-        
+
         # Find the trigger phrase
         trigger_index = -1
         matched_trigger = None
@@ -44,29 +60,31 @@ class TaskDetector:
                 trigger_index = idx
                 matched_trigger = trigger
                 break
-        
+
         if trigger_index == -1:
             return None
-        
+
         # Extract content after trigger
         start_index = trigger_index + len(matched_trigger)
         content = text[start_index:].strip()
-        
+
         return content if content else None
-    
+
     @classmethod
     async def ai_extract_task_details(cls, all_segments_text: str, available_lists: list, available_members: list = None, timezone: str = "UTC") -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[int], Optional[str], Optional[List[str]]]:
         """
         Extract task name, description, list, priority, due date, and assignees from voice segments.
         Uses AI to intelligently parse task details.
-        
-        Returns: (list_id, list_name, task_name, task_description, priority, due_date, assignee_ids) 
+
+        Returns: (list_id, list_name, task_name, task_description, priority, due_date, assignee_ids)
         """
+        if not available_lists:
+            available_lists = []
         if available_members is None:
             available_members = []
         # Get current date/time for context
         from datetime import datetime
-        
+
         try:
             import pytz
             tz = pytz.timezone(timezone)
@@ -75,43 +93,50 @@ class TaskDetector:
             # Fallback if pytz not available
             now = datetime.now()
             timezone = "UTC"
-        
+
         current_date_str = now.strftime("%A, %B %d, %Y at %I:%M %p")
         current_iso = now.strftime("%Y-%m-%d")
-        
+
         # Create list mapping for AI
-        list_names = [lst["name"] for lst in available_lists]
-        list_map = {lst["name"]: lst["id"] for lst in available_lists}
-        
+        valid_lists = [lst for lst in available_lists if isinstance(lst, dict) and lst.get("name") and lst.get("id")]
+        list_names = [lst["name"] for lst in valid_lists]
+        list_map = {lst["name"]: lst["id"] for lst in valid_lists}
+
         # Include space names for better context
         list_with_spaces = []
-        for lst in available_lists:
+        for lst in valid_lists:
             space_name = lst.get("space_name", "")
             if space_name:
                 list_with_spaces.append(f"{lst['name']} (in {space_name})")
             else:
                 list_with_spaces.append(lst['name'])
-        
+
         # Create member mapping for AI
         member_names = []
         member_map = {}
-        if available_members:
-            for member in available_members:
-                username = member.get("username") or ""
-                email = member.get("email") or ""
-                member_id = member.get("id")
-                
-                if username and member_id:
-                    member_names.append(username)
-                    member_map[username.lower()] = member_id
-                
-                # Also map by email name (before @)
-                if email and "@" in email and member_id:
-                    email_name = email.split("@")[0]
-                    if email_name:
-                        member_names.append(email_name)
-                        member_map[email_name.lower()] = member_id
-        
+        for member in available_members:
+            if not isinstance(member, dict):
+                continue
+            username = member.get("username") or ""
+            email = member.get("email") or ""
+            member_id = member.get("id")
+
+            if username and member_id:
+                member_names.append(username)
+                member_map[username.lower()] = member_id
+
+            # Also map by email name (before @)
+            if email and "@" in email and member_id:
+                email_name = email.split("@")[0]
+                if email_name:
+                    member_names.append(email_name)
+                    member_map[email_name.lower()] = member_id
+
+        client = get_openai_client()
+        if client is None:
+            print("⚠️  OpenAI client not configured or unavailable", flush=True)
+            return None, None, all_segments_text, None, 3, None, []
+
         try:
             response = await client.chat.completions.create(
                 model="gpt-4o",
@@ -249,9 +274,9 @@ CRITICAL RULES:
                 temperature=0.3,
                 max_tokens=300
             )
-            
+
             result = response.choices[0].message.content.strip()
-            
+
             # Parse response
             list_name = None
             task_name = None
@@ -259,7 +284,7 @@ CRITICAL RULES:
             priority = 3  # Default to normal
             due_date = None
             assignee_names = []
-            
+
             for line in result.split('\n'):
                 if line.startswith("LIST:"):
                     list_name = line.replace("LIST:", "").strip()
@@ -283,13 +308,13 @@ CRITICAL RULES:
                     if assignees_str.upper() != "NONE":
                         # Split by comma and clean up
                         assignee_names = [name.strip() for name in assignees_str.split(",") if name.strip()]
-            
+
             # Match assignee names to IDs
             assignee_ids = []
             if assignee_names and available_members:
                 for name in assignee_names:
                     name_lower = name.lower()
-                    
+
                     # Try exact match first
                     if name_lower in member_map:
                         assignee_ids.append(str(member_map[name_lower]))
@@ -299,18 +324,18 @@ CRITICAL RULES:
                         for member in available_members:
                             username = (member.get("username") or "").lower()
                             email = (member.get("email") or "").lower()
-                            
-                            if username and email and (name_lower in username or username in name_lower or 
+
+                            if username and email and (name_lower in username or username in name_lower or
                                 name_lower in email or email.startswith(name_lower)):
                                 assignee_ids.append(str(member.get("id")))
                                 print(f"👤 Fuzzy matched assignee: {name} → {member.get('username')}", flush=True)
                                 break
-            
+
             # Handle unknown list
             if not list_name or list_name.upper() == "UNKNOWN":
                 print(f"⚠️  No list identified in command", flush=True)
                 return None, None, task_name, description, priority, due_date, assignee_ids
-            
+
             # Get list ID from map (case insensitive)
             list_id = None
             for name, id in list_map.items():
@@ -318,21 +343,21 @@ CRITICAL RULES:
                     list_id = id
                     list_name = name  # Use exact name from map
                     break
-            
+
             if not list_id:
                 # Try fuzzy match - more flexible matching
                 list_name_lower = list_name.lower()
                 best_match = None
                 best_score = 0
-                
-                for lst in available_lists:
-                    name = lst["name"].lower()
-                    
+
+                for lst in valid_lists:
+                    name = str(lst.get("name", "")).lower()
+
                     # Exact match
                     if name == list_name_lower:
                         best_match = lst
                         break
-                    
+
                     # Contains match
                     if list_name_lower in name or name in list_name_lower:
                         # Score based on length similarity
@@ -340,7 +365,7 @@ CRITICAL RULES:
                         if score > best_score:
                             best_score = score
                             best_match = lst
-                    
+
                     # Word match (e.g., "manufacturing" in "Manufacturing Tasks")
                     list_words = list_name_lower.split()
                     name_words = name.split()
@@ -350,17 +375,17 @@ CRITICAL RULES:
                             if score > best_score:
                                 best_score = score
                                 best_match = lst
-                
+
                 if best_match:
                     list_id = best_match["id"]
                     matched_name = best_match["name"]
                     print(f"🔍 Fuzzy matched '{list_name}' to '{matched_name}' (score: {best_score:.2f})", flush=True)
                     list_name = matched_name
-            
+
             if not list_id:
                 print(f"⚠️  List '{list_name}' not found in workspace", flush=True)
                 return None, list_name, task_name, description, priority, due_date, assignee_ids
-            
+
             print(f"✅ Extracted - List: {list_name}, Task: '{task_name}', Priority: {priority}", flush=True)
             if description:
                 print(f"   Description: '{description}'", flush=True)
@@ -368,24 +393,36 @@ CRITICAL RULES:
                 print(f"   Due Date: '{due_date}'", flush=True)
             if assignee_ids:
                 print(f"   Assignees: {len(assignee_ids)} person(s) - IDs: {assignee_ids}", flush=True)
-            
+
             return list_id, list_name, task_name, description, priority, due_date, assignee_ids
-            
+
         except Exception as e:
-            print(f"⚠️  AI extraction failed: {e}", flush=True)
+            print(f"⚠️  AI extraction failed: {type(e).__name__}", flush=True)
             return None, None, all_segments_text, None, 3, None, []
-    
+
     @classmethod
     async def ai_match_list(cls, spoken_list: str, available_lists: list) -> Optional[dict]:
         """
         Use AI to fuzzy match a spoken list name to available lists.
         Returns best matching list dict or None
         """
-        if not available_lists:
+        if not spoken_list or not available_lists:
             return None
-        
-        list_names = [lst["name"] for lst in available_lists]
-        
+
+        valid_lists = [lst for lst in available_lists if isinstance(lst, dict) and lst.get("name")]
+        if not valid_lists:
+            return None
+
+        client = get_openai_client()
+        if client is None:
+            spoken_lower = str(spoken_list).lower()
+            for lst in valid_lists:
+                if str(lst.get("name", "")).lower() == spoken_lower:
+                    return lst
+            return None
+
+        list_names = [lst["name"] for lst in valid_lists]
+
         try:
             response = await client.chat.completions.create(
                 model="gpt-4o",
@@ -413,52 +450,52 @@ User said: "sprint stuff" → sprint planning
 User said: "xyz123" (not in list) → NONE"""
                     },
                     {
-                        "role": "user", 
+                        "role": "user",
                         "content": f"User said list: '{spoken_list}'\n\nBest match from available lists:"
                     }
                 ],
                 temperature=0.1,
                 max_tokens=20
             )
-            
+
             matched = response.choices[0].message.content.strip()
-            
+
             if matched.upper() == "NONE":
                 return None
-            
+
             # Find the list with this name
-            for lst in available_lists:
+            for lst in valid_lists:
                 if lst["name"].lower() == matched.lower():
                     print(f"🎯 AI matched '{spoken_list}' → {lst['name']}", flush=True)
                     return lst
-            
+
             return None
-            
+
         except Exception as e:
-            print(f"⚠️  AI list matching failed: {e}", flush=True)
+            print(f"⚠️  AI list matching failed: {type(e).__name__}", flush=True)
             # Fallback to simple matching
-            spoken_lower = spoken_list.lower()
-            for lst in available_lists:
-                if lst["name"].lower() == spoken_lower:
+            spoken_lower = str(spoken_list).lower()
+            for lst in valid_lists:
+                if str(lst.get("name", "")).lower() == spoken_lower:
                     return lst
             return None
-    
+
     @classmethod
     def clean_content(cls, content: str) -> str:
         """Basic cleaning of content (fallback)."""
         # Remove multiple spaces
         content = re.sub(r'\s+', ' ', content)
-        
+
         # Remove common filler words
         filler_words = ["um", "uh", "like", "you know", "so", "yeah"]
         words = content.split()
         cleaned_words = [w for w in words if w.lower().rstrip('.,!?') not in filler_words]
-        
+
         content = ' '.join(cleaned_words).strip()
-        
+
         # Ensure proper capitalization of first letter
         if content and content[0].islower():
             content = content[0].upper() + content[1:]
-        
+
         return content
 

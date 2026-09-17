@@ -113,7 +113,28 @@ class LocalWalSyncImpl implements LocalWalSync {
   final SyncUploadGate? _uploadGateOverride;
   SyncUploadGate get _uploadGate => _uploadGateOverride ?? SyncUploadGate.instance;
 
-  LocalWalSyncImpl(this.listener, {SyncUploadGate? uploadGate}) : _uploadGateOverride = uploadGate;
+  // Deterministic-replay seams: null means production wall clock, dart:async
+  // periodic timers, and the shared HTTP job-status endpoint.
+  final DateTime Function()? _nowOverride;
+  final Timer Function(Duration, void Function(Timer))? _periodicOverride;
+  final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
+
+  DateTime _now() => _nowOverride?.call() ?? DateTime.now();
+
+  Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
+
+  Future<SyncJobFetch> Function(String jobId) get _jobStatusFetcher => _jobStatusFetcherOverride ?? fetchSyncJobStatus;
+
+  LocalWalSyncImpl(
+    this.listener, {
+    SyncUploadGate? uploadGate,
+    DateTime Function()? now,
+    Timer Function(Duration, void Function(Timer))? periodic,
+    Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
+  })  : _uploadGateOverride = uploadGate,
+        _nowOverride = now,
+        _periodicOverride = periodic,
+        _jobStatusFetcherOverride = jobStatusFetcher;
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -157,10 +178,10 @@ class LocalWalSyncImpl implements LocalWalSync {
   @override
   void start() {
     _initializeWals();
-    _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
+    _chunkingTimer = _periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
       await _chunk();
     });
-    _flushingTimer = Timer.periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
+    _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
       t,
     ) async {
       await _flush();
@@ -230,7 +251,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   @override
   void setSessionGeolocation(Geolocation? geolocation) {
     _sessionGeolocation = _copyGeolocation(geolocation);
-    _sessionGeolocationSetAt = geolocation == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    _sessionGeolocationSetAt = geolocation == null ? null : _now().millisecondsSinceEpoch ~/ 1000;
   }
 
   Geolocation? _copyGeolocation(Geolocation? geolocation) =>
@@ -243,7 +264,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
 
     var lossesThreshold = 10 * _framesPerSecond;
-    var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
+    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * _framesPerSecond;
     if (pivot <= 0) {
       return;
@@ -409,7 +430,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Returns unsynced WALs whose timerStart falls within [sessionStartSeconds, now].
   /// Used by the live capture screen to show inline audio safety indicators.
   List<Wal> getSessionUnsyncedWals(int sessionStartSeconds) {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
     return _wals
         .where(
           (w) =>
@@ -438,7 +459,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (high <= 0) return;
 
     var lossesThreshold = 10 * _framesPerSecond;
-    var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
@@ -503,7 +524,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Stamp all session WALs with the given conversationId and persist to disk.
   /// This makes WAL→conversation linkage survive app kill.
   Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
     int stamped = 0;
     for (final wal in _wals) {
       if (wal.status == WalStatus.miss &&
@@ -618,7 +639,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     _isCancelled = false;
     _accumulatedResponse = null;
 
-    final initialNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     var wals = _wals
         .where(
           (wal) =>
@@ -657,7 +678,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     while (true) {
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
-      final batchNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
       final candidates = _wals
           .where(
             (wal) =>
@@ -798,7 +819,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           // shared job_id and mark uploaded. The reconciler resolves this to
           // synced / miss(retry) / corrupted out of the critical path. The
           // local file is retained until confirmed synced.
-          final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          final now = _now().millisecondsSinceEpoch ~/ 1000;
           for (final wal in batchWals) {
             wal.status = WalStatus.uploaded;
             wal.jobId = result.jobId;
@@ -961,7 +982,7 @@ class LocalWalSyncImpl implements LocalWalSync {
               (candidate) => candidate.status == WalStatus.miss && candidate.conversationId == walToSync.conversationId,
             )
             .toList(),
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        _now().millisecondsSinceEpoch ~/ 1000,
       );
       final result = await _uploadGate.upload(
         [walFile],
@@ -985,7 +1006,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         DebugLogManager.logInfo('Single WAL upload succeeded (fast-path)', {'walId': wal.id});
         listener.onWalSynced(wal);
       } else {
-        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final now = _now().millisecondsSinceEpoch ~/ 1000;
         walToSync.status = WalStatus.uploaded;
         walToSync.jobId = result.jobId;
         walToSync.uploadedAt = now;
@@ -1094,13 +1115,13 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (byJob.isEmpty) return resp;
 
     bool changed = false;
-    final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     const maxConcurrent = 3;
     final entries = byJob.entries.toList();
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
-      final fetched = await Future.wait(slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))));
+      final fetched = await Future.wait(slice.map((e) async => (e.value, await _jobStatusFetcher(e.key))));
 
       for (final (members, fetch) in fetched) {
         final jobId = members.first.jobId;
