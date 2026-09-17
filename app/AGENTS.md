@@ -78,7 +78,7 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
 Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
-Dev contracts: [B0 registration](lib/services/dev_controls/REGISTRATION.md).
+Dev contracts: [B0 registration](lib/services/dev_controls/REGISTRATION.md), [B1 addressability](lib/services/dev_controls/ADDRESSABILITY.md).
 ## Test Strategy
 
 ### Test Structure

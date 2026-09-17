@@ -15,7 +15,10 @@ put `pendingContract('C1');` on its own line first inside the body. This survive
 Dart formatting (a named argument gets folded onto another line). The async body
 executes in its own zone; assertions/UnimplementedError print PENDING;
 success throws XPASS outside the catch. Ordinary errors still fail. Use
-awaited assertions; `testWidgets`/skip are not supported pending markers.
+awaited assertions. For widgets use `contractWidgets` from `support/spine/widgets.dart`;
+framework/async/teardown errors still fail normally. Never use `skip`.
+B0/B1 wire contracts run once with compile-time opt-in via `app/test.sh`, then
+the ordinary suite still proves the opt-out guard.
 
 Register each file (including helper/fixture files) in `contracts/spine/files.json`.
 The check resolves the file's **introducing Git commit**, reads its bytes with

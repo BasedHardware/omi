@@ -41,6 +41,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/dev_controls/journey_faults.dart';
 import 'package:omi/utils/enums.dart';
 
+export 'addressability.dart';
+
 /// Version of the semantic-controls contract. Bump on any breaking change;
 /// additive capabilities append without a bump.
 const String semanticControlsVersion = 'semantic-controls/v1';
