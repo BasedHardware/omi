@@ -82,7 +82,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reprocessTranscription => 'Muling Proseso ang Transkripsyon';
 
   @override
-  String get retranscribingConversation => 'Muling tinatranscribe ang pag-uusap...\nMaaaring tumagal ito ng ilang segundo';
+  String get retranscribingConversation =>
+      'Muling tinatranscribe ang pag-uusap...\nMaaaring tumagal ito ng ilang segundo';
 
   @override
   String get errorReprocessingTranscription => 'Error sa muling pagproseso ng transkripsyon. Subukan ulit mamaya.';

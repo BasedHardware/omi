@@ -82,7 +82,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get reprocessTranscription => 'Proses Ulang Transkripsi';
 
   @override
-  String get retranscribingConversation => 'Mentranskripsi ulang percakapan...\nIni mungkin memakan waktu beberapa detik';
+  String get retranscribingConversation =>
+      'Mentranskripsi ulang percakapan...\nIni mungkin memakan waktu beberapa detik';
 
   @override
   String get errorReprocessingTranscription => 'Kesalahan saat memproses ulang transkripsi. Coba lagi nanti.';

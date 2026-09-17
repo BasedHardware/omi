@@ -85,7 +85,8 @@ class AppLocalizationsMr extends AppLocalizations {
   String get retranscribingConversation => 'संभाषण पुन्हा ट्रान्सक्राइब करत आहे...\nयाला काही सेकंद लागू शकतात';
 
   @override
-  String get errorReprocessingTranscription => 'ट्रान्सक्रिप्शन पुन्हा प्रक्रिया करताना त्रुटी. नंतर पुन्हा प्रयत्न करा.';
+  String get errorReprocessingTranscription =>
+      'ट्रान्सक्रिप्शन पुन्हा प्रक्रिया करताना त्रुटी. नंतर पुन्हा प्रयत्न करा.';
 
   @override
   String get errorNoStoredAudio => 'या संभाषणासाठी संग्रहित ऑडिओ उपलब्ध नाही.';

@@ -88,7 +88,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get errorReprocessingTranscription => 'Erreur lors du retraitement de la transcription. Réessaie plus tard.';
 
   @override
-  String get errorNoStoredAudio => 'Aucun audio enregistré n\\\'est disponible pour cette conversation.';
+  String get errorNoStoredAudio => 'Aucun audio enregistré n\'est disponible pour cette conversation.';
 
   @override
   String get deleteConversation => 'Supprimer la conversation';

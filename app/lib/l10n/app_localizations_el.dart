@@ -82,10 +82,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reprocessTranscription => 'Επανεπεξεργασία απομαγνητοφώνησης';
 
   @override
-  String get retranscribingConversation => 'Επανάληψη απομαγνητοφώνησης συνομιλίας...\nΑυτό μπορεί να διαρκέσει λίγα δευτερόλεπτα';
+  String get retranscribingConversation =>
+      'Επανάληψη απομαγνητοφώνησης συνομιλίας...\nΑυτό μπορεί να διαρκέσει λίγα δευτερόλεπτα';
 
   @override
-  String get errorReprocessingTranscription => 'Σφάλμα κατά την επανεπεξεργασία της απομαγνητοφώνησης. Δοκιμάστε ξανά αργότερα.';
+  String get errorReprocessingTranscription =>
+      'Σφάλμα κατά την επανεπεξεργασία της απομαγνητοφώνησης. Δοκιμάστε ξανά αργότερα.';
 
   @override
   String get errorNoStoredAudio => 'Δεν υπάρχει αποθηκευμένος ήχος για αυτή τη συνομιλία.';
