@@ -82,10 +82,7 @@ function presentReview(value: unknown): void {
   if (value === undefined || value === null) {
     return;
   }
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    return;
-  }
-  const review = value as Record<string, unknown>;
+  const review = object(value);
   presentNullableDate(review.rated_at);
   presentNullableDate(review.responded_at);
   presentNullableDouble(review.score);
@@ -136,22 +133,25 @@ function presentObjectList(
 }
 
 function presentExternalIntegration(value: unknown): void {
-  presentObject(value, row => {
-    presentNullableString(row.app_home_url);
-    presentNullableString(row.chat_messages_target);
-    presentNullableString(row.chat_tools_manifest_url);
-    presentNullableString(row.mcp_server_url);
-    presentNullableString(row.setup_completed_url);
-    presentNullableString(row.setup_instructions_file_path);
-    presentNullableString(row.triggers_on);
-    presentNullableString(row.webhook_url);
-    presentObjectList(row.actions, action => {
-      presentNullableString(action.action);
-    });
-    presentObjectList(row.auth_steps, step => {
-      presentNullableString(step.name);
-      presentNullableString(step.url);
-    });
+  if (value === undefined || value === null) {
+    return;
+  }
+  const row = object(value);
+  presentNullableString(row.app_home_url);
+  presentNullableString(row.chat_messages_target);
+  presentNullableString(row.chat_tools_manifest_url);
+  presentNullableString(row.mcp_server_url);
+  presentNullableString(row.setup_completed_url);
+  presentNullableString(row.setup_instructions_file_path);
+  presentNullableString(row.triggers_on);
+  presentNullableString(row.webhook_url);
+  presentNullableMap(row.mcp_oauth_tokens);
+  presentObjectList(row.actions, action => {
+    presentNullableString(action.action);
+  });
+  presentObjectList(row.auth_steps, step => {
+    presentNullableString(step.name);
+    presentNullableString(step.url);
   });
 }
 
@@ -163,6 +163,7 @@ function presentChatTools(value: unknown): void {
     presentNullableString(tool.name);
     presentNullableString(tool.status_message);
     presentNullableString(tool.transport);
+    presentNullableMap(tool.parameters);
   });
 }
 
