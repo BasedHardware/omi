@@ -17,6 +17,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -148,7 +149,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
-  Future<void> saveEditingSummary(String? appId, String newContent) async {
+  Future<void> _saveEditingSummary(String? appId, String newContent) async {
     final trimmed = newContent.trim();
     if (trimmed.isEmpty) return;
 
@@ -180,6 +181,22 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       conversation.appResults[index].content = oldContent;
       notifyListeners();
     }
+  }
+
+  /// Save an edit against the same summary identity used for display. Legacy
+  /// app output without an id, duplicate app ids, and stale selections are
+  /// read-only because the current mutation API addresses results by app id.
+  Future<void> saveEditingSummarySelection(ConversationSummarySelection selection, String newContent) async {
+    if (!selection.canEdit(conversation)) return;
+    if (!selection.isApp) {
+      await _saveEditingSummary(null, newContent);
+      return;
+    }
+    final index = selection.resultIndex;
+    if (index == null || index < 0 || index >= conversation.appResults.length) return;
+    final result = conversation.appResults[index];
+    if (result.appId == null) return;
+    await _saveEditingSummary(result.appId, newContent);
   }
 
   void toggleIsTranscriptExpanded() {
@@ -326,10 +343,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       // Update the cached conversation to ensure we have the latest data
       _cachedConversation = updatedConversation;
 
-      // Check if the summarized app is in the apps list
-      AppResponse? summaryApp = getSummarizedApp();
-      if (summaryApp != null && summaryApp.appId != null && appProvider != null) {
-        String appId = summaryApp.appId!;
+      // Check if the selected app summary is in the apps list.
+      final summarySelection = getSummarySelection();
+      if (summarySelection.isApp && summarySelection.appId != null && appProvider != null) {
+        String appId = summarySelection.appId!;
         bool appExists = appProvider!.apps.any((app) => app.id == appId);
         if (!appExists) {
           await appProvider!.getApps();
@@ -367,23 +384,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  /// Returns the first app result that actually carries content, which is the
-  /// summary of the conversation. An app result with empty content is not a
-  /// summary: returning it suppressed the structured sections (they only render
-  /// when `appId == null`) while `AppResultDetailWidget` fell into its
-  /// "no summary" placeholder, so a conversation with a full sections summary
-  /// rendered as having none. Mirrors desktop's `ConversationSummarySelection`.
-  AppResponse? getSummarizedApp() {
-    final appResult = conversation.appResults.firstWhereOrNull((r) => r.content.trim().isNotEmpty);
-    if (appResult != null) {
-      return appResult;
-    }
-    // If no app result carries content but we have a structured overview or
-    // sections, create a fake AppResponse
-    if (conversation.structured.overview.isNotEmpty || conversation.structured.sections.isNotEmpty) {
-      return AppResponse(conversation.structured.overview, appId: null);
-    }
-    return null;
+  /// Returns the explicit source and body used by every summary surface.
+  ConversationSummarySelection getSummarySelection() {
+    return ConversationSummarySelection.select(conversation);
   }
 
   /// Returns the list of suggested summarization apps for this conversation

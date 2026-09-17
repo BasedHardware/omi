@@ -19,6 +19,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/logger.dart';
@@ -543,17 +544,22 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   Widget _buildSummaryPillContent(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, _) {
-        final summarizedApp = provider.getSummarizedApp();
-        final app = summarizedApp != null
-            ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId)
+        final summarySelection = provider.getSummarySelection();
+        final app = summarySelection.isApp
+            ? provider.appsList.firstWhereOrNull((element) => element.id == summarySelection.appId)
             : null;
 
-        return _buildSummaryPillInner(context, provider, app);
+        return _buildSummaryPillInner(context, provider, summarySelection, app);
       },
     );
   }
 
-  Widget _buildSummaryPillInner(BuildContext context, ConversationDetailProvider provider, App? app) {
+  Widget _buildSummaryPillInner(
+    BuildContext context,
+    ConversationDetailProvider provider,
+    ConversationSummarySelection summarySelection,
+    App? app,
+  ) {
     final isReprocessing = provider.loadingReprocessConversation;
     final reprocessingApp = provider.selectedAppForReprocessing;
 
@@ -574,8 +580,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     String displayName = context.l10n.summary;
     if (isReprocessing && reprocessingApp != null) {
       displayName = reprocessingApp.name;
-    } else if (app != null) {
-      displayName = app.name;
+    } else if (summarySelection.isApp) {
+      displayName = app?.name ?? context.l10n.unknownApp;
     }
 
     if (displayName.length > 8) {
@@ -591,9 +597,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         appImageUrl = Assets.images.herologo.path;
         isLocalAsset = true;
       }
-    } else if (app != null) {
+    } else if (summarySelection.isApp && app != null) {
       appImageUrl = app.getImageUrl();
     }
+    final isUnknownApp = !isReprocessing && summarySelection.isApp && app == null;
 
     return Container(
       height: 56,
@@ -621,7 +628,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // App icon or default icon
-              _buildAppIcon(appImageUrl, isLocalAsset, isReprocessing),
+              _buildAppIcon(appImageUrl, isLocalAsset, isReprocessing, isUnknownApp: isUnknownApp),
               const SizedBox(width: 6),
               // App name
               Flexible(
@@ -898,7 +905,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildAppIcon(String? imageUrl, bool isLocalAsset, bool isLoading) {
+  Widget _buildAppIcon(String? imageUrl, bool isLocalAsset, bool isLoading, {bool isUnknownApp = false}) {
     const double size = 28;
 
     if (isLoading) {
@@ -906,6 +913,14 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         width: size,
         height: size,
         child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+      );
+    }
+
+    if (isUnknownApp) {
+      return const SizedBox(
+        width: size,
+        height: size,
+        child: Icon(Icons.apps_outlined, color: Colors.white, size: 24),
       );
     }
 
