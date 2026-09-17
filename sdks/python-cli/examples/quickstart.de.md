@@ -66,6 +66,17 @@ export OMI_API_KEY=omi_dev_...
 ```bash
 omi auth status    # Lokaler Status
 omi auth whoami    # Server-Seite verifizieren
+omi auth refresh   # OAuth-ID-Token erneuern (nur OAuth-Profile; bei API-Key-Profilen ohne Effekt)
+```
+
+### Profile
+
+Mehrere Identitaeten (z. B. privat/CI) lassen sich in `~/.omi/config.toml` als Profile verwalten:
+
+```bash
+omi --profile work memory list --limit 5
+# oder via Umgebungsvariable (Flag hat Vorrang vor der Variable, sonst 'default')
+export OMI_PROFILE=work
 ```
 
 ---
@@ -122,12 +133,18 @@ for m in memories:
 
 ## 5. Exit-Codes
 
+Die Codes folgen `omi_cli/errors.py` (`EXIT_*`-Konstanten):
+
 | Code | Bedeutung | Aktion |
 | --- | --- | --- |
 | `0` | Erfolg | — |
-| `1` | Allgemeiner Fehler | Fehlermeldung pruefen |
-| `2` | Auth-Fehler | `omi auth login` ausfuehren |
-| `3` | Netzwerkfehler | Verbindung pruefen |
+| `1` | Nutzungsfehler (ungueltige Flags, fehlende Argumente, Validierung) | Befehlszeile pruefen |
+| `2` | Auth-Fehler (keine/abgelaufene Zugangsdaten, unzureichende Rechte) | `omi auth login` ausfuehren |
+| `3` | Server-Fehler (5xx, Verbindungsabbruch) | Spaeter erneut versuchen |
+| `4` | Ratenlimit (429) | Warten, dann erneut versuchen |
+| `5` | Nicht gefunden (404) | ID/Parameter pruefen |
+
+Hinweis: Click-Parsing-Fehler (unbekannte Option, fehlendes Argument) melden sich ebenfalls mit Code `2` (Click-Konvention), nicht mit `1`.
 
 ---
 
