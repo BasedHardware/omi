@@ -167,7 +167,7 @@ export function DeviceControls({
           accessibilityRole="button"
           disabled={busy || pending !== null}
           onPress={find}
-          style={styles.scanButton}>
+          style={[styles.scanButton, local.action]}>
           <Text style={styles.scanButtonText}>Find device</Text>
         </FocusPressable>
       ) : (
@@ -181,7 +181,7 @@ export function DeviceControls({
           accessibilityRole="button"
           disabled={busy || pending !== null}
           onPress={readStorage}
-          style={styles.scanButton}>
+          style={[styles.scanButton, local.action]}>
           <Text style={styles.scanButtonText}>Read storage status</Text>
         </FocusPressable>
       ) : (
@@ -238,7 +238,7 @@ export function DeviceControls({
                   onPress={() => {
                     write(control.setting, Math.max(0, value! - control.step));
                   }}
-                  style={styles.scanButton}>
+                  style={[styles.scanButton, local.action]}>
                   <Text style={styles.scanButtonText}>−</Text>
                 </FocusPressable>
                 <FocusPressable
@@ -256,7 +256,7 @@ export function DeviceControls({
                       Math.min(control.maximum, value! + control.step),
                     );
                   }}
-                  style={styles.scanButton}>
+                  style={[styles.scanButton, local.action]}>
                   <Text style={styles.scanButtonText}>+</Text>
                 </FocusPressable>
               </>
@@ -284,6 +284,7 @@ export function DeviceControls({
 
 const local = StyleSheet.create({
   container: {gap: 8, paddingVertical: 12},
+  action: {minHeight: 44, minWidth: 44, alignItems: 'center'},
   row: {flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap'},
   label: {flexGrow: 1, flexShrink: 1},
 });

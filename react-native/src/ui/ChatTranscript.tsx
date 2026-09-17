@@ -77,7 +77,8 @@ const ChatMessageRow = memo(function ChatMessageRow({
       ]}>
       {!human && (
         <OmiAvatar
-          tone={desktop ? 'ink' : 'identity'}
+          tone={desktop || compact ? 'ink' : 'identity'}
+          size={compact && !desktop ? 28 : 40}
           inkColor={desktop ? token.color.ink : undefined}
           animate={streaming}
           reduceMotion={reduceMotion}
@@ -90,6 +91,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
             ? styles.chatMessageColumnCompact
             : styles.chatMessageColumnDesktop,
           human && styles.chatMessageColumnHuman,
+          compact && !desktop && transcriptStyles.mobileColumn,
           desktop && desktopStyles.column,
         ]}>
         <View
@@ -229,6 +231,7 @@ const desktopStyles = StyleSheet.create({
 });
 
 const transcriptStyles = StyleSheet.create({
+  mobileColumn: {flexShrink: 1, maxWidth: '85%'},
   human: {
     backgroundColor: 'transparent',
     borderWidth: 0,

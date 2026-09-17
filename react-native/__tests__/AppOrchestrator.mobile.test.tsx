@@ -121,6 +121,8 @@ test.each([
 
 test('mobile Ask Omi opens the actual chat and reports a missing backend', async () => {
   const renderer = await renderApp();
+  const connections = mockNative.connectDevice.mock.calls.length;
+  const disconnections = mockNative.disconnectDevice.mock.calls.length;
   await act(async () => {
     renderer.root
       .findAllByType(TextInput)
@@ -130,6 +132,11 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
   expect(control(renderer, 'Chat scroll region')).toBeDefined();
   expect(JSON.stringify(renderer.toJSON())).toContain('Chat');
+  await act(async () => control(renderer, 'Back to Home').props.onPress());
+  expect(control(renderer, 'Open Omi device')).toBeDefined();
+  expect(control(renderer, 'Ask Omi').props.value).toBe('Hello Omi');
+  expect(mockNative.connectDevice).toHaveBeenCalledTimes(connections);
+  expect(mockNative.disconnectDevice).toHaveBeenCalledTimes(disconnections);
 });
 
 test('mobile device panel exposes the existing scan and connection controls', async () => {
