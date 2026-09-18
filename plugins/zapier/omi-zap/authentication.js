@@ -20,7 +20,7 @@ module.exports = {
     },
     {
       helpText:
-        'Integration token shown next to the Secret Key in the Omi App under Explore > Apps > Zapier > Integration Instructions. Required once the backend enables authenticated Zapier endpoints.',
+        'Integration token provisioned alongside the Secret Key in the Omi App under Explore > Apps > Zapier > Integration Instructions. Required once the backend enables authenticated Zapier endpoints.',
       computed: false,
       key: 'token',
       required: false,
