@@ -163,12 +163,15 @@ function optionalCount(value: unknown): number | undefined {
       throw new DailySummaryError();
     }
     if (!/^[0-9]+$/.test(value)) {
-      return undefined;
+      throw new DailySummaryError();
     }
     const parsed = Number(value);
     return parsed === 0 ? undefined : parsed;
   }
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    throw new DailySummaryError();
+  }
+  if (value < 0) {
     return undefined;
   }
   return value === 0 ? undefined : value;

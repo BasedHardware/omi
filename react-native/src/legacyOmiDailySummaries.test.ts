@@ -558,6 +558,128 @@ test('old daily summaries name Flutter DailySummary.fromGenerated padded GET mem
   ).toThrow('Omi daily summaries are malformed');
 });
 
+test('old daily summaries name Flutter DailySummary.fromGenerated type-wrong GET memories_created instead of remapping to a headline chip', () => {
+  const neighbor = {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'};
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {memories_created: '1'},
+          },
+          {
+            id: 'sum-json',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {memories_created: 1},
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    {id: 'sum-json', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {memories_created: null},
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    neighbor,
+  ]);
+  for (const memories_created of [true, false, [], {}, '', 'abc', '1.5', 1.5]) {
+    expect(() =>
+      parseOmiDailySummaries(
+        JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+              stats: {memories_created},
+            },
+            neighbor,
+          ],
+        }),
+      ),
+    ).toThrow('Omi daily summaries are malformed');
+  }
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {action_items_created: true},
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toThrow('Omi daily summaries are malformed');
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {total_conversations: true},
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toThrow('Omi daily summaries are malformed');
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            date: '2026-09-09',
+            headline: 'Met with the team',
+            stats: {total_conversations: '3', total_duration_minutes: 1.5},
+          },
+          neighbor,
+        ],
+      }),
+    ),
+  ).toThrow('Omi daily summaries are malformed');
+});
+
 test('names Flutter DailySummaryCard omitted or JSON-null GET headlines as Your Day in Review', () => {
   expect(
     parseOmiDailySummaries(
@@ -943,7 +1065,7 @@ test('does not omit a neighboring daily summary when stored stats cannot project
           {
             id: 'sum-optional',
             headline: 'Shipped the recap',
-            stats: {total_conversations: '3', total_duration_minutes: 1.5},
+            stats: {total_conversations: '3'},
           },
           {
             id: 'sum-stats-object',
@@ -1178,6 +1300,26 @@ test('old daily summaries name Flutter DailySummary.fromGenerated type-wrong GET
           date: '2026-09-09',
           headline: 'Met with the team',
           highlights: [{topic: 'Team', conversation_ids: [1]}],
+        },
+        {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'},
+      ],
+    }),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  expect(await loadOmiDailySummaries(backend)).toEqual([]);
+});
+
+test('old daily summaries name Flutter DailySummary.fromGenerated type-wrong GET memories_created instead of omitting Daily Recaps', async () => {
+  const request = jest.fn(async () => ({
+    id: 'summaries',
+    status: 200,
+    body: JSON.stringify({
+      summaries: [
+        {
+          id: 'sum-1',
+          date: '2026-09-09',
+          headline: 'Met with the team',
+          stats: {memories_created: true},
         },
         {id: 'sum-kept', date: '2026-09-08', headline: 'Neighbor recap'},
       ],
