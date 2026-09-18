@@ -84,10 +84,10 @@ class ConversationDetailPage extends StatefulWidget {
   });
 
   @override
-  State<ConversationDetailPage> createState() => _ConversationDetailPageState();
+  State<ConversationDetailPage> createState() => ConversationDetailPageState();
 }
 
-class _ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
+class ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
@@ -112,7 +112,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
   List<int> _searchResultPositions = []; // Track positions of search results
-  final List<Timer> _ownedTimers = [];
+  final List<(Timer, Completer<void>)> _ownedDelays = [];
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -291,23 +291,30 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     super.dispose();
   }
 
+  /// Test seam for the cancel-completes-waiter contract. Production callers use [_delay].
+  @visibleForTesting
+  Future<void> ownedDelayForTesting(Duration duration) => _delay(duration);
+
   Future<void> _delay(Duration duration) {
     if (!mounted) return Future.value();
     final completer = Completer<void>();
     late final Timer timer;
     timer = Timer(duration, () {
-      _ownedTimers.remove(timer);
+      _ownedDelays.remove((timer, completer));
       if (!completer.isCompleted) completer.complete();
     });
-    _ownedTimers.add(timer);
+    _ownedDelays.add((timer, completer));
     return completer.future;
   }
 
   void _cancelOwnedTimers() {
-    for (final timer in _ownedTimers) {
+    for (final (timer, completer) in _ownedDelays) {
       timer.cancel();
+      // Complete normally: `await _delay` sits in audio cleanup's try/finally.
+      // An error would look like a download failure and arm another delay in catch.
+      if (!completer.isCompleted) completer.complete();
     }
-    _ownedTimers.clear();
+    _ownedDelays.clear();
   }
 
   /// Show the share to contacts bottom sheet

@@ -346,6 +346,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     _scanEpoch++;
     _didNotMakeItTimer?.cancel();
     _didNotMakeItTimer = null;
+    deviceProvider?.stopDiscoveryScanning();
   }
 
   @override
