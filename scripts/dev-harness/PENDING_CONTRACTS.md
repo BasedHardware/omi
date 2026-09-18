@@ -19,6 +19,18 @@ awaited assertions. Compare collection-bearing Dart records field by field:
 record equality compares Map identity; pass the Map itself to `expect`. Compile/load errors happen before the wrapper and fail the
 owner suite; overriding `noSuchMethod` in a fake is valid Dart, not a compile bypass.
 
+**Pending green means an executed, unmet contract, not a verified feature or a
+correct oracle.** Missing behavior in existing code fails assertions without
+throwing a stub error (B0 registration and C1 preference forwarding). An exception
+class cannot distinguish a wrong implementation from a wrong expected value;
+accepting only stub errors would ban those regression contracts, not detect rot.
+A body may stop at its first failure; later assertions have not necessarily run.
+Review failures against the specification, and exercise new oracles against a
+satisfying implementation and a violating mutation where available. Report
+oracle defects with reproductions before retirement; XFAIL counts prove neither
+implementation nor oracle correctness. Diagnose with pytest --runxfail or local
+marker removal, without editing assertions. Both languages have the same meaning.
+
 The smallest immutable boundary is the **whole oracle**: registered spine tests,
 fixtures and support code, including setup and assertions, with only whole pending
 marker lines removable. Assertions alone are insufficient: changing a fixture or
