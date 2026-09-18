@@ -2617,9 +2617,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewAndManageConversations => '녹음된 대화를 검토하고 관리하세요';
 
   @override
-  String get startCapturingConversations => 'Omi 장치로 대화를 캡처하여 여기에서 보세요.';
-
-  @override
   String get useMobileAppToCapture => '모바일 앱을 사용하여 오디오를 캡처하세요';
 
   @override
@@ -3104,9 +3101,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcribing => '텍스트 변환 중...';
-
-  @override
-  String get transcriptionFailed => '텍스트 변환 실패';
 
   @override
   String get discardedConversation => '삭제된 대화';
@@ -3621,9 +3615,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get preparingSystemAudioCapture => '시스템 오디오 캡처 준비 중';
 
   @override
-  String get clickTheButtonToCaptureAudio => '라이브 자막, AI 인사이트 및 자동 저장을 위해 오디오를 캡처하려면 버튼을 클릭하세요.';
-
-  @override
   String get reconnecting => '재연결 중...';
 
   @override
@@ -3669,9 +3660,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => '라이브 자막을 보려면 녹음을 시작하세요';
-
-  @override
   String get paused => '일시중지됨';
 
   @override
@@ -3690,9 +3678,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => '시스템 오디오 캡처 설정 중';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => '오디오 캡처 및 자막 생성 중';
 
   @override
   String get clickToBeginRecordingSystemAudio => '시스템 오디오 녹음을 시작하려면 클릭하세요';
@@ -8630,6 +8615,43 @@ class AppLocalizationsKo extends AppLocalizations {
   String audioSavedLocally(String duration) {
     return '$duration 오디오가 로컬에 저장됨';
   }
+
+  @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
 
   @override
   String get willSyncAutomatically => '자동으로 동기화됩니다';

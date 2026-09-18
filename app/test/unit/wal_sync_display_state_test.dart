@@ -94,6 +94,63 @@ void main() {
     });
   });
 
+  group('worstSessionSyncState', () {
+    test('empty session -> null (nothing to report)', () {
+      expect(worstSessionSyncState(const []), isNull);
+    });
+
+    test('a single healthy WAL reports its own state', () {
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.miss)]),
+        WalSyncDisplayState.waiting,
+      );
+    });
+
+    test('failed outranks retrying, syncing and waiting', () {
+      expect(
+        worstSessionSyncState([
+          makeWal(status: WalStatus.miss, retryCount: 1),
+          makeWal(status: WalStatus.miss, isSyncing: true),
+          makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries),
+          makeWal(status: WalStatus.miss),
+        ]),
+        WalSyncDisplayState.failed,
+        reason: 'the indicator must name the WAL that needs the user, not the busiest one',
+      );
+    });
+
+    test('retrying outranks syncing and waiting', () {
+      expect(
+        worstSessionSyncState([
+          makeWal(status: WalStatus.miss, isSyncing: true),
+          makeWal(status: WalStatus.miss, retryCount: 1),
+        ]),
+        WalSyncDisplayState.retrying,
+      );
+    });
+
+    test('corrupted and outsideRecoveryWindow are terminal like failed', () {
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.corrupted)]),
+        WalSyncDisplayState.corrupted,
+      );
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.outsideRecoveryWindow)]),
+        WalSyncDisplayState.outsideRecoveryWindow,
+      );
+    });
+
+    test('only failed is retryable', () {
+      for (final state in WalSyncDisplayState.values) {
+        expect(
+          isRetryableSyncState(state),
+          state == WalSyncDisplayState.failed,
+          reason: '$state must not offer a retry that cannot succeed',
+        );
+      }
+    });
+  });
+
   group('Wal jobId/uploadedAt persistence', () {
     test('round-trips through toJson/fromJson', () {
       final w = makeWal(status: WalStatus.uploaded, jobId: 'job-xyz')..uploadedAt = 1700000123;

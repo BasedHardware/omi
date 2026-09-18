@@ -87,6 +87,22 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('uploading phase names its state instead of reading as stuck', (tester) async {
+    final speech = _SpeechProvider();
+    await _pump(tester, speech, () {});
+    speech.uploadingProfile = true;
+    speech.notifyListeners();
+    await tester.pump();
+    expect(find.text('Uploading your voice profile...'), findsOneWidget);
+    speech.updateLoadingState(SpeechProfileLoadingState.memorizing);
+    await tester.pump();
+    expect(find.text('Memorizing your voice...'), findsOneWidget);
+    speech.updateLoadingState(SpeechProfileLoadingState.personalizing);
+    await tester.pump();
+    expect(find.text('Personalizing your experience...'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('upload failure offers Skip and never displays All Done', (tester) async {
     var skipped = false;
     final speech = _SpeechProvider();

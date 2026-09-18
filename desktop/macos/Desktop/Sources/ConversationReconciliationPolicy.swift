@@ -158,9 +158,17 @@ enum ConversationReconciliationPolicy {
     guard !server.transcriptSegmentsIncluded, let current, !current.transcriptSegments.isEmpty else {
       return server
     }
+    // A projected list row is bound to the server's current transcript. Do not attach a
+    // previously loaded transcript unless its verified projection names the same bytes.
+    if let projection = server.localSummary {
+      guard current.localSummary?.transcriptVerified == true,
+        current.localSummary?.transcriptSha256 == projection.transcriptSha256
+      else { return server }
+    }
     var retained = server
     retained.transcriptSegments = current.transcriptSegments
     retained.transcriptSegmentsIncluded = true
+    retained.localSummary?.transcriptVerified = true
     return retained
   }
 
@@ -198,7 +206,8 @@ enum ConversationReconciliationPolicy {
       starred: mutation.starred ?? serverConversation.starred,
       folderId: mutation.hasFolderIdMutation ? mutation.folderId : serverConversation.folderId,
       inputDeviceName: serverConversation.inputDeviceName,
-      deferred: serverConversation.deferred
+      deferred: serverConversation.deferred,
+      localSummary: serverConversation.localSummary
     )
   }
 

@@ -2612,9 +2612,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reviewAndManageConversations => '查看和管理已录制的对话';
 
   @override
-  String get startCapturingConversations => '开始使用您的Omi设备捕获对话以在此处查看。';
-
-  @override
   String get useMobileAppToCapture => '使用您的移动应用程序捕获音频';
 
   @override
@@ -3099,9 +3096,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcribing => '正在转录...';
-
-  @override
-  String get transcriptionFailed => '转录失败';
 
   @override
   String get discardedConversation => '已丢弃的对话';
@@ -3616,9 +3610,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get preparingSystemAudioCapture => '正在准备系统音频捕获';
 
   @override
-  String get clickTheButtonToCaptureAudio => '点击按钮以捕获音频，用于实时转录、AI 洞察和自动保存。';
-
-  @override
   String get reconnecting => '重新连接中...';
 
   @override
@@ -3664,9 +3655,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => '开始录音以查看实时转录';
-
-  @override
   String get paused => '已暂停';
 
   @override
@@ -3685,9 +3673,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => '正在设置系统音频捕获';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => '正在捕获音频并生成转录';
 
   @override
   String get clickToBeginRecordingSystemAudio => '点击开始录制系统音频';
@@ -8617,6 +8602,43 @@ class AppLocalizationsZh extends AppLocalizations {
   String audioSavedLocally(String duration) {
     return '$duration 音频已本地保存';
   }
+
+  @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
 
   @override
   String get willSyncAutomatically => '将自动同步';
