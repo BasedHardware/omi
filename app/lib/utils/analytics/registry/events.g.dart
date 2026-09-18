@@ -259,6 +259,87 @@ final class MemoriesAllVisibilityChanged extends RegisteredEvent {
   Map<String, Object> get properties => {"new_visibility": newVisibility.wireName, "facts_count": factsCount};
 }
 
+final class ShowDiscardedMemoriesToggled extends RegisteredEvent {
+  const ShowDiscardedMemoriesToggled({required this.showDiscarded});
+  final bool showDiscarded;
+  @override
+  String get wireName => "Show Discarded Memories Toggled";
+  @override
+  Map<String, Object> get properties => {"show_discarded": showDiscarded};
+}
+
+final class ShowDiscardedConversationsToggled extends RegisteredEvent {
+  const ShowDiscardedConversationsToggled({required this.showDiscarded});
+  final bool showDiscarded;
+  @override
+  String get wireName => "Show Discarded Conversations Toggled";
+  @override
+  Map<String, Object> get properties => {"show_discarded": showDiscarded};
+}
+
+final class DeletedConversationsFilterToggled extends RegisteredEvent {
+  const DeletedConversationsFilterToggled({required this.showDeleted});
+  final bool showDeleted;
+  @override
+  String get wireName => "Deleted Conversations Filter Toggled";
+  @override
+  Map<String, Object> get properties => {"show_deleted": showDeleted};
+}
+
+final class AppsFilterMyApps extends RegisteredEvent {
+  const AppsFilterMyApps({required this.enabled});
+  final bool enabled;
+  @override
+  String get wireName => "Apps Filter My Apps";
+  @override
+  Map<String, Object> get properties => {"enabled": enabled};
+}
+
+final class AppsFilterInstalled extends RegisteredEvent {
+  const AppsFilterInstalled({required this.enabled});
+  final bool enabled;
+  @override
+  String get wireName => "Apps Filter Installed";
+  @override
+  Map<String, Object> get properties => {"enabled": enabled};
+}
+
+final class DailySummaryToggled extends RegisteredEvent {
+  const DailySummaryToggled({required this.enabled});
+  final bool enabled;
+  @override
+  String get wireName => "Daily Summary Toggled";
+  @override
+  Map<String, Object> get properties => {"enabled": enabled};
+}
+
+final class AiAppGeneratorAppGenerated extends RegisteredEvent {
+  const AiAppGeneratorAppGenerated({required this.success});
+  final bool success;
+  @override
+  String get wireName => "AI App Generator App Generated";
+  @override
+  Map<String, Object> get properties => {"success": success};
+}
+
+final class ActionItemsViewToggled extends RegisteredEvent {
+  const ActionItemsViewToggled({required this.groupedView});
+  final bool groupedView;
+  @override
+  String get wireName => "Action Items View Toggled";
+  @override
+  Map<String, Object> get properties => {"grouped_view": groupedView};
+}
+
+final class PhoneCallStarted extends RegisteredEvent {
+  const PhoneCallStarted({required this.hasContactName});
+  final bool hasContactName;
+  @override
+  String get wireName => "Phone Call Started";
+  @override
+  Map<String, Object> get properties => {"has_contact_name": hasContactName};
+}
+
 enum TypeExtensionProbeMode {
   off("off"),
   headphonesOnly("headphones_only"),

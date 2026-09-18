@@ -31,7 +31,16 @@
     "appsFilterRating",
     "aiAppGeneratorPromptSubmitted",
     "voiceResponseModeChanged",
-    "memoriesAllVisibilityChanged"
+    "memoriesAllVisibilityChanged",
+    "showDiscardedMemoriesToggled",
+    "showDiscardedConversationsToggled",
+    "deletedConversationsFilterToggled",
+    "appsFilterMyApps",
+    "appsFilterInstalled",
+    "dailySummaryToggled",
+    "aiAppGeneratorAppGenerated",
+    "actionItemsViewToggled",
+    "phoneCallStarted"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

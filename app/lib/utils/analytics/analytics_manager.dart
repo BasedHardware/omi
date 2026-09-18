@@ -565,7 +565,7 @@ class AnalyticsManager {
   void phoneCallVerificationCompleted() => track('Phone Call Verification Completed');
 
   void phoneCallStarted({String? contactName}) =>
-      track('Phone Call Started', properties: {'has_contact_name': contactName != null});
+      const TypedEvents().emit(PhoneCallStarted(hasContactName: contactName != null));
 
   void phoneCallConnected() => track('Phone Call Connected');
 
@@ -932,7 +932,7 @@ class AnalyticsManager {
   void speechProfileContinued() => track(speechProfileContinuedEventName);
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
-      track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
+      const TypedEvents().emit(ShowDiscardedMemoriesToggled(showDiscarded: showDiscarded));
 
   // Conversation Display Settings Events
   void conversationDisplaySettingsOpened() => const TypedEvents().emit(const ConversationDisplaySettingsOpened());
@@ -941,7 +941,7 @@ class AnalyticsManager {
       const TypedEvents().emit(ShowShortConversationsToggled(showShort: showShort));
 
   void showDiscardedConversationsToggled(bool showDiscarded) =>
-      track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
+      const TypedEvents().emit(ShowDiscardedConversationsToggled(showDiscarded: showDiscarded));
 
   void shortConversationThresholdChanged(int thresholdSeconds) => const TypedEvents().emit(
         ShortConversationThresholdChanged(
@@ -1232,7 +1232,7 @@ class AnalyticsManager {
   void actionItemsPageOpened() => track('Action Items Page Opened');
 
   void actionItemsViewToggled(bool isGroupedView) {
-    track('Action Items View Toggled', properties: {'grouped_view': isGroupedView});
+    const TypedEvents().emit(ActionItemsViewToggled(groupedView: isGroupedView));
   }
 
   void actionItemToggledCompletionOnActionItemsPage({
@@ -1292,7 +1292,7 @@ class AnalyticsManager {
   }
 
   void deletedConversationsFilterToggled(bool showDeleted) {
-    track('Deleted Conversations Filter Toggled', properties: {'show_deleted': showDeleted});
+    const TypedEvents().emit(DeletedConversationsFilterToggled(showDeleted: showDeleted));
   }
 
   void calendarFilterApplied(DateTime startDate, DateTime endDate) {
@@ -1639,11 +1639,11 @@ class AnalyticsManager {
   }
 
   void appsFilterMyApps({required bool enabled}) {
-    track('Apps Filter My Apps', properties: {'enabled': enabled});
+    const TypedEvents().emit(AppsFilterMyApps(enabled: enabled));
   }
 
   void appsFilterInstalled({required bool enabled}) {
-    track('Apps Filter Installed', properties: {'enabled': enabled});
+    const TypedEvents().emit(AppsFilterInstalled(enabled: enabled));
   }
 
   void appsFilterRating({required int rating}) {
@@ -1950,7 +1950,7 @@ class AnalyticsManager {
   void permissionsInterstitialSkipped() => track('Permissions Interstitial Skipped');
 
   void dailySummaryToggled({required bool enabled}) {
-    track('Daily Summary Toggled', properties: {'enabled': enabled});
+    const TypedEvents().emit(DailySummaryToggled(enabled: enabled));
     setUserProperty('Daily Summary Enabled', enabled);
   }
 
@@ -2182,7 +2182,7 @@ class AnalyticsManager {
   }
 
   void aiAppGeneratorAppGenerated({required bool success}) {
-    track('AI App Generator App Generated', properties: {'success': success});
+    const TypedEvents().emit(AiAppGeneratorAppGenerated(success: success));
   }
 
   void importHistoryPageOpened() => track('Import History Page Opened');

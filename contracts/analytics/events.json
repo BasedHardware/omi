@@ -465,6 +465,168 @@
       "correlation": null
     },
     {
+      "id": "showDiscardedMemoriesToggled",
+      "wire_name": "Show Discarded Memories Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "showDiscarded": {
+          "type": "bool",
+          "wire_name": "show_discarded"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "showDiscardedConversationsToggled",
+      "wire_name": "Show Discarded Conversations Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "showDiscarded": {
+          "type": "bool",
+          "wire_name": "show_discarded"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deletedConversationsFilterToggled",
+      "wire_name": "Deleted Conversations Filter Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "showDeleted": {
+          "type": "bool",
+          "wire_name": "show_deleted"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsFilterMyApps",
+      "wire_name": "Apps Filter My Apps",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsFilterInstalled",
+      "wire_name": "Apps Filter Installed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "dailySummaryToggled",
+      "wire_name": "Daily Summary Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "aiAppGeneratorAppGenerated",
+      "wire_name": "AI App Generator App Generated",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "success": {
+          "type": "bool",
+          "wire_name": "success"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "actionItemsViewToggled",
+      "wire_name": "Action Items View Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "groupedView": {
+          "type": "bool",
+          "wire_name": "grouped_view"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallStarted",
+      "wire_name": "Phone Call Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "hasContactName": {
+          "type": "bool",
+          "wire_name": "has_contact_name"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
       "id": "typeExtensionProbe",
       "wire_name": "Type Extension Probe",
       "status": "active",

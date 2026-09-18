@@ -31,4 +31,13 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | aiAppGeneratorPromptSubmitted | AI App Generator Prompt Submitted | prompt_length | active | mobile-instrumentation-presence |
 | voiceResponseModeChanged | Voice Response Mode Changed | mode, mode_int | active | mobile-instrumentation-presence |
 | memoriesAllVisibilityChanged | All Facts Visibility Changed | new_visibility, facts_count | active | mobile-instrumentation-presence |
+| showDiscardedMemoriesToggled | Show Discarded Memories Toggled | show_discarded | active | mobile-instrumentation-presence |
+| showDiscardedConversationsToggled | Show Discarded Conversations Toggled | show_discarded | active | mobile-instrumentation-presence |
+| deletedConversationsFilterToggled | Deleted Conversations Filter Toggled | show_deleted | active | mobile-instrumentation-presence |
+| appsFilterMyApps | Apps Filter My Apps | enabled | active | mobile-instrumentation-presence |
+| appsFilterInstalled | Apps Filter Installed | enabled | active | mobile-instrumentation-presence |
+| dailySummaryToggled | Daily Summary Toggled | enabled | active | mobile-instrumentation-presence |
+| aiAppGeneratorAppGenerated | AI App Generator App Generated | success | active | mobile-instrumentation-presence |
+| actionItemsViewToggled | Action Items View Toggled | grouped_view | active | mobile-instrumentation-presence |
+| phoneCallStarted | Phone Call Started | has_contact_name | active | mobile-instrumentation-presence |
 | typeExtensionProbe | Type Extension Probe | enabled, count, mode | active | c8-type-extension |
