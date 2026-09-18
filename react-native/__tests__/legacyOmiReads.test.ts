@@ -119,6 +119,106 @@ test('old conversations name Flutter ConversationListItem fromJson type-wrong GE
   }
 });
 
+test('old conversations name Flutter Geolocation.fromJson type-wrong GET time instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    geolocation: {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      time: '2026-09-07T00:00:00.000Z',
+    },
+  };
+  const titles = async (rows: unknown[]) =>
+    (await loadConversations(backend(rows).api)).items.map(item => item.title);
+  expect(await titles([row, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([
+      {
+        ...row,
+        geolocation: {
+          latitude: 37.7749,
+          longitude: -122.4194,
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        geolocation: {
+          latitude: 37.7749,
+          longitude: -122.4194,
+          time: null,
+        },
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  for (const extra of ['', 'not-a-date', 1, true, [], {}]) {
+    await expect(
+      titles([
+        {
+          ...row,
+          geolocation: {
+            latitude: 37.7749,
+            longitude: -122.4194,
+            time: extra,
+          },
+        },
+        neighbor,
+      ]),
+    ).rejects.toThrow('Omi timestamp is malformed');
+  }
+});
+
+test('old conversations name Flutter Geolocation.fromJson padded GET time instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+  };
+  for (const extra of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    ' 2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    await expect(
+      loadConversations(
+        backend([
+          {
+            ...row,
+            geolocation: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              time: extra,
+            },
+          },
+          neighbor,
+        ]).api,
+      ),
+    ).rejects.toThrow('Omi timestamp is malformed');
+  }
+});
+
 test('old conversations name Flutter ConversationListItem fromJson padded GET latitude instead of remapping to a conversation chip', async () => {
   const neighbor = {
     ...conversation,

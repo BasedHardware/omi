@@ -274,6 +274,7 @@ function locationChrome(value: unknown): {
   if (geo.captured_at !== undefined && geo.captured_at !== null) {
     calendarEventTimeCopy(geo.captured_at);
   }
+  presentNullableDate(geo.time);
   const address =
     geo.address === undefined || geo.address === null
       ? ''

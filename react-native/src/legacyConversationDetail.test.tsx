@@ -669,6 +669,86 @@ test('old conversation details name Flutter Conversation.fromGenerated padded GE
   }
 });
 
+test('old conversation details name Flutter Geolocation.fromJson type-wrong GET time instead of remapping to a recap chip', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        time: '2026-09-07T00:00:00.000Z',
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        time: null,
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  for (const extra of ['', 'not-a-date', 1, true, [], {}]) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        geolocation: {
+          latitude: 37.7749,
+          longitude: -122.4194,
+          time: extra,
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
+test('old conversation details name Flutter Geolocation.fromJson padded GET time instead of remapping to a recap chip', async () => {
+  for (const extra of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    ' 2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    mockRequest.mockResolvedValue(
+      response({
+        ...fixture,
+        geolocation: {
+          latitude: 37.7749,
+          longitude: -122.4194,
+          time: extra,
+        },
+      }),
+    );
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
 test('old conversation details name Flutter Conversation.fromGenerated type-wrong GET suggested_summarization_apps item instead of remapping to a recap chip', async () => {
   mockRequest.mockResolvedValue(
     response({

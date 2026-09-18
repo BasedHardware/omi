@@ -134,6 +134,7 @@ function presentGeolocation(value: unknown): void {
   presentNullableDouble(geolocation.accuracy);
   presentNullableDouble(geolocation.altitude);
   presentNullableDate(geolocation.captured_at);
+  presentNullableDate(geolocation.time);
   presentNullableString(geolocation.address);
   presentNullableString(geolocation.capture_source);
   presentNullableString(geolocation.google_place_id);
