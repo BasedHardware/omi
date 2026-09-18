@@ -80,6 +80,8 @@ RCT_EXPORT_MODULE(OmiNative)
   return YES;
 }
 
+- (dispatch_queue_t)methodQueue { return dispatch_get_main_queue(); }
+
 - (NSArray<NSString *> *)supportedEvents {
   return @[ @"omiNativeEvent" ];
 }
@@ -89,9 +91,16 @@ RCT_EXPORT_MODULE(OmiNative)
 }
 
 - (void)invalidate {
-  [self cancelReconnect];
-  [self retireConnection:@"Omi Bluetooth session closed"];
-  self.central.delegate = nil;
+  void (^retire)(void) = ^{
+    self.observing = NO;
+    [self cancelReconnect];
+    [self retireConnection:@"Omi Bluetooth session closed"];
+    [self.central stopScan];
+    self.central.delegate = nil;
+    self.scanGeneration++;
+    if (self.scanResolve != nil) { self.scanResolve(@[]); self.scanResolve = nil; }
+  };
+  if (NSThread.isMainThread) retire(); else dispatch_sync(dispatch_get_main_queue(), retire);
   [super invalidate];
 }
 
@@ -544,8 +553,13 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     }
     return;
   }
-  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiCodecUUID]] && characteristic.value.length > 0) {
+  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiCodecUUID]]) {
     const unsigned char *bytes = (const unsigned char *)characteristic.value.bytes;
+    if (characteristic.value.length != 1 || !OmiBleCodecSupported(bytes[0])) {
+      [self cancelReconnect];
+      [self retireConnection:@"This Omi audio codec is not supported"];
+      return;
+    }
     self.codec = @(bytes[0]);
     [self finishConnectionIfReady];
     [self emitSnapshot];

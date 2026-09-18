@@ -56,8 +56,12 @@ static BOOL OmiRememberedCurrent(NSUInteger ticket, NSUInteger generation, NSStr
 
 static NSDictionary *OmiRememberedRefreshSession(NSDictionary *refreshed, NSDictionary *current) {
   NSMutableDictionary *merged = [refreshed mutableCopy];
-  [merged removeObjectForKey:@"rememberedDevice"];
-  if (current[@"rememberedDevice"] != nil) merged[@"rememberedDevice"] = current[@"rememberedDevice"];
+  // An in-flight refresh must not resurrect a disconnected capture grant or
+  // overwrite a newly authorized device with its earlier session snapshot.
+  for (NSString *key in @[@"rememberedDevice", @"bleRecording", @"recordingOwner"]) {
+    [merged removeObjectForKey:key];
+    if (current[key] != nil) merged[key] = current[key];
+  }
   return merged;
 }
 
