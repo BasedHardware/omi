@@ -105,7 +105,7 @@ def _safe_category(category: Any) -> str:
     value = _clean_text(category).lower()
     if not value:
         return ""
-    if re.fullmatch(r"[a-z\-]+(\.[a-z]{2})?", value):
+    if re.fullmatch(r"[a-z\-]+(\.[a-z\-]+)?", value):
         return value[:32]
     return ""
 
