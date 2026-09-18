@@ -4,6 +4,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -47,29 +48,44 @@ abstract interface class CaptureBleListeners {
   void removeBatchRecordingFinalizedListener(void Function(String) callback);
 }
 
-typedef CaptureSocketOpen = Future<TranscriptSegmentSocketService?> Function({
-  required BleAudioCodec codec,
-  required int sampleRate,
-  required String language,
-  required bool force,
-  String? source,
-  String? clientConversationId,
-  CustomSttConfig? customSttConfig,
-});
+/// Production [CaptureBleListeners] over the shared [BleBridge] singleton.
+class BleBridgeCaptureListeners implements CaptureBleListeners {
+  const BleBridgeCaptureListeners();
+
+  @override
+  void addBatchRecordingFinalizedListener(void Function(String) callback) =>
+      BleBridge.instance.addBatchRecordingFinalizedListener(callback);
+
+  @override
+  void removeBatchRecordingFinalizedListener(void Function(String) callback) =>
+      BleBridge.instance.removeBatchRecordingFinalizedListener(callback);
+}
+
+typedef CaptureSocketOpen =
+    Future<TranscriptSegmentSocketService?> Function({
+      required BleAudioCodec codec,
+      required int sampleRate,
+      required String language,
+      required bool force,
+      String? source,
+      String? clientConversationId,
+      CustomSttConfig? customSttConfig,
+    });
 
 /// Conversation socket open that includes the production geolocation header.
 /// Spine oracles still type [CaptureSocketOpen] without it; composition wraps
 /// that older callback and the explicit path always supplies geolocation here.
-typedef CaptureConversationSocketOpen = Future<TranscriptSegmentSocketService?> Function({
-  required BleAudioCodec codec,
-  required int sampleRate,
-  required String language,
-  required bool force,
-  String? source,
-  String? clientConversationId,
-  CustomSttConfig? customSttConfig,
-  Geolocation? geolocation,
-});
+typedef CaptureConversationSocketOpen =
+    Future<TranscriptSegmentSocketService?> Function({
+      required BleAudioCodec codec,
+      required int sampleRate,
+      required String language,
+      required bool force,
+      String? source,
+      String? clientConversationId,
+      CustomSttConfig? customSttConfig,
+      Geolocation? geolocation,
+    });
 
 /// Auth identity boundary for the capture pipeline.
 ///
@@ -103,9 +119,9 @@ class CaptureConnectivityBoundary {
     required bool initiallyConnected,
     required Stream<bool> changes,
     required bool Function() isConnected,
-  })  : _initiallyConnected = initiallyConnected,
-        _changes = changes,
-        _isConnected = isConnected;
+  }) : _initiallyConnected = initiallyConnected,
+       _changes = changes,
+       _isConnected = isConnected;
 
   final bool _initiallyConnected;
   final Stream<bool> _changes;
@@ -115,9 +131,9 @@ class CaptureConnectivityBoundary {
 
   /// The production boundary over the shared [ConnectivityService].
   CaptureConnectivityBoundary.production()
-      : _initiallyConnected = ConnectivityService().isConnected,
-        _changes = ConnectivityService().onConnectionChange,
-        _isConnected = _productionProbe;
+    : _initiallyConnected = ConnectivityService().isConnected,
+      _changes = ConnectivityService().onConnectionChange,
+      _isConnected = _productionProbe;
 
   static bool _productionProbe() => ConnectivityService().isConnected;
 

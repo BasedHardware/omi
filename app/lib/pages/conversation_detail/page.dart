@@ -84,10 +84,10 @@ class ConversationDetailPage extends StatefulWidget {
   });
 
   @override
-  State<ConversationDetailPage> createState() => _ConversationDetailPageState();
+  State<ConversationDetailPage> createState() => ConversationDetailPageState();
 }
 
-class _ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
+class ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
@@ -112,6 +112,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
   List<int> _searchResultPositions = []; // Track positions of search results
+  final List<(Timer, Completer<void>)> _ownedDelays = [];
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -265,7 +266,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       // Auto-open share to contacts sheet if requested (from important conversation notification)
       if (widget.openShareToContactsOnLoad && mounted) {
         // Small delay to ensure the page is fully rendered
-        await Future.delayed(const Duration(milliseconds: 500));
+        await _delay(const Duration(milliseconds: 500));
         if (mounted) {
           _showShareToContactsBottomSheet();
         }
@@ -281,12 +282,39 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   void dispose() {
+    _cancelOwnedTimers();
     _controller?.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Test seam for the cancel-completes-waiter contract. Production callers use [_delay].
+  @visibleForTesting
+  Future<void> ownedDelayForTesting(Duration duration) => _delay(duration);
+
+  Future<void> _delay(Duration duration) {
+    if (!mounted) return Future.value();
+    final completer = Completer<void>();
+    late final Timer timer;
+    timer = Timer(duration, () {
+      _ownedDelays.remove((timer, completer));
+      if (!completer.isCompleted) completer.complete();
+    });
+    _ownedDelays.add((timer, completer));
+    return completer.future;
+  }
+
+  void _cancelOwnedTimers() {
+    for (final (timer, completer) in _ownedDelays) {
+      timer.cancel();
+      // Complete normally: `await _delay` sits in audio cleanup's try/finally.
+      // An error would look like a download failure and arm another delay in catch.
+      if (!completer.isCompleted) completer.complete();
+    }
+    _ownedDelays.clear();
   }
 
   /// Show the share to contacts bottom sheet
@@ -565,7 +593,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         currentState = AudioDownloadState.success;
         updateSheet?.call(() {});
 
-        await Future.delayed(const Duration(milliseconds: 500));
+        await _delay(const Duration(milliseconds: 500));
 
         if (sheetContext.mounted) {
           Navigator.maybeOf(sheetContext)?.pop();
@@ -590,7 +618,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         currentState = AudioDownloadState.error;
         updateSheet?.call(() {});
 
-        await Future.delayed(const Duration(seconds: 2));
+        await _delay(const Duration(seconds: 2));
 
         if (sheetContext.mounted) {
           Navigator.maybeOf(sheetContext)?.pop();
@@ -623,7 +651,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       currentState = AudioDownloadState.error;
       updateSheet?.call(() {});
 
-      await Future.delayed(const Duration(seconds: 2));
+      await _delay(const Duration(seconds: 2));
 
       if (sheetContext.mounted) {
         Navigator.maybeOf(sheetContext)?.pop();
@@ -780,8 +808,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
                                         context.read<ConversationProvider>().updateConversationInSortedList(
-                                              provider.conversation,
-                                            );
+                                          provider.conversation,
+                                        );
                                         // Track star/unstar action
                                         PlatformManager.instance.analytics.conversationStarToggled(
                                           conversation: provider.conversation,
@@ -861,7 +889,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
                                       );
                                       // Small delay to let share sheet appear, then clear loading
-                                      await Future.delayed(const Duration(milliseconds: 150));
+                                      await _delay(const Duration(milliseconds: 150));
+                                      if (!mounted) return;
                                       setState(() {
                                         _isSharing = false;
                                       });
@@ -1135,13 +1164,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   child: Consumer<ConversationDetailProvider>(
                     builder: (context, provider, child) {
                       final conversation = provider.conversation;
-                      final hasActionItems =
-                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
+                      final hasActionItems = conversation.structured.actionItems
+                          .where((item) => !item.deleted)
+                          .isNotEmpty;
                       return ConversationBottomBar(
                         mode: ConversationBottomBarMode.detail,
                         selectedTab: selectedTab,
                         conversation: conversation,
-                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                        hasSegments:
+                            conversation.transcriptSegments.isNotEmpty ||
                             conversation.photos.isNotEmpty ||
                             conversation.externalIntegration != null,
                         hasActionItems: hasActionItems,
@@ -1385,9 +1416,9 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                           onSaveSummarySelection: (selection, newContent) {
                             PlatformManager.instance.analytics.editSummarySaved();
                             context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                  selection,
-                                  newContent,
-                                );
+                              selection,
+                              newContent,
+                            );
                           },
                         ),
                   const SliverToBoxAdapter(child: GetGeolocationWidgets()),
@@ -1666,29 +1697,29 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
             child: _isLoading
                 ? _buildShimmerList()
                 : _events.isEmpty
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(40),
-                          child: Text(
-                            'No calendar events found around this time.',
-                            style: TextStyle(color: Colors.grey, fontSize: 15),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: _events.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
-                        itemBuilder: (context, index) {
-                          final event = _events[index];
-                          final isLinkingThis = _linkingEventId == event.eventId;
-                          final isSuggested = event.eventId == _suggestedEventId;
-                          return _buildEventTile(event, isSuggested, isLinkingThis);
-                        },
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Text(
+                        'No calendar events found around this time.',
+                        style: TextStyle(color: Colors.grey, fontSize: 15),
+                        textAlign: TextAlign.center,
                       ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: _events.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
+                    itemBuilder: (context, index) {
+                      final event = _events[index];
+                      final isLinkingThis = _linkingEventId == event.eventId;
+                      final isSuggested = event.eventId == _suggestedEventId;
+                      return _buildEventTile(event, isSuggested, isLinkingThis);
+                    },
+                  ),
           ),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],
@@ -1783,9 +1814,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 }
                 final segments = provider.conversation.transcriptSegments;
                 final segment = segments[segmentIndex];
-                final person =
-                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
-                final speakerName = person?.name ??
+                final person = segment.personId != null
+                    ? SharedPreferencesUtil().getPersonById(segment.personId!)
+                    : null;
+                final speakerName =
+                    person?.name ??
                     context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
                 PlatformManager.instance.analytics.editSegmentTextStarted();
                 bool saved = false;
@@ -1844,8 +1877,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               );
                               if (segmentIndex == -1) continue;
                               provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId =
-                                  finalPersonId == 'user' ? null : finalPersonId;
+                              provider.conversation.transcriptSegments[segmentIndex].personId = finalPersonId == 'user'
+                                  ? null
+                                  : finalPersonId;
                             }
                             await assignBulkConversationTranscriptSegments(
                               provider.conversation.id,
@@ -1882,9 +1916,12 @@ class ActionItemDetailWidget extends StatefulWidget {
 class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
   final AppReviewService _appReviewService = AppReviewService();
+  Timer? _pendingClearTimer;
 
   @override
   void dispose() {
+    _pendingClearTimer?.cancel();
+    _pendingClearTimer = null;
     // Clean up any pending state for this item when widget is disposed
     _pendingStates.remove(widget.actionItem.description);
     super.dispose();
@@ -1994,7 +2031,9 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       await conversationProvider.updateGlobalActionItemState(provider.conversation, itemDescription, newValue);
 
       // Wait for 200ms before clearing pending state (allows user to see the change before item moves)
-      Future.delayed(const Duration(milliseconds: 200), () {
+      _pendingClearTimer?.cancel();
+      _pendingClearTimer = Timer(const Duration(milliseconds: 200), () {
+        _pendingClearTimer = null;
         if (mounted) {
           setState(() {
             _pendingStates.remove(itemDescription); // Clear pending state so item moves to correct section

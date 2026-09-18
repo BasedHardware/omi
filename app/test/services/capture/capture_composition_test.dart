@@ -53,22 +53,23 @@ CaptureDependencies _deps({
     phoneMic: _InertMic(),
     batchSupported: false,
     auth: CaptureAuthBoundary(isSignedIn: () => true, refreshIdToken: () async => null),
-    connectivity: connectivity ??
+    connectivity:
+        connectivity ??
         CaptureConnectivityBoundary(initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
     now: clock.now,
     scheduling: scheduling ?? ManualScheduler(clock: clock),
     preferences: preferences ?? _MutePrefs(),
     ble: _NoopBle(),
-    openSocket: ({
-      required codec,
-      required sampleRate,
-      required language,
-      required force,
-      source,
-      clientConversationId,
-      customSttConfig,
-    }) async =>
-        null,
+    openSocket:
+        ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+        }) async => null,
     owner: CaptureSessionOwner(
       coordinator: RecordingTransferCoordinator(
         reconcile: () async {},
@@ -119,6 +120,8 @@ void main() {
     expect(body, contains('preferences: dependencies.preferences'));
     expect(body, contains('bleListeners: dependencies.ble'));
     expect(body, contains('openConversationSocket'));
+    expect(body, contains('openConversationSocket ??'));
+    expect(body, contains('dependencies.openSocket('));
     expect(body, contains('sessionOwner: dependencies.owner'));
     final providerSource = File('lib/providers/capture_provider.dart').readAsStringSync();
     expect(providerSource, contains('super.walService'));
