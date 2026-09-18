@@ -1164,6 +1164,11 @@ checks:
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
 
+  - id: notion-null-params-tests
+    command: ["python3", "plugins/omi-notion-app/test_main.py"]
+    triggers: ["plugins/omi-notion-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13944 the backend sends explicit JSON null for omitted optional params, so unguarded min(body.get(\"max_results\")) raised TypeError in all four Notion listing tools"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]

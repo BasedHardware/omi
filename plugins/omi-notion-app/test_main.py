@@ -108,6 +108,86 @@ class PageReadTests(unittest.TestCase):
                 if text:
                     self.assertIn(text, result.result)
 
+class MaxResultsTests(unittest.TestCase):
+    """#13944: the Omi backend forwards explicit JSON null for omitted optional
+    parameters, so every listing handler must coerce max_results itself."""
+
+    TOOLS = {
+        "search": (notion.tool_search, {"uid": "test-user", "query": "weekly plan"}, 20),
+        "list_pages": (notion.tool_list_pages, {"uid": "test-user"}, 20),
+        "list_databases": (notion.tool_list_databases, {"uid": "test-user"}, 20),
+        "query_database": (notion.tool_query_database, {"uid": "test-user", "database_id": "test-db"}, 50),
+    }
+
+    def call(self, handler, body):
+        posts = []
+
+        def send(url, **kwargs):
+            posts.append(json.loads(kwargs["data"]))
+            response = Mock(status_code=200)
+            response.json.return_value = {
+                "results": [{
+                    "object": "page",
+                    "id": "test-page",
+                    "url": "https://www.notion.so/test-page",
+                    "created_time": "2026-09-01T00:00:00.000Z",
+                    "last_edited_time": "2026-09-08T00:00:00.000Z",
+                    "title": [{"plain_text": "Known title"}],
+                    "properties": {"title": {"type": "title", "title": [{"plain_text": "Known title"}]}},
+                }]
+            }
+            return response
+
+        request = Mock(json=AsyncMock(return_value=body))
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion.requests, "post", side_effect=send):
+            result = asyncio.run(handler(request))
+        self.assertEqual(len(posts), 1)
+        return result, posts[0]
+
+    def test_null_and_absent_max_results_use_the_documented_default(self):
+        for name, (handler, body, _) in self.TOOLS.items():
+            for marker in ("absent", "null"):
+                with self.subTest(tool=name, marker=marker):
+                    sent = dict(body)
+                    if marker == "null":
+                        sent["max_results"] = None
+                    result, posted = self.call(handler, sent)
+                    self.assertIsNone(result.error)
+                    self.assertEqual(posted["page_size"], 10)
+                    self.assertIn("Known title", result.result)
+
+    def test_ints_and_numeric_strings_pass_through(self):
+        for name, (handler, body, _) in self.TOOLS.items():
+            for value, expected in ((1, 1), (5, 5), ("7", 7)):
+                with self.subTest(tool=name, value=value):
+                    result, posted = self.call(handler, {**body, "max_results": value})
+                    self.assertIsNone(result.error)
+                    self.assertEqual(posted["page_size"], expected)
+
+    def test_zero_and_negative_values_clamp_to_one(self):
+        # Notion rejects page_size outside 1..100.
+        for name, (handler, body, _) in self.TOOLS.items():
+            for value in (0, -3):
+                with self.subTest(tool=name, value=value):
+                    result, posted = self.call(handler, {**body, "max_results": value})
+                    self.assertIsNone(result.error)
+                    self.assertEqual(posted["page_size"], 1)
+
+    def test_oversized_values_cap_at_each_tools_documented_maximum(self):
+        for name, (handler, body, maximum) in self.TOOLS.items():
+            with self.subTest(tool=name):
+                result, posted = self.call(handler, {**body, "max_results": 500})
+                self.assertIsNone(result.error)
+                self.assertEqual(posted["page_size"], maximum)
+
+    def test_unparseable_boolean_and_overflowing_values_fall_back_to_default(self):
+        for name, (handler, body, _) in self.TOOLS.items():
+            for value in (True, False, "many", "5.5x", 1e309, float("nan"), [5], {"n": 5}):
+                with self.subTest(tool=name, value=repr(value)):
+                    result, posted = self.call(handler, {**body, "max_results": value})
+                    self.assertIsNone(result.error)
+                    self.assertEqual(posted["page_size"], 10)
+
 class PageWriteTests(unittest.TestCase):
     def write(self, content, create=False, fail_at=None, failure=None, **metadata):
         calls = []
