@@ -1593,6 +1593,12 @@ class CaptureController extends ChangeNotifier
     _socket?.unsubscribe(this);
     _metrics.dispose();
     _peopleRefreshFuture = null;
+    // Synchronous belt-and-braces: the keep-alive periodic must not outlive
+    // dispose even before lifetime.close()'s drain reaches its release
+    // (that drain is async; tests assert the no-pending-timers invariant
+    // synchronously).
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     unawaited(lifetime.close());
     super.dispose();
   }
