@@ -688,6 +688,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                 onPressed: () {
                   HapticFeedback.mediumImpact();
                   if (widget.isFromOnboarding) {
@@ -758,6 +759,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
+                            tooltip: provider.conversation.starred
+                                ? context.l10n.unstarConversation
+                                : context.l10n.starConversation,
                             onPressed: _isTogglingStarred
                                 ? null
                                 : () async {
@@ -824,6 +828,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
+                            tooltip: context.l10n.share,
                             onPressed: _isSharing
                                 ? null
                                 : () async {
@@ -892,6 +897,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             ),
                             child: IconButton(
                               padding: EdgeInsets.zero,
+                              tooltip: context.l10n.search,
                               onPressed: () {
                                 setState(() {
                                   _isSearching = !_isSearching;
@@ -977,7 +983,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 onTap: () => _handleMenuSelection(context, 'delete', provider),
                               ),
                             ],
-                            buttonBuilder: (context, showMenu) => GestureDetector(
+                            buttonBuilder: (context, showMenu) => Semantics(
+                              button: true,
+                              label: context.l10n.moreOptions,
+                              excludeSemantics: true,
                               onTap: () {
                                 HapticFeedback.mediumImpact();
                                 PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
@@ -985,15 +994,24 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 );
                                 showMenu();
                               },
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.3),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Center(
-                                  child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                              child: GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
+                                    conversationId: provider.conversation.id,
+                                  );
+                                  showMenu();
+                                },
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withValues(alpha: 0.3),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Center(
+                                    child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1010,6 +1028,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           body: Stack(
             children: [
               GestureDetector(
+                excludeFromSemantics: true,
                 behavior: HitTestBehavior.translucent,
                 onTap: () {
                   // Close search if search bar is empty and user taps on content
@@ -1330,6 +1349,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   Widget build(BuildContext context) {
     super.build(context);
     return GestureDetector(
+      excludeFromSemantics: true,
       behavior: HitTestBehavior.translucent,
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -1709,6 +1729,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         }
       },
       child: GestureDetector(
+        excludeFromSemantics: true,
         behavior: HitTestBehavior.translucent,
         onTap: () {
           FocusScope.of(context).unfocus();

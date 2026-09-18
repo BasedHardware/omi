@@ -10013,4 +10013,16 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'بیس لائن کی حالت اپ ڈیٹ نہیں ہو سکی۔';
+
+  @override
+  String get unstarConversation => 'گفتگو سے ستارہ ہٹائیں';
+
+  @override
+  String get moreOptions => 'مزید اختیارات';
+
+  @override
+  String get filterByDate => 'تاریخ کے مطابق فلٹر کریں';
+
+  @override
+  String get memoryGraph => 'یادداشت کا گراف';
 }

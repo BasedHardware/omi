@@ -10828,5 +10828,9 @@
     "home": "خانه",
     "failedToUpdateBaselineStatus": "به‌روزرسانی وضعیت پایه ناموفق بود.",
     "memoryAllowUse": "اجازه استفاده",
-    "memoryDontUse": "استفاده نکن"
+    "memoryDontUse": "استفاده نکن",
+    "unstarConversation": "برداشتن ستاره از گفتگو",
+    "moreOptions": "گزینه‌های بیشتر",
+    "filterByDate": "فیلتر بر اساس تاریخ",
+    "memoryGraph": "نمودار خاطرات"
 }

@@ -10028,4 +10028,16 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Kan de baseline-status niet bijwerken.';
+
+  @override
+  String get unstarConversation => 'Ster van gesprek verwijderen';
+
+  @override
+  String get moreOptions => 'Meer opties';
+
+  @override
+  String get filterByDate => 'Filteren op datum';
+
+  @override
+  String get memoryGraph => 'Herinneringengrafiek';
 }

@@ -10001,4 +10001,16 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'به‌روزرسانی وضعیت پایه ناموفق بود.';
+
+  @override
+  String get unstarConversation => 'برداشتن ستاره از گفتگو';
+
+  @override
+  String get moreOptions => 'گزینه‌های بیشتر';
+
+  @override
+  String get filterByDate => 'فیلتر بر اساس تاریخ';
+
+  @override
+  String get memoryGraph => 'نمودار خاطرات';
 }

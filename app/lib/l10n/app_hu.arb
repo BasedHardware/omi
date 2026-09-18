@@ -3337,5 +3337,9 @@
     "home": "Kezdőlap",
     "failedToUpdateBaselineStatus": "Az alapállapot frissítése sikertelen.",
     "memoryAllowUse": "Használat engedélyezése",
-    "memoryDontUse": "Ne használd"
+    "memoryDontUse": "Ne használd",
+    "unstarConversation": "Csillag eltávolítása a beszélgetésről",
+    "moreOptions": "További lehetőségek",
+    "filterByDate": "Szűrés dátum szerint",
+    "memoryGraph": "Emlékgráf"
 }

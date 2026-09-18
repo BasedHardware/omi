@@ -3241,5 +3241,9 @@
     "home": "Trang chủ",
     "failedToUpdateBaselineStatus": "Không thể cập nhật trạng thái đường cơ sở.",
     "memoryAllowUse": "Cho phép dùng",
-    "memoryDontUse": "Không dùng"
+    "memoryDontUse": "Không dùng",
+    "unstarConversation": "Bỏ gắn sao cuộc trò chuyện",
+    "moreOptions": "Tùy chọn khác",
+    "filterByDate": "Lọc theo ngày",
+    "memoryGraph": "Đồ thị ký ức"
 }

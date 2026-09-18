@@ -9810,4 +9810,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => '无法更新基线状态。';
+
+  @override
+  String get unstarConversation => '取消星标对话';
+
+  @override
+  String get moreOptions => '更多选项';
+
+  @override
+  String get filterByDate => '按日期筛选';
+
+  @override
+  String get memoryGraph => '记忆图谱';
 }

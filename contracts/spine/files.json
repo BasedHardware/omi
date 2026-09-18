@@ -12,6 +12,8 @@
   "scripts/dev-harness/tests/spine/fake_flutter.py": "V1",
   "scripts/dev-harness/tests/spine/pending.py": "MECHANISM",
   "scripts/dev-harness/tests/spine/test_evidence_freeze.py": "V8",
+  "scripts/dev-harness/tests/spine/test_live_conformance.py": "V1",
+  "scripts/dev-harness/tests/spine/test_live_negotiation.py": "V1",
   "scripts/dev-harness/tests/spine/test_live_revision.py": "V1",
   "scripts/dev-harness/tests/spine/test_live_session.py": "V1"
 }

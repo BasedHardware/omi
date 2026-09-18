@@ -10071,4 +10071,16 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Αποτυχία ενημέρωσης της βασικής κατάστασης.';
+
+  @override
+  String get unstarConversation => 'Αφαίρεση αστεριού από τη συνομιλία';
+
+  @override
+  String get moreOptions => 'Περισσότερες επιλογές';
+
+  @override
+  String get filterByDate => 'Φιλτράρισμα κατά ημερομηνία';
+
+  @override
+  String get memoryGraph => 'Γράφος αναμνήσεων';
 }

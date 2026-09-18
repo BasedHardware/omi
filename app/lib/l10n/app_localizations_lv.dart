@@ -10024,4 +10024,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Neizdevās atjaunināt bāzes statusu.';
+
+  @override
+  String get unstarConversation => 'Noņemt zvaigzni no sarunas';
+
+  @override
+  String get moreOptions => 'Vairāk opciju';
+
+  @override
+  String get filterByDate => 'Filtrēt pēc datuma';
+
+  @override
+  String get memoryGraph => 'Atmiņu grafs';
 }

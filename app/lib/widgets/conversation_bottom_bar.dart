@@ -399,6 +399,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               icon: FontAwesomeIcons.solidComments,
               isSelected: widget.selectedTab == ConversationTab.transcript,
               onTap: () => widget.onTabSelected(ConversationTab.transcript),
+              semanticLabel: context.l10n.transcript,
             ),
             const SizedBox(width: 8),
             _buildStopButton(),
@@ -438,6 +439,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     icon: FontAwesomeIcons.solidComments,
                     isSelected: isTranscriptSelected,
                     onTap: () => widget.onTabSelected(ConversationTab.transcript),
+                    semanticLabel: context.l10n.transcript,
                   ),
           ),
         ),
@@ -460,6 +462,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     icon: FontAwesomeIcons.solidFileLines,
                     isSelected: false,
                     onTap: () => widget.onTabSelected(ConversationTab.summary),
+                    semanticLabel: context.l10n.summary,
                   ),
           ),
         ),
@@ -470,6 +473,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             icon: FontAwesomeIcons.listCheck,
             isSelected: widget.selectedTab == ConversationTab.actionItems,
             onTap: () => widget.onTabSelected(ConversationTab.actionItems),
+            semanticLabel: context.l10n.actionItems,
           ),
         ],
       ],
@@ -510,32 +514,42 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
+    required String semanticLabel,
   }) {
-    return Container(
-      height: 56,
-      width: 56,
-      decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      excludeSemantics: true,
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        onTap();
+      },
+      child: Container(
+        height: 56,
+        width: 56,
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(28),
+            onTap: () {
+              HapticFeedback.mediumImpact();
+              onTap();
+            },
+            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(28),
-          onTap: () {
-            HapticFeedback.mediumImpact();
-            onTap();
-          },
-          child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
         ),
       ),
     );
@@ -847,37 +861,47 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
+    required String semanticLabel,
   }) {
-    return Material(
-      key: key,
-      elevation: 4,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      child: Container(
-        height: 56,
-        width: 56,
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(0, 2),
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      excludeSemantics: true,
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        onTap();
+      },
+      child: Material(
+        key: key,
+        elevation: 4,
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: Container(
+          height: 56,
+          width: 56,
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                spreadRadius: 1,
+                blurRadius: 5,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(28),
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                onTap();
+              },
+              child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
             ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          shape: const CircleBorder(),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(28),
-            onTap: () {
-              HapticFeedback.mediumImpact();
-              onTap();
-            },
-            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
           ),
         ),
       ),

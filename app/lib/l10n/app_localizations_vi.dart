@@ -9996,4 +9996,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Không thể cập nhật trạng thái đường cơ sở.';
+
+  @override
+  String get unstarConversation => 'Bỏ gắn sao cuộc trò chuyện';
+
+  @override
+  String get moreOptions => 'Tùy chọn khác';
+
+  @override
+  String get filterByDate => 'Lọc theo ngày';
+
+  @override
+  String get memoryGraph => 'Đồ thị ký ức';
 }

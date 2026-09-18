@@ -10042,4 +10042,16 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Az alapállapot frissítése sikertelen.';
+
+  @override
+  String get unstarConversation => 'Csillag eltávolítása a beszélgetésről';
+
+  @override
+  String get moreOptions => 'További lehetőségek';
+
+  @override
+  String get filterByDate => 'Szűrés dátum szerint';
+
+  @override
+  String get memoryGraph => 'Emlékgráf';
 }

@@ -3241,5 +3241,9 @@
     "home": "Domov",
     "failedToUpdateBaselineStatus": "Nepodarilo sa aktualizovať stav základnej pamäte.",
     "memoryAllowUse": "Povoliť použitie",
-    "memoryDontUse": "Nepoužívať"
+    "memoryDontUse": "Nepoužívať",
+    "unstarConversation": "Odstrániť hviezdu z konverzácie",
+    "moreOptions": "Ďalšie možnosti",
+    "filterByDate": "Filtrovať podľa dátumu",
+    "memoryGraph": "Graf spomienok"
 }

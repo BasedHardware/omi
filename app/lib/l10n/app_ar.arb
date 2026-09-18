@@ -3241,5 +3241,9 @@
     "home": "الرئيسية",
     "failedToUpdateBaselineStatus": "فشل تحديث حالة الخط الأساسي.",
     "memoryAllowUse": "السماح بالاستخدام",
-    "memoryDontUse": "عدم الاستخدام"
+    "memoryDontUse": "عدم الاستخدام",
+    "unstarConversation": "إلغاء تمييز المحادثة بنجمة",
+    "moreOptions": "المزيد من الخيارات",
+    "filterByDate": "تصفية حسب التاريخ",
+    "memoryGraph": "الرسم البياني للذكريات"
 }

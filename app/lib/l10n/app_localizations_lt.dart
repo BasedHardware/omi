@@ -10020,4 +10020,16 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Nepavyko atnaujinti bazinės būsenos.';
+
+  @override
+  String get unstarConversation => 'Pašalinti pokalbio žvaigždutę';
+
+  @override
+  String get moreOptions => 'Daugiau parinkčių';
+
+  @override
+  String get filterByDate => 'Filtruoti pagal datą';
+
+  @override
+  String get memoryGraph => 'Prisiminimų grafas';
 }

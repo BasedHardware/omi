@@ -3241,5 +3241,9 @@
     "home": "होम",
     "failedToUpdateBaselineStatus": "बेसलाइन स्थिति अपडेट करने में विफल।",
     "memoryAllowUse": "उपयोग की अनुमति दें",
-    "memoryDontUse": "उपयोग न करें"
+    "memoryDontUse": "उपयोग न करें",
+    "unstarConversation": "बातचीत से स्टार हटाएँ",
+    "moreOptions": "और विकल्प",
+    "filterByDate": "तारीख के अनुसार फ़िल्टर करें",
+    "memoryGraph": "स्मृति ग्राफ़"
 }

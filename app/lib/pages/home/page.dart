@@ -168,6 +168,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
   Timer? _announcementTimer;
+  final List<Timer> _prewarmTimers = [];
 
   void _ensurePageInitialized(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
@@ -203,14 +204,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _prewarmRemainingTabs(int selectedIndex) {
+    for (final timer in _prewarmTimers) {
+      timer.cancel();
+    }
+    _prewarmTimers.clear();
     var delay = const Duration(milliseconds: 350);
     for (var index = 0; index < _pages.length; index++) {
       if (index == selectedIndex) continue;
       final pageIndex = index;
-      Timer(delay, () {
-        if (!mounted) return;
-        _schedulePageInitialization(pageIndex);
-      });
+      _prewarmTimers.add(
+        Timer(delay, () {
+          if (!mounted) return;
+          _schedulePageInitialization(pageIndex);
+        }),
+      );
       delay += const Duration(milliseconds: 180);
     }
   }
@@ -1177,6 +1184,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void dispose() {
     _announcementTimer?.cancel();
     _announcementTimer = null;
+    for (final timer in _prewarmTimers) {
+      timer.cancel();
+    }
+    _prewarmTimers.clear();
     WidgetsBinding.instance.removeObserver(this);
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();

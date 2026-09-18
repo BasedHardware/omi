@@ -10058,4 +10058,16 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'No s\'ha pogut actualitzar l\'estat de la línia de base.';
+
+  @override
+  String get unstarConversation => 'Treu l\'estrella de la conversa';
+
+  @override
+  String get moreOptions => 'Més opcions';
+
+  @override
+  String get filterByDate => 'Filtra per data';
+
+  @override
+  String get memoryGraph => 'Graf de memòries';
 }

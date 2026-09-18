@@ -10054,4 +10054,16 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Неуспешно ажурирање на основниот статус.';
+
+  @override
+  String get unstarConversation => 'Отстрани ѕвезда од разговорот';
+
+  @override
+  String get moreOptions => 'Повеќе опции';
+
+  @override
+  String get filterByDate => 'Филтрирај по датум';
+
+  @override
+  String get memoryGraph => 'Граф на спомени';
 }

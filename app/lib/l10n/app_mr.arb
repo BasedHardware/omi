@@ -10828,5 +10828,9 @@
     "home": "मुख्यपृष्ठ",
     "failedToUpdateBaselineStatus": "बेसलाइन स्थिती अद्यतनित करणे अयशस्वी.",
     "memoryAllowUse": "वापर करू द्या",
-    "memoryDontUse": "वापरू नका"
+    "memoryDontUse": "वापरू नका",
+    "unstarConversation": "संभाषणावरील तारा काढा",
+    "moreOptions": "अधिक पर्याय",
+    "filterByDate": "तारखेनुसार फिल्टर करा",
+    "memoryGraph": "स्मृती आलेख"
 }

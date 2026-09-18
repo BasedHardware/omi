@@ -3276,5 +3276,9 @@
     "home": "Accueil",
     "failedToUpdateBaselineStatus": "Échec de la mise à jour du statut de référence.",
     "memoryAllowUse": "Autoriser l'utilisation",
-    "memoryDontUse": "Ne pas utiliser"
+    "memoryDontUse": "Ne pas utiliser",
+    "unstarConversation": "Retirer la conversation des favoris",
+    "moreOptions": "Plus d’options",
+    "filterByDate": "Filtrer par date",
+    "memoryGraph": "Graphe des souvenirs"
 }

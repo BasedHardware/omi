@@ -539,6 +539,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           body: Stack(
             children: [
               GestureDetector(
+                excludeFromSemantics: true,
                 onTap: () {},
                 child: RefreshIndicator(
                   onRefresh: () async {

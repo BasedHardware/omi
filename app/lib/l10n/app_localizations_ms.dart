@@ -10027,4 +10027,16 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Gagal mengemas kini status garis dasar.';
+
+  @override
+  String get unstarConversation => 'Nyahbintang perbualan';
+
+  @override
+  String get moreOptions => 'Lagi pilihan';
+
+  @override
+  String get filterByDate => 'Tapiskan mengikut tarikh';
+
+  @override
+  String get memoryGraph => 'Graf memori';
 }

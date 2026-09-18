@@ -10031,4 +10031,16 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Nie udało się zaktualizować statusu linii bazowej.';
+
+  @override
+  String get unstarConversation => 'Usuń gwiazdkę z rozmowy';
+
+  @override
+  String get moreOptions => 'Więcej opcji';
+
+  @override
+  String get filterByDate => 'Filtruj według daty';
+
+  @override
+  String get memoryGraph => 'Graf wspomnień';
 }

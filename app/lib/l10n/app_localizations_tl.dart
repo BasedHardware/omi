@@ -10092,4 +10092,16 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => 'Hindi na-update ang status ng baseline.';
+
+  @override
+  String get unstarConversation => 'Alisin ang bituin sa pag-uusap';
+
+  @override
+  String get moreOptions => 'Higit pang mga opsyon';
+
+  @override
+  String get filterByDate => 'I-filter ayon sa petsa';
+
+  @override
+  String get memoryGraph => 'Graph ng mga alaala';
 }

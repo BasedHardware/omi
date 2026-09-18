@@ -9832,4 +9832,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get failedToUpdateBaselineStatus => '베이스라인 상태 업데이트에 실패했습니다.';
+
+  @override
+  String get unstarConversation => '대화 별표 해제';
+
+  @override
+  String get moreOptions => '추가 옵션';
+
+  @override
+  String get filterByDate => '날짜별 필터';
+
+  @override
+  String get memoryGraph => '기억 그래프';
 }
