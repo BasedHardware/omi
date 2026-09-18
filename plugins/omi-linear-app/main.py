@@ -12,10 +12,11 @@ from typing import Optional, Dict, Any, List, Tuple
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import Depends, FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from linear_tools_auth import require_linear_tools_auth
 
 from db import (
     store_linear_tokens,
@@ -470,7 +471,7 @@ async def disconnect_linear(uid: str):
 # ============================================
 
 @app.post("/tools/create_issue", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_create_issue(request: Request):
+async def tool_create_issue(request: Request, _auth: None = Depends(require_linear_tools_auth)):
     """
     Create a new issue in Linear.
     Chat tool for Omi - creates issues with title, description, and priority.
@@ -592,7 +593,7 @@ def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int =
 
 
 @app.post("/tools/list_my_issues", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_list_my_issues(request: Request):
+async def tool_list_my_issues(request: Request, _auth: None = Depends(require_linear_tools_auth)):
     """
     List issues assigned to the user.
     Chat tool for Omi - shows the user's assigned issues.
@@ -675,7 +676,7 @@ async def tool_list_my_issues(request: Request):
 
 
 @app.post("/tools/list_recent_issues", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_list_recent_issues(request: Request):
+async def tool_list_recent_issues(request: Request, _auth: None = Depends(require_linear_tools_auth)):
     """
     List recent issues in Linear workspace.
     Chat tool for Omi - shows recent issues regardless of assignee.
@@ -775,7 +776,7 @@ async def tool_list_recent_issues(request: Request):
 
 
 @app.post("/tools/update_issue_status", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_update_issue_status(request: Request):
+async def tool_update_issue_status(request: Request, _auth: None = Depends(require_linear_tools_auth)):
     """
     Update the status of an issue.
     Chat tool for Omi - moves issues between workflow states.
@@ -868,7 +869,7 @@ async def tool_update_issue_status(request: Request):
 
 
 @app.post("/tools/search_issues", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_search_issues(request: Request):
+async def tool_search_issues(request: Request, _auth: None = Depends(require_linear_tools_auth)):
     """
     Search for issues in Linear.
     Chat tool for Omi - searches issues by text query.
@@ -972,7 +973,7 @@ async def tool_search_issues(request: Request):
 
 
 @app.post("/tools/get_issue", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_issue(request: Request):
+async def tool_get_issue(request: Request, _auth: None = Depends(require_linear_tools_auth)):
     """
     Get details of a specific issue.
     Chat tool for Omi - retrieves full issue details.

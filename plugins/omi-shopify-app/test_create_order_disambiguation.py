@@ -58,7 +58,7 @@ stubs = {
         "fastapi",
         **{
             name: Framework
-            for name in ("FastAPI", "HTTPException", "Request", "Query", "Form")
+            for name in ("FastAPI", "HTTPException", "Request", "Query", "Form", "Depends")
         },
     ),
     "fastapi.responses": module(

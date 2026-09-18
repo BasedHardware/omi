@@ -58,6 +58,7 @@ stubs = {
         FastAPI=Framework,
         Request=Framework,
         Query=Framework,
+        Depends=Framework,
         HTTPException=HTTPExceptionStub,
     ),
     "fastapi.responses": module(

@@ -52,6 +52,7 @@ def load_app():
     fastapi.HTTPException = HTTPException
     fastapi.Query = lambda default=None, **kwargs: default
     fastapi.Form = lambda default=None, **kwargs: default
+    fastapi.Depends = lambda default=None, **kwargs: default
 
     staticfiles = ModuleType("fastapi.staticfiles")
     staticfiles.StaticFiles = lambda **kwargs: None

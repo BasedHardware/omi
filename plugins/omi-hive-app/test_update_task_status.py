@@ -26,6 +26,7 @@ class _FastAPI:
 _fastapi.FastAPI = _FastAPI
 _fastapi.HTTPException = Exception
 _fastapi.Request = MagicMock
+_fastapi.Depends = MagicMock
 _fastapi.Query = lambda *args, **kwargs: None
 _fastapi.Form = lambda *args, **kwargs: None
 
