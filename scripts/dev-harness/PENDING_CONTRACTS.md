@@ -22,6 +22,18 @@ owner suite; overriding `noSuchMethod` in a fake is valid Dart, not a compile by
 Widget contracts use `contractWidgets` from `app/test/support/spine/widgets.dart`.
 Plain skip is forbidden; unexpected runtime/framework/teardown errors stay red.
 
+**Pending green means an executed, unmet contract, not a verified feature or a
+correct oracle.** Missing behavior in existing code fails assertions without
+throwing a stub error (B0 registration and C1 preference forwarding). An exception
+class cannot distinguish a wrong implementation from a wrong expected value;
+accepting only stub errors would ban those regression contracts, not detect rot.
+A body may stop at its first failure; later assertions have not necessarily run.
+Review failures against the specification, and exercise new oracles against a
+satisfying implementation and a violating mutation where available. Report
+oracle defects with reproductions before retirement; XFAIL counts prove neither
+implementation nor oracle correctness. Diagnose with pytest --runxfail or local
+marker removal, without editing assertions. Both languages have the same meaning.
+
 The smallest immutable boundary is the **whole oracle**: registered spine tests,
 fixtures and support code, including setup and assertions, with only whole pending
 marker lines removable. Assertions alone are insufficient: changing a fixture or
@@ -34,10 +46,12 @@ must not invent new obligations. Formatting still needs an exact pinned revision
 Register every oracle in `contracts/spine/files.json`. Resolve introductions and
 revision payloads from **all reachable history**, never a single simplified
 history path or a selected parent. Match revision payloads by their pinned digest;
-conflicting introductions/owners/records fail closed. A squash may absorb only a
-revision prefix ending at an exact accepted digest. Retired marker occurrences
-cannot return on either a branch head or a base-first PR merge. Missing/shallow
-history requires fetching it, never rebaselining.
+conflicting introductions/owners/records fail closed. A prefix whose records are
+already accepted by the target may start from an exact pinned target-tree version,
+even when an older branch introduction survives and squash erased intermediate
+payloads. New revision tails still require exact payloads and preserved markers.
+Retired markers cannot return on either parent order. Missing/shallow history
+requires fetching it, never rebaselining.
 
 A builder removes markers and makes those same tests pass. Corrections append
 `contracts/spine/revisions/NNN-description.json` with path, owner, before/after
@@ -62,7 +76,11 @@ sandbox. Keep dispatch direct; new indirection needs a reviewed invocation rule.
 Main may add guards/logging around those calls. A runner cannot also be an oracle.
 The runner declarations are immutable, like the legacy revision-scope snapshot;
 no builder can add its implementation to either allowlist. Spine-owned skeletons
-retain the existing exact-byte scope pins. The runner/checker and pure-oracle PRs
+retain exact-byte pins. `shared-prefixes.json` separately freezes an existing
+scaffold prefix on a shared implementation file: its remaining bytes must equal
+the accepted target exactly. Main’s body edits therefore survive; proposed body
+edits cannot accompany an oracle revision. Declarations are immutable and cannot
+classify an oracle as shared. The runner/checker and pure-oracle PRs
 still require coordinator review: Git cannot authenticate reviewer roles or stop
 a malicious replacement of the checker itself.
 
