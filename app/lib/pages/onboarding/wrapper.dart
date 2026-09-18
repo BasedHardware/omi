@@ -343,6 +343,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // The guided introduction owns its transcription-only session and
           // reviews statements before explicitly saving them as memories.
           : SpeechProfileWidget(
+              flowSource: 'first_run',
               goNext: () {
                 // All Done is not enroll success (#12765). Upload/embedding
                 // events fire only from the guided I/O upload receipt.

@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'goal_text_cleanup.dart';
 
 class VoiceEnrollmentUnavailable implements Exception {}
@@ -50,8 +52,10 @@ class IntroductionAnswer {
 
 class GuidedVoiceController extends ChangeNotifier {
   static const promptCount = 4;
-  GuidedVoiceController(this.io);
+  GuidedVoiceController(this.io, {this.flowSource = 'first_run', this.flowVariant = 'guided_voice_v1'});
   final GuidedVoiceIO io;
+  final String flowSource;
+  final String flowVariant;
   IntroductionStage stage = IntroductionStage.ready;
   int promptIndex = 0;
   int alternative = 0;
@@ -71,7 +75,85 @@ class GuidedVoiceController extends ChangeNotifier {
   bool _prepared = false;
   bool _autoStart = false;
   bool _extraSample = false;
-  final _sessionId = DateTime.now().microsecondsSinceEpoch.toString();
+  final _sessionId = const Uuid().v4();
+  DateTime? _startedAt;
+  DateTime? _promptViewedAt;
+  int _viewedPrompt = -1;
+  int _recordingAttempts = 0;
+  int _reviewAttempts = 0;
+  int _saveAttempts = 0;
+  int _voiceAttempts = 0;
+  bool _startedTelemetry = false;
+  bool _terminalTelemetry = false;
+
+  String get sessionId => _sessionId;
+
+  void markStarted() {
+    if (_startedTelemetry || _disposed) return;
+    _startedTelemetry = true;
+    _startedAt = DateTime.now();
+    final analytics = PlatformManager.instance.analytics;
+    analytics.guidedIntroStarted(
+      sessionId: _sessionId,
+      source: flowSource,
+      variant: flowVariant,
+      promptCount: promptCount,
+    );
+    _recordPromptViewed();
+  }
+
+  void _recordPromptViewed() {
+    if (promptIndex >= promptCount || _viewedPrompt == promptIndex) return;
+    _viewedPrompt = promptIndex;
+    _promptViewedAt = DateTime.now();
+    PlatformManager.instance.analytics.guidedIntroPromptViewed(
+      sessionId: _sessionId,
+      source: flowSource,
+      variant: flowVariant,
+      promptIndex: promptIndex,
+    );
+  }
+
+  int _promptDurationMs() => _promptViewedAt == null ? 0 : DateTime.now().difference(_promptViewedAt!).inMilliseconds;
+
+  void _recordCompletedPrompt({required String result, required bool transcriptPresent}) {
+    PlatformManager.instance.analytics.guidedIntroPromptCompleted(
+      sessionId: _sessionId,
+      source: flowSource,
+      variant: flowVariant,
+      promptIndex: promptIndex,
+      result: result,
+      durationMs: _promptDurationMs(),
+      transcriptPresent: transcriptPresent,
+    );
+  }
+
+  void _recordTerminal({required String completionMode}) {
+    if (_terminalTelemetry) return;
+    _terminalTelemetry = true;
+    final goals = answers.where((answer) => answer.isGoal).toList(growable: false);
+    final goal = goals.isEmpty ? null : goals.first;
+    PlatformManager.instance.analytics.guidedIntroCompleted(
+      sessionId: _sessionId,
+      source: flowSource,
+      variant: flowVariant,
+      completionMode: completionMode,
+      voiceResult: voiceSaved
+          ? 'success'
+          : completionMode == 'saved'
+              ? 'failed'
+              : 'skipped',
+      memorySaved: savedMemoryCount,
+      goalResult: goal == null
+          ? 'not_present'
+          : goal.saved
+              ? 'saved'
+              : goal.keep
+                  ? 'failed'
+                  : 'skipped',
+      elapsedMs: _startedAt == null ? 0 : DateTime.now().difference(_startedAt!).inMilliseconds,
+    );
+  }
 
   double get progress => promptIndex / promptCount;
   bool get isGoalPrompt => promptIndex == promptCount - 1 && !_extraSample;
@@ -99,6 +181,7 @@ class GuidedVoiceController extends ChangeNotifier {
 
   Future<void> start() async {
     if (busy || active || _disposed) return;
+    markStarted();
     _autoStart = true;
     final generation = ++_generation;
     stage = IntroductionStage.starting;
@@ -131,11 +214,26 @@ class GuidedVoiceController extends ChangeNotifier {
         return;
       }
       stage = IntroductionStage.recording;
+      _recordingAttempts++;
+      PlatformManager.instance.analytics.guidedIntroRecordingStarted(
+        sessionId: _sessionId,
+        source: flowSource,
+        variant: flowVariant,
+        promptIndex: promptIndex,
+        attempt: _recordingAttempts,
+      );
       _previewTimer = Timer.periodic(const Duration(seconds: 3), (_) => _updatePreview(generation));
     } catch (_) {
       if (!_current(generation)) return;
       stage = IntroductionStage.paused;
       error = 'microphone';
+      PlatformManager.instance.analytics.guidedIntroRecordingFailed(
+        sessionId: _sessionId,
+        source: flowSource,
+        variant: flowVariant,
+        promptIndex: promptIndex,
+        failureClass: 'microphone',
+      );
       await io.stop();
     }
     _emit();
@@ -190,22 +288,26 @@ class GuidedVoiceController extends ChangeNotifier {
           isGoal: isGoalPrompt, originalText: isGoalPrompt ? text : null);
       answer.keep = answer.text.isNotEmpty;
       answers.add(answer);
+      _recordCompletedPrompt(result: 'answered', transcriptPresent: true);
       await _advance();
     } catch (_) {
       if (!_current(generation)) return;
       stage = IntroductionStage.paused;
       error = 'transcription';
+      _recordCompletedPrompt(result: 'transcription_failed', transcriptPresent: false);
       _emit();
     }
   }
 
   Future<void> skipPrompt() async {
     if (busy || _disposed) return;
+    markStarted();
     ++_generation;
     _previewTimer?.cancel();
     stage = IntroductionStage.transcribing;
     await io.stop();
     if (_disposed) return;
+    _recordCompletedPrompt(result: 'skipped', transcriptPresent: false);
     await _advance();
   }
 
@@ -219,6 +321,19 @@ class GuidedVoiceController extends ChangeNotifier {
     error = null;
     promptIndex++;
     stage = promptIndex >= promptCount ? IntroductionStage.review : IntroductionStage.ready;
+    if (stage == IntroductionStage.review) {
+      _reviewAttempts++;
+      PlatformManager.instance.analytics.guidedIntroReviewShown(
+        sessionId: _sessionId,
+        source: flowSource,
+        variant: flowVariant,
+        answerCount: answers.length,
+        goalPresent: answers.any((answer) => answer.isGoal),
+        reviewAttempt: _reviewAttempts,
+      );
+    } else {
+      _recordPromptViewed();
+    }
     _emit();
     if (stage == IntroductionStage.ready && _autoStart) await start();
   }
@@ -250,6 +365,18 @@ class GuidedVoiceController extends ChangeNotifier {
 
   Future<void> saveAll() async {
     if (busy || _disposed || stage == IntroductionStage.done) return;
+    markStarted();
+    _saveAttempts++;
+    PlatformManager.instance.analytics.guidedIntroSaveSubmitted(
+      sessionId: _sessionId,
+      source: flowSource,
+      variant: flowVariant,
+      selectedAnswerCount: keptCount,
+      selectedMemoryCount: answers.where((answer) => answer.keep && !answer.isGoal).length,
+      goalSelected: answers.any((answer) => answer.isGoal && answer.keep),
+      voiceAttempted: !voiceSaved,
+      attempt: _saveAttempts,
+    );
     if (answers.any((a) => a.isGoal && a.keep && a.text.trim().length > 500)) {
       error = 'goalLong';
       _emit();
@@ -264,6 +391,7 @@ class GuidedVoiceController extends ChangeNotifier {
       await _saveMemories();
       if (_disposed) return;
       stage = voiceSaved && allMemoriesSaved ? IntroductionStage.done : IntroductionStage.review;
+      if (stage == IntroductionStage.done) _recordTerminal(completionMode: 'saved');
     } finally {
       _savingAll = false;
       _emit();
@@ -286,6 +414,15 @@ class GuidedVoiceController extends ChangeNotifier {
     if (pcm.length < 5 * 32000) {
       error = 'short';
       stage = IntroductionStage.voiceError;
+      _voiceAttempts++;
+      PlatformManager.instance.analytics.guidedIntroVoiceEnrollment(
+        sessionId: _sessionId,
+        source: flowSource,
+        variant: flowVariant,
+        result: 'short',
+        durationMs: 0,
+        attempt: _voiceAttempts,
+      );
       _emit();
       return;
     }
@@ -293,6 +430,8 @@ class GuidedVoiceController extends ChangeNotifier {
     stage = IntroductionStage.savingVoice;
     error = null;
     _emit();
+    _voiceAttempts++;
+    final voiceStartedAt = DateTime.now();
     try {
       final audio = pcm.takeBytes();
       // Four prompt caps can overshoot by one native buffer each. Respect the
@@ -302,14 +441,38 @@ class GuidedVoiceController extends ChangeNotifier {
       voiceSaved = saved;
       stage = saved ? IntroductionStage.review : IntroductionStage.voiceError;
       if (!saved) error = 'upload';
+      PlatformManager.instance.analytics.guidedIntroVoiceEnrollment(
+        sessionId: _sessionId,
+        source: flowSource,
+        variant: flowVariant,
+        result: saved ? 'success' : 'failure',
+        durationMs: DateTime.now().difference(voiceStartedAt).inMilliseconds,
+        attempt: _voiceAttempts,
+      );
     } on VoiceEnrollmentUnavailable {
       if (!_current(generation)) return;
       stage = IntroductionStage.voiceError;
       error = 'voiceUnavailable';
+      PlatformManager.instance.analytics.guidedIntroVoiceEnrollment(
+        sessionId: _sessionId,
+        source: flowSource,
+        variant: flowVariant,
+        result: 'unavailable',
+        durationMs: DateTime.now().difference(voiceStartedAt).inMilliseconds,
+        attempt: _voiceAttempts,
+      );
     } catch (_) {
       if (!_current(generation)) return;
       stage = IntroductionStage.voiceError;
       error = 'upload';
+      PlatformManager.instance.analytics.guidedIntroVoiceEnrollment(
+        sessionId: _sessionId,
+        source: flowSource,
+        variant: flowVariant,
+        result: 'failure',
+        durationMs: DateTime.now().difference(voiceStartedAt).inMilliseconds,
+        attempt: _voiceAttempts,
+      );
     }
     _emit();
   }
@@ -327,6 +490,7 @@ class GuidedVoiceController extends ChangeNotifier {
 
   Future<void> saveMemories() async {
     if (busy || _disposed) return;
+    markStarted();
     await _saveMemories();
   }
 
@@ -336,29 +500,70 @@ class GuidedVoiceController extends ChangeNotifier {
     error = null;
     _emit();
     String? saveError;
+    var memoryAttempted = 0;
+    var memorySaved = 0;
+    var memoryFailed = 0;
+    var goalResult = 'not_selected';
     for (final answer in answers.where((a) => a.keep && !a.saved && a.text.trim().isNotEmpty)) {
       if (!_current(generation)) return;
       try {
         if (answer.isGoal && answer.text.trim().length > 500) {
+          PlatformManager.instance.analytics.guidedIntroContentSave(
+            sessionId: _sessionId,
+            source: flowSource,
+            variant: flowVariant,
+            memoryAttempted: memoryAttempted,
+            memorySaved: memorySaved,
+            memoryFailed: memoryFailed,
+            goalResult: 'failed',
+            attempt: _saveAttempts,
+          );
           stage = IntroductionStage.review;
           error = 'goalLong';
           _emit();
           return;
+        }
+        if (answer.isGoal) {
+          goalResult = 'attempted';
+        } else {
+          memoryAttempted++;
         }
         if (answer.isGoal) answer.submittedGoal ??= answer.text.trim();
         final saved =
             answer.isGoal ? await io.saveGoal(answer.submittedGoal!, answer.id) : await io.remember(answer.text.trim());
         if (!_current(generation)) return;
         answer.saved = saved;
+        if (answer.isGoal) {
+          goalResult = saved ? 'saved' : 'failed';
+        } else if (saved) {
+          memorySaved++;
+        } else {
+          memoryFailed++;
+        }
         _emit();
         if (!saved) {
           saveError = answer.isGoal ? 'goal' : 'memories';
         }
       } catch (_) {
         saveError = answer.isGoal ? 'goal' : 'memories';
+        if (answer.isGoal) {
+          goalResult = 'failed';
+        } else {
+          memoryFailed++;
+        }
       }
     }
     if (!_current(generation)) return;
+    PlatformManager.instance.analytics.guidedIntroContentSave(
+      sessionId: _sessionId,
+      source: flowSource,
+      variant: flowVariant,
+      memoryAttempted: memoryAttempted,
+      memorySaved: memorySaved,
+      memoryFailed: memoryFailed,
+      goalResult: goalResult,
+      attempt: _saveAttempts,
+    );
     stage = allMemoriesSaved && !_savingAll ? IntroductionStage.done : IntroductionStage.review;
     if (!allMemoriesSaved) {
       error = saveError ?? 'memories';
@@ -366,8 +571,15 @@ class GuidedVoiceController extends ChangeNotifier {
     _emit();
   }
 
+  void markSkipped() {
+    if (_disposed) return;
+    markStarted();
+    _recordTerminal(completionMode: 'skipped');
+  }
+
   @override
   void dispose() {
+    if (_startedTelemetry && !_terminalTelemetry) _recordTerminal(completionMode: 'abandoned');
     _disposed = true;
     ++_generation;
     _previewTimer?.cancel();

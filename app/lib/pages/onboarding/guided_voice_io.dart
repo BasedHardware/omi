@@ -106,7 +106,8 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
       }
       return saved;
     } on SpeechProfileUploadException catch (e) {
-      PlatformManager.instance.analytics.speechProfileUploadFailed(reason: 'http_${e.statusCode}');
+      PlatformManager.instance.analytics
+          .speechProfileUploadFailed(reason: 'http_${e.statusCode}', statusCode: e.statusCode);
       if (e.statusCode == 503) throw VoiceEnrollmentUnavailable();
       rethrow;
     } catch (_) {

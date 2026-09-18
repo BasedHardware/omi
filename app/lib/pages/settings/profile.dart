@@ -471,6 +471,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               backgroundColor: Colors.black,
                               appBar: AppBar(backgroundColor: Colors.black),
                               body: SpeechProfileWidget(
+                                flowSource: 'settings',
                                 goNext: () => Navigator.of(routeContext).pop(),
                                 onSkip: () => Navigator.of(routeContext).pop(),
                               ),

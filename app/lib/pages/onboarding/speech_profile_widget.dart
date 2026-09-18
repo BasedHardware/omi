@@ -13,10 +13,19 @@ import 'guided_voice_io.dart';
 /// A bounded introduction: user-paced prompts, independent voice enrollment,
 /// and explicit review before any personal statement becomes a memory.
 class SpeechProfileWidget extends StatefulWidget {
-  const SpeechProfileWidget({super.key, required this.goNext, required this.onSkip, this.controller});
+  const SpeechProfileWidget({
+    super.key,
+    required this.goNext,
+    required this.onSkip,
+    this.controller,
+    this.flowSource = 'first_run',
+    this.flowVariant = 'guided_voice_v1',
+  });
   final VoidCallback goNext;
   final VoidCallback onSkip;
   final GuidedVoiceController? controller;
+  final String flowSource;
+  final String flowVariant;
 
   @override
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
@@ -36,7 +45,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
   @override
   void initState() {
     super.initState();
-    flow = widget.controller ?? GuidedVoiceController(DeviceGuidedVoiceIO());
+    flow = widget.controller ??
+        GuidedVoiceController(DeviceGuidedVoiceIO(), flowSource: widget.flowSource, flowVariant: widget.flowVariant);
+    flow.markStarted();
     WidgetsBinding.instance.addObserver(this);
     _shownPrompt = flow.promptIndex;
     flow.addListener(_showCurrentPrompt);
@@ -131,6 +142,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
   }
 
   Future<void> _skip() async {
+    flow.markSkipped();
     await flow.pause();
     if (mounted) widget.onSkip();
   }
