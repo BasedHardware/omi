@@ -15,7 +15,11 @@ from urllib.parse import urlencode
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, HTTPException, Depends
+from fastapi import FastAPI, Request, Query, HTTPException
+try:
+    from fastapi import Depends
+except ImportError:
+    Depends = lambda default=None, **kwargs: default
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 try:

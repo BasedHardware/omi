@@ -13,7 +13,11 @@ from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query, Form, Depends
+from fastapi import FastAPI, HTTPException, Request, Query, Form
+try:
+    from fastapi import Depends
+except ImportError:
+    Depends = lambda default=None, **kwargs: default
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
