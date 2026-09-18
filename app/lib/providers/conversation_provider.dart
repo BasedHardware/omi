@@ -195,6 +195,9 @@ class ConversationProvider extends ChangeNotifier {
 
   ApiViewState<List<ServerConversation>> get apiViewState => _listViewState;
 
+  @visibleForTesting
+  bool get usesTypedConversationApi => _conversationApi != null;
+
   ApiViewState<ServerConversation> typedDetailState(String id) =>
       _typedDetailStates[id] ?? const ApiViewState(phase: ApiViewPhase.data);
 
@@ -1015,15 +1018,27 @@ class ConversationProvider extends ChangeNotifier {
     );
   }
 
+  ({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})
+      _packTypedConversationList(ApiResult<List<ServerConversation>> typed) {
+    return switch (typed) {
+      ApiSuccess(:final data) => (items: data, ok: true, truncated: false, typed: typed),
+      ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false, typed: typed),
+    };
+  }
+
   Future<({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})>
       _getConversationsFromServer() async {
     final typedApi = _conversationApi;
     if (typedApi != null) {
-      final typed = await typedApi.list();
-      return switch (typed) {
-        ApiSuccess(:final data) => (items: data, ok: true, truncated: false, typed: typed),
-        ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false, typed: typed),
-      };
+      final (startDate, endDate) = _getDateFilterRange();
+      final typed = await typedApi.list(
+        includeDiscarded: showDiscardedConversations,
+        startDate: startDate,
+        endDate: endDate,
+        folderId: selectedFolderId,
+        starred: showStarredOnly ? true : null,
+      );
+      return _packTypedConversationList(typed);
     }
     final fetcher = _conversationListFetcher;
     if (fetcher != null) {
@@ -1192,16 +1207,39 @@ class ConversationProvider extends ChangeNotifier {
     final (startDate, endDate) = _getDateFilterRange();
 
     final pageOffset = _conversationServerOffset;
-    final pageResult = conversationPageFetcherOverride != null
-        ? await conversationPageFetcherOverride!.call()
-        : await getConversationsResult(
-            offset: pageOffset,
-            includeDiscarded: showDiscardedConversations,
-            startDate: startDate,
-            endDate: endDate,
-            folderId: selectedFolderId,
-            starred: showStarredOnly ? true : null,
-          );
+    final typedApi = _conversationApi;
+    late final ({
+      List<ServerConversation> items,
+      bool ok,
+      bool truncated,
+      ApiResult<List<ServerConversation>>? typed
+    }) pageResult;
+    if (conversationPageFetcherOverride != null) {
+      final fetched = await conversationPageFetcherOverride!.call();
+      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+    } else if (typedApi != null) {
+      pageResult = _packTypedConversationList(
+        await typedApi.list(
+          limit: _conversationPageSize,
+          offset: pageOffset,
+          includeDiscarded: showDiscardedConversations,
+          startDate: startDate,
+          endDate: endDate,
+          folderId: selectedFolderId,
+          starred: showStarredOnly ? true : null,
+        ),
+      );
+    } else {
+      final fetched = await getConversationsResult(
+        offset: pageOffset,
+        includeDiscarded: showDiscardedConversations,
+        startDate: startDate,
+        endDate: endDate,
+        folderId: selectedFolderId,
+        starred: showStarredOnly ? true : null,
+      );
+      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+    }
     if (operationRevision != _conversationFetchRevision) {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
       return false;
