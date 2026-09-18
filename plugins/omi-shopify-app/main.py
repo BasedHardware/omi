@@ -13,10 +13,12 @@ from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query, Form
+from fastapi import FastAPI, HTTPException, Request, Query, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+from shopify_tools_auth import require_shopify_tools_auth
 
 from db import (
     store_shopify_tokens,
@@ -440,7 +442,10 @@ def _coerce_int(
 
 
 @app.post("/tools/get_analytics", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_analytics(request: Request):
+async def tool_get_analytics(
+    request: Request,
+    _auth: None = Depends(require_shopify_tools_auth),
+):
     """
     Get store analytics.
     Chat tool for Omi - retrieves store analytics and sales data.
@@ -755,7 +760,10 @@ async def tool_get_analytics(request: Request):
 
 
 @app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_orders(request: Request):
+async def tool_get_orders(
+    request: Request,
+    _auth: None = Depends(require_shopify_tools_auth),
+):
     """
     Get recent orders.
     Chat tool for Omi - retrieves a list of recent orders.
@@ -829,7 +837,10 @@ async def tool_get_orders(request: Request):
 
 
 @app.post("/tools/get_order_details", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_order_details(request: Request):
+async def tool_get_order_details(
+    request: Request,
+    _auth: None = Depends(require_shopify_tools_auth),
+):
     """
     Get details of a specific order.
     Chat tool for Omi - retrieves detailed information about an order.
@@ -1035,7 +1046,10 @@ def select_product_variant(product, sku=None):
 
 
 @app.post("/tools/create_order", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_create_order(request: Request):
+async def tool_create_order(
+    request: Request,
+    _auth: None = Depends(require_shopify_tools_auth),
+):
     """
     Create a new order.
     Chat tool for Omi - creates a new order. Can search for customer by name or email.
@@ -1688,7 +1702,10 @@ async def tool_create_order(request: Request):
 
 
 @app.post("/tools/get_customers", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_customers(request: Request):
+async def tool_get_customers(
+    request: Request,
+    _auth: None = Depends(require_shopify_tools_auth),
+):
     """
     Get customers.
     Chat tool for Omi - retrieves a list of customers, with optional search.
@@ -1747,7 +1764,10 @@ async def tool_get_customers(request: Request):
 
 
 @app.post("/tools/create_customer", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_create_customer(request: Request):
+async def tool_create_customer(
+    request: Request,
+    _auth: None = Depends(require_shopify_tools_auth),
+):
     """
     Create a new customer.
     Chat tool for Omi - creates a new customer in the store.

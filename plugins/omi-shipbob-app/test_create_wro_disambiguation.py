@@ -33,6 +33,7 @@ class Framework:
 
     post = get
     mount = lambda *args, **kwargs: None
+    exception_handler = lambda *args, **kwargs: (lambda function: function)
 
 
 class Response:
@@ -53,7 +54,7 @@ stubs = {
     "fastapi": module(
         "fastapi",
         **{
-            name: Framework for name in ("FastAPI", "HTTPException", "Request", "Query")
+            name: Framework for name in ("FastAPI", "HTTPException", "Request", "Query", "Depends")
         },
     ),
     "fastapi.responses": module(
@@ -65,6 +66,7 @@ stubs = {
     ),
     "fastapi.staticfiles": module("fastapi.staticfiles", StaticFiles=Framework),
     "fastapi.templating": module("fastapi.templating", Jinja2Templates=Framework),
+    "fastapi.exceptions": module("fastapi.exceptions", RequestValidationError=Exception),
     "db": module(
         "db",
         **{
@@ -81,7 +83,22 @@ stubs = {
             )
         },
     ),
-    "models": module("models", ChatToolResponse=Response),
+    "models": module(
+        "models",
+        ChatToolResponse=Response,
+        **{
+            name: Response
+            for name in (
+                "GetInventoryRequest",
+                "GetProductsRequest",
+                "CreateWroRequest",
+                "GetWrosRequest",
+                "CancelWroRequest",
+                "GetOrdersRequest",
+                "GetFulfillmentCentersRequest",
+            )
+        },
+    ),
 }
 spec = importlib.util.spec_from_file_location(
     "shipbob_under_test", Path(__file__).with_name("main.py")

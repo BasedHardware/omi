@@ -59,6 +59,7 @@ stubs = {
         Request=Framework,
         Query=Framework,
         HTTPException=HTTPExceptionStub,
+        Depends=Framework,
     ),
     "fastapi.responses": module(
         "fastapi.responses",

@@ -42,7 +42,7 @@ class Response:
 def load_app():
     modules = {}
     definitions = {
-        'fastapi': dict(FastAPI=App, HTTPException=Exception, Request=object, Query=Mock()),
+        'fastapi': dict(FastAPI=App, HTTPException=Exception, Request=object, Query=Mock(), Depends=Mock()),
         'fastapi.responses': dict(HTMLResponse=object, RedirectResponse=Mock(), JSONResponse=Mock()),
         'fastapi.staticfiles': dict(StaticFiles=Mock()),
         'fastapi.templating': dict(Jinja2Templates=Mock()),
