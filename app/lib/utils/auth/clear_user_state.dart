@@ -5,6 +5,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -38,6 +39,7 @@ void clearAllUserState(BuildContext context) {
   context.read<GoalsProvider>().clearUserData();
   context.read<PhoneCallProvider>().clearUserData();
   context.read<SyncProvider>().clearUserData();
+  context.read<DeviceProvider>().clearUserData();
   context.read<TaskIntegrationProvider>().clearUserData();
   context.read<IntegrationProvider>().clearUserData();
   context.read<McpProvider>().clearUserData();
