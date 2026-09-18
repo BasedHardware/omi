@@ -176,6 +176,22 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
   var isSignedIn: Bool
+  /// Which account this bundle is actually signed into.
+  ///
+  /// `isSignedIn` alone cannot answer "is this the account I think it is", and
+  /// a named bundle's identity is not stable across rebuilds: `run.sh` reseeds
+  /// auth from a source bundle, so reinstalling a QA bundle can silently swap
+  /// the signed-in account. On 2026-09-18 that turned a free-tier verification
+  /// into a managed-path run against a different account, and nothing in the
+  /// snapshot could have revealed it.
+  ///
+  /// The uid is the machine-checkable half — it is what rollout cohorts are
+  /// keyed on, so a harness can assert the bundle is the account it configured.
+  /// Non-production bundles only, like the rest of this bridge.
+  var accountUserID: String?
+  /// Human-readable half, for a developer reading `omi-ctl state` rather than
+  /// asserting on it.
+  var accountEmail: String?
   var isRestoringAuth: Bool
   var isAppActive: Bool
   var mainWindowTitle: String?
@@ -485,6 +501,8 @@ final class DesktopAutomationStateStore {
     isSidebarCollapsed: true,
     hasCompletedOnboarding: false,
     isSignedIn: false,
+    accountUserID: nil,
+    accountEmail: nil,
     isRestoringAuth: true,
     isAppActive: false,
     mainWindowTitle: nil,
