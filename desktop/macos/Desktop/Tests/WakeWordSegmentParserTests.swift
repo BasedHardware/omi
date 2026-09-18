@@ -77,7 +77,7 @@ final class WakeWordSegmentParserTests: XCTestCase {
   /// "and my friend went hiking" and auto-sent it. The homophones are the recognizer
   /// guessing, and its guesses are ordinary English, so a bare homophone now needs a
   /// punctuation break — the recognizer's own signal that the speaker addressed something
-  /// and paused. Every homophone hit observed live carried one.
+  /// and paused — or, for "oh me" and "o me", a command-shaped remainder.
   func testBareHomophoneInOrdinarySpeechDoesNotFire() {
     for sentence in [
       "oh me and my friend went hiking",
@@ -262,5 +262,39 @@ final class WakeWordSegmentParserTests: XCTestCase {
   func testBareOnlyIsNotACommand() {
     XCTAssertNil(WakeWordSegmentParser.command(after: "Only.", wakePhrase: "Omi"))
     XCTAssertNil(WakeWordSegmentParser.command(after: "Only", wakePhrase: "Omi"))
+  }
+
+  // MARK: - Two-word renderings said without a pause
+
+  /// Live misses, verbatim from the stored local segments. No break after the phrase, so the
+  /// punctuation-break rule turned every one of them down.
+  func testTwoWordRenderingWithoutAPauseOpeningACommandIsTheWakeWord() {
+    let cases = [
+      ("Oh me what time it is.", "what time it is."),
+      ("Oh me read my latest message.", "read my latest message."),
+      ("O me who am I?", "who am I?"),
+      ("O me tell me a fact.", "tell me a fact."),
+      ("Owe me what time it is.", "what time it is."),
+      ("Owe me what we have to do today.", "what we have to do today."),
+      ("How me what day is it today?", "what day is it today?"),
+    ]
+    for (segment, expected) in cases {
+      XCTAssertEqual(
+        WakeWordSegmentParser.command(after: segment, wakePhrase: "Omi"), expected,
+        "failed for \(segment)")
+    }
+  }
+
+  /// The same words in ordinary speech are followed by the rest of that sentence, not a command.
+  func testTwoWordRenderingWithoutAPauseInOrdinarySpeechDoesNotFire() {
+    for segment in [
+      "Owe me a favor and we're even.",
+      "How me and my brother met is a long story.",
+      "Oh me oh my.",
+    ] {
+      XCTAssertNil(
+        WakeWordSegmentParser.command(after: segment, wakePhrase: "Omi"),
+        "fired for \(segment)")
+    }
   }
 }

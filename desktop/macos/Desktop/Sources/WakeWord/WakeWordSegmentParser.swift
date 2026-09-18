@@ -147,8 +147,16 @@ enum WakeWordSegmentParser {
   /// rewind timeline". The same scan found 8 ordinary uses of "only", all mid-sentence,
   /// none sentence-initial. Hence `.commandHead`: sentence position plus an assistant-shaped
   /// next word, which is what actually separates the two populations.
+  ///
+  /// The two-word renderings failed the same way when said without a pause. Across 1,961
+  /// stored segments, 29 distinct sentences open with "oh me", "o me", "owe me" or "how me",
+  /// every one of them addressed to Omi, and 15 have no break after the phrase ("Oh me what
+  /// time it is.", "Owe me what time it is.", "How me what day is it today?"), so all 15 were
+  /// dropped. 14 of them pass this rule; the exception is "O me order Thai food for Maya.".
+  /// "oh me" and "o me" stay homophones too, so with a break they need no command shape.
+  /// "oh my" stays out: it is ordinary speech, and the same scan found "Oh my god.".
   static let commandShapedRenderings: [String: [String]] = [
-    "omi": ["only"]
+    "omi": ["only", "oh me", "o me", "owe me", "how me"]
   ]
 
   /// What a phrase needs beyond itself before it counts as the wake word.
@@ -175,10 +183,11 @@ enum WakeWordSegmentParser {
   /// would otherwise parse to the command "and my friend went hiking" and auto-send it.
   ///
   /// A bare homophone therefore has to be followed by a punctuation break, which is the
-  /// recognizer's own signal that the speaker addressed something and then paused. Every
-  /// homophone hit observed live carried one ("Oh me, how are you?"). A greeting prefix is
-  /// corroboration in its own right — "hey oh me" is not something a person says by
-  /// accident — so those forms keep the ordinary word boundary.
+  /// recognizer's own signal that the speaker addressed something and then paused ("Oh me,
+  /// how are you?"). Renderings in `commandShapedRenderings` can instead be followed by a
+  /// command-shaped remainder, which is how the ones said without a pause are recovered. A
+  /// greeting prefix is corroboration in its own right — "hey oh me" is not something a
+  /// person says by accident — so those forms keep the ordinary word boundary.
   static func candidates(for phrase: String) -> [Candidate] {
     var result: [Candidate] = [Candidate(text: phrase, corroboration: .none)]
     for greeting in ["hey", "ok", "okay"] {
