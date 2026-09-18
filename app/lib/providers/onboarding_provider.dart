@@ -36,6 +36,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   List<BtDevice> deviceList = [];
   List<BtDevice> savedDeviceList = [];
   Timer? _didNotMakeItTimer;
+  Timer? _connectSettleTimer;
+  int _scanEpoch = 0;
+  bool _isDisposed = false;
   bool enableInstructions = false;
   Map<String, BtDevice> foundDevicesMap = {};
 
@@ -237,7 +240,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       isClicked = false;
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
-      await Future.delayed(const Duration(seconds: 2));
+      _connectSettleTimer?.cancel();
+      final settle = Completer<void>();
+      _connectSettleTimer = Timer(const Duration(seconds: 2), () {
+        if (!settle.isCompleted) settle.complete();
+      });
+      await settle.future;
+      _connectSettleTimer = null;
+      if (_isDisposed) return;
       SharedPreferencesUtil().btDevice = connectedDevice!;
       _syncSavedDevices();
       SharedPreferencesUtil().deviceName = connectedDevice.name;
@@ -283,10 +293,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future<void> scanDevices({required VoidCallback onShowDialog, VoidCallback? onShowLocationDialog}) async {
+    final epoch = ++_scanEpoch;
     if (SharedPreferencesUtil().btDevice.id.isEmpty) {
       // it means the device has been unpaired
       deviceAlreadyUnpaired();
     }
+    if (_isDisposed || epoch != _scanEpoch) return;
 
     // Subscribe before checking the adapter so a successful enable action can
     // retry discovery and publish its results back to this page.
@@ -295,6 +307,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // check if bluetooth is enabled on both platforms
     if (!hasBluetoothPermission) {
       await askForBluetoothPermissions();
+      if (_isDisposed || epoch != _scanEpoch) return;
       if (!hasBluetoothPermission) {
         onShowDialog();
         return;
@@ -304,6 +317,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // Android 11 and below: location permission required for BLE scanning
     if (PlatformService.isAndroid) {
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
+      if (_isDisposed || epoch != _scanEpoch) return;
       if (deviceInfo.version.sdkInt <= 30) {
         final locationGranted = await Permission.locationWhenInUse.isGranted;
         updateLocationPermission(locationGranted);
@@ -317,8 +331,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
       return;
     }
+    if (_isDisposed || epoch != _scanEpoch) return;
 
     _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
+      if (_isDisposed) return;
       enableInstructions = true;
       notifyListeners();
     });
@@ -326,9 +342,19 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     await deviceProvider?.initiateConnection("Onboarding");
   }
 
+  void cancelActiveScan() {
+    _scanEpoch++;
+    _didNotMakeItTimer?.cancel();
+    _didNotMakeItTimer = null;
+    deviceProvider?.stopDiscoveryScanning();
+  }
+
   @override
   void dispose() {
-    _didNotMakeItTimer?.cancel();
+    _isDisposed = true;
+    cancelActiveScan();
+    _connectSettleTimer?.cancel();
+    _connectSettleTimer = null;
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }

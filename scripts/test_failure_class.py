@@ -313,6 +313,18 @@ class FailureClassCliTests(unittest.TestCase):
         )
 
     def test_prepare_narrows_candidates_to_matching_scope_hints(self) -> None:
+        """Narrowing must list exactly the classes whose hints match the
+        change. Seeded definitions keep whatever scope_hints the real
+        registry carries, so a live hint on a sibling (for example a
+        registry glob matching the definition JSON this test commits)
+        would otherwise appear as a candidate. Pin siblings to an
+        unrelated tracked glob first.
+        """
+        self.write("unrelated-tracked/keep.txt", "keep\n")
+        self.commit("chore: live hint target")
+        self.base = self.git("rev-parse", "HEAD")
+        for class_id in SEED_IDS:
+            self.set_definition_field(class_id, "scope_hints", ["unrelated-tracked/**"])
         self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["src/**"])
         self.write("src/example.txt", "touched\n")
         self.commit("fix(backend): protect read boundary")
