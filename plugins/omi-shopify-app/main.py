@@ -192,24 +192,58 @@ def get_user_shop(uid: str) -> Optional[str]:
     return tokens.get("shop_domain")
 
 
+def _oauth_state_for(uid: str) -> str:
+    """Generate a tamper-proof signed state token binding the flow to the initiating uid."""
+    sig = hmac.new(
+        SHOPIFY_CLIENT_SECRET.encode("utf-8"),
+        uid.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    return f"{uid}.{sig}"
+
+
+def _verify_and_extract_state_uid(state: Optional[str]) -> Optional[str]:
+    """Verify cryptographic signature on state and return uid, or None if invalid/tampered."""
+    if not state or "." not in state:
+        return None
+    uid, sig = state.split(".", 1)
+    expected_sig = hmac.new(
+        SHOPIFY_CLIENT_SECRET.encode("utf-8"),
+        uid.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    if hmac.compare_digest(sig, expected_sig):
+        return uid
+    return None
+
+
 def verify_shopify_hmac(query_string: str, hmac_value: str) -> bool:
     """Verify the HMAC signature from Shopify."""
-    # Parse query string and remove hmac parameter
-    params = urllib.parse.parse_qs(query_string)
+    if not hmac_value:
+        return False
+    # Parse query string and remove hmac and signature parameters
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
     params.pop('hmac', None)
+    params.pop('signature', None)
     
-    # Sort and encode parameters
-    sorted_params = sorted(params.items())
-    encoded = urllib.parse.urlencode([(k, v[0]) for k, v in sorted_params])
+    # Sort and format parameters according to Shopify specification
+    sorted_pairs = []
+    for k in sorted(params.keys()):
+        val = params[k]
+        val_str = ",".join(val) if isinstance(val, list) else str(val)
+        sorted_pairs.append(f"{k}={val_str}")
+    
+    message = "&".join(sorted_pairs)
     
     # Calculate HMAC
     digest = hmac.new(
         SHOPIFY_CLIENT_SECRET.encode('utf-8'),
-        encoded.encode('utf-8'),
+        message.encode('utf-8'),
         hashlib.sha256
     ).hexdigest()
     
     return hmac.compare_digest(digest, hmac_value)
+
 
 
 def format_currency(amount: str, currency: str = "USD") -> str:
@@ -291,7 +325,7 @@ async def shopify_auth(uid: str, shop: Optional[str] = None):
         "client_id": SHOPIFY_CLIENT_ID,
         "scope": scopes,
         "redirect_uri": SHOPIFY_REDIRECT_URI,
-        "state": uid,  # Use uid as state to identify user on callback
+        "state": _oauth_state_for(uid),
     }
     
     auth_url = f"https://{shop}/admin/oauth/authorize?{urllib.parse.urlencode(params)}"
@@ -328,7 +362,23 @@ async def shopify_callback(
             "error": "Invalid callback parameters"
         })
     
-    uid = state
+    # Verify Shopify HMAC signature
+    raw_query = getattr(getattr(request, "url", None), "query", "") or ""
+    if not hmac or not verify_shopify_hmac(raw_query, hmac):
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid HMAC signature from Shopify"
+        })
+    
+    # Verify signed state to prevent login CSRF and rebinding attacks
+    uid = _verify_and_extract_state_uid(state)
+    if not uid:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid or tampered state parameter"
+        })
     
     # Exchange code for access token
     token_url = f"https://{shop}/admin/oauth/access_token"
