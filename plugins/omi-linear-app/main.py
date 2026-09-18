@@ -996,7 +996,7 @@ async def tool_search_issues(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query_text = body.get("query", "")
-        limit = body.get("limit", 5)
+        limit = coerce_limit(body.get("limit"), default=5, min_val=1, max_val=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
