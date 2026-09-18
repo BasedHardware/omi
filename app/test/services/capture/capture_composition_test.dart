@@ -118,7 +118,9 @@ void main() {
     expect(body, contains('connectivity: dependencies.connectivity'));
     expect(body, contains('preferences: dependencies.preferences'));
     expect(body, contains('bleListeners: dependencies.ble'));
-    expect(body, contains('openSocket: dependencies.openSocket'));
+    expect(body, contains('openConversationSocket'));
+    expect(body, contains('openConversationSocket ??'));
+    expect(body, contains('dependencies.openSocket('));
     final providerSource = File('lib/providers/capture_provider.dart').readAsStringSync();
     expect(providerSource, contains('super.walService'));
     expect(providerSource, contains('super.phoneMicRecorder'));

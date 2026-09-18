@@ -23,9 +23,11 @@ class CaptureProvider extends CaptureController {
     super.preferences,
     super.bleListeners,
     super.openSocket,
+    super.sessionOwner,
     LocalSegmentStore? localSegmentStore,
   }) : localSegmentStore = localSegmentStore ?? LocalSegmentStore.disabled() {
     addListener(_persistLiveSegments);
+    lifetime.own(() => removeListener(_persistLiveSegments));
   }
 
   final LocalSegmentStore localSegmentStore;
@@ -43,21 +45,20 @@ class CaptureProvider extends CaptureController {
             '${segment.id}:${segment.speaker}:${segment.speakerId}:${segment.isUser}:${segment.personId ?? ''}:${segment.text}')
         .join('\n');
     if (fingerprint == _lastPersistedFingerprint) return;
-    _lastPersistedFingerprint = fingerprint;
     final pending = List.of(segments);
-    _liveSegmentWrite =
-        _liveSegmentWrite.then((_) => localSegmentStore.replaceSession(sessionId, pending)).catchError((Object e) {
+    final owner = sessionOwner;
+    final token = owner?.token;
+    _liveSegmentWrite = _liveSegmentWrite.then((_) async {
+      if (owner != null && token != null && !owner.isCurrent(token)) return;
+      await localSegmentStore.replaceSession(sessionId, pending);
+      if (owner != null && token != null && !owner.isCurrent(token)) return;
+      _lastPersistedFingerprint = fingerprint;
+    }).catchError((Object e) {
       Logger.debug('Error persisting live segments: $e');
       if (_lastPersistedFingerprint == fingerprint) {
         _lastPersistedFingerprint = null;
       }
     });
     unawaited(_liveSegmentWrite);
-  }
-
-  @override
-  void dispose() {
-    removeListener(_persistLiveSegments);
-    super.dispose();
   }
 }

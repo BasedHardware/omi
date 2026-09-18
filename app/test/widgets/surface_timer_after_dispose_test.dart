@@ -74,8 +74,8 @@ void main() {
         uid: 'uid',
         content: 'deleted memory',
         category: MemoryCategory.manual,
-        createdAt: DateTime(2026, 9, 18),
-        updatedAt: DateTime(2026, 9, 18),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
         visibility: MemoryVisibility.private,
       ),
     );
@@ -90,9 +90,15 @@ void main() {
   testWidgets('ActionItemDetailWidget completion delay is cancelled on dispose', (tester) async {
     final structured = Structured('Sprint', 'Overview', emoji: '🧠');
     structured.actionItems = [ActionItem('Ship the timer fix')];
+    // ConversationDetailProvider.conversationOrNull() validates the
+    // conversation's local day against selectedDate, which defaults to the
+    // clock at provider construction. Derive both from the same instant so
+    // the day-key comparison holds in every timezone and at any wall-clock
+    // time instead of only when the runner's calendar day matches UTC.
+    final conversationDate = DateTime.now().subtract(const Duration(hours: 2));
     final conversation = ServerConversation(
       id: 'conv-timer',
-      createdAt: DateTime(2026, 9, 18, 9),
+      createdAt: conversationDate,
       structured: structured,
     );
     final conversations = _ImmediateConversationProvider();
@@ -100,6 +106,7 @@ void main() {
     final detail = ConversationDetailProvider();
     detail.conversationProvider = conversations;
     detail.setCachedConversation(conversation);
+    detail.selectedDate = conversationLocalDayKey(conversation.createdAt);
 
     await tester.pumpWidget(
       _l10nApp(

@@ -145,7 +145,6 @@ void main() {
   });
 
   contractTest('C1 production provider drops ABA device codec completion before opening socket', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-replay-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {

@@ -77,7 +77,7 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
 Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
-
+Dev contracts: [B0 registration](lib/services/dev_controls/REGISTRATION.md), [B1 addressability](lib/services/dev_controls/ADDRESSABILITY.md).
 ## Test Strategy
 
 ### Test Structure
@@ -99,7 +99,7 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manifest, local + CI).
 
-CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
+CI runs `test.sh`, `analyze_ratchet.sh` (no new info/warnings), and `journeys-hermetic`.
 
 ### Test Patterns
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
@@ -155,5 +155,5 @@ Key rules:
 - Must reconnect after every hot restart (kills VM Service session).
 - Refs go stale frequently — always re-snapshot before every interaction. Use `press x y` as fallback.
 - `AGENT_FLUTTER_LOG` must point to flutter run stdout (not logcat).
-- Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Add `Key('descriptive_name')` to new interactive widgets.
+- Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Use catalog `omi.*` keys on new controls.
 - Full command reference: `agent-flutter schema`.

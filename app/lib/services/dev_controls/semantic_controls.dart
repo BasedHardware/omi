@@ -41,6 +41,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/dev_controls/journey_faults.dart';
 import 'package:omi/utils/enums.dart';
 
+export 'addressability.dart';
+
 /// Version of the semantic-controls contract. Bump on any breaking change;
 /// additive capabilities append without a bump.
 const String semanticControlsVersion = 'semantic-controls/v1';
@@ -190,28 +192,28 @@ class SemanticControls {
   /// Installs the VM service extensions when (and only when) the current
   /// build is [semanticControlsEligible]. Called from the debug branch of
   /// `main()` next to `MarionetteBinding.ensureInitialized()`; inert elsewhere.
-  void installIfEligible() {
+  void installIfEligible({void Function(String, developer.ServiceExtensionHandler)? register}) {
     if (!semanticControlsEligible || _installed) return;
     _installed = true;
-    _registerExtensions();
+    _registerExtensions(register ?? developer.registerExtension);
   }
 
   bool get installed => _installed;
 
   static const JsonEncoder _json = JsonEncoder();
 
-  void _registerExtensions() {
-    developer.registerExtension('omi.controls.capabilities', (method, params) async {
+  void _registerExtensions(void Function(String, developer.ServiceExtensionHandler) register) {
+    register('omi.controls.capabilities', (method, params) async {
       return developer.ServiceExtensionResponse.result(_json.convert({
         'contract_version': semanticControlsVersion,
         'capabilities': capabilities,
         'faults': [for (final f in JourneyFault.values) f.name],
       }));
     });
-    developer.registerExtension('omi.controls.state', (method, params) async {
+    register('omi.controls.state', (method, params) async {
       return developer.ServiceExtensionResponse.result(_json.convert(state().toJson()));
     });
-    developer.registerExtension('omi.controls.wait_ready', (method, params) async {
+    register('omi.controls.wait_ready', (method, params) async {
       final condition = params['condition'];
       if (condition == null) {
         return developer.ServiceExtensionResponse.error(
@@ -227,7 +229,7 @@ class SemanticControls {
         return developer.ServiceExtensionResponse.error(-32000, e.toString());
       }
     });
-    developer.registerExtension('omi.controls.navigate', (method, params) async {
+    register('omi.controls.navigate', (method, params) async {
       final destination = params['destination'];
       if (destination == null) {
         return developer.ServiceExtensionResponse.error(
@@ -240,7 +242,7 @@ class SemanticControls {
           ? developer.ServiceExtensionResponse.result(_json.convert({'ok': true}))
           : developer.ServiceExtensionResponse.error(-32001, 'unknown destination "$destination"');
     });
-    developer.registerExtension('omi.controls.fault', (method, params) async {
+    register('omi.controls.fault', (method, params) async {
       final fault = params['fault'];
       final clear = params['clear'] == 'true';
       if (fault == null) {
