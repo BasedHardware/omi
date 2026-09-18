@@ -305,6 +305,12 @@ function calendarEventTimeCopy(value: unknown): string {
     }),
   );
 }
+function presentNullableDate(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  calendarEventTimeCopy(value);
+}
 function calendarEvent(
   value: unknown,
 ): LegacyConversationDetail['calendarEvent'] {
@@ -506,6 +512,10 @@ export async function loadLegacyConversationDetail(
   presentNullableString(value.source);
   presentNullableString(value.status);
   presentNullableString(value.visibility);
+  presentNullableDate(value.created_at);
+  presentNullableDate(value.started_at);
+  presentNullableDate(value.finished_at);
+  presentNullableDate(value.updated_at);
   presentUnusedStringListItems(value.suggested_summarization_apps);
   const structured = object(value.structured);
   presentNullableString(structured.category);

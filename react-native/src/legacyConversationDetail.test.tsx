@@ -593,6 +593,82 @@ test('old conversation details name Flutter Conversation.fromGenerated type-wron
   }
 });
 
+test('old conversation details name Flutter Conversation.fromGenerated type-wrong GET created_at instead of remapping to a recap chip', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      created_at: '2026-09-07T00:00:00.000Z',
+      started_at: '2026-09-07T00:00:00.000Z',
+      finished_at: '2026-09-07T00:05:00.000Z',
+      updated_at: '2026-09-07T00:05:00.000Z',
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      created_at: null,
+      started_at: null,
+      finished_at: null,
+      updated_at: null,
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  for (const extra of ['', 'not-a-date', 1, true, [], {}]) {
+    mockRequest.mockResolvedValue(response({...fixture, created_at: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, started_at: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, finished_at: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, updated_at: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
+test('old conversation details name Flutter Conversation.fromGenerated padded GET created_at instead of remapping to a recap chip', async () => {
+  for (const extra of [
+    '  2026-09-07T00:00:00.000Z  ',
+    '2026-09-07T00:00:00.000Z ',
+    ' 2026-09-07T00:00:00.000Z',
+    '2026-09-07T00:00:00.000Z\n',
+    '\u00852026-09-07T00:00:00.000Z',
+  ]) {
+    mockRequest.mockResolvedValue(response({...fixture, created_at: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, started_at: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, finished_at: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+    mockRequest.mockResolvedValue(response({...fixture, updated_at: extra}));
+    await expect(
+      loadLegacyConversationDetail(backend, fixture.id),
+    ).rejects.toMatchObject({kind: 'invalid'});
+  }
+});
+
 test('old conversation details name Flutter Conversation.fromGenerated type-wrong GET suggested_summarization_apps item instead of remapping to a recap chip', async () => {
   mockRequest.mockResolvedValue(
     response({
