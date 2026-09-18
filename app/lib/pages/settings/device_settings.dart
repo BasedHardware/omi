@@ -433,7 +433,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                             opt.$2,
                             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
                           ),
-                          trailing: currentAction == opt.$1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                          trailing:
+                              currentAction == opt.$1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
                           onTap: () {
                             onSelected(opt.$1);
                             Navigator.pop(sheetContext);

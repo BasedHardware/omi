@@ -531,7 +531,7 @@ class CaptureController extends ChangeNotifier
   DateTime? _lastButtonActionTime; // Debounce timestamp for button operations
   static const _buttonActionDebounce = Duration(milliseconds: 400);
   bool _isForceProcessing = false; // Mutex guard for forceProcessingCurrentConversation
-  Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
+  Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
 
   StreamSubscription? _storageStream;
 
@@ -1128,6 +1128,10 @@ class CaptureController extends ChangeNotifier
         case 3:
           // Ask Question (Toggle voice question mode)
           Logger.debug("Button action: toggle voice question session");
+          if (_isPaused) {
+            Logger.debug("Cannot start voice question while paused/muted");
+            break;
+          }
           if (_voiceCommandSession == null) {
             Logger.debug("Starting voice question session (toggle mode)");
             if (OmiVoicePlaybackService.instance.isSpeaking) {
@@ -2431,7 +2435,7 @@ class CaptureController extends ChangeNotifier
       await phoneSync.finalizeCurrentSession();
       _clearSessionLocation();
 
-      _resetStateVariables();
+      await _resetStateVariables();
       externalActions.addProcessingConversation(
         ServerConversation(
           id: '0',
@@ -2766,6 +2770,7 @@ class CaptureController extends ChangeNotifier
     BatteryWidgetService().updateMuteState(false);
     // Resume streaming from the device
     await _initiateDeviceAudioStreaming();
+    if (_isPaused || _recordingDevice == null) return;
 
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
