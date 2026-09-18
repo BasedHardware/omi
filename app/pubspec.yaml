@@ -163,7 +163,7 @@ dev_dependencies:
   # consumes but does not re-export.
   async: ^2.11.0
   stream_channel: ^2.1.4
-  # Direct dev dep for the HomePageWrapper mounted-guard widget test's Firebase mock:
+  # Direct dev dep for the HomePage timer widget test's Firebase mock:
   # setupFirebaseCoreMocks lives in firebase_core_platform_interface/test.dart,
   # which firebase_core depends on but does not re-export.
   firebase_core_platform_interface: ^5.4.2

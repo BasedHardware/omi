@@ -525,6 +525,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           body: Stack(
             children: [
               GestureDetector(
+                excludeFromSemantics: true,
                 onTap: () {},
                 child: RefreshIndicator(
                   onRefresh: () async {
@@ -2147,12 +2148,7 @@ const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4)
 /// the header's Spacer. The child stays where it was on the text line and
 /// nothing in the list moves; the target becomes the header's full 36pt height.
 class _SectionHeaderTapTarget extends StatelessWidget {
-  const _SectionHeaderTapTarget({
-    required this.onTap,
-    required this.child,
-    required this.reach,
-    this.semanticLabel,
-  });
+  const _SectionHeaderTapTarget({required this.onTap, required this.child, required this.reach, this.semanticLabel});
 
   final VoidCallback onTap;
   final Widget child;
