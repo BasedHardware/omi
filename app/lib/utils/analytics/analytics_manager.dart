@@ -913,6 +913,178 @@ class AnalyticsManager {
 
   void speechProfileContinued() => track(speechProfileContinuedEventName);
 
+  void guidedIntroStarted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptCount,
+  }) =>
+      track('Guided Intro Started', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'prompt_count': promptCount,
+      });
+
+  void guidedIntroPromptViewed({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+  }) =>
+      track('Guided Intro Prompt Viewed', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'prompt_index': promptIndex,
+      });
+
+  void guidedIntroRecordingStarted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required int attempt,
+  }) =>
+      track('Guided Intro Recording Started', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'prompt_index': promptIndex,
+        'attempt': attempt,
+      });
+
+  void guidedIntroRecordingFailed({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required String failureClass,
+  }) =>
+      track('Guided Intro Recording Failed', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'prompt_index': promptIndex,
+        'failure_class': failureClass,
+      });
+
+  void guidedIntroPromptCompleted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required String result,
+    required int durationMs,
+    required bool transcriptPresent,
+  }) =>
+      track('Guided Intro Prompt Completed', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'prompt_index': promptIndex,
+        'result': result,
+        'duration_ms': durationMs,
+        'transcript_present': transcriptPresent,
+      });
+
+  void guidedIntroReviewShown({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int answerCount,
+    required bool goalPresent,
+    required int reviewAttempt,
+  }) =>
+      track('Guided Intro Review Shown', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'answer_count': answerCount,
+        'goal_present': goalPresent,
+        'review_attempt': reviewAttempt,
+      });
+
+  void guidedIntroSaveSubmitted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int selectedAnswerCount,
+    required int selectedMemoryCount,
+    required bool goalSelected,
+    required bool voiceAttempted,
+    required int attempt,
+  }) =>
+      track('Guided Intro Save Submitted', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'selected_answer_count': selectedAnswerCount,
+        'selected_memory_count': selectedMemoryCount,
+        'goal_selected': goalSelected,
+        'voice_attempted': voiceAttempted,
+        'attempt': attempt,
+      });
+
+  void guidedIntroVoiceEnrollment({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required String result,
+    required int durationMs,
+    required int attempt,
+  }) =>
+      track('Guided Intro Voice Enrollment', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'result': result,
+        'duration_ms': durationMs,
+        'attempt': attempt,
+      });
+
+  void guidedIntroContentSave({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int memoryAttempted,
+    required int memorySaved,
+    required int memoryFailed,
+    required String goalResult,
+    required int attempt,
+  }) =>
+      track('Guided Intro Content Save', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'memory_attempted': memoryAttempted,
+        'memory_saved': memorySaved,
+        'memory_failed': memoryFailed,
+        'goal_result': goalResult,
+        'attempt': attempt,
+      });
+
+  void guidedIntroCompleted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required String completionMode,
+    required String voiceResult,
+    required int memorySaved,
+    required String goalResult,
+    required int elapsedMs,
+  }) =>
+      track('Guided Intro Completed', properties: {
+        'session_id': sessionId,
+        'source': source,
+        'variant': variant,
+        'completion_mode': completionMode,
+        'voice_result': voiceResult,
+        'memory_saved': memorySaved,
+        'goal_result': goalResult,
+        'elapsed_ms': elapsedMs,
+      });
+
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
