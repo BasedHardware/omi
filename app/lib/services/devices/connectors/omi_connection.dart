@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -19,6 +20,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsDeviceNameCharacteristicUuid = '19b10014-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -874,6 +876,44 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting mic gain: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<void> performSetDeviceName(String name) async {
+    try {
+      final bytes = utf8.encode(name.trim());
+      // Maximum name length stored on device is 31 bytes
+      final clampedBytes = bytes.length > 31 ? bytes.sublist(0, 31) : bytes;
+      await transport.writeCharacteristic(
+        settingsServiceUuid,
+        settingsDeviceNameCharacteristicUuid,
+        clampedBytes,
+      );
+      Logger.debug('OmiDeviceConnection: Successfully set device name to "$name"');
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting device name: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<String?> performGetDeviceName() async {
+    try {
+      final value = await transport.readCharacteristic(
+        settingsServiceUuid,
+        settingsDeviceNameCharacteristicUuid,
+      );
+      if (value.isNotEmpty) {
+        final name = utf8.decode(value, allowMalformed: true).trim();
+        if (name.isNotEmpty) {
+          return name;
+        }
+      }
+      return null;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting device name: $e');
       return null;
     }
   }

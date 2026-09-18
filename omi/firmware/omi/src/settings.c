@@ -23,6 +23,7 @@ struct lsm6dsl_time_base {
 };
 
 static struct lsm6dsl_time_base lsm6dsl_time_base = {0};
+static char device_name[MAX_DEVICE_NAME_LEN] = {0};
 
 static int settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg)
 {
@@ -123,6 +124,22 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         LOG_WRN("lsm6dsl_time_base size mismatch: len=%u expected=%u (or legacy %u)",
             (unsigned)len, (unsigned)sizeof(lsm6dsl_time_base), (unsigned)(sizeof(uint64_t) + sizeof(uint32_t)));
         return -EINVAL;
+    }
+
+    if (settings_name_steq(name, "device_name", &next) && !next) {
+        if (len >= sizeof(device_name)) {
+            return -EINVAL;
+        }
+        memset(device_name, 0, sizeof(device_name));
+        if (len > 0) {
+            rc = read_cb(cb_arg, device_name, len);
+            if (rc < 0) {
+                return rc;
+            }
+            device_name[len] = '\0';
+        }
+        LOG_INF("Loaded device_name: %s", device_name);
+        return 0;
     }
 
     return -ENOENT;
@@ -244,4 +261,28 @@ int app_settings_save_mic_gain(uint8_t new_gain)
 uint8_t app_settings_get_mic_gain(void)
 {
     return mic_gain;
+}
+
+int app_settings_save_device_name(const char *name)
+{
+    if (name == NULL) {
+        device_name[0] = '\0';
+    } else {
+        strncpy(device_name, name, sizeof(device_name) - 1);
+        device_name[sizeof(device_name) - 1] = '\0';
+    }
+
+    size_t name_len = strlen(device_name);
+    int err = settings_save_one("omi/device_name", device_name, name_len);
+    if (err) {
+        LOG_ERR("Failed to save device_name (err %d)", err);
+    } else {
+        LOG_INF("Saved device_name: %s", device_name);
+    }
+    return err;
+}
+
+const char *app_settings_get_device_name(void)
+{
+    return device_name;
 }

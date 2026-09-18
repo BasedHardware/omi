@@ -92,4 +92,21 @@ int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp
  */
 int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp);
 
+#define MAX_DEVICE_NAME_LEN 32
+
+/**
+ * @brief Save the device name setting to onboard persistent storage.
+ *
+ * @param name The new device name (null-terminated string, up to 31 chars).
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_save_device_name(const char *name);
+
+/**
+ * @brief Get the current persisted device name.
+ *
+ * @return The current device name string, or empty string if not set.
+ */
+const char *app_settings_get_device_name(void);
+
 #endif // SETTINGS_H
