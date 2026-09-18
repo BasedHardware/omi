@@ -37,7 +37,7 @@ class ChatToolResponse(BaseModel):
 
 
 def _safe_limit(limit: Any) -> int:
-    if limit is None or limit == "":
+    if limit is None or limit == "" or isinstance(limit, bool):
         return 5
     try:
         limit = int(limit)
@@ -75,11 +75,26 @@ def _clean_snippet(value: Optional[str]) -> str:
     return text.strip()
 
 
+def _safe_get_dict(source: Any, key: str) -> dict[str, Any]:
+    """Safely get a dict value even if key is present with None."""
+    if not isinstance(source, dict):
+        return {}
+    val = source.get(key)
+    return val if isinstance(val, dict) else {}
+
+
 def _format_summary(data: dict[str, Any], language: str) -> str:
+    if not isinstance(data, dict):
+        return "No summary was returned for this article."
+
     title = data.get("title") or "Untitled"
     extract = data.get("extract") or "No summary was returned for this article."
     description = data.get("description")
-    page_url = data.get("content_urls", {}).get("desktop", {}).get("page") or _article_url(language, title)
+
+    # Guard against null content_urls or null desktop sub-dictionaries
+    content_urls = _safe_get_dict(data, "content_urls")
+    desktop = _safe_get_dict(content_urls, "desktop")
+    page_url = desktop.get("page") or _article_url(language, title)
 
     lines = [title]
     if description:
@@ -185,6 +200,9 @@ async def get_omi_tools_manifest():
 
 @app.post("/tools/search_articles", tags=["chat_tools"], response_model=ChatToolResponse)
 async def search_articles(payload: dict[str, Any]):
+    if not isinstance(payload, dict):
+        return ChatToolResponse(error="Missing required field: query")
+
     query = (payload.get("query") or "").strip()
     if not query:
         return ChatToolResponse(error="Missing required field: query")
@@ -205,12 +223,19 @@ async def search_articles(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        results = data.get("query", {}).get("search", [])[:limit]
+        query_data = _safe_get_dict(data, "query")
+        results = query_data.get("search", [])
+        if not isinstance(results, list):
+            results = []
+        results = results[:limit]
+
         if not results:
             return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
 
         lines = [f"Wikipedia search results for '{query}':"]
         for index, item in enumerate(results, start=1):
+            if not isinstance(item, dict):
+                continue
             title = item.get("title") or "Untitled"
             snippet = _clean_snippet(item.get("snippet"))
             lines.append(f"\n{index}. {title}")
@@ -227,6 +252,9 @@ async def search_articles(payload: dict[str, Any]):
 
 @app.post("/tools/get_article_summary", tags=["chat_tools"], response_model=ChatToolResponse)
 async def get_article_summary(payload: dict[str, Any]):
+    if not isinstance(payload, dict):
+        return ChatToolResponse(error="Missing required field: title")
+
     title = (payload.get("title") or "").strip()
     if not title:
         return ChatToolResponse(error="Missing required field: title")
@@ -236,6 +264,8 @@ async def get_article_summary(payload: dict[str, Any]):
 
     try:
         data = await _request_json(url)
+        if not isinstance(data, dict):
+            return ChatToolResponse(error=f"Invalid response returned for '{title}'.")
         if data.get("type") == "disambiguation":
             return ChatToolResponse(
                 result=_format_summary(data, language)
@@ -251,7 +281,8 @@ async def get_article_summary(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_random_article", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_random_article(payload: dict[str, Any]):
+async def get_random_article(payload: Optional[dict[str, Any]] = None):
+    payload = payload if isinstance(payload, dict) else {}
     language = _safe_language(payload.get("language"))
     url = f"https://{language}.wikipedia.org/w/api.php"
 
@@ -267,11 +298,13 @@ async def get_random_article(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        random_items = data.get("query", {}).get("random", [])
-        if not random_items:
+        query_data = _safe_get_dict(data, "query")
+        random_items = query_data.get("random", [])
+        if not isinstance(random_items, list) or not random_items:
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 
-        title = random_items[0].get("title")
+        first_item = random_items[0] if isinstance(random_items[0], dict) else {}
+        title = first_item.get("title")
         if not title:
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 
