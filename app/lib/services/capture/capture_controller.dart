@@ -13,7 +13,6 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -25,6 +24,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/capture_lifetime.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
@@ -124,7 +124,8 @@ class CaptureController extends ChangeNotifier
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
 
   late final CaptureAuthBoundary _auth = _authOverride ?? CaptureAuthBoundary.production;
-  late final CaptureScheduling _scheduling = _schedulingOverride ?? const WallClockCaptureScheduling();
+  late final CaptureLifetime lifetime = CaptureLifetime(_schedulingOverride ?? const WallClockCaptureScheduling());
+  CaptureScheduling get _scheduling => lifetime;
 
   AudioSource? _activeSource;
 
@@ -132,7 +133,6 @@ class CaptureController extends ChangeNotifier
 
   bool get isWalSupported => _isWalSupported;
 
-  StreamSubscription<bool>? _connectionStateListener;
   late final CaptureConnectivityBoundary _connectivity;
   late bool _isConnected;
 
@@ -240,13 +240,19 @@ class CaptureController extends ChangeNotifier
         _openSocketOverride = openSocket,
         _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
+    // Restore a persisted device mute so it survives an app kill/restart. When
+    // the device reconnects, streamDeviceRecording() reads _isPaused as
+    // `wasPaused` and re-applies the mute instead of silently resuming.
     _isPaused = _preferences.deviceMuted;
-    _connectionStateListener = _connectivity.changes.listen((bool isConnected) {
-      onConnectionStateChanged(isConnected);
+    lifetime.listen(_connectivity.changes, onConnectionStateChanged);
+    final ble = _bleListeners ?? const BleBridgeCaptureListeners();
+    ble.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+    lifetime.own(() {
+      ble.removeBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+      _bleBytesStream?.cancel();
+      _blePhotoStream?.cancel();
+      _bleButtonStream?.cancel();
     });
-    (_bleListeners?.addBatchRecordingFinalizedListener ?? BleBridge.instance.addBatchRecordingFinalizedListener)(
-      _onOfflineRecordingFinalized,
-    );
   }
 
   static Future<void> _startAndroidLocationForegroundTask() async {
@@ -529,10 +535,6 @@ class CaptureController extends ChangeNotifier
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
-
-  StreamSubscription? _storageStream;
-
-  get storageStream => _storageStream;
 
   RecordingState recordingState = RecordingState.stop;
 
@@ -999,130 +1001,131 @@ class CaptureController extends ChangeNotifier
 
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
-    _bleButtonStream?.cancel();
-    _bleButtonStream = await _getBleButtonListener(
-      deviceId,
-      onButtonReceived: (List<int> value) {
-        final snapshot = List<int>.from(value);
-        if (snapshot.isEmpty || snapshot.length < 4) return;
-        var buttonState = ByteData.view(
-          Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-        ).getUint32(0);
-        Logger.debug("device button $buttonState");
+    _bleButtonStream = lifetime.takeSubscription(
+      _bleButtonStream,
+      await _getBleButtonListener(
+        deviceId,
+        onButtonReceived: (List<int> value) {
+          final snapshot = List<int>.from(value);
+          if (snapshot.isEmpty || snapshot.length < 4) return;
+          var buttonState = ByteData.view(
+            Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
+          ).getUint32(0);
+          Logger.debug("device button $buttonState");
 
-        // Intercept for interactive device onboarding
-        if (deviceOnboardingProvider?.isOnboardingActive == true) {
-          deviceOnboardingProvider!.onButtonEvent(buttonState);
-          // For step 1 (ask question), let single-tap fall through to normal voice command handling
-          if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
-            // Fall through to normal single-tap handling below
-          } else {
+          // Intercept for interactive device onboarding
+          if (deviceOnboardingProvider?.isOnboardingActive == true) {
+            deviceOnboardingProvider!.onButtonEvent(buttonState);
+            // For step 1 (ask question), let single-tap fall through to normal voice command handling
+            if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
+              // Fall through to normal single-tap handling below
+            } else {
+              return;
+            }
+          }
+
+          // double tap
+          if (buttonState == 2) {
+            Logger.debug("Double tap detected");
+
+            // Guard: ignore if already processing a button event
+            if (_isProcessingButtonEvent) {
+              Logger.debug("Double tap: already processing, ignoring");
+              return;
+            }
+
+            int doubleTapAction = _preferences.doubleTapAction;
+
+            if (doubleTapAction == 1) {
+              // Pause/resume recording
+              Logger.debug("Double tap: toggling pause/mute");
+              _isProcessingButtonEvent = true;
+              if (_isPaused) {
+                PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+                resumeDeviceRecording().then((_) {
+                  _isProcessingButtonEvent = false;
+                }).catchError((e) {
+                  Logger.debug("Error resuming device recording: $e");
+                  _isProcessingButtonEvent = false;
+                });
+              } else {
+                PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+                pauseDeviceRecording().then((_) {
+                  _isProcessingButtonEvent = false;
+                }).catchError((e) {
+                  Logger.debug("Error pausing device recording: $e");
+                  _isProcessingButtonEvent = false;
+                });
+              }
+            } else if (doubleTapAction == 2) {
+              // Star ongoing conversation (doesn't end it)
+              Logger.debug("Double tap: marking conversation for starring");
+              if (!_starOngoingConversation) {
+                markConversationForStarring();
+                PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+                // Haptic feedback to confirm
+                HapticFeedback.mediumImpact();
+              } else {
+                // Toggle off if already marked
+                unmarkConversationForStarring();
+                PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+                HapticFeedback.lightImpact();
+              }
+            } else {
+              // End conversation and process (default)
+              Logger.debug("Double tap: processing conversation");
+              PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+              forceProcessingCurrentConversation();
+            }
             return;
           }
-        }
 
-        // double tap
-        if (buttonState == 2) {
-          Logger.debug("Double tap detected");
-
-          // Guard: ignore if already processing a button event
-          if (_isProcessingButtonEvent) {
-            Logger.debug("Double tap: already processing, ignoring");
+          // Single tap (buttonState == 1) - toggle voice question mode
+          // Tap once to start, tap again to end
+          if (buttonState == 1) {
+            debugPrint("Single tap detected");
+            if (_voiceCommandSession == null) {
+              // Start voice question session (new toggle mode)
+              debugPrint("Starting voice question session (toggle mode)");
+              // Cut off any in-flight voice playback from a prior reply so the
+              // new recording starts clean.
+              if (OmiVoicePlaybackService.instance.isSpeaking) {
+                OmiVoicePlaybackService.instance.interrupt();
+              }
+              _voiceCommandSession = DateTime.now();
+              _commandBytes = [];
+              _startVoiceCommandTimeout(deviceId);
+              _playSpeakerHaptic(deviceId, 1);
+            } else {
+              // End on second tap
+              debugPrint("Ending voice question session (toggle mode)");
+              _endVoiceCommandSession(deviceId);
+            }
             return;
           }
 
-          int doubleTapAction = _preferences.doubleTapAction;
-
-          if (doubleTapAction == 1) {
-            // Pause/resume recording
-            Logger.debug("Double tap: toggling pause/mute");
-            _isProcessingButtonEvent = true;
-            if (_isPaused) {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error resuming device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            } else {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error pausing device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            }
-          } else if (doubleTapAction == 2) {
-            // Star ongoing conversation (doesn't end it)
-            Logger.debug("Double tap: marking conversation for starring");
-            if (!_starOngoingConversation) {
-              markConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-              // Haptic feedback to confirm
-              HapticFeedback.mediumImpact();
-            } else {
-              // Toggle off if already marked
-              unmarkConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-              HapticFeedback.lightImpact();
-            }
-          } else {
-            // End conversation and process (default)
-            Logger.debug("Double tap: processing conversation");
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
-            forceProcessingCurrentConversation();
-          }
-          return;
-        }
-
-        // Single tap (buttonState == 1) - toggle voice question mode
-        // Tap once to start, tap again to end
-        if (buttonState == 1) {
-          debugPrint("Single tap detected");
-          if (_voiceCommandSession == null) {
-            // Start voice question session (new toggle mode)
-            debugPrint("Starting voice question session (toggle mode)");
-            // Cut off any in-flight voice playback from a prior reply so the
-            // new recording starts clean.
-            if (OmiVoicePlaybackService.instance.isSpeaking) {
-              OmiVoicePlaybackService.instance.interrupt();
-            }
+          // Legacy support: start long press (for voice commands) - older firmware
+          if (buttonState == 3 && _voiceCommandSession == null) {
+            debugPrint("Legacy: Long press start detected");
             _voiceCommandSession = DateTime.now();
             _commandBytes = [];
             _startVoiceCommandTimeout(deviceId);
             _playSpeakerHaptic(deviceId, 1);
-          } else {
-            // End on second tap
-            debugPrint("Ending voice question session (toggle mode)");
+          }
+
+          // Legacy support: release (end voice command) - older firmware
+          // End on release if a voice command session is active
+          if (buttonState == 5 && _voiceCommandSession != null) {
+            debugPrint("Legacy: Release detected - ending voice command");
             _endVoiceCommandSession(deviceId);
           }
-          return;
-        }
-
-        // Legacy support: start long press (for voice commands) - older firmware
-        if (buttonState == 3 && _voiceCommandSession == null) {
-          debugPrint("Legacy: Long press start detected");
-          _voiceCommandSession = DateTime.now();
-          _commandBytes = [];
-          _startVoiceCommandTimeout(deviceId);
-          _playSpeakerHaptic(deviceId, 1);
-        }
-
-        // Legacy support: release (end voice command) - older firmware
-        // End on release if a voice command session is active
-        if (buttonState == 5 && _voiceCommandSession != null) {
-          debugPrint("Legacy: Release detected - ending voice command");
-          _endVoiceCommandSession(deviceId);
-        }
-      },
+        },
+      ),
     );
   }
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     Logger.debug('streamAudioToWs in capture_provider');
-    _bleBytesStream?.cancel();
     _startMetricsTracking();
     final subscription = await _getBleAudioBytesListener(
       deviceId,
@@ -1177,7 +1180,7 @@ class CaptureController extends ChangeNotifier
         }
       },
     );
-    _bleBytesStream = subscription;
+    _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
     return subscription != null;
   }
@@ -1502,41 +1505,30 @@ class CaptureController extends ChangeNotifier
     if (connection == null) return;
 
     await connection.performCameraStartPhotoController();
-    _blePhotoStream = await connection.performGetImageListener(
-      onImageReceived: (orientedImage) async {
-        final rotatedImageBytes = rotateImage(orientedImage);
-        final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-        final String base64Image = base64Encode(rotatedImageBytes);
+    _blePhotoStream = lifetime.takeSubscription(
+      _blePhotoStream,
+      await connection.performGetImageListener(
+        onImageReceived: (orientedImage) async {
+          final rotatedImageBytes = rotateImage(orientedImage);
+          final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
+          final String base64Image = base64Encode(rotatedImageBytes);
 
-        // Add placeholder to UI for immediate feedback
-        photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
-        photos = List.from(photos);
-        _segmentsPhotosVersion++;
-        notifyListeners();
-
-        // Chunking Logic
-        const int chunkSize = 8192; // 8KB chunks
-        final totalChunks = (base64Image.length / chunkSize).ceil();
-
-        for (int i = 0; i < totalChunks; i++) {
-          final start = i * chunkSize;
-          final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
-          final chunk = base64Image.substring(start, end);
-
-          final payload = jsonEncode({
-            'type': 'image_chunk',
-            'id': tempId,
-            'index': i,
-            'total': totalChunks,
-            'data': chunk,
-          });
-
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(payload); // Send the JSON string
-          }
-          await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
-        }
-      },
+          // Add placeholder to UI for immediate feedback
+          photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
+          photos = List.from(photos);
+          _segmentsPhotosVersion++;
+          notifyListeners();
+          await emitBase64ImageChunks(
+            base64Image,
+            id: tempId,
+            emit: (payload) async {
+              if (_socket?.state == SocketServiceState.connected) {
+                _socket?.send(payload);
+              }
+            },
+          );
+        },
+      ),
     );
     notifyListeners();
   }
@@ -1598,20 +1590,16 @@ class CaptureController extends ChangeNotifier
     _phoneBatchGeolocationPreference.invalidateSession();
     _clearSessionLocation();
     _recordingTelemetry.complete(reason: 'pipeline_closed');
-    _bleBytesStream?.cancel();
-    _blePhotoStream?.cancel();
-    _bleButtonStream?.cancel();
     _socket?.unsubscribe(this);
-    _keepAliveTimer?.cancel();
-    _inProgressConversationRefreshTimer?.cancel();
-    _connectionStateListener?.cancel();
     _metrics.dispose();
-    _autoSyncFallbackTimer?.cancel();
-    _peopleRefreshFuture = null; // Clear in-flight tracker
-    (_bleListeners?.removeBatchRecordingFinalizedListener ?? BleBridge.instance.removeBatchRecordingFinalizedListener)(
-      _onOfflineRecordingFinalized,
-    );
-
+    _peopleRefreshFuture = null;
+    // Synchronous belt-and-braces: the keep-alive periodic must not outlive
+    // dispose even before lifetime.close()'s drain reaches its release
+    // (that drain is async; tests assert the no-pending-timers invariant
+    // synchronously).
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    unawaited(lifetime.close());
     super.dispose();
   }
 
@@ -2018,6 +2006,12 @@ class CaptureController extends ChangeNotifier
 
   @visibleForTesting
   bool get keepAliveScheduledForTesting => _keepAliveTimer?.isActive ?? false;
+
+  @visibleForTesting
+  void debugArmVoiceCommandTimeout(String deviceId) {
+    _voiceCommandSession = _now();
+    _startVoiceCommandTimeout(deviceId);
+  }
 
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();

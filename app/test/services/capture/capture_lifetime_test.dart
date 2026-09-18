@@ -161,6 +161,19 @@ void main() {
     expect(bag.debugTrackedCount, 0);
   });
 
+  test('close cancels every owned timer so nothing fires afterwards', () async {
+    final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
+    final bag = CaptureLifetime(scheduler);
+    var fired = 0;
+    bag.once(const Duration(seconds: 1), () => fired++);
+    bag.once(const Duration(seconds: 2), () => fired++);
+    bag.periodic(const Duration(seconds: 1), (_) => fired++);
+    await bag.close();
+    expect(scheduler.pendingTimers, isEmpty);
+    scheduler.elapse(const Duration(seconds: 5));
+    expect(fired, 0);
+  });
+
   test('concurrent close joins the in-flight drain; a later close is a no-op', () async {
     final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
     final gate = Completer<void>();
