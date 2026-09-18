@@ -192,24 +192,82 @@ def get_user_shop(uid: str) -> Optional[str]:
     return tokens.get("shop_domain")
 
 
+def _signing_secret() -> Optional[str]:
+    """The app secret used for Shopify HMAC and OAuth state signing.
+
+    Returns None when the secret is absent or still the checked-in placeholder,
+    so every signature check fails closed rather than validating against a
+    value that is public in this repository.
+    """
+    secret = SHOPIFY_CLIENT_SECRET
+    if not secret or secret == "YOUR_CLIENT_SECRET_HERE":
+        return None
+    return secret
+
+
 def verify_shopify_hmac(query_string: str, hmac_value: str) -> bool:
-    """Verify the HMAC signature from Shopify."""
-    # Parse query string and remove hmac parameter
-    params = urllib.parse.parse_qs(query_string)
+    """Verify the HMAC signature Shopify puts on OAuth redirects.
+
+    Shopify signs the *decoded* `key=value` pairs, sorted by key and joined
+    with `&` — not a re-percent-encoded query string. Blank values are part of
+    the signed message, and repeated keys are joined with commas.
+    """
+    secret = _signing_secret()
+    if not secret or not hmac_value:
+        return False
+
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
     params.pop('hmac', None)
-    
-    # Sort and encode parameters
-    sorted_params = sorted(params.items())
-    encoded = urllib.parse.urlencode([(k, v[0]) for k, v in sorted_params])
-    
-    # Calculate HMAC
+    params.pop('signature', None)
+
+    message = "&".join(
+        f"{key}={','.join(values)}" for key, values in sorted(params.items())
+    )
+
     digest = hmac.new(
-        SHOPIFY_CLIENT_SECRET.encode('utf-8'),
-        encoded.encode('utf-8'),
+        secret.encode('utf-8'),
+        message.encode('utf-8'),
         hashlib.sha256
     ).hexdigest()
-    
+
     return hmac.compare_digest(digest, hmac_value)
+
+
+def _oauth_state_for(uid: str) -> str:
+    """Build a tamper-evident OAuth `state` binding the flow to this uid."""
+    secret = _signing_secret()
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail="SHOPIFY_CLIENT_SECRET is not configured",
+        )
+    signature = hmac.new(
+        secret.encode('utf-8'),
+        uid.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return f"{uid}:{signature}"
+
+
+def _oauth_state_uid(state: str) -> Optional[str]:
+    """Return the uid carried by a `state` this server signed, else None."""
+    secret = _signing_secret()
+    if not secret or not state or ":" not in state:
+        return None
+
+    uid, _, signature = state.rpartition(":")
+    if not uid:
+        return None
+
+    expected = hmac.new(
+        secret.encode('utf-8'),
+        uid.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, signature):
+        return None
+    return uid
 
 
 def format_currency(amount: str, currency: str = "USD") -> str:
@@ -291,7 +349,8 @@ async def shopify_auth(uid: str, shop: Optional[str] = None):
         "client_id": SHOPIFY_CLIENT_ID,
         "scope": scopes,
         "redirect_uri": SHOPIFY_REDIRECT_URI,
-        "state": uid,  # Use uid as state to identify user on callback
+        # Signed so only flows this server started can bind a uid on callback.
+        "state": _oauth_state_for(uid),
     }
     
     auth_url = f"https://{shop}/admin/oauth/authorize?{urllib.parse.urlencode(params)}"
@@ -309,7 +368,9 @@ async def shopify_callback(
     code: Optional[str] = None,
     state: Optional[str] = None,
     shop: Optional[str] = None,
-    hmac: Optional[str] = None,
+    # Aliased: a parameter literally named `hmac` would shadow the `hmac`
+    # module for the whole function body.
+    hmac_value: Optional[str] = Query(None, alias="hmac"),
     error: Optional[str] = None,
     error_description: Optional[str] = None
 ):
@@ -327,9 +388,25 @@ async def shopify_callback(
             "authenticated": False,
             "error": "Invalid callback parameters"
         })
-    
-    uid = state
-    
+
+    # Reject anything Shopify did not sign, before the code is exchanged.
+    if not verify_shopify_hmac(str(request.url.query), hmac_value or ""):
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid callback signature"
+        })
+
+    # Only bind a uid whose state this server signed at initiation, otherwise
+    # a valid foreign grant can be rebound onto someone else's account.
+    uid = _oauth_state_uid(state)
+    if not uid:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid callback state"
+        })
+
     # Exchange code for access token
     token_url = f"https://{shop}/admin/oauth/access_token"
     
