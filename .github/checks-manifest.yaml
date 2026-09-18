@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: omi-pubmed-tests
+    command: ["python3", "plugins/omi-pubmed-app/test_main.py"]
+    triggers: ["plugins/omi-pubmed-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PubMed article lookup and related queries must safely sanitize PMIDs from URLs/prefixes/integers, defend against non-dict payloads, and handle NCBI API errors without 500s"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
