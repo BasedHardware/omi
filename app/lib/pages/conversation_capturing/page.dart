@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -14,6 +15,7 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -181,6 +183,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
         final effectivelyMuted = _isMuted || provider.isCallActive;
+        final connectivity = context.watch<ConnectivityProvider>();
+        final usage = context.watch<UsageProvider>();
+        final photoChannelActive = _photoChannelActive(deviceProvider.connectedDevice);
+        final transcriptionInterrupted = provider.recordingState == RecordingState.interrupted;
         final transcriptSessionId =
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
@@ -216,8 +222,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   Expanded(
                     child: Text(
                       provider.photos.isNotEmpty
-                          ? 'Capturing'
-                          : (effectivelyMuted ? context.l10n.muted : context.l10n.listening),
+                          ? (provider.segments.isEmpty ? context.l10n.capturingPhotos : context.l10n.capturing)
+                          : (effectivelyMuted
+                              ? context.l10n.muted
+                              : transcriptionInterrupted
+                                  ? context.l10n.reconnecting
+                                  : context.l10n.listening),
                     ),
                   ),
                 ],
@@ -235,13 +245,21 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         // Transcripts, photos + inline WAL safety indicator
                         Column(
                           children: [
-                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
+                            _buildUnsyncedWalIndicator(provider),
                             Expanded(
                               child: provider.segments.isEmpty && provider.photos.isEmpty
                                   ? Center(
                                       child: Padding(
                                         padding: const EdgeInsets.only(top: 50.0),
-                                        child: Text(context.l10n.waitingForTranscriptOrPhotos),
+                                        child: Text(
+                                          _liveCaptureEmptyStateText(
+                                            provider,
+                                            connectivity: connectivity,
+                                            usage: usage,
+                                            photoChannelActive: photoChannelActive,
+                                            transcriptionInterrupted: transcriptionInterrupted,
+                                          ),
+                                        ),
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
@@ -706,51 +724,119 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  Widget _buildUnsyncedWalIndicator(List<Wal> unsyncedWals, int inFlightSeconds) {
+  /// Photos reach a live conversation only through camera-capable wearables
+  /// (Ray-Ban Meta, OpenGlass). A phone-mic session has no photo channel, so
+  /// its empty state must not promise one (#14473).
+  bool _photoChannelActive(BtDevice? connectedDevice) {
+    final type = connectedDevice?.type;
+    return type == DeviceType.raybanMeta || type == DeviceType.openglass;
+  }
+
+  /// The live-capture empty state names only what this session can actually
+  /// produce, and swaps in a truthful state line when the transcript pipeline
+  /// is degraded instead of promising "waiting" forever (#14473): an
+  /// out-of-credits plan can never produce a transcript while waiting, an
+  /// offline device is waiting on the network, and `interrupted` means the
+  /// transcription socket dropped and is reconnecting.
+  String _liveCaptureEmptyStateText(
+    CaptureProvider provider, {
+    required ConnectivityProvider connectivity,
+    required UsageProvider usage,
+    required bool photoChannelActive,
+    required bool transcriptionInterrupted,
+  }) {
+    if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (!connectivity.isConnected) return context.l10n.recordingOfflineTranscriptWillCatchUp;
+    if (transcriptionInterrupted) return context.l10n.transcriptionPausedReconnecting;
+    if (!photoChannelActive) return context.l10n.listeningTranscriptWillAppear;
+    return context.l10n.waitingForTranscriptOrPhotos;
+  }
+
+  Widget _buildUnsyncedWalIndicator(CaptureProvider provider) {
+    final unsyncedWals = provider.unsyncedSessionWals;
+    final inFlightSeconds = provider.inFlightAudioSeconds;
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
     if (totalSeconds <= 5) return const SizedBox.shrink();
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
+
+    // The indicator names the worst outcome across the session's WALs so it
+    // can say what happens next, instead of always claiming a healthy local
+    // save next to a spinner that never resolves (#14473).
+    final worst = worstSessionSyncState(unsyncedWals);
+    final bool uploading =
+        inFlightSeconds > 0 || unsyncedWals.any((w) => w.syncDisplayState == WalSyncDisplayState.syncing);
+    final bool retrying = worst == WalSyncDisplayState.retrying;
+    final bool failed = worst != null && _isTerminalWalState(worst);
+    final bool retryable = worst != null && isRetryableSyncState(worst);
+
+    final Color dotColor;
+    final String text;
+    if (failed) {
+      dotColor = const Color(0xFFFF5A5A);
+      text = retryable ? context.l10n.audioUploadFailedTapRetry(label) : context.l10n.audioUploadFailedKeptLocal(label);
+    } else if (retrying) {
+      dotColor = const Color(0xFFFFB800);
+      text = context.l10n.audioUploadRetrying(label);
+    } else if (uploading) {
+      dotColor = const Color(0xFF4CAF50);
+      text = context.l10n.uploadingAudioForTranscription(label);
+    } else {
+      dotColor = const Color(0xFF4CAF50);
+      text = context.l10n.audioSavedLocally(label);
+    }
+
+    final indicator = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A24),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2E2E3E), width: 0.5),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: const TextStyle(color: Color(0xFFE0E0E8), fontSize: 12.5, fontWeight: FontWeight.w500),
+          ),
+          if (!failed && !retrying && uploading) ...[
+            const SizedBox(width: 8),
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF6C6C80)),
+            ),
+          ],
+        ],
+      ),
+    );
+
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A24),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF2E2E3E), width: 0.5),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: const BoxDecoration(color: Color(0xFF4CAF50), shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                context.l10n.audioSavedLocally(label),
-                style: const TextStyle(color: Color(0xFFE0E0E8), fontSize: 12.5, fontWeight: FontWeight.w500),
-              ),
-              if (inFlightSeconds > 0) ...[
-                const SizedBox(width: 8),
-                const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF6C6C80)),
-                ),
-              ],
-            ],
-          ),
-        ),
+        child: retryable
+            ? GestureDetector(onTap: () => provider.retryFailedSessionWalUploads(), child: indicator)
+            : indicator,
       ),
     );
   }
+
+  /// Terminal for automatic uploads: failed (retry budget spent, but a
+  /// deliberate retry can still work), corrupted, or past the recovery window.
+  bool _isTerminalWalState(WalSyncDisplayState state) =>
+      state == WalSyncDisplayState.failed ||
+      state == WalSyncDisplayState.corrupted ||
+      state == WalSyncDisplayState.outsideRecoveryWindow;
 
   String _getTimeoutDisplayText(BuildContext context) {
     final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;

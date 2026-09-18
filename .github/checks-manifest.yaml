@@ -215,7 +215,7 @@ checks:
     reason: "the one-action production backend release contract must reject legacy release planes"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
-    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", "app/lib/**/*.dart", ".github/scripts/check_product_file_line_count_ratchet.py"]
     lanes: ["local", "ci"]
     requires_pr_body: true
     reason: "#9838 freezes oversized product files against the target branch without a shared metadata ledger; exact PR-body exceptions preserve reviewability without unrelated merge conflicts"
@@ -355,6 +355,11 @@ checks:
     triggers: ["scripts/failure-class", "scripts/test_failure_class.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the failure-class CLI is the registry's only schema authority; its hermetic tests had no blocking lane and had silently gone stale"
+  - id: registry-conflict-resolver-tests
+    command: ["python3", "scripts/test_resolve_registry_conflict.py"]
+    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
   - id: desktop-changelog-data
     command: ["python3", ".github/scripts/desktop-changelog.py", "validate"]
     triggers: ["all"]
@@ -1175,6 +1180,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
+  - id: mobile-event-registry
+    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

@@ -6,6 +6,18 @@ import Foundation
 /// There is no cloud step. A second registered engine is never consulted on
 /// failure (AFM is a selection, not a fallback). Kill switches short-circuit
 /// before any HTTP.
+///
+/// `makeDefault` resolves *which* engine once, at construction:
+/// 1. `disableLocalInference` — no engine (handled at dispatch).
+/// 2. `forceLocalInferenceEngine` / `OMI_FORCE_LOCAL_INFERENCE_ENGINE` — that id
+///    (overlay at select time; does not rewrite this snapshot).
+/// 3. AFM `availability.resolve() == .available` — `.afm`.
+/// 4. Otherwise `.localServer` (developer loopback).
+///
+/// Availability is a construction-time snapshot. Apple Intelligence toggling
+/// off later must fail closed on the already-selected engine, not switch to
+/// the other one. `makeDefault` runs per conversation finalization, so a
+/// model that finishes downloading is picked up on the next conversation.
 struct LocalInferenceRuntime: Sendable {
   var engines: [any LocalInferenceService]
   var killSwitches: LocalInferenceKillSwitches
@@ -24,19 +36,39 @@ struct LocalInferenceRuntime: Sendable {
     self.defaultEngineID = defaultEngineID
   }
 
+  /// Product default when no force overlay is set. `available` means the
+  /// on-device model can run *now* — not "will be ready after a download"
+  /// and not a version check alone. The probe is `SystemLanguageModel.default.availability`,
+  /// a property read, not a generation.
+  static func resolveDefaultEngineID(availability: any AFMAvailabilityChecking) -> LocalInferenceEngineID {
+    switch availability.resolve() {
+    case .available:
+      return .afm
+    case .unavailable:
+      return .localServer
+    }
+  }
+
   static func makeDefault(
     httpClient: any LocalInferenceHTTPClient = URLSessionLocalInferenceHTTPClient(),
     killSwitches: LocalInferenceKillSwitches = .resolve(),
-    configuration: LocalServerInferenceConfiguration = .fromKillSwitchSources()
+    configuration: LocalServerInferenceConfiguration = .fromKillSwitchSources(),
+    afmAvailability: any AFMAvailabilityChecking = AFMSystemAvailabilityChecker(),
+    afmSession: any AFMStructuredGenerating = AFMSystemSession(),
+    afmContextWindow: any AFMContextWindowProviding = AFMSystemContextWindow()
   ) -> LocalInferenceRuntime {
     LocalInferenceRuntime(
       engines: [
         LocalServerInferenceAdapter(configuration: configuration, httpClient: httpClient),
-        AFMLocalInferenceAdapter(),
+        AFMLocalInferenceAdapter(
+          availability: afmAvailability,
+          session: afmSession,
+          contextWindow: afmContextWindow
+        ),
       ],
       killSwitches: killSwitches,
       fallback: DesktopLocalInferenceFallbackRecorder(),
-      defaultEngineID: .localServer
+      defaultEngineID: resolveDefaultEngineID(availability: afmAvailability)
     )
   }
 

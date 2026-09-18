@@ -76,6 +76,12 @@ def test_child_env_for_real_mode() -> None:
     # Without this the harness backend refuses every adjudication with 409, which is
     # correct for production and useless for the machine meant to exercise the feature.
     assert child["SCREEN_FRAME_EGRESS_ENABLED"] == "true"
+    # The flag alone lights nobody: utils.free_tier_cohort admits only the configured
+    # cohort and treats unset/empty/malformed as admitting no one. Both halves must be
+    # present or the harness silently processes every conversation normally and the
+    # on-device path it exists to exercise never runs.
+    assert child["FREE_TIER_LOCAL_PROCESSING"] == "true"
+    assert child["FREE_TIER_LOCAL_PROCESSING_COHORT"] == "pct:100"
 
 
 def test_offline_mode_still_supplies_the_screen_frame_signing_secret() -> None:

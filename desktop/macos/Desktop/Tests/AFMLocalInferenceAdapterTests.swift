@@ -339,19 +339,21 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     }
   }
 
-  func testMakeDefaultStillSelectsLocalServer() throws {
+  func testMakeDefaultRegistersBothEngines() throws {
     let runtime = LocalInferenceRuntime.makeDefault(
       killSwitches: .enabled,
       configuration: LocalServerInferenceConfiguration(
         baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1")),
         model: "local",
-        contextWindowTokens: 8192,
+        contextWindowTokens: 2048,
         timeout: 60
-      )
+      ),
+      afmAvailability: FixedAvailability(value: .unavailable),
+      afmSession: ScriptedSession(results: []),
+      afmContextWindow: FixedContextWindow(tokens: nil)
     )
-    XCTAssertEqual(runtime.defaultEngineID, .localServer)
     XCTAssertEqual(Set(runtime.engines.map(\.engineID)), [.localServer, .afm])
-    XCTAssertEqual(runtime.selectedContextWindowTokens(), 8192)
+    XCTAssertEqual(runtime.defaultEngineID, .localServer)
   }
 
   func testForcedAFMSelectsTheRegisteredAdapter() async throws {

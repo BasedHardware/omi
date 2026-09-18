@@ -40,10 +40,8 @@ class CaptureProvider extends CaptureController {
     final sessionId = activeCaptureSessionId ?? activeRecordingId;
     if (sessionId == null) return;
     final fingerprint = segments
-        .map(
-          (segment) =>
-              '${segment.id}:${segment.speaker}:${segment.speakerId}:${segment.isUser}:${segment.personId ?? ''}:${segment.text}',
-        )
+        .map((segment) =>
+            '${segment.id}:${segment.speaker}:${segment.speakerId}:${segment.isUser}:${segment.personId ?? ''}:${segment.text}')
         .join('\n');
     if (fingerprint == _lastPersistedFingerprint) return;
     final pending = List.of(segments);
@@ -56,6 +54,9 @@ class CaptureProvider extends CaptureController {
       _lastPersistedFingerprint = fingerprint;
     }).catchError((Object e) {
       Logger.debug('Error persisting live segments: $e');
+      if (_lastPersistedFingerprint == fingerprint) {
+        _lastPersistedFingerprint = null;
+      }
     });
     unawaited(_liveSegmentWrite);
   }
