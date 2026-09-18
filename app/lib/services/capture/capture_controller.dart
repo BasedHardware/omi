@@ -1352,10 +1352,7 @@ class CaptureController extends ChangeNotifier
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     var language = _preferences.hasSetPrimaryLanguage ? _preferences.userPrimaryLanguage : "multi";
     final customSttConfig = _preferences.customSttConfig;
-    final decision = await SttModeResolver.instance.decide(
-      persistedCustomStt: customSttConfig,
-      codec: codec,
-    );
+    final decision = await SttModeResolver.instance.decide(persistedCustomStt: customSttConfig, codec: codec);
     if (decision.blockSocket) {
       await _abandonTranscriptionSocket(reason: 'stt mode blocked: ${decision.reason}');
       return;
@@ -1695,6 +1692,7 @@ class CaptureController extends ChangeNotifier
     // synchronously).
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    unawaited(_sessionOwner?.close());
     unawaited(lifetime.close());
     super.dispose();
   }
@@ -2155,7 +2153,9 @@ class CaptureController extends ChangeNotifier
       }
 
       _keepAliveLastExecutedAt = _now();
-      if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
+      // onClosed clears readiness without necessarily dropping the socket object.
+      // A still-connected transport is not "healthy transcription"; readiness is.
+      if (!recordingDeviceServiceReady || _transcriptServiceReady) {
         t.cancel();
         _keepAliveTimer = null;
         return;
