@@ -498,9 +498,16 @@ def acquire(
 
 
 def recover(repo_root: Path, session_id: str, env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    from . import cli as harness_cli
+    from . import live_session
+
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease, allow_dead_owner=True)
+    live_session.teardown(repo_root, session_id, env)
+    code = _harness_call(lease, harness_cli.cmd_down)
+    if code != 0:
+        raise SessionError(f"session harness down failed during recover (exit {code}); generation was not bumped")
     lease = {**lease, "generation": int(lease.get("generation", 1)) + 1, "owner": owner_identity()}
     lease["recovered_at"] = session_evidence.utc_now()
     _save_json_atomic(directory / LEASE_FILENAME, lease)
@@ -628,6 +635,9 @@ def reset(
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease)
+    from . import live_session
+
+    live_session.teardown(repo_root, session_id, env)
     # The harness reset validates the instance sentinel itself, so the blast
     # radius is exactly this session's instance state root.
     code = _harness_call(lease, harness_reset or harness_cli.cmd_reset)
@@ -656,14 +666,15 @@ def stop(
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease, allow_dead_owner=True)
+    from . import live_session
 
-    device = lease.get("device")
-    if isinstance(device, Mapping) and device.get("kind") == "simulator" and device.get("udid"):
-        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]))
-
+    live_session.teardown(repo_root, session_id, env)
     code = _harness_call(lease, harness_cli.cmd_down)
     if code != 0:
         raise SessionError(f"session harness down failed (exit {code}); session services may still run")
+    device = lease.get("device")
+    if isinstance(device, Mapping) and device.get("kind") == "simulator" and device.get("udid"):
+        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]))
     lease = {**lease, "status": "stopped", "stopped_at": session_evidence.utc_now(), "device": None}
     _save_json_atomic(directory / LEASE_FILENAME, lease)
     return lease
