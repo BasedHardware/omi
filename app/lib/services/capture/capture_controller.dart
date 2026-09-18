@@ -1680,6 +1680,7 @@ class CaptureController extends ChangeNotifier
     _keepAliveTimer?.cancel();
     _inProgressConversationRefreshTimer?.cancel();
     _connectionStateListener?.cancel();
+    unawaited(_sessionOwner?.close());
     _metrics.dispose();
     _autoSyncFallbackTimer?.cancel();
     _peopleRefreshFuture = null; // Clear in-flight tracker
@@ -2143,7 +2144,9 @@ class CaptureController extends ChangeNotifier
       }
 
       _keepAliveLastExecutedAt = _now();
-      if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
+      // onClosed clears readiness without necessarily dropping the socket object.
+      // A still-connected transport is not "healthy transcription"; readiness is.
+      if (!recordingDeviceServiceReady || _transcriptServiceReady) {
         t.cancel();
         _keepAliveTimer = null;
         return;
