@@ -7,7 +7,6 @@ import '../support/spine/contract.dart';
 
 void main() {
   contractTest('C1 coalescing preserves explicit retry when auto-upload is disabled', () async {
-    pendingContract('C1');
     final gate = Completer<void>();
     var drains = 0;
     final coordinator = RecordingTransferCoordinator(
@@ -35,7 +34,6 @@ void main() {
   });
 
   contractTest('C1 a new WAL revision during a drain queues one serial pass, not a lost wake', () async {
-    pendingContract('C1');
     final gate = Completer<void>();
     var drains = 0;
     var active = 0;

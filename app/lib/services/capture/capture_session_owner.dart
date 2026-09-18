@@ -38,18 +38,21 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
         _startForeground = startForeground,
         _stopForeground = stopForeground;
 
-  // FGS stays on a later cut; the constructor contract is stored so that cut
-  // does not change the explicit composition shape.
   final RecordingTransferCoordinator _coordinator;
-  // ignore: unused_field
   final Future<void> Function() _startForeground;
-  // ignore: unused_field
   final Future<void> Function() _stopForeground;
 
   int _generation = 0;
   String _identity = '';
   int _connectEpoch = 0;
   bool _closed = false;
+  bool _desiredForeground = false;
+  bool _foregroundRunning = false;
+  Future<void>? _foregroundOp;
+  Future<void>? _recoveryJoin;
+  WakeTrigger? _coalescedTrigger;
+  int? _recoveryRevision;
+  bool _recoveryWakeStarted = false;
   _InFlightConnect? _inFlight;
   _PublishedConnect? _published;
   Future<void>? _closeFinished;
@@ -135,30 +138,126 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
     return completer.future;
   }
 
-  Future<void> setForegroundRequired(bool required) => throw UnimplementedError('C1 ordered FGS intent');
-  bool get foregroundRunning => throw UnimplementedError('C1 settled FGS state');
+  /// Latest desired hold wins. A stop admitted while start is pending waits,
+  /// then stops once; a failed start stays not-running and may retry.
+  /// FGS publication is the settled running flag, not session identity: a
+  /// replaceSession must not drop an admitted hold, but close() must.
+  Future<void> setForegroundRequired(bool required) {
+    if (_closed) {
+      return required ? Future<void>.value() : _runForeground();
+    }
+    _desiredForeground = required;
+    return _runForeground();
+  }
 
+  bool get foregroundRunning => _foregroundRunning;
+
+  Future<void> _runForeground() {
+    final existing = _foregroundOp;
+    if (existing != null) return existing;
+    final done = Completer<void>();
+    _foregroundOp = done.future;
+    () async {
+      var failed = false;
+      try {
+        while (!_closed && _desiredForeground != _foregroundRunning) {
+          if (_desiredForeground) {
+            await _startForeground();
+            if (_closed || !_desiredForeground) {
+              await _stopForeground();
+              _foregroundRunning = false;
+              continue;
+            }
+            _foregroundRunning = true;
+          } else {
+            await _stopForeground();
+            _foregroundRunning = false;
+          }
+        }
+        if (_closed && _foregroundRunning) {
+          await _stopForeground();
+          _foregroundRunning = false;
+        }
+        if (!done.isCompleted) done.complete();
+      } catch (error, stack) {
+        failed = true;
+        _foregroundRunning = false;
+        if (!done.isCompleted) done.completeError(error, stack);
+      } finally {
+        _foregroundOp = null;
+      }
+      if (!failed && !_closed && _desiredForeground != _foregroundRunning) {
+        await _runForeground();
+      }
+    }();
+    return done.future;
+  }
+
+  /// Concurrent requests join the coordinator's in-flight pass; a later wake
+  /// still runs. Pin the session at admit and refuse to attach completion to a
+  /// later generation. An already-admitted drain is not undone.
   @override
-  Future<void> requestRecovery(WakeTrigger trigger, {int? inventoryRevision}) =>
-      throw UnimplementedError('C1 coalesced recovery request');
+  Future<void> requestRecovery(WakeTrigger trigger, {int? inventoryRevision}) {
+    if (_closed) return Future<void>.value();
+    final admitted = token;
+    _coalescedTrigger = _preferTrigger(_coalescedTrigger, trigger);
+    if (inventoryRevision != null && (_recoveryRevision == null || inventoryRevision > _recoveryRevision!)) {
+      if (_recoveryWakeStarted) {
+        unawaited(_coordinator.wake(trigger));
+      }
+      _recoveryRevision = inventoryRevision;
+    } else if (_recoveryWakeStarted && trigger == WakeTrigger.userRetry) {
+      unawaited(_coordinator.wake(trigger));
+    }
+    return _recoveryJoin ??= _runRecovery(admitted);
+  }
 
-  /// Generation-guarded coordinator wake. Distinct from [requestRecovery]
-  /// coalescing, which is a later C1 cut.
+  WakeTrigger _preferTrigger(WakeTrigger? existing, WakeTrigger incoming) {
+    if (existing == WakeTrigger.userRetry || incoming != WakeTrigger.userRetry) {
+      return existing ?? incoming;
+    }
+    return incoming;
+  }
+
+  Future<void> _runRecovery(CaptureSessionToken admitted) async {
+    try {
+      await Future<void>.delayed(Duration.zero);
+      if (_closed || !isCurrent(admitted)) return;
+      final trigger = _coalescedTrigger ?? WakeTrigger.startup;
+      _recoveryWakeStarted = true;
+      await _coordinator.wake(trigger);
+    } finally {
+      _recoveryJoin = null;
+      _recoveryWakeStarted = false;
+      _coalescedTrigger = null;
+      _recoveryRevision = null;
+    }
+    if (!isCurrent(admitted)) return;
+  }
+
+  /// Generation-guarded coordinator wake. [requestRecovery] is the coalesced
+  /// caller-facing admit; this helper skips a wake whose session already rolled.
   Future<void> wakeIfCurrent(CaptureSessionToken token, WakeTrigger trigger) async {
     if (!isCurrent(token)) return;
-    await _coordinator.wake(trigger);
+    await requestRecovery(trigger);
   }
 
   /// Invalidates synchronously, then drains owned teardown. Idempotent.
   Future<void> close() {
     if (_closed) return _closeFinished ?? Future<void>.value();
     _closed = true;
+    _desiredForeground = false;
     _generation++;
     _connectEpoch++;
     return _closeFinished ??= _drainClose();
   }
 
   Future<void> _drainClose() async {
+    try {
+      await _runForeground();
+    } catch (_) {
+      // Close still drains sockets after a failed FGS stop.
+    }
     final inFlight = _inFlight?.future;
     if (inFlight != null) {
       try {

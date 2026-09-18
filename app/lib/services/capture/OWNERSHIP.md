@@ -98,7 +98,11 @@ and test conversion, 1.5–2 days for socket/generation; split reviewable commit
 (3+) migrate existing test groups in small batches, every group passing the owner
 suite; (4) atomic default-removal and production cutover after all ~90 call sites
 are ready; (5+) socket then persistence fences, each with its production tests;
-(6) capture recovery request and FGS intent extraction. Retire only satisfied
+(6) capture recovery request and FGS intent extraction — landed on
+CaptureSessionOwner: concurrent wakes join one drain, FGS latest-hold wins,
+stale finalize cannot wake a later session. Home's static FGS and C2's five
+wake sites stay out; the default constructor still falls back to the singleton
+coordinator. Retire only satisfied
 markers; whole-C1 adoption waits until the last cut. No long-lived hot-file rewrite.
 
 The coordinator reserves main.dart for cut (4): replace BOTH

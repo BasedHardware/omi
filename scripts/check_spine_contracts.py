@@ -15,7 +15,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = "contracts/spine/files.json"
 ROOTS = ("scripts/dev-harness/tests/spine/", "app/test/spine/")
-MARKER = re.compile(r'''^\s*(?:@pending\("([A-Z][A-Z0-9-]*)"\)|pendingContract\('([A-Z][A-Z0-9-]*)'\);)\s*$''')
+MARKER = re.compile(r'''^\s*(?:@pending\((?:"([A-Z][A-Z0-9-]*)"|'([A-Z][A-Z0-9-]*)')\)|pendingContract\((?:'([A-Z][A-Z0-9-]*)'|"([A-Z][A-Z0-9-]*)")\);)\s*$''')
 
 
 _reads = ContextVar("spine_git_reads", default=None)
@@ -511,6 +511,8 @@ def _check(root: Path, base_ref: str) -> list[str]:
                 errors.append(f"{path}: introducing commit unavailable; fetch full history")
         for number, line in enumerate(current.splitlines(), 1):
             match = MARKER.fullmatch(line)
+            if owner != "MECHANISM" and re.match(r"^\s*(?:@pending\b|pendingContract\s*\()", line) and not match:
+                errors.append(f"{path}:{number}: pending markers must be a complete standalone literal call")
             if match:
                 package = next(value for value in match.groups() if value)
                 count += 1

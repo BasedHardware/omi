@@ -34,7 +34,6 @@ class Effects {
 
 void main() {
   contractTest('C1 concurrent recovery requesters share one drain; a later wake still runs', () async {
-    pendingContract('C1');
     final e = Effects()..drainGate = Completer<void>();
     addTearDown(e.coordinator.dispose);
     final a = e.owner.requestRecovery(WakeTrigger.deviceConnected);
@@ -51,7 +50,6 @@ void main() {
   });
 
   contractTest('C1 stop while native FGS start is pending stops once after completion', () async {
-    pendingContract('C1');
     final e = Effects()..startGate = Completer<void>();
     final a = e.owner.setForegroundRequired(true);
     await pumpEventQueue();
@@ -70,7 +68,6 @@ void main() {
   });
 
   contractTest('C1 failed FGS start can retry; failure is observable', () async {
-    pendingContract('C1');
     var starts = 0;
     final e = Effects();
     final owner = CaptureSessionOwner(
