@@ -359,12 +359,18 @@ jobs:
       - name: Setup Gradle for Flutter compile smoke
         uses: gradle/actions/setup-gradle@v6
         with:
-          # Default behaviour makes every non-default-branch run read-only AND
-          # never seeds the cache from main, so each PR paid a full cold
-          # assembleDevDebug ("Gradle User Home cache not found"). Stating the
-          # condition explicitly lets main runs write the cache that PRs read.
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-          cache-cleanup: on-success
+          # This job is the Mobile App Checks wall. A main write here added
+          # ~1m of Gradle save+cleanup AFTER the APK was already uploaded
+          # (run 35256814704, Post Setup Gradle 1m08s). It also raced the
+          # parallel JVM job for the same content keys (ReserveCacheError on
+          # 35268313733 and 35250647514). Restore-only on every ref: PRs and
+          # main read the User Home that android-unit-tests writes on main.
+          # Cross-job restore is the default (strict-match false); run
+          # 35257388447 restored android-unit-tests[...] from this job.
+          # setup-gradle cannot overlap that POST save with earlier steps —
+          # moving the write to the non-wall job is the off-critical-path
+          # option that still seeds the cache.
+          cache-read-only: true
           # `caches` is the build cache; `wrapper` avoids re-downloading
           # Gradle 8.14 on every job. Restore-keys still fall back across
           # jobs on this OS (gradle-home-cache-strict-match defaults false).
@@ -478,6 +484,9 @@ jobs:
       - name: Setup Gradle for Android JVM unit tests
         uses: gradle/actions/setup-gradle@v6
         with:
+          # Sole Gradle User Home writer. Compile-smoke is restore-only so
+          # this job's ~1m POST save is not on the workflow wall (JVM finishes
+          # minutes before Android Compile Smoke in the V5 sample).
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
           cache-cleanup: on-success
           gradle-home-cache-includes: |
