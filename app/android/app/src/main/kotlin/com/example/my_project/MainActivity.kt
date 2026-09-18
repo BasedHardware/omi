@@ -8,6 +8,8 @@ import com.friend.ios.ble.OmiBleManager
 import com.friend.ios.ble.OmiCompanionManager
 import com.friend.ios.batch.OmiBackgroundAudioStreamer
 import com.friend.ios.phonemic.*
+import com.friend.ios.sync.SyncTransferForegroundService
+import com.friend.ios.sync.SyncTransferPlugin
 import android.os.Bundle
 import androidx.annotation.NonNull
 import android.Manifest
@@ -47,6 +49,7 @@ class MainActivity: FlutterActivity() {
         PhoneMicController.initialize(application)
         PhoneMicController.instance.bindFlutterApi(PhoneMicFlutterApi(flutterEngine.dartExecutor.binaryMessenger))
         PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
+        SyncTransferPlugin.register(flutterEngine, this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
             call, result ->
             if (call.method == "drain") {
@@ -102,6 +105,9 @@ class MainActivity: FlutterActivity() {
         // leaves native deferring audio to an engine that is gone (issue #10847).
         // configureFlutterEngine re-arms both on the next attach.
         OmiBleManager.isFlutterAlive = false
+        // Dart owns transfer lifetime; once the engine is gone the FGS cannot
+        // finish a sync and must not keep the notification/wake lock.
+        SyncTransferForegroundService.stop(this)
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
             .edit()
             .putBoolean("flutter.nativeBleForegroundReady", false)
