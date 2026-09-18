@@ -7,6 +7,42 @@
     {
       "path": "app/lib/phone_mic_interface.dart",
       "reason": "codegen contract inputs, unimported by design"
+    },
+    {
+      "path": "app/lib/services/capture/scenarios/capture_scenario.dart",
+      "reason": "SCA-489/C3 replay contracts: consumed by tests now and by the C2/C4 lanes when they integrate; no app-import until then"
+    },
+    {
+      "path": "app/lib/services/capture/scenarios/native_event_vector.dart",
+      "reason": "SCA-489/C3 native event vector schema replayed through tests now and C5 Swift/Kotlin seams later; no app-import until then"
+    },
+    {
+      "path": "app/lib/services/capture/capture_composition.dart",
+      "reason": "Spine A/C1 compiling ownership contract, intentionally unreachable until App core implements composition; exercised by protected spine tests. Remove on wiring."
+    },
+    {
+      "path": "app/lib/services/capture/capture_session_owner.dart",
+      "reason": "Spine A/C1 compiling ownership contract, intentionally unreachable until App core implements composition; exercised by protected spine tests. Remove on wiring."
+    },
+    {
+      "path": "app/lib/services/capture/capture_lifetime.dart",
+      "reason": "Spine A/C1 compiling ownership contract, intentionally unreachable until App core implements composition; exercised by protected spine tests. Remove on wiring."
+    },
+    {
+      "path": "app/lib/backend/http/api_result.dart",
+      "reason": "Spine A/C3 typed-result skeleton consumed by protected tests, intentionally unreachable until App core migrates first API/consumer. Remove on wiring."
+    },
+    {
+      "path": "app/lib/backend/http/api_presentation.dart",
+      "reason": "Spine A/C3 typed-result skeleton consumed by protected tests, intentionally unreachable until App core migrates first API/consumer. Remove on wiring."
+    },
+    {
+      "path": "app/lib/backend/http/api_fallback.dart",
+      "reason": "Spine A/C3 typed-result skeleton consumed by protected tests, intentionally unreachable until App core migrates first API/consumer. Remove on wiring."
+    },
+    {
+      "path": "app/lib/backend/http/conversation_api_contract.dart",
+      "reason": "Spine A/C3 typed-result skeleton consumed by protected tests, intentionally unreachable until App core migrates first API/consumer. Remove on wiring."
     }
   ]
 }

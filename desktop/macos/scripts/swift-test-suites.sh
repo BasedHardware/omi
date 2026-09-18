@@ -608,23 +608,32 @@ while IFS= read -r suite; do
   suites+=("$suite")
 done < <(cut -f1 "$suite_map" | sort -u)
 
-# A suite that drives RuntimeOwnerAuthorityTestFixture transitions the
-# process-global owner authority through that same standard domain, so it
-# belongs to the sequential cluster whether or not anyone remembered to list
-# it. ChatToolExecutorPolicyTests did not, and a concurrent suite moving
-# `auth_userId` underneath it failed its tool calls with
-# `authorized_execution_owner_changed`, which blocked a release cut (#11511).
-declare -a fixture_files=()
-while IFS= read -r fixture_file; do
-  fixture_files+=("$fixture_file")
+# A suite that drives one of these owner-test surfaces transitions or directly
+# mutates the process-global owner through the production-standard defaults
+# domain, so it belongs to the sequential cluster whether or not anyone
+# remembered to list it:
+#
+# - `RuntimeOwnerAuthorityTestFixture` is the explicit authority fixture.
+# - `withAutomationOwnerIfMissing` temporarily transitions that same domain.
+# - Rewind storage's auth helpers hide their standard-domain mutation behind a
+#   shared support type, so the calling suite does not mention the authority
+#   fixture itself.
+#
+# Missing the first surface blocked a release cut in #11511. Missing the latter
+# two let MemoryAtlas change `auth_userId` while Kernel projection installed its
+# temporary reset owner in #12039, failing the owner-scoped clear.
+auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)'
+declare -a auth_domain_files=()
+while IFS= read -r auth_domain_file; do
+  auth_domain_files+=("$auth_domain_file")
 done < <(find "$TESTS_ROOT" -type f -name '*.swift' \
-  -exec grep -l 'RuntimeOwnerAuthorityTestFixture' {} +)
+  -exec grep -lE "$auth_domain_marker_pattern" {} +)
 
 declare -a derived_serial_suites=()
-if [ "${#fixture_files[@]}" -gt 0 ]; then
+if [ "${#auth_domain_files[@]}" -gt 0 ]; then
   while IFS= read -r suite; do
     derived_serial_suites+=("$suite")
-  done < <(grep -hE "$suite_class_pattern" "${fixture_files[@]}" \
+  done < <(grep -hE "$suite_class_pattern" "${auth_domain_files[@]}" \
     | sed -E "$suite_class_name" \
     | sort -u)
 fi

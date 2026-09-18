@@ -6,22 +6,31 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 
 ServerConversation _conversationWithSections() {
   final structured = Structured('Sprint sync', 'Short compatibility paragraph.', emoji: '🧠');
-  structured.sections = [
-    const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday'),
-  ];
-  return ServerConversation(
-    id: 'conv-1',
-    createdAt: DateTime(2026, 7, 1, 9).toUtc(),
-    structured: structured,
-  );
+  structured.sections = [const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday')];
+  return ServerConversation(id: 'conv-1', createdAt: DateTime(2026, 7, 1, 9).toUtc(), structured: structured);
 }
 
-Future<void> _pumpSummary(WidgetTester tester, {App? app, AppResponse? response, bool asSliver = false}) async {
+Future<void> _pumpSummary(
+  WidgetTester tester, {
+  App? app,
+  AppResponse? response,
+  bool asSliver = false,
+  bool legacyApp = false,
+}) async {
   final conversation = _conversationWithSections();
+  final selection = response == null
+      ? ConversationSummarySelection.select(conversation)
+      : ConversationSummarySelection(
+          content: response.content,
+          kind: legacyApp || response.appId != null ? ConversationSummaryKind.app : ConversationSummaryKind.overview,
+          appId: response.appId,
+          resultIndex: legacyApp || response.appId != null ? 0 : null,
+        );
   await tester.pumpWidget(
     MaterialApp(
       theme: ThemeData.dark(),
@@ -32,18 +41,14 @@ Future<void> _pumpSummary(WidgetTester tester, {App? app, AppResponse? response,
             ? CustomScrollView(
                 slivers: [
                   AppResultDetailWidget(
-                    appResponse: response ?? AppResponse(conversation.structured.overview, appId: null),
+                    summarySelection: selection,
                     app: app,
                     conversation: conversation,
                     asSliver: true,
                   ),
                 ],
               )
-            : AppResultDetailWidget(
-                appResponse: response ?? AppResponse(conversation.structured.overview, appId: null),
-                app: app,
-                conversation: conversation,
-              ),
+            : AppResultDetailWidget(summarySelection: selection, app: app, conversation: conversation),
       ),
     ),
   );
@@ -94,8 +99,19 @@ void main() {
       expect(find.text('Summary'), findsNothing);
     });
 
+    testWidgets('an unattributed legacy app result is still Unknown App', (tester) async {
+      await _pumpSummary(tester, response: AppResponse('Imported app output.'), legacyApp: true);
+
+      expect(find.text('Unknown App'), findsOneWidget);
+      expect(find.text('Summary'), findsNothing);
+    });
+
     testWidgets('a resolved app result shows the app name', (tester) async {
-      await _pumpSummary(tester, app: _templateApp(), response: AppResponse('App summary', appId: 'app-1'));
+      await _pumpSummary(
+        tester,
+        app: _templateApp(),
+        response: AppResponse('App summary', appId: 'app-1'),
+      );
 
       expect(find.text('My Template'), findsOneWidget);
       expect(find.text('Unknown App'), findsNothing);

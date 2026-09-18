@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-temp-file-cleanup-excludes-final-replace",
+  "violated_contract": "A write-to-temp-then-atomic-replace primitive that cleans up its own temp file on failure must cover every failure point after the temp file is created, including the final os.replace/os.rename, not only the preceding serialization step. Omi CLI's config save() wrapped tomli_w.dump() in a try/except that unlinked the temp file on failure, but called os.replace() after that block exited, so a replace failure (e.g. the destination transiently locked on Windows) propagated the exception with no cleanup — leaving the fully serialized, credential-bearing temp file on disk indefinitely.",
+  "canonical_prevention": "Keep the entire write-then-replace sequence, from temp-file creation through the final replace, inside one try/except whose except clause unlinks only the temp file this invocation created (never another concurrent writer's) and re-raises the original error unmasked.",
+  "canonical_prevention_artifact": [
+    "sdks/python-cli/tests/test_config.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python-cli/omi_cli/config.py",
+    "backend/database/google_credentials.py"
+  ],
+  "status": "open"
+}

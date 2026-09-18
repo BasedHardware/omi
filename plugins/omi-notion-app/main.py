@@ -28,6 +28,7 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
+from notion_content import encode_payload, plan_content_requests, title_items
 
 load_dotenv()
 
@@ -88,9 +89,9 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
         if method == "GET":
             response = requests.get(url, headers=headers, params=params)
         elif method == "POST":
-            response = requests.post(url, headers=headers, json=json_data or {})
+            response = requests.post(url, headers=headers, data=encode_payload(json_data or {}))
         elif method == "PATCH":
-            response = requests.patch(url, headers=headers, json=json_data)
+            response = requests.patch(url, headers=headers, data=encode_payload(json_data))
         elif method == "DELETE":
             response = requests.delete(url, headers=headers)
         else:
@@ -99,12 +100,51 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
         if response.status_code in [200, 201]:
             return response.json()
         else:
-            log(f"Notion API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            log(f"Notion API error: HTTP {response.status_code}")
+            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
-        log(f"Notion API request error: {e}")
+        log(f"Notion API request error: {type(e).__name__}")
         return {"error": str(e)}
+
+
+def append_response_valid(result: Any) -> bool:
+    """Recognize the documented successful append response before counting a batch."""
+    if not isinstance(result, dict) or result.get("object") != "list" or "error" in result:
+        return False
+    blocks = result.get("results")
+    # The response can be paginated and contain partial block objects. It
+    # acknowledges the write; its result count need not equal the batch size.
+    if not isinstance(blocks, list):
+        return False
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("object") != "block":
+            return False
+        block_id = block.get("id")
+        if not isinstance(block_id, str) or not block_id.strip():
+            return False
+    return True
+
+
+def append_content_batches(uid: str, page_id: str, batches: list, confirmed: int, total: int) -> Optional[str]:
+    """Stop at the first unconfirmed write; replay could duplicate saved content."""
+    for batch in batches:
+        try:
+            result = notion_api_request(uid, "PATCH", f"/blocks/{page_id}/children", json_data=batch)
+        except Exception:
+            result = None
+        if not append_response_valid(result):
+            status = result.get("status_code") if isinstance(result, dict) else None
+            diagnostic = f" (HTTP {status})" if status else ""
+            return (
+                f"Content write was not confirmed{diagnostic}.\n\n"
+                f"**Page ID:** `{page_id}`\n"
+                f"Confirmed {confirmed} of {total} paragraph block(s) saved. "
+                "The failed batch may have been applied. Check the page before retrying; "
+                "replaying the full content can duplicate it."
+            )
+        confirmed += len(batch["children"])
+    return None
 
 
 def extract_title(page: dict) -> str:
@@ -148,6 +188,51 @@ def extract_text_content(blocks: List[dict]) -> str:
     return "\n".join(text_parts)
 
 
+# Notion paginates block children at 100 per request and signals the rest via
+# has_more/next_cursor. The rendered output is capped separately, so fetch
+# until the page is exhausted or the content budget is met — the character
+# cap, not the first response's block count, decides what is shown. The page
+# ceiling and repeated-cursor check bound a malformed cursor.
+BLOCK_CHILDREN_PAGE_SIZE = 100
+BLOCK_CHILDREN_MAX_PAGES = 10
+PAGE_CONTENT_LIMIT = 1000
+
+
+def fetch_page_blocks(uid: str, page_id: str) -> Optional[dict]:
+    """Return a page's block children as a single list payload, following
+    next_cursor while has_more. A failure on any page returns that page's
+    error so the caller reports a failed read rather than a silently
+    truncated page."""
+    blocks = []
+    cursor = None
+    seen_cursors = set()
+
+    for _ in range(BLOCK_CHILDREN_MAX_PAGES):
+        params = {"page_size": BLOCK_CHILDREN_PAGE_SIZE}
+        if cursor:
+            params["start_cursor"] = cursor
+
+        result = notion_api_request(uid, "GET", f"/blocks/{page_id}/children", params=params)
+        if not result or "error" in result:
+            return result
+
+        results = result.get("results")
+        if not isinstance(results, list):
+            return {"error": "Unexpected block children response"}
+        blocks.extend(results)
+
+        if len(extract_text_content(blocks)) >= PAGE_CONTENT_LIMIT:
+            break
+
+        next_cursor = result.get("next_cursor")
+        if not result.get("has_more") or not isinstance(next_cursor, str) or not next_cursor or next_cursor in seen_cursors:
+            break
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+
+    return {"results": blocks}
+
+
 def format_page_info(page: dict, include_content: bool = False) -> str:
     """Format a page for display."""
     title = extract_title(page)
@@ -159,7 +244,7 @@ def format_page_info(page: dict, include_content: bool = False) -> str:
     parts = [
         f"**{title}**",
         f"  Created: {created} | Edited: {last_edited}",
-        f"  ID: `{page_id[:20]}...`"
+        f"  ID: `{page_id}`"
     ]
 
     if url:
@@ -181,7 +266,7 @@ def format_database_info(db: dict) -> str:
 
     parts = [
         f"**{title}**",
-        f"  ID: `{db_id[:20]}...`",
+        f"  ID: `{db_id}`",
         f"  Properties: {', '.join(prop_names)}"
     ]
 
@@ -511,8 +596,8 @@ async def tool_get_page(request: Request):
         if not page or "error" in page:
             return ChatToolResponse(error=f"Page not found: {page.get('error', 'Unknown error')}")
 
-        # Get page content (blocks)
-        blocks = notion_api_request(uid, "GET", f"/blocks/{page_id}/children", params={"page_size": 50})
+        # Get page content (blocks), following Notion's cursor pagination
+        blocks = fetch_page_blocks(uid, page_id)
 
         title = extract_title(page)
         url = page.get("url", "")
@@ -548,8 +633,8 @@ async def tool_get_page(request: Request):
                 result_parts.append("")
                 result_parts.append("**Content:**")
                 # Limit content length
-                if len(content) > 1000:
-                    content = content[:1000] + "..."
+                if len(content) > PAGE_CONTENT_LIMIT:
+                    content = content[:PAGE_CONTENT_LIMIT] + "..."
                 result_parts.append(content)
 
         return ChatToolResponse(result="\n".join(result_parts))
@@ -586,7 +671,7 @@ async def tool_create_page(request: Request):
         page_data = {
             "properties": {
                 "title": {
-                    "title": [{"text": {"content": title}}]
+                    "title": title_items(title)
                 }
             }
         }
@@ -597,7 +682,7 @@ async def tool_create_page(request: Request):
             # For database pages, use Name property instead of title
             page_data["properties"] = {
                 "Name": {
-                    "title": [{"text": {"content": title}}]
+                    "title": title_items(title)
                 }
             }
         elif parent_page_id:
@@ -611,28 +696,23 @@ async def tool_create_page(request: Request):
             else:
                 return ChatToolResponse(error="Please specify a parent page or database ID.")
 
-        # Add content as paragraph blocks
-        if content:
-            paragraphs = content.split("\n")
-            page_data["children"] = [
-                {
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {
-                        "rich_text": [{"text": {"content": p}}]
-                    }
-                }
-                for p in paragraphs if p.strip()
-            ]
+        batches = plan_content_requests(content or "", page_data)
+        result = notion_api_request(uid, "POST", "/pages", json_data=batches[0])
 
-        log(f"Creating page with data: {page_data}")
+        page_id = result.get("id") if isinstance(result, dict) else None
+        if not result or "error" in result or not isinstance(page_id, str) or not page_id.strip():
+            status = result.get("status_code") if isinstance(result, dict) else None
+            diagnostic = f" (HTTP {status})" if status else ""
+            return ChatToolResponse(error=(
+                f"Page creation was not confirmed{diagnostic}. "
+                "Check Notion before retrying; the page may already have been created."
+            ))
 
-        result = notion_api_request(uid, "POST", "/pages", json_data=page_data)
+        total = sum(len(batch.get("children", [])) for batch in batches)
+        error = append_content_batches(uid, page_id, batches[1:], len(batches[0].get("children", [])), total)
+        if error:
+            return ChatToolResponse(error=f"Page created, but not all content writes were confirmed.\n\n{error}")
 
-        if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to create page: {result.get('error', 'Unknown error')}")
-
-        page_id = result.get("id", "")
         url = result.get("url", "")
 
         result_parts = [
@@ -647,11 +727,11 @@ async def tool_create_page(request: Request):
 
         return ChatToolResponse(result="\n".join(result_parts))
 
-    except Exception as e:
-        log(f"Error creating page: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to create page: {str(e)}")
+    except ValueError as e:
+        return ChatToolResponse(error=f"Failed to create page: {e}")
+    except Exception:
+        log("Error creating page")
+        return ChatToolResponse(error="Failed to create page. Check Notion before retrying.")
 
 
 @app.post("/tools/update_page", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -737,29 +817,17 @@ async def tool_append_content(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
-        # Create paragraph blocks from content
-        paragraphs = content.split("\n")
-        children = [
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "rich_text": [{"text": {"content": p}}]
-                }
-            }
-            for p in paragraphs if p.strip()
-        ]
+        batches = plan_content_requests(content)
+        total = sum(len(batch["children"]) for batch in batches)
+        error = append_content_batches(uid, page_id, batches, 0, total)
+        if error:
+            return ChatToolResponse(error=error)
 
-        result = notion_api_request(uid, "PATCH", f"/blocks/{page_id}/children", json_data={"children": children})
+        return ChatToolResponse(result=f"**Content Added!**\n\nAdded {total} paragraph(s) to the page.")
 
-        if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to append content: {result.get('error', 'Unknown error')}")
-
-        return ChatToolResponse(result=f"**Content Added!**\n\nAdded {len(children)} paragraph(s) to the page.")
-
-    except Exception as e:
-        log(f"Error appending content: {e}")
-        return ChatToolResponse(error=f"Failed to append content: {str(e)}")
+    except Exception:
+        log("Error appending content")
+        return ChatToolResponse(error="Failed to append content. Check the page before retrying.")
 
 
 @app.post("/tools/list_databases", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -842,7 +910,7 @@ async def tool_query_database(request: Request):
             url = entry.get("url", "")
 
             result_parts.append(f"- **{title}**")
-            result_parts.append(f"  ID: `{entry_id[:20]}...`")
+            result_parts.append(f"  ID: `{entry_id}`")
             if url:
                 result_parts.append(f"  URL: {url}")
             result_parts.append("")
@@ -1043,8 +1111,8 @@ async def notion_callback(
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            log(f"Token exchange failed: {response.status_code}")
+            return HTMLResponse(content=f"Token exchange failed: {response.status_code}", status_code=400)
 
         token_data = response.json()
         access_token = token_data.get("access_token")
@@ -1089,10 +1157,8 @@ async def notion_callback(
         """)
 
     except Exception as e:
-        log(f"OAuth error: {e}")
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        log(f"OAuth error: {type(e).__name__}")
+        return HTMLResponse(content="Authentication error", status_code=500)
 
 
 @app.get("/setup/notion")

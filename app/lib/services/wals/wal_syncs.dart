@@ -9,6 +9,7 @@ import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -72,8 +73,20 @@ class WalSyncs implements IWalSync {
     return parts[2] >= 20;
   }
 
-  WalSyncs(this.listener) {
-    _phoneSync = LocalWalSyncImpl(listener);
+  WalSyncs(
+    this.listener, {
+    SyncUploadGate? phoneUploadGate,
+    DateTime Function()? phoneNow,
+    Timer Function(Duration, void Function(Timer))? phonePeriodic,
+    Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+  }) {
+    _phoneSync = LocalWalSyncImpl(
+      listener,
+      uploadGate: phoneUploadGate,
+      now: phoneNow,
+      periodic: phonePeriodic,
+      jobStatusFetcher: phoneJobStatusFetcher,
+    );
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
     _storageSync = StorageSyncImpl(listener);

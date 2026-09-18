@@ -31,6 +31,42 @@ const jitRuntimeMatrix = (): JitRuntimeMatrix => {
 };
 
 describe('web knowledge ledger memory boundary', () => {
+  it('keeps server belief metadata read-only and leaves unknown rows unclassified', () => {
+    const [current, unknown] = normalizeKnowledgeLedgerMemories([
+      {
+        ...baseMemory,
+        id: 'current-belief',
+        content: 'A current preference',
+        belief_class: 'preference',
+        currency: 0.8,
+        currency_band: 'current',
+        as_of: '2026-08-23T00:00:00Z',
+        belief_computed_at: '2026-08-23T01:00:00Z',
+      },
+      {
+        ...baseMemory,
+        id: 'unknown-belief',
+        content: 'An unclassified legacy memory',
+        currency: null,
+        currency_band: null,
+        belief_computed_at: '2026-08-23T01:00:00Z',
+      },
+    ]);
+
+    expect(current).toMatchObject({
+      belief_class: 'preference',
+      currency: 0.8,
+      currency_band: 'current',
+      as_of: '2026-08-23T00:00:00Z',
+      belief_computed_at: '2026-08-23T01:00:00Z',
+    });
+    expect(unknown).toMatchObject({
+      belief_computed_at: '2026-08-23T01:00:00Z',
+      currency: null,
+      currency_band: null,
+    });
+  });
+
   it('runs the shared mixed-version JIT contract through the web runtime adapters', () => {
     const matrix = jitRuntimeMatrix();
     const memories = normalizeKnowledgeLedgerMemories(matrix.memory_rows);

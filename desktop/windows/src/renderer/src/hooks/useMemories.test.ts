@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act, cleanup } from '@testing-library/react'
+import { renderHook, act, cleanup, waitFor } from '@testing-library/react'
 
 // C9: the backend binds PATCH /v3/memories/{id} and /v3/memories/{id}/visibility
 // `value` as a QUERY param (a plain `value: str` function arg — see edit_memory /
@@ -11,6 +11,7 @@ const omiApiGet = vi.fn()
 const omiApiPost = vi.fn()
 const omiApiPatch = vi.fn()
 const omiApiDelete = vi.fn()
+const LAST_UID_KEY = 'omi.lastSignedInUid'
 
 vi.mock('../lib/apiClient', () => ({
   omiApi: {
@@ -21,7 +22,8 @@ vi.mock('../lib/apiClient', () => ({
   }
 }))
 
-import { useMemories, type Memory } from './useMemories'
+import { useMemories, type Memory, type MemoryReadView } from './useMemories'
+import { cache as memoriesCache, resetMemoriesCache } from '../lib/memoriesCache'
 
 const memory = (id: string, content: string, visibility?: string): unknown => ({
   id,
@@ -145,6 +147,12 @@ describe('useMemories — pagination, capability header, delete', () => {
           subject_scope: 'primary_user',
           slot: 'home_city',
           body: 'wrong-kind-body',
+          currency: 0.82,
+          currency_band: 'current',
+          as_of: '2026-08-22T00:00:00Z',
+          belief_class: 'preference',
+          half_life_days: 180,
+          belief_computed_at: '2026-08-23T00:00:00Z',
           trigger_condition: { wrong: true },
           intent_backed: 'true',
           curation_weight: '3',
@@ -191,6 +199,14 @@ describe('useMemories — pagination, capability header, delete', () => {
     expect(result.current.memories[0]).not.toHaveProperty('kind')
     expect(result.current.memories[1]).toMatchObject({ kind: 'fact', status: 'active' })
     expect(result.current.memories[1]).toMatchObject({ slot: 'home_city' })
+    expect(result.current.memories[1]).toMatchObject({
+      currency: 0.82,
+      currency_band: 'current',
+      as_of: '2026-08-22T00:00:00Z',
+      belief_class: 'preference',
+      half_life_days: 180,
+      belief_computed_at: '2026-08-23T00:00:00Z'
+    })
     expect(result.current.memories[1].evidence).toEqual([
       { evidence_id: 'current-evidence', independence_group: 'current-group' }
     ])
@@ -273,5 +289,166 @@ describe('useMemories — pagination, capability header, delete', () => {
     ).rejects.toThrow('offline')
     // The failed delete is walked back — the row is still present.
     expect(result.current.memories.some((m) => m.id === 'm0')).toBe(true)
+  })
+
+  it('posts beta memory-use feedback and reuses its id when a user retries', async () => {
+    memoriesCache.beliefEnabled = true
+    omiApiGet.mockResolvedValue({
+      data: [memory('m1', 'Original content', 'private')],
+      headers: { 'x-omi-memory-belief-enabled': 'true' }
+    })
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    omiApiPost.mockRejectedValueOnce(new Error('temporary failure')).mockResolvedValue({ data: {} })
+    await expect(result.current.setMemoryUse('m1', 'suppress')).rejects.toThrow('temporary failure')
+    await act(async () => {
+      await result.current.setMemoryUse('m1', 'suppress')
+    })
+    await act(async () => {
+      await result.current.setMemoryUse('m1', 'allow')
+    })
+
+    expect(omiApiPost).toHaveBeenCalledTimes(3)
+    expect(omiApiPost.mock.calls[0]).toEqual([
+      '/v3/memories/m1/use',
+      expect.objectContaining({ action: 'suppress', feedback_id: expect.any(String) })
+    ])
+    expect(omiApiPost.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ action: 'suppress', feedback_id: expect.any(String) })
+    )
+    expect(omiApiPost.mock.calls[1][1].feedback_id).toBe(omiApiPost.mock.calls[0][1].feedback_id)
+    expect(omiApiPost.mock.calls[2][1]).toEqual(
+      expect.objectContaining({ action: 'allow', feedback_id: expect.any(String) })
+    )
+    expect(omiApiPost.mock.calls[2][1].feedback_id).not.toBe(
+      omiApiPost.mock.calls[0][1].feedback_id
+    )
+    resetMemoriesCache()
+  })
+
+  it('clears a cached beta capability when a response omits the capability header', async () => {
+    memoriesCache.beliefEnabled = true
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.beliefEnabled).toBe(false)
+    resetMemoriesCache()
+  })
+
+  it('uses useful-now while a retained history selection has no explicit capability', async () => {
+    resetMemoriesCache()
+    memoriesCache.beliefEnabled = false
+    const { result } = renderHook(() => useMemories('history'))
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(memoriesCache.view).toBe('useful_now')
+    expect(omiApiGet.mock.calls[0]).toEqual(['/v3/memories', { params: { limit: 500, offset: 0 } }])
+    resetMemoriesCache()
+  })
+
+  it('does not carry a prior owner history capability into a new owner', async () => {
+    localStorage.clear()
+    localStorage.setItem(LAST_UID_KEY, 'owner-a')
+    memoriesCache.beliefEnabled = true
+
+    // Auth teardown performs this reset before the next owner is mounted.
+    resetMemoriesCache()
+    localStorage.setItem(LAST_UID_KEY, 'owner-b')
+    const { result } = renderHook(() => useMemories('history'))
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(memoriesCache.beliefEnabled).toBe(false)
+    expect(memoriesCache.view).toBe('useful_now')
+    expect(omiApiGet.mock.calls[0]).toEqual(['/v3/memories', { params: { limit: 500, offset: 0 } }])
+    localStorage.clear()
+    resetMemoriesCache()
+  })
+})
+
+describe('useMemories — view switching', () => {
+  it('clears the previous view rows when the requested view changes', async () => {
+    resetMemoriesCache()
+    localStorage.clear()
+    memoriesCache.beliefEnabled = true
+    omiApiGet.mockResolvedValue({
+      data: [memory('u1', 'useful row')],
+      headers: { 'x-omi-memory-belief-enabled': 'true' }
+    })
+    const { result, rerender } = renderHook(({ view }) => useMemories(view), {
+      initialProps: { view: 'useful_now' as MemoryReadView }
+    })
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.memories.map((m) => m.content)).toEqual(['useful row'])
+
+    // Hold the history fetch open so the cleared intermediate state is observable.
+    // Key the mock on `view` so the pager's follow-up empty/offset request cannot
+    // pick up the previous useful-now mockResolvedValue and merge those rows.
+    const { promise: historyPending, resolve: resolveHistory } = Promise.withResolvers<{
+      data: unknown[]
+      headers?: Record<string, string>
+    }>()
+    omiApiGet.mockImplementation((_path: string, init?: { params?: { view?: string } }) => {
+      if (init?.params?.view === 'history') return historyPending
+      return Promise.resolve({
+        data: [memory('u1', 'useful row')],
+        headers: { 'x-omi-memory-belief-enabled': 'true' }
+      })
+    })
+    rerender({ view: 'history' })
+
+    // Before the fix the previous view's rows stayed on screen (and, with a
+    // null cache.list, no publish ever replaced them).
+    await waitFor(() => expect(result.current.memories).toEqual([]))
+    expect(result.current.loading).toBe(true)
+
+    await act(async () => {
+      resolveHistory({
+        data: [memory('h1', 'history row')],
+        headers: { 'x-omi-memory-belief-enabled': 'true' }
+      })
+    })
+    await waitFor(() =>
+      expect(result.current.memories.map((m) => m.content)).toEqual(['history row'])
+    )
+    resetMemoriesCache()
+  })
+
+  it('keeps the new view empty when its revalidation fetch fails', async () => {
+    resetMemoriesCache()
+    localStorage.clear()
+    memoriesCache.beliefEnabled = true
+    omiApiGet.mockResolvedValue({
+      data: [memory('u1', 'useful row')],
+      headers: { 'x-omi-memory-belief-enabled': 'true' }
+    })
+    const { result, rerender } = renderHook(({ view }) => useMemories(view), {
+      initialProps: { view: 'useful_now' as MemoryReadView }
+    })
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.memories).toHaveLength(1)
+
+    omiApiGet.mockRejectedValueOnce(new Error('history view down'))
+    rerender({ view: 'history' })
+
+    await waitFor(() => expect(result.current.error).toBe('history view down'))
+    // The failed fetch leaves the new view empty — the stale useful-now rows
+    // must not come back.
+    expect(result.current.memories).toEqual([])
+    expect(result.current.loading).toBe(false)
+    resetMemoriesCache()
   })
 })

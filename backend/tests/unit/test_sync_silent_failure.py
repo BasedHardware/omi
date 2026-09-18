@@ -1389,6 +1389,8 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.notifications'].send_notification = MagicMock()
         sys.modules['utils.notifications'].send_notification_async = AsyncMock()
+        sys.modules['utils.notifications'].send_client_displayed_notification = MagicMock()
+        sys.modules['utils.notifications'].send_client_displayed_notification_async = AsyncMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
         sys.modules['utils.log_sanitizer'].sanitize = lambda v: v

@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/c7_registry_test.dart",
+  "owner": "C7",
+  "before": "d1d8528a228a6ecb373db40854cd8bd738a6c7ee992414e3d4b56de555f27fd0",
+  "after": "f1f3f8f8b5db81aa8a41b9e7cffa05982514d7fb00044b0022403c6dec60ceda",
+  "reason": "Spine turn17: require direct TypedEvents registry API resolution. Restrict manager import to AnalyticsManager so the existing emit calls must resolve through typed_events.dart, not its manager re-export. Preserve all runtime assertions and pending markers; no analyzer baseline change."
+}

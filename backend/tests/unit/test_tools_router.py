@@ -120,6 +120,7 @@ _SYS_MODULE_NAMES = [
     "utils.other",
     "utils.other.endpoints",
     "utils.memory",
+    "utils.memory.belief_model",
     "utils.memory.chat_memory_adapter",
     "utils.memory.default_read_rollout",
     "utils.memory.memory_system",
@@ -206,6 +207,13 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 _stub_package("utils.memory")
+
+# This router suite exercises the released service contract. Temporal policy
+# and Beta traversal are covered by the memory service's dedicated suites.
+belief_model_stub = _stub_module("utils.memory.belief_model")
+belief_model_stub.belief_model_enabled = lambda: False
+belief_model_stub.memory_use_suppressed = lambda _memory: False
+belief_model_stub.normalize_temporal_read_view = lambda view: view
 
 memory_service_stub = _stub_module("utils.memory.memory_service")
 

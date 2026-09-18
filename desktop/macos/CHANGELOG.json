@@ -2,6 +2,189 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.363",
+      "date": "2026-09-18",
+      "changes": [
+        "Free-tier conversation summaries now run on this Mac with Apple Intelligence when it is available",
+        "Fixed on-device conversation summaries not appearing after sync"
+      ]
+    },
+    {
+      "version": "0.12.362",
+      "date": "2026-09-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.361",
+      "date": "2026-09-17",
+      "changes": [
+        "Live notes no longer retry on every sentence when your plan doesn't include AI notes"
+      ]
+    },
+    {
+      "version": "0.12.360",
+      "date": "2026-09-17",
+      "changes": [
+        "Fixed chat failing after long sessions or an offline period, and show sign-in recovery when a session expires",
+        "Fixed repeated meeting summaries, preserved cached notes and sources, and improved headings and lists"
+      ]
+    },
+    {
+      "version": "0.12.359",
+      "date": "2026-09-17",
+      "changes": [
+        "Fixed deferred realtime answers completing silently instead of becoming available to the next voice turn."
+      ]
+    },
+    {
+      "version": "0.12.358",
+      "date": "2026-09-17",
+      "changes": [
+        "Rewind opens faster by loading the app-filter list after the overlay is ready."
+      ]
+    },
+    {
+      "version": "0.12.357",
+      "date": "2026-09-17",
+      "changes": [
+        "Chat-first tab switches acknowledge the mounted page sooner so navigation feels snappier."
+      ]
+    },
+    {
+      "version": "0.12.356",
+      "date": "2026-09-16",
+      "changes": [
+        "Explicit remember/save requests typed in chat now save the memory reliably; a runtime timestamp prefix on the request could previously make them be rejected as unauthorized."
+      ]
+    },
+    {
+      "version": "0.12.355",
+      "date": "2026-09-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.354",
+      "date": "2026-09-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.353",
+      "date": "2026-09-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.352",
+      "date": "2026-09-15",
+      "changes": [
+        "Claude Code chat sessions now persist across reboot and sign-in again after your session expires, instead of clearing the session list.",
+        "Offline voice dictation no longer waits indefinitely when its on-device speech model cannot finish loading — the turn now stops after a bounded wait instead of leaving Omi stuck",
+        "Fixed custom API keys being cleared without explanation and stopped unvalidated or rotated keys from being used before enrollment",
+        "On-device transcription now closes on a pause in a noisy room instead of waiting out its 10-second window, so spoken commands reach Omi sooner"
+      ]
+    },
+    {
+      "version": "0.12.351",
+      "date": "2026-09-15",
+      "changes": [
+        "Memory lists now use server-owned currency assessments, keep unknown classifications visible, expose Useful now and discoverable History views behind the Beta capability header, and let you tell Omi which memories to use without deleting them"
+      ]
+    },
+    {
+      "version": "0.12.350",
+      "date": "2026-09-14",
+      "changes": [
+        "Always-on listening no longer switches itself off when your microphone is briefly taken by another audio app — Omi now keeps trying to reconnect for several minutes instead of giving up after six seconds",
+        "Fixed chat-only apps not opening their own conversation and improved delegated agent provider and file-path reliability"
+      ]
+    },
+    {
+      "version": "0.12.349",
+      "date": "2026-09-14",
+      "changes": [
+        "Dropping several files onto the chat composer at once now stages all of them up to the attachment limit, and composers without attachment support now decline file drags instead of pasting the dropped file's path into the message"
+      ]
+    },
+    {
+      "version": "0.12.348",
+      "date": "2026-09-14",
+      "changes": [
+        "Fixed dragging a file onto the chat composer only working over its border, not the input area itself"
+      ]
+    },
+    {
+      "version": "0.12.347",
+      "date": "2026-09-13",
+      "changes": [
+        "Fixed conversation summaries flashing while scrolling on desktop"
+      ]
+    },
+    {
+      "version": "0.12.346",
+      "date": "2026-09-13",
+      "changes": [
+        "Dictations into Wispr Flow, superwhisper, or macOS Dictation no longer become conversations: while a dictation app is using the microphone (and no call is), Omi mutes its own listening for exactly that window. Calls are never muted. Toggle under Transcription → Ignore Dictation Apps"
+      ]
+    },
+    {
+      "version": "0.12.345",
+      "date": "2026-09-13",
+      "changes": [
+        "Fixed external app setup so sign-in links and completion checks keep working when the provider's URL already carries its own query parameters"
+      ]
+    },
+    {
+      "version": "0.12.344",
+      "date": "2026-09-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.343",
+      "date": "2026-09-13",
+      "changes": [
+        "Long background-agent and discovery cards in chat now scroll smoothly and let you select their text",
+        "Settings → Advanced → AI Provider now respects the Hermes and OpenClaw selections in chat (previously both silently ran the Claude engine and failed with \"Claude sign-in is required\")",
+        "Stopped live transcripts from hitching when selecting or scrolling long captures"
+      ]
+    },
+    {
+      "version": "0.12.342",
+      "date": "2026-09-12",
+      "changes": [
+        "Apps export rows (including Claude / Claude Code) now keep the integration name, status, and Connect control on one line"
+      ]
+    },
+    {
+      "version": "0.12.341",
+      "date": "2026-09-12",
+      "changes": [
+        "Restored icons and labels in the main window's top navigation for Chat, Memories, Tasks and Apps"
+      ]
+    },
+    {
+      "version": "0.12.340",
+      "date": "2026-09-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.339",
+      "date": "2026-09-11",
+      "changes": [
+        "Voice replies now use your own OpenAI or Gemini key when you pick that model under Advanced → Voice Model, instead of falling back to Omi's managed service and failing on billing — and a billing error now says which service declined and what to do about it"
+      ]
+    },
+    {
       "version": "0.12.338",
       "date": "2026-09-11",
       "changes": [

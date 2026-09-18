@@ -12,10 +12,10 @@ import pusher.main as pusher_main
 @pytest.mark.parametrize(
     'env',
     [
-        {'MEMORY_ENABLED': 'on'},
-        {'MEMORY_MODE': 'write'},
+        {'MEMORY_ENABLED': 'on', 'SONIOX_API_KEY': 'test-key'},
+        {'MEMORY_MODE': 'write', 'SONIOX_API_KEY': 'test-key'},
         # The production parser keeps this legacy mode mutation-capable.
-        {'MEMORY_MODE': 'read'},
+        {'MEMORY_MODE': 'read', 'SONIOX_API_KEY': 'test-key'},
     ],
 )
 def test_pusher_static_capability_admission_accepts_runtime_writable_modes(env: dict[str, str]) -> None:

@@ -943,6 +943,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             elevation: 0,
             leading: IconButton(
               icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              tooltip: MaterialLocalizations.of(context).backButtonTooltip,
               onPressed: () => Navigator.of(context).pop(),
             ),
             title: Text(

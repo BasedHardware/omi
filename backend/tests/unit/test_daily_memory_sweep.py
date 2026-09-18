@@ -26,8 +26,11 @@ from utils.memory.daily_memory_sweep import (
     QA_SWEEP_MAX_SDK_RETRIES,
     QA_SWEEP_MAX_MEMORY_LOOKUPS,
     QA_SWEEP_MAX_MODEL_COST_USD,
+    QA_SWEEP_MAX_MODEL_CANDIDATES,
     QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
     QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS,
+    QA_SWEEP_MAX_INPUT_TOKENS,
+    QA_SWEEP_MAX_OUTPUT_TOKENS,
     QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
     SweepAuthority,
     SweepAuthorityState,
@@ -57,12 +60,15 @@ from utils.memory.daily_memory_sweep import (
     MODEL_INVOCATION_FENCE_COLLECTION,
     MODEL_INVOCATION_SCHEMA_VERSION,
     _invoke_model_once,
+    MODEL_INVOCATION_REPAIR_PATH,
+    repair_daily_sweep_model_invocation,
     _apply_candidate,
     cleanup_expired_daily_memory_sweep_stages,
     read_daily_memory_sweep_cohort_assignment,
     run_daily_memory_sweep_scheduler,
     produce_completed_day_daily_summary_sources,
     firestore_daily_sweep_source_provider,
+    _read_cursor,
 )
 from models.product_memory import normalized_memory_content_key, MemorySubjectScope
 from utils.conversations.owner_attribution import OwnerAttributionEvidence
@@ -302,13 +308,19 @@ class _Ref:
 
 
 class _EmptyCollection:
+    def order_by(self, _field):
+        return self
+
+    def select(self, _fields):
+        return self
+
     def where(self, *args, **kwargs):
         return self
 
     def limit(self, _count):
         return self
 
-    def stream(self):
+    def stream(self, **_kwargs):
         return []
 
 
@@ -396,6 +408,52 @@ def test_runner_uses_local_completed_days_and_cursor(monkeypatch):
     assert first.completed_local_dates == (date(2026, 8, 23),)
     assert written == ["fact-alice-role"]
     assert second.status == "not_due"
+
+
+def test_belief_automation_pause_blocks_beta_writes_but_flag_off_still_sweeps(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    written = []
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._apply_candidate",
+        lambda uid, local_date, candidate, **kwargs: (written.append(candidate.candidate_id) or "mem-1", None),
+    )
+    packet = DailySweepInput(
+        uid="user-1",
+        local_date=date(2026, 8, 23),
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        **_packet_kwargs(date(2026, 8, 23)),
+        candidates=(_candidate(),),
+    )
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    monkeypatch.setenv("MEMORY_BELIEF_AUTOMATION_PAUSED", "true")
+    paused = run_daily_memory_sweep(
+        "user-1",
+        "America/New_York",
+        datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        {packet.local_date: packet},
+        db_client=db,
+        authority=SweepAuthorityState(enabled=True),
+    )
+    assert paused.status == "disabled"
+    assert paused.telemetry["status"] == "disabled"
+    assert paused.blocked_reason is None
+    assert written == []
+
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED")
+    stable = run_daily_memory_sweep(
+        "user-1",
+        "America/New_York",
+        datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        {packet.local_date: packet},
+        db_client=db,
+        authority=SweepAuthorityState(enabled=True),
+    )
+    assert stable.status == "committed"
+    assert written == ["fact-alice-role"]
 
 
 def test_unknown_slot_fails_that_candidate_not_the_day(monkeypatch):
@@ -575,36 +633,62 @@ def test_cohort_reader_distinguishes_false_from_posthog_outage(monkeypatch):
     )
 
 
-def test_scheduler_requeues_posthog_outage_without_calling_source_provider():
+def test_scheduler_runs_without_posthog_cohort_resolution(monkeypatch):
     source_calls = []
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
     summary = run_daily_memory_sweep_scheduler(
-        db_client=object(),
+        db_client=_Db(),
         now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
         uid_inventory=("user-1",),
         source_provider=lambda *_args, **_kwargs: source_calls.append(True),
         timezone_resolver=lambda _uid: "UTC",
         authority=SweepAuthorityState(enabled=True),
-        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
-        cohort_authorizer=lambda *_args: DailySweepCohortDecision.unavailable,
+        cohort_authority=DailySweepCohortAuthority(enabled=False, cohort_name=""),
+        cohort_authorizer=None,
     )
-    assert summary.failed_uids == ("user-1",)
-    assert summary.completed_uids == ()
-    assert source_calls == []
+    assert summary.attempted_users == 1
+    assert source_calls == [True]
+    assert all("cohort" not in error for error in summary.errors)
 
 
-def test_scheduler_never_treats_disabled_cohort_as_unrestricted(monkeypatch):
+def test_scheduler_does_not_fail_closed_on_missing_cohort_configuration(monkeypatch):
+    source_calls = []
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
     summary = run_daily_memory_sweep_scheduler(
-        db_client=object(),
+        db_client=_Db(),
         now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
         uid_inventory=("user-1",),
-        source_provider=lambda *_args, **_kwargs: None,
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
         timezone_resolver=lambda _uid: "UTC",
         authority=SweepAuthorityState(enabled=True),
         cohort_authority=DailySweepCohortAuthority(enabled=False, cohort_name=""),
-        cohort_authorizer=lambda *_args: True,
+        cohort_authorizer=None,
     )
-    assert summary.attempted_users == 0
-    assert summary.errors == ("cohort_disabled",)
+    assert summary.attempted_users == 1
+    assert source_calls == [True]
+    assert summary.errors != ("cohort_disabled",)
 
 
 @pytest.mark.parametrize(
@@ -637,11 +721,22 @@ def test_scheduler_cleanup_runs_even_when_rollout_is_closed(monkeypatch, authori
     assert summary.attempted_users == 0
 
 
-@pytest.mark.parametrize("decision", [DailySweepCohortDecision.disabled, DailySweepCohortDecision.unavailable])
-def test_scheduler_cohort_gate_precedes_timezone_reconciliation_and_all_sweep_writes(decision):
+def test_scheduler_legacy_cohort_arguments_do_not_block_timezone_reconciliation(monkeypatch):
     db = _Db()
     source_calls = []
     reconciliation_calls = []
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
     summary = run_daily_memory_sweep_scheduler(
         db_client=db,
         now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
@@ -650,16 +745,14 @@ def test_scheduler_cohort_gate_precedes_timezone_reconciliation_and_all_sweep_wr
         timezone_resolver=lambda _uid: "America/Los_Angeles",
         timezone_reconciler=lambda *_args: reconciliation_calls.append(True),
         authority=SweepAuthorityState(enabled=True),
-        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
-        cohort_authorizer=lambda *_args: decision,
+        cohort_authority=DailySweepCohortAuthority(enabled=False, cohort_name=""),
+        cohort_authorizer=None,
     )
-    assert source_calls == []
+    assert source_calls == [True]
     assert reconciliation_calls == []
     assert db.store == {}
-    if decision is DailySweepCohortDecision.disabled:
-        assert summary.completed_uids == ("user-1",)
-    else:
-        assert summary.failed_uids == ("user-1",)
+    assert summary.attempted_users == 1
+    assert all("cohort" not in error for error in summary.errors)
 
 
 def test_stale_overlapping_cursor_writer_cannot_move_cursor_backward(monkeypatch):
@@ -1004,7 +1097,7 @@ def test_fenced_invocation_survives_wipe_race_without_recreating_user_state(monk
 
     assert paid_call_count == 1
     assert provider_results == [None, None]
-    assert db.store.keys() == {
+    assert {key for key in db.store if not key.startswith("daily_memory_sweep_window_admissions/")} == {
         "account_deletions/user-1",
         f"{MODEL_INVOCATION_FENCE_COLLECTION}/wipe-race-generation-4-source-7-window-a",
     }
@@ -1315,7 +1408,269 @@ def test_returned_payload_expiry_keeps_content_free_tombstone_and_blocks_replay(
     assert paid_call_count == 1
 
 
+def test_repair_receipt_reopens_exactly_one_bounded_invocation_retry(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    invocation_id = "repair-window-a"
+    claim_at = datetime(2026, 9, 15, 5, 0, tzinfo=timezone.utc)
+    paid_calls = []
+
+    def dying_provider():
+        paid_calls.append("first")
+        raise RuntimeError("worker died after the provider call")
+
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            invocation_id,
+            candidate_builder=dying_provider,
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-a",
+            now=claim_at,
+        )
+        is None
+    )
+    fence_path = f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}"
+    assert db.store[fence_path]["state"] == "indeterminate"
+
+    # Before the lease expires an explicit repair must fail closed.
+    with pytest.raises(ValueError, match="expired invocation lease"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={
+                "jit_run_id": "qa-sweep-1",
+                "attempts": [{"request_id": "req-1", "outcome": "success", "total_tokens": 2730}],
+            },
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(minutes=2),
+        )
+
+    receipt = repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id=invocation_id,
+        provider_outcome_evidence={
+            "jit_run_id": "qa-sweep-1",
+            "attempts": [{"request_id": "req-1", "outcome": "success", "total_tokens": 2730}],
+        },
+        repair_authority="operator:qa-sweep-1",
+        now=claim_at + timedelta(minutes=16),
+    )
+    assert receipt["prior_state"] == "indeterminate"
+    assert receipt["provider_outcome_summary"] == "success_usage_recorded"
+    assert receipt["consumed"] is False
+    stored = db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}"]
+    assert stored["window_id"] == "window-a"
+
+    def repaired_provider():
+        paid_calls.append("second")
+        return ({"candidate_id": "repaired"},)
+
+    assert _invoke_model_once(
+        db,
+        "user-1",
+        invocation_id,
+        candidate_builder=repaired_provider,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=1,
+        window_id="window-a",
+        now=claim_at + timedelta(minutes=17),
+    ) == ({"candidate_id": "repaired"},)
+    assert db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}"]["consumed"] is True
+    assert db.store[fence_path]["repaired_from_state"] == "indeterminate"
+
+    # A tombstone that reforms after the repaired retry stays closed forever:
+    # exactly one repair receipt may ever exist per invocation.
+    db.store[fence_path]["state"] = "indeterminate"
+    with pytest.raises(ValueError, match="already has a repair receipt"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={"jit_run_id": "qa-sweep-2", "attempts": [{"request_id": "req-2"}]},
+            repair_authority="operator:qa-sweep-2",
+            now=claim_at + timedelta(minutes=40),
+        )
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            invocation_id,
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("charged a third time")),
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-a",
+            now=claim_at + timedelta(minutes=41),
+        )
+        is None
+    )
+    assert paid_calls == ["first", "second"]
+
+
+def test_repair_receipt_requires_accounting_evidence_and_tombstoned_fence(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    invocation_id = "repair-returned"
+    claim_at = datetime(2026, 9, 15, 5, 0, tzinfo=timezone.utc)
+    assert _invoke_model_once(
+        db,
+        "user-1",
+        invocation_id,
+        candidate_builder=lambda: ({"candidate_id": "returned"},),
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=1,
+        window_id="window-a",
+        now=claim_at,
+    ) == ({"candidate_id": "returned"},)
+
+    # A returned invocation has a proven provider outcome; nothing to repair.
+    with pytest.raises(ValueError, match="not repairable"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={"jit_run_id": "qa-sweep-1", "attempts": [{"request_id": "req-1"}]},
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(hours=2),
+        )
+    # Evidence without the owning run id is not a provider proof.
+    db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/repair-evidence").set(
+        {
+            "uid": "user-1",
+            "invocation_id": "repair-evidence",
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "sweep_generation": 1,
+            "window_id": "window-b",
+            "state": "payload_expired",
+            "claimed_at": claim_at,
+        }
+    )
+    with pytest.raises(ValueError, match="owning run id"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id="repair-evidence",
+            provider_outcome_evidence={"attempts": []},
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(hours=2),
+        )
+    receipt = repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id="repair-evidence",
+        provider_outcome_evidence=_operator_attestation(
+            db.store[f"{MODEL_INVOCATION_FENCE_COLLECTION}/repair-evidence"],
+            claim_at + timedelta(hours=2),
+            authority="operator:qa-sweep-9",
+        ),
+        repair_authority="operator:qa-sweep-9",
+        now=claim_at + timedelta(hours=2),
+    )
+    assert receipt["provider_outcome_summary"] == "operator_attested_no_dispatch"
+    # A consumed or identity-mismatched receipt never reopens a claim.
+    db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/repair-evidence"]["consumed"] = True
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            "repair-evidence",
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("stale receipt reopened")),
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-b",
+            now=claim_at + timedelta(hours=3),
+        )
+        is None
+    )
+
+
+def test_scheduler_names_incomplete_sources_without_raising(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence={"feature": "memories", "requests": [{"request_id": "req-1"}]},
+        ),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    assert summary.attempted_users == 1
+    assert summary.blocked_users == 1
+    assert summary.failed_uids == ("user-1",)
+    assert summary.errors == ("uid=user-1:source_incomplete:2026-08-23",)
+    assert summary.model_dispatch_evidence == ({"feature": "memories", "requests": [{"request_id": "req-1"}]},)
+
+
+def test_scheduler_source_incomplete_includes_content_free_reason(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence={
+                "feature": "memories",
+                "failure_reason": "daily_sweep_summary_input_budget",
+                "requests": [],
+            },
+        ),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    assert summary.errors == ("uid=user-1:source_incomplete:2026-08-23:daily_sweep_summary_input_budget",)
+    assert "fact" not in "".join(summary.errors)
+
+
 def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
+
     monkeypatch.setattr(data_export, "get_user_profile", lambda _uid: {})
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversation_photos", lambda *_args, **_kwargs: ())
@@ -1376,7 +1731,21 @@ def test_onboarding_malformed_stage_fails_closed_without_reextracting(monkeypatc
     )
 
 
-def _day_source(conversation_id, summary, transcript="", needs_folder=False, segments=None):
+def _day_read(*sources, status="complete", **kwargs):
+    from utils.memory.daily_memory_sweep import CompletedDaySourceRead
+
+    return CompletedDaySourceRead(rows=tuple(sources), status=status, **kwargs)
+
+
+def _day_source(
+    conversation_id,
+    summary,
+    transcript="",
+    needs_folder=False,
+    segments=None,
+    started_at=None,
+    has_structured_summary=False,
+):
     from utils.memory.daily_memory_sweep import CompletedDayConversationSource
 
     return CompletedDayConversationSource(
@@ -1387,6 +1756,8 @@ def _day_source(conversation_id, summary, transcript="", needs_folder=False, seg
         owner_evidence=OwnerAttributionEvidence.from_segments(
             segments if segments is not None else [SimpleNamespace(speaker_id=0, is_user=True)]
         ),
+        started_at=started_at,
+        has_structured_summary=has_structured_summary,
     )
 
 
@@ -1406,7 +1777,7 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
     calls = []
@@ -1470,7 +1841,7 @@ def test_qa_completed_day_rejects_a_stage_from_another_run(monkeypatch):
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -1506,6 +1877,7 @@ def test_qa_completed_day_rejects_a_stage_from_another_run(monkeypatch):
         qa_run_id="qa-run-1",
     )
     assert second.source_status == "incomplete"
+    assert second.model_dispatch_evidence.get("failure_reason") == "daily_summary_stage_unavailable"
 
 
 def test_qa_source_provider_rejects_a_preexisting_packet(monkeypatch):
@@ -1535,10 +1907,7 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **kwargs: (
-            (_day_source("conversation-1", "stable summary"),),
-            "complete",
-        ),
+        lambda *_args, **kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(
         enabled=True,
@@ -1583,8 +1952,11 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
     assert seen["usage_context"].feature == "memories"
     assert get_current_context() is None
     assert QA_SWEEP_MAX_CATCH_UP_DAYS == 1
-    assert QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 1
-    assert QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 2_000
+    assert QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 8
+    assert QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 8_000
+    assert QA_SWEEP_MAX_MODEL_CANDIDATES == 3
+    assert QA_SWEEP_MAX_INPUT_TOKENS == 24_576
+    assert QA_SWEEP_MAX_OUTPUT_TOKENS == 2_048
 
 
 def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypatch):
@@ -1603,12 +1975,9 @@ def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypa
     )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: (
-            (
-                _day_source("conversation-1", "planning summary", needs_folder=True),
-                _day_source("conversation-2", "second summary"),
-            ),
-            "complete",
+        lambda *_args, **_kwargs: _day_read(
+            _day_source("conversation-1", "planning summary", needs_folder=True),
+            _day_source("conversation-2", "second summary"),
         ),
     )
     monkeypatch.setattr(
@@ -1701,7 +2070,7 @@ def test_completed_day_memory_without_valid_citation_is_dropped(monkeypatch):
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -1762,7 +2131,7 @@ def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeyp
     )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -1780,6 +2149,7 @@ def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeyp
         window_override=window,
     )
     assert result.source_status == "incomplete"
+    assert result.model_dispatch_evidence.get("failure_reason") == "daily_summary_stage_unavailable"
 
 
 def test_legacy_compatibility_proof_allows_more_than_two_unslotted_facts():
@@ -1857,7 +2227,7 @@ def test_completed_day_agent_slot_reaches_the_candidate(monkeypatch):
     window = completed_local_day_window(local_date, "UTC")
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -1916,7 +2286,7 @@ def test_completed_day_stale_schema_stage_attests_empty_and_advances(monkeypatch
     )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
-        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+        lambda *_args, **_kwargs: _day_read(_day_source("conversation-1", "stable summary")),
     )
     model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
 
@@ -2122,8 +2492,11 @@ def test_legacy_compatibility_proof_still_fails_closed_above_the_scan_ceiling():
     from utils.memory.daily_memory_sweep import MAX_LEGACY_COMPAT_OCCUPANT_SCAN, SweepAuthoritativeQueryUnavailable
 
     total = MAX_LEGACY_COMPAT_OCCUPANT_SCAN + 1
-    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(total)]
-    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+    # The proof fails on the bounded page count before it validates any row;
+    # keep this fixture payload-free so the duration guard measures the query
+    # ceiling rather than constructing thousands of full MemoryItem-shaped
+    # dictionaries.
+    db = _PaginatedLegacyDb([_LegacySnapshot({}, f"memory-{index:05d}") for index in range(total)])
 
     with pytest.raises(SweepAuthoritativeQueryUnavailable):
         _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
@@ -2392,7 +2765,7 @@ def test_completed_day_owner_gate_and_basis(monkeypatch, owners, about, basis, e
     ]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'summary', segments=segments),), 'complete'),
+        lambda *_args, **_kwargs: _day_read(_day_source('conversation-1', 'summary', segments=segments)),
     )
     result = produce_completed_day_daily_summary_sources(
         'user-1',
@@ -2435,6 +2808,71 @@ def test_completed_day_owner_gate_and_basis(monkeypatch, owners, about, basis, e
         assert writes[0].subject_scope == expected_scope
 
 
+def test_completed_day_typed_proposal_is_preserved_without_a_standing_slot(monkeypatch):
+    """An explicitly proposed decision is useful context, but never a profile slot."""
+
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    segments = [TranscriptSegment(text='I may move to Boston.', speaker_id=0, is_user=True, start=0, end=1)]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: _day_read(_day_source('conversation-1', 'summary', segments=segments)),
+    )
+    result = produce_completed_day_daily_summary_sources(
+        'user-1',
+        local_date,
+        'UTC',
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0),
+        agent_runner=lambda *_args, **_kwargs: _agent_output(
+            memories=[
+                SimpleNamespace(
+                    content='David proposed moving to Boston',
+                    conversation_ids=['conversation-1'],
+                    about='user',
+                    basis='proposed',
+                    slot='current_city',
+                    arguments={'decision': 'proposed', 'object': 'moving to Boston'},
+                )
+            ]
+        ),
+        window_override=completed_local_day_window(local_date, 'UTC'),
+    )
+
+    assert len(result.daily_summary) == 1
+    candidate = result.daily_summary[0]
+    assert candidate.slot is None
+    assert candidate.arguments == {'decision': 'proposed', 'object': 'moving to Boston'}
+
+
+def test_apply_candidate_add_path_persists_scoped_arguments(monkeypatch):
+    """A new (non-amendment) candidate must persist its scoped qualifiers and
+    decision state, exactly like the amend path."""
+    from utils.memory.daily_memory_sweep import _apply_candidate
+
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    db = _Db()
+    writes = []
+    monkeypatch.setattr('utils.memory.daily_memory_sweep._target_for_candidate', lambda *_a, **_k: None)
+    monkeypatch.setattr('utils.memory.daily_memory_sweep._find_active_slot_or_subject', lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep.save_ledger_write',
+        lambda _uid, write, **_kwargs: writes.append(write) or 'written',
+    )
+    candidate = _candidate(
+        content='David proposed moving to Boston',
+        slot=None,
+        arguments={'decision': 'proposed', 'object': 'moving to Boston'},
+    )
+
+    assert _apply_candidate('user-1', date(2026, 8, 23), candidate, db_client=db) == ('written', None)
+    assert writes[0].arguments == {'decision': 'proposed', 'object': 'moving to Boston'}
+
+
 @pytest.mark.parametrize(
     'owners,trust', [((True, True), 'multi_owner'), ((False, False), 'no_owner'), ((True, False), 'unique_owner')]
 )
@@ -2458,27 +2896,20 @@ def test_completed_day_reader_carries_evidence_and_safe_phase_b_transcript(owner
     )
     snapshot.id = 'c'
 
-    class Query(_EmptyCollection):
-        def order_by(self, _field):
-            return self
-
-        def stream(self):
-            return [snapshot]
-
-    rows, status = _read_completed_day_conversation_sources(
+    read = _read_completed_day_conversation_sources(
         'u',
         completed_local_day_window(date(2026, 8, 23), 'UTC'),
-        db_client=SimpleNamespace(collection=lambda _path: Query()),
+        db_client=_ConversationDb([snapshot]),
         max_conversations=8,
         max_summary_characters=1000,
     )
-    assert status == 'complete'
-    assert len(rows) == 1
-    assert rows[0].owner_evidence.trust == trust
-    assert ('UNTRUSTED' in rows[0].transcript_text) == (trust != 'unique_owner')
+    assert read.status == 'complete'
+    assert len(read.rows) == 1
+    assert read.rows[0].owner_evidence.trust == trust
+    assert ('UNTRUSTED' in read.rows[0].transcript_text) == (trust != 'unique_owner')
     if trust != 'unique_owner':
-        assert 'Speaker 0:' in rows[0].transcript_text and 'Speaker 1:' in rows[0].transcript_text
-        assert 'User:' not in rows[0].transcript_text
+        assert 'Speaker 0:' in read.rows[0].transcript_text and 'Speaker 1:' in read.rows[0].transcript_text
+        assert 'User:' not in read.rows[0].transcript_text
 
 
 def test_daily_sweep_ledger_searcher_prefixes_active_memory_ids(monkeypatch):
@@ -2510,7 +2941,7 @@ def test_completed_day_lookup_duplicate_is_skipped_not_staged_as_sibling(monkeyp
     segments = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'gym', segments=segments),), 'complete'),
+        lambda *_args, **_kwargs: _day_read(_day_source('conversation-1', 'gym', segments=segments)),
     )
     result = produce_completed_day_daily_summary_sources(
         'user-1',
@@ -2559,12 +2990,9 @@ def test_completed_day_gate_emits_decision_path_drop_counters(monkeypatch, caplo
     ]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: (
-            (
-                _day_source('conversation-1', 'gym', segments=trusted),
-                _day_source('conversation-2', 'guest', segments=untrusted),
-            ),
-            'complete',
+        lambda *_args, **_kwargs: _day_read(
+            _day_source('conversation-1', 'gym', segments=trusted),
+            _day_source('conversation-2', 'guest', segments=untrusted),
         ),
     )
     with caplog.at_level(logging.INFO):
@@ -2653,7 +3081,7 @@ def test_completed_day_omitted_about_is_dropped_subjectless_not_a_parse_failure(
     trusted = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'gym', segments=trusted),), 'complete'),
+        lambda *_args, **_kwargs: _day_read(_day_source('conversation-1', 'gym', segments=trusted)),
     )
     with caplog.at_level(logging.INFO):
         result = produce_completed_day_daily_summary_sources(
@@ -2706,12 +3134,9 @@ def test_completed_day_owner_name_in_about_still_hits_the_owner_gate(monkeypatch
     ]
     monkeypatch.setattr(
         'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-        lambda *_args, **_kwargs: (
-            (
-                _day_source('conversation-1', 'gym', segments=trusted),
-                _day_source('conversation-2', 'guest', segments=untrusted),
-            ),
-            'complete',
+        lambda *_args, **_kwargs: _day_read(
+            _day_source('conversation-1', 'gym', segments=trusted),
+            _day_source('conversation-2', 'guest', segments=untrusted),
         ),
     )
     with caplog.at_level(logging.INFO):
@@ -2754,3 +3179,1578 @@ def test_completed_day_owner_name_in_about_still_hits_the_owner_gate(monkeypatch
     ]
     event = json.loads(messages[0].split('canonical_memory_decision_path.v1 ', 1)[1])
     assert event['demoted_owner_untrusted'] == 1
+
+
+@pytest.fixture
+def fenced_summary(monkeypatch):
+    """Real agent + real transaction decorator, with strict local persistence."""
+    from contextlib import nullcontext
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.llm import memories
+
+    db = StrictFirestore()
+    control = MemoryControlState(uid="user-1", head_commit_id="head0", account_generation=4, source_generation=7)
+    db.document("users/user-1/memory_state/apply_control").create(control.model_dump(mode="json"))
+    monkeypatch.setattr(memories, "get_prompt_memories", lambda _: ("Test", ""))
+    monkeypatch.setattr(memories, "current_date_for_uid", lambda _: "2026-09-17")
+    monkeypatch.setattr(memories, "track_usage", lambda *_a, **_kw: nullcontext())
+    identity = dict(account_generation=4, source_generation=7, sweep_generation=1, window_id="window-a")
+    fence_path = (MODEL_INVOCATION_FENCE_COLLECTION, "pre-dispatch")
+
+    def fail():
+        memories.run_daily_sweep_summary_agent(
+            "user-1",
+            [("c1", "Test summary")],
+            {},
+            llm=object(),
+            max_input_tokens=1,
+        )
+        raise AssertionError("budget check did not fail")
+
+    def invoke(builder=fail, **kwargs):
+        return _invoke_model_once(db, "user-1", "pre-dispatch", candidate_builder=builder, **identity, **kwargs)
+
+    return db, fence_path, invoke, fail
+
+
+def test_pre_dispatch_failure_releases_with_reason_and_next_run_claims(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+    assert invoke() is None
+    assert db.rows[path]["state"] == "pre_dispatch_released"
+    assert db.rows[path]["pre_dispatch_releases"] == 1
+    assert db.rows[path]["failure_reason"] == "daily_sweep_summary_input_budget"
+    calls = []
+    assert invoke(lambda: calls.append(1) or ({"candidate_id": "ok"},)) == ({"candidate_id": "ok"},)
+    assert calls == [1]
+    assert db.rows[path]["pre_dispatch_releases"] == 1
+
+
+def test_fourth_pre_dispatch_failure_exhausts_release_budget(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+    for _ in range(4):
+        assert invoke() is None
+    assert db.rows[path]["state"] == "pre_dispatch_exhausted"
+    assert db.rows[path]["pre_dispatch_releases"] == 3
+    assert db.rows[path]["blocked_reason"] == "pre_dispatch_release_limit"
+    assert invoke(lambda: pytest.fail("exhausted claim retried")) is None
+
+
+@pytest.mark.parametrize("mutation", ["state", "identity", "claim", "deletion", "generation", "user_deleted"])
+def test_pre_dispatch_release_refuses_changed_fence(fenced_summary, mutation):
+    db, path, invoke, fail = fenced_summary
+
+    def changed():
+        if mutation == "state":
+            db.rows[path]["state"] = "returned"
+        elif mutation == "identity":
+            db.rows[path]["uid"] = "foreign"
+        elif mutation == "claim":
+            db.rows[path]["claim_id"] = "newer-claim"
+        elif mutation == "deletion":
+            db.rows[("account_deletions", "user-1")] = {"wipe_status": "running"}
+        elif mutation == "generation":
+            db.rows[("users", "user-1", "memory_state", "apply_control")]["account_generation"] += 1
+        else:
+            del db.rows[("users", "user-1", MODEL_INVOCATION_PATH, "pre-dispatch")]
+        return fail()
+
+    assert invoke(changed) is None
+    assert db.rows[path]["state"] != "pre_dispatch_released"
+    assert db.rows[path]["pre_dispatch_releases"] == 0
+
+
+def test_forged_pre_dispatch_exception_is_indeterminate(fenced_summary):
+    from models.daily_sweep_dispatch import SweepPreDispatchError
+
+    db, path, invoke, _ = fenced_summary
+    assert invoke(lambda: (_ for _ in ()).throw(SweepPreDispatchError("daily_sweep_summary_input_budget"))) is None
+    assert db.rows[path]["state"] == "indeterminate"
+    assert invoke(lambda: pytest.fail("forged signal reopened")) is None
+
+
+def test_post_dispatch_cannot_replay_certified_error_or_clear_evidence(fenced_summary):
+    from utils.llm.memories import run_daily_sweep_summary_agent
+
+    db, path, invoke, fail = fenced_summary
+    evidence = {}
+    calls = []
+
+    def builder():
+        try:
+            fail()
+        except Exception as certified:
+
+            class Provider:
+                def invoke(self, *_args, **_kwargs):
+                    calls.append(1)
+                    evidence.clear()
+                    raise certified
+
+            run_daily_sweep_summary_agent(
+                "user-1",
+                [("c1", "summary")],
+                {},
+                llm=Provider(),
+                dispatch_evidence=evidence,
+            )
+        return ()
+
+    assert invoke(builder) is None
+    assert calls == [1]
+    assert db.rows[path]["state"] == "indeterminate"
+    assert invoke(lambda: pytest.fail("post-dispatch claim retried")) is None
+
+
+@pytest.mark.parametrize("exhausted", [False, True])
+def test_operator_attestation_reopens_once_and_consumes_receipt(fenced_summary, exhausted):
+    db, path, invoke, _ = fenced_summary
+    claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+    if exhausted:
+        for _ in range(4):
+            assert invoke(now=claimed) is None
+        assert db.rows[path]["state"] == "pre_dispatch_exhausted"
+    else:
+        assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("legacy unknown failure")), now=claimed) is None
+    repaired = claimed + timedelta(hours=1)
+    evidence = _operator_attestation(db.rows[path], repaired)
+    receipt = repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id="pre-dispatch",
+        provider_outcome_evidence=evidence,
+        repair_authority="operator:test",
+        now=repaired,
+    )
+    assert receipt["provider_outcome_summary"] == "operator_attested_no_dispatch"
+    calls = []
+    for _ in range(2):
+        assert invoke(lambda: calls.append(1) or ({"candidate_id": "ok"},), now=repaired) == ({"candidate_id": "ok"},)
+    assert calls == [1]
+    assert db.rows[("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch")]["consumed"] is True
+
+
+@pytest.mark.parametrize(
+    "invalid", ["confirmation", "reference", "unexpired", "wrong_claim", "worker", "actor", "identity"]
+)
+def test_core_repair_rejects_invalid_operator_attestation(fenced_summary, invalid):
+    db, path, invoke, _ = fenced_summary
+    claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+    assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("unknown")), now=claimed) is None
+    repaired = claimed + timedelta(hours=1)
+    evidence = _operator_attestation(db.rows[path], repaired)
+    if invalid == "confirmation":
+        evidence["confirmation"] = ""
+    elif invalid == "reference":
+        evidence["evidence_reference"] = ""
+    elif invalid == "unexpired":
+        repaired = claimed + timedelta(minutes=16)
+    elif invalid == "wrong_claim":
+        evidence["claimed_at"] = (claimed - timedelta(hours=1)).isoformat()
+    elif invalid == "worker":
+        evidence["claim_id"] = "other-worker"
+    elif invalid == "actor":
+        evidence["attested_by"] = "somebody-else"
+    else:
+        evidence["claim_identity"]["source_generation"] += 1
+    with pytest.raises(ValueError, match="valid claim-bound operator attestation"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id="pre-dispatch",
+            provider_outcome_evidence=evidence,
+            repair_authority="operator:test",
+            now=repaired,
+        )
+    assert ("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch") not in db.rows
+
+
+def test_receipt_consumption_revalidates_no_attempt_shape(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+    claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+    assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("unknown")), now=claimed) is None
+    fence = db.rows[path]
+    receipt_path = ("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch")
+    db.rows[receipt_path] = {
+        **fence,
+        "schema_version": "daily_memory_sweep_model_invocation_repair.v1",
+        "consumed": False,
+        "prior_state": "indeterminate",
+        "prior_claimed_at": claimed,
+        "prior_claim_id": fence["claim_id"],
+        "provider_outcome_evidence": {
+            "provider_outcome": "no_recorded_attempt",
+            "attempts": [],
+            "accounting_read_complete": True,
+            "uid": "user-1",
+            "feature": "memories",
+            "claimed_at": claimed.isoformat(),
+            "window_start": (claimed - timedelta(minutes=2)).isoformat(),
+            "window_end": (claimed + timedelta(hours=1)).isoformat(),
+        },
+    }
+    assert invoke(lambda: pytest.fail("invalid proof consumed"), now=claimed + timedelta(hours=1)) is None
+    assert db.rows[receipt_path]["consumed"] is False
+
+
+def test_existing_recorded_attempt_receipt_without_claim_token_remains_valid(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+    claimed = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+    assert invoke(lambda: (_ for _ in ()).throw(RuntimeError("unknown")), now=claimed) is None
+    fence = db.rows[path]
+    db.rows[("users", "user-1", MODEL_INVOCATION_REPAIR_PATH, "pre-dispatch")] = {
+        **{
+            key: fence[key]
+            for key in (
+                "uid",
+                "invocation_id",
+                "account_generation",
+                "source_generation",
+                "sweep_generation",
+                "window_id",
+            )
+        },
+        "schema_version": "daily_memory_sweep_model_invocation_repair.v1",
+        "consumed": False,
+        "provider_outcome_evidence": {"jit_run_id": "actual-run", "attempts": [{"request_id": "req-1"}]},
+    }
+    assert invoke(lambda: ({"candidate_id": "ok"},), now=claimed + timedelta(hours=1)) == ({"candidate_id": "ok"},)
+
+
+def _operator_attestation(fence, now, *, authority="operator:test"):
+    return {
+        "provider_outcome": "operator_attested_no_dispatch",
+        "attempts": [],
+        "confirmation": "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED",
+        "evidence_reference": "incident:qa-sweep-reviewed",
+        "attested_by": authority,
+        "attested_at": now.isoformat(),
+        "claimed_at": fence["claimed_at"].isoformat(),
+        "claim_id": fence.get("claim_id"),
+        "claim_identity": {
+            key: fence[key]
+            for key in (
+                "uid",
+                "invocation_id",
+                "account_generation",
+                "source_generation",
+                "sweep_generation",
+                "window_id",
+            )
+        },
+    }
+
+
+def test_successful_builder_cannot_finalize_a_newer_claim(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+
+    def replace_claim():
+        # Only the top-level claim changes: removing finalize's token check
+        # would incorrectly publish A's result under B's durable claim.
+        db.rows[path]["claim_id"] = "claim-b"
+        return ({"candidate_id": "claim-a-output"},)
+
+    assert invoke(replace_claim) is None
+    assert db.rows[path]["claim_id"] == "claim-b"
+    assert db.rows[path]["state"] == "pending"
+    assert "candidate_digest" not in db.rows[path]
+    user = db.rows[("users", "user-1", MODEL_INVOCATION_PATH, "pre-dispatch")]
+    assert user["state"] == "pending" and "candidate_page" not in user
+
+
+def test_generation_close_cannot_mark_a_newer_claim_indeterminate(fenced_summary):
+    db, path, invoke, _ = fenced_summary
+
+    def close_generation_and_replace_claim():
+        db.rows[path]["claim_id"] = "claim-b"
+        db.rows[("users", "user-1", "memory_state", "apply_control")]["source_generation"] += 1
+        return ({"candidate_id": "claim-a-output"},)
+
+    assert invoke(close_generation_and_replace_claim) is None
+    assert db.rows[path]["claim_id"] == "claim-b"
+    assert db.rows[path]["state"] == "pending"
+    assert "indeterminate_at" not in db.rows[path]
+
+
+class _LimitedQuery:
+    def __init__(self, snapshots, *, error=None):
+        self._snapshots = list(snapshots)
+        self.limit_count = None
+        self._error = error
+        self.fields = None
+        self.order = []
+        self.full_reads = []
+
+    def select(self, fields):
+        self.fields = fields
+        return self
+
+    def where(self, *args, **kwargs):
+        if self._error is not None:
+            raise self._error
+        return self
+
+    def order_by(self, field):
+        self.order.append(field)
+        return self
+
+    def limit(self, count):
+        self.limit_count = count
+        return self
+
+    def stream(self):
+        if self._error is not None:
+            raise self._error
+        snapshots = sorted(self._snapshots, key=lambda row: (row.to_dict()["started_at"], row.id))
+        result = []
+        for full in snapshots[: self.limit_count]:
+            projected = _Snapshot({key: value for key, value in full.to_dict().items() if key in self.fields})
+            projected.id = full.id
+
+            def get(full=full):
+                self.full_reads.append(full.id)
+                return full
+
+            projected.reference = SimpleNamespace(get=get)
+            result.append(projected)
+        return result
+
+
+class _ConversationDb(_Db):
+    def __init__(self, snapshots, *, error=None):
+        super().__init__()
+        self.conversation_query = _LimitedQuery(snapshots, error=error)
+        for row in snapshots:
+            self.store[f"users/user-1/conversations/{row.id}"] = row.to_dict()
+
+    def collection(self, path):
+        if str(path).endswith("/conversations"):
+            return self.conversation_query
+        return _EmptyCollection()
+
+
+def _conversation_snapshot(
+    conversation_id,
+    *,
+    started,
+    title="Meeting",
+    overview="Planning",
+    transcript="hello",
+    status="completed",
+    finished=True,
+    discarded=False,
+    is_locked=False,
+):
+    payload = {
+        "id": conversation_id,
+        "created_at": started,
+        "started_at": started,
+        "status": status,
+        "structured": {"title": title, "overview": overview, "category": "personal"},
+        "transcript_segments": [{"text": transcript, "speaker_id": 0, "is_user": True, "start": 0, "end": 1}],
+        "discarded": discarded,
+        "is_locked": is_locked,
+    }
+    if finished:
+        payload["finished_at"] = started + timedelta(minutes=1)
+    snapshot = _Snapshot(payload)
+    snapshot.id = conversation_id
+    return snapshot
+
+
+def test_completed_day_source_fetch_limit_is_twice_the_spine_and_hard_capped():
+    from utils.memory.daily_memory_sweep import (
+        COMPLETED_DAY_SOURCE_PAGE_CAP,
+        _completed_day_source_fetch_limit,
+    )
+
+    assert _completed_day_source_fetch_limit(QA_SWEEP_MAX_SUMMARY_CONVERSATIONS) == 16
+    assert _completed_day_source_fetch_limit(200) == COMPLETED_DAY_SOURCE_PAGE_CAP
+    assert _completed_day_source_fetch_limit(300) == COMPLETED_DAY_SOURCE_PAGE_CAP
+
+
+def test_completed_day_subset_prefers_structured_then_longest_and_is_stable():
+    from utils.memory.daily_memory_sweep import _select_completed_day_source_rows
+
+    started = datetime(2026, 8, 23, 10, tzinfo=timezone.utc)
+    later = started + timedelta(hours=2)
+    rows = [
+        _day_source("raw-long", "z" * 40, has_structured_summary=False, started_at=later),
+        _day_source("struct-short", "aa", has_structured_summary=True, started_at=started),
+        _day_source("struct-long", "bbbb", has_structured_summary=True, started_at=started),
+    ]
+    first_selection = _select_completed_day_source_rows(rows, max_conversations=2, max_summary_characters=1_000)
+    shuffled_selection = _select_completed_day_source_rows(
+        list(reversed(rows)), max_conversations=2, max_summary_characters=1_000
+    )
+    assert first_selection.truncated is True
+    assert first_selection.truncation_reason == "conversation_page_over_budget"
+    assert [row.conversation_id for row in first_selection.rows] == ["struct-long", "struct-short"]
+    assert shuffled_selection == first_selection
+
+    chars_only_selection = _select_completed_day_source_rows(
+        rows, max_conversations=8, max_summary_characters=len("bbbb")
+    )
+    assert chars_only_selection.truncated is True
+    assert chars_only_selection.truncation_reason == "summary_characters_over_budget"
+    assert [row.conversation_id for row in chars_only_selection.rows] == ["struct-long"]
+
+
+def test_completed_day_reader_truncates_over_count_instead_of_stalling():
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    snapshots = [
+        _conversation_snapshot("raw", started=started, title="", overview="", transcript="raw transcript"),
+        _conversation_snapshot("short", started=started + timedelta(hours=1), title="Short", overview="A"),
+        _conversation_snapshot(
+            "long", started=started + timedelta(hours=2), title="LongerTitle", overview="Overview text"
+        ),
+    ]
+    db = _ConversationDb(snapshots)
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+    first = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=db,
+        max_conversations=2,
+        max_summary_characters=5_000,
+    )
+    second = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=db,
+        max_conversations=2,
+        max_summary_characters=5_000,
+    )
+    assert first.status == "complete"
+    assert first.truncated is True
+    assert first.reason == "conversation_page_over_budget"
+    assert first.rows_seen == 3
+    assert first.rows_used == 2
+    assert [row.conversation_id for row in first.rows] == ["long", "short"]
+    assert [row.conversation_id for row in second.rows] == [row.conversation_id for row in first.rows]
+    from utils.memory.daily_memory_sweep import COMPLETED_DAY_ELIGIBILITY_CAP
+
+    assert db.conversation_query.limit_count == 100_001
+    assert db.conversation_query.order == ["started_at", "__name__"] * 2
+
+
+def test_completed_day_reader_truncates_over_characters_instead_of_stalling():
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    snapshots = [
+        _conversation_snapshot("alpha", started=started, title="Alpha", overview="x"),
+        _conversation_snapshot("bravo", started=started + timedelta(hours=1), title="Bravo", overview="yyyy"),
+    ]
+    db = _ConversationDb(snapshots)
+    first = _read_completed_day_conversation_sources(
+        "u",
+        completed_local_day_window(date(2026, 8, 23), "UTC"),
+        db_client=db,
+        max_conversations=8,
+        max_summary_characters=40,
+    )
+    second = _read_completed_day_conversation_sources(
+        "u",
+        completed_local_day_window(date(2026, 8, 23), "UTC"),
+        db_client=db,
+        max_conversations=8,
+        max_summary_characters=40,
+    )
+    assert first.status == "complete"
+    assert first.truncated is True
+    assert first.reason == "summary_characters_over_budget"
+    assert first.rows_used >= 1
+    assert first.rows_used < first.rows_seen
+    assert [row.conversation_id for row in second.rows] == [row.conversation_id for row in first.rows]
+
+
+def test_completed_day_reader_keeps_ineligible_and_undecodable_incomplete():
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+    processing = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=_ConversationDb(
+            [
+                _conversation_snapshot("done", started=started),
+                _conversation_snapshot("live", started=started + timedelta(hours=1), status="processing"),
+            ]
+        ),
+        max_conversations=8,
+        max_summary_characters=5_000,
+    )
+    assert processing.status == "incomplete"
+    assert processing.reason == "row_not_eligible"
+
+    in_progress = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=_ConversationDb(
+            [_conversation_snapshot("live", started=started, status="in_progress", finished=False)]
+        ),
+        max_conversations=8,
+        max_summary_characters=5_000,
+    )
+    assert in_progress.status == "incomplete"
+    assert in_progress.reason == "row_not_eligible"
+
+    missing_id = _conversation_snapshot("gone", started=started)
+    missing_id.id = ""
+    undecodable = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=_ConversationDb([missing_id]),
+        max_conversations=8,
+        max_summary_characters=5_000,
+    )
+    assert undecodable.status == "incomplete"
+    assert undecodable.reason == "row_undecodable"
+
+    query_failed = _read_completed_day_conversation_sources(
+        "u",
+        window,
+        db_client=_ConversationDb([], error=RuntimeError("unavailable")),
+        max_conversations=8,
+        max_summary_characters=5_000,
+    )
+    assert query_failed.status == "incomplete"
+    assert query_failed.reason == "query_failed"
+
+
+def test_completed_day_producer_attaches_truncated_evidence_and_records_fallback(monkeypatch):
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(
+                "one",
+                started=datetime(2026, 8, 23, 8, tzinfo=timezone.utc),
+                title="One",
+                overview="A",
+            ),
+            _conversation_snapshot(
+                "two",
+                started=datetime(2026, 8, 23, 10, tzinfo=timezone.utc),
+                title="Two",
+                overview="B",
+            ),
+            _conversation_snapshot(
+                "three",
+                started=datetime(2026, 8, 23, 12, tzinfo=timezone.utc),
+                title="Three",
+                overview="C",
+            ),
+        ]
+    )
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    fallbacks = []
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.record_fallback",
+        lambda **kwargs: fallbacks.append(kwargs),
+    )
+    seen_ids = []
+
+    def agent(_uid, summary_rows, _lookup, **_kwargs):
+        seen_ids.extend(conversation_id for conversation_id, _text in summary_rows)
+        return _agent_output(
+            memories=[
+                SimpleNamespace(
+                    about="user",
+                    basis="decided",
+                    content="fact from truncated day",
+                    conversation_ids=[summary_rows[0][0]],
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS",
+        2,
+    )
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0),
+        agent_runner=agent,
+        window_override=completed_local_day_window(date(2026, 8, 23), "UTC"),
+    )
+    assert result.source_status == "complete"
+    assert result.complete is True
+    assert result.model_dispatch_evidence["truncated"] is True
+    assert result.model_dispatch_evidence["rows_seen"] == 3
+    assert result.model_dispatch_evidence["rows_used"] == 2
+    assert result.model_dispatch_evidence["truncation_reason"] == "conversation_page_over_budget"
+    assert fallbacks[0]["component"] == "daily_summary"
+    assert fallbacks[0]["from_mode"] == "full_source"
+    assert fallbacks[0]["to_mode"] == "truncated_source"
+    assert fallbacks[0]["reason"] == "capacity_full"
+    assert fallbacks[0]["outcome"] == "degraded"
+    assert len(seen_ids) == 2
+    assert "fact" not in str(result.model_dispatch_evidence)
+
+
+def test_completed_day_producer_keeps_processing_row_incomplete(monkeypatch):
+    db = _ConversationDb(
+        [
+            _conversation_snapshot("done", started=datetime(2026, 8, 23, 8, tzinfo=timezone.utc)),
+            _conversation_snapshot(
+                "live",
+                started=datetime(2026, 8, 23, 10, tzinfo=timezone.utc),
+                status="processing",
+            ),
+        ]
+    )
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0),
+        agent_runner=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not dispatch")),
+        window_override=completed_local_day_window(date(2026, 8, 23), "UTC"),
+    )
+    assert result.source_status == "incomplete"
+    assert result.complete is False
+    assert result.model_dispatch_evidence["failure_reason"] == "row_not_eligible"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    (
+        "query_failed",
+        "row_not_eligible",
+        "row_undecodable",
+        "qa_cached_summary_rejected",
+        "cached_summary_missing_candidates",
+        "cached_summary_identity_mismatch",
+        "cached_summary_not_attested",
+        "model_route_not_budgeted",
+        "model_name_not_configured",
+        "qa_rate_card_unavailable",
+        "model_cost_over_budget",
+        "daily_summary_stage_unavailable",
+        "invocation_payload_expired",
+        "invocation_pre_dispatch_exhausted",
+        "invocation_indeterminate",
+        "invocation_pending",
+        "source_locked_before_dispatch",
+        "source_lock_check_unavailable",
+        "eligibility_scan_over_budget",
+        "source_row_changed",
+        "private_but_snake_case",
+        None,
+    ),
+)
+def test_scheduler_source_incomplete_reasons_reach_the_error_string(monkeypatch, reason):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=_Db(),
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence={"failure_reason": reason},
+        ),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    expected = "unknown_reason" if reason in ("private_but_snake_case", None) else reason
+    assert summary.errors == (f"uid=user-1:source_incomplete:2026-08-23:{expected}",)
+    assert "fact" not in "".join(summary.errors)
+    assert "conversation" not in "".join(summary.errors)
+
+
+def test_scheduler_advances_cursor_for_truncated_over_budget_day(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.read_account_deletion_projection_fence",
+        lambda _uid, db_client: type("Fence", (), {"blocks_projection_writes": False})(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.firestore.transactional",
+        lambda function: lambda transaction, *args: function(transaction, *args),
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._apply_candidate",
+        lambda *_args, **_kwargs: ("mem-1", None),
+    )
+    monkeypatch.setattr("utils.memory.daily_memory_sweep._finish_receipt", lambda *_args, **_kwargs: None)
+    db = _Db()
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    source_calls = []
+
+    def source_provider(*_args, **_kwargs):
+        source_calls.append(True)
+        return DailySweepRuntimeSources.from_iterables(
+            daily_summary=(_candidate(),),
+            complete=True,
+            source_status="complete",
+            eligibility_proof="completed_transcript_v1",
+            model_dispatch_evidence={
+                "truncated": True,
+                "rows_seen": 6,
+                "rows_used": 2,
+                "truncation_reason": "conversation_page_over_budget",
+            },
+        )
+
+    kwargs = dict(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=source_provider,
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    first = run_daily_memory_sweep_scheduler(**kwargs)
+    assert first.committed_users == 1
+    assert first.errors == ()
+    cursor = _read_cursor(db, "user-1", control)
+    assert cursor.last_completed_local_date == date(2026, 8, 23)
+    second = run_daily_memory_sweep_scheduler(**kwargs)
+    assert source_calls == [True]
+    assert second.committed_users == 0
+    assert second.errors == ()
+
+
+def _read_test_day(db, *, max_conversations=8):
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    return _read_completed_day_conversation_sources(
+        "user-1",
+        completed_local_day_window(date(2026, 8, 23), "UTC"),
+        db_client=db,
+        max_conversations=max_conversations,
+        max_summary_characters=8_000,
+    )
+
+
+def test_eligibility_observes_processing_row_beyond_full_document_page():
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(
+                f"c-{index:04d}", started=started, status="processing" if index == 400 else "completed"
+            )
+            for index in range(401)
+        ]
+    )
+    result = _read_test_day(db, max_conversations=200)
+    assert result.status == "incomplete"
+    assert result.reason == "row_not_eligible"
+    assert db.conversation_query.full_reads == []
+
+
+def test_eligibility_hard_cap_refuses_overflow_before_full_document_reads():
+    from utils.memory.daily_memory_sweep import COMPLETED_DAY_ELIGIBILITY_CAP
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(f"c-{index:04d}", started=started)
+            for index in range(COMPLETED_DAY_ELIGIBILITY_CAP + 1)
+        ]
+    )
+    result = _read_test_day(db)
+    assert result.status == "incomplete"
+    assert result.reason == "eligibility_scan_over_budget"
+    assert db.conversation_query.limit_count == 100_001
+    assert db.conversation_query.full_reads == []
+
+
+def test_eligibility_exact_cap_is_complete_and_full_reads_are_bounded():
+    from utils.memory.daily_memory_sweep import COMPLETED_DAY_ELIGIBILITY_CAP
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(f"c-{index:04d}", started=started)
+            for index in reversed(range(COMPLETED_DAY_ELIGIBILITY_CAP))
+        ]
+    )
+    result = _read_test_day(db)
+    assert result.status == "complete"
+    assert result.rows_seen == COMPLETED_DAY_ELIGIBILITY_CAP
+    assert db.conversation_query.full_reads == [f"c-{index:04d}" for index in range(16)]
+    assert db.conversation_query.order == ["started_at", "__name__"]
+    assert set(db.conversation_query.fields) == {"started_at", "status", "discarded", "is_locked", "finished_at"}
+
+
+def test_exact_selection_page_with_discarded_rows_is_not_truncated():
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [_conversation_snapshot(f"c-{index:04d}", started=started, discarded=index < 8) for index in range(16)]
+    )
+    result = _read_test_day(db)
+    assert result.status == "complete"
+    assert result.rows_seen == result.rows_used == 8
+    assert not result.truncated
+    assert result.reason == ""
+    assert db.conversation_query.full_reads == [f"c-{index:04d}" for index in range(8, 16)]
+
+
+def test_oversize_row_after_selected_row_is_skipped_before_later_fitting_row():
+    from utils.memory.daily_memory_sweep import _select_completed_day_source_rows
+
+    rows = [
+        _day_source("structured", "a" * 100, has_structured_summary=True),
+        _day_source("oversize", "b" * 9_000),
+        _day_source("fits", "c" * 50),
+    ]
+    selected = _select_completed_day_source_rows(rows, max_conversations=8, max_summary_characters=8_000)
+    assert [row.conversation_id for row in selected.rows] == ["fits", "structured"]
+    assert selected.truncated
+    assert selected.truncation_reason == "summary_characters_over_budget"
+
+
+@pytest.fixture
+def window_stage(monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.memory import daily_memory_sweep as sweep
+
+    db = StrictFirestore()
+    control = MemoryControlState(uid="user-1", head_commit_id="head0", account_generation=4, source_generation=7)
+    db.document("users/user-1/memory_state/apply_control").create(control.model_dump(mode="json"))
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+
+    def stage(rows, runner):
+        for row in rows:
+            path = ("users", "user-1", "conversations", row.conversation_id)
+            db.rows.setdefault(path, {"is_locked": False})
+        return sweep._load_or_stage_daily_summary_candidates(
+            "user-1",
+            date(2026, 8, 23),
+            "UTC",
+            control,
+            window,
+            rows,
+            db_client=db,
+            agent_runner=runner,
+            max_candidates=3,
+        )
+
+    return db, stage
+
+
+@pytest.mark.parametrize("mutation", ["late_row", "deleted_row", "enriched_row", "summary_edit"])
+@pytest.mark.parametrize("possible_dispatch", ["returned", "indeterminate"])
+def test_mutated_day_cannot_mint_new_invocation_after_possible_dispatch(
+    window_stage, monkeypatch, mutation, possible_dispatch
+):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
+    from models.daily_sweep_dispatch import SweepDispatchScope
+
+    db, stage = window_stage
+    rows = [_day_source("one", "unstructured"), _day_source("two", "stable")]
+    calls = []
+    create = StrictFirestoreTransaction.create
+
+    def fail_stage(self, ref, payload):
+        if "daily_memory_sweep_daily_summary_staged" in ref.path:
+            raise RuntimeError("stage creation failed")
+        return create(self, ref, payload)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", fail_stage)
+
+    def agent(_uid, selected, _lookup, **_kwargs):
+        SweepDispatchScope.mark_provider_dispatch()
+        calls.append(tuple(selected))
+        if possible_dispatch == "indeterminate":
+            raise RuntimeError("provider outcome unknown")
+        return _agent_output()
+
+    assert stage(rows, agent) is None
+    fences = {key: dict(value) for key, value in db.rows.items() if key[0] == MODEL_INVOCATION_FENCE_COLLECTION}
+    assert len(fences) == 1
+    original = next(iter(fences.values()))
+    assert original["state"] == possible_dispatch
+    if mutation == "late_row":
+        rows.insert(0, _day_source("earlier", "late arriving earlier-started row"))
+    elif mutation == "deleted_row":
+        rows.pop()
+    elif mutation == "enriched_row":
+        rows[0] = _day_source("one", "structured enrichment", has_structured_summary=True)
+    else:
+        rows[0] = _day_source("one", "edited summary")
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", create)
+    assert stage(rows, agent) is None
+    assert len(calls) == 1
+    assert {key: value for key, value in db.rows.items() if key[0] == MODEL_INVOCATION_FENCE_COLLECTION} == fences
+    assert not any("daily_memory_sweep_daily_summary_staged" in key for key in db.rows)
+
+
+def test_unchanged_day_replays_returned_output_after_stage_creation_failure(window_stage, monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
+
+    db, stage = window_stage
+    create = StrictFirestoreTransaction.create
+
+    def fail_stage(self, ref, payload):
+        if "daily_memory_sweep_daily_summary_staged" in ref.path:
+            raise RuntimeError("stage unavailable")
+        return create(self, ref, payload)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", fail_stage)
+    calls = []
+    rows = [_day_source("one", "stable")]
+    agent = lambda *_a, **_kw: calls.append(1) or _agent_output()
+    assert stage(rows, agent) is None
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", create)
+    assert stage(rows, agent) == ((), ())
+    assert calls == [1]
+    fence = next(value for key, value in db.rows.items() if key[0] == MODEL_INVOCATION_FENCE_COLLECTION)
+    staged = next(value for key, value in db.rows.items() if "daily_memory_sweep_daily_summary_staged" in key)
+    assert staged["transcript_digest"] == fence["input_digest"]
+
+
+def test_certified_release_allows_fresh_selection_on_same_window(window_stage, monkeypatch):
+    from utils.llm import memories
+
+    db, stage = window_stage
+    monkeypatch.setattr(memories, "get_prompt_memories", lambda _: ("Test", ""))
+    monkeypatch.setattr(memories, "current_date_for_uid", lambda _: "2026-08-24")
+    monkeypatch.setattr(memories, "get_llm", lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("not prepared")))
+    assert stage([_day_source("old", "old selection")], memories.run_daily_sweep_summary_agent) is None
+    path, before = next((key, value) for key, value in db.rows.items() if key[0] == MODEL_INVOCATION_FENCE_COLLECTION)
+    assert before["state"] == "pre_dispatch_released"
+    calls = []
+
+    def agent(_uid, rows, _lookup, **_kwargs):
+        calls.append(rows)
+        return _agent_output()
+
+    assert stage([_day_source("new", "new selection")], agent) == ((), ())
+    after = db.rows[path]
+    assert after["state"] == "returned"
+    assert after["input_digest"] != before["input_digest"]
+    assert after["claim_id"] != before["claim_id"]
+    assert after["pre_dispatch_releases"] == 1
+    assert calls == [(("new", "new selection"),)]
+
+
+def test_locked_rows_never_enter_provider_summary_or_transcript(monkeypatch):
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb(
+        [
+            _conversation_snapshot(
+                "locked", started=started, title="locked secret", transcript="private", is_locked=True
+            ),
+            _conversation_snapshot("visible", started=started),
+        ]
+    )
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    seen = []
+
+    def agent(_uid, rows, lookup, **_kwargs):
+        seen.append((rows, lookup))
+        return _agent_output()
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=3, max_cost_usd=1),
+        agent_runner=agent,
+    )
+    assert result.complete
+    assert len(seen) == 1
+    assert [key for key, _ in seen[0][0]] == ["visible"]
+    assert set(seen[0][1]) == {"visible"}
+    assert db.conversation_query.full_reads == ["visible"]
+
+
+def test_source_truncation_survives_real_qa_agent_and_receipt(monkeypatch):
+    from utils.llm import memories
+    from utils.memory import daily_memory_sweep as sweep
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb([_conversation_snapshot(f"c-{i}", started=started) for i in range(9)])
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    monkeypatch.setattr(memories, "get_prompt_memories", lambda _: ("Test", ""))
+    monkeypatch.setattr(memories, "current_date_for_uid", lambda _: "2026-08-24")
+    calls = []
+
+    class Model:
+        def _get_request_payload(self, prompt, **kwargs):
+            return {"messages": [{"role": "user", "content": prompt.to_string()}], **kwargs}
+
+        def invoke(self, prompt, **kwargs):
+            calls.append(kwargs)
+            return '{"memories": [], "transcript_requests": [], "folder_assignments": []}'
+
+    monkeypatch.setattr(memories, "get_llm", lambda *_a, **_kw: Model())
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=3, max_cost_usd=1),
+        agent_runner=memories.run_daily_sweep_summary_agent,
+        qa_run_id="source-evidence-test",
+    )
+    assert result.complete
+    evidence = result.model_dispatch_evidence
+    assert evidence["truncated"] is True
+    assert evidence["rows_seen"] == 9 and evidence["rows_used"] == 8
+    assert evidence["truncation_reason"] == "conversation_page_over_budget"
+    assert len(evidence["requests"]) == len(calls) == 1
+    staged = next(value for key, value in db.store.items() if "daily_summary_staged" in key)
+    assert staged["dispatch_evidence"] == evidence
+    sweep.write_qa_sweep_run_receipt(
+        db,
+        run_id="source-evidence-test",
+        summary=sweep.DailySweepSchedulerSummary(model_dispatch_evidence=(evidence,)),
+    )
+    receipt = sweep._qa_sweep_run_ref(db, "source-evidence-test").get().to_dict()
+    assert receipt["model_dispatch_evidence"] == [evidence]
+
+
+@pytest.mark.parametrize("reason", ["private_but_snake_case", "private text", None, {"bad": "reason"}])
+def test_unknown_source_reasons_are_fixed_tokens_in_qa_receipts(reason):
+    from utils.memory import daily_memory_sweep as sweep
+
+    db = _Db()
+    evidence = {"failure_reason": reason, "truncation_reason": reason}
+    sweep.write_qa_sweep_run_receipt(
+        db,
+        run_id="unknown-reason-test",
+        summary=sweep.DailySweepSchedulerSummary(model_dispatch_evidence=(evidence,)),
+    )
+    for value in db.store.values():
+        assert value["model_dispatch_evidence"] == [
+            {"failure_reason": "unknown_reason", "truncation_reason": "unknown_reason"}
+        ]
+
+
+def test_historical_transcript_keyed_fence_blocks_new_window_identity(window_stage):
+    db, stage = window_stage
+    window = completed_local_day_window(date(2026, 8, 23), "UTC")
+    db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/old-text-derived-id").create(
+        {
+            "uid": "user-1",
+            "window_id": window.window_id,
+            "account_generation": 4,
+            "source_generation": 7,
+            "sweep_generation": 1,
+            "state": "returned",
+            "invocation_id": "old-text-derived-id",
+        }
+    )
+    calls = []
+    assert stage([_day_source("changed", "new text")], lambda *_a, **_kw: calls.append(1) or _agent_output()) is None
+    assert calls == []
+    assert len([key for key in db.rows if key[0] == MODEL_INVOCATION_FENCE_COLLECTION]) == 1
+
+
+def test_onboarding_uses_the_same_locked_content_exclusion():
+    assert (
+        _onboarding_transcript_eligibility(
+            {
+                "status": "completed",
+                "finished_at": datetime(2026, 8, 23, 8, tzinfo=timezone.utc),
+                "finalization_status": "completed",
+                "is_locked": True,
+            }
+        )
+        == "discarded"
+    )
+
+
+def test_admission_serializes_overlapping_workers_before_identity_computation(window_stage):
+    from utils.memory import daily_memory_sweep as sweep
+
+    db, _ = window_stage
+    entered, finish = threading.Event(), threading.Event()
+    calls, identities = [], []
+    kwargs = dict(account_generation=4, source_generation=7, sweep_generation=1, window_id="admitted")
+
+    def provider():
+        calls.append("first")
+        entered.set()
+        assert finish.wait(5)
+        return ()
+
+    worker = threading.Thread(
+        target=lambda: sweep._invoke_model_once(
+            db, "user-1", lambda: "first-version", candidate_builder=provider, **kwargs
+        )
+    )
+    worker.start()
+    try:
+        assert entered.wait(5)
+        evidence = {}
+        assert (
+            sweep._invoke_model_once(
+                db,
+                "user-1",
+                lambda: identities.append("evaluated"),
+                candidate_builder=lambda: calls.append("second"),
+                invocation_evidence=evidence,
+                **kwargs,
+            )
+            is None
+        )
+        assert evidence["failure_reason"] == "window_admission_busy"
+        assert identities == []
+    finally:
+        finish.set()
+        worker.join(5)
+    assert calls == ["first"]
+    # Even after the lease is released, a changed identity algorithm reuses the binding.
+    assert (
+        sweep._invoke_model_once(
+            db, "user-1", lambda: "new-version", candidate_builder=lambda: calls.append("third"), **kwargs
+        )
+        == ()
+    )
+    assert calls == ["first"]
+
+
+def test_pre_lock_claim_cannot_be_protected_by_new_admission(window_stage):
+    """Hermetic counterexample: a pre-lock binary never reads the new admission document."""
+    from utils.memory import daily_memory_sweep as sweep
+
+    db, _ = window_stage
+    calls = []
+    kwargs = dict(account_generation=4, source_generation=7, sweep_generation=1, window_id="old-snapshot")
+    assert (
+        sweep._invoke_model_once(
+            db, "user-1", lambda: "digest-b", candidate_builder=lambda: calls.append("new") or (), **kwargs
+        )
+        == ()
+    )
+    # This is the pre-lock claim behavior: independently derived digest A, no shared admission read.
+    assert (
+        sweep._invoke_model_once_claimed(
+            db, "user-1", "digest-a", candidate_builder=lambda: calls.append("pre-lock") or (), **kwargs
+        )
+        == ()
+    )
+    assert calls == ["new", "pre-lock"]
+
+
+def test_pre_lock_preflight_trips_then_clears_at_lease_expiry():
+    from utils.memory import daily_memory_sweep as sweep
+
+    now = datetime(2026, 8, 24, 12, tzinfo=timezone.utc)
+
+    class Query(_EmptyCollection):
+        def stream(self, **kwargs):
+            return [_Snapshot({"uid": "user-1", "state": "pending", "claimed_at": now})]
+
+    db = SimpleNamespace(collection=lambda _name: Query())
+    with pytest.raises(RuntimeError, match="^pre_lock_claim_live$"):
+        sweep.assert_no_live_pre_lock_claims(db, now=now, uids=("user-1",))
+    sweep.assert_no_live_pre_lock_claims(db, now=now + sweep.MODEL_INVOCATION_LEASE, uids=("user-1",))
+    sweep.assert_no_live_pre_lock_claims(db, now=now, uids=("another-user",))
+
+
+def test_onboarding_stage_gap_transcript_mutation_never_dispatches_twice(window_stage, monkeypatch):
+    from utils.memory import daily_memory_sweep as sweep
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
+
+    db, _ = window_stage
+    calls = []
+    create = StrictFirestoreTransaction.create
+
+    def fail_stage(self, ref, payload):
+        if "onboarding_staged" in "/".join(ref.path):
+            raise RuntimeError("lost stage")
+        return create(self, ref, payload)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", fail_stage)
+    kwargs = dict(
+        db_client=db,
+        extractor=lambda *_args: calls.append(True) or (),
+        account_generation=4,
+        source_generation=7,
+        sweep_generation=1,
+        window_id="onboarding:one",
+    )
+    assert sweep._load_or_stage_onboarding_candidates("user-1", "one", "one", "first text", **kwargs) is None
+    monkeypatch.setattr(StrictFirestoreTransaction, "create", create)
+    assert sweep._load_or_stage_onboarding_candidates("user-1", "one", "one", "changed text", **kwargs) is None
+    assert calls == [True]
+    assert len([path for path in db.rows if path[0] == MODEL_INVOCATION_FENCE_COLLECTION]) == 1
+
+
+def test_mostly_discarded_window_does_not_hit_eligible_ceiling():
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    db = _ConversationDb([_conversation_snapshot(str(i), started=started, discarded=i != 0) for i in range(2002)])
+    result = _read_test_day(db)
+    assert result.status == "complete"
+    assert result.rows_seen == result.rows_used == 1
+    assert not result.truncated
+
+
+def test_unexhausted_scan_ceiling_is_distinct(monkeypatch):
+    from utils.memory import daily_memory_sweep as sweep
+
+    monkeypatch.setattr(sweep, "COMPLETED_DAY_SCAN_CAP", 2)
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    result = _read_test_day(
+        _ConversationDb([_conversation_snapshot(str(i), started=started, discarded=True) for i in range(3)])
+    )
+    assert result.status == "incomplete"
+    assert result.reason == "source_scan_over_budget"
+
+
+def test_contentless_eligible_row_reports_omission():
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    result = _read_test_day(
+        _ConversationDb([_conversation_snapshot("empty", started=started, title="", overview="", transcript="")])
+    )
+    assert (result.rows_seen, result.rows_used, result.contentless_rows_omitted) == (1, 0, 1)
+    assert result.truncated
+    assert result.reason == "contentless_rows_omitted"
+
+
+@pytest.mark.parametrize("change", ["insert", "processing"])
+def test_projection_is_not_a_stable_whole_window_snapshot(change):
+    """Document the actual point-in-time limit instead of asserting nonexistent snapshot isolation."""
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    snapshots = [_conversation_snapshot(f"c-{i:02d}", started=started) for i in range(17)]
+    db = _ConversationDb(snapshots)
+    original = db.conversation_query.stream
+
+    def stream():
+        projections = original()
+        if change == "insert":
+            db.conversation_query._snapshots.append(
+                _conversation_snapshot("late", started=started, status="processing")
+            )
+        else:
+            db.conversation_query._snapshots[-1] = _conversation_snapshot("c-16", started=started, status="processing")
+        return projections
+
+    db.conversation_query.stream = stream
+    result = _read_test_day(db)
+    assert result.status == "complete"
+    assert result.rows_seen == 17
+    assert len(db.conversation_query.full_reads) == 16
+
+    assert _read_test_day(db).reason == "row_not_eligible"
+
+
+def test_locked_only_day_records_exclusion_without_content():
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    result = _read_test_day(_ConversationDb([_conversation_snapshot("locked", started=started, is_locked=True)]))
+    assert result.status == "complete"
+    assert result.rows == ()
+    assert result.locked_rows_excluded == 1
+
+
+def test_skip_attestation_consumes_once_without_dispatch_and_survives_changed_input(window_stage):
+    from utils.memory import daily_memory_sweep as sweep
+
+    db, _ = window_stage
+    claimed = datetime(2026, 8, 24, 12, tzinfo=timezone.utc)
+    now = claimed + sweep.MODEL_INVOCATION_LEASE + sweep.MODEL_INVOCATION_REPAIR_MARGIN + timedelta(seconds=1)
+    kwargs = dict(account_generation=4, source_generation=7, sweep_generation=1, window_id="skip-this")
+    calls = []
+    assert (
+        sweep._invoke_model_once(
+            db,
+            "user-1",
+            "skip-id",
+            candidate_builder=lambda: calls.append(True) or (),
+            input_digest="old",
+            now=claimed,
+            **kwargs,
+        )
+        == ()
+    )
+    fence = db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/skip-id").get().to_dict()
+    evidence = {
+        "provider_outcome": "operator_attested_skip_window",
+        "window_disposition": "abandoned",
+        "provider_dispatch_status": "not_attested",
+        "accounting_checked": False,
+        "confirmation": sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
+        "attested_by": "operator",
+        "evidence_reference": "incident:review-123",
+        "attested_at": now.isoformat(),
+        "claimed_at": claimed.isoformat(),
+        "claim_id": fence["claim_id"],
+        "claim_identity": {"uid": "user-1", "invocation_id": "skip-id", **kwargs},
+    }
+    sweep.repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id="skip-id",
+        provider_outcome_evidence=evidence,
+        repair_authority="operator",
+        now=now,
+    )
+    assert sweep._consume_attested_window_skip(db, "user-1", **kwargs)
+    assert sweep._consume_attested_window_skip(db, "user-1", **kwargs)
+    assert (
+        sweep._invoke_model_once(
+            db,
+            "user-1",
+            "different-version",
+            candidate_builder=lambda: calls.append(False),
+            input_digest="changed",
+            now=now,
+            **kwargs,
+        )
+        == ()
+    )
+    assert calls == [True]
+    with pytest.raises(ValueError):
+        sweep.repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id="skip-id",
+            provider_outcome_evidence=evidence,
+            repair_authority="operator",
+            now=now,
+        )
+
+
+def test_multiple_historical_claims_require_each_skip_attestation(window_stage):
+    from utils.memory import daily_memory_sweep as sweep
+
+    db, _ = window_stage
+    claimed = datetime(2026, 8, 24, 12, tzinfo=timezone.utc)
+    now = claimed + sweep.MODEL_INVOCATION_LEASE + sweep.MODEL_INVOCATION_REPAIR_MARGIN + timedelta(seconds=1)
+    identity = dict(account_generation=4, source_generation=7, sweep_generation=1, window_id="historical-many")
+    for invocation in ("historical-a", "historical-b"):
+        assert (
+            sweep._invoke_model_once_claimed(
+                db, "user-1", invocation, candidate_builder=lambda: (), now=claimed, **identity
+            )
+            == ()
+        )
+    for index, invocation in enumerate(("historical-a", "historical-b")):
+        fence = db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation}").get().to_dict()
+        evidence = {
+            "provider_outcome": "operator_attested_skip_window",
+            "window_disposition": "abandoned",
+            "provider_dispatch_status": "not_attested",
+            "accounting_checked": False,
+            "confirmation": sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
+            "attested_by": "operator",
+            "evidence_reference": "incident:historical",
+            "attested_at": now.isoformat(),
+            "claimed_at": claimed.isoformat(),
+            "claim_id": fence["claim_id"],
+            "claim_identity": {"uid": "user-1", "invocation_id": invocation, **identity},
+        }
+        sweep.repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation,
+            provider_outcome_evidence=evidence,
+            repair_authority="operator",
+            now=now,
+        )
+        assert sweep._consume_attested_window_skip(db, "user-1", **identity) is (index == 1)
+    assert sweep._consume_attested_window_skip(db, "user-1", **identity)
+
+
+def test_admission_lease_is_committed_before_identity_factory_runs(window_stage):
+    from utils.memory import daily_memory_sweep as sweep
+
+    db, _ = window_stage
+
+    def identity_factory():
+        admissions = [row for path, row in db.rows.items() if path[0] == sweep.WINDOW_ADMISSION_COLLECTION]
+        assert len(admissions) == 1
+        assert admissions[0]["holder"]
+        assert admissions[0]["lease_expires_at"] > datetime.now(timezone.utc)
+        assert admissions[0]["invocation_id"] is None
+        return "computed-after-commit"
+
+    assert (
+        sweep._invoke_model_once(
+            db,
+            "user-1",
+            identity_factory,
+            candidate_builder=lambda: (),
+            account_generation=4,
+            source_generation=7,
+            sweep_generation=1,
+            window_id="compute-after-admission",
+        )
+        == ()
+    )
+
+
+@pytest.mark.parametrize("state", ["pending", "indeterminate", "payload_expired", "pre_dispatch_exhausted"])
+@pytest.mark.parametrize("changed_input", [False, True])
+def test_blocked_invocation_reports_durable_state(window_stage, state, changed_input):
+    from utils.memory import daily_memory_sweep as sweep
+
+    db, _ = window_stage
+    identity = dict(account_generation=4, source_generation=7, sweep_generation=1, window_id="reasons")
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    assert (
+        sweep._invoke_model_once(
+            db, "user-1", "reason-id", candidate_builder=lambda: (), input_digest="original", now=now, **identity
+        )
+        == ()
+    )
+    fence_key = (MODEL_INVOCATION_FENCE_COLLECTION, "reason-id")
+    db.rows[fence_key]["state"] = state
+    if state == "payload_expired":
+        user_ref = sweep._model_invocation_ref(db, "user-1", "reason-id")
+        del db.rows[user_ref.path]
+    evidence = {}
+    assert (
+        sweep._invoke_model_once(
+            db,
+            "user-1",
+            "reason-id",
+            candidate_builder=lambda: pytest.fail("blocked state dispatched"),
+            input_digest="changed" if changed_input else "original",
+            now=now,
+            invocation_evidence=evidence,
+            **identity,
+        )
+        is None
+    )
+    expected = "invocation_input_changed" if changed_input and state == "pending" else f"invocation_{state}"
+    assert evidence["failure_reason"] == expected
+    assert expected in sweep.SOURCE_REASON_CODES
+
+
+@pytest.mark.parametrize("lock_before_phase", [1, 2])
+def test_selected_source_locked_during_preparation_never_reaches_next_provider_call(monkeypatch, lock_before_phase):
+    from utils.llm import memories
+
+    db = _ConversationDb([_conversation_snapshot("private", started=datetime(2026, 8, 23, 8, tzinfo=timezone.utc))])
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    monkeypatch.setattr(memories, "get_prompt_memories", lambda _: ("Test", ""))
+    monkeypatch.setattr(memories, "current_date_for_uid", lambda _: "2026-08-24")
+    calls = []
+    payloads = []
+
+    class Model:
+        def _get_request_payload(self, prompt, **kwargs):
+            payloads.append(prompt)
+            if len(calls) + 1 == lock_before_phase:
+                db.store["users/user-1/conversations/private"]["is_locked"] = True
+            return {"messages": [{"role": "user", "content": prompt.to_string()}], **kwargs}
+
+        def invoke(self, prompt, **kwargs):
+            assert not db.store["users/user-1/conversations/private"]["is_locked"]
+            calls.append(prompt)
+            return '{"memories": [], "transcript_requests": [{"conversation_id": "private", "reason": "verify"}]}'
+
+    monkeypatch.setattr(memories, "get_llm", lambda *_a, **_kw: Model())
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        date(2026, 8, 23),
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=3, max_cost_usd=1),
+        agent_runner=memories.run_daily_sweep_summary_agent,
+    )
+    assert not result.complete
+    assert result.model_dispatch_evidence["failure_reason"] == "source_locked_before_dispatch"
+    assert len(calls) == lock_before_phase - 1
+    assert len(payloads) >= lock_before_phase
+    fence = next(value for key, value in db.store.items() if key.startswith(MODEL_INVOCATION_FENCE_COLLECTION + "/"))
+    assert fence["state"] == ("pre_dispatch_released" if lock_before_phase == 1 else "indeterminate")
+
+
+@pytest.mark.parametrize("source", [None, {}, {"is_locked": False}, {"is_locked": True}])
+def test_dispatch_lock_projection_fails_closed_but_accepts_legacy_unlocked_row(source):
+    from models.memory_contracts import MemoryExtractionError
+    from utils.memory.daily_memory_sweep import _assert_selected_sources_unlocked
+
+    db = _Db()
+    if source is not None:
+        db.store["users/user-1/conversations/one"] = source
+    if source is None or source.get("is_locked"):
+        with pytest.raises(MemoryExtractionError):
+            _assert_selected_sources_unlocked(db, "user-1", ("one",))
+    else:
+        _assert_selected_sources_unlocked(db, "user-1", ("one",))
+
+
+@pytest.mark.parametrize("invalid", ["empty_attempts", "old_assertion", "no_abandonment", "dispatch_denial"])
+def test_abandonment_attestation_rejects_misleading_evidence(invalid):
+    from utils.memory import daily_memory_sweep as sweep
+
+    claimed = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    now = claimed + sweep.MODEL_INVOCATION_LEASE + sweep.MODEL_INVOCATION_REPAIR_MARGIN + timedelta(seconds=1)
+    identity = dict(
+        uid="user-1",
+        invocation_id="one",
+        account_generation=4,
+        source_generation=7,
+        sweep_generation=1,
+        window_id="window",
+    )
+    evidence = {
+        "provider_outcome": "operator_attested_skip_window",
+        "window_disposition": "abandoned",
+        "provider_dispatch_status": "not_attested",
+        "accounting_checked": False,
+        "confirmation": sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
+        "attested_by": "operator",
+        "evidence_reference": "incident:abandon-window",
+        "attested_at": now.isoformat(),
+        "claimed_at": claimed.isoformat(),
+        "claim_id": "claim",
+        "claim_identity": identity,
+    }
+    kwargs = dict(identity=identity, claimed_at=claimed, claim_id="claim", authority="operator", now=now)
+    assert sweep.valid_no_dispatch_attestation(evidence, **kwargs)
+    if invalid == "empty_attempts":
+        evidence["attempts"] = []
+    elif invalid == "old_assertion":
+        evidence["confirmation"] = "ATTEST_SKIP_WINDOW_WITHOUT_DISPATCH_AND_WORKER_TERMINATED"
+    elif invalid == "no_abandonment":
+        evidence.pop("window_disposition")
+    else:
+        evidence["provider_dispatch_status"] = "never_dispatched"
+    assert not sweep.valid_no_dispatch_attestation(evidence, **kwargs)

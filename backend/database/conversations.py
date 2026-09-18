@@ -23,7 +23,11 @@ from utils.conversations.transcript_hash import (
     transcript_sha256_for_binding,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS, STALE_IN_PROGRESS_CONVERSATIONS_QUERY
+from .firestore_index_registry import (
+    CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
+    MCP_CONVERSATION_CARD_QUERY_SPECS,
+    STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+)
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
@@ -1093,38 +1097,60 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
     """
     Update the conversation's displayed summary.
 
-    If app_id is None: writes to structured.overview (default backend overview).
+    If app_id is None: writes to structured.overview (default backend overview)
+    and removes the structured sections projection.  Sections are a structured
+    representation of the generated overview; once a user edits the overview,
+    retaining them would expose stale evidence or let a client compose the old
+    note after the new text.
     If app_id is set: rewrites the matching apps_results entry's content.
+
+    The read and write are one transaction so the edit cannot be based on a
+    stale app-result array, and both paths advance ``updated_at`` together with
+    the content mutation.
 
     Returns:
         'ok' on success, 'not_found' if conversation missing,
-        'app_result_not_found' if app_id given but no matching apps_results entry.
+        'app_result_not_found' if app_id given but no matching apps_results entry,
+        'app_result_ambiguous' if multiple entries share that app_id.
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    transaction = db.transaction()
 
-    doc_snapshot = conversation_ref.get()
-    if not doc_snapshot.exists:
-        return 'not_found'
+    @firestore.transactional
+    def _update(transaction) -> str:
+        doc_snapshot = conversation_ref.get(transaction=transaction)
+        if not doc_snapshot.exists:
+            return 'not_found'
 
-    if app_id is None:
-        conversation_ref.update({'structured.overview': content})
-        _sync_conversation_search_index(uid, conversation_id)
-        return 'ok'
+        updated_at = datetime.now(timezone.utc)
+        if app_id is None:
+            transaction.update(
+                conversation_ref,
+                {
+                    'structured.overview': content,
+                    'structured.sections': firestore.DELETE_FIELD,
+                    'updated_at': updated_at,
+                },
+            )
+            return 'ok'
 
-    raw = doc_snapshot.to_dict() or {}
-    apps_results = list(raw.get('apps_results') or [])
-    found = False
-    for entry in apps_results:
-        if isinstance(entry, dict) and entry.get('app_id') == app_id:
-            entry['content'] = content
-            found = True
-            break
-    if not found:
+        raw = doc_snapshot.to_dict() or {}
+        stored_results = raw.get('apps_results') or []
+        apps_results = copy.deepcopy(stored_results) if isinstance(stored_results, list) else []
+        if sum(isinstance(entry, dict) and entry.get('app_id') == app_id for entry in apps_results) > 1:
+            return 'app_result_ambiguous'
+        for entry in apps_results:
+            if isinstance(entry, dict) and entry.get('app_id') == app_id:
+                entry['content'] = content
+                transaction.update(conversation_ref, {'apps_results': apps_results, 'updated_at': updated_at})
+                return 'ok'
         return 'app_result_not_found'
 
-    conversation_ref.update({'apps_results': apps_results})
-    return 'ok'
+    result = _update(transaction)
+    if result == 'ok' and app_id is None:
+        _sync_conversation_search_index(uid, conversation_id)
+    return result
 
 
 def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str) -> str:
@@ -1136,8 +1162,13 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
     Without it, two edits that both read the pre-edit transcript_segments array
     and each rewrite the whole array clobber one another — the later write wins
     and silently drops the earlier edit. The same write DELETE_FIELDs
-    ``client_processing``: a projection bound to the old transcript must not
-    outlive it. Missing projection: DELETE_FIELD is a no-op.
+    ``client_processing`` and clears structured source references that include
+    the edited segment: a projection bound to the old transcript must not
+    outlive it. A whole section or action-item reference set is cleared when
+    it contains the edited segment, even when other segment IDs remain,
+    because the evidence is no longer complete. Summary text, action-item
+    fields, and unrelated references are preserved. Missing projection:
+    DELETE_FIELD is a no-op.
 
     Returns:
         'ok' on success, 'not_found' if conversation missing, 'locked' if conversation is locked,
@@ -1173,6 +1204,13 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
 
         doc_level = conversation_data.get('data_protection_level', 'standard')
         prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
+        prepared_payload.update(
+            _summary_source_reference_invalidations(conversation_data.get('structured'), segment_id)
+        )
+        # Keep the summary/reference invalidation and transcript edit under
+        # one server-side revision. Consumers can use this as the freshness
+        # boundary without pretending that the old evidence still applies.
+        prepared_payload['updated_at'] = datetime.now(timezone.utc)
         _invalidate_client_processing(prepared_payload)
         transaction.update(doc_ref, prepared_payload)
         return 'ok'
@@ -1485,6 +1523,37 @@ def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, li
     return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
 
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_finished_after(
+    uid: str,
+    *,
+    status: str,
+    finished_after: datetime,
+    limit: int = 25,
+    firestore_client=None,
+) -> List[Dict[str, Any]]:
+    """Conversations in ``status`` whose last activity is at or after ``finished_after``.
+
+    Duplicate-capture detection (#3244) asks for the captures that were still
+    running when this recording started; ordering by the activity clock keeps
+    the bounded page on the rows nearest that start, which are the only ones
+    that can overlap it. Photos are not loaded — the caller compares windows
+    and transcript words only.
+    """
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    conversations_ref = (
+        CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY.build(
+            user_ref.collection(conversations_collection),
+            {'status': status, 'finished_after': finished_after},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('finished_at', direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    return [doc.to_dict() for doc in conversations_ref.stream()]
+
+
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -1691,6 +1760,39 @@ def _invalidate_client_processing(payload: Dict[str, Any]) -> None:
     """
     for field in PROJECTION_FAMILY_FIELDS:
         payload[field] = firestore.DELETE_FIELD
+
+
+def _summary_source_reference_invalidations(structured: Any, segment_id: str) -> Dict[str, Any]:
+    """Return structured fields whose evidence includes an edited segment.
+
+    Structured summaries remain user-visible after a transcript edit, so this
+    deliberately preserves every item's content and metadata. Clearing the
+    complete reference list for an affected item avoids presenting a partial
+    set of IDs as authoritative for text that has changed. The returned paths
+    are suitable for merging into the same Firestore transaction payload.
+    """
+    if not isinstance(structured, dict):
+        return {}
+
+    invalidations: Dict[str, Any] = {}
+    for field in ('sections', 'action_items'):
+        items = structured.get(field)
+        if not isinstance(items, list):
+            continue
+
+        copied_items = copy.deepcopy(items)
+        changed = False
+        for item in copied_items:
+            if not isinstance(item, dict):
+                continue
+            references = item.get('source_segment_ids')
+            if isinstance(references, (list, tuple, set)) and segment_id in references:
+                item['source_segment_ids'] = []
+                changed = True
+        if changed:
+            invalidations[f'structured.{field}'] = copied_items
+
+    return invalidations
 
 
 def _projection_digest(candidate: Any) -> Any:

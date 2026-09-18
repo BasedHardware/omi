@@ -60,7 +60,7 @@ steps:
       target: dashboard
       activateApp: false
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S2
     name: Capture Dashboard Visual
@@ -70,7 +70,7 @@ steps:
   - id: S3
     name: Assert Dashboard State
     state.expect:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S4
     name: Navigate to Memories
@@ -78,7 +78,7 @@ steps:
       target: memories
       activateApp: false
     wait:
-      state.selectedTabIndex: 3
+      state.chatFirstRoute: memories
 
   - id: S5
     name: Refresh Data

@@ -84,6 +84,12 @@ def _restore_package_paths():
     notifications = sys.modules.get('utils.notifications')
     if notifications is not None and not hasattr(notifications, 'send_notification'):
         notifications.send_notification = MagicMock()
+    if notifications is not None and not hasattr(notifications, 'send_client_displayed_notification'):
+        notifications.send_client_displayed_notification = MagicMock()
+    if notifications is not None and not hasattr(notifications, 'send_client_displayed_notification_async'):
+        from unittest.mock import AsyncMock
+
+        notifications.send_client_displayed_notification_async = AsyncMock()
     redis_db = sys.modules.get('database.redis_db')
     if redis_db is not None:
         redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))

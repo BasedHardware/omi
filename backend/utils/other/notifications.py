@@ -17,6 +17,7 @@ import database.redis_db as redis_db
 from database.redis_db import release_daily_summary_lock, try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.summary_selection import select_primary_summary
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
@@ -90,25 +91,18 @@ def _conversation_has_summary_content(conversation: Any) -> bool:
     """True when the recap renderer would show more than this conversation's title.
 
     Reads the content fields ``conversations_to_string(use_transcript=False)``
-    renders as the body — the first app result's content when one exists, else
-    the structured overview, plus ``structured.action_items`` and
-    ``structured.events`` — so the pre-LLM decline guard cannot drift from
-    what the model would actually see.
+    renders as the body — the canonical primary summary projection, plus
+    ``structured.action_items`` and ``structured.events`` — so the pre-LLM
+    decline guard cannot drift from what the model would actually see.
 
     Attendee names are rendered too, but deliberately do not count: they are
     presence labels attached to the conversation, not summary content, and a
     day that renders as titles plus a list of names is still the degenerate
     F-12 shape this gate exists to decline.
     """
-    apps_results = getattr(conversation, 'apps_results', None) or []
-    if apps_results:
-        content = getattr(apps_results[0], 'content', None)
-        if content and content.strip():
-            return True
-    structured = getattr(conversation, 'structured', None)
-    overview = getattr(structured, 'overview', None)
-    if overview and overview.strip():
+    if select_primary_summary(conversation).content:
         return True
+    structured = getattr(conversation, 'structured', None)
     if getattr(structured, 'action_items', None):
         return True
     return bool(getattr(structured, 'events', None))

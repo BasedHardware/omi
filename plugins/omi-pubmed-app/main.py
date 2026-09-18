@@ -1,4 +1,5 @@
 import html
+import xml.etree.ElementTree as ET
 from typing import Any
 
 import httpx
@@ -10,7 +11,7 @@ from models import ChatToolResponse
 app = FastAPI(
     title="Omi PubMed App",
     description="PubMed chat tools for Omi",
-    version="1.0.1",
+    version="1.0.2",
 )
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -31,6 +32,35 @@ def _clamp_max_results(value: Any, default: int = 5) -> int:
     except (TypeError, ValueError):
         return default
     return max(1, min(parsed, 10))
+
+
+def _extract_abstract_from_efetch_xml(xml_text: str) -> str:
+    """Parse efetch XML and return the abstract text for the first article."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    abstract_parts = root.findall(".//AbstractText")
+    if not abstract_parts:
+        return ""
+    chunks = []
+    for part in abstract_parts:
+        label = (part.get("Label") or "").strip()
+        text = "".join(part.itertext()).strip()
+        if not text:
+            continue
+        chunks.append(f"{label}: {text}" if label else text)
+    return " ".join(chunks).strip()
+
+
+async def _fetch_abstract(client: httpx.AsyncClient, pmid: str) -> str:
+    """ESummary has no abstract field; efetch XML does."""
+    resp = await client.get(
+        f"{EUTILS}/efetch.fcgi",
+        params={"db": "pubmed", "id": pmid, "retmode": "xml"},
+    )
+    resp.raise_for_status()
+    return _extract_abstract_from_efetch_xml(resp.text)
 
 
 def _extract_article_fields(record: dict) -> dict:
@@ -79,6 +109,13 @@ async def _search_ids(client: httpx.AsyncClient, query: str, retmax: int = 5) ->
         },
     )
     return data.get("esearchresult", {}).get("idlist", [])
+
+
+def _select_related_pmids(links: list, source_pmid: str, max_results: int) -> list[str]:
+    """NCBI's pubmed_pubmed linkset includes the source PMID among the results;
+    exclude it before applying the limit so max_results counts only articles
+    actually related to it."""
+    return [str(x) for x in links if str(x) != str(source_pmid)][:max_results]
 
 
 async def _fetch_summaries(client: httpx.AsyncClient, ids: list[str]) -> dict:
@@ -206,6 +243,15 @@ async def get_pubmed_article(request: Request):
 
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             summaries = await _fetch_summaries(client, [pmid])
+            if pmid in summaries:
+                # Prefer a real efetch abstract; ESummary never includes one.
+                # Abstract enrichment is optional so ESummary still works if efetch fails.
+                try:
+                    abstract = await _fetch_abstract(client, pmid)
+                except Exception:
+                    abstract = ""
+                if abstract:
+                    summaries[pmid]["abstract"] = abstract
 
         if pmid not in summaries:
             return ChatToolResponse(error=f"No PubMed record found for PMID {pmid}")
@@ -254,7 +300,7 @@ async def get_related_pubmed(request: Request):
             if linksets:
                 dbs = linksets[0].get("linksetdbs", [])
                 if dbs:
-                    related = [str(x) for x in dbs[0].get("links", [])[:max_results]]
+                    related = _select_related_pmids(dbs[0].get("links", []), pmid, max_results)
 
             if not related:
                 return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
