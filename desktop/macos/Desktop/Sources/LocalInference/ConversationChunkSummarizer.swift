@@ -146,7 +146,17 @@ struct ConversationChunkSummarizer: Sendable {
   }
 
   /// Tokens held back from every chunk for the model's own answer.
-  static let completionReserveTokens = 1024
+  ///
+  /// A `LanguageModelSession`'s transcript is prompt **plus** completion against
+  /// one window, so this is not slack — it is the other half of the budget.
+  ///
+  /// 1024 was too small. Measured on live AFM, a map pass emitted 7 sections and
+  /// 26 action items; a full `LocalSummaryDraft` at the schema's now-bounded caps
+  /// (8 sections, 15 action items, 6 events) still runs to well over a thousand
+  /// tokens. The failure showed up as `"The session's transcript exceeded the
+  /// model's context size."` on prompts that had room, which is why it looked
+  /// unrelated to prompt size and therefore non-deterministic.
+  static let completionReserveTokens = 2048
 
   /// UTF-8 bytes / 3. Deliberately pessimistic; see the caveat below.
   ///
