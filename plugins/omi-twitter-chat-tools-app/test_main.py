@@ -1,5 +1,7 @@
 """Unit tests for Twitter Omi Integration hardening."""
 import unittest
+from unittest.mock import patch
+import asyncio
 import sys
 import os
 
@@ -120,48 +122,45 @@ class TestChatToolResponse(unittest.TestCase):
         self.assertIsNone(resp.error)
 
 
+class TestRegressionAndRoutes(unittest.TestCase):
+    def test_manifest_endpoints_are_registered_routes(self):
+        """Verify all tool endpoints defined in get_omi_tools_manifest are registered routes."""
+        import main
+        registered_paths = {route.path for route in main.app.routes}
+        manifest = asyncio.run(main.get_omi_tools_manifest()).get("tools", [])
+        self.assertTrue(manifest, "Tools manifest is empty")
+        for tool in manifest:
+            endpoint = tool.get("endpoint")
+            self.assertIn(endpoint, registered_paths, f"Advertised endpoint {endpoint} not registered in FastAPI routes")
+
+    def test_tool_post_tweet_success_path_no_name_error(self):
+        """Verify tool_post_tweet success path returns formatted tweet without NameError or unhandled exceptions."""
+        import main
+
+        class DummyRequest:
+            async def json(self):
+                return {"uid": "user_abc", "text": "Hello world from hardened plugin!"}
+
+        with patch("main.get_valid_access_token", return_value="fake_token"), \
+             patch("main.twitter_api_request", return_value={"data": {"id": "1234567890"}}):
+            response = asyncio.run(main.tool_post_tweet(DummyRequest()))
+            self.assertIsNone(response.error)
+            self.assertIsNotNone(response.result)
+            self.assertIn("1234567890", response.result)
+            self.assertIn("https://twitter.com/i/web/status/1234567890", response.result)
+
+    def test_tool_post_tweet_rejects_overlong_text(self):
+        """Verify tool_post_tweet enforces 280 character limit early with user-friendly error."""
+        import main
+
+        class DummyRequest:
+            async def json(self):
+                return {"uid": "user_abc", "text": "x" * 281}
+
+        response = asyncio.run(main.tool_post_tweet(DummyRequest()))
+        self.assertIsNotNone(response.error)
+        self.assertIn("280", response.error)
+
+
 if __name__ == "__main__":
     unittest.main()
-
-
-def test_manifest_endpoints_are_registered_routes():
-    """Verify all tool endpoints defined in TOOLS_DEFINITIONS are registered routes."""
-    import main
-    registered_paths = {route.path for route in main.app.routes}
-    manifest = main.TOOLS_DEFINITIONS.get("tools", [])
-    assert manifest, "Tools manifest is empty"
-    for tool in manifest:
-        endpoint = tool.get("endpoint")
-        assert endpoint in registered_paths, f"Advertised endpoint {endpoint} not registered in FastAPI routes"
-
-
-def test_tool_post_tweet_success_path_no_name_error():
-    """Verify tool_post_tweet success path returns formatted tweet without NameError or unhandled exceptions."""
-    import main
-    import asyncio
-
-    class DummyRequest:
-        async def json(self):
-            return {"uid": "user_abc", "text": "Hello world from hardened plugin!"}
-
-    with patch("main.get_valid_access_token", return_value="fake_token"), \
-         patch("main.twitter_api_request", return_value={"data": {"id": "1234567890"}}):
-        response = asyncio.run(main.tool_post_tweet(DummyRequest()))
-        assert response.error is None
-        assert response.result is not None
-        assert "1234567890" in response.result
-        assert "https://twitter.com/i/web/status/1234567890" in response.result
-
-
-def test_tool_post_tweet_rejects_overlong_text():
-    """Verify tool_post_tweet enforces 280 character limit early with user-friendly error."""
-    import main
-    import asyncio
-
-    class DummyRequest:
-        async def json(self):
-            return {"uid": "user_abc", "text": "x" * 281}
-
-    response = asyncio.run(main.tool_post_tweet(DummyRequest()))
-    assert response.error is not None
-    assert "280" in response.error
