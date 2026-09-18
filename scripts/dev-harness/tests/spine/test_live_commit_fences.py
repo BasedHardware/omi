@@ -8,7 +8,6 @@ from .test_live_session import rig
 from dev_harness import live_session as live
 
 
-@pending("V1")
 @pytest.mark.parametrize("operation", ["start", "reload", "restart"])
 def test_lease_roll_during_readiness_cannot_advance_loaded_identity(rig, operation):
     factory = rig.factory
@@ -80,7 +79,6 @@ def test_readiness_requires_boolean_true_not_truthy_values(rig):
         engine.close()
 
 
-@pending("V1")
 def test_negotiation_error_cannot_restore_cached_ready_state(rig):
     factory = rig.factory
     armed = [False]
@@ -128,7 +126,6 @@ def test_negotiation_error_cannot_restore_cached_ready_state(rig):
         engine.close()
 
 
-@pending("V1")
 def test_authorization_header_is_redacted_before_retained_logs(rig):
     secret = "SYNTHETIC-unrelated-credential-42"
     factory = rig.factory
