@@ -2616,34 +2616,6 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
-    # Custom-STT skips managed-STT credits at listen connect. The LLM work that
-    # follows (structure / summary / memory) still consults the processing
-    # budget so those sessions cannot run uncapped on Omi's bill (#7690).
-    # Paid unlimited plans and LLM BYOK stay allowed — this is not the
-    # #10962 blanket skip that removed summaries for every custom-STT user.
-    custom_stt = bool(getattr(conversation, 'uses_custom_stt', False))
-    source_token = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
-    # Regular conversations never consult this gate — they are already bounded
-    # by STT credits at listen connect. Keep that contract at the call site so
-    # a stubbed/truthy helper cannot abort memory/task/goal fan-out.
-    if custom_stt and should_skip_omi_paid_postprocessing(
-        uid,
-        uses_custom_stt=custom_stt,
-        source=source_token if isinstance(source_token, str) else None,
-    ):
-        logger.info(
-            "custom-STT processing budget exhausted: skipping Omi-paid post-processing uid=%s conv=%s",
-            uid,
-            getattr(conversation, 'id', '?'),
-        )
-        if isinstance(conversation, Conversation):
-            try:
-                conversation.status = ConversationStatus.completed
-            except Exception:
-                pass
-        report_persistence(False)
-        return cast(Conversation, conversation)
-
     # Free-tier local processing (S6): when the rollout flag is on, desktop
     # conversations consult the processing policy instead of the legacy
     # should_defer_desktop_processing fail-open. Identified-basic and other
@@ -2760,6 +2732,39 @@ def process_conversation(
                 ),
             )
             return stored
+
+    # Custom-STT skips managed-STT credits at listen connect. The LLM work that
+    # follows (structure / summary / memory) still consults the processing
+    # budget so those sessions cannot run uncapped on Omi's bill (#7690).
+    # Paid unlimited plans and LLM BYOK stay allowed — this is not the
+    # #10962 blanket skip that removed summaries for every custom-STT user.
+    #
+    # After the unpaid desktop path (#14513): store_projection /
+    # deterministic_minimum already returned above. Consulting this gate
+    # earlier would complete a desktop custom-STT session without the
+    # on-device summary it would otherwise persist. Regular conversations
+    # never consult this gate — they are already bounded by STT credits at
+    # listen connect. Keep that contract at the call site so a stubbed/truthy
+    # helper cannot abort memory/task/goal fan-out.
+    custom_stt = bool(getattr(conversation, 'uses_custom_stt', False))
+    source_token = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
+    if custom_stt and should_skip_omi_paid_postprocessing(
+        uid,
+        uses_custom_stt=custom_stt,
+        source=source_token if isinstance(source_token, str) else None,
+    ):
+        logger.info(
+            "custom-STT processing budget exhausted: skipping Omi-paid post-processing uid=%s conv=%s",
+            uid,
+            getattr(conversation, 'id', '?'),
+        )
+        if isinstance(conversation, Conversation):
+            try:
+                conversation.status = ConversationStatus.completed
+            except Exception:
+                pass
+        report_persistence(False)
+        return cast(Conversation, conversation)
 
     _enrich_meeting_context(uid, conversation)
 
