@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-unscheduled-hermetic-guard-rots-unobserved",
+  "violated_contract": "A hermetic regression suite that no check lane executes cannot report its own drift, so it retires itself silently. A plugin suite whose stub surface mirrors the import surface of the module under test is only correct relative to that module: when the module gains an import, the stub does not fail on its own, it fails at collection the next time something runs it. If nothing runs it, there is no collection, no error, and no failing check -- the guard is still internally consistent and reads as passing. plugins/omi-shipbob-app/test_create_wro_disambiguation.py was the only regression guard for #13997 (a WRO posted against the wrong product when a spoken name matched two inventory items by substring) and had no entry in .github/checks-manifest.yaml. Three later additions to main.py -- `from fastapi.exceptions import RequestValidationError`, the `@app.exception_handler(...)` registration, and seven request models imported from `models` -- moved the import surface past the stub, and the suite stopped importing without any check noticing. The regression it pinned was unguarded for as long as the drift lasted, and the plugin looked covered because the file was still in the tree.",
+  "canonical_prevention": "Every hermetic test suite added to plugins/ is registered in .github/checks-manifest.yaml on both the local and ci lanes in the same PR that adds it, so its execution is a property of the repository rather than of a contributor remembering to run it. A guard that is never scheduled is not a guard: schedule first, then rely on it. Where a stub has to mirror the module under test's import surface, keep the mirror failing loudly by making it a scheduled check -- the manifest entry, not a hand-added name, is what converts the next drift from silent retirement into a red check.",
+  "canonical_prevention_artifact": [
+    ".github/checks-manifest.yaml",
+    "plugins/omi-shipbob-app/test_create_wro_disambiguation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/**",
+    ".github/checks-manifest.yaml"
+  ],
+  "status": "open"
+}
