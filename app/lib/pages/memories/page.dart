@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,11 +37,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   final ScrollController _scrollController = ScrollController();
 
   OverlayEntry? _deleteNotificationOverlay;
+  Timer? _deleteNotificationTimer;
 
   bool _isInitialLoad = true;
 
   @override
   void dispose() {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = null;
     _searchController.dispose();
     _scrollController.dispose();
     _removeDeleteNotification();
@@ -48,6 +53,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
   // Remove the delete notification overlay if it exists
   void _removeDeleteNotification() {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = null;
     _deleteNotificationOverlay?.remove();
     _deleteNotificationOverlay = null;
   }
@@ -116,7 +123,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
     Overlay.of(context).insert(_deleteNotificationOverlay!);
 
-    Future.delayed(const Duration(seconds: 4), () {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = Timer(const Duration(seconds: 4), () {
       if (!mounted) return;
       _removeDeleteNotification();
     });
