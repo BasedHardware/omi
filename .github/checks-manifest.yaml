@@ -215,7 +215,7 @@ checks:
     reason: "the one-action production backend release contract must reject legacy release planes"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
-    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", "app/lib/**/*.dart", ".github/scripts/check_product_file_line_count_ratchet.py"]
     lanes: ["local", "ci"]
     requires_pr_body: true
     reason: "#9838 freezes oversized product files against the target branch without a shared metadata ledger; exact PR-body exceptions preserve reviewability without unrelated merge conflicts"
