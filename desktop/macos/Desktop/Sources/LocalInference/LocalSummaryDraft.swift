@@ -51,6 +51,10 @@ struct LocalSummaryDraft: Codable, Sendable, Equatable {
     actionItems = try c.decodeIfPresent([LocalActionItemDraft].self, forKey: .actionItems) ?? []
   }
 
+  /// Guided generation honors `required` more tightly than the prompt.
+  /// Map/reduce prompts ask for title, overview, sections, and action items;
+  /// those four are required so AFM cannot omit them. `emoji`, `category`, and
+  /// `events` stay optional.
   static let jsonSchema = LocalInferenceJSONSchema(
     name: "client_processing_draft",
     json: Data(
@@ -98,7 +102,7 @@ struct LocalSummaryDraft: Codable, Sendable, Equatable {
             }
           }
         },
-        "required": ["title"]
+        "required": ["title", "overview", "sections", "action_items"]
       }
       """.utf8)
   )

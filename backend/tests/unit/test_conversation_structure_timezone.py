@@ -158,6 +158,10 @@ _load_module_from_file(
     "utils.conversations.wake_word",
     BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
 )
+_load_module_from_file(
+    "utils.conversations.summary_selection",
+    BACKEND_DIR / "utils" / "conversations" / "summary_selection.py",
+)
 
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",

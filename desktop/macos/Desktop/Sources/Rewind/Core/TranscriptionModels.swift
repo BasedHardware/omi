@@ -92,6 +92,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var category: String?
   var actionItemsJson: String?  // JSON-encoded [ActionItem]
   var eventsJson: String?  // JSON-encoded [Event]
+  var sectionsJson: String?  // JSON-encoded [SummarySection]
 
   // MARK: - Additional Conversation Data
   var geolocationJson: String?  // JSON-encoded Geolocation
@@ -143,6 +144,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     category: String? = nil,
     actionItemsJson: String? = nil,
     eventsJson: String? = nil,
+    sectionsJson: String? = nil,
     // Additional data
     geolocationJson: String? = nil,
     photosJson: String? = nil,
@@ -186,6 +188,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.category = category
     self.actionItemsJson = actionItemsJson
     self.eventsJson = eventsJson
+    self.sectionsJson = sectionsJson
     // Additional data
     self.geolocationJson = geolocationJson
     self.photosJson = photosJson
@@ -386,6 +389,7 @@ extension TranscriptionSessionRecord {
     // Encode structured data as JSON
     let actionItemsJson = try? String(data: encoder.encode(conversation.structured.actionItems), encoding: .utf8)
     let eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+    let sectionsJson = try? String(data: encoder.encode(conversation.structured.sections), encoding: .utf8)
     let geolocationJson = try? String(data: encoder.encode(conversation.geolocation), encoding: .utf8)
     let photosJson = try? String(data: encoder.encode(conversation.photos), encoding: .utf8)
     let appsResultsJson = try? String(data: encoder.encode(conversation.appsResults), encoding: .utf8)
@@ -427,6 +431,7 @@ extension TranscriptionSessionRecord {
       category: conversation.structured.category,
       actionItemsJson: actionItemsJson,
       eventsJson: eventsJson,
+      sectionsJson: sectionsJson,
       geolocationJson: geolocationJson,
       photosJson: photosJson,
       appsResultsJson: appsResultsJson,
@@ -465,6 +470,7 @@ extension TranscriptionSessionRecord {
     self.category = conversation.structured.category
     self.actionItemsJson = try? String(data: encoder.encode(conversation.structured.actionItems), encoding: .utf8)
     self.eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+    self.sectionsJson = try? String(data: encoder.encode(conversation.structured.sections), encoding: .utf8)
 
     // Update additional data
     self.geolocationJson = try? String(data: encoder.encode(conversation.geolocation), encoding: .utf8)
@@ -516,6 +522,11 @@ extension TranscriptionSessionRecord {
     if Self.isEmptyJsonCollection(eventsJson), !conversation.structured.events.isEmpty {
       eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
     }
+    // Nil identifies a pre-migration cache entry. An encoded empty array is an
+    // authoritative absence and must not be refilled by an older response.
+    if sectionsJson == nil, !conversation.structured.sections.isEmpty {
+      sectionsJson = try? String(data: encoder.encode(conversation.structured.sections), encoding: .utf8)
+    }
     if Self.isEmptyJsonCollection(photosJson), !conversation.photos.isEmpty {
       photosJson = try? String(data: encoder.encode(conversation.photos), encoding: .utf8)
     }
@@ -539,6 +550,7 @@ extension TranscriptionSessionRecord {
       || Self.isDefaultCategory(category) && !Self.isDefaultCategory(conversation.structured.category)
       || Self.isEmptyJsonCollection(actionItemsJson) && !conversation.structured.actionItems.isEmpty
       || Self.isEmptyJsonCollection(eventsJson) && !conversation.structured.events.isEmpty
+      || sectionsJson == nil && !conversation.structured.sections.isEmpty
       || Self.isEmptyJsonCollection(photosJson) && !conversation.photos.isEmpty
       || Self.isEmptyJsonCollection(appsResultsJson) && !conversation.appsResults.isEmpty
   }
@@ -633,6 +645,9 @@ extension TranscriptionSessionRecord {
     let events: [Event] =
       (eventsJson?.data(using: .utf8))
       .flatMap { try? decoder.decode([Event].self, from: $0) } ?? []
+    let sections: [SummarySection] =
+      (sectionsJson?.data(using: .utf8))
+      .flatMap { try? decoder.decode([SummarySection].self, from: $0) } ?? []
     let geolocation: Geolocation? = (geolocationJson?.data(using: .utf8))
       .flatMap { try? decoder.decode(Geolocation.self, from: $0) }
     let photos: [ConversationPhoto] =
@@ -667,7 +682,8 @@ extension TranscriptionSessionRecord {
         emoji: emoji ?? "",
         category: category ?? "other",
         actionItems: actionItems,
-        events: events
+        events: events,
+        sections: sections
       ),
       transcriptSegments: transcriptSegments,
       transcriptSegmentsIncluded: transcriptIncluded ?? (cacheCompleteness == .detail || !segments.isEmpty),

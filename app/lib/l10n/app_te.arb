@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "వేరే పేరుతో వెళ్లాలనుకుంటున్నారా?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "మీ పేరు ఏమిటి?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -10829,5 +10825,12 @@
     "tapPlusToStartRecording": "రికార్డింగ్ ప్రారంభించడానికి + నొక్కండి",
     "processingTakingLonger": "ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.",
     "speechProfileEnrollmentPrompt": "Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.",
-    "home": "హోమ్"
+    "home": "హోమ్",
+    "failedToUpdateBaselineStatus": "బేస్‌లైన్ స్థితిని నవీకరించడం విఫలమైంది.",
+    "memoryAllowUse": "ఉపయోగాన్ని అనుమతించు",
+    "memoryDontUse": "ఉపయోగించవద్దు",
+    "unstarConversation": "సంభాషణ నక్షత్రాన్ని తీసివేయండి",
+    "moreOptions": "మరిన్ని ఎంపికలు",
+    "filterByDate": "తేదీ ప్రకారం ఫిల్టర్ చేయండి",
+    "memoryGraph": "జ్ఞాపకాల గ్రాఫ్"
 }

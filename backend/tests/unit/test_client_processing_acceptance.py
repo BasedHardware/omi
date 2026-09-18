@@ -147,6 +147,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
+    conv_proc.validate_structured_source_segment_ids = lambda structured, _ids: structured
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
