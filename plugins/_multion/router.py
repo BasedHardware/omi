@@ -4,7 +4,7 @@ from typing import List
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import APIRouter, Request, Form, HTTPException, Query
+from fastapi import APIRouter, Request, Form, HTTPException, Query, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -12,6 +12,11 @@ from langchain_groq import ChatGroq
 
 import db
 from models import Conversation, EndpointResponse
+
+try:
+    from .multion_auth import require_multion_auth
+except ImportError:
+    from multion_auth import require_multion_auth
 
 load_dotenv()
 
@@ -127,7 +132,7 @@ async def setup_uid_page(request: Request):
     return templates.TemplateResponse("setup_multion_phone.html", {"request": request, "uid": uid})
 
 
-@router.post("/multion/submit_uid", tags=['multion'])
+@router.post("/multion/submit_uid", tags=['multion'], dependencies=[Depends(require_multion_auth)])
 async def submit_uid(request: Request, user_id: str = Form(...), uid: str = Form(...)):
     db.store_multion_user_id(uid, user_id)
     is_setup_completed = db.get_multion_user_id(uid) is not None
@@ -144,7 +149,7 @@ async def check_setup_completion(uid: str = Query(...)):
     return {"is_setup_completed": is_setup_completed}
 
 
-@router.post("/multion", response_model=EndpointResponse, tags=['multion'])
+@router.post("/multion", response_model=EndpointResponse, tags=['multion'], dependencies=[Depends(require_multion_auth)])
 async def multion_endpoint(conversation: Conversation, uid: str = Query(...)):
     user_id = db.get_multion_user_id(uid)
     if not user_id:
