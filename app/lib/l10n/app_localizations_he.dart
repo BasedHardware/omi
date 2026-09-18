@@ -242,7 +242,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get searchConversations => 'חפש שיחות...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count נבחרו';
   }
 
@@ -2028,10 +2028,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get memoryHistory => 'היסטוריה';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'אפשר שימוש';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'אל תשתמש';
 
   @override
   String get undo => 'בטל';
@@ -9917,4 +9917,19 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get home => 'בית';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'עדכון מצב קו הבסיס נכשל.';
+
+  @override
+  String get unstarConversation => 'הסרת כוכב מהשיחה';
+
+  @override
+  String get moreOptions => 'אפשרויות נוספות';
+
+  @override
+  String get filterByDate => 'סינון לפי תאריך';
+
+  @override
+  String get memoryGraph => 'גרף זיכרונות';
 }

@@ -15,6 +15,8 @@ Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
 
+Never edit generated `.g.dart`/`.gen.dart` files. Regenerate using the commands above after source changes; resolve build_runner conflicts with `--delete-conflicting-outputs`.
+
 ### Setup Sequence
 ```bash
 bash setup.sh ios    # or: bash setup.sh android
@@ -109,12 +111,9 @@ CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analy
 
 ## Localization (l10n)
 
-- All user-facing strings must use `context.l10n.keyName`
-- 49 locales: English (template) + 48 translations in `lib/l10n/` — never trust a remembered count; enumerate with `ls lib/l10n/app_*.arb`.
-- Template: `lib/l10n/app_en.arb`
-- Add keys via `jq` (never read full ARB — they're large). Use skill `add-a-new-localization-key-l10n-arb`
-- Translate all locales — use skill `omi-add-missing-language-keys-l10n` for real translations
-- Regenerate after changes: `flutter gen-l10n`; done only when it emits zero "untranslated message(s)" warnings. To get the exact missing-key list, temporarily add `untranslated-messages-file: /tmp/untranslated.json` to `l10n.yaml` and re-run.
+- All user-facing strings use `context.l10n.keyName`. Template: `lib/l10n/app_en.arb`. Never hardcode a locale count; `python3 scripts/l10n.py template` lists every locale the tree has.
+- Add/change/remove a key with `scripts/l10n.py` (`add`/`set`/`remove`). Do not edit ARB files by hand or with `jq`. The caller supplies translations (no network); the tool writes every locale, runs `flutter gen-l10n`, formats generated Dart, and refuses a partial or placeholder-mismatched change.
+- `python3 scripts/l10n.py check` is the fast consistency gate (parse, key-set, placeholders, generated freshness). Ready for a pre-push hook; not wired in this package.
 
 ## Auth & Security
 
@@ -135,13 +134,6 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 ### API Base URLs
 - Dev: configured in `.dev.env` → `Env.apiBaseUrl`
 - Prod: configured in `.prod.env` → `Env.apiBaseUrl`
-
-## Codegen Rules
-
-- Run `flutter pub run build_runner build` after changing: env files, model annotations, pigeon contracts, or pubspec assets
-- Run `flutter gen-l10n` after changing ARB files
-- Never edit files ending in `.g.dart` or `.gen.dart`
-- If build_runner fails with conflicts: `flutter pub run build_runner build --delete-conflicting-outputs`
 
 ## App Flows & E2E
 

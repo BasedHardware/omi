@@ -1,3 +1,4 @@
+import { credentialedModelFetch, type ModelHeadersReply } from "../agent/dist/runtime/model-fetch.js";
 // Omi Provider Extension for pi-mono
 //
 // Responsibilities:
@@ -1007,6 +1008,26 @@ function connectOmiPipe(pipePath: string): Promise<void> {
   });
 }
 
+async function requestModelHeaders(forceRefresh: boolean, capabilityRef?: string): Promise<ModelHeadersReply> {
+  const connection = omiPipeConnection;
+  if (!connection || connection !== omiPipeConnection || !capabilityRef) {
+    return { failureCode: "transport_interruption" };
+  }
+  const callId = `model-headers-${++omiCallIdCounter}`;
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      omiPendingCalls.delete(callId);
+      resolve({ failureCode: "transport_interruption" });
+    }, OMI_TOOL_TIMEOUT_MS);
+    omiPendingCalls.set(callId, { connection, resolve: result => {
+      clearTimeout(timer);
+      try { resolve(JSON.parse(result)); }
+      catch { resolve({ failureCode: "transport_interruption" }); }
+    } });
+    connection.write(JSON.stringify({ type: "model_headers", callId, capabilityRef, forceRefresh }) + "\n");
+  });
+}
+
 async function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
   const connection: Socket | null = omiPipeConnection;
   if (!connection) return Promise.resolve("Error: not connected to Omi bridge");
@@ -1087,6 +1108,10 @@ export function applyOmiProviderHeaders(
 ): void {
   headers["x-omi-chat-contract-version"] = OMI_CHAT_CONTRACT_VERSION;
   if (relayContextRaw === undefined) return;
+  try {
+    const context = JSON.parse(relayContextRaw);
+    if (typeof context.capabilityRef === "string") headers["x-omi-local-capability"] = context.capabilityRef;
+  } catch { /* Missing authority fails closed at the credential request boundary. */ }
   const requestId = omiRequestIdFromRelayContext(relayContextRaw);
   if (requestId) headers["x-omi-request-id"] = requestId;
   const reasoningEffort = omiReasoningEffortFromRelayContext(relayContextRaw);
@@ -1798,39 +1823,25 @@ export function __resetUserMcpForTest(): void {
 // ---------------------------------------------------------------------------
 
 export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
-  installOmiJitFetchGuard();
   // Best-effort, never fatal: tighten a pre-existing audit log to owner-only.
   void restrictAuditLogPermissions();
 
   const baseUrl = process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
-  const apiKey = process.env.OMI_API_KEY || "";
-
-  // BYOK: the Swift app sets OMI_BYOK_* env vars for the selected LLM provider and
-  // optional Deepgram key. Attach configured capabilities as X-BYOK-* headers on
-  // every request so the backend applies the LLM BYOK quota exemption and routes
-  // inference through the selected provider key instead of Omi's server key.
-  const byokMap: Array<[string, string]> = [
-    ["OMI_BYOK_OPENROUTER", "X-BYOK-OpenRouter"],
-    ["OMI_BYOK_OPENAI", "X-BYOK-OpenAI"],
-    ["OMI_BYOK_ANTHROPIC", "X-BYOK-Anthropic"],
-    ["OMI_BYOK_GEMINI", "X-BYOK-Gemini"],
-    ["OMI_BYOK_DEEPGRAM", "X-BYOK-Deepgram"],
-  ];
-  const byokHeaders: Record<string, string> = {};
-  for (const [envName, headerName] of byokMap) {
-    const value = process.env[envName];
-    if (value && value.length > 0) byokHeaders[headerName] = value;
-  }
-  const byokActive = Object.keys(byokHeaders).length > 0;
-  if (byokActive) {
-    process.stderr.write(`[omi-provider] BYOK active — attaching ${Object.keys(byokHeaders).length} X-BYOK headers\n`);
-  }
+  // The SDK swallows before_provider_headers exceptions. Acquire credentials
+  // at fetch instead, so a failed refresh cannot send stale headers upstream.
+  globalThis.fetch = credentialedModelFetch({
+    baseUrl,
+    fetch: globalThis.fetch.bind(globalThis),
+    headers: requestModelHeaders,
+    report: status => process.stdout.write(JSON.stringify(status) + "\n"),
+  });
+  // Accounting observes the final response, never the unread authentication retry.
+  installOmiJitFetchGuard();
 
   pi.registerProvider("omi", {
     api: "openai-completions",
     baseUrl,
-    apiKey,
-    ...(byokActive ? { headers: byokHeaders } : {}),
+    apiKey: "omi-request-scoped",
     models: [
       {
         id: "omi-sonnet",
@@ -1909,7 +1920,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
 
   // Register Omi-specific tools (execute_sql, semantic_search, etc.)
   // These forward to Swift via the OMI_BRIDGE_PIPE Unix socket.
-  void registerOmiTools(pi);
+  await registerOmiTools(pi);
 
   // User MCP servers from the Apps page, exposed through the two proxy tools
   // (progressive disclosure). Awaited (pi waits for async extension factories)
@@ -1929,6 +1940,7 @@ export const __connectOmiPipeForTest = connectOmiPipe;
 
 /** Test-only: call a Swift tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool;
+export const __requestModelHeadersForTest = requestModelHeaders;
 export const __omiRelayCapabilityRefForTest = omiRelayCapabilityRef;
 
 /** Test-only: access to pending calls map for assertions. */

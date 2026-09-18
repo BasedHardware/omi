@@ -112,6 +112,17 @@ def test_missing_java_runtime_is_reported_as_a_prerequisite(
     assert any("java runtime" in item for item in missing)
 
 
+def test_missing_uvicorn_names_setup_backend(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_python_importable", lambda name: False if name == "uvicorn" else True)
+    cfg = config.load_config(REPO_ROOT)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert any("uvicorn" in item and "make lane-backend" in item for item in missing)
+
+
 def test_pre_21_java_is_reported_as_a_prerequisite(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

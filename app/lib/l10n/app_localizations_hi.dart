@@ -242,7 +242,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get searchConversations => 'बातचीत खोजें...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count चयनित';
   }
 
@@ -2021,10 +2021,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'उपयोग की अनुमति दें';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'उपयोग न करें';
 
   @override
   String get undo => 'पूर्ववत करें';
@@ -9976,4 +9976,19 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get home => 'होम';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'बेसलाइन स्थिति अपडेट करने में विफल।';
+
+  @override
+  String get unstarConversation => 'बातचीत से स्टार हटाएँ';
+
+  @override
+  String get moreOptions => 'और विकल्प';
+
+  @override
+  String get filterByDate => 'तारीख के अनुसार फ़िल्टर करें';
+
+  @override
+  String get memoryGraph => 'स्मृति ग्राफ़';
 }

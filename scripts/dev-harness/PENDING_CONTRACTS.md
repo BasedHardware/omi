@@ -17,7 +17,8 @@ put `pendingContract('C1');` on its own line first inside the body. This survive
 Dart formatting (a named argument gets folded onto another line). The async body
 executes in its own zone; assertions/UnimplementedError print PENDING;
 success throws XPASS outside the catch. Ordinary errors still fail. Use
-awaited assertions. Compile/load errors happen before the wrapper and fail the
+awaited assertions. Compare collection-bearing Dart records field by field:
+record equality compares Map identity; pass the Map itself to `expect`. Compile/load errors happen before the wrapper and fail the
 owner suite; overriding `noSuchMethod` in a fake is valid Dart, not a compile bypass.
 
 The smallest immutable boundary is the **whole oracle**: registered spine tests,
@@ -25,7 +26,9 @@ fixtures and support code, including setup and assertions, with only whole pendi
 marker lines removable. Assertions alone are insufficient: changing a fixture or
 not executing a test also weakens it. Registry owners and reviewed revision
 records remain immutable; the exact before/after SHA256 pins are unchanged.
-Neither shared runner bytes nor parent ordering is an oracle.
+Protect authorized **content and obligations**, not incidental history: runner
+edits, parent order, formatter-equivalent introductions and rejected proposals
+must not invent new obligations. Formatting still needs an exact pinned revision.
 
 Register every oracle in `contracts/spine/files.json`. Resolve introductions and
 revision payloads from **all reachable history**, never a single simplified
@@ -37,10 +40,17 @@ history requires fetching it, never rebaselining.
 
 A builder removes markers and makes those same tests pass. Corrections append
 `contracts/spine/revisions/NNN-description.json` with path, owner, before/after
-SHA256 and reason, preserving pending markers. A revision PR may change only
+SHA256 and reason, preserving pending markers. An exceptional already-introduced
+marker-free rendering may additionally be pinned as `retired_sha256` (for example,
+formatter output with its unused marker import removed). This admits only those
+exact bytes, never general formatting/import edits, and cannot restore markers. A revision PR may change only
 oracle paths, design/check machinery and already accepted skeleton bytes;
 splitting revision and implementation into two commits still fails. Restore a
 changed oracle on a builder PR and send its reproduction to the spine.
+Append-only means records accepted by the target or introduced in a scope-eligible
+whole proposal, not every historical addition. Reverting a rejected mixed proposal
+removes no authorized record. Eligibility is not proof of human review; coordinator
+review remains authoritative. Deleting an authorized record still fails.
 
 Shared shell runners are declared separately in `contracts/spine/runners.json`.
 Their invocation contract, not their file hash, is protected: fail-fast, direct
