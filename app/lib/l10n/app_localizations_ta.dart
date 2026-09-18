@@ -2679,9 +2679,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reviewAndManageConversations => 'உங்கள் கைப்பற்றிய உரையாடல்களை மீளாய்வு செய்க மற்றும் நிர்வகிக்கவும்';
 
   @override
-  String get startCapturingConversations => 'உங்கள் Omi சாதனம் உடன் உரையாடல்களை கைப்பற்ற தொடங்கவும் அவற்றை இங்கே காண.';
-
-  @override
   String get useMobileAppToCapture => 'ஆடியோ கைப்பற்ற உங்கள் மொபைல் ஆப்பைப் பயன்படுத்தவும்';
 
   @override
@@ -3181,9 +3178,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribing => 'மொழிபெயர்க்கிறது...';
-
-  @override
-  String get transcriptionFailed => 'மொழிபெயர்ப்பு தோல்வியுற்றது';
 
   @override
   String get discardedConversation => 'கைவிடப்பட்ட உரையாடல்';
@@ -3709,10 +3703,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get preparingSystemAudioCapture => 'கணினி ஆடியோ பிடிப்பைத் தயாரிக்கிறது';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'நிகழ்நேர எழுத்தாக்கம், AI நுண்ணறிவுகள் மற்றும் தானாக சேமிக்கத்திற்கான ஆடியோவைப் பிடிக்க பொத்தானைக் கிளிக் செய்யவும்.';
-
-  @override
   String get reconnecting => 'மீண்டும் இணைக்கிறது...';
 
   @override
@@ -3758,9 +3748,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'நிகழ்நேர எழுத்தாக்கம் பார்க்க பதிவை தொடங்கவும்';
-
-  @override
   String get paused => 'இடைநிறுத்தப்பட்டுள்ளது';
 
   @override
@@ -3779,9 +3766,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'கணினி ஆடியோ பிடிப்பை அமைக்கிறது';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'ஆடியோவைப் பிடித்து எழுத்தாக்கத்தை உருவாக்கிறது';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'கணினி ஆடியோவைப் பதிவு செய்ய தொடங்க கிளிக் செய்யவும்';
@@ -8833,6 +8817,43 @@ class AppLocalizationsTa extends AppLocalizations {
   String audioSavedLocally(String duration) {
     return '$duration ஆடியோ உள்ளூரில் சேமிக்கப்பட்ட';
   }
+
+  @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
 
   @override
   String get willSyncAutomatically => 'தானாகவே ஒத்திசைக்கப்படும்';
