@@ -301,7 +301,8 @@ jobs:
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: development
           deploy_targets: all
-          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          workload_identity_service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
           project_id: ${{ vars.GCP_PROJECT_ID }}
           runtime_gcp_project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
           runtime_env: ${{ vars.ENV }}
