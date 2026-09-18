@@ -112,6 +112,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
   List<int> _searchResultPositions = []; // Track positions of search results
+  final List<Timer> _ownedTimers = [];
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -265,7 +266,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       // Auto-open share to contacts sheet if requested (from important conversation notification)
       if (widget.openShareToContactsOnLoad && mounted) {
         // Small delay to ensure the page is fully rendered
-        await Future.delayed(const Duration(milliseconds: 500));
+        await _delay(const Duration(milliseconds: 500));
         if (mounted) {
           _showShareToContactsBottomSheet();
         }
@@ -281,12 +282,32 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   void dispose() {
+    _cancelOwnedTimers();
     _controller?.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _delay(Duration duration) {
+    if (!mounted) return Future.value();
+    final completer = Completer<void>();
+    late final Timer timer;
+    timer = Timer(duration, () {
+      _ownedTimers.remove(timer);
+      if (!completer.isCompleted) completer.complete();
+    });
+    _ownedTimers.add(timer);
+    return completer.future;
+  }
+
+  void _cancelOwnedTimers() {
+    for (final timer in _ownedTimers) {
+      timer.cancel();
+    }
+    _ownedTimers.clear();
   }
 
   /// Show the share to contacts bottom sheet
@@ -565,7 +586,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         currentState = AudioDownloadState.success;
         updateSheet?.call(() {});
 
-        await Future.delayed(const Duration(milliseconds: 500));
+        await _delay(const Duration(milliseconds: 500));
 
         if (sheetContext.mounted) {
           Navigator.maybeOf(sheetContext)?.pop();
@@ -590,7 +611,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         currentState = AudioDownloadState.error;
         updateSheet?.call(() {});
 
-        await Future.delayed(const Duration(seconds: 2));
+        await _delay(const Duration(seconds: 2));
 
         if (sheetContext.mounted) {
           Navigator.maybeOf(sheetContext)?.pop();
@@ -623,7 +644,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       currentState = AudioDownloadState.error;
       updateSheet?.call(() {});
 
-      await Future.delayed(const Duration(seconds: 2));
+      await _delay(const Duration(seconds: 2));
 
       if (sheetContext.mounted) {
         Navigator.maybeOf(sheetContext)?.pop();
@@ -861,7 +882,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
                                       );
                                       // Small delay to let share sheet appear, then clear loading
-                                      await Future.delayed(const Duration(milliseconds: 150));
+                                      await _delay(const Duration(milliseconds: 150));
+                                      if (!mounted) return;
                                       setState(() {
                                         _isSharing = false;
                                       });
@@ -1881,9 +1903,12 @@ class ActionItemDetailWidget extends StatefulWidget {
 class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
   final AppReviewService _appReviewService = AppReviewService();
+  Timer? _pendingClearTimer;
 
   @override
   void dispose() {
+    _pendingClearTimer?.cancel();
+    _pendingClearTimer = null;
     // Clean up any pending state for this item when widget is disposed
     _pendingStates.remove(widget.actionItem.description);
     super.dispose();
@@ -1993,7 +2018,9 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       await conversationProvider.updateGlobalActionItemState(provider.conversation, itemDescription, newValue);
 
       // Wait for 200ms before clearing pending state (allows user to see the change before item moves)
-      Future.delayed(const Duration(milliseconds: 200), () {
+      _pendingClearTimer?.cancel();
+      _pendingClearTimer = Timer(const Duration(milliseconds: 200), () {
+        _pendingClearTimer = null;
         if (mounted) {
           setState(() {
             _pendingStates.remove(itemDescription); // Clear pending state so item moves to correct section
