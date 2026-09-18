@@ -148,6 +148,24 @@ class HiveNameResolutionTests(unittest.TestCase):
         self.assertEqual(candidates, [])
 
 
+class HiveManifestSchemaTests(unittest.IsolatedAsyncioTestCase):
+    async def test_manifest_schema_compliance(self):
+        manifest = await main.get_omi_tools_manifest()
+        self.assertIn("tools", manifest)
+        self.assertEqual(len(manifest["tools"]), 5)
+
+        for tool in manifest["tools"]:
+            self.assertIn("name", tool)
+            self.assertIn("parameters", tool)
+            params = tool["parameters"]
+            self.assertEqual(
+                params.get("type"),
+                "object",
+                f"Tool {tool['name']} parameters missing 'type': 'object'",
+            )
+            self.assertIn("properties", params)
+            self.assertIn("required", params)
+
 class HiveCreateTaskSafetyTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.project = _project("target", "Target")
