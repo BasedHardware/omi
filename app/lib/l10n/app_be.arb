@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "Хочаце быць вядомамі пад чым-то іншым?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "Якое вашае імя?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -10829,5 +10825,12 @@
     "tapPlusToStartRecording": "Націсніце +, каб пачаць запіс",
     "processingTakingLonger": "Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.",
     "speechProfileEnrollmentPrompt": "Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.",
-    "home": "Галоўная"
+    "home": "Галоўная",
+    "failedToUpdateBaselineStatus": "Не атрымалася абнавіць статус базовай памяці.",
+    "memoryAllowUse": "Дазволіць выкарыстанне",
+    "memoryDontUse": "Не выкарыстоўваць",
+    "unstarConversation": "Зняць зорку з размовы",
+    "moreOptions": "Дадатковыя параметры",
+    "filterByDate": "Фільтр па даце",
+    "memoryGraph": "Граф успамінаў"
 }
