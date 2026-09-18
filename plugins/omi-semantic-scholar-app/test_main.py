@@ -406,5 +406,24 @@ class ResponseContractTests(unittest.TestCase):
             main.ChatToolResponse()
 
 
+class UrlNormalizationAndPoolTests(unittest.TestCase):
+    def test_normalize_identifier_unquotes_urls(self):
+        raw = "URL:https%3A%2F%2Farxiv.org%2Fabs%2F2103.12345"
+        norm = main.normalize_identifier(raw)
+        self.assertEqual(norm, "ARXIV:2103.12345")
+
+    def test_coerce_limit_bounds_and_defaults(self):
+        self.assertEqual(main._coerce_limit(None, 5), 5)
+        self.assertEqual(main._coerce_limit("invalid", 5), 5)
+        self.assertEqual(main._coerce_limit(0, 5), 5)
+        self.assertEqual(main._coerce_limit(20, 5), 10)
+        self.assertEqual(main._coerce_limit(3, 5), 3)
+
+    def test_get_client_returns_shared_instance(self):
+        client1 = main.get_client()
+        client2 = main.get_client()
+        self.assertIs(client1, client2)
+
+
 if __name__ == "__main__":
     unittest.main()
