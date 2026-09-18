@@ -90,19 +90,14 @@ checks:
     triggers: ["sdks/device/typescript/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
-  - id: app-addressability
-    command: ["python3", "scripts/check_app_addressability.py", "--changed-files", "{changed_files}", "--base", "{base}"]
-    triggers: ["app/lib/**/*.dart", "app/test/support/addressability_widgets.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
+  - id: mobile-client-compat-catalog
+    command: ["python3", "scripts/check_client_compat.py", "--base", "{base}"]
+    triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; explicit route declarations plus changed-file no-growth debt protect catalogued navigation and control keys"
-  - id: app-addressability-check-tests
-    command: ["python3", "scripts/test_check_app_addressability.py"]
-    triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "Token scan must reject child-key laundering and unknown explicit route declarations without taxing helpers or dialogs"
+    reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
   - id: spine-contracts
     command: ["python3", "scripts/check_spine_contracts.py", "--base", "{base}"]
-    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", "backend/testing/e2e/test_client_compat_replay.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
@@ -1176,6 +1171,16 @@ checks:
     triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"
+  - id: app-addressability
+    command: ["python3", "scripts/check_app_addressability.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart", "app/test/support/addressability_widgets.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; explicit route declarations plus changed-file no-growth debt protect catalogued navigation and control keys"
+  - id: app-addressability-check-tests
+    command: ["python3", "scripts/test_check_app_addressability.py"]
+    triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Token scan must reject child-key laundering and unknown explicit route declarations without taxing helpers or dialogs"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
