@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: stack-overflow-app-tests
+    command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
+    triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Stack Overflow app must preserve generic type brackets in code blocks during HTML stripping, handle null owner objects, and enforce safe query limits"
   - id: omi-stack-overflow-tests
     command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
     triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
