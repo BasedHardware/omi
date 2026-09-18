@@ -7,10 +7,10 @@ and fetching an item with top-level comments.
 
 from html import unescape
 import re
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -192,7 +192,7 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/get_front_page", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_front_page(payload: Any = None):
+async def get_front_page(payload: Annotated[Any, Body()] = None):
     payload = _safe_payload(payload)
     try:
         limit = _safe_limit(payload.get("limit"))
@@ -209,7 +209,7 @@ async def get_front_page(payload: Any = None):
 
 
 @app.post("/tools/search_stories", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_stories(payload: Any = None):
+async def search_stories(payload: Annotated[Any, Body()] = None):
     payload = _safe_payload(payload)
     query = (payload.get("query") or "").strip()
     if not query:
@@ -232,7 +232,7 @@ async def search_stories(payload: Any = None):
 
 
 @app.post("/tools/get_discussion", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_discussion(payload: Any = None):
+async def get_discussion(payload: Annotated[Any, Body()] = None):
     payload = _safe_payload(payload)
     item_id = payload.get("item_id")
     if item_id is None or item_id == "" or isinstance(item_id, bool):
