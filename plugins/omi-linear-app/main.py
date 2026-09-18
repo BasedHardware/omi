@@ -7,6 +7,8 @@ and chat tools for managing issues, projects, and workflows.
 import os
 import base64
 import re
+import hashlib
+import hmac
 import urllib.parse
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
@@ -446,18 +448,47 @@ async def home(request: Request, uid: Optional[str] = None):
     })
 
 
+def _oauth_state_for(uid: str) -> str:
+    """Generate a signed state token binding the OAuth flow to the initiating uid."""
+    if not LINEAR_CLIENT_SECRET:
+        raise ValueError("LINEAR_CLIENT_SECRET is not configured")
+    sig = hmac.new(
+        LINEAR_CLIENT_SECRET.encode("utf-8"),
+        uid.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()[:32]
+    return f"{uid}:{sig}"
+
+
+def _verify_and_extract_state_uid(state: Optional[str]) -> Optional[str]:
+    """Verify cryptographic signature on state and return uid, or None if invalid/tampered."""
+    if not LINEAR_CLIENT_SECRET or not state or ":" not in state:
+        return None
+    uid, sig = state.rsplit(":", 1)
+    expected_sig = hmac.new(
+        LINEAR_CLIENT_SECRET.encode("utf-8"),
+        uid.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()[:32]
+    if hmac.compare_digest(sig, expected_sig):
+        return uid
+    return None
+
+
 @app.get("/auth/linear")
 async def linear_auth(uid: str):
     """Initiate Linear OAuth flow."""
     if not uid:
         raise HTTPException(status_code=400, detail="User ID is required")
+    if not LINEAR_CLIENT_SECRET:
+        raise HTTPException(status_code=503, detail="Linear OAuth client secret is not configured")
     
     params = {
         "client_id": LINEAR_CLIENT_ID,
         "response_type": "code",
         "redirect_uri": LINEAR_REDIRECT_URI,
         "scope": ",".join(LINEAR_SCOPES),
-        "state": uid,
+        "state": _oauth_state_for(uid),
         "prompt": "consent",
     }
     
@@ -482,7 +513,13 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
             "error": "Invalid callback parameters"
         })
     
-    uid = state
+    uid = _verify_and_extract_state_uid(state)
+    if not uid:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid or tampered state parameter"
+        })
     
     # Exchange code for tokens
     response = requests.post(

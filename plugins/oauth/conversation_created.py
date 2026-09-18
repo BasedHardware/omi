@@ -23,14 +23,18 @@ async def setup_notion_crm(request: Request, uid: str):
     """
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
+    if not get_notion().oauth_client_secret:
+        raise HTTPException(status_code=503, detail='Notion OAuth client secret is not configured')
     oauth_url = get_notion().get_oauth_url(uid)
     return templates.TemplateResponse("setup_notion_crm.html", {"request": request, "uid": uid, "oauth_url": oauth_url})
 
 
-def response_setup_notion_crm_page(request: Request, uid: str, err: str):
-    if not uid:
+def response_setup_notion_crm_page(request: Request, uid: str = "", err: str = ""):
+    if not uid and not err:
         raise HTTPException(status_code=400, detail='UID is required')
-    oauth_url = get_notion().get_oauth_url(uid)
+    oauth_url = ""
+    if uid and get_notion().oauth_client_secret:
+        oauth_url = get_notion().get_oauth_url(uid)
     return templates.TemplateResponse(
         "setup_notion_crm.html",
         {
@@ -48,7 +52,11 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     Callback from Notion Oauth.
     """
 
-    uid = state
+    uid = get_notion().uid_from_state(state)
+    if not uid:
+        return response_setup_notion_crm_page(
+            request, "", "Invalid or tampered state parameter"
+        )
 
     # Get access token
     oauth_ok = get_notion().get_access_token(code)

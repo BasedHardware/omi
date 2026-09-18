@@ -1,6 +1,9 @@
 import base64
+import hashlib
+import hmac
 import os
-from typing import Any, List
+import urllib.parse
+from typing import Any, List, Optional
 
 import requests
 
@@ -119,9 +122,31 @@ class NotionClient:
         self.oauth_redirect_uri = oauth_redirect_uri
         self.auth_url = auth_url
 
-    def get_oauth_url(self, uid: str):
-        # Should use encryption on state (with some salt) to prevent attacks
-        state = uid
+    def _signed_state(self, uid: str) -> str:
+        if not self.oauth_client_secret:
+            raise ValueError("Notion OAuth client secret is not configured")
+        sig = hmac.new(
+            self.oauth_client_secret.encode("utf-8"),
+            uid.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()[:32]
+        return f"{uid}:{sig}"
+
+    def uid_from_state(self, state: Optional[str]) -> Optional[str]:
+        if not self.oauth_client_secret or not state or ":" not in state:
+            return None
+        uid, sig = state.rsplit(":", 1)
+        expected_sig = hmac.new(
+            self.oauth_client_secret.encode("utf-8"),
+            uid.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()[:32]
+        if hmac.compare_digest(sig, expected_sig):
+            return uid
+        return None
+
+    def get_oauth_url(self, uid: str) -> str:
+        state = urllib.parse.quote(self._signed_state(uid))
         return f"{self.auth_url}&state={state}"
 
     def get_database(self, database_id: str, access_token: str, timeout: float = DEFAULT_TIMEOUT):
