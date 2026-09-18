@@ -15,9 +15,12 @@ put `pendingContract('C1');` on its own line first inside the body. This survive
 Dart formatting (a named argument gets folded onto another line). The async body
 executes in its own zone; assertions/UnimplementedError print PENDING;
 success throws XPASS outside the catch. Ordinary errors still fail. Use
-awaited assertions. Compare collection-bearing Dart records field by field:
-record equality compares Map identity; pass the Map itself to `expect`. Compile/load errors happen before the wrapper and fail the
-owner suite; overriding `noSuchMethod` in a fake is valid Dart, not a compile bypass.
+awaited assertions; widget contracts use `contractWidgets` from
+`app/test/support/spine/widgets.dart`. Plain skip is forbidden. Compile/load
+errors precede the wrapper and fail the owner suite; overridden noSuchMethod
+is valid Dart. Unexpected runtime/framework/teardown errors stay red.
+Compare collection-bearing Dart records field by field: record equality compares
+Map identity; pass the Map itself to `expect`.
 
 The smallest immutable boundary is the **whole oracle**: registered spine tests,
 fixtures and support code, including setup and assertions, with only whole pending
@@ -31,10 +34,12 @@ must not invent new obligations. Formatting still needs an exact pinned revision
 Register every oracle in `contracts/spine/files.json`. Resolve introductions and
 revision payloads from **all reachable history**, never a single simplified
 history path or a selected parent. Match revision payloads by their pinned digest;
-conflicting introductions/owners/records fail closed. A squash may absorb only a
-revision prefix ending at an exact accepted digest. Retired marker occurrences
-cannot return on either a branch head or a base-first PR merge. Missing/shallow
-history requires fetching it, never rebaselining.
+conflicting introductions/owners/records fail closed. A prefix whose records are
+already accepted by the target may start from an exact pinned target-tree version,
+even when an older branch introduction survives and squash erased intermediate
+payloads. New revision tails still require exact payloads and preserved markers.
+Retired markers cannot return on either parent order. Missing/shallow history
+requires fetching it, never rebaselining.
 
 A builder removes markers and makes those same tests pass. Corrections append
 `contracts/spine/revisions/NNN-description.json` with path, owner, before/after
