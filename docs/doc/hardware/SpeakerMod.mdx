@@ -1,0 +1,97 @@
+---
+title: "Speaker Upgrade & Audio Output Mod"
+description: "How to replace the buzzer on Omi hardware with a dynamic micro-speaker and I2S amplifier for AI voice output"
+---
+
+# Speaker Upgrade & Audio Output Mod
+
+This guide details how to modify the **Omi** hardware to replace the onboard passive buzzer with a dynamic micro-speaker capable of real-time speech and TTS audio output.
+
+---
+
+## 1. Background & Limitations
+
+The standard Omi device (CV1 and DevKits) is engineered primarily as an ambient audio capture wearable:
+* **Microphones:** Dual TDK T5838 PDM microphones.
+* **SoC:** Nordic nRF5340 (dual-core Cortex-M33).
+* **Alert Output:** Onboard buzzer / transducer driven by a simple switching transistor.
+
+A standard buzzer operates on resonance (tuned around 2.7–4 kHz) and cannot reproduce intelligible human speech. Furthermore, the nRF5340 GPIO pins can only supply ~5–15 mA, which is insufficient to drive an 8 Ω / 16 Ω dynamic speaker coil directly.
+
+---
+
+## 2. Recommended Hardware Additions
+
+To achieve clear voice playback for AI voice feedback and companion apps, add an external I2S DAC / Class-D amplifier:
+
+| Component | Part Number / Module | Notes |
+| :--- | :--- | :--- |
+| **I2S Class-D Amplifier** | **MAX98357A** (WLP / Breakout) | Compact mono amplifier, accepts direct I2S digital audio. |
+| **Dynamic Micro-Speaker** | **1511 Speaker Box** (15mm × 11mm × 3.5mm) | 8 Ω, 0.8W–1.0W; integrated acoustic cavity. |
+| **Alternative Speaker** | **10mm–12mm Round Micro-Speaker** | 8 Ω / 16 Ω; fits inside circular pendant enclosures. |
+
+---
+
+## 3. Wiring & Schematics
+
+```
+                     +-----------------------+
+                     |    Omi Mainboard      |
+                     |  (Nordic nRF5340)     |
+                     +-----------------------+
+                       |        |        |
+                   I2S_BCLK  I2S_LRCLK  I2S_DOUT
+                       |        |        |
+                       v        v        v
+                     +-----------------------+
+3.7V LiPo Battery -->| VIN      BCLK     DIN |
+(from Omi VDD)       |                       |
+                     |       MAX98357A       |
+GND ---------------->| GND      LRC     GAIN |
+                     +-----------------------+
+                              +     -
+                              |     |
+                              v     v
+                     +-----------------------+
+                     |      1511 Speaker     |
+                     |       (8Ω / 1W)       |
+                     +-----------------------+
+```
+
+### Pin Connections:
+1. **VIN / VDD:** Connect to the regulated 3.7V / 3.3V battery rail on Omi.
+2. **GND:** Connect to common ground.
+3. **BCLK (Bit Clock):** Map to nRF5340 I2S BCLK GPIO.
+4. **LRC / LRCLK (Word Select):** Map to nRF5340 I2S LRCK GPIO.
+5. **DIN (Data In):** Map to nRF5340 I2S SDOUT GPIO.
+6. **GAIN:** Tie to GND for 9 dB gain (recommended for 1511 speakers to prevent clipping).
+
+---
+
+## 4. Firmware Setup (Zephyr / nRF Connect SDK)
+
+Enable the I2S driver on the application core in `prj.conf`:
+
+```ini
+CONFIG_I2S=y
+CONFIG_AUDIO=y
+CONFIG_AUDIO_CODEC_NONE=y
+```
+
+In your devicetree overlay (`nrf5340dk_nrf5340_cpuapp.overlay` or custom board overlay):
+
+```dts
+&i2s0 {
+    status = "okay";
+    sck-pin = <28>;
+    lrck-pin = <29>;
+    sdout-pin = <30>;
+};
+```
+
+---
+
+## 5. Acoustic Design Tips
+
+1. **Acoustic Porting:** Ensure your 3D-printed enclosure has a grille or open port (~1.5–2mm) aligned with the front of the speaker diaphragm.
+2. **Gasket Sealing:** Use closed-cell foam or a silicone gasket around the speaker perimeter to separate front and back sound waves, preventing low-frequency cancellation.
