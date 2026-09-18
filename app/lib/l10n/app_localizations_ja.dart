@@ -2617,9 +2617,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reviewAndManageConversations => '記録された会話を確認および管理します';
 
   @override
-  String get startCapturingConversations => 'Omiデバイスで会話のキャプチャを開始して、ここに表示します。';
-
-  @override
   String get useMobileAppToCapture => 'モバイルアプリで音声をキャプチャします';
 
   @override
@@ -3104,9 +3101,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcribing => '文字起こし中...';
-
-  @override
-  String get transcriptionFailed => '文字起こし失敗';
 
   @override
   String get discardedConversation => '破棄された会話';
@@ -3621,9 +3615,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get preparingSystemAudioCapture => 'システム音声キャプチャを準備中';
 
   @override
-  String get clickTheButtonToCaptureAudio => 'ボタンをクリックして、ライブ文字起こし・AI インサイト・自動保存のために音声をキャプチャします。';
-
-  @override
   String get reconnecting => '再接続中...';
 
   @override
@@ -3669,9 +3660,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => '録音を開始してライブ文字起こしを表示';
-
-  @override
   String get paused => '一時停止中';
 
   @override
@@ -3690,9 +3678,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'システム音声キャプチャを設定中';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => '音声をキャプチャして文字起こしを生成中';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'クリックしてシステム音声の録音を開始';
@@ -8628,6 +8613,43 @@ class AppLocalizationsJa extends AppLocalizations {
   String audioSavedLocally(String duration) {
     return '$duration の音声をローカルに保存しました';
   }
+
+  @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
 
   @override
   String get willSyncAutomatically => '自動的に同期されます';
