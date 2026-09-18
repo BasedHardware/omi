@@ -142,7 +142,7 @@ private final class DraftEngine: LocalInferenceService, @unchecked Sendable {
       )
       let cloud = DraftEngine(
         engineID: .afm,
-        contextWindowTokens: 4096,
+        contextWindowTokens: 8192,
         generateResults: [.success(LocalSummaryDraft(title: "cloud should never run"))]
       )
       let store = MemoryLocalProjectionStore()
@@ -276,7 +276,7 @@ private final class DraftEngine: LocalInferenceService, @unchecked Sendable {
 
     private func thirtyMinuteSegments() -> [TranscriptHash.Segment] {
       // ~150 wpm × 30 min ≈ 4500 words. Repeating a 15-word line 300 times is
-      // enough to overflow AFM's 4096-token shared window.
+      // enough to overflow a 4096-token engine window (chunker stress, not AFM).
       let line = "This is filler speech used to force map-reduce on a four thousand token window."
       return (0..<300).map { index in
         TranscriptHash.Segment(speaker: "SPEAKER_00", text: "\(line) \(index)")

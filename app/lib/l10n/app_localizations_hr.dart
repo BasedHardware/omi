@@ -244,7 +244,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get searchConversations => 'Pretraži razgovore...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count odabrano';
   }
 
@@ -2046,10 +2046,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get memoryHistory => 'Povijest';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Dopusti korištenje';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nemoj koristiti';
 
   @override
   String get undo => 'Vrati Unazad';
@@ -10032,4 +10032,19 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get home => 'Početna';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nije moguće ažurirati osnovni status.';
+
+  @override
+  String get unstarConversation => 'Ukloni zvjezdicu s razgovora';
+
+  @override
+  String get moreOptions => 'Više opcija';
+
+  @override
+  String get filterByDate => 'Filtriraj po datumu';
+
+  @override
+  String get memoryGraph => 'Graf sjećanja';
 }

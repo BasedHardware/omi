@@ -38,11 +38,11 @@ QA_SWEEP_PROJECT = "based-hardware-dev"
 QA_SWEEP_DATABASE = "jit-qa"
 QA_SWEEP_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 QA_SWEEP_MODEL_NAME = "gpt-5.6-luna"
-QA_SWEEP_MAX_MODEL_CANDIDATES = 1
+QA_SWEEP_MAX_MODEL_CANDIDATES = 3
 QA_SWEEP_MAX_MODEL_COST_USD = 0.05
 QA_SWEEP_MAX_CATCH_UP_DAYS = 1
-QA_SWEEP_MAX_SUMMARY_CONVERSATIONS = 1
-QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 2_000
+QA_SWEEP_MAX_SUMMARY_CONVERSATIONS = 8
+QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 8_000
 QA_SWEEP_MAX_TRANSCRIPT_FETCHES = 0
 QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS = 0
 QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
@@ -50,9 +50,10 @@ QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
 # Keep these equal to the deployed memories route's QA request contract.  The
-# checked-in gpt-5.6-luna card prices 12,288 input + 256 output tokens at under
-# the $0.05 cap; the gateway's durable attempt row is the usage/cost authority.
-QA_SWEEP_MAX_INPUT_TOKENS = 16_384
+# checked-in gpt-5.6-luna card ($0.20/M in, $1.20/M out) prices 24,576 input +
+# 2,048 output at $0.0073728, under the $0.05 cap; the gateway's durable
+# attempt row is the usage/cost authority.
+QA_SWEEP_MAX_INPUT_TOKENS = 24_576
 QA_SWEEP_MAX_OUTPUT_TOKENS = 2_048
 QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
 QA_SWEEP_ACCOUNTING_READ_RETRIES = 2

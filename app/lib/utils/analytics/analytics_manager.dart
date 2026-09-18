@@ -655,13 +655,7 @@ class AnalyticsManager {
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
     track(
       'Device Connected',
-      properties: {
-        ...device.toJson(),
-        'type': device.type.name,
-        'device_vendor': vendor,
-        'hardware_family': hardwareFamily,
-        ..._deviceIdentityProperties(device),
-      },
+      properties: _deviceConnectionEventProperties(device),
     );
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
@@ -672,13 +666,7 @@ class AnalyticsManager {
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
     track(
       'Device Paired',
-      properties: {
-        ...device.toJson(),
-        'type': device.type.name,
-        'device_vendor': device.type.analyticsVendor,
-        'hardware_family': hardwareFamily,
-        ..._deviceIdentityProperties(device),
-      },
+      properties: _deviceConnectionEventProperties(device),
     );
     _setUserPropertiesBatch({
       'has_paired_device': true,
@@ -706,6 +694,16 @@ class AnalyticsManager {
   }
 
   static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
+
+  /// Closed Device Connected / Device Paired properties. Persistence fields
+  /// from [BtDevice.toJson] (raw id, name, serial, locator, RSSI) stay off
+  /// the analytics channel; hashed identity is the join key.
+  static Map<String, Object> _deviceConnectionEventProperties(BtDevice device) => {
+        'type': device.type.name,
+        'device_vendor': device.type.analyticsVendor,
+        'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
+        ..._deviceIdentityProperties(device),
+      };
 
   static Map<String, Object> _deviceIdentityProperties(BtDevice device) {
     final serial = device.serialNumber?.trim();
@@ -841,18 +839,21 @@ class AnalyticsManager {
   }
 
   void conversationCreated(ServerConversation conversation, {BtDevice? recordingDevice}) {
-    var properties = getConversationEventProperties(conversation);
-    properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
-    properties['action_items_count'] = conversation.structured.actionItems.length;
-    properties['transcript_language'] = _preferences.userPrimaryLanguage;
-
-    // Additional properties for conversation creation
-    properties['conversation_source'] = conversation.source?.toString().split('.').last ?? 'unknown';
-    properties['duration_seconds'] = conversation.getDurationInSeconds();
-    properties['timestamp'] = conversation.createdAt.toIso8601String();
+    // Named fields only. getConversationEventProperties reads getTranscript()
+    // to derive counts; Memory Created must not pull user content into analytics.
+    final properties = <String, dynamic>{
+      'memory_id': conversation.id,
+      'memory_discarded': conversation.discarded,
+      'memory_hours_since_creation': DateTime.now().difference(conversation.createdAt).inHours,
+      'memory_result': conversation.discarded ? 'discarded' : 'saved',
+      'action_items_count': conversation.structured.actionItems.length,
+      'transcript_language': _preferences.userPrimaryLanguage,
+      'conversation_source': conversation.source?.toString().split('.').last ?? 'unknown',
+      'duration_seconds': conversation.getDurationInSeconds(),
+      'timestamp': conversation.createdAt.toIso8601String(),
+    };
     properties.addAll(recordingDeviceProperties(recordingDevice));
 
-    // Get the summarized app info if available
     if (conversation.appResults.isNotEmpty) {
       var summarizedApp = conversation.appResults.firstOrNull;
       if (summarizedApp != null && summarizedApp.appId != null) {
