@@ -17,7 +17,7 @@ final class AutomationAccountIdentityTests: XCTestCase {
 
   func testReportsTheStoredUserID() throws {
     let defaults = try scratchDefaults()
-    defaults.set("gTVXbJh4JePPxsB3hlFQsX8OHhq2", forKey: "auth_userId")
+    defaults.set("gTVXbJh4JePPxsB3hlFQsX8OHhq2", forKey: DefaultsKey.authUserId)
     XCTAssertEqual(
       AuthState.automationAccountUserID(defaults: defaults, isNonProduction: true),
       "gTVXbJh4JePPxsB3hlFQsX8OHhq2"
@@ -29,7 +29,7 @@ final class AutomationAccountIdentityTests: XCTestCase {
     XCTAssertNil(AuthState.automationAccountUserID(defaults: empty, isNonProduction: true))
 
     let blank = try scratchDefaults()
-    blank.set("   ", forKey: "auth_userId")
+    blank.set("   ", forKey: DefaultsKey.authUserId)
     XCTAssertNil(
       AuthState.automationAccountUserID(defaults: blank, isNonProduction: true),
       "a whitespace-only value is 'unknown', not an account id"
@@ -42,8 +42,8 @@ final class AutomationAccountIdentityTests: XCTestCase {
   /// that reintroduces the same ambiguity this exists to remove.
   func testAnswersBeforeTheCredentialHasValidated() throws {
     let defaults = try scratchDefaults()
-    defaults.set("some-uid", forKey: "auth_userId")
-    defaults.set(false, forKey: "auth_isSignedIn")
+    defaults.set("some-uid", forKey: DefaultsKey.authUserId)
+    defaults.set(false, forKey: DefaultsKey.authIsSignedIn)
     XCTAssertEqual(AuthState.automationAccountUserID(defaults: defaults, isNonProduction: true), "some-uid")
   }
 
@@ -52,7 +52,7 @@ final class AutomationAccountIdentityTests: XCTestCase {
   /// than assumed.
   func testProductionBuildsReportNothing() throws {
     let defaults = try scratchDefaults()
-    defaults.set("some-uid", forKey: "auth_userId")
+    defaults.set("some-uid", forKey: DefaultsKey.authUserId)
     XCTAssertNil(AuthState.automationAccountUserID(defaults: defaults, isNonProduction: false))
   }
 }
