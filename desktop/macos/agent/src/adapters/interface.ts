@@ -14,7 +14,6 @@ export interface HarnessConfig {
   /** Omi API base URL for pi-mono provider */
   omiApiBaseUrl?: string;
   /** Firebase auth token for Omi API authentication */
-  authToken?: string;
 }
 
 /**

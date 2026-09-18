@@ -649,7 +649,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{count} selected'**
-  String selectedCount(int count, Object s);
+  String selectedCount(int count);
 
   /// Merge button label
   ///
@@ -18608,6 +18608,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
   String get speechProfileEnrollmentPrompt;
+
+  /// Screen-reader label for the Home tab in the bottom navigation bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get home;
+
+  /// Snackbar when toggling a memory's baseline flag fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update baseline status'**
+  String get failedToUpdateBaselineStatus;
+
+  /// Accessible name for the conversation-detail star button when the conversation is already starred
+  ///
+  /// In en, this message translates to:
+  /// **'Unstar conversation'**
+  String get unstarConversation;
+
+  /// Accessible name for the conversation-detail overflow menu
+  ///
+  /// In en, this message translates to:
+  /// **'More options'**
+  String get moreOptions;
+
+  /// Accessible name for the conversations calendar filter button
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by date'**
+  String get filterByDate;
+
+  /// Accessible name for the memories graph button
+  ///
+  /// In en, this message translates to:
+  /// **'Memory graph'**
+  String get memoryGraph;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

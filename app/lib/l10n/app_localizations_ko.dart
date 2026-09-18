@@ -241,7 +241,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get searchConversations => '대화 검색...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count개 선택됨';
   }
 
@@ -2007,10 +2007,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryHistory => '기록';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => '사용 허용';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => '사용 안 함';
 
   @override
   String get undo => '실행 취소';
@@ -9826,4 +9826,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
+
+  @override
+  String get home => '홈';
+
+  @override
+  String get failedToUpdateBaselineStatus => '베이스라인 상태 업데이트에 실패했습니다.';
+
+  @override
+  String get unstarConversation => '대화 별표 해제';
+
+  @override
+  String get moreOptions => '추가 옵션';
+
+  @override
+  String get filterByDate => '날짜별 필터';
+
+  @override
+  String get memoryGraph => '기억 그래프';
 }

@@ -5,6 +5,7 @@ inputs, never CLI flags that could replace production safety checks.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -61,6 +62,8 @@ class LiveSession:
         source: Callable[[], SourceStamp],
         factory: Callable[[LaunchSpec], MachineProcess],
         screenshot: Callable[[str, Path], None],
+        startup_timeout_s: float = 900,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         raise LiveNotImplemented("V1 live-session engine is not implemented; Harness V1 owns this package")
 
@@ -71,7 +74,8 @@ class LiveSession:
                 timeout_s: float = 30) -> Mapping[str, Any]:
         """Return {outcome, result, evidence}; accepted and refused attempts have receipts.
 
-        outcome: ok|rejected|restart-required|blocked. Rejections of the request
+        outcome: ok|rejected|restart-required|blocked; error_code distinguishes
+        daemon-exited, deadline, reload-rejected, malformed-response. Rejections of the request
         boundary itself raise LiveError with stable code. No retry on mutation.
         """
         raise LiveNotImplemented(f"V1 live {operation} is not implemented")
@@ -96,8 +100,13 @@ def validate_live_evidence(document: Mapping[str, Any]) -> list[str]:
     raise LiveNotImplemented("V1 live evidence validation is not implemented")
 
 
-def teardown(repo_root: Path, session_id: str, env: Mapping[str, str] | None = None) -> None:
-    """Builder wires stop/reset/recover here before services/device/generation edits.
+def teardown(repo_root: Path, session_id: str, env: Mapping[str, str] | None = None, *,
+             probe: Callable[[BrokerIdentity], BrokerIdentity | None] | None = None,
+             terminate: Callable[[int], None] | None = None) -> None:
+    """live.json has broker and child objects encoded as BrokerIdentity fields.
+
+    Production probes full identity; injected callbacks only exercise teardown.
+    Builder wires stop/reset/recover here before services/device/generation edits.
 
     No live manifest: no-op. Present manifest: bounded stop of proven owned
     process group; unverifiable ownership raises LiveError without cleanup.

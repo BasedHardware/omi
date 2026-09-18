@@ -76,10 +76,23 @@ see [FIXTURE_AUDIO.md](FIXTURE_AUDIO.md) (LibriSpeech release-probe WAV).
 --platform ios` is an alias for `ios-simulator`. Unknown names are refused
 with a message that lists the valid values. Pins: Flutter version comes from
 `.github/workflows/mobile-app-checks.yml`
-(never "latest"); the backend venv must be Python 3.11; JDK ≥ 21 for the
-Firebase emulators. Capacity: emulator lanes require ≥ 12GiB free on the
+(never "latest"); the backend venv must be Python 3.11 **and** able to import
+`yaml` and `dotenv` (a `.venv` directory is not enough); JDK ≥ 21 for the
+Firebase emulators. `app/.dev.env` with a non-loopback `API_BASE_URL`, or
+`OMI_APP_PROFILE`/`OMI_APP_FLAVOR` other than `local_dev`/`dev`, is
+`operator-action-needed` — the doctor will not rewrite the file. Capacity:
+emulator lanes require ≥ 12GiB free on the
 shared Data/scratch container — below that the check is an operator gate and
-contract/unit work continues without it.
+contract/unit work continues without it. Android image inventory is three-way:
+the emulator binary missing is `emulator engine missing`; a successful
+`sdkmanager --list_installed` (semicolon or slash paths) or on-disk
+`system-images/android-36/google_apis/arm64-v8a` with no image is `no
+system-images package installed`; a missing sdkmanager or a nonzero inventory
+with no parseable listing and no on-disk tree is `cannot determine` — not a
+finding that the engine or image is absent. cmdline-tools 23 deprecation
+warnings on stderr are not a failed inventory (this host exits 0).
+
+Fresh linked worktree: `make lane-bootstrap` (see `LANE_BOOTSTRAP.md`).
 
 ## Evidence
 

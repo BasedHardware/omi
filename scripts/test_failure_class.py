@@ -325,6 +325,24 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertEqual(payload["candidates_total"], len(SEED_IDS))
         self.assertIn("advisory", payload["candidate_narrowing"])
 
+    def test_prepare_trailing_slash_scope_hint_matches_files_under_that_directory(self) -> None:
+        """A hint written as a directory prefix with a trailing slash is the
+        form authors actually type. fnmatch treats it as a literal, so
+        ``app/lib/pages/home/`` never matches ``app/lib/pages/home/page.dart``
+        unless prepare expands it to a directory glob.
+        """
+        for class_id in SEED_IDS:
+            self.set_definition_field(class_id, "scope_hints", ["nowhere/**"])
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["app/lib/pages/home/"])
+        self.write("app/lib/pages/home/page.dart", "class Home {}\n")
+        self.commit("fix(app): touch home page")
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
+        )
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([item["id"] for item in payload["advisory_candidates"]], ["FC-malformed-doc-read"])
+
     def test_prepare_lists_every_candidate_when_nothing_matches_scope(self) -> None:
         """Narrowing to nothing would read as 'no class can apply' — a classification
         this CLI does not make."""

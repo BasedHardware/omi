@@ -244,7 +244,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get searchConversations => 'Пошук розмов...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Вибрано: $count';
   }
 
@@ -2049,10 +2049,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistory => 'Історія';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Дозволити використання';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Не використовувати';
 
   @override
   String get undo => 'Скасувати';
@@ -10015,4 +10015,22 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.';
+
+  @override
+  String get home => 'Головна';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Не вдалося оновити базовий статус.';
+
+  @override
+  String get unstarConversation => 'Зняти позначку з розмови';
+
+  @override
+  String get moreOptions => 'Інші параметри';
+
+  @override
+  String get filterByDate => 'Фільтрувати за датою';
+
+  @override
+  String get memoryGraph => 'Граф спогадів';
 }

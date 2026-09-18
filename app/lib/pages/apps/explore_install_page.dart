@@ -23,6 +23,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -109,7 +110,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         }
 
         return SliverPadding(
-          padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20, top: 20),
+          padding: EdgeInsets.only(bottom: bottomNavBarClearance(context), left: 20, right: 20, top: 20),
           sliver: SliverList.separated(
             itemCount: filteredApps.length,
             separatorBuilder: (context, index) => const SizedBox(height: 8),
@@ -144,7 +145,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         }).toList();
 
         return SliverPadding(
-          padding: const EdgeInsets.only(top: 8, bottom: 100),
+          padding: EdgeInsets.only(top: 8, bottom: bottomNavBarClearance(context)),
           sliver: SliverList.builder(
             itemCount: filteredGroups.length,
             itemBuilder: (context, index) {
@@ -375,7 +376,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         _buildShimmerCategorySection(),
         _buildShimmerCategorySection(),
         _buildShimmerCategorySection(),
-        const SizedBox(height: 100),
+        SizedBox(height: bottomNavBarClearance(context)),
       ],
     );
   }

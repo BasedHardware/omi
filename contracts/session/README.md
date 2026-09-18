@@ -14,9 +14,8 @@ One document per session, emitted by the session CLI
 (`scripts/dev-harness/mobile-session.sh evidence <session-id>`), stored at
 `<state-root>/mobile-sessions/<session-id>/evidence.json`.
 
-Guarantees encoded in the schema (and enforced again by the Python validator
-`dev_harness.session_evidence`, which consumers should treat as the executable
-form of this contract):
+Normative acceptance is `dev_harness.session_evidence.validate_evidence`, not
+JSON Schema alone. The schema describes structure; the validator adds:
 
 - **Identity binds source to artifact to run.** `source.git_sha` +
   `source.dirty_digest` identify the checkout; `artifact.sha256`/`git_sha`
@@ -56,4 +55,9 @@ nested definitions, and runs in the harness owner suite/local+CI manifest.
 Annotation text cannot redefine semantics; reviewers own that boundary.
 The Python validator also owns cross-field identity, path safety, chronology,
 and accounting rules. V1 builder must implement live validation without
-changing the frozen schema or relaxing old receipt rules.
+changing the frozen schema or relaxing old receipt rules. Its live validator
+must reject traversal, successful reload/restart with daemon_code != 0, success
+without loaded_source, unequal loaded/requested identities, and reversed times.
+The protected `test_live_receipt_validates_structure_and_cross_field_claims`
+is normative V1 acceptance; consumers must call the validator, even if JSON
+Schema accepted the document. A live receipt is unsupported until it passes.

@@ -148,10 +148,19 @@ struct LocalServerInferenceAdapter: LocalInferenceService {
     guard (200...299).contains(status) else {
       throw LocalInferenceError.httpStatus(status)
     }
-    let completion = try JSONDecoder().decode(OpenAIChatCompletionResponse.self, from: data)
+    let completion: OpenAIChatCompletionResponse
+    do {
+      completion = try JSONDecoder().decode(OpenAIChatCompletionResponse.self, from: data)
+    } catch {
+      throw LocalInferenceError.invalidResponse("undecodable_content")
+    }
     let content = try unwrapContent(completion)
     let payload = try jsonObjectData(from: content)
-    return try JSONDecoder().decode(T.self, from: payload)
+    do {
+      return try JSONDecoder().decode(T.self, from: payload)
+    } catch {
+      throw LocalInferenceError.invalidResponse("undecodable_content")
+    }
   }
 
   func runToolLoop(prompt _: String, tools _: [LocalInferenceToolSpec], budget _: ToolLoopBudget) async throws

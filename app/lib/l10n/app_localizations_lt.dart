@@ -243,7 +243,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchConversations => 'Ieškoti pokalbių...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Pasirinkta: $count';
   }
 
@@ -2045,10 +2045,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryHistory => 'Istorija';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Leisti naudoti';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nenaudoti';
 
   @override
   String get undo => 'Atšaukti';
@@ -10014,4 +10014,22 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes.';
+
+  @override
+  String get home => 'Pradžia';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nepavyko atnaujinti bazinės būsenos.';
+
+  @override
+  String get unstarConversation => 'Pašalinti pokalbio žvaigždutę';
+
+  @override
+  String get moreOptions => 'Daugiau parinkčių';
+
+  @override
+  String get filterByDate => 'Filtruoti pagal datą';
+
+  @override
+  String get memoryGraph => 'Prisiminimų grafas';
 }

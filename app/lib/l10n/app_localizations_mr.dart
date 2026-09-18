@@ -243,7 +243,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get searchConversations => 'संभाषण शोधा...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count निवडले';
   }
 
@@ -2046,10 +2046,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'वापर करू द्या';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'वापरू नका';
 
   @override
   String get undo => 'पूर्ववत् करा';
@@ -10004,4 +10004,22 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi ला तुमचा आवाज ओळखता यावा म्हणून — कोणत्याही विषयावर सुमारे 5 सेकंद बोला.';
+
+  @override
+  String get home => 'मुख्यपृष्ठ';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'बेसलाइन स्थिती अद्यतनित करणे अयशस्वी.';
+
+  @override
+  String get unstarConversation => 'संभाषणावरील तारा काढा';
+
+  @override
+  String get moreOptions => 'अधिक पर्याय';
+
+  @override
+  String get filterByDate => 'तारखेनुसार फिल्टर करा';
+
+  @override
+  String get memoryGraph => 'स्मृती आलेख';
 }

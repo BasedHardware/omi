@@ -91,7 +91,10 @@ class AndroidTooling:
         self._adb = adb
 
     def _run(self, *args: str, ok: tuple[int, ...] = (0,)) -> str:
-        code, out = self._runner([self._adb, *args])
+        try:
+            code, out = self._runner([self._adb, *args])
+        except OSError as exc:
+            raise DeviceRunnerError(f"adb not available: {exc}") from exc
         if code not in ok:
             raise DeviceRunnerError(f"adb {' '.join(args)} failed (exit {code}): {out.strip()[:400]}")
         return out
@@ -144,7 +147,10 @@ class IosTooling:
         self._runner = runner
 
     def _run(self, *args: str) -> str:
-        code, out = self._runner(["xcrun", "devicectl", *args])
+        try:
+            code, out = self._runner(["xcrun", "devicectl", *args])
+        except OSError as exc:
+            raise DeviceRunnerError(f"xcrun/devicectl not available: {exc}") from exc
         if code != 0:
             raise DeviceRunnerError(f"devicectl {' '.join(args)} failed (exit {code}): {out.strip()[:400]}")
         return out

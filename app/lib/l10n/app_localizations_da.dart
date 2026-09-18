@@ -244,7 +244,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get searchConversations => 'Søg samtaler...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count valgt';
   }
 
@@ -2029,10 +2029,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get memoryHistory => 'Historik';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Tillad brug';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Brug ikke';
 
   @override
   String get undo => 'Fortryd';
@@ -9979,4 +9979,22 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.';
+
+  @override
+  String get home => 'Hjem';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Kunne ikke opdatere baseline-status.';
+
+  @override
+  String get unstarConversation => 'Fjern stjerne fra samtale';
+
+  @override
+  String get moreOptions => 'Flere indstillinger';
+
+  @override
+  String get filterByDate => 'Filtrer efter dato';
+
+  @override
+  String get memoryGraph => 'Hukommelsesgraf';
 }

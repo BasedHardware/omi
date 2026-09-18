@@ -164,6 +164,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
+    conv_proc.validate_structured_source_segment_ids = lambda structured, _ids: structured
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
@@ -877,6 +878,7 @@ def test_entrypoint_matrix(
 ) -> None:
     del row_id
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: flag_on)
+    monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
     spies = _spy_managed_effects(monkeypatch, pc)
     kwargs = _effective_kwargs(entry, cell)
     extra_kwargs = dict(_REPROCESS_FORCE_KWARGS) if cell == 'reprocess_force' else None
@@ -1002,6 +1004,7 @@ def test_red_proof_minimum_must_report_actual_persistence(monkeypatch: Any, pc: 
 # call, terminal minimum (the S14 proactivity half).
 def test_red_proof_reprocess_force_overlay_hits_the_eager_deny(monkeypatch: Any, pc: Any) -> None:
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = True
     monkeypatch.setattr(
