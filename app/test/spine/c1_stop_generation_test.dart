@@ -22,25 +22,24 @@ void main() {
       final d = dependencies(world: world, preferences: SharedPreferencesUtil(), location: location);
       final phone = PhoneSpy(world.wal.getSyncs().phone);
       final deps = CaptureDependencies(
-        wal: WalSpy(phone),
-        phoneMic: d.phoneMic,
-        batchSupported: d.batchSupported,
-        auth: d.auth,
-        connectivity: d.connectivity,
-        now: d.now,
-        scheduling: d.scheduling,
-        preferences: d.preferences,
-        ble: d.ble,
-        openSocket: d.openSocket,
-        owner: d.owner,
-        location: location,
-        localSegments: d.localSegments,
-        codec: d.codec,
-        microphonePermission: d.microphonePermission,
-        refreshConversation: d.refreshConversation,
-        telemetry: d.telemetry,
-        ensureDeviceConnection: d.ensureDeviceConnection,
-      );
+          wal: WalSpy(phone),
+          phoneMic: d.phoneMic,
+          batchSupported: d.batchSupported,
+          auth: d.auth,
+          connectivity: d.connectivity,
+          now: d.now,
+          scheduling: d.scheduling,
+          preferences: d.preferences,
+          ble: d.ble,
+          openSocket: d.openSocket,
+          owner: d.owner,
+          location: location,
+          localSegments: d.localSegments,
+          codec: d.codec,
+          microphonePermission: d.microphonePermission,
+          refreshConversation: d.refreshConversation,
+          telemetry: d.telemetry,
+          ensureDeviceConnection: d.ensureDeviceConnection);
       final p = composeCaptureProvider(deps);
       await p.streamRecording();
       await pumpEventQueue();
