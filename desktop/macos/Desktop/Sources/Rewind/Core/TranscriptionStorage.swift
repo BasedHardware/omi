@@ -66,7 +66,8 @@ actor TranscriptionStorage {
     inputDeviceName: String? = nil,
     clientConversationId: String? = nil,
     conversationRole: TranscriptionConversationRole = .ambient,
-    finalizationStrategy: TranscriptionFinalizationStrategy = .cloudReconcile
+    finalizationStrategy: TranscriptionFinalizationStrategy = .cloudReconcile,
+    captureAttemptId: String? = nil
   ) async throws -> Int64 {
     let db = try await ensureInitialized()
 
@@ -79,7 +80,8 @@ actor TranscriptionStorage {
       status: .recording,
       clientConversationId: clientConversationId,
       conversationRole: conversationRole,
-      finalizationStrategy: finalizationStrategy
+      finalizationStrategy: finalizationStrategy,
+      captureAttemptId: captureAttemptId
     )
 
     let record = try await db.write { database in
@@ -251,7 +253,8 @@ actor TranscriptionStorage {
       await AnalyticsManager.shared.conversationCreated(
         conversationId: telemetry.conversationId,
         source: telemetry.source,
-        durationSeconds: telemetry.durationSeconds
+        durationSeconds: telemetry.durationSeconds,
+        attemptId: telemetry.attemptId
       )
     }
     return result.accepted
@@ -552,16 +555,21 @@ actor TranscriptionStorage {
 
   /// Update speaker assignment metadata for existing segments in a synced conversation.
   /// Matches by backend segment IDs when available, then falls back to local segment order.
+  /// - Returns: the number of segment rows actually updated — 0 means the
+  ///   conversation has no local session or no segment matched, i.e. nothing was
+  ///   persisted. Callers for whom the local store is the only holder of the
+  ///   assignment (the backend-404 fallback) must treat 0 as failure.
+  @discardableResult
   func updateSpeakerAssignmentByBackendId(
     _ backendId: String,
     segmentIds: [String],
     fallbackSegmentOrders: [Int],
     isUser: Bool,
     personId: String?
-  ) async throws {
+  ) async throws -> Int {
     let db = try await ensureInitialized()
 
-    try await db.write { database in
+    return try await db.write { database -> Int in
       guard
         let sessionId = try Int64.fetchOne(
           database,
@@ -569,7 +577,7 @@ actor TranscriptionStorage {
           arguments: [backendId]
         )
       else {
-        return
+        return 0
       }
 
       let encodedSegmentIds = String(
@@ -581,6 +589,7 @@ actor TranscriptionStorage {
         as: UTF8.self
       )
 
+      var updatedRows = 0
       if !segmentIds.isEmpty {
         try database.execute(
           sql: """
@@ -592,6 +601,7 @@ actor TranscriptionStorage {
             """,
           arguments: [isUser, personId, sessionId, encodedSegmentIds]
         )
+        updatedRows += database.changesCount
       }
 
       if !fallbackSegmentOrders.isEmpty {
@@ -605,7 +615,9 @@ actor TranscriptionStorage {
             """,
           arguments: [isUser, personId, sessionId, encodedFallbackOrders]
         )
+        updatedRows += database.changesCount
       }
+      return updatedRows
     }
   }
   /// Get all segments for a session ordered by segmentOrder

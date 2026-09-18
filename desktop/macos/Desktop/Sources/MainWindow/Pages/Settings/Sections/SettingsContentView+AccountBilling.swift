@@ -36,7 +36,7 @@ extension SettingsContentView {
 
               Button("Sign Out") {
                 appState.stopTranscription()
-                ProactiveAssistantsPlugin.shared.stopMonitoring()
+                ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .signOut)
                 Task {
                   try? await AuthService.shared.signOut()
                 }
@@ -341,7 +341,7 @@ extension SettingsContentView {
 
             Text(
               subscription.deprecationMessage
-                ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at $49/mo."
+                ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at \(operatorDeprecationFallbackPrice)."
             )
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)

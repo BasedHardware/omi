@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:opus_dart/opus_dart.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
@@ -13,19 +17,22 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Enum for loading text states in speech profile
 enum SpeechProfileLoadingState { uploading, memorizing, personalizing, allSet }
 
 /// Enum for progress message states in speech profile
-enum SpeechProfileProgressState { keepSpeaking, keepGoing, almostThere, soClose }
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -47,19 +54,59 @@ class SpeechProfileProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
 
   bool startedRecording = false;
-  double percentageCompleted = 0;
+
+  /// Sentence target for Settings redo; first-run onboarding uses
+  /// transcribed speech duration via [recordingProgress]. A sentence ends at
+  /// ., ! or ? followed by a space or the end of the text (so "3.5" is not a boundary); both server STT and the
+  /// on-device recognizers punctuate their output.
+  static const int targetSentenceCount = 3;
+  bool _recordingTargetReached = false;
+
+  /// Once the target is reached the recording is not cut off mid-sentence:
+  /// it finalizes after [completionGrace] without new speech (each new
+  /// segment restarts the wait), or at [completionCap] after the target at
+  /// the latest.
+  static const Duration completionGrace = Duration(seconds: 2);
+  static const Duration completionCap = Duration(seconds: 8);
+
+  /// Backend `/v3/upload-audio` rejects WAVs shorter than 5s. Three short
+  /// punctuated sentences can otherwise finalize in ~2s and 400 as TOO_SHORT.
+  static const Duration minUploadDuration = Duration(seconds: 5);
+  static const int uploadMaxAttempts = 3;
+  static const Duration uploadAttemptTimeout = Duration(seconds: 30);
+  Timer? _completionGraceTimer;
+  Timer? _completionCapTimer;
+  bool _completionFired = false;
+  DateTime? _recordingStartedAt;
+  static final RegExp _sentenceEnd = RegExp(r'[.!?]+(?=\s|$)');
+
+  int get spokenSentenceCount => _sentenceEnd.allMatches(text).length;
+  double get sentenceProgress => (spokenSentenceCount / targetSentenceCount).clamp(0.0, 1.0);
   bool uploadingProfile = false;
   bool profileCompleted = false;
   Timer? forceCompletionTimer;
+  Timer? _reconnectTimer;
+  bool _reconnecting = false;
+  int _sessionGeneration = 0;
+  int? _fallbackGeneration;
+  bool _disposed = false;
+
+  bool _isCurrentSession(int generation) => !_disposed && generation == _sessionGeneration;
+
+  /// Consecutive closes with code 1011 (server-side STT failure) while no
+  /// user speech has been captured yet. This combination means the STT
+  /// backend is down, not that the socket hiccuped, so retrying it forever
+  /// only spins in place — see _maxSttUnavailableCloses below.
+  int _sttUnavailableCloseCount = 0;
+  static const int _maxSttUnavailableCloses = 3;
 
   bool isInitialising = false;
   bool isInitialised = false;
 
   String text = '';
-  SpeechProfileProgressState progressState = SpeechProfileProgressState.keepSpeaking;
 
-  late Function? _finalizedCallback;
-  late Function? _processConversationCallback;
+  Function? _finalizedCallback;
+  Function? _processConversationCallback;
 
   /// only used during onboarding /////
   SpeechProfileLoadingState loadingState = SpeechProfileLoadingState.uploading;
@@ -67,15 +114,132 @@ class SpeechProfileProvider extends ChangeNotifier
 
   // Onboarding state (questions from server)
   bool usePhoneMic = false;
+  // True only for the real onboarding flow (see wrapper.dart), which claims
+  // onboarding provenance server-side. Every other caller (Settings' "redo
+  // speech profile") sends speech_profile_redo=enabled instead so an already-
+  // onboarded account still gets the question flow — see
+  // routers/listen/runtime.py's _bootstrap for why that distinction exists.
+  bool _isOnboardingFlow = false;
+  bool get isOnboardingFlow => _isOnboardingFlow;
+
+  /// First-run enrollment needs a short voice sample, not three answers.
+  /// Use the union of non-empty user transcript spans: gaps, overlapping
+  /// updates and Omi's prompts must not fill the bar. STT timestamps are an
+  /// estimate; the backend still validates the actual uploaded audio.
+  double get recordingProgress {
+    if (!isOnboardingFlow) return sentenceProgress;
+    final speech = segments
+        .where((s) =>
+            s.speakerId != omiSpeakerId &&
+            s.text.trim().isNotEmpty &&
+            s.start.isFinite &&
+            s.end.isFinite &&
+            s.start >= 0 &&
+            s.end > s.start)
+        .toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+    double seconds = 0;
+    double end = 0;
+    for (final segment in speech) {
+      seconds += max(0, segment.end - max(end, segment.start));
+      end = max(end, segment.end);
+    }
+    return (seconds / minUploadDuration.inSeconds).clamp(0.0, 1.0);
+  }
+
+  /// True while the question flow is transcribed on-device instead of by the
+  /// backend's streaming STT — entered up front when the pre-flight
+  /// availability check fails, or mid-session after repeated 1011 closes with
+  /// no captured speech. The voice print is unaffected either way: it is
+  /// computed server-side from the WAV uploaded at finalize(), never from the
+  /// transcript, so a locally transcribed session yields the same profile.
+  bool usingLocalStt = false;
+  CustomSttConfig? _localSttConfig;
   String currentQuestion = '';
   int currentQuestionIndex = 0;
   int totalQuestions = 0;
 
-  double get questionProgress => totalQuestions == 0 ? 0.0 : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
+  /// Live mic input level in [0.0, 1.0], computed straight from the outgoing
+  /// PCM16 audio so the recording UI can give the user visible confirmation
+  /// their voice is actually being picked up — no native amplitude API
+  /// dependency, and it reflects the real audio being sent in production.
+  double micLevel = 0.0;
+  DateTime? _lastMicLevelNotify;
+  // Separate from audioStorage.opusDecoder: that one decodes the full
+  // recording once at finalize() time, this one decodes the same live frames
+  // independently (Opus packets decode independently of each other) purely
+  // for the meter, so neither interferes with the other.
+  SimpleOpusDecoder? _micLevelOpusDecoder;
+
+  void _updateMicLevel(Uint8List bytes) {
+    final sampleCount = bytes.length ~/ 2;
+    if (sampleCount == 0) return;
+
+    final byteData = ByteData.sublistView(bytes);
+    final samples = List<int>.generate(sampleCount, (i) => byteData.getInt16(i * 2, Endian.little));
+    _updateMicLevelFromSamples(samples);
+  }
+
+  void _updateMicLevelFromSamples(List<int> samples) {
+    if (samples.isEmpty) return;
+
+    double sumSquares = 0;
+    for (final sample in samples) {
+      sumSquares += sample * sample;
+    }
+    final rms = sqrt(sumSquares / samples.length);
+    // 16-bit PCM full-scale is 32768; normal speech rarely gets close to
+    // that, so scale against a much lower reference to keep the meter
+    // visibly responsive to a normal speaking voice, even a quiet one.
+    final normalized = (rms / 1200).clamp(0.0, 1.0);
+    // Exponential smoothing so the bars don't flicker chunk to chunk, weighted
+    // toward the new sample so the meter still reacts quickly.
+    micLevel = micLevel * 0.5 + normalized * 0.5;
+
+    // Mic bytes arrive many times a second; throttle notifyListeners so this
+    // doesn't rebuild the whole page on every ~10ms audio chunk.
+    final now = DateTime.now();
+    if (_lastMicLevelNotify == null || now.difference(_lastMicLevelNotify!) > const Duration(milliseconds: 80)) {
+      _lastMicLevelNotify = now;
+      notifyListeners();
+    }
+  }
+
+  /// Feeds the mic-level meter from a connected device's audio frame
+  /// (post header-stripping). Omi devices default to Opus, which has to be
+  /// decoded before an amplitude can be computed at all — pcm16 needs no
+  /// decode. Other, rarer device codecs (pcm8/mulaw/aac/lc3) aren't decoded
+  /// live for this meter; the glow just stays at its idle level for those.
+  void _updateMicLevelFromDeviceFrame(List<int> frame) {
+    if (frame.isEmpty) return;
+    switch (audioStorage.codec) {
+      case BleAudioCodec.pcm16:
+        _updateMicLevel(Uint8List.fromList(frame));
+        break;
+      case BleAudioCodec.opus:
+      case BleAudioCodec.opusFS320:
+        try {
+          _micLevelOpusDecoder ??= SimpleOpusDecoder(sampleRate: 16000, channels: 1);
+          final decoded = _micLevelOpusDecoder!.decode(input: Uint8List.fromList(frame));
+          _updateMicLevelFromSamples(decoded);
+        } catch (e) {
+          // A dropped/out-of-order BLE packet can produce an undecodable
+          // frame; that's fine for a meter-only concern — just skip it.
+          Logger.debug('Speech profile: mic-level opus decode skipped: $e');
+        }
+        break;
+      default:
+        break;
+    }
+  }
 
   void skipCurrentQuestion() {
     if (_socket?.state == SocketServiceState.connected) {
       _socket?.sendText('{"type": "skip_question"}');
+    } else {
+      // Previously a silent no-op while the socket was mid-reconnect (see
+      // _scheduleReconnect), so tapping Skip looked like it did nothing.
+      notifyInfo('SKIP_UNAVAILABLE');
     }
   }
 
@@ -111,11 +275,14 @@ class SpeechProfileProvider extends ChangeNotifier
     Function? finalizedCallback,
     Function? processConversationCallback,
     bool usePhoneMic = false,
+    bool isOnboardingFlow = false,
   }) async {
     _finalizedCallback = finalizedCallback;
     _processConversationCallback = processConversationCallback;
+    resetTranscript();
     setInitialising(true);
     this.usePhoneMic = usePhoneMic;
+    _isOnboardingFlow = isOnboardingFlow;
 
     try {
       if (usePhoneMic) {
@@ -158,6 +325,11 @@ class SpeechProfileProvider extends ChangeNotifier
 
   void updateStartedRecording(bool value) {
     startedRecording = value;
+    if (value) {
+      _recordingStartedAt ??= clock.now();
+    } else {
+      _recordingStartedAt = null;
+    }
     notifyListeners();
   }
 
@@ -176,17 +348,147 @@ class SpeechProfileProvider extends ChangeNotifier
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
-    _socket = await ServiceManager.instance().socket.speechProfile(
-          codec: codec,
-          sampleRate: rate,
-          language: language,
-          force: force,
-        );
+    final generation = _sessionGeneration;
+    var socket = await openSpeechProfileSocket(
+      codec: codec,
+      sampleRate: rate,
+      language: language,
+      force: force,
+      speechProfileRedo: !_isOnboardingFlow,
+      customSttConfig: usingLocalStt ? _localSttConfig : null,
+    );
+    if (!_isCurrentSession(generation)) {
+      // The session was closed or reset while the socket was being created.
+      // Adopting it anyway would leak a live backend session that close()'s
+      // stop() never saw, so discard it and fail the attempt exactly like a
+      // null socket does.
+      await socket?.stop(reason: 'stale-session');
+      socket = null;
+    }
+    _socket = socket;
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
     _socket?.subscribe(this, this);
     await _socket?.requestFirstOnboardingQuestion();
+  }
+
+  /// Opens the speech-profile socket. Overridden in tests to control the
+  /// timing of an attempt; production always goes through the socket service
+  /// pool. Mirrors CaptureProvider.openConversationSocket.
+  @visibleForTesting
+  Future<TranscriptSegmentSocketService?> openSpeechProfileSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    bool speechProfileRedo = false,
+    CustomSttConfig? customSttConfig,
+  }) {
+    return ServiceManager.instance().socket.speechProfile(
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          speechProfileRedo: speechProfileRedo,
+          force: force,
+          customSttConfig: customSttConfig,
+        );
+  }
+
+  /// Switches this session to on-device transcription. Returns false, leaving
+  /// the session untouched, when this platform has no usable local model
+  /// (Apple speech on iOS is always available; Android needs a downloaded
+  /// Whisper model). Safe to call before initialise() (pre-flight) or while a
+  /// session is live (the next socket attempt picks the new mode up).
+  Future<bool> enableLocalStt() async {
+    final generation = _sessionGeneration;
+    if (_disposed) return false;
+    final config = await resolveLocalSttConfig();
+    if (!_isCurrentSession(generation) || config == null) return false;
+    _localSttConfig = config;
+    usingLocalStt = true;
+    notifyListeners();
+    return true;
+  }
+
+  /// Resolves the on-device STT config. Overridden in tests so the fallback
+  /// path can be exercised without a real model or platform channel.
+  @visibleForTesting
+  Future<CustomSttConfig?> resolveLocalSttConfig() async {
+    final freemium = FreemiumTranscriptionService();
+    if (await freemium.checkReadiness() != FreemiumReadiness.ready) return null;
+    final config = freemium.getFreemiumConfig();
+    if (config == null) return null;
+    // The readiness check treats iOS as always ready, but on-device
+    // recognition only works once the language model for the locale is
+    // installed; ask the OS so the fallback is never entered blind.
+    if (Platform.isIOS && !await OnDeviceAppleProvider.isOnDeviceAvailable(config.language ?? 'en')) {
+      Logger.debug('On-device speech recognition unavailable for ${config.language}; no local STT fallback');
+      return null;
+    }
+    return config;
+  }
+
+  /// Backend STT is down mid-session: keep the flow alive on on-device
+  /// transcription instead of dead-ending in STT_UNAVAILABLE, when we can.
+  void _fallBackToLocalStt() {
+    final generation = _sessionGeneration;
+    if (_disposed || _fallbackGeneration == generation) return;
+    _fallbackGeneration = generation;
+    unawaited(() async {
+      try {
+        final enabled = await enableLocalStt();
+        if (!_isCurrentSession(generation) || !startedRecording || profileCompleted || uploadingProfile) return;
+        if (enabled) {
+          _sttUnavailableCloseCount = 0;
+          notifyInfo('LOCAL_STT_FALLBACK');
+          _scheduleReconnect();
+        } else {
+          notifyError('STT_UNAVAILABLE');
+        }
+      } catch (e) {
+        if (_isCurrentSession(generation) && startedRecording && !profileCompleted && !uploadingProfile) {
+          Logger.debug('Speech profile local STT availability failed: $e');
+          notifyError('STT_UNAVAILABLE');
+        }
+      } finally {
+        if (_fallbackGeneration == generation) _fallbackGeneration = null;
+      }
+    }());
+  }
+
+  /// Uploads the recorded speech-profile audio. Overridden in tests to avoid
+  /// a real network call.
+  @visibleForTesting
+  Future<bool> uploadSpeechProfile(File file) => uploadProfile(file);
+
+  bool _isTooShortUploadError(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('audio duration is invalid') || text.contains('audio is empty');
+  }
+
+  /// Retries transient upload failures. Duration-too-short / empty-audio 400s
+  /// are not retried — more talking is required, not another POST.
+  @visibleForTesting
+  Future<({bool success, bool tooShort})> uploadProfileWithRetry(File file) async {
+    var tooShort = false;
+    for (var attempt = 1; attempt <= uploadMaxAttempts; attempt++) {
+      try {
+        final ok = await uploadSpeechProfile(file).timeout(
+          uploadAttemptTimeout,
+          onTimeout: () {
+            Logger.debug('Profile upload timed out after ${uploadAttemptTimeout.inSeconds}s (attempt $attempt)');
+            return false;
+          },
+        );
+        if (ok) return (success: true, tooShort: false);
+      } catch (e) {
+        Logger.debug('Error uploading profile (attempt $attempt): $e');
+        tooShort = _isTooShortUploadError(e);
+        if (tooShort) return (success: false, tooShort: true);
+      }
+    }
+    return (success: false, tooShort: false);
   }
 
   /// Start phone microphone streaming (alternative to BLE device streaming).
@@ -206,6 +508,8 @@ class SpeechProfileProvider extends ChangeNotifier
 
           // Store audio frames for speech profile upload
           audioStorage.frames.add(bytes.toList());
+
+          _updateMicLevel(bytes);
 
           // Send to transcription socket
           if (_socket?.state == SocketServiceState.connected) {
@@ -251,41 +555,27 @@ class SpeechProfileProvider extends ChangeNotifier
 
       updateLoadingState(SpeechProfileLoadingState.memorizing);
       Logger.debug('Creating WAV file...');
-      var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+      File file;
+      try {
+        file = (await audioStorage.createWavFile(filename: 'speaker_profile.wav')).item1;
+      } catch (_) {
+        Logger.debug('Speech profile WAV creation failed');
+        completeAfterUploadFailure(tooShort: false);
+        return;
+      }
       Logger.debug('WAV file created, uploading profile...');
 
-      bool uploadSuccess = false;
-      bool uploadFailedDueToShortAudio = false;
-      try {
-        uploadSuccess = await uploadProfile(data.item1).timeout(
-          const Duration(seconds: 30),
-          onTimeout: () {
-            Logger.debug('Profile upload timed out after 30 seconds');
-            return false;
-          },
-        );
-        Logger.debug('Profile upload completed: $uploadSuccess');
-      } catch (e) {
-        Logger.debug('Error uploading profile: $e');
-        final error = e.toString().toLowerCase();
-        uploadFailedDueToShortAudio = error.contains('audio duration is invalid') || error.contains('audio is empty');
-        uploadSuccess = false;
-      }
+      final upload = await uploadProfileWithRetry(file);
+      Logger.debug('Profile upload completed: success=${upload.success} tooShort=${upload.tooShort}');
 
-      if (!uploadSuccess) {
-        // Upload failed - notify user but still process conversation
-        uploadingProfile = false;
-        notifyError(uploadFailedDueToShortAudio ? 'TOO_SHORT' : 'UPLOAD_FAILED');
-
-        // Still trigger conversation processing
-        if (_processConversationCallback != null) {
-          Logger.debug('Triggering conversation processing despite upload failure...');
-          _processConversationCallback!();
-        }
+      if (!upload.success) {
+        completeAfterUploadFailure(tooShort: upload.tooShort);
         return;
       }
 
       SharedPreferencesUtil().hasSpeakerProfile = true;
+      PlatformManager.instance.analytics.speechProfileUploadSucceeded();
+      PlatformManager.instance.analytics.speechProfileEmbeddingStored();
       Logger.debug('Speaker profile saved to preferences');
 
       updateLoadingState(SpeechProfileLoadingState.personalizing);
@@ -296,6 +586,8 @@ class SpeechProfileProvider extends ChangeNotifier
         _processConversationCallback!();
       }
 
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
       uploadingProfile = false;
       profileCompleted = true;
       text = '';
@@ -306,6 +598,32 @@ class SpeechProfileProvider extends ChangeNotifier
         _finalizedCallback!();
       }
     }
+  }
+
+  /// Upload failed. Do not mark the profile completed — All Done means a
+  /// voiceprint landed. Skip for now on the recording UI is the way out so
+  /// onboarding is never trapped. Separated from finalize() so it's directly
+  /// testable without a real (opus-decoder-backed) WavBytesUtil.
+  @visibleForTesting
+  void completeAfterUploadFailure({required bool tooShort}) {
+    uploadingProfile = false;
+    profileCompleted = false;
+    _completionFired = false;
+    _recordingTargetReached = false;
+    _cancelCompletionTimers();
+    notifyError(tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED');
+    PlatformManager.instance.analytics.speechProfileUploadFailed(
+      reason: tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED',
+    );
+
+    if (_processConversationCallback != null) {
+      Logger.debug('Triggering conversation processing despite upload failure...');
+      _processConversationCallback!();
+    }
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    notifyListeners();
   }
 
   // TODO: use connection directly
@@ -346,6 +664,9 @@ class SpeechProfileProvider extends ChangeNotifier
         }
 
         final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
+
+        _updateMicLevelFromDeviceFrame(trimmedValue);
+
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(trimmedValue);
         }
@@ -372,11 +693,25 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   void resetSegments() {
+    audioStorage.clearAudioBytes();
+    resetTranscript();
+  }
+
+  /// Forgets the previous recording's transcript and progress so a new
+  /// recording (Redo, or onboarding after a Settings redo) starts empty
+  /// instead of showing and counting what was said last time. Does not touch
+  /// audio storage, which initialise() recreates.
+  void resetTranscript() {
+    _sessionGeneration++;
+    _cancelCompletionTimers();
+    _completionFired = false;
     segments.clear();
     streamStartedAtSecond = null;
-    audioStorage.clearAudioBytes();
     text = '';
-    percentageCompleted = 0;
+    _recordingTargetReached = false;
+    _recordingStartedAt = startedRecording ? clock.now() : null;
+    profileCompleted = false;
+    uploadingProfile = false;
     notifyListeners();
   }
 
@@ -389,25 +724,14 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void updateProgressMessage() {
-    // Only show user's speech, not Omi questions
-    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    int wordsCount = text.split(' ').length;
-    progressState = SpeechProfileProgressState.keepSpeaking;
-    if (wordsCount > 10) {
-      progressState = SpeechProfileProgressState.keepGoing;
-    } else if (wordsCount > 25) {
-      progressState = SpeechProfileProgressState.almostThere;
-    } else if (wordsCount > 40) {
-      progressState = SpeechProfileProgressState.soClose;
-    }
-    notifyListeners();
-  }
-
   Future close() async {
+    _sessionGeneration++;
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _cancelCompletionTimers();
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
 
     _stopPhoneMicStreaming();
 
@@ -417,10 +741,16 @@ class SpeechProfileProvider extends ChangeNotifier
     currentQuestionIndex = 0;
     totalQuestions = 0;
     startedRecording = false;
-    percentageCompleted = 0;
+    _recordingTargetReached = false;
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
+    _isOnboardingFlow = false;
+    usingLocalStt = false;
+    _localSttConfig = null;
+    micLevel = 0.0;
+    isInitialised = false;
+    _sttUnavailableCloseCount = 0;
     _processConversationCallback = null;
 
     await _socket?.stop(reason: 'closing');
@@ -429,9 +759,13 @@ class SpeechProfileProvider extends ChangeNotifier
 
   @override
   void dispose() {
+    _disposed = true;
+    _sessionGeneration++;
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _cancelCompletionTimers();
+    _reconnectTimer?.cancel();
     _finalizedCallback = null;
     _socket?.unsubscribe(this);
     ServiceManager.instance().device.unsubscribe(this);
@@ -472,7 +806,20 @@ class SpeechProfileProvider extends ChangeNotifier
     Logger.debug('Speech profile socket closed with code: $closeCode');
     // Only notify error if we're still recording and not completed
     if (startedRecording && !profileCompleted && !uploadingProfile) {
+      final sttUnavailable = closeCode == 1011 && segments.isEmpty;
+      _sttUnavailableCloseCount = sttUnavailable ? _sttUnavailableCloseCount + 1 : 0;
+      if (sttUnavailable && _sttUnavailableCloseCount >= _maxSttUnavailableCloses) {
+        _reconnectTimer?.cancel();
+        _reconnectTimer = null;
+        if (!usingLocalStt) {
+          _fallBackToLocalStt();
+          return;
+        }
+        notifyError('STT_UNAVAILABLE');
+        return;
+      }
       notifyError('SOCKET_DISCONNECTED');
+      _scheduleReconnect();
     }
   }
 
@@ -481,7 +828,58 @@ class SpeechProfileProvider extends ChangeNotifier
     Logger.debug('Speech profile socket error: $err');
     if (startedRecording && !profileCompleted && !uploadingProfile) {
       notifyError('SOCKET_ERROR');
+      _scheduleReconnect();
     }
+  }
+
+  /// Retry connecting on an interval until it succeeds or the flow ends.
+  ///
+  /// Unlike the main capture socket (CaptureProvider._startKeepAliveServices),
+  /// this socket previously had no reconnect at all: once dropped,
+  /// skipCurrentQuestion() and outgoing mic audio are both no-ops gated on
+  /// `_socket?.state == connected` (see below), so onboarding hung forever
+  /// until the app was force-relaunched.
+  ///
+  /// The backend keeps no onboarding state across connections
+  /// (OnboardingHandler is constructed fresh per websocket in
+  /// routers/listen/runtime.py), so a reconnect always restarts the question
+  /// sequence from the top. Reset locally to match rather than showing a
+  /// stale question index against a server that has actually restarted.
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (profileCompleted || uploadingProfile || _socket?.state == SocketServiceState.connected) {
+        timer.cancel();
+        return;
+      }
+
+      // _initiateWebsocket is async, so without this guard a slow attempt
+      // still in flight would overlap with the next 5s tick and open a
+      // second socket concurrently — the same failure mode CaptureProvider's
+      // keep-alive hit in #11305.
+      if (_reconnecting) return;
+      _reconnecting = true;
+
+      Logger.debug('Speech profile socket reconnect attempt');
+      try {
+        if (usePhoneMic) {
+          await _initiateWebsocket(codec: BleAudioCodec.pcm16, sampleRate: 16000, force: true);
+        } else if (device != null) {
+          final codec = await _getAudioCodec(device!.id);
+          await _initiateWebsocket(codec: codec, force: true);
+        } else {
+          return;
+        }
+
+        currentQuestionIndex = 0;
+        currentQuestion = '';
+        notifyListeners();
+      } catch (e) {
+        Logger.debug('Speech profile socket reconnect failed: $e');
+      } finally {
+        _reconnecting = false;
+      }
+    });
   }
 
   @override
@@ -498,8 +896,9 @@ class SpeechProfileProvider extends ChangeNotifier
       Logger.debug('Question ${event.questionIndex} answered');
       notifyInfo('NEXT_QUESTION');
     } else if (event is OnboardingCompleteEvent) {
-      Logger.debug('Onboarding complete from backend: conversationId=${event.conversationId}');
-      finalize();
+      // Completion is driven by the recording target (onSegmentReceived);
+      // the backend finishing its topic checks only means it stops asking.
+      Logger.debug('Onboarding topics complete from backend: conversationId=${event.conversationId}');
     }
   }
 
@@ -525,14 +924,57 @@ class SpeechProfileProvider extends ChangeNotifier
     // Validate single speaker (exclude Omi segments)
     _validateSingleSpeaker();
 
-    // Display only user's speech, not Omi's questions
-    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    percentageCompleted = questionProgress;
-
-    notifyInfo('SCROLL_DOWN');
+    updateSpokenText();
     notifyListeners();
   }
 
+  /// Recomputes what the user has said (Omi's own question segments are
+  /// excluded), the recording progress, and finalizes the recording
+  /// once the target is reached. Split from onSegmentReceived so it can be
+  /// exercised without the audio storage that method also touches.
+  @visibleForTesting
+  void updateSpokenText() {
+    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
+    if (_completionFired || recordingProgress < 1) return;
+
+    if (!_recordingTargetReached) {
+      _recordingTargetReached = true;
+      Logger.debug('Speech profile recording target reached; finalizing after a pause');
+      _completionCapTimer = Timer(completionCap, _completeOnTarget);
+    }
+    // Still talking: wait for a pause so the last sentence is not cut off.
+    _completionGraceTimer?.cancel();
+    _completionGraceTimer = Timer(completionGrace, _completeOnTarget);
+  }
+
+  void _completeOnTarget() {
+    final started = _recordingStartedAt;
+    if (started != null) {
+      final elapsed = clock.now().difference(started);
+      if (elapsed < minUploadDuration) {
+        final wait = minUploadDuration - elapsed;
+        Logger.debug(
+            'Recording target reached after ${elapsed.inMilliseconds}ms; waiting ${wait.inMilliseconds}ms to meet upload floor');
+        _completionGraceTimer?.cancel();
+        _completionGraceTimer = Timer(wait, _completeOnTarget);
+        return;
+      }
+    }
+    _cancelCompletionTimers();
+    _completionFired = true;
+    finalize();
+  }
+
+  void _cancelCompletionTimers() {
+    _completionGraceTimer?.cancel();
+    _completionCapTimer?.cancel();
+    _completionGraceTimer = null;
+    _completionCapTimer = null;
+  }
+
   @override
-  void onConnected() {}
+  void onConnected() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+  }
 }

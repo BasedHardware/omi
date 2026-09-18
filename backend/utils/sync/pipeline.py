@@ -29,6 +29,7 @@ from pydub import AudioSegment
 from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,
     RUN_LOCK_RENEWAL_SAFETY_SECONDS,
@@ -64,14 +65,24 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
-from models.conversation import CreateConversation
+from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
+from models.geolocation import Geolocation
 from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
-from utils.executors import db_executor, run_blocking, start_background_task, storage_executor, sync_executor
+from utils.executors import (
+    db_executor,
+    postprocess_executor,
+    run_blocking,
+    start_background_task,
+    storage_executor,
+    submit_with_context,
+    sync_executor,
+)
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
@@ -107,16 +118,16 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
-from utils.stt.speaker_embedding import (
-    SPEAKER_MATCH_THRESHOLD,
-    compare_embeddings,
-    extract_embedding_from_bytes,
-)
+from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_match import select_speaker_match
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
+from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
+from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
+from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
@@ -127,7 +138,6 @@ MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 
 # Valid terminal segment results — a transcript, or audio with no speech. All else is a failure.
 _NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
-_SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet'}
 _PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
 _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _SYNC_FAILURE_REASON_CODES = {
@@ -149,20 +159,6 @@ _SYNC_FAILURE_REASON_CODES = {
     'sync_vad_failed',
     'sync_worker_stale',
 }
-
-
-def _bounded_sync_model(model: str | None) -> str:
-    normalized = (model or '').strip().lower()
-    return normalized if normalized in _SYNC_STT_MODELS else 'unknown'
-
-
-def _bounded_sync_lane(lane: str | None) -> str:
-    return lane if lane in {SyncLane.FRESH.value, SyncLane.BACKFILL.value} else 'unknown'
-
-
-def _bounded_exception_type(error: BaseException) -> str:
-    name = error.__class__.__name__
-    return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
 
 
 async def _resolve_fair_use_soft_cap_plan(uid: str):
@@ -761,6 +757,13 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
         del aseg
 
 
+def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> None:
+    """Load the webhook surface only in the post-processing worker that uses it."""
+    from utils.webhooks import conversation_created_webhook
+
+    asyncio.run(conversation_created_webhook(uid, conversation))
+
+
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
     """
     Reprocess a conversation after new segments have been added.
@@ -776,14 +779,25 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
 
-    process_conversation(
+    was_discarded = conversation.discarded
+    processed_conversation = process_conversation(
         uid=uid,
         language_code=language or 'en',
         conversation=conversation,
         force_process=True,
         is_reprocess=True,
+        bypass_jit_first_open=True,
         persistence_observer=_require_current_conversation_persistence,
     )
+
+    # Limitless uploads commonly begin as a short discarded fragment and only
+    # become a real conversation after later WAL segments are merged. The
+    # initial discarded pass is not a useful creation event, while the generic
+    # reprocess path deliberately suppresses webhooks. Emit exactly at the
+    # discarded -> visible transition so pendant conversations reach developer
+    # integrations without duplicating events on ordinary later reprocessing.
+    if conversation.source == ConversationSource.limitless and was_discarded and not processed_conversation.discarded:
+        submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
@@ -937,26 +951,31 @@ def identify_speakers_for_segments(
                 logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
                 continue
 
-            # Compare only against unmatched candidates (each person can be one speaker)
-            best_match = None
-            best_distance = float('inf')
-            for person_id, data in person_embeddings_cache.items():
-                if person_id in matched_person_ids:
-                    continue
-                distance = compare_embeddings(query_embedding, data['embedding'])
-                if distance < best_distance:
-                    best_distance = distance
-                    best_match = (person_id, data['name'])
-
-            if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
-                person_id, person_name = best_match
-                speaker_to_person_map[speaker_id] = (person_id, person_name)
+            # Keep assigned candidates in the ambiguity comparison. Removing the
+            # owner after a first match must not make a similar household voice
+            # look unambiguous; apply one-person/one-speaker dedup only afterward.
+            distances = {
+                person_id: compare_embeddings(query_embedding, data['embedding'])
+                for person_id, data in person_embeddings_cache.items()
+            }
+            decision = select_speaker_match(distances)
+            accepted = decision.person_id is not None and decision.person_id not in matched_person_ids
+            logger.info(
+                'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s',
+                uid,
+                speaker_id,
+                seg_duration,
+                decision.best_id,
+                decision.best_distance,
+                decision.runner_up_distance,
+                accepted,
+            )
+            if accepted and decision.person_id is not None:
+                person_id = decision.person_id
+                speaker_to_person_map[speaker_id] = (person_id, person_embeddings_cache[person_id]['name'])
                 segment_person_assignment_map[best_seg.id] = person_id
                 matched_person_ids.add(person_id)
-                logger.info(
-                    f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
-                    f'(distance={best_distance:.3f}) uid={uid}'
-                )
 
     # Text-based detection runs independently for all unmatched speakers.
     # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
@@ -1044,6 +1063,7 @@ def process_segment(
     client_platform: Optional[str] = None,
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
+    geolocation: Optional[Geolocation] = None,
 ):
     provider = 'unknown'
     model = 'unknown'
@@ -1134,7 +1154,9 @@ def process_segment(
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
         if target_conversation_id:
-            closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
+            closest_memory = conversations_db.get_conversation(
+                uid, target_conversation_id, read_site=FirestoreReadSite.SYNC_PIPELINE_TARGET_CONVERSATION
+            )
             if not conversations_db.eligible_merge_target(closest_memory):
                 logger.warning(
                     f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
@@ -1155,6 +1177,7 @@ def process_segment(
                 private_cloud_sync_enabled=private_cloud_sync_enabled,
                 client_device_id=client_device_id,
                 client_platform=client_platform,
+                geolocation=geolocation,
             )
             created = process_conversation(
                 uid,
@@ -1167,6 +1190,11 @@ def process_segment(
             if private_cloud_sync_enabled:
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
+            if geolocation and not closest_memory.get('geolocation'):
+                conversations_db.update_conversation(
+                    uid, closest_memory['id'], {'geolocation': geolocation.model_dump()}
+                )
+                closest_memory['geolocation'] = geolocation.model_dump()
             transcript_segments = [s.model_dump() for s in transcript_segments]
 
             # assign timestamps to each segment
@@ -1630,6 +1658,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     should_lock: bool,
     job_dir: str,
     target_conversation_id: str = None,
+    geolocation: Optional[Geolocation] = None,
     task_mode: bool = False,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
@@ -1656,6 +1685,14 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     coordinator itself holds zero thread pool slots — only leaf operations use
     threads, and only for their actual duration.
     """
+    # Enrich raw sync geolocation (address / place id) once per job before any
+    # conversation is created. This is the single enrichment point covering both
+    # the inline and Cloud Tasks dispatch branches; it runs before the
+    # concurrency gate so no slot is held during the geocode call. The resolver
+    # keeps the caller's exact coordinates and returns the input unchanged on
+    # any geocode failure, so a miss never drops the user's location.
+    geolocation = await async_resolve_geolocation(geolocation)
+
     sync_provider = 'unknown'
     sync_model = 'unknown'
     job_outcome_recorded = False
@@ -2107,6 +2144,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     client_platform=client_platform,
                     sync_lane=sync_lane,
                     deferred_outcome=deferred_outcome,
+                    geolocation=geolocation,
                 )
                 if ok:
                     # Persist result contributions before the processed marker.

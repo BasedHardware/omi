@@ -102,6 +102,39 @@ final class ChatToolExecutorSQLTests: XCTestCase {
     try await super.tearDown()
   }
 
+  func testExecuteSQLRendersUTCTimestampInPinnedLocalTimeZone() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-tz-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (timestamp TEXT, appName TEXT)")
+      try db.execute(
+        sql: "INSERT INTO screenshots VALUES (?, ?)",
+        arguments: ["2026-08-27 19:59:51", "Claude"]
+      )
+    }
+
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT timestamp, appName FROM screenshots"],
+      dbQueue: pool,
+      expectedOwnerID: nil,
+      timeZone: timeZone
+    )
+
+    XCTAssertTrue(
+      result.contains("3:59:51 PM") || result.contains("15:59:51"),
+      "expected local 3:59:51, got \(result)")
+    XCTAssertTrue(
+      result.contains("America/New_York") || result.contains("EDT"),
+      "expected a zone token, got \(result)")
+    XCTAssertFalse(result.contains("7:59:51 PM"), "must not present UTC-as-local \(result)")
+    XCTAssertTrue(result.contains("Claude"))
+  }
+
   func testReadOnlySQLAllowsSelectAndReadOnlyCTE() {
     XCTAssertTrue(ChatToolExecutor.isReadOnlySQLStatement("SELECT * FROM screenshots LIMIT 1"))
     XCTAssertTrue(
@@ -140,6 +173,210 @@ final class ChatToolExecutorSQLTests: XCTestCase {
         "WITH words AS (SELECT 'INSERT UPDATE DELETE' AS text) SELECT text FROM words"
       )
     )
+  }
+
+  func testExecuteSQLRefusesRawOCRProjectionAndPointsToWorkContext() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-raw-ocr-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(
+        sql: "CREATE TABLE screenshots (timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT)"
+      )
+      for index in 0..<20 {
+        try db.execute(
+          sql: "INSERT INTO screenshots VALUES (?, ?, ?, ?)",
+          arguments: [
+            "2026-08-19T14:\(index):00Z",
+            "Claude",
+            "Session \(index)",
+            "raw-ocr-\(index)-\(String(repeating: "x", count: 600))",
+          ]
+        )
+      }
+    }
+
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT timestamp, windowTitle, ocrText FROM screenshots ORDER BY timestamp DESC LIMIT 20"],
+      dbQueue: pool,
+      expectedOwnerID: nil
+    )
+
+    XCTAssertFalse(result.contains("raw-ocr-"))
+    XCTAssertTrue(result.contains("Raw ocrText columns are not returned"))
+    XCTAssertTrue(result.contains("call get_work_context"))
+    XCTAssertTrue(result.contains("substr(ocrText, 1, 200)"))
+  }
+
+  func testExecuteSQLRefusesAliasedRawOCRProjection() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-aliased-ocr-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (ocrText TEXT)")
+      try db.execute(sql: "INSERT INTO screenshots VALUES (?)", arguments: ["aliased-raw-ocr"])
+    }
+
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT ocrText AS body FROM screenshots"],
+      dbQueue: pool,
+      expectedOwnerID: nil
+    )
+
+    XCTAssertFalse(result.contains("aliased-raw-ocr"))
+    XCTAssertTrue(result.contains("Raw ocrText columns are not returned"))
+  }
+
+  func testExecuteSQLAllowsBoundedOCRPreviewAndExactOCRPredicate() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-ocr-preview-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (appName TEXT, ocrText TEXT)")
+      try db.execute(
+        sql: "INSERT INTO screenshots VALUES (?, ?)",
+        arguments: ["Claude", "needle-bounded-preview-with-more-text"]
+      )
+    }
+
+    let result = await ChatToolExecutor.executeSQL(
+      [
+        "query":
+          "SELECT appName, substr(ocrText, 1, 14) AS preview FROM screenshots WHERE ocrText LIKE '%needle%'"
+      ],
+      dbQueue: pool,
+      expectedOwnerID: nil
+    )
+
+    XCTAssertTrue(result.contains("needle-bounded"))
+    XCTAssertFalse(result.contains("Raw ocrText columns are not returned"))
+  }
+
+  func testExecuteSQLCapsTotalRenderedResultSize() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-output-budget-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE probe (value TEXT)")
+      for index in 0..<100 {
+        try db.execute(
+          sql: "INSERT INTO probe VALUES (?)",
+          arguments: ["row-\(index)-\(String(repeating: "z", count: 500))"]
+        )
+      }
+    }
+
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT value FROM probe"],
+      dbQueue: pool,
+      expectedOwnerID: nil
+    )
+
+    XCTAssertLessThan(result.count, 12_500)
+    XCTAssertTrue(result.contains("Result truncated"))
+    XCTAssertTrue(result.contains("100 row(s)"))
+  }
+
+  func testEmptyScreenshotSQLPointsRecentWorkToWorkContext() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-empty-screenshots-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (appName TEXT)")
+    }
+
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT appName FROM screenshots"],
+      dbQueue: pool,
+      expectedOwnerID: nil
+    )
+
+    XCTAssertTrue(result.contains("No results"))
+    XCTAssertTrue(result.contains("call get_work_context"))
+  }
+
+  func testExecuteSQLRendersStoredGRDBDateInPinnedLocalTimeWithZoneLabel() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-datetime-localization-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    // 2026-08-27T19:59:51Z — the exact UTC instant from #12321's repro.
+    let utcInstant = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-27T19:59:51Z"))
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (appName TEXT, timestamp DATETIME NOT NULL)")
+      try db.execute(
+        sql: "INSERT INTO screenshots (appName, timestamp) VALUES (?, ?)",
+        arguments: ["Claude", utcInstant]
+      )
+    }
+
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT appName, timestamp FROM screenshots"],
+      dbQueue: pool,
+      expectedOwnerID: nil,
+      timeZone: timeZone
+    )
+
+    XCTAssertTrue(
+      result.contains("2026-08-27 3:59:51 PM"),
+      "expected pinned local+zone rendering in result:\n\(result)"
+    )
+    XCTAssertTrue(result.contains("(America/New_York)"))
+    XCTAssertFalse(result.contains("2026-08-27 19:59:51"))
+  }
+
+  func testExecuteSQLRejectsProjectedLocaltimeButAllowsUTCBoundaryConversion() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-localtime-projection-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (timestamp DATETIME NOT NULL)")
+      try db.execute(sql: "INSERT INTO screenshots VALUES (datetime('now'))")
+    }
+
+    let utc = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+    let boundaryResult = await ChatToolExecutor.executeSQL(
+      [
+        "query": """
+        SELECT timestamp FROM screenshots
+        WHERE timestamp >= datetime('now', 'localtime', 'start of day', 'utc')
+        """
+      ],
+      dbQueue: pool,
+      expectedOwnerID: nil,
+      timeZone: utc
+    )
+    XCTAssertFalse(boundaryResult.contains("keep timestamp result expressions in UTC"))
+    XCTAssertTrue(boundaryResult.contains("timestamp"))
+
+    let projectedResult = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT datetime(timestamp, 'localtime') AS timestamp FROM screenshots"],
+      dbQueue: pool,
+      expectedOwnerID: nil,
+      timeZone: utc
+    )
+    XCTAssertTrue(projectedResult.contains("keep timestamp result expressions in UTC"))
   }
 
   func testSQLAuthorizationIsOutsideSwiftPhysicalPreconditions() {

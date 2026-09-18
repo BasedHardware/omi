@@ -20,12 +20,29 @@ enum ContextTitleNormalizer {
     result = replacing(#"\b\d+[×x]\d+\b"#, in: result)
 
     let app = appName?.lowercased() ?? ""
-    if app.contains("telegram") || app.contains("slack") || app.contains("discord") {
+    let isMessagingApp =
+      app.contains("telegram") || app.contains("slack") || app.contains("discord")
+    let isBrowser =
+      app.contains("chrome") || app.contains("safari") || app.contains("firefox")
+      || app.contains("arc") || app.contains("edge") || app.contains("brave")
+      || app.contains("vivaldi") || app.contains("opera")
+
+    if isMessagingApp || isBrowser {
+      // A *leading* `(4) ` is the web unread badge, never identity: `(4) Home / X`
+      // and `Home / X` are one page. Titles do not otherwise begin with a bare
+      // parenthesized number, so this stays safe outside messaging apps — unlike
+      // the trailing form below, where `Issue (123)` is genuinely identity.
+      result = replacing(#"^\s*\(\d+\)\s*"#, in: result)
+      result = replacing(#"^\s*\[\d+\]\s*"#, in: result)
+    }
+    if isMessagingApp {
       // Messaging apps append unread counts to the conversation title. Keep this
       // app-scoped: `(123)` in a document title is identity, not cosmetic noise.
       result = replacing(#"\s*\(\d+\)\s*$"#, in: result)
       result = replacing(#"\s*\[\d+\]\s*$"#, in: result)
-      result = replacing(#"\s*[-–—]\s*\d+\s+(new\s+)?messages?\s*$"#, in: result)
+      // `item(s)` covers Slack's web title, which reads "- 1 new item" rather
+      // than "- 1 new message" and so never matched the original pattern.
+      result = replacing(#"\s*[-–—]\s*\d+\s+(new\s+)?(messages?|items?)\s*$"#, in: result)
     }
     if app.contains("terminal") || app.contains("iterm") || app.contains("warp") {
       result = replacing(#"\s+[-–—]\s+(zsh|bash|fish)\s*$"#, in: result)

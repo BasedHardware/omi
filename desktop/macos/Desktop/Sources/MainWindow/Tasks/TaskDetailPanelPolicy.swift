@@ -5,7 +5,6 @@ import Foundation
 enum TaskDetailPanelAction: String, CaseIterable, Hashable {
   case toggleCompletion
   case edit
-  case execute
   case openThread
   case decreaseIndent
   case increaseIndent
@@ -18,6 +17,7 @@ enum TaskDetailSourceRoute: Equatable {
   case capture(id: String)
   case memory(id: String)
   case rewind
+  case rewindFrame(id: Int64)
   case external(URL)
 }
 
@@ -79,14 +79,14 @@ struct TaskDetailPanelState: Equatable {
 enum TaskDetailPanelPresentationPolicy {
   static func showsHoverActions(
     isRowHovering: Bool,
-    isPriorityPickerPresented: Bool,
+    isKeyboardSelected: Bool = false,
     isMultiSelectMode: Bool,
     isDeletedTask: Bool,
     isTextFieldFocused: Bool,
     isDetailPanelPresented: Bool
   ) -> Bool {
     guard !isDetailPanelPresented else { return false }
-    return (isRowHovering || isPriorityPickerPresented)
+    return (isRowHovering || isKeyboardSelected)
       && !isMultiSelectMode
       && !isDeletedTask
       && !isTextFieldFocused
@@ -102,9 +102,6 @@ enum TaskDetailPanelActionPolicy {
     var actions: Set<TaskDetailPanelAction> = [
       .toggleCompletion, .edit, .copyLink, .delete,
     ]
-    if !task.completed {
-      actions.insert(.execute)
-    }
     if hasChat {
       actions.insert(.openThread)
     }
@@ -160,12 +157,25 @@ enum TaskDetailSourceLinkPolicy {
         subtitle = evidenceID
         systemImage = "brain.head.profile"
       case .local_screen:
-        // Rewind is the established desktop source surface. The current
-        // Rewind page has no selection/deep-link contract for a frame id, so
-        // do not pretend the opaque evidence id selects a particular frame.
-        route = .rewind
-        title = "Screen context"
-        subtitle = "Open Rewind"
+        if let screenshotID = RewindEvidenceCardPolicy.card(
+          for: evidence,
+          currentDeviceID: ClientDeviceService.shared.clientDeviceId
+        )?.screenshotID {
+          route = .rewindFrame(id: screenshotID)
+          title = "Screen evidence"
+          subtitle = "Open Rewind · frame \(screenshotID)"
+        } else {
+          // Every screen ref this policy cannot resolve to an exact frame —
+          // `capture.v2` rows written before the frame contract existed, refs
+          // from another Mac, legacy nil versions — still had a source row
+          // before the frame deep link shipped. Rewind is the established
+          // desktop surface and the page itself is always a valid
+          // destination, so fall back to it rather than dropping the only
+          // provenance the task has.
+          route = .rewind
+          title = "Screen context"
+          subtitle = "Open Rewind"
+        }
         systemImage = "rectangle.dashed.and.paperclip"
       case .external:
         guard let url = URL(string: evidenceID), url.scheme != nil else { continue }
@@ -233,9 +243,7 @@ enum TaskDetailSourceLinkPolicy {
     if !task.tags.isEmpty {
       fields.append(TaskDetailField(label: "Tags", value: task.tags.joined(separator: ", ")))
     }
-    if let priority = task.priority, !priority.isEmpty {
-      fields.append(TaskDetailField(label: "Priority", value: priority.capitalized))
-    }
+    // Priority is not a read-only field here — the panel edits it directly.
     if let source = task.source, !source.isEmpty {
       fields.append(TaskDetailField(label: "Source", value: "\(task.sourceLabel) (\(source))"))
     }
@@ -260,15 +268,6 @@ enum TaskDetailSourceLinkPolicy {
     }
     if let confidence = task.confidence {
       fields.append(TaskDetailField(label: "Confidence", value: "\(Int(confidence * 100))%"))
-    }
-    if let agentStatus = task.agentStatus, !agentStatus.isEmpty {
-      fields.append(TaskDetailField(label: "Agent", value: agentStatus.capitalized))
-    }
-    if let files = task.agentEditedFiles, !files.isEmpty {
-      fields.append(TaskDetailField(label: "Edited files", value: files.joined(separator: ", ")))
-    }
-    if let prompt = task.agentPrompt, !prompt.isEmpty {
-      fields.append(TaskDetailField(label: "Agent prompt", value: String(prompt.prefix(2000))))
     }
     fields.append(contentsOf: metadataFields(for: task))
     return fields
@@ -314,6 +313,7 @@ enum TaskDetailSourceLinkPolicy {
     case .capture(let id): return "capture:\(id)"
     case .memory(let id): return "memory:\(id)"
     case .rewind: return "rewind"
+    case .rewindFrame(let id): return "rewind:\(id)"
     case .external(let url): return "external:\(url.absoluteString)"
     }
   }

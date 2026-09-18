@@ -1,7 +1,8 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
 
+from datetime import timedelta
 import xml.etree.ElementTree as ET
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -22,6 +23,12 @@ from routers.updates import (
     _preview_download_landing_html,
     _xml_attr,
     router as updates_router,
+)
+from desktop_download_page import (
+    PRODUCT_HUNT_BADGE_ENDS_AT,
+    download_landing_html,
+    install_steps_html,
+    product_hunt_badge_html,
 )
 from database.desktop_update_policy import get_desktop_update_policy
 
@@ -719,7 +726,7 @@ class TestAppcastEndpoint:
     async def test_returns_xml_with_items(self):
         mock_releases = [
             {
-                "channel": "beta",
+                "channel": "stable",
                 "release": {
                     "published_at": "2026-03-01T00:00:00Z",
                     "body": "",
@@ -735,7 +742,7 @@ class TestAppcastEndpoint:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/xml"
         assert "<item>" in resp.text
-        assert "sparkle:channel>beta<" in resp.text
+        assert "<sparkle:channel>" not in resp.text
 
     @pytest.mark.asyncio
     async def test_404_when_no_releases(self):
@@ -748,7 +755,7 @@ class TestAppcastEndpoint:
     async def test_deduplicates_by_channel(self):
         mock_releases = [
             {
-                "channel": "beta",
+                "channel": "stable",
                 "release": {
                     "published_at": "2026-03-02T00:00:00Z",
                     "body": "",
@@ -758,7 +765,7 @@ class TestAppcastEndpoint:
                 "metadata": {},
             },
             {
-                "channel": "beta",
+                "channel": "stable",
                 "release": {
                     "published_at": "2026-03-01T00:00:00Z",
                     "body": "",
@@ -778,7 +785,7 @@ class TestAppcastEndpoint:
     async def test_skips_release_without_zip(self):
         mock_releases = [
             {
-                "channel": "beta",
+                "channel": "stable",
                 "release": {"published_at": "2026-03-01T00:00:00Z", "body": "", "assets": [_dmg_asset()]},
                 "version_info": {"version": "1.0.0+100", "build": "100"},
                 "metadata": {},
@@ -807,10 +814,9 @@ class TestAppcastEndpoint:
 
     @pytest.mark.asyncio
     async def test_appcast_never_exposes_implicit_stable_item_when_only_beta_resolves(self):
-        """#9528: legacy Sparkle treats untagged items as stable-default.
-
-        A beta-only resolved feed must tag every <item> with sparkle:channel=beta
-        so no untagged item can be mistaken for stable.
+        """A beta-only resolved feed must tag every <item> with sparkle:channel=beta
+        so no untagged item can be mistaken for stable. That contract lives on
+        identity=beta; the default feed must not include the beta item at all.
         """
         mock_releases = [
             {
@@ -818,24 +824,29 @@ class TestAppcastEndpoint:
                 "release": {
                     "published_at": "2026-03-01T00:00:00Z",
                     "body": "",
-                    "assets": [_zip_asset("https://example.com/Omi-beta.zip")],
+                    "assets": [
+                        _zip_asset("https://example.com/Omi-beta.zip"),
+                        _beta_zip_asset("https://example.com/Omi.Beta.zip"),
+                    ],
                 },
                 "version_info": {"version": "2.0.0+200", "build": "200"},
-                "metadata": {"edSignature": "beta-sig"},
+                "metadata": {"edSignature": "beta-sig", "betaEdSignature": "beta-id-sig"},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                resp = await client.get("/v2/desktop/appcast.xml")
-        assert resp.status_code == 200
-        assert resp.text.count("<item>") == 1
-        assert resp.text.count("<sparkle:channel>beta</sparkle:channel>") == 1
-        # No untagged item that legacy clients could treat as stable-default.
-        assert resp.text.count("<item>") == resp.text.count("<sparkle:channel>beta</sparkle:channel>")
+                default_resp = await client.get("/v2/desktop/appcast.xml")
+                beta_resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+        assert default_resp.status_code == 200
+        assert default_resp.text.count("<item>") == 0
+        assert beta_resp.status_code == 200
+        assert beta_resp.text.count("<item>") == 1
+        assert beta_resp.text.count("<sparkle:channel>beta</sparkle:channel>") == 1
+        assert beta_resp.text.count("<item>") == beta_resp.text.count("<sparkle:channel>beta</sparkle:channel>")
 
     @pytest.mark.asyncio
-    async def test_appcast_stable_item_is_untagged_and_beta_item_is_explicit(self):
-        """#9528: stable must be the implicit Sparkle default; beta must be tagged."""
+    async def test_appcast_stable_identity_omits_beta_channel_items(self):
+        """Stable.app must not Sparkle-install beta-channel Omi.zip (Mechanism 2 freeze)."""
         mock_releases = [
             {
                 "channel": "stable",
@@ -862,16 +873,10 @@ class TestAppcastEndpoint:
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/appcast.xml")
         assert resp.status_code == 200
-        assert resp.text.count("<item>") == 2
-        assert resp.text.count("<sparkle:channel>beta</sparkle:channel>") == 1
+        assert resp.text.count("<item>") == 1
         assert "https://example.com/Omi-stable.zip" in resp.text
-        assert "https://example.com/Omi-beta.zip" in resp.text
-
-        items = resp.text.split("<item>")[1:]
-        stable_item = next(item for item in items if "Omi-stable.zip" in item)
-        beta_item = next(item for item in items if "Omi-beta.zip" in item)
-        assert "<sparkle:channel>" not in stable_item.split("</item>")[0]
-        assert "<sparkle:channel>beta</sparkle:channel>" in beta_item.split("</item>")[0]
+        assert "https://example.com/Omi-beta.zip" not in resp.text
+        assert "<sparkle:channel>" not in resp.text
 
 
 # --- Download endpoint ---
@@ -939,7 +944,7 @@ class TestDownloadEndpoint:
             {
                 "channel": "beta",
                 "version_info": {"version": "1.0.0+100", "build": "100"},
-                "release": {"assets": [_dmg_asset("https://example.com/older-beta.dmg")]},
+                "release": {"assets": [_beta_dmg_asset("https://example.com/older-beta.dmg")]},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
@@ -1379,7 +1384,10 @@ class TestDesktopUpdateAdminEndpoints:
             "idempotent": False,
         }
         admit.assert_called_once_with(manifest, control_generation=7)
-        invalidate.assert_called_once_with("desktop_update_pointer:macos:beta")
+        assert invalidate.call_args_list == [
+            call("github_releases_desktop"),
+            call("desktop_update_pointer:macos:beta"),
+        ]
 
     @pytest.mark.asyncio
     async def test_signed_beta_candidate_rejection_writes_nothing_and_never_invalidates_stable(self):
@@ -1408,7 +1416,7 @@ class TestDesktopUpdateAdminEndpoints:
         invalidate.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_signed_beta_candidate_idempotent_receipt_repairs_only_the_beta_cache_after_the_transaction(self):
+    async def test_signed_beta_candidate_idempotent_receipt_repairs_release_and_beta_caches_after_transaction(self):
         manifest = {"release_id": "v0.12.93+12093-macos"}
         receipt = {"manifest": manifest, "pointer": {"generation": 7}, "idempotent": True}
         with (
@@ -1426,7 +1434,10 @@ class TestDesktopUpdateAdminEndpoints:
                 )
 
         assert response.status_code == 200
-        invalidate.assert_called_once_with("desktop_update_pointer:macos:beta")
+        assert invalidate.call_args_list == [
+            call("github_releases_desktop"),
+            call("desktop_update_pointer:macos:beta"),
+        ]
 
     @pytest.mark.asyncio
     async def test_registers_immutable_manifest(self):
@@ -1545,8 +1556,52 @@ class TestDesktopUpdateAdminEndpoints:
             expected_generation=9,
             expected_current_release_id="v0.12.86+12086-macos",
             operation="repoint",
+            serving_backends=None,
         )
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:stable")
+
+    @pytest.mark.asyncio
+    async def test_promote_rejects_unknown_serving_backend_keys_and_malformed_shas(self):
+        serving = {
+            "desktop_backend": {
+                "release_sha": "a" * 40,
+                "release_channel": "production",
+                "chat_contract_version": "1",
+                "health_url": "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+            },
+            "api_backend": {"release_sha": "b" * 40, "health_url": "https://api.omi.me/health"},
+            "captured_at": "2026-09-01T15:35:00Z",
+        }
+        with patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                unknown = await client.post(
+                    "/v2/desktop/channels/promote",
+                    headers={"secret-key": "real-secret"},
+                    json={
+                        "platform": "macos",
+                        "channel": "stable",
+                        "release_id": "v0.12.254+12254-macos",
+                        "expected_generation": 1,
+                        "serving_backends": {**serving, "extra": "nope"},
+                    },
+                )
+                bad_sha = await client.post(
+                    "/v2/desktop/channels/promote",
+                    headers={"secret-key": "real-secret"},
+                    json={
+                        "platform": "macos",
+                        "channel": "stable",
+                        "release_id": "v0.12.254+12254-macos",
+                        "expected_generation": 1,
+                        "serving_backends": {
+                            **serving,
+                            "desktop_backend": {**serving["desktop_backend"], "release_sha": "DEADBEEF"},
+                        },
+                    },
+                )
+
+        assert unknown.status_code == 422
+        assert bad_sha.status_code == 422
 
 
 # --- Update policy endpoint ---
@@ -1817,7 +1872,7 @@ class TestBetaIdentityServing:
         assert "stable-sig" not in xml
 
     @pytest.mark.asyncio
-    async def test_appcast_default_identity_is_unchanged_by_beta_assets(self):
+    async def test_appcast_default_identity_omits_beta_channel_entirely(self):
         entries = [
             _beta_live_entry(
                 channel="beta",
@@ -1830,8 +1885,9 @@ class TestBetaIdentityServing:
                 resp = await client.get("/v2/desktop/appcast.xml")
 
         assert resp.status_code == 200
+        assert resp.text.count("<item>") == 0
         assert "Omi.Beta.zip" not in resp.text
-        assert "https://example.com/Omi.zip" in resp.text
+        assert "https://example.com/Omi.zip" not in resp.text
 
     @pytest.mark.asyncio
     async def test_appcast_identity_beta_omits_releases_without_beta_artifacts(self):
@@ -1924,20 +1980,89 @@ class TestBetaIdentityServing:
         assert "https://example.com/omi.dmg" in resp.text
 
     @pytest.mark.asyncio
-    async def test_download_beta_endpoint_falls_back_to_stable_dmg_pre_rollout(self):
-        # Public macos.omi.me/beta must not 404 while no live beta release ships
-        # beta-identity artifacts; the strict guard stays on the Sparkle feed.
+    async def test_download_beta_endpoint_does_not_fall_back_to_stable_dmg(self):
+        # A "get Beta" link must never install Omi.app. Missing beta-identity
+        # artifacts fail closed instead of serving omi.dmg.
         entries = [
             _beta_live_entry(channel="beta", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "sig"}),
         ]
         with (
             patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
             patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[]),
-            patch("routers.updates.record_fallback") as fallback,
         ):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/beta")
 
-        assert resp.status_code == 200
-        assert "https://example.com/omi.dmg" in resp.text
-        fallback.assert_called_once()
+        assert resp.status_code == 404
+        assert "omi.dmg" not in resp.text
+
+
+class TestDownloadLandingInstallSteps:
+    """The landing page's install guidance is illustrated cards, not a text list."""
+
+    def test_macos_steps_name_the_dmg_the_drag_and_the_launch(self):
+        html = install_steps_html("macos")
+
+        assert html.count('class="step"') == 3
+        assert "omi.dmg" in html
+        assert "Applications" in html
+        # The old plain-text list is gone: no "1." / "2." prefixes, no <br> ladder.
+        assert "1. Open the downloaded" not in html
+
+    def test_windows_steps_cover_smartscreen(self):
+        html = install_steps_html("windows")
+
+        assert html.count('class="step"') == 3
+        assert "omi-setup.exe" in html
+        assert "Run anyway" in html
+
+    def test_download_status_is_one_chip_not_a_stack(self):
+        """The old page stacked six centered elements above the video: headline,
+        version, badge, status text, a large checkmark, and a fallback link. The
+        status is now a single chip and the fallback link folds into the meta line."""
+        html = download_landing_html("https://example.com/omi.dmg", version="0.12.264")
+
+        assert html.count('class="status-chip"') == 1
+        # the separate spinner/checkmark block and its standalone copy are gone
+        assert 'class="checkmark"' not in html
+        assert 'id="status-icon"' not in html
+        assert "Your download should start automatically" not in html
+        # the chip says where the file went, not that a process completed
+        assert "Downloading" in html and "Download started" not in html
+        # the manual fallback survives, inline in the meta line rather than on its own row
+        assert 'class="meta"' in html
+        assert html.count('class="download-link"') == 1
+
+    def test_landing_page_renders_the_steps_below_the_video(self):
+        html = download_landing_html("https://example.com/omi.dmg", version="0.12.264")
+
+        assert html.index('id="demo-video"') < html.index('class="steps"')
+        assert "Installation steps:" not in html
+
+
+class TestProductHuntBadge:
+    """Launch-day badge: visible during the window, gone afterwards, no code change needed."""
+
+    def test_badge_renders_during_the_launch_window(self):
+        html = product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT - timedelta(hours=1))
+
+        assert "post_id=1240025" in html
+        assert 'rel="noopener noreferrer"' in html
+
+    def test_badge_disappears_once_the_window_closes(self):
+        assert product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT) == ""
+        assert product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT + timedelta(days=1)) == ""
+
+    def test_badge_cache_buster_advances_with_the_hour(self):
+        # Product Hunt bakes the vote count into the SVG, so a fixed `t` would freeze it.
+        first = product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT - timedelta(hours=3))
+        second = product_hunt_badge_html(PRODUCT_HUNT_BADGE_ENDS_AT - timedelta(hours=2))
+
+        assert first != second
+
+    def test_landing_page_drops_the_badge_after_the_window(self):
+        html = download_landing_html("https://example.com/omi.dmg", version="0.12.264")
+
+        # Renders today; the gate is exercised directly above. Guard the markup contract
+        # so a future edit cannot leave a dangling empty anchor behind.
+        assert html.count('class="ph-badge"') <= 1

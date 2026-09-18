@@ -221,9 +221,38 @@ def test_python_memory_query_and_filter_semantics():
     assert ("created_at", ">=", datetime.fromisoformat(data["start_date"])) in filters
     assert ("created_at", "<=", datetime.fromisoformat(data["end_date"])) in filters
     assert fake_db.orders == [("scoring", "DESCENDING"), ("created_at", "DESCENDING")]
-    assert fake_db.limit_value == data["limit"]
-    assert fake_db.offset_value == data["offset"]
-    assert [memory["id"] for memory in result] == ["active"]
+
+    # Deliberate pin update (#12713). This used to assert limit_value == data["limit"]
+    # and offset_value == data["offset"] -- that a raw Firestore limit/offset was applied
+    # to the scoring stream. That is precisely the defect: limit/offset were applied
+    # before user_review / invalid_at were filtered in Python, so a hidden row inside the
+    # raw page stole a visible slot and the page came back short. Keeping the old pin
+    # would pin the bug.
+    #
+    # The contract is now the visible page: no raw offset at all, and a first read of
+    # exactly the documents the page needs when nothing is hidden -- which is the same
+    # document count the old query streamed, so this is not a read-cost regression.
+    assert fake_db.offset_value is None, "a visible page must never advance a raw Firestore offset"
+    assert fake_db.limit_value == data["offset"] + data["limit"]
+
+    # The fixture's offset (4) is past the only visible row, so the correct page is empty.
+    # This assertion used to read ["active"], which passed only because the fake recorded
+    # offset_value without applying it -- the raw offset was asserted but never exercised,
+    # so the old contract could not tell a correct page from a mis-paginated one.
+    assert [memory["id"] for memory in result] == []
+
+    # Visibility filtering itself, pinned at offset 0 where the page is reachable.
+    fake_db = FakeQuery([active, rejected, invalidated])
+    first_page = memories_db.get_memories(
+        "contract-user-8547",
+        limit=data["limit"],
+        offset=0,
+        categories=data["categories"],
+        start_date=datetime.fromisoformat(data["start_date"]),
+        end_date=datetime.fromisoformat(data["end_date"]),
+        firestore_client=fake_db,
+    )
+    assert [memory["id"] for memory in first_page] == ["active"]
 
     fake_db = FakeQuery([active, rejected, invalidated])
     result = memories_db.get_memories("contract-user-8547", include_invalidated=True, firestore_client=fake_db)

@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
@@ -13,6 +14,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/wal_sync_upload.dart';
 
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
@@ -74,7 +76,7 @@ Future<List<ServerConversation>> getConversations({
 // succeeded. An empty `items` with `ok == false` means the fetch failed
 // (no response / non-200, e.g. auth token not ready right after a cold
 // start) — which callers must NOT treat as "the user has no conversations".
-Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
+Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
@@ -84,25 +86,20 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   String? folderId,
   bool? starred,
 }) async {
-  String url =
-      '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
-
-  // Add date filters if provided
-  if (startDate != null) {
-    url += '&start_date=${startDate.toUtc().toIso8601String()}';
-  }
-  if (endDate != null) {
-    url += '&end_date=${endDate.toUtc().toIso8601String()}';
-  }
-  if (folderId != null) {
-    url += '&folder_id=$folderId';
-  }
-  if (starred != null) {
-    url += '&starred=$starred';
-  }
+  String url = conversationCollectionUrl(
+    Env.apiBaseUrl ?? '',
+    limit: limit,
+    offset: offset,
+    statuses: statuses,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    folderId: folderId,
+    starred: starred,
+  );
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return (items: <ServerConversation>[], ok: false);
+  if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
@@ -110,10 +107,10 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
         .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
         .toList();
     Logger.debug('getConversations length: ${memories.length}');
-    return (items: memories, ok: true);
+    return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
-  return (items: <ServerConversation>[], ok: false);
+  return (items: <ServerConversation>[], ok: false, truncated: false);
 }
 
 Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
@@ -232,6 +229,27 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
+/// Fetch calendar events in [start, end] that have no recorded conversation.
+/// Returns capture-gap rows (never conversations), or an empty list on error.
+Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({required DateTime start, required DateTime end}) async {
+  final url =
+      '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return (jsonDecode(body) as List<dynamic>)
+        .map(
+          (row) =>
+              CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>)),
+        )
+        .toList();
+  }
+  // 400 means no connected calendar — nothing was captured, so nothing to show.
+  debugPrint('getCalendarCaptureGaps: ${response.statusCode} - ${response.body}');
+  return [];
+}
+
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
@@ -257,6 +275,112 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
 
 Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
+}
+
+String conversationCollectionUrl(
+  String baseUrl, {
+  int limit = 50,
+  int offset = 0,
+  List<ConversationStatus> statuses = const [],
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? folderId,
+  bool? starred,
+}) {
+  final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  var url =
+      '${root}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
+  if (startDate != null) {
+    url += '&start_date=${startDate.toUtc().toIso8601String()}';
+  }
+  if (endDate != null) {
+    url += '&end_date=${endDate.toUtc().toIso8601String()}';
+  }
+  if (folderId != null) {
+    url += '&folder_id=$folderId';
+  }
+  if (starred != null) {
+    url += '&starred=$starred';
+  }
+  return url;
+}
+
+/// Typed conversation list/detail. Legacy [getConversations]/[getConversationById]
+/// stay for unmigrated callers; 403/503/missing are distinct here instead of null.
+class ConversationApi {
+  ConversationApi({required String baseUrl, ApiSend? send})
+      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+        _send = send;
+
+  final String _baseUrl;
+  final ApiSend? _send;
+
+  Future<ApiResult<List<ServerConversation>>> list({
+    int limit = 50,
+    int offset = 0,
+    List<ConversationStatus> statuses = const [],
+    bool includeDiscarded = true,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? folderId,
+    bool? starred,
+  }) async {
+    final sent = await executeApi<String>(
+      request: ApiRequest(
+        url: conversationCollectionUrl(
+          _baseUrl,
+          limit: limit,
+          offset: offset,
+          statuses: statuses,
+          includeDiscarded: includeDiscarded,
+          startDate: startDate,
+          endDate: endDate,
+          folderId: folderId,
+          starred: starred,
+        ),
+        method: 'GET',
+      ),
+      send: _send,
+      decode: (body) => body,
+    );
+    return switch (sent) {
+      ApiFailure(:final problem) => ApiFailure(problem),
+      ApiSuccess(:final data) => decodeApiRows<ServerConversation>(
+          data,
+          ServerConversation.fromJson,
+          fallback: recordFallback,
+        ),
+    };
+  }
+
+  Future<ApiResult<ServerConversation>> byId(String id) {
+    return executeApi<ServerConversation>(
+      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      send: _send,
+      decode: (body) {
+        final decoded = jsonDecode(body);
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('conversation detail is not an object');
+        }
+        return ServerConversation.fromJson(decoded);
+      },
+    );
+  }
+}
+
+/// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy
+/// inline base64 photos continue to render without a network round trip.
+Future<Uint8List?> getConversationPhotoImage(String conversationId, String photoId) async {
+  final response = await makeApiCall(
+    url:
+        '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/photos/${Uri.encodeComponent(photoId)}/image',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response?.statusCode != 200) return null;
+  return response!.bodyBytes;
 }
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {
@@ -298,12 +422,14 @@ class TranscriptsResponse {
   List<TranscriptSegment> soniox;
   List<TranscriptSegment> whisperx;
   List<TranscriptSegment> speechmatics;
+  List<TranscriptSegment> prerecorded;
 
   TranscriptsResponse({
     this.deepgram = const [],
     this.soniox = const [],
     this.whisperx = const [],
     this.speechmatics = const [],
+    this.prerecorded = const [],
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
@@ -328,6 +454,7 @@ class TranscriptsResponse {
       soniox: readSegments('soniox'),
       whisperx: readSegments('whisperx'),
       speechmatics: readSegments('speechmatics'),
+      prerecorded: readSegments('prerecorded'),
     );
   }
 }
@@ -455,6 +582,16 @@ class UploadFilesResult {
   bool get isQueued => jobId != null;
 }
 
+class SyncUploadHttpException implements Exception {
+  final int statusCode;
+  final String message;
+
+  const SyncUploadHttpException(this.statusCode, this.message);
+
+  @override
+  String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
+}
+
 /// Server-provided classification for a sync upload HTTP 429.
 ///
 /// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
@@ -562,10 +699,10 @@ int? _parseRetryAfterSeconds(http.Response response) {
 ///
 /// The application-generated restriction response carries this bounded header.
 /// Everything else remains a generic backend-capacity limit.
-SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
-    response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-        ? SyncRateLimitKind.fairUse
-        : SyncRateLimitKind.backendCapacity;
+SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
+  final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
+  return reason == 'fair_use' ? SyncRateLimitKind.fairUse : SyncRateLimitKind.backendCapacity;
+}
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
@@ -578,7 +715,9 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
   bool claimLiveCapture = false,
+  Geolocation? geolocation,
 }) async {
+  assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
   String? captureManifest;
   if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
@@ -590,7 +729,10 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   var response = await makeMultipartApiCall(
     url: url,
     files: files,
-    headers: {if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest},
+    headers: {
+      if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+      if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
+    },
     onUploadProgress: onUploadProgress,
   );
 
@@ -613,9 +755,11 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     return UploadFilesResult.queued(start.jobId);
   }
   if (response.statusCode == 400) {
-    throw Exception('Audio file could not be processed by server');
+    throw SyncUploadHttpException(response.statusCode, 'Audio file could not be processed by server');
+  } else if (response.statusCode == 401 || response.statusCode == 403) {
+    throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
   } else if (response.statusCode == 413) {
-    throw Exception('Audio file is too large to upload');
+    throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload');
   } else if (response.statusCode == 429 ||
       (response.statusCode == 503 &&
           response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'backfill_capacity')) {
@@ -626,9 +770,9 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
-    throw Exception('Server is temporarily unavailable');
+    throw SyncUploadHttpException(response.statusCode, 'Server is temporarily unavailable');
   }
-  throw Exception('Upload failed unexpectedly');
+  throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
 }
 
 /// Why a single job-status fetch did not yield a usable status.
@@ -683,11 +827,20 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   }
 }
 
+/// Serialize a local calendar-day bound for conversation search.
+///
+/// Local [DateTime] values have no offset in [DateTime.toIso8601String], and
+/// `search_conversations_endpoint` parses naive datetimes in the server TZ.
+/// Convert to UTC first, matching the conversation-list date filter.
+String serializeConversationSearchDateBound(DateTime date) => date.toUtc().toIso8601String();
+
 Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   String query, {
   int? page,
   int? limit,
   bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
   String? speakerId,
 }) async {
   Logger.debug(Env.apiBaseUrl);
@@ -700,13 +853,17 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       'page': page ?? 1,
       'per_page': limit ?? 10,
       'include_discarded': includeDiscarded,
+      if (startDate != null) 'start_date': serializeConversationSearchDateBound(startDate),
+      if (endDate != null) 'end_date': serializeConversationSearchDateBound(endDate),
       if (speakerId != null) 'speaker_id': speakerId,
     }),
   );
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
     final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final convos = data.items.map((conversation) => ServerConversation.fromGenerated(conversation)).toList();
+    // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
+    // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
+    final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
     return (convos, data.currentPage, data.totalPages);
   }
   return (<ServerConversation>[], 0, 0);

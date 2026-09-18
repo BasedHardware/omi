@@ -1,0 +1,8 @@
+{
+  "version": "0.12.216",
+  "date": "2026-08-25",
+  "changes": [
+    "Fixed longer Assistant replies being cancelled when the agent was still working through a quiet step.",
+    "Fixed cancelled and superseded tasks appearing as active across desktop task views"
+  ]
+}

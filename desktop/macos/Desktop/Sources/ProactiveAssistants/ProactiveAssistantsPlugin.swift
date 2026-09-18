@@ -56,6 +56,20 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var captureTimer: Timer?
   private var analysisDelayTimer: Timer?
   private var isInDelayPeriod = false
+  // Monitoring-duration telemetry (see MonitoringSessionTracker /
+  // MonitoringSessionStore). Deliberately a separate timer from
+  // `captureTimer`: it must keep ticking through
+  // `pauseCaptureForSystemInterruption()`, which invalidates the capture
+  // timers on purpose.
+  private var monitoringSessionTracker = MonitoringSessionTracker()
+  private let monitoringSessionStore: MonitoringSessionPersisting = MonitoringSessionDefaultsStore.shared
+  private var monitoringHeartbeatTimer: Timer?
+  // Content-refresh dwell tracking (see ContextDwellRefreshPolicy): anchored at
+  // the last real context switch or fired refresh, reset on real switches.
+  private var dwellContextAnchor: Date?
+  private var dwellRefreshCount = 0
+  private var dwellGeneration = 0
+  private var lastQuestionRescueBurstStamp: Date?
 
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
@@ -186,6 +200,8 @@ public class ProactiveAssistantsPlugin: NSObject {
   )
   /// Fast poll interval for checking idle/app/window state without capturing.
   private let capturePollInterval: TimeInterval = 1.0
+  /// Exempts HID idleness while another process plays media (movie night ≠ away).
+  private let mediaPlaybackDetector = MediaPlaybackDetector()
   /// Apps whose content changes slowly. The value is the heartbeat interval in seconds.
   /// Uses bundle ID when available, falling back to localized app name.
   private let appSpecificHeartbeatIntervals: [String: TimeInterval] = [
@@ -219,6 +235,16 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // Set up system event observers for sleep/wake/lock recovery
     setupSystemEventObservers()
+
+    // A silent evaluation with no forced lookup right after typing gets ONE
+    // re-extraction: the extraction model stochastically omits the typed
+    // question, and this is the deterministic second chance (see
+    // ContextDwellRefreshPolicy.questionRescueGrant).
+    NotificationCenter.default.addObserver(
+      forName: Self.contextEvalSilentWithoutLookup, object: nil, queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in self?.grantQuestionRescueIfEarned() }
+    }
 
     // Listen for CLI-triggered test notifications
     setupTestNotificationListeners()
@@ -322,6 +348,10 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Report resources before starting heavy monitoring
     ResourceMonitor.shared.reportResourcesNow(context: "before_monitoring_start")
 
+    // Resolve the persistent-stream rollout flag while we are on the main actor
+    // (PostHog is MainActor-bound; the capture path is not and reads the cache).
+    ScreenCaptureStreamFeature.resolveAndCache()
+
     // Initialize services
     screenCaptureService = ScreenCaptureService()
 
@@ -384,6 +414,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     isMonitoring = true
     setScreenCaptureHealth(.active)
 
+    let monitoringSessionID = UUID().uuidString
+    monitoringSessionTracker.start(
+      at: Date(),
+      sessionID: monitoringSessionID,
+      heldBy: isScreenLocked ? [.screenLock] : []
+    )
+    persistMonitoringSessionIfActive()
+    startMonitoringHeartbeatTimer()
+
     // Capture the first frame immediately so screenshots appear right away
     // (don't wait for the first timer interval to elapse)
     Task { @MainActor in
@@ -395,7 +434,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_start")
 
     sendEvent(type: "monitoringStarted", data: [:])
-    AnalyticsManager.shared.monitoringStarted()
+    AnalyticsManager.shared.monitoringStarted(sessionID: monitoringSessionID)
     log("Proactive assistants started")
 
     completion(true, nil)
@@ -449,6 +488,57 @@ public class ProactiveAssistantsPlugin: NSObject {
     )
   }
 
+  /// 60-second repeating write-only heartbeat for monitoring-duration
+  /// recovery: refreshes `lastHeartbeatAt` on the persisted
+  /// `MonitoringSessionRecord` so a crash has an upper bound on how long the
+  /// session actually ran. Modeled on `startSentryHeartbeat()`
+  /// (`OmiApp.swift`), but deliberately NOT invalidated by
+  /// `pauseCaptureForSystemInterruption()` — the whole point is to keep
+  /// ticking through sleep/screen-lock, which is exactly what that function
+  /// tears down for the capture timers. Started in `continueStartMonitoring`,
+  /// invalidated in `stopMonitoring()`.
+  ///
+  /// This only writes to disk — it must never emit a PostHog event, or an
+  /// 8-hour monitoring session would produce 480 events instead of the one
+  /// `Monitoring Stopped` at the end.
+  private func startMonitoringHeartbeatTimer() {
+    monitoringHeartbeatTimer?.invalidate()
+    monitoringHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        self?.recordMonitoringHeartbeat()
+      }
+    }
+  }
+
+  private func recordMonitoringHeartbeat() {
+    monitoringSessionTracker.heartbeat(at: Date())
+    persistMonitoringSessionIfActive()
+  }
+
+  private func persistMonitoringSessionIfActive() {
+    guard monitoringSessionTracker.hasActiveSession else { return }
+    monitoringSessionStore.save(monitoringSessionTracker.record)
+  }
+
+  /// Cheap synchronous disk stamp for `applicationWillTerminate` — there is
+  /// no synchronous PostHog flush available at terminate time, so this and
+  /// `MonitoringSessionRecovery` are how a normal quit while monitoring gets
+  /// its `Monitoring Stopped` event (recovered at the next launch) instead of
+  /// silently losing the session.
+  func stampMonitoringSessionAppQuit(at date: Date = Date()) {
+    // Stop the heartbeat first. The stamp is a snapshot, not a `finish()`, so
+    // the tracker stays live — and a heartbeat landing on the terminate run
+    // loop would overwrite the stamped record with a live one (`endedAt` nil),
+    // turning a clean quit into a recovered `session_lost` at the next launch.
+    monitoringHeartbeatTimer?.invalidate()
+    monitoringHeartbeatTimer = nil
+    // Nil for a session that already emitted its live `Monitoring Stopped`,
+    // so quitting later cannot rewrite a finished session into a clean quit
+    // and have the next launch recover it as a second event.
+    guard let stamped = monitoringSessionTracker.quitStampedRecord(at: date) else { return }
+    monitoringSessionStore.save(stamped)
+  }
+
   /// Suspend every timer that can capture or distribute context while the
   /// display is unavailable. Keeping the background-recovery mode flag lets
   /// resume restore that mode without accidentally starting the 1 Hz capture
@@ -463,6 +553,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     isInDelayPeriod = false
     backgroundPollTimer?.invalidate()
     backgroundPollTimer = nil
+    // The persistent stream keeps the OS screen-recording indicator lit; release it
+    // whenever the display is unavailable. Resume rebuilds it on the first tick.
+    ScreenCaptureService.suspendPersistentCaptureStream(reason: "system interruption")
   }
 
   private func resumeCaptureAfterSystemInterruption(reason: String) {
@@ -484,9 +577,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
   }
 
-  /// Stop monitoring
-  public func stopMonitoring() {
+  /// Stop monitoring. `reason` is recorded on the persisted session and
+  /// emitted as `stop_reason` on `Monitoring Stopped` — see
+  /// `MonitoringStopReason`. Defaults to `.userToggle` so ordinary UI toggle
+  /// call sites keep compiling unchanged.
+  public func stopMonitoring(reason: MonitoringStopReason = .userToggle) {
     guard isMonitoring else { return }
+
+    monitoringHeartbeatTimer?.invalidate()
+    monitoringHeartbeatTimer = nil
 
     captureTimer?.invalidate()
     captureTimer = nil
@@ -539,6 +638,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     insightAssistant = nil
     memoryAssistant = nil
     screenCaptureService = nil
+    ScreenCaptureService.suspendPersistentCaptureStream(reason: "monitoring stopped")
 
     isMonitoring = false
     isStartingMonitoring = false  // Reset in case stop was called during startup
@@ -557,7 +657,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_stop")
 
     sendEvent(type: "monitoringStopped", data: [:])
-    AnalyticsManager.shared.monitoringStopped()
+    let monitoringSummary = monitoringSessionTracker.finish(at: Date(), reason: reason)
+    // Clear before emitting, not after. The stored record is still the last
+    // heartbeat snapshot with `endedAt == nil`, so a crash in this window with
+    // the old ordering left it on disk and the next launch recovered the same
+    // `session_id` as a *second* stop. Clearing first makes that window lose
+    // an event instead of duplicating one, and a lost stop is visibly missing
+    // where a duplicate silently inflates the numbers.
+    monitoringSessionStore.clear()
+    AnalyticsManager.shared.monitoringStopped(summary: monitoringSummary)
     log("Proactive assistants stopped")
   }
 
@@ -612,6 +720,163 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
   }
 
+  /// Seconds since the last key-down in this login session. The dwell-refresh
+  /// trigger (ContextDwellRefreshPolicy) keys on typing because typed text is
+  /// invisible to pixel-similarity signals. `combinedSessionState` on purpose:
+  /// it counts what actually reaches the focused app — hardware keys and
+  /// assistive/automation input alike — where `hidSystemState` counts only raw
+  /// hardware and reads accessibility users' typing as idleness.
+  private static func keyboardIdleSeconds() -> TimeInterval {
+    CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
+  }
+
+  /// Posted by the engine when an evaluation ends in model-chosen silence with
+  /// no forced lookup armed — the signature of an extraction that missed the
+  /// typed question.
+  public static let contextEvalSilentWithoutLookup = Notification.Name(
+    "OmiContextEvalSilentWithoutLookup")
+
+  private func grantQuestionRescueIfEarned() {
+    let idle = Self.keyboardIdleSeconds()
+    let burstStamp = Date().addingTimeInterval(-idle)
+    guard
+      ContextDwellRefreshPolicy.questionRescueGrant(
+        lastRescueBurstStamp: lastQuestionRescueBurstStamp,
+        currentBurstStamp: burstStamp,
+        keyboardIdleSeconds: idle)
+    else { return }
+    lastQuestionRescueBurstStamp = burstStamp
+    dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+    log("Context dwell refresh: silent evaluation after typing; granting one re-extraction")
+  }
+
+  /// SCShareableContent resolution inside captureWindowCGImage can stall for
+  /// tens of seconds under capture-pipeline contention; a dwell refresh that
+  /// waits that long delivers its answer a minute late. Bound the wait — a
+  /// timed-out capture aborts the refresh through the ordinary retry path
+  /// (anchor backdate, ~10s), which beats blocking the whole chain.
+  @available(macOS 14.0, *)
+  private func dwellCaptureWithTimeout(
+    windowID: CGWindowID, seconds: TimeInterval
+  ) async -> ScreenCaptureService.WindowCaptureResult? {
+    guard let service = screenCaptureService else { return nil }
+    return await AsyncFirstResolved.run(
+      { await service.captureWindowCGImage(windowID: windowID) },
+      {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        return nil
+      }
+    )
+  }
+
+  /// A dwell refresh must capture its own frame: the preview-skip path starves
+  /// full captures while the user types, so the freshest tracked frame would
+  /// otherwise predate the very content this refresh exists to evaluate.
+  private func captureFrameThenRefreshActiveContext(
+    windowID: CGWindowID, appName: String, windowTitle: String?, launchGeneration: Int
+  ) async {
+    // Capture BEFORE the transition so the departing extraction sees the typed
+    // content even when the preview-skip path starved full captures. Skip the
+    // whole refresh if the user already switched away: tracking the old app's
+    // frame after a switch would contaminate the new context's bucket.
+    log("Context dwell refresh chain: started")
+    guard AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle) else {
+      // The slot must not die silently: backdate the anchor exactly like a
+      // failed capture so the next settled tick can retry, and say why. SPA
+      // titles (compose drafts) shift underneath the tick, so this guard
+      // fires in normal use, not only on real app switches.
+      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
+        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
+      {
+        dwellContextAnchor = anchor
+      }
+      log("Context dwell refresh aborted: context no longer tracked; retrying shortly")
+      return
+    }
+    // The fresh pre-transition capture is REQUIRED: transitioning without it
+    // would extract a stale frame that predates the typed content, spending
+    // the refresh (and its cooldown) on nothing. On failure — or on macOS 13,
+    // which has no window-image capture path here — the anchor is backdated so
+    // the refresh retries in ~10s instead of waiting out the full cooldown.
+    var capturedFreshFrame = false
+    if #available(macOS 14.0, *) {
+      let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
+      // A declined consent must NOT fall through to the retry-anchor path below: that
+      // backdates the anchor and re-attempts in ~10 s, which is another timer-cadence
+      // capture session and another chance to re-arm the consent dialog. Same contract
+      // as the capture tick and the recovery polls — terminal, not retried.
+      if case .permissionDeclined = result {
+        log("Context dwell refresh aborted: consent declined — stopping capture, no retry")
+        handleCaptureConsentDeclined()
+        return
+      }
+      if case .success(let image) = result,
+        AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
+      {
+        frameCount += 1
+        AssistantCoordinator.shared.trackFrame(
+          CapturedFrame(
+            cgImage: image,
+            jpegQuality: 0.8,
+            appName: appName,
+            windowTitle: windowTitle,
+            frameNumber: frameCount,
+            captureTime: Date()
+          ))
+        capturedFreshFrame = true
+      }
+    }
+    guard capturedFreshFrame else {
+      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
+        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
+      {
+        dwellContextAnchor = anchor
+      }
+      log("Context dwell refresh aborted: fresh capture failed; retrying shortly")
+      return
+    }
+    log("Context dwell refresh chain: fresh frame captured")
+    guard
+      let arrivingFence = await AssistantCoordinator.shared.refreshActiveContextForDwell(
+        expectedApp: appName, expectedWindowTitle: windowTitle)
+    else {
+      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
+        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
+      {
+        dwellContextAnchor = anchor
+      }
+      log("Context dwell refresh aborted: coordinator refused the transition; retrying shortly")
+      return
+    }
+    // Capture AGAIN after the visit opened: the entry evaluation only grounds
+    // on frames captured at or after the visit began, and a static screen may
+    // never produce another full frame through the preview-skip path.
+    if #available(macOS 14.0, *) {
+      let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
+      if case .permissionDeclined = result {
+        log("Context dwell refresh: consent declined on the post-visit capture — stopping capture")
+        handleCaptureConsentDeclined()
+        return
+      }
+      if case .success(let image) = result,
+        AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
+      {
+        frameCount += 1
+        AssistantCoordinator.shared.trackFrame(
+          CapturedFrame(
+            cgImage: image,
+            jpegQuality: 0.8,
+            appName: appName,
+            windowTitle: windowTitle,
+            frameNumber: frameCount,
+            captureTime: Date()
+          ))
+      }
+    }
+    log("Context dwell refresh chain: transitioned; entering evaluation")
+    await ContextProactivityEngine.shared.contextEntered(arrivingFence)
+  }
+
   private func handleCaptureTargetUnavailable() {
     // A secure/system/helper surface is not proof that the capture engine or
     // permission failed. Keep the normal timer armed so the very next real
@@ -619,6 +884,51 @@ public class ProactiveAssistantsPlugin: NSObject {
     screenCaptureFailureTracker.recordTargetUnavailable()
     lastCaptureSucceeded = true
     setScreenCaptureHealth(.temporarilyUnavailable)
+  }
+
+  /// One consent-decline banner per EPISODE, not per process. Static (like
+  /// hasAutoResetThisSession) because the app-activation path restarts monitoring and
+  /// each restart's first declined capture must not stack another banner on the one the
+  /// user has not acted on yet. Cleared on the first successful capture (see
+  /// captureFrame), which is what ends the episode — a process that runs for weeks will
+  /// meet more than one re-confirmation, and the second one must still be explained.
+  private static var hasNotifiedConsentDeclinedThisSession = false
+
+  /// ScreenCaptureKit said "the user declined TCCs" — macOS re-confirming consent for
+  /// app-built content filters, with the Screen Recording grant itself intact.
+  ///
+  /// This must be terminal, not retried: every retried capture opens a fresh session,
+  /// and macOS re-arms the consent dialog per session, so the old 3 s retry (plus the
+  /// 5 s recovery poll behind it) produced three dialogs in ten minutes on a live
+  /// machine. Exposé/Mission Control produce the same error transiently — that carve-out
+  /// stays. Recovery is human-scale only: the notification click restarts monitoring,
+  /// and so does the existing app re-activation start path.
+  private func handleCaptureConsentDeclined() {
+    switch ScreenCaptureConsentPolicy.actionForDeclinedCapture(
+      isInSpecialSystemMode: isInSpecialSystemMode(),
+      hasNotifiedThisSession: Self.hasNotifiedConsentDeclinedThisSession)
+    {
+    case .waitForSpecialModeToEnd:
+      handleCaptureTargetUnavailable()
+    case .stopAndNotify(let shouldNotify):
+      log(
+        "ProactiveAssistantsPlugin: ScreenCaptureKit consent declined — stopping capture, no automatic retry"
+      )
+      AnalyticsManager.shared.screenCaptureBrokenDetected()
+      sendEvent(type: "captureConsentDeclined", data: [:])
+      let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+      stopMonitoring(reason: .captureConsentDeclined)
+      guard shouldNotify, let ownerID else { return }
+      Self.hasNotifiedConsentDeclinedThisSession = true
+      NotificationService.shared.sendNotification(
+        ownerID: ownerID,
+        title: NotificationService.screenCaptureConsentTitle,
+        message:
+          "macOS asked to re-confirm screen recording for Omi. Click to resume capture.",
+        deliverSystemBanner: true,
+        respectFrequency: false
+      )
+    }
   }
 
   private func handleCaptureEngineFailure() {
@@ -739,7 +1049,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         log("ProactiveAssistantsPlugin: Screen recording permission revoked — stopping monitoring")
         // Send user-visible notification about lost permission
         sendEvent(type: "permissionLost", data: ["permission": "screenRecording"])
-        stopMonitoring()
+        stopMonitoring(reason: .permissionRevoked)
         return
       }
     }
@@ -776,9 +1086,19 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    // Cheap early exits before resolving the active window.
-    let idleSeconds = systemIdleSeconds()
-    if idleSeconds >= captureTrigger.idleThreshold {
+    // Cheap early exits before resolving the active window. Two exemptions compose:
+    // media playback exempts HID idleness at every level (a movie viewer types nothing
+    // for an hour but is still watching — MediaPlaybackIdlePolicy), and Maximum
+    // notification level additionally extends the window to 300s for HID-idle WITHOUT
+    // media (reading a static feed). Calmer levels keep the 60s threshold.
+    let idleThreshold = SuggestionPacing.captureIdleThreshold(
+      frequencyLevel: NotificationService.currentFrequencyLevel(),
+      base: captureTrigger.idleThreshold
+    )
+    let idleSeconds = mediaPlaybackDetector.effectiveIdleSeconds(
+      hidIdleSeconds: systemIdleSeconds(),
+      threshold: idleThreshold)
+    if idleSeconds >= idleThreshold {
       logCaptureGate("idle")
       return
     }
@@ -831,6 +1151,40 @@ public class ProactiveAssistantsPlugin: NSObject {
         newApp: appForCheck,
         newWindowTitle: windowTitle
       )
+      // Content-refresh dwell tracking (see ContextDwellRefreshPolicy). This
+      // sits BEFORE the capture decision on purpose: typed text moves almost
+      // no preview pixels, so the preview-skip path starves full captures
+      // during exactly the dwells this exists to re-evaluate.
+      if ContextBucketsFeature.isDwellRefreshEnabled,
+        !RewindSettings.shared.isAppExcluded(appForCheck)
+      {
+        let tickTime = Date()
+        if switched || dwellContextAnchor == nil {
+          dwellContextAnchor = tickTime
+          dwellRefreshCount = 0
+          dwellGeneration += 1
+        } else if let anchor = dwellContextAnchor,
+          ContextDwellRefreshPolicy.shouldRefresh(
+            secondsSinceAnchor: tickTime.timeIntervalSince(anchor),
+            firedRefreshesThisContext: dwellRefreshCount,
+            keyboardIdleSeconds: Self.keyboardIdleSeconds())
+        {
+          dwellContextAnchor = tickTime
+          dwellRefreshCount += 1
+          log(
+            "Context dwell refresh #\(dwellRefreshCount): typed content settled; re-evaluating active context"
+          )
+          let refreshApp = appForCheck
+          let refreshTitle = windowTitle
+          let refreshWindowID = windowID
+          let launchGeneration = dwellGeneration
+          Task { [weak self] in
+            await self?.captureFrameThenRefreshActiveContext(
+              windowID: refreshWindowID, appName: refreshApp, windowTitle: refreshTitle,
+              launchGeneration: launchGeneration)
+          }
+        }
+      }
       if switched && !isInDelayPeriod {
         let delaySeconds = AssistantSettings.shared.analysisDelay
         if delaySeconds > 0 {
@@ -879,7 +1233,12 @@ public class ProactiveAssistantsPlugin: NSObject {
       app: appName ?? "",
       windowTitle: currentWindowTitle,
       idleSeconds: idleSeconds,
-      now: now
+      now: now,
+      forceHeartbeatCapture: SuggestionPacing.forcesHeartbeatCapture(
+        frequencyLevel: NotificationService.currentFrequencyLevel()),
+      idleThresholdOverride: SuggestionPacing.captureIdleThreshold(
+        frequencyLevel: NotificationService.currentFrequencyLevel(),
+        base: captureTrigger.idleThreshold)
     ) {
     case .skip:
       return
@@ -890,6 +1249,13 @@ public class ProactiveAssistantsPlugin: NSObject {
       if #available(macOS 14.0, *) {
         let previewResult = await screenCaptureService.captureWindowCGImage(
           windowID: windowID, maxSize: 80)
+        // Short-circuit on a decline. Falling through would open a SECOND capture
+        // session in the same tick (the full capture below), doubling the very
+        // session rate that re-arms the consent dialog.
+        if case .permissionDeclined = previewResult {
+          handleCaptureConsentDeclined()
+          return
+        }
         if case .success(let previewImage) = previewResult {
           let previewHash = RewindOCRService.dHash(of: previewImage)
           let similarity = captureTrigger.previewSimilarity(to: previewHash)
@@ -934,6 +1300,9 @@ public class ProactiveAssistantsPlugin: NSObject {
       case .windowGone:
         handleCaptureTargetUnavailable()
         return
+      case .permissionDeclined:
+        handleCaptureConsentDeclined()
+        return
       case .failed:
         handleCaptureEngineFailure()
         return
@@ -947,14 +1316,22 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
         lastCaptureSucceeded = true
         setScreenCaptureHealth(.active)
+        // A successful capture ends the consent episode, so the one-banner-per-episode
+        // budget is refilled here rather than being spent once for the life of the
+        // process. Same shape as the reset-notification suppression, which
+        // `AppState.checkScreenRecordingPermission()` clears as soon as capture
+        // recovers. Without this, a second genuine re-confirmation weeks into an
+        // uptime stops capture with no user-visible explanation at all — silence is
+        // worse than the spam this guard exists to prevent.
+        Self.hasNotifiedConsentDeclinedThisSession = false
 
         frameCount += 1
         let captureTime = Date()
-        // A full-screen `CGImage` redrawn into a 9x8 grayscale context — a real decode and
-        // downscale, and it was on the main actor for every captured frame. `CGImage` is immutable,
-        // and the hash is a pure function of it, so nothing about this needed the main thread.
+        // Off the main actor on purpose: `CGImage` is immutable and the hash is a pure function.
+        // Hashed at preview scale: this enters the same history the ≤80px preview grabs are
+        // compared against, and a full-resolution dHash aliases differently (see previewScaleDHash).
         let fullHash = await Task.detached(priority: .userInitiated) {
-          RewindOCRService.dHash(of: cgImage)
+          RewindOCRService.previewScaleDHash(of: cgImage)
         }.value
         captureTrigger.markCaptured(
           app: appName, windowTitle: currentWindowTitle, at: captureTime, frameHash: fullHash)
@@ -1156,8 +1533,18 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   // MARK: - CLI Test Triggers
 
-  /// Listen for distributed notifications from CLI to trigger test runs
+  /// Listen for distributed notifications from CLI to trigger test runs.
+  ///
+  /// Local development bundles only. `DistributedNotificationCenter` is a machine-wide bus with
+  /// no sender authentication, so a registered observer lets any local process deliver an
+  /// arbitrary proactive notification — floating-bar card, optional system banner — and journal
+  /// it into the signed-in user's real backend chat. `allowsLocalAutomation` (not the broader
+  /// `isNonProduction`) is the correct gate: external preview bundles ship to users outside the
+  /// team and share the non-production namespace, so they must ignore CLI triggers exactly as
+  /// the shipped apps do. Same predicate `DesktopAutomationBridge` uses for its debug surface.
   private func setupTestNotificationListeners() {
+    guard AppBuild.allowsLocalAutomation else { return }
+
     // Distributed notifications may arrive on the posting thread, so entering a selector on this
     // MainActor-isolated plugin can trap before a Task-based actor hop executes.
     let observers = [
@@ -1209,13 +1596,21 @@ public class ProactiveAssistantsPlugin: NSObject {
         detail: payload["detail"]
       )
 
-      log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")
+      // Functional notices (screen-recording repair, meeting hand-off) opt into a system
+      // banner; the proactive default does not. The CLI carries the flag so both delivery
+      // contracts stay exercisable against a real running bundle.
+      let deliverSystemBanner = payload["deliverSystemBanner"] == "true"
+
+      log(
+        "NotificationTestCLI: Received test trigger (title=\(resolvedTitle), "
+          + "assistantId=\(resolvedAssistantId), deliverSystemBanner=\(deliverSystemBanner))")
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
         title: resolvedTitle,
         message: resolvedMessage,
         assistantId: resolvedAssistantId,
-        context: context
+        context: context,
+        deliverSystemBanner: deliverSystemBanner
       )
     }
   }
@@ -1236,6 +1631,8 @@ public class ProactiveAssistantsPlugin: NSObject {
           "ProactiveAssistantsPlugin: System going to sleep, wasMonitoring=\(self?.wasMonitoringBeforeSleep ?? false)")
 
         self?.pauseCaptureForSystemInterruption()
+        self?.monitoringSessionTracker.pause(at: Date(), source: .systemSleep)
+        self?.persistMonitoringSessionIfActive()
         ContextVisitCoordinator.interruptForSleepIfEnabled()
       }
     }
@@ -1251,6 +1648,23 @@ public class ProactiveAssistantsPlugin: NSObject {
       }
     }
     systemEventObservers.append(wakeObserver)
+
+    // The duration clock's own wake signal, taken from the same notification
+    // center as its pause. `.systemDidWake` above is an `AppState` rebroadcast
+    // of this notification; pausing on the workspace center and resuming on a
+    // rebroadcast means one dropped hop leaves the session paused forever.
+    // Resume is idempotent per source, so both firing is harmless.
+    let durationWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didWakeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
+        self?.persistMonitoringSessionIfActive()
+      }
+    }
+    systemEventObservers.append(durationWakeObserver)
 
     // Screen locked
     let lockObserver = NotificationCenter.default.addObserver(
@@ -1281,6 +1695,13 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// Handle system wake from sleep
   private func handleSystemWake() {
     log("ProactiveAssistantsPlugin: System woke from sleep")
+
+    // Releases only the sleep hold. On the standard password-after-sleep path
+    // the screen is still locked here — capture stays down until unlock (see
+    // the `!isScreenLocked` guard below), so the paused interval must stay
+    // open too. `handleScreenUnlock` releases the other half.
+    monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
+    persistMonitoringSessionIfActive()
 
     // Reset failure counter
     screenCaptureFailureTracker.reset()
@@ -1329,6 +1750,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     wasMonitoringBeforeLock = isMonitoring
 
     pauseCaptureForSystemInterruption()
+    monitoringSessionTracker.pause(at: Date(), source: .screenLock)
+    persistMonitoringSessionIfActive()
   }
 
   /// Handle screen unlock - resume capture
@@ -1336,6 +1759,20 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin: Screen unlocked - resuming capture")
 
     isScreenLocked = false
+    // Releases the lock hold. Screen-lock and system-sleep overlap on the
+    // usual laptop path (lock -> sleep -> wake -> unlock); the tracker's
+    // source set closes the single paused interval when the *last* hold
+    // clears, which on that path is this one, not the wake above.
+    monitoringSessionTracker.resume(at: Date(), source: .screenLock)
+    // A machine cannot be unlocked while asleep, so reaching here proves the
+    // sleep hold is stale. Releasing it is the backstop for a wake that never
+    // arrived: the pause comes straight off `NSWorkspace.willSleepNotification`
+    // while the resume rides an `AppState` rebroadcast, and the old boolean
+    // guard survived a dropped wake only because *any* resume cleared it.
+    // Without this, one missed wake would report the rest of the session as
+    // paused — the exact inverse of the bug the source set fixes.
+    monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
+    persistMonitoringSessionIfActive()
     // Reset failure counter
     screenCaptureFailureTracker.reset()
     lastCaptureSucceeded = true
@@ -1443,7 +1880,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       NotificationCenter.default.post(name: .screenCapturePermissionLost, object: nil)
 
       // Stop monitoring since we can't capture
-      self.stopMonitoring()
+      self.stopMonitoring(reason: .permissionRevoked)
 
       // Send user notification
       if let ownerID {
@@ -1578,13 +2015,20 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    if await screenCaptureService.captureActiveWindowAsync() != nil {
+    switch await screenCaptureService.captureActiveWindowCGImage() {
+    case .success:
       // Success! Exit recovery mode
       log(
         "ProactiveAssistantsPlugin: Recovery successful after \(recoveryRetryCount) attempts (~\(recoveryRetryCount * Int(recoveryInterval))s), resuming normal capture (frontmost: \(getFrontmostAppInfo()))"
       )
       exitRecoveryMode(success: true)
-    } else {
+    case .permissionDeclined:
+      // The consent dialog is up. Recovery's 5 s retry is exactly the loop that
+      // re-arms it — stop here; handleCaptureConsentDeclined stops monitoring, which
+      // clears the recovery state.
+      log("ProactiveAssistantsPlugin: Recovery hit declined consent — stopping instead of retrying")
+      handleCaptureConsentDeclined()
+    case .windowGone, .failed:
       // Still failing
       if recoveryRetryCount >= maxRecoveryRetries {
         // Give up and show the reset notification
@@ -1654,12 +2098,20 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     log("ProactiveAssistantsPlugin: Background poll attempt \(backgroundPollCount)/\(maxBackgroundPollAttempts)")
 
-    if await screenCaptureService.captureActiveWindowAsync() != nil {
+    switch await screenCaptureService.captureActiveWindowCGImage() {
+    case .success:
       log("ProactiveAssistantsPlugin: Background polling recovered after \(backgroundPollCount) attempts")
       exitBackgroundPolling(success: true)
-    } else if backgroundPollCount >= maxBackgroundPollAttempts {
-      log("ProactiveAssistantsPlugin: Background polling exhausted, attempting auto-reset")
-      exitBackgroundPolling(success: false)
+    case .permissionDeclined:
+      // Same contract as attemptRecovery: a pending consent dialog must never be
+      // re-sampled on a timer, not even a 60 s one.
+      log("ProactiveAssistantsPlugin: Background poll hit declined consent — stopping instead of retrying")
+      handleCaptureConsentDeclined()
+    case .windowGone, .failed:
+      if backgroundPollCount >= maxBackgroundPollAttempts {
+        log("ProactiveAssistantsPlugin: Background polling exhausted, attempting auto-reset")
+        exitBackgroundPolling(success: false)
+      }
     }
   }
 
@@ -1685,6 +2137,11 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// Attempt automatic recovery (soft first, then hard reset as last resort)
   private func attemptAutoReset() {
     let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    // A restart cannot fix a grant that is not live in this process, and must never happen
+    // while the user is still walking through onboarding — see mayRestartToRecoverCapture.
+    let mayRestart = ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+      grantedAtLaunch: ScreenCaptureService.grantedAtProcessStart,
+      onboardingComplete: UserDefaults.standard.bool(forKey: .hasCompletedOnboarding))
     // Step 1: Try soft recovery first (lsregister + SCK re-request, no TCC wipe)
     if !Self.hasSoftRecoveryThisSession {
       Self.hasSoftRecoveryThisSession = true
@@ -1704,8 +2161,15 @@ public class ProactiveAssistantsPlugin: NSObject {
           } else {
             // Soft recovery failed in-process, restart app to refresh permission state
             // This still avoids wiping TCC — the restart itself often fixes stale caches
-            log("ProactiveAssistantsPlugin: Soft recovery failed in-process, restarting to refresh state")
+            log("ProactiveAssistantsPlugin: Soft recovery failed in-process")
             AnalyticsManager.shared.screenCaptureBrokenDetected()
+            guard mayRestart else {
+              log(
+                "ProactiveAssistantsPlugin: not restarting to recover capture "
+                  + "(grantedAtLaunch=\(ScreenCaptureService.grantedAtProcessStart) "
+                  + "onboardingComplete=\(UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)))")
+              return
+            }
             ScreenCaptureService.softRecoveryAndRestart()
           }
         }
@@ -1720,7 +2184,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
       AnalyticsManager.shared.screenCaptureBrokenDetected()
       NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
-      stopMonitoring()
+      stopMonitoring(reason: .recoveryExhausted)
 
       guard let ownerID else { return }
       NotificationService.shared.sendNotification(
@@ -1737,7 +2201,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin: Soft recovery + restart already tried, notifying user")
     AnalyticsManager.shared.screenCaptureBrokenDetected()
     NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
-    stopMonitoring()
+    stopMonitoring(reason: .recoveryExhausted)
 
     guard let ownerID else { return }
     NotificationService.shared.sendNotification(

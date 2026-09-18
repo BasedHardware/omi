@@ -112,6 +112,24 @@ def test_additive_endpoint_optional_request_property_and_response_property_are_c
     assert checker.compare_specs(base, head) == []
 
 
+def test_deliberately_removed_endpoints_are_allowed_but_only_those():
+    checker = load_checker()
+    base = contract()
+    base['paths']['/v1/agent/keepalive'] = {
+        'post': {'responses': {'200': {'content': {'application/json': {'schema': {'type': 'object'}}}}}}
+    }
+    head = copy.deepcopy(base)
+    del head['paths']['/v1/agent/keepalive']
+
+    assert checker.compare_specs(base, head) == []
+
+    head_unknown = copy.deepcopy(base)
+    del head_unknown['paths']['/v1/goals']
+
+    failures = [str(issue) for issue in checker.compare_specs(base, head_unknown)]
+    assert any('paths./v1/goals: released endpoint was removed' in item for item in failures)
+
+
 def test_released_query_parameter_cannot_move_to_body():
     checker = load_checker()
     base = contract()

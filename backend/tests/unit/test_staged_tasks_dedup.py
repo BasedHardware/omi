@@ -61,6 +61,9 @@ def _make_doc(doc_id, data):
 def _stub_action_items_query(monkeypatch, docs):
     """Stub db.collection(...).document(uid).collection(action_items).where(...).stream() to yield docs."""
     fake_query = MagicMock()
+    fake_query.order_by.return_value = fake_query
+    fake_query.limit.return_value = fake_query
+    fake_query.start_after.return_value = fake_query
     fake_query.stream.return_value = iter(docs)
 
     fake_subcol = MagicMock()

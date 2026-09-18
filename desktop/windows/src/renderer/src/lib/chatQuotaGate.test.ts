@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { ChatUsageQuota } from './omiApi.generated'
-import { createChatQuotaGate, isLimitReached, limitMessage } from './chatQuotaGate'
+import {
+  createChatQuotaGate,
+  isLimitReached,
+  limitMessage,
+  COLD_START_SYNC_TIMEOUT_MS
+} from './chatQuotaGate'
 
 // The bar's pre-send chat-quota gate (port of macOS FloatingBarUsageLimiter).
 // The bug it closes: the bar's send path had NO gate, so a user over their
@@ -124,6 +129,46 @@ describe('createChatQuotaGate', () => {
     }
   })
 
+  it('uses the exported time box when the caller names none — the path production takes', async () => {
+    // Every case above passes an explicit 5_000, so none of them reads
+    // COLD_START_SYNC_TIMEOUT_MS. Production does the opposite: barSend.ts calls
+    // createChatQuotaGate() with no arguments and therefore runs entirely on the
+    // default. A mutation audit confirmed the gap — setting the constant to 0
+    // left this whole file green while defeating the cold-start gate in the
+    // shipped app, because the box would fire before the first sync could land
+    // and an over-cap user would get a free send.
+    vi.useFakeTimers()
+    try {
+      let land!: (q: ChatUsageQuota) => void
+      const fetchQuota = vi.fn(
+        () =>
+          new Promise<ChatUsageQuota>((resolve) => {
+            land = resolve
+          })
+      )
+      const gate = createChatQuotaGate(fetchQuota)
+
+      const verdict = gate.check()
+      // Just inside the box: the send is still waiting, so a verdict that lands
+      // here still gates.
+      await vi.advanceTimersByTimeAsync(COLD_START_SYNC_TIMEOUT_MS - 1)
+      land(quota({ allowed: false }))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(await verdict).toMatchObject({ blocked: true })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('pins the cold-start box, which the cases above cannot', () => {
+    // Five seconds is chosen against a real bound rather than picked: apiClient
+    // retries 429/503 with backoff over five tries up to 16s apart, so an
+    // unbounded await would hold a send — and a voice turn — for roughly 30s
+    // with no feedback. The box has to be short enough to stay under a user's
+    // patience and long enough for a healthy round trip.
+    expect(COLD_START_SYNC_TIMEOUT_MS).toBe(5_000)
+  })
+
   it('fails OPEN when the quota fetch errors — the server stays the real enforcer', async () => {
     const gate = createChatQuotaGate(async () => {
       throw new Error('offline')
@@ -177,5 +222,88 @@ describe('checkSync — synchronous PTT pre-capture veto', () => {
     expect(gate.checkSync()).toEqual({ blocked: false })
     gate.recordQuery() // 29 + 1 === 30
     expect(gate.checkSync()).toMatchObject({ blocked: true })
+  })
+})
+
+describe('sync throttle — reveal/reply request volume', () => {
+  // The regression: `sync()` had only an in-flight dedupe, which does nothing for
+  // sequential calls. It runs on every bar reveal and after every chat reply, so a
+  // normal voice session issued one GET /v1/users/me/usage-quota per interaction.
+  const gate = (
+    fetchQuota: () => Promise<ChatUsageQuota>
+  ): ReturnType<typeof createChatQuotaGate> => createChatQuotaGate(fetchQuota, 5_000, 60_000)
+
+  it('fetches once across a burst of reveals', async () => {
+    const fetchQuota = vi.fn(async () => quota())
+    const g = gate(fetchQuota)
+    for (let i = 0; i < 8; i++) await g.sync()
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
+  })
+
+  it('throttles on the shipped default when built with no interval argument', async () => {
+    // barSend.ts calls createChatQuotaGate() with no arguments, so production runs
+    // entirely on MIN_SYNC_INTERVAL_MS. Every other case here passes an explicit
+    // interval, which would leave the shipped constant unread by any test.
+    const fetchQuota = vi.fn(async () => quota())
+    const g = createChatQuotaGate(fetchQuota)
+    for (let i = 0; i < 8; i++) await g.sync()
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
+  })
+
+  it('fetches again once the interval has elapsed', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_700_000_000_000)
+    try {
+      const fetchQuota = vi.fn(async () => quota())
+      const g = gate(fetchQuota)
+      await g.sync()
+      expect(fetchQuota).toHaveBeenCalledTimes(1)
+
+      vi.advanceTimersByTime(59_999)
+      await g.sync()
+      expect(fetchQuota).toHaveBeenCalledTimes(1)
+
+      vi.advanceTimersByTime(1)
+      await g.sync()
+      expect(fetchQuota).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('never throttles the cold start, so an over-cap user still gets blocked', async () => {
+    // check() forces a sync when there is no snapshot. Throttling that would hand a
+    // free send to exactly the user the gate exists to stop.
+    const fetchQuota = vi.fn(async () => quota({ used: 30 }))
+    const g = gate(fetchQuota)
+    await expect(g.check()).resolves.toMatchObject({ blocked: true })
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps counting sends while the snapshot is held, so the cap still binds', async () => {
+    // The throttle is only safe because the optimistic delta covers the gap.
+    const fetchQuota = vi.fn(async () => quota({ used: 28 }))
+    const g = gate(fetchQuota)
+    await g.sync()
+    expect(g.isLimitReached()).toBe(false)
+
+    g.recordQuery()
+    await g.sync() // throttled — no fresh snapshot to reset the delta
+    g.recordQuery()
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
+    expect(g.isLimitReached()).toBe(true)
+  })
+
+  it('backs off a failing probe instead of retrying it on every reveal', async () => {
+    const fetchQuota = vi.fn(async () => {
+      throw new Error('boom')
+    })
+    const g = gate(fetchQuota)
+    await g.sync()
+    await g.sync()
+    await g.sync()
+    // A failure leaves no snapshot, so the cold-start exemption would let every
+    // reveal re-probe a backend that is already failing. The attempt stamp stops it.
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
   })
 })

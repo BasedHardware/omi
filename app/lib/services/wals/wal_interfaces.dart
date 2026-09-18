@@ -1,5 +1,6 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -83,6 +84,9 @@ abstract class LocalWalSync implements IWalSync {
 
   /// Set device metadata for WAL file naming.
   void setDeviceInfo(String? deviceId, String? deviceModel);
+
+  /// Set the snapshot inherited by WALs created for the active session.
+  void setSessionGeolocation(Geolocation? geolocation);
 }
 
 abstract class SDCardWalSync implements IWalSync {
@@ -117,6 +121,14 @@ abstract class RingStorageSync implements IWalSync {
   Future<void> refreshWalsFromDevice();
 }
 
+/// Why the most recent flash-page drain pass stopped before reaching the
+/// newest page enumerated from the device. A stall with the newest-page
+/// pointer still advancing means the pendant is recording (an open recording
+/// session starves the drain). A stall with zero free capture pages means the
+/// pendant is full: it halts recording but stays armed in recording mode, and
+/// serves no flash pages until the user presses the button to stop recording.
+enum FlashSyncStallReason { none, recordingSuspected, deviceFull, unknown }
+
 abstract class FlashPageWalSync implements IWalSync {
   void setDevice(BtDevice? device);
   void setLocalSync(LocalWalSync localSync);
@@ -124,4 +136,5 @@ abstract class FlashPageWalSync implements IWalSync {
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
   Future<void> refreshWalsFromDevice();
+  FlashSyncStallReason get lastStallReason;
 }

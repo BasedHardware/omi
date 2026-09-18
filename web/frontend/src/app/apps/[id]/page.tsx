@@ -8,6 +8,8 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { ProductBanner } from '@/src/app/components/product-banner';
+import { APP_STORE_HARDWARE_PRODUCT } from '@/src/constants/app-store-hardware-product';
+import { PRODUCT_INFO } from '@/src/app/components/product-banner/types';
 import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
 import envConfig from '@/src/constants/envConfig';
 
@@ -72,8 +74,6 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
   const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
-  const productUrl =
-    'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
 
   return {
     __html: JSON.stringify([
@@ -108,18 +108,18 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
       {
         '@context': 'https://schema.org',
         '@type': 'Product',
-        name: 'OMI Necklace',
-        description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
+        name: APP_STORE_HARDWARE_PRODUCT.name,
+        description: APP_STORE_HARDWARE_PRODUCT.description,
         brand: {
           '@type': 'Brand',
           name: 'OMI',
         },
         offers: {
           '@type': 'Offer',
-          price: '89',
-          priceCurrency: 'USD',
+          price: APP_STORE_HARDWARE_PRODUCT.schemaPrice,
+          priceCurrency: APP_STORE_HARDWARE_PRODUCT.currency,
           availability: 'https://schema.org/InStock',
-          url: productUrl,
+          url: PRODUCT_INFO.url,
           priceValidUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
             .toISOString()
             .split('T')[0], // Valid for 1 year
@@ -154,11 +154,13 @@ function getPlatformLink(userAgent: string) {
   const isAndroid = /android/i.test(userAgent);
   const isIOS = /iphone|ipad|ipod/i.test(userAgent);
 
-  return isAndroid
-    ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
-    : isIOS
-    ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-    : 'https://omi.me';
+  if (isAndroid) {
+    return 'https://play.google.com/store/apps/details?id=com.friend.ios';
+  }
+  if (isIOS) {
+    return 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
+  }
+  return 'https://omi.me';
 }
 
 // Helper function to format date

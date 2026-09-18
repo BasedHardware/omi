@@ -128,7 +128,7 @@ def test_auto_dev_smoke_uses_the_tagged_candidate_output_with_existing_auth():
         'Shift Cloud Run traffic to validated revisions'
     )
     assert '--audience backend=${{ steps.candidate-urls.outputs.backend_audience }}' in workflow
-    assert 'smoke_what_matters_now.py --base-url https://api.omi.dev' not in workflow
+    assert 'smoke_what_matters_now.py --base-url https://api.omiapi.com' not in workflow
 
 
 def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
@@ -139,7 +139,7 @@ def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
     # The SCA-33 workflow refactor invokes the smoke via the deploy-control scripts
     # root: `"$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url ...`, so
     # the quote from that path prefix sits between the script name and the flag.
-    assert 'smoke_what_matters_now.py" --base-url https://api.omi.dev' in workflow
+    assert 'smoke_what_matters_now.py" --base-url https://api.omiapi.com' in workflow
     assert 'id: smoke-what-matters-now-datastore-query' in workflow
     assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in workflow
     restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')

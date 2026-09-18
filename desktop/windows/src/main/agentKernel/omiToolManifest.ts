@@ -669,6 +669,28 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         ['x', 'y']
       )
     }
+  },
+  get_jit_knowledge: {
+    surfaces: ['desktop_chat'],
+    capabilityDoc: doc(
+      'JIT Knowledge',
+      'Read active server-authoritative JIT facts and playbooks mirrored locally.',
+      [
+        'Use for current canonical facts and playbook steps already available in the JIT mirror.',
+        'This tool does not search history or expose raw screen, OCR, calendar, or prompt telemetry.'
+      ]
+    )
+  },
+  query_jit_history: {
+    surfaces: ['desktop_chat'],
+    capabilityDoc: doc(
+      'JIT History Query',
+      'Explicitly search mirrored historical JIT handles when current facts are insufficient.',
+      [
+        'Choose when to call this tool; the host never infers a historical lookup from silence or keywords.',
+        'Alias handles are resolved to canonical memory IDs in the result.'
+      ]
+    )
   }
 }
 
@@ -1453,6 +1475,56 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       'Requires local Rewind database; raw screenshot pixels still require separate approval.'
     ],
     adapters: piLocalApiAndScreenContextStdio()
+  },
+  {
+    name: 'get_jit_knowledge',
+    label: 'Get JIT Knowledge',
+    description:
+      'Read active canonical JIT facts and playbooks from the authenticated local mirror. Use this before asking for historical context.',
+    promptSnippet: 'get_jit_knowledge - Read active canonical JIT facts and playbooks',
+    latency: 'fast local',
+    inputSchema: schema({
+      limit: {
+        type: 'number',
+        description: 'Maximum facts/playbooks per category (default 50, max 100).'
+      }
+    }),
+    annotations: readOnlyLocal,
+    timeoutClass: 'normal',
+    executor: { kind: 'swiftTool', executorName: 'get_jit_knowledge' },
+    intendedForAgents: true,
+    runtimePreconditions: ['Requires a current authenticated JIT ledger mirror.'],
+    adapters: piAndStdio()
+  },
+  {
+    name: 'query_jit_history',
+    label: 'Query JIT History',
+    description:
+      'Search historical JIT handles only when the agent decides that current knowledge is insufficient. Alias handles resolve to canonical IDs.',
+    promptSnippet: 'query_jit_history - Explicitly search historical JIT knowledge',
+    promptGuidelines: [
+      'Decide explicitly when historical context is needed; do not assume a keyword match is enough.',
+      'Keep the query narrow and use the returned canonical handles for follow-up reasoning.'
+    ],
+    latency: 'fast local',
+    inputSchema: schema(
+      {
+        query: { type: 'string', description: 'Explicit historical query selected by the agent.' },
+        limit: { type: 'number', description: 'Maximum results per page (default 20, max 50).' },
+        cursor: { type: 'string', description: 'Cursor returned by a prior page.' },
+        audit: {
+          type: 'boolean',
+          description: 'Explicitly include hidden/rejected history rows for audit work.'
+        }
+      },
+      ['query']
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: 'normal',
+    executor: { kind: 'swiftTool', executorName: 'query_jit_history' },
+    intendedForAgents: true,
+    runtimePreconditions: ['Requires a current authenticated JIT ledger mirror.'],
+    adapters: piAndStdio()
   }
 ]
 

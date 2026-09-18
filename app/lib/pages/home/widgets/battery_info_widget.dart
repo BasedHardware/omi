@@ -20,6 +20,12 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/header_circle_button.dart';
+
+/// The header pills paint 36pt tall; this transparent margin, inside an opaque
+/// GestureDetector, makes the touch target [kMinTapTarget] without moving them
+/// (the app bar centers the row, and the toolbar is taller than the target).
+const EdgeInsets _pillTargetMargin = EdgeInsets.symmetric(vertical: (kMinTapTarget - 36) / 2);
 
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
@@ -29,6 +35,198 @@ class BatteryInfoWidget extends StatefulWidget {
 }
 
 class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
+  @override
+  Widget build(BuildContext context) {
+    return Selector<HomeProvider, bool>(
+      selector: (context, state) => state.selectedIndex == 0,
+      builder: (context, isMemoriesPage, child) {
+        // Use Selector to only rebuild when battery level, connected device, or connecting state changes
+        // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
+        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool)>(
+          selector: (_, provider) => (
+            provider.batteryLevel,
+            provider.connectedDevice,
+            provider.pairedDevice,
+            provider.isConnecting,
+            provider.isCharging,
+          ),
+          builder: (context, data, child) {
+            final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
+            if (connectedDevice != null) {
+              final batteryPill = GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  routeToPage(context, const ConnectedDevice());
+                  PlatformManager.instance.analytics.batteryIndicatorClicked();
+                },
+                child: Container(
+                  height: 36,
+                  margin: _pillTargetMargin,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Add device icon
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: Image.asset(
+                          DeviceUtils.getDeviceImagePath(
+                            deviceType: connectedDevice.type,
+                            modelNumber: connectedDevice.modelNumber,
+                            deviceName: connectedDevice.name,
+                          ),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      // Only show battery indicator and percentage when battery level is valid (> 0)
+                      if (batteryLevel > 0) ...[
+                        const SizedBox(width: 6.0),
+                        if (isCharging)
+                          const Icon(Icons.bolt, color: Color.fromARGB(255, 0, 255, 8), size: 14)
+                        else
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: batteryLevel > 75
+                                  ? const Color.fromARGB(255, 0, 255, 8)
+                                  : batteryLevel > 20
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        const SizedBox(width: 4.0),
+                        Text(
+                          '$batteryLevel%',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+              if (!isMemoriesPage) return batteryPill;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  batteryPill,
+                  // 8pt between the painted shapes; the button's 44pt target overhangs
+                  // its 36pt circle by 4pt.
+                  const SizedBox(width: 4),
+                  HeaderCircleButton(
+                    semanticLabel: context.l10n.phoneCallsWithOmi,
+                    icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
+                    },
+                  ),
+                ],
+              );
+            } else if (pairedDevice != null && pairedDevice.id.isNotEmpty) {
+              // Device is paired but disconnected
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () async {
+                  await routeToPage(context, const ConnectedDevice());
+                },
+                child: Container(
+                  height: 36,
+                  margin: _pillTargetMargin,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Device icon with slash line
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: Stack(
+                          children: [
+                            Image.asset(DeviceUtils.getDeviceImageFromBtDevice(pairedDevice), fit: BoxFit.contain),
+                            // Slash line across the image
+                            Positioned.fill(child: CustomPaint(painter: SlashLinePainter())),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6.0),
+                      Text(
+                        context.l10n.disconnected,
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            } else {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () async {
+                      if (SharedPreferencesUtil().btDevice.id.isEmpty) {
+                        routeToPage(context, const ConnectDevicePage());
+                        PlatformManager.instance.analytics.connectFriendClicked();
+                      } else {
+                        await routeToPage(context, const ConnectedDevice());
+                      }
+                    },
+                    child: Container(
+                      height: 36,
+                      margin: _pillTargetMargin,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1F1F25),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
+                          isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
+                          isConnecting && isMemoriesPage
+                              ? Text(
+                                  context.l10n.searching,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
+                                )
+                              : isMemoriesPage
+                                  ? Text(context.l10n.connect,
+                                      style: const TextStyle(color: Colors.white, fontSize: 12))
+                                  : const SizedBox.shrink(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Circular phone-mic record button shown to the right of the home chat bar.
+/// Tap starts/stops recording; long-press opens the record options sheet.
+class HomeRecordButton extends StatefulWidget {
+  const HomeRecordButton({super.key});
+
+  @override
+  State<HomeRecordButton> createState() => _HomeRecordButtonState();
+}
+
+class _HomeRecordButtonState extends State<HomeRecordButton> {
   void _showRecordOptions(BuildContext context) {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
@@ -84,259 +282,33 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<HomeProvider, bool>(
-      selector: (context, state) => state.selectedIndex == 0,
-      builder: (context, isMemoriesPage, child) {
-        // Use Selector to only rebuild when battery level, connected device, or connecting state changes
-        // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
-        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool)>(
-          selector: (_, provider) => (
-            provider.batteryLevel,
-            provider.connectedDevice,
-            provider.pairedDevice,
-            provider.isConnecting,
-            provider.isCharging,
+    return Consumer<CaptureProvider>(
+      builder: (context, captureProvider, _) {
+        final isRecording = captureProvider.recordingState == RecordingState.record;
+        final isInitialising = captureProvider.recordingState == RecordingState.initialising;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _startRecording(context),
+          onLongPress: isRecording || isInitialising ? null : () => _showRecordOptions(context),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 62,
+            height: 62,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
+              shape: BoxShape.circle,
+            ),
+            child: isRecording
+                ? const Icon(Icons.stop_rounded, size: 24, color: Colors.white)
+                : isInitialising
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.add, size: 28, color: Colors.white),
           ),
-          builder: (context, data, child) {
-            final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
-            if (connectedDevice != null) {
-              final batteryPill = GestureDetector(
-                onTap: () {
-                  routeToPage(context, const ConnectedDevice());
-                  PlatformManager.instance.analytics.batteryIndicatorClicked();
-                },
-                child: Container(
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Add device icon
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: Image.asset(
-                          DeviceUtils.getDeviceImagePath(
-                            deviceType: connectedDevice.type,
-                            modelNumber: connectedDevice.modelNumber,
-                            deviceName: connectedDevice.name,
-                          ),
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                      // Only show battery indicator and percentage when battery level is valid (> 0)
-                      if (batteryLevel > 0) ...[
-                        const SizedBox(width: 6.0),
-                        if (isCharging)
-                          const Icon(Icons.bolt, color: Color.fromARGB(255, 0, 255, 8), size: 14)
-                        else
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: batteryLevel > 75
-                                  ? const Color.fromARGB(255, 0, 255, 8)
-                                  : batteryLevel > 20
-                                      ? Colors.yellow.shade700
-                                      : Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        const SizedBox(width: 4.0),
-                        Text(
-                          '$batteryLevel%',
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              );
-              if (!isMemoriesPage) return batteryPill;
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  batteryPill,
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
-                    },
-                    child: Container(
-                      height: 36,
-                      width: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
-                    ),
-                  ),
-                ],
-              );
-            } else if (pairedDevice != null && pairedDevice.id.isNotEmpty) {
-              // Device is paired but disconnected
-              return GestureDetector(
-                onTap: () async {
-                  await routeToPage(context, const ConnectedDevice());
-                },
-                child: Container(
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Device icon with slash line
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: Stack(
-                          children: [
-                            Image.asset(DeviceUtils.getDeviceImageFromBtDevice(pairedDevice), fit: BoxFit.contain),
-                            // Slash line across the image
-                            Positioned.fill(child: CustomPaint(painter: SlashLinePainter())),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6.0),
-                      Text(
-                        context.l10n.disconnected,
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            } else {
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () async {
-                      if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-                        routeToPage(context, const ConnectDevicePage());
-                        PlatformManager.instance.analytics.connectFriendClicked();
-                      } else {
-                        await routeToPage(context, const ConnectedDevice());
-                      }
-                    },
-                    child: Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
-                          isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
-                          isConnecting && isMemoriesPage
-                              ? Text(
-                                  context.l10n.searching,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
-                                )
-                              : isMemoriesPage
-                                  ? Text(context.l10n.connect,
-                                      style: const TextStyle(color: Colors.white, fontSize: 12))
-                                  : const SizedBox.shrink(),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (isMemoriesPage)
-                    Consumer<CaptureProvider>(
-                      builder: (context, captureProvider, _) {
-                        final isRecording = captureProvider.recordingState == RecordingState.record;
-                        final isInitialising = captureProvider.recordingState == RecordingState.initialising;
-                        final showChevron = !isRecording && !isInitialising;
-                        return Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => _startRecording(context),
-                                  child: Container(
-                                    height: 36,
-                                    alignment: Alignment.center,
-                                    padding: EdgeInsets.fromLTRB(12, 0, showChevron ? 10 : 12, 0),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        if (isRecording)
-                                          const Icon(Icons.stop_rounded, size: 14, color: Colors.white)
-                                        else if (isInitialising)
-                                          const SizedBox(
-                                            width: 12,
-                                            height: 12,
-                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                          )
-                                        else
-                                          const FaIcon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          isRecording
-                                              ? context.l10n.stop
-                                              : isInitialising
-                                                  ? '...'
-                                                  : context.l10n.record,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                if (showChevron) ...[
-                                  Container(width: 1, height: 18, color: Colors.white.withValues(alpha: 0.25)),
-                                  GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => _showRecordOptions(context),
-                                    child: Container(
-                                      height: 36,
-                                      alignment: Alignment.center,
-                                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      child: const Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        size: 18,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                ],
-              );
-            }
-          },
         );
       },
     );

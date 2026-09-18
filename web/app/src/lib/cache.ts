@@ -10,9 +10,9 @@
 
 // Cache TTL constants
 export const CACHE_TTL = {
-  SHORT: 60 * 1000,        // 1 minute - user-specific frequently changing data
-  MEDIUM: 5 * 60 * 1000,   // 5 minutes - lists that update occasionally
-  LONG: 60 * 60 * 1000,    // 1 hour - static/reference data
+  SHORT: 60 * 1000, // 1 minute - user-specific frequently changing data
+  MEDIUM: 5 * 60 * 1000, // 5 minutes - lists that update occasionally
+  LONG: 60 * 60 * 1000, // 1 hour - static/reference data
 } as const;
 
 // Cache entry with metadata
@@ -20,6 +20,26 @@ interface CacheEntry<T> {
   data: T;
   timestamp: number;
   ttl: number;
+}
+
+/** Scope for data that is both user-owned and backend-environment-specific. */
+export interface MemoryCacheScope {
+  ownerId: string;
+  backendScope: string;
+}
+
+export function getMemoryBackendScope(): string {
+  const configured =
+    typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_BASE_URL : undefined;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'unknown';
+}
+
+export function memoryCacheScopeKey(scope: MemoryCacheScope): string {
+  return `owner=${encodeURIComponent(scope.ownerId)}&backend=${encodeURIComponent(
+    scope.backendScope,
+  )}`;
 }
 
 // In-flight request tracking for deduplication
@@ -36,7 +56,9 @@ if (typeof window !== 'undefined') {
   try {
     // Check if this is a page reload - if so, clear cache for fresh data
     // This ensures refreshing the page always fetches fresh data from server
-    const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const navEntry = performance.getEntriesByType('navigation')[0] as
+      | PerformanceNavigationTiming
+      | undefined;
     const isReload = navEntry?.type === 'reload';
 
     if (isReload) {
@@ -46,6 +68,9 @@ if (typeof window !== 'undefined') {
       if (stored) {
         const parsed = JSON.parse(stored) as Record<string, CacheEntry<unknown>>;
         for (const [key, entry] of Object.entries(parsed)) {
+          // Memory entries are user-owned. They are hydrated lazily by
+          // getCache after the authenticated owner scope is known.
+          if (key.startsWith('memories:')) continue;
           // Only restore if not expired (check against original TTL)
           if (Date.now() - entry.timestamp < entry.ttl) {
             cache.set(key, entry);
@@ -69,7 +94,7 @@ function persistCache(): void {
       const toStore: Record<string, CacheEntry<unknown>> = {};
       for (const [key, entry] of cache.entries()) {
         // Only persist certain keys to avoid bloating storage
-        if (PERSISTENT_KEYS.some(pattern => key.includes(pattern))) {
+        if (PERSISTENT_KEYS.some((pattern) => key.includes(pattern))) {
           toStore[key] = entry;
         }
       }
@@ -89,6 +114,20 @@ const invalidationListeners = new Set<InvalidationListener>();
  * @returns { data, isStale } or null if not in cache
  */
 export function getCache<T>(key: string): { data: T; isStale: boolean } | null {
+  const isScopedMemoryKey =
+    key.startsWith('memories:owner=') && key.includes('&backend=');
+  if (!cache.has(key) && isScopedMemoryKey && typeof window !== 'undefined') {
+    try {
+      const stored = sessionStorage.getItem('omi_cache');
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, CacheEntry<unknown>>;
+        const entry = parsed[key];
+        if (entry && Date.now() - entry.timestamp < entry.ttl) cache.set(key, entry);
+      }
+    } catch {
+      // Ignore malformed or unavailable session storage.
+    }
+  }
   const entry = cache.get(key) as CacheEntry<T> | undefined;
   if (!entry) return null;
 
@@ -124,6 +163,17 @@ export function deleteCache(key: string): void {
   persistCache();
 }
 
+/** Delete entries for one data family without notifying active readers. */
+export function deleteCachePattern(pattern: string, scope?: MemoryCacheScope): void {
+  const scopeKey = scope ? memoryCacheScopeKey(scope) : null;
+  for (const key of cache.keys()) {
+    if (key.includes(pattern) && (!scopeKey || key.startsWith(`memories:${scopeKey}:`))) {
+      cache.delete(key);
+    }
+  }
+  persistCache();
+}
+
 /**
  * Invalidate cache entries matching a pattern
  * @param pattern - String pattern to match against cache keys
@@ -137,11 +187,11 @@ export function invalidateCache(pattern: string): void {
     }
   }
 
-  keysToDelete.forEach(key => cache.delete(key));
+  keysToDelete.forEach((key) => cache.delete(key));
   persistCache();
 
   // Notify listeners
-  invalidationListeners.forEach(listener => listener(pattern));
+  invalidationListeners.forEach((listener) => listener(pattern));
 }
 
 /**
@@ -188,7 +238,7 @@ export function onCacheInvalidation(listener: InvalidationListener): () => void 
  */
 export async function deduplicatedFetch<T>(
   key: string,
-  fetcher: () => Promise<T>
+  fetcher: () => Promise<T>,
 ): Promise<T> {
   // Check if request is already in flight
   const pending = pendingRequests.get(key);
@@ -216,7 +266,7 @@ export async function fetchWithCache<T>(
     ttl?: number;
     forceRefresh?: boolean;
     onStaleData?: (data: T) => void;
-  } = {}
+  } = {},
 ): Promise<T> {
   const { ttl = CACHE_TTL.MEDIUM, forceRefresh = false, onStaleData } = options;
 
@@ -231,9 +281,11 @@ export async function fetchWithCache<T>(
         // Stale data - return immediately and revalidate in background
         onStaleData(cached.data);
         // Background revalidation
-        deduplicatedFetch(key, fetcher).then(freshData => {
-          setCache(key, freshData, ttl);
-        }).catch(console.error);
+        deduplicatedFetch(key, fetcher)
+          .then((freshData) => {
+            setCache(key, freshData, ttl);
+          })
+          .catch(console.error);
         return cached.data;
       }
     }
@@ -267,8 +319,12 @@ export const cacheKeys = {
 
   conversation: (id: string) => `conversation:${id}`,
 
-  memories: (categories: string[]) =>
-    `memories:${categories.length === 0 ? 'all' : [...categories].sort().join(',')}`,
+  screenFrames: (conversationId: string) => `screenFrames:${conversationId}`,
+
+  memories: (categories: string[], view = 'default', scope?: MemoryCacheScope) =>
+    `memories:${scope ? `${memoryCacheScopeKey(scope)}:` : ''}${view}:${
+      categories.length === 0 ? 'all' : [...categories].sort().join(',')
+    }`,
 
   memory: (id: string) => `memory:${id}`,
 
@@ -283,6 +339,10 @@ export const cacheKeys = {
   search: (type: string, query: string) => `search:${type}:${query}`,
 
   apps: (tab: string, filters?: string) => `apps:${tab}:${filters || ''}`,
+
+  goals: (includeEnded: boolean) => `goals:${includeEnded ? 'all' : 'active'}`,
+
+  scores: (date?: string) => `scores:${date || 'today'}`,
 };
 
 // Invalidation patterns for mutations
@@ -292,4 +352,5 @@ export const invalidationPatterns = {
   actionItems: 'actionItems',
   folders: 'folders',
   apps: 'apps',
+  goals: 'goals',
 };

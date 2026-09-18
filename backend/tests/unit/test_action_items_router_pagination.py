@@ -1,10 +1,20 @@
 """Router pagination uses one database call with a one-row lookahead."""
 
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 
 import routers.action_items as action_items_router
+
+
+@pytest.fixture(autouse=True)
+def _disable_list_cache(monkeypatch):
+    """Keep the one-row-lookahead contract on its uncached database path.
+
+    The response-cache contract is covered by test_action_items_list_read_cost;
+    this module must exercise the database query for every parametrized page.
+    """
+    monkeypatch.setattr(action_items_router, 'list_cache_ttl_seconds', lambda: 0)
 
 
 def _item(item_id: str, *, locked: bool = False, description: str = 'Do a thing') -> dict:
@@ -52,6 +62,7 @@ def test_page_uses_one_row_lookahead(rows, expected_ids, expected_has_more):
         due_end_date=None,
         limit=3,
         offset=7,
+        budget=ANY,
     )
     assert [item.id for item in response['action_items']] == expected_ids
     assert response['has_more'] is expected_has_more

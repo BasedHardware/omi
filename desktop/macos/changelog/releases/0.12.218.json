@@ -1,0 +1,11 @@
+{
+  "version": "0.12.218",
+  "date": "2026-08-25",
+  "changes": [
+    "Hardened the rating-prompt kill switch wiring against analytics SDK updates.",
+    "The rating prompt now counts each question exactly once (retries and busy sends no longer advance it).",
+    "Hardened rating-prompt question accounting behind an executable submit/retry ledger.",
+    "The rating-prompt kill switch now takes effect within minutes, without waiting for another question.",
+    "Added a remote kill switch for the in-app rating prompt."
+  ]
+}

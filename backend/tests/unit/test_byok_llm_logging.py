@@ -168,6 +168,8 @@ def test_llm_error_callback_uses_provider_context():
 
     google_genai_stub = types.ModuleType('langchain_google_genai')
     google_genai_stub.ChatGoogleGenerativeAI = _DummyClient
+    langchain_anthropic_stub = types.ModuleType('langchain_anthropic')
+    langchain_anthropic_stub.ChatAnthropic = _DummyClient
     openai_stub = types.ModuleType('langchain_openai')
     openai_stub.ChatOpenAI = _DummyClient
     openai_stub.OpenAIEmbeddings = _DummyClient
@@ -184,6 +186,7 @@ def test_llm_error_callback_uses_provider_context():
         'langchain_core.callbacks': callbacks_stub,
         'langchain_core.language_models': language_models_stub,
         'langchain_core.output_parsers': output_parsers_stub,
+        'langchain_anthropic': langchain_anthropic_stub,
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,
@@ -244,6 +247,8 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
 
     google_genai_stub = types.ModuleType('langchain_google_genai')
     google_genai_stub.ChatGoogleGenerativeAI = _DummyClient
+    langchain_anthropic_stub = types.ModuleType('langchain_anthropic')
+    langchain_anthropic_stub.ChatAnthropic = _DummyClient
     openai_stub = types.ModuleType('langchain_openai')
     openai_stub.ChatOpenAI = _DummyClient
     openai_stub.OpenAIEmbeddings = _DummyClient
@@ -260,6 +265,7 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
         'langchain_core.callbacks': callbacks_stub,
         'langchain_core.language_models': language_models_stub,
         'langchain_core.output_parsers': output_parsers_stub,
+        'langchain_anthropic': langchain_anthropic_stub,
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,
@@ -315,6 +321,8 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
     output_parsers_stub.PydanticOutputParser = _DummyClient
     google_genai_stub = types.ModuleType('langchain_google_genai')
     google_genai_stub.ChatGoogleGenerativeAI = _DummyClient
+    langchain_anthropic_stub = types.ModuleType('langchain_anthropic')
+    langchain_anthropic_stub.ChatAnthropic = _DummyClient
     openai_stub = types.ModuleType('langchain_openai')
     openai_stub.ChatOpenAI = _DummyClient
     openai_stub.OpenAIEmbeddings = _DummyClient
@@ -331,6 +339,7 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
         'langchain_core.callbacks': callbacks_stub,
         'langchain_core.language_models': language_models_stub,
         'langchain_core.output_parsers': output_parsers_stub,
+        'langchain_anthropic': langchain_anthropic_stub,
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,

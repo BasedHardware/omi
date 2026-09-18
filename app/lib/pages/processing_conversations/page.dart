@@ -104,6 +104,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                                 widget.conversation.transcriptSegments,
                                 widget.conversation.photos,
                                 null,
+                                conversationId: widget.conversation.id,
                               ),
                             if (!hasPhotos && widget.conversation.transcriptSegments.isEmpty)
                               Column(

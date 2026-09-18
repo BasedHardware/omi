@@ -253,7 +253,7 @@ async def create_task_internal(
                 body['due_string'] = due_date.strftime('%Y-%m-%d')
 
             response = await client.post(
-                'https://api.todoist.com/rest/v2/tasks',
+                'https://api.todoist.com/api/v1/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
                 json=body,
             )
@@ -328,7 +328,7 @@ async def create_task_internal(
             if due_date:
                 task_data['due'] = due_date.strftime('%Y-%m-%dT00:00:00.000Z')
 
-            async def _google_tasks_post(c, token):
+            async def _google_tasks_post(c: httpx.AsyncClient, token: str) -> httpx.Response:
                 return await c.post(
                     f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
                     headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},

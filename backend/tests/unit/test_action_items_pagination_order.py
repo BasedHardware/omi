@@ -57,6 +57,9 @@ class _Query:
     def order_by(self, *a, **k):
         return self
 
+    def select(self, _fields):
+        return self
+
     def offset(self, n):
         self._offset = n
         return self

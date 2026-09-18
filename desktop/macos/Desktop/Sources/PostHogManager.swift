@@ -207,6 +207,17 @@ class PostHogManager {
     return PostHogSDK.shared.getFeatureFlag(flag)
   }
 
+  /// Get the JSON payload configured on a feature flag
+  func getFeatureFlagPayload(_ flag: String) -> Any? {
+    guard isInitialized else { return nil }
+    return PostHogSDK.shared.getFeatureFlagResult(flag)?.payload
+  }
+
+  /// The SDK's own flag-delivery signal (posted on the main queue after the
+  /// initial preload and after every reload) — re-exported so observers get a
+  /// compile-checked symbol instead of a raw notification-name string.
+  static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
+
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
@@ -271,33 +282,91 @@ extension PostHogManager {
     track("Signed Out")
   }
 
-  // MARK: - Monitoring Events
-
-  func monitoringStarted() {
-    track("Monitoring Started")
-  }
-
-  func monitoringStopped() {
-    track("Monitoring Stopped")
-  }
-
   // MARK: - Recording Events
 
-  func transcriptionStarted() {
-    track(
-      "Desktop Recording Started",
-      properties: [
-        "platform": "macos"
-      ])
+  static func transcriptionStartedProperties(
+    attemptId: String? = nil,
+    mode: String? = nil,
+    intent: String? = nil
+  ) -> [String: Any] {
+    var properties: [String: Any] = [
+      "platform": "macos"
+    ]
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
+    if let mode {
+      properties["recording_mode"] = mode
+    }
+    if let intent {
+      properties["intent"] = intent
+    }
+    return properties
   }
 
-  func transcriptionStopped(wordCount: Int) {
+  func transcriptionStarted(attemptId: String? = nil, mode: String? = nil, intent: String? = nil) {
+    track(
+      "Desktop Recording Started",
+      properties: Self.transcriptionStartedProperties(attemptId: attemptId, mode: mode, intent: intent))
+  }
+
+  static func transcriptionStoppedProperties(wordCount: Int, attemptId: String? = nil) -> [String: Any] {
+    var properties: [String: Any] = [
+      "platform": "macos",
+      "word_count": wordCount,
+    ]
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
+    return properties
+  }
+
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil) {
     track(
       "Desktop Recording Stopped",
-      properties: [
-        "platform": "macos",
-        "word_count": wordCount,
-      ])
+      properties: Self.transcriptionStoppedProperties(wordCount: wordCount, attemptId: attemptId))
+  }
+
+  // MARK: - Capture Attempt Outcome
+
+  /// Terminal record for one armed ambient-capture attempt. The authoritative
+  /// attempt/outcome funnel for the retention investigation; `Desktop Recording
+  /// Started` remains an arming signal, not a success KPI.
+  static let captureAttemptOutcomeEventName = "Desktop Capture Attempt Outcome"
+
+  /// Full outcome payload for an attempt that terminalized in-process. Every
+  /// field is a bounded boolean/enum/opaque id — no transcript, audio, device,
+  /// or path content (see `CaptureAttemptOutcomeState`).
+  static func captureAttemptOutcomeProperties(
+    _ attempt: CaptureAttemptOutcomeState,
+    finalizationReason: TranscriptionFinalizationReason
+  ) -> [String: Any] {
+    [
+      "platform": "macos",
+      "attempt_id": attempt.attemptId,
+      "mode": attempt.mode,
+      "intent": attempt.intent.rawValue,
+      "capture_eligible": attempt.captureEligible,
+      "first_audio_frame": attempt.firstAudioFrame,
+      "speech_observed": attempt.speechObserved,
+      "terminal_reason": attempt.terminalReason(for: finalizationReason).rawValue,
+      "conversation_accepted": attempt.conversationAccepted,
+    ]
+  }
+
+  /// Minimal outcome payload for an attempt whose process died mid-flight:
+  /// the crash-recovery hook only knows the persisted join key, so every other
+  /// dimension is omitted rather than guessed.
+  static func captureAttemptPendingProperties(attemptId: String) -> [String: Any] {
+    [
+      "platform": "macos",
+      "attempt_id": attemptId,
+      "terminal_reason": CaptureAttemptOutcomeState.TerminalReason.pending.rawValue,
+    ]
+  }
+
+  func captureAttemptOutcome(properties: [String: Any]) {
+    track(Self.captureAttemptOutcomeEventName, properties: properties)
   }
 
   func recordingError(
@@ -501,14 +570,58 @@ extension PostHogManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
   // This matches Flutter's naming for analytics consistency.
 
-  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
+  static func conversationCreatedProperties(
+    source: String,
+    durationSeconds: Int?,
+    attemptId: String? = nil
+  ) -> [String: Any] {
     var properties: [String: Any] = [
-      "source": source
+      "conversation_source": source
     ]
     if let duration = durationSeconds {
       properties["duration_seconds"] = duration
     }
-    track("Memory Created", properties: properties)
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
+    return properties
+  }
+
+  func conversationCreated(
+    conversationId _: String,
+    source: String,
+    durationSeconds: Int? = nil,
+    attemptId: String? = nil
+  ) {
+    track(
+      "Memory Created",
+      properties: Self.conversationCreatedProperties(
+        source: source,
+        durationSeconds: durationSeconds,
+        attemptId: attemptId)
+    )
+  }
+
+  static func conversationProcessingProperties(elapsedSeconds: Int, outcome: String?) -> [String: Any] {
+    var properties: [String: Any] = ["elapsed_seconds": max(0, elapsedSeconds)]
+    if let outcome {
+      properties["outcome"] = outcome
+    }
+    return properties
+  }
+
+  func conversationProcessingCompleted(conversationId _: String, elapsedSeconds: Int, outcome: String) {
+    track(
+      "Conversation Processing Completed",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: outcome)
+    )
+  }
+
+  func conversationProcessingStalled(conversationId _: String, elapsedSeconds: Int) {
+    track(
+      "Conversation Processing Stalled",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: nil)
+    )
   }
 
   func memoryDeleted(conversationId: String) {
@@ -549,16 +662,20 @@ extension PostHogManager {
 
   // MARK: - Search Events
 
-  func searchQueryEntered(query: String) {
-    track(
-      "Search Query Entered",
-      properties: [
-        "query_length": query.count
-      ])
+  func searchQueryEntered(properties: [String: Any]) {
+    track("Search Query Entered", properties: properties)
   }
 
-  func searchBarFocused() {
-    track("Search Bar Focused")
+  func searchBarFocused(properties: [String: Any]) {
+    track("Search Bar Focused", properties: properties)
+  }
+
+  func searchResultOpened(properties: [String: Any]) {
+    track("Search Result Opened", properties: properties)
+  }
+
+  func conversationOpenedFromSearch(properties: [String: Any]) {
+    track("Conversation Opened From Search", properties: properties)
   }
 
   // MARK: - Settings Events
@@ -623,6 +740,17 @@ extension PostHogManager {
       ])
   }
 
+  /// Reprocess fired without a specific app (one-tap row affordance for
+  /// untitled/failed conversations). Separate event so we can distinguish
+  /// from the existing "reprocess-with-app" funnel in product metrics.
+  func conversationReprocessedDefault(conversationId: String) {
+    track(
+      "Conversation Reprocessed Default",
+      properties: [
+        "conversation_id": conversationId
+      ])
+  }
+
   // MARK: - Settings Events (Additional)
 
   func settingToggled(setting: String, enabled: Bool) {
@@ -665,6 +793,21 @@ extension PostHogManager {
       properties: [
         "feedback_length": feedbackLength
       ])
+  }
+
+  func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
+    var properties: [String: Any] = [
+      "rating": rating,
+      "trigger": "third_question",
+    ]
+    // The prompt revision the client saw, so copy experiments are separable.
+    // The comment NEVER travels to PostHog — Firestore only, admin-only read.
+    if let revision {
+      properties["revision"] = revision
+    }
+    track(
+      "Desktop Rating Submitted",
+      properties: properties)
   }
 
   // MARK: - Rewind Events (Desktop-specific)
@@ -839,14 +982,16 @@ extension PostHogManager {
   func suggestionAssistantEvaluationFailed(
     identity: SuggestionAssistantTelemetry.Identity,
     shape: SuggestionAssistantTelemetry.EvaluationShape,
-    latency: TimeInterval
+    latency: TimeInterval,
+    reason: SuggestionAssistantTelemetry.EvaluationFailureReason
   ) {
     track(
       SuggestionAssistantTelemetry.evaluationFailedEventName,
       properties: SuggestionAssistantTelemetry.evaluationFailedPayload(
         identity: identity,
         shape: shape,
-        latency: latency
+        latency: latency,
+        reason: reason
       )
     )
   }
@@ -1014,7 +1159,9 @@ extension PostHogManager {
     title: String,
     assistantId: String,
     surface: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    dismissalKind: NotificationDismissalKind,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    attention: InterjectAttention? = nil
   ) {
     var properties = notificationProperties(
       notificationId: notificationId,
@@ -1022,10 +1169,46 @@ extension PostHogManager {
       assistantId: assistantId,
       surface: surface
     )
+    properties["dismissal_kind"] = dismissalKind.rawValue
+    if let attention {
+      properties["attention"] = attention.rawValue
+    }
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",
       properties: properties)
+  }
+
+  func notificationHovered(
+    notificationId: String,
+    assistantId: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties: [String: Any] = [
+      "notification_id": notificationId,
+      "assistant_id": assistantId,
+    ]
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
+    track("Notification Hovered", properties: properties)
+  }
+
+  func suggestionFeedbackRecorded(
+    verb: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    provenance: InterjectFeedbackProvenance? = nil
+  ) {
+    var properties: [String: Any] = ["verb": verb]
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
+    if let provenance {
+      // Keep account identity out of event properties; PostHog already binds
+      // events to the authenticated installation. These opaque joins are
+      // sufficient for receipt correlation without copying owner IDs.
+      properties["feedback_lane"] = provenance.lane
+      properties["feedback_delivery_id"] = provenance.deliveryID
+      properties["feedback_candidate_id"] = provenance.candidateID
+      properties["feedback_account_generation"] = provenance.accountGeneration
+    }
+    track("Suggestion Feedback Recorded", properties: properties)
   }
 
   private func notificationProperties(

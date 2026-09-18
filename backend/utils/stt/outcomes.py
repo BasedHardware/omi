@@ -12,6 +12,12 @@ _KNOWN_PROVIDERS = {
     PrerecordedSTTService.DEEPGRAM,
     PrerecordedSTTService.MODULATE,
     PrerecordedSTTService.PARAKEET,
+    # Live-path provider tokens (config.stt_provider_policy). The live socket
+    # and failover paths label failures with these; omitting them laundered
+    # every soniox and deepgram_cloud terminal failure to provider='unknown'
+    # in omi_live_stt_terminal_failures_total.
+    'soniox',
+    'deepgram_cloud',
 }
 
 _PUBLIC_FAILURES: dict[TranscriptionOutcome, tuple[int, str, str]] = {

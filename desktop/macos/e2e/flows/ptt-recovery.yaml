@@ -1,0 +1,76 @@
+version: 2
+name: ptt-recovery
+tier: 2
+description: Hermetic offline PTT question recovery merges an unsent question into the existing main composer draft.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationPTTRecoveryActions.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/OfflinePTTQuestionRecovery.swift
+  - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/MainChatNavigationRequest.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatComposerDraft.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
+preconditions:
+  - automation_bridge_ready
+  - auth_ready
+  - named_non_production_bundle_ui_lane
+  - provider_mode_offline
+steps:
+  - id: S0
+    name: Mount the actual composer before exercising recovery
+    bridge.navigate:
+      target: chat
+      activateApp: false
+    wait:
+      state.chatFirstRoute: chat
+  - id: S1
+    bridge.action:
+      name: ptt_recovery_snapshot
+    expect:
+      result.detail.question_available: "false"
+  - id: S2
+    bridge.action:
+      name: set_chat_drafts
+      params:
+        main: "[[MARKER:ptt-recovery-existing]] Existing composer note"
+    expect:
+      result.detail.main: "[[MARKER:ptt-recovery-existing]] Existing composer note"
+  - id: S3
+    bridge.action:
+      name: chat_drafts_snapshot
+    expect:
+      result.detail.main: "[[MARKER:ptt-recovery-existing]] Existing composer note"
+  - id: S4
+    bridge.action:
+      name: ptt_recovery_fixture
+      params:
+        text: "[[MARKER:ptt-recovery-question]] What did I miss while we were offline?"
+    expect:
+      result.detail.question_available: "true"
+  - id: S5
+    bridge.action:
+      name: ptt_recovery_snapshot
+    expect:
+      result.detail.question_available: "true"
+  - id: S6
+    bridge.action:
+      name: ptt_recovery_review
+    expect:
+      result.detail.question_available: "false"
+  - id: S7
+    bridge.action:
+      name: chat_drafts_snapshot
+    expect:
+      result.detail.main: "[[MARKER:ptt-recovery-existing]] Existing composer note\n\n[[MARKER:ptt-recovery-question]] What did I miss while we were offline?"
+  - id: S8
+    bridge.action:
+      name: set_chat_drafts
+      params:
+        main: ""
+    expect:
+      result.detail.main: ""

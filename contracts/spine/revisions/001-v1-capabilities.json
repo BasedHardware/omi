@@ -1,0 +1,7 @@
+{
+  "path": "scripts/dev-harness/tests/spine/fake_flutter.py",
+  "owner": "V1",
+  "before": "086e922387d5a0ad767f3215d465ec16ab0b575c3536e3ec51190c1acd7b5a91",
+  "after": "ded5dc8e8172496630c3d2a6f662f8a6ccbcb30b593e7a5bc490711ef69ff9cd",
+  "reason": "Spine A turn 4, coordinator and App UI review: B0 registers exactly five extensions; fault arm/clear are operations, not capabilities. No broker fallback or acceptance assertion changed."
+}

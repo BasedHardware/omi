@@ -140,7 +140,7 @@ struct ConversationsLiveTranscript: View {
         LiveTranscriptView(segments: monitor.segments)
           .frame(maxHeight: 220)
           // Let clicks fall through to the card's expand tap rather than being
-          // captured by the inner scroll / text selection.
+          // captured by the inner scroll view.
           .allowsHitTesting(false)
       }
     }
@@ -155,6 +155,53 @@ struct ConversationsLiveTranscript: View {
     )
     .contentShape(RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous))
     .modifier(LiveTranscriptExpandTap(onExpand: onExpand, isHovered: $isHovered))
+  }
+}
+
+/// Replaces the Live card between "capture stopped" and "row in the list".
+/// Same slot, same shape, same last line of transcript — the capture the
+/// user was watching is what is being saved.
+struct ConversationsSavingCaptureCard: View {
+  @ObservedObject private var monitor = LiveTranscriptMonitor.shared
+  @State private var pulse = false
+
+  private var lastLine: String? {
+    monitor.savedSegments.last?.text ?? monitor.latestText
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.xs) {
+        Circle()
+          .fill(Ink.accent)
+          .frame(width: 7, height: 7)
+          .opacity(pulse ? 0.4 : 1.0)
+          .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+        Text("Saving").scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(Ink.secondary)
+        Spacer()
+      }
+      if let lastLine, !lastLine.isEmpty {
+        Text(lastLine)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+          .lineLimit(2)
+          .padding(.vertical, OmiSpacing.sm)
+      } else {
+        Text("Adding to your conversations…").scaledFont(size: OmiType.body).foregroundColor(Ink.secondary)
+          .padding(.vertical, OmiSpacing.sm)
+      }
+    }
+    .padding(OmiSpacing.lg)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+        .fill(Ink.rowFill)
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+            .stroke(Ink.separator.opacity(0.3), lineWidth: 1))
+    )
+    .onAppear { pulse = true }
+    .accessibilityIdentifier("conversations-saving-capture")
   }
 }
 
@@ -387,10 +434,16 @@ private struct LiveSegmentView: View {
       }
 
       // Message bubble
+      // NOTE: SwiftUI text selection was removed here because it wraps each
+      // Text in an NSTextView-backed StyledTextLayoutEngine (SelectionOverlay),
+      // the same FC-selection-overlay-layout-loop failure class the saved
+      // transcript already hit in SpeakerBubbleView. A long capture mounts one
+      // overlay per segment and every live update relays them all. Once the
+      // capture is saved, users can copy the full transcript via the Copy
+      // control in the conversation detail header.
       Text(segment.text)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
-        .textSelection(.enabled)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
@@ -405,7 +458,6 @@ private struct LiveSegmentView: View {
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
             .italic()
-            .textSelection(.enabled)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xs)
             .background(

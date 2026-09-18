@@ -8,8 +8,6 @@ import XCTest
 @MainActor
 final class QueryShellTests: XCTestCase {
 
-  // MARK: - The one key
-
   /// **`⏎` sends. There is nothing else for it to mean.**
   ///
   /// The surface used to answer this question with "it depends": `⏎` searched and `⌘⏎` asked, which
@@ -30,9 +28,43 @@ final class QueryShellTests: XCTestCase {
     }
   }
 
+  // MARK: - What the empty bar says
+
+  /// Clearing the chat left the bar saying `Ask a follow-up…` over an empty transcript — an
+  /// invitation to follow up on nothing. The composer now says `Ask Omi`, full stop: the prompt
+  /// does not depend on what the transcript holds, so there is no state for it to get wrong.
+  func testTheChatComposerAlwaysSaysAskOmi() {
+    XCTAssertEqual(QueryComposerPlaceholder.text(mode: .answer), "Ask Omi")
+    XCTAssertEqual(QueryComposerPlaceholder.chat, "Ask Omi")
+  }
+
+  /// `chat_composer_snapshot` must expose the same placeholder/mode the composer draws, or a
+  /// harness cannot assert the Ask Omi prompt through the supported headless bridge (#13201).
+  func testChatComposerSnapshotExposesPlaceholderAndMode() {
+    let answer = ChatComposerAutomationSnapshot.detail(
+      draft: "", stagedAttachments: 0, firstAttachment: "", mode: .answer)
+    XCTAssertEqual(answer["placeholder"], "Ask Omi")
+    XCTAssertEqual(answer["mode"], "answer")
+    QueryShellComposerAutomation.publish(.answer)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, "Ask Omi")
+
+    let results = ChatComposerAutomationSnapshot.detail(
+      draft: "priya", stagedAttachments: 0, firstAttachment: "", mode: .results)
+    XCTAssertEqual(results["placeholder"], RewindSearchMetrics.placeholder)
+    XCTAssertEqual(results["mode"], "results")
+    QueryShellComposerAutomation.publish(.results)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, RewindSearchMetrics.placeholder)
+    QueryShellComposerAutomation.publish(.homeDefault)
+  }
+
+  /// The search placement keeps its own prompt; it is a different control.
+  func testSearchingKeepsTheSearchPlaceholder() {
+    XCTAssertEqual(QueryComposerPlaceholder.text(mode: .results), RewindSearchMetrics.placeholder)
+  }
+
   // MARK: - What a submit leaves behind
 
-  /// A composer that keeps the message it just sent leaves `Ask a follow-up…` permanently
+  /// A composer that keeps the message it just sent leaves its placeholder permanently
   /// unreachable, makes a second `⏎` re-send the question verbatim, and forces the reader to empty
   /// the field by hand before they can write the next one.
   func testAskingSendsTheTrimmedQuestionAndEmptiesTheComposer() {
@@ -53,6 +85,33 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(submission.question, "priya")
     XCTAssertEqual(submission.text, "", "the send consumes the words wherever the bar is standing")
     XCTAssertEqual(submission.mode, .answer)
+  }
+
+  /// **A staged file with no words is a send.** Dropping a PDF on the bar and pressing return used to
+  /// resolve to `.none`, so the only way to ask about an attachment was to invent words for it.
+  func testAStagedItemWithNoWordsSubmitsAsAnAsk() {
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "", hasAttachments: true), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "   ", hasAttachments: true), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "", hasAttachments: false), .none)
+
+    let submission = QueryShellSubmission.resolve(text: "  ", hasAttachments: true)
+    XCTAssertEqual(submission.action, .ask)
+    XCTAssertEqual(submission.question, "", "An empty question: the attachment is the message")
+    XCTAssertEqual(submission.text, "", "The send consumes the field as it does for words")
+    XCTAssertEqual(submission.mode, .answer)
+  }
+
+  /// The ledger admits the resolved attachment-only submit — and once the send has consumed the
+  /// attachments there is nothing for `Try again` to re-send.
+  func testTheLedgerAdmitsAnAttachmentOnlySubmitButOffersNoRetryForIt() {
+    var ledger = QueryShellSendLedger()
+    XCTAssertNil(ledger.planSubmit(nil), "A bare empty field resolved to no question at all")
+    guard let plan = ledger.planSubmit("") else { return XCTFail("an attachment-only send is a plan") }
+    XCTAssertTrue(plan.countsAsQuestion)
+    XCTAssertNil(ledger.planSubmit("", providerBusy: true), "Return during a turn is still refused")
+
+    ledger.recordAccepted(plan)
+    XCTAssertNil(ledger.planRetry(), "The caption alone would ask about files that are gone")
   }
 
   /// An inert key must not move the reader. Before this, an empty field was itself read as "go back
@@ -200,14 +259,39 @@ final class QueryShellTests: XCTestCase {
 
   // MARK: - The gap
 
-  /// The single most important number on the surface: two panels 12 pt apart read as two objects,
+  /// The single most important number on the surface: two panels keep a compact real gap,
   /// the same two at 0 read as one slab with a rule through it.
   func testTheTwoPanelsKeepRealAirBetweenThemAndShareOneCorner() {
-    XCTAssertEqual(QueryShellLayout.panelGap, 12)
+    XCTAssertEqual(QueryShellLayout.panelGap, 8)
     XCTAssertEqual(
       QueryShellLayout.panelGap, RewindSearchLayout.panelGap,
       "one product, one opinion about how far apart its glass sits")
     XCTAssertEqual(QueryShellLayout.panelCornerRadius, InkGlass.cornerRadius)
+  }
+
+  func testSharedSearchAndBrainChromeUseTheCompactDensityContract() {
+    XCTAssertEqual(QueryShellLayout.barMinHeight, 48)
+    XCTAssertEqual(RewindSearchLayout.barHeight, QueryShellLayout.barMinHeight)
+    XCTAssertEqual(RewindSearchMetrics.queryFontSize, QueryShellLayout.queryFontSize)
+    XCTAssertEqual(
+      PagePanelFirstRowMetrics.topPadding,
+      QueryShellLayout.panelPaddingTop,
+      "list and catalog toolbars must start where Activity's first row starts")
+    XCTAssertEqual(
+      BrainSectionPageMetrics.navigationTopPadding,
+      PagePanelFirstRowMetrics.topPadding,
+      "Brain pills must not sit closer to the panel edge than the other page controls")
+    XCTAssertEqual(
+      PagePanelFirstRowMetrics.bottomPadding,
+      0,
+      "the first row must not stack a second gap before its content")
+    XCTAssertEqual(
+      BrainSectionPageMetrics.navigationBottomPadding,
+      PagePanelVerticalRhythm.rowGap,
+      "Brain navigation owns the single gap before its refinement row")
+    XCTAssertEqual(BrainSectionPageMetrics.navigationHeight, 44)
+    XCTAssertGreaterThanOrEqual(QueryShellLayout.chipHeight, 28)
+    XCTAssertLessThan(QueryShellLayout.panelHeaderSpacing, 8)
   }
 
   /// Both panels sit in the top bar's lane, or the surface reads as three objects that missed
@@ -472,26 +556,21 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(QueryShellRoute.conversation.navItem, .conversations)
     XCTAssertEqual(QueryShellRoute.memories.navItem, .conversations)
     XCTAssertEqual(QueryShellRoute.brainMap.navItem, .conversations)
-    XCTAssertEqual(QueryShellRoute.rewind.navItem, .rewind)
+    XCTAssertEqual(QueryShellRoute.rewind.navItem, .conversations)
   }
 
-  /// The three hub routes must each select a *different* one of the hub's own views, and Rewind must
-  /// select none — writing a Memory-hub destination on the way to Rewind is how the hub ends up on
-  /// whichever view the last unrelated navigation happened to leave behind.
-  func testTheThreeHubRoutesSelectTheHubsOwnThreeViews() {
+  /// Each route into Brain must select the peer view that owns its content.
+  func testTheBrainRoutesSelectTheirOwnViews() {
     XCTAssertEqual(
       QueryShellRoute.allCases.compactMap(\.memoryDestination),
-      [.conversations, .memories, .brainMap],
-      "Home's hub routes no longer cover the hub's three views one-for-one")
-    XCTAssertNil(
-      QueryShellRoute.rewind.memoryDestination,
-      "a page of its own must not write the Memory hub's destination on the way there")
+      [.conversations, .memories, .brainMap, .rewind],
+      "Home's Brain routes no longer select their peer views one-for-one")
 
     for route in QueryShellRoute.allCases {
       guard let hubView = route.memoryDestination else { continue }
       XCTAssertTrue(
-        MemoryHubDestination.switcherOrder.contains(hubView),
-        "\(route) selects a hub view the hub's own switcher does not show")
+        ActivityDestinationChip.reachableHubDestinations.contains(hubView),
+        "\(route) selects a hub view Activity's chip row has no chip for")
     }
   }
 

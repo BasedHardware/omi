@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-attestation-scoped-to-batch-not-item",
+  "violated_contract": "When a model proposes a label, tag, or claim for each of several items in one batched request, the evidence check that accepts it must run against the item it is being attached to. Searching the batch's combined text accepts any proposal supported by any item, which is a strictly weaker check than no batching at all: it is satisfied more easily the more items are batched together.",
+  "canonical_prevention": "Carry the per-item evidence alongside the per-item proposal — a map keyed by item id, not one concatenated string — and pass the item's own key into the acceptance predicate. Keep a test in which a label is supported by exactly one item in a multi-item batch and assert the other items in that batch are not given it.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ContextWorkstreamReconcilerTests.swift"
+  ],
+  "evidence_prs": [
+    11665
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamReconciler.swift"
+  ],
+  "status": "open"
+}

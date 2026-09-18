@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
@@ -16,9 +17,11 @@ from fastapi.responses import JSONResponse, Response
 from firebase_admin import credentials
 
 from routers import pusher, metrics
+from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
 from utils.executors import drain_background_tasks, log_executor_health, start_background_task
 from utils.readiness import ReadinessGate
+from utils.stt.streaming import validate_streaming_stt_env
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -30,7 +33,24 @@ else:
     firebase_admin_sdk.initialize_app()
 
 
+def _validate_static_capabilities(env: Mapping[str, str] | None = None) -> None:
+    """Reject a Pusher revision that cannot complete its mandatory finalizer.
+
+    This is a static configuration admission check only. Transient memory or
+    datastore availability must not flap process readiness.
+    """
+
+    memory_mode = rollout_mode_env_value(env)
+    if memory_mode not in {MemoryRolloutMode.write.value, MemoryRolloutMode.read.value}:
+        raise RuntimeError(
+            'pusher static capability admission failed: '
+            'conversation.finalize.persisted requires memory.canonical.mutate'
+        )
+    validate_streaming_stt_env(env)
+
+
 async def startup_event() -> None:
+    _validate_static_capabilities()
     start_background_task(log_executor_health(), name='pusher:executor_health')
 
 

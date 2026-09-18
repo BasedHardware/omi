@@ -36,6 +36,7 @@ FINALIZATION_ADMISSION_METHODS = {
 LIFECYCLE_FIELDS = {
     'status',
     'discarded',
+    'deferred',
     'finalization_job_id',
     'finalization_revision',
     'finalization_status',

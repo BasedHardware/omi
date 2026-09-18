@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: 'Enable or disable qualified desktop Beta promotion'
+        description: 'Enable or disable signed desktop Beta promotion'
         required: true
         type: choice
         options:

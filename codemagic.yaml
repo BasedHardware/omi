@@ -23,7 +23,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -174,7 +174,8 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $(scripts/build_provenance_dart_defines.sh)
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -237,7 +238,7 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -409,7 +410,8 @@ workflows:
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            $(scripts/build_provenance_dart_defines.sh)
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -454,7 +456,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -558,7 +560,8 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $(scripts/build_provenance_dart_defines.sh)
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -639,7 +642,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -829,7 +832,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -957,7 +960,8 @@ workflows:
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            $(scripts/build_provenance_dart_defines.sh)
 
 
     artifacts:
@@ -1001,7 +1005,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1103,7 +1107,8 @@ workflows:
           # Build
           shorebird patch ios \
             --flavor prod -- \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $(scripts/build_provenance_dart_defines.sh)
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -1135,7 +1140,7 @@ workflows:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
         DMGBUILD_VERSION: "1.6.7"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1667,7 +1672,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -1797,7 +1802,8 @@ workflows:
 
           # Should use bump version automatically by CI
           shorebird patch android \
-            --flavor prod
+            --flavor prod -- \
+            $(scripts/build_provenance_dart_defines.sh)
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
@@ -1816,8 +1822,8 @@ workflows:
 
   # ============================================
   # OMI DESKTOP SWIFT RELEASE
-  # Builds, signs, notarizes, and publishes the Swift macOS app from omi/desktop/macos/.
-  # Source code lives directly in omi/desktop/macos/ (monorepo).
+  # Builds, signs, notarizes, and publishes the Swift macOS app from desktop/macos/.
+  # Source code lives directly in desktop/macos/ (monorepo).
   #
   # Trigger: push a tag like v0.0.10+10-macos to BasedHardware/omi
   #   git tag v0.0.10+10-macos && git push origin v0.0.10+10-macos
@@ -1878,13 +1884,13 @@ workflows:
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
         DMGBUILD_VERSION: "1.6.7"
-      xcode: 16.4
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: "v*-macos"
-          include: true
+      # Desktop Swift ship/CI toolchain pin. Keep in sync with
+      # desktop/macos/ci/xcode-pin.json (enforced by the
+      # desktop-swift-ci-contract check); never `latest` or `edge`.
+      xcode: 26.6
+    # API-dispatched by desktop_auto_release.yml after its exact tag is pushed.
+    # Keeping this workflow manual prevents a webhook/API race from creating
+    # duplicate builds for one immutable candidate.
     working_directory: desktop/macos
     cache:
       cache_paths:
@@ -2677,7 +2683,7 @@ workflows:
       - name: Publish immutable external preview
         script: |
           if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
-            echo "Normal releases publish through the beta/stable qualification lane."
+            echo "Normal releases publish through the beta/stable signed-smoke lane."
             exit 0
           fi
           set -euo pipefail
@@ -2753,9 +2759,10 @@ workflows:
           fi
           set -euo pipefail
 
-          # Symbolication is a release requirement, not best-effort publishing.
-          # Upload the UUID-verified dSYM before creating the immutable candidate.
-          scripts/publish-desktop-debug-symbols.sh upload \
+          # Keep symbol publication repairable: a Sentry credential outage must not
+          # strand an otherwise signed and smoke-tested candidate. The exact,
+          # UUID-verified dSYM is retained as a GitHub release artifact below.
+          scripts/publish-desktop-debug-symbols.sh upload-best-effort \
             --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
             --dsym "$DSYM_PATH"
 
@@ -2886,7 +2893,10 @@ workflows:
         # This registry remains on the production control plane even when the
         # preview artifact itself is configured to use a preview backend.
         DESKTOP_PREVIEW_REGISTRY_URL: "https://api.omi.me"
-      xcode: 16.4
+      # Desktop Swift ship/CI toolchain pin. Keep in sync with
+      # desktop/macos/ci/xcode-pin.json (enforced by the
+      # desktop-swift-ci-contract check); never `latest` or `edge`.
+      xcode: 26.6
     working_directory: desktop/macos
     cache:
       cache_paths:
@@ -2896,3 +2906,90 @@ workflows:
       - build/*.app
       - build/*.dmg
       - build/desktop-smoke-result.json
+
+  # ============================================
+  # CONTEXT FOR CLAUDE RELEASE
+  # A separately-installable micro-app release. The package/release helpers own
+  # product identity and artifact naming; only Apple signing/notarization inputs
+  # are shared with the Omi Desktop workflow.
+  #
+  # Trigger: context-for-claude-v1.1.0
+  # Required group: context_for_claude_release
+  #   CONTEXT_SPARKLE_PUBLIC_KEY   — Context-only Sparkle Ed25519 public key
+  #   CONTEXT_SPARKLE_PRIVATE_KEY  — Context-only private ZIP-signing key
+  #   CONTEXT_GITHUB_TOKEN         — repo Contents-write token for release upload
+  # Reused appstore_credentials inputs:
+  #   MACOS_DEVELOPER_ID_P12, MACOS_DEVELOPER_ID_P12_PASSWORD,
+  #   APP_STORE_CONNECT_PRIVATE_KEY, APP_STORE_CONNECT_KEY_IDENTIFIER,
+  #   APP_STORE_CONNECT_ISSUER_ID
+  # ============================================
+  context-for-claude-release:
+    name: Release Context for Claude
+    instance_type: mac_mini_m4
+    max_build_duration: 120
+    environment:
+      groups:
+        - appstore_credentials
+        - context_for_claude_release
+      vars:
+        CONTEXT_RELEASE_REPO: "BasedHardware/omi"
+      xcode: 16.4
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "context-for-claude-v*"
+          include: true
+    working_directory: desktop/context-for-claude
+    cache:
+      cache_paths:
+        - ~/Library/Caches/org.swift.swiftpm
+    scripts:
+      - name: Validate Context release tag
+        script: |
+          set -euo pipefail
+          ./scripts/release-context.sh --tag "${CM_TAG:?CM_TAG is required}" --dry-run
+
+      - name: Import Developer ID certificate
+        script: |
+          set -euo pipefail
+          keychain initialize
+          printf '%s' "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/context-developer-id.p12
+          KEYCHAIN_PATH="$(keychain get-default)"
+          security import /tmp/context-developer-id.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm -f /tmp/context-developer-id.p12
+          SIGN_IDENTITY="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | awk -F'"' '{print $2}')"
+          [[ -n "$SIGN_IDENTITY" ]] || {
+            echo "ERROR: Developer ID Application certificate not found" >&2
+            exit 1
+          }
+          printf 'CFC_SIGN_IDENTITY=%s\n' "$SIGN_IDENTITY" >> "$CM_ENV"
+
+      - name: Resolve Context Swift packages
+        script: |
+          set -euo pipefail
+          # --disable-keychain: the Developer ID import above initializes a build keychain, after
+          # which SwiftPM's credential search fails with errSecInteractionNotAllowed (-25308) and
+          # aborts the resolve while fetching Sparkle's binary artifact. That artifact is a public
+          # release asset and none of this package's dependencies are private, so there is no
+          # credential to find.
+          xcrun swift package resolve --disable-keychain
+
+      - name: Build, notarize, sign, and publish Context
+        script: |
+          set -euo pipefail
+          # These are existing Apple notarization inputs from appstore_credentials.
+          # They are mapped to Context-specific helper variables and never printed.
+          export CFC_ASC_PRIVATE_KEY="$APP_STORE_CONNECT_PRIVATE_KEY"
+          export CFC_ASC_KEY_ID="$APP_STORE_CONNECT_KEY_IDENTIFIER"
+          export CFC_ASC_ISSUER_ID="$APP_STORE_CONNECT_ISSUER_ID"
+          ./scripts/release-context.sh --tag "${CM_TAG:?CM_TAG is required}" --publish
+
+    artifacts:
+      - dist/*.dmg
+      - dist/*.zip

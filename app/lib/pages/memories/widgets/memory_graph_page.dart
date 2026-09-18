@@ -12,6 +12,7 @@ import 'package:flutter/scheduler.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
@@ -223,8 +224,6 @@ class MemoryGraphPage extends StatefulWidget {
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
-  final bool autoRebuildIfEmpty;
-  final bool hideRebuildButtonWhenEmpty;
   final double initialZoom;
 
   const MemoryGraphPage({
@@ -233,8 +232,6 @@ class MemoryGraphPage extends StatefulWidget {
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
-    this.autoRebuildIfEmpty = false,
-    this.hideRebuildButtonWhenEmpty = false,
     this.initialZoom = 1.0,
   });
 
@@ -248,6 +245,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   final Random _rnd = Random();
   final GlobalKey _graphKey = GlobalKey();
+  final GlobalKey _shareButtonKey = GlobalKey();
 
   double _rotationX = 0.0;
   double _rotationY = 0.0;
@@ -259,14 +257,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   Offset? _lastPanStart;
 
   bool _isLoading = true;
-  bool _isRebuilding = false;
   String? _error;
 
   final _repaintNotifier = ValueNotifier<int>(0);
 
   String? _selectedNodeId;
   final Set<String> _highlightedNodeIds = {};
-  int _autoRebuildAttempts = 0;
 
   @override
   void initState() {
@@ -345,10 +341,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _populateGraph(data);
       _runLayoutSync();
     } catch (e) {
+      Logger.debug('Knowledge graph load failed: $e');
       if (!mounted) return;
       if (!silent) {
         setState(() {
-          _error = e.toString();
+          _error = context.l10n.couldNotLoadKnowledgeGraph;
         });
       }
     } finally {
@@ -371,38 +368,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       if (!currentIds.contains(n['id'])) return false;
     }
     return true;
-  }
-
-  Future<void> _rebuildGraph() async {
-    setState(() {
-      _isRebuilding = true;
-      _error = null;
-    });
-
-    try {
-      PlatformManager.instance.analytics.brainMapRebuilt();
-      await KnowledgeGraphApi.rebuildKnowledgeGraph();
-      if (!mounted) return;
-
-      final data = await KnowledgeGraphApi.waitForGraphStability();
-      if (!mounted) return;
-
-      _populateGraph(data);
-      _runLayoutSync();
-
-      simulation.wake();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRebuilding = false;
-        });
-      }
-    }
   }
 
   void _populateGraph(Map<String, dynamic> data) {
@@ -570,7 +535,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       await file.writeAsBytes(finalByteData.buffer.asUint8List());
 
       if (mounted) {
-        await Share.shareXFiles([XFile(file.path)], text: context.l10n.checkOutMyMemoryGraph);
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: context.l10n.checkOutMyMemoryGraph,
+          sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
+        );
       }
     } catch (e) {
       Logger.debug('Error sharing graph: $e');
@@ -594,7 +563,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               elevation: 0,
               leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
               actions: widget.showShareButton
-                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  ? [
+                      IconButton(
+                        key: _shareButtonKey,
+                        icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                        onPressed: _shareGraph,
+                      ),
+                    ]
                   : null,
             )
           : null,
@@ -649,13 +624,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
-      if (widget.autoRebuildIfEmpty && !_isRebuilding && _autoRebuildAttempts < 3) {
-        _autoRebuildAttempts++;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _rebuildGraph();
-        });
-      }
-
       return Center(
         child: Padding(
           padding: EdgeInsets.all(widget.embedded ? 16.0 : 32.0),
@@ -670,32 +638,10 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 Text(context.l10n.noKnowledgeGraphYet, style: const TextStyle(color: Colors.white70, fontSize: 18)),
                 const SizedBox(height: 12),
                 Text(
-                  _isRebuilding
-                      ? context.l10n.buildingKnowledgeGraphFromMemories
-                      : context.l10n.knowledgeGraphWillBuildAutomatically,
+                  context.l10n.knowledgeGraphWillBuildAutomatically,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white38, fontSize: 14),
                 ),
-                const SizedBox(height: 24),
-                if (_isRebuilding)
-                  SizedBox(
-                    width: 200,
-                    child: LinearProgressIndicator(
-                      backgroundColor: Colors.white10,
-                      color: Colors.purpleAccent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  )
-                else if (!widget.hideRebuildButtonWhenEmpty)
-                  ElevatedButton.icon(
-                    onPressed: _rebuildGraph,
-                    icon: const Icon(Icons.auto_fix_high),
-                    label: Text(context.l10n.buildGraphButton),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purpleAccent.withValues(alpha: 0.2),
-                      foregroundColor: Colors.purpleAccent,
-                    ),
-                  ),
               ],
             ),
           ),

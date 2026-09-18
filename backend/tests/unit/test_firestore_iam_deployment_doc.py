@@ -3,6 +3,7 @@ from pathlib import Path
 MEMORY_PROTECTED_COLLECTIONS = [
     "users/{uid}/memory_items/{memory_id}",
     "users/{uid}/memory_operations/{operation_id}",
+    "users/{uid}/memory_ledger_reopens/{source_memory_id}",
     "users/{uid}/memory_outbox/{event_id}",
     "users/{uid}/memory_control/{doc_id}",
     "users/{uid}/memory_state/{doc_id}",
@@ -28,7 +29,7 @@ REQUIRED_TERMS = [
 
 def test_memory_firestore_iam_deployment_doc_covers_service_account_boundary_and_gate():
     root = Path(__file__).resolve().parents[2].parent
-    doc_path = root / "docs" / "epics" / "memory_firestore_iam_deployment.md"
+    doc_path = root / "backend" / "docs" / "epics" / "memory_firestore_iam_deployment.md"
 
     assert doc_path.exists()
     doc = doc_path.read_text()

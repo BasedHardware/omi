@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Aking Mga App",
+    "myApps": "Likha ko",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -1780,10 +1780,6 @@
     "openSettings": "Buksan ang Settings",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "Gusto mo bang gamitin ang ibang pangalan?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "Ano ang iyong pangalan?",
     "@whatsYourName": {
@@ -10780,5 +10776,62 @@
     "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
-    "accountCutoverOpenStore": "Buka toko"
+    "accountCutoverOpenStore": "Buka toko",
+    "chatScopeAbout": "Tungkol sa: {title}",
+    "askAboutThisConversation": "Itanong tungkol dito",
+    "sendRawAudioToOmi": "Ipadala ang raw na audio sa Omi",
+    "sendRawAudioToOmiDescription": "I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature.",
+    "findDevice": "Hanapin",
+    "diagnosticsShareFailed": "Hindi maibahagi ang diagnostics. Pakisubukan ulit.",
+    "appDisabledTitle": "Naka-disable ang app na ito at hindi ito mai-install.",
+    "appDisabledWebhookFailures": "Nabigo ang endpoint nito nang 72 oras na sunod-sunod, kaya itinigil ang mga paghahatid.",
+    "appDisabledGeneric": "I-nadisable ito ng Omi.",
+    "appDisabledOwnerHint": "Ayusin muna ang endpoint — sinusuri muli ng pag-enable ang bawat naka-configure na URL.",
+    "appReEnable": "I-enable muli",
+    "appReEnableFailedTitle": "Hindi ma-enable muli",
+    "appReEnableFailedBody": "Hindi ma-enable muli ang app na ito. Pakisubukan ulit.",
+    "appDisabledOn": "Na-disable noong {date}.",
+    "appDisabledLastError": "Huling error: {error}.",
+    "prerecordedTranscript": "Paunang-rekord",
+    "pendantRecordingSyncBlocked": "Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
+    "pendantFullSyncBlocked": "Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
+    "conversationsNotCapturedCount": "Hindi na-record ({count})",
+    "transcriptionNoAudio": "Hindi tumatanggap ng audio ang transkripsyon",
+    "chatBlockTask": "Gawain",
+    "chatBlockGoal": "Layunin",
+    "chatBlockConversation": "Pag-uusap",
+    "chatBlockMemory": "Alaala",
+    "chatBlockQuestion": "Tanong",
+    "chatBlockOpenInGoals": "Buksan sa Mga Layunin",
+    "chatBlockOpenConversation": "Buksan ang pag-uusap",
+    "chatBlockOpenInMemories": "Buksan sa Mga Alaala",
+    "chatBlockUnavailable": "Hindi na available",
+    "chatBlockRecommendedNextSteps": "Mga inirerekomendang susunod na hakbang",
+    "couldNotLoadMemories": "Hindi ma-load ang mga alaala",
+    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph",
+    "speechProfileOwnerTitle": "Profile ng Boses ni {name}",
+    "play": "I-play",
+    "redo": "I-record muli",
+    "answerWithYourVoice": "Sumagot gamit ang iyong boses:",
+    "speechProfileTopicLocation": "Saan ka nakatira?",
+    "speechProfileTopicWork": "Ano ang trabaho mo?",
+    "speechProfileTopicGoal": "Ano ang pangmatagalan mong layunin?",
+    "speechToTextUnavailableDesc": "Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.",
+    "memoryHistoryPartial": "Hindi available ang ilang bahagi ng kasaysayan ng mga alaala. Ipinapakita ang kasaysayang natanggap sa ngayon.",
+    "memoryHistory": "Kasaysayan",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "I-tap ang + para magsimulang mag-record",
+    "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
+    "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
+    "home": "Home",
+    "failedToUpdateBaselineStatus": "Hindi na-update ang status ng baseline.",
+    "memoryAllowUse": "Payagan ang paggamit",
+    "memoryDontUse": "Huwag gamitin",
+    "unstarConversation": "Alisin ang bituin sa pag-uusap",
+    "moreOptions": "Higit pang mga opsyon",
+    "filterByDate": "I-filter ayon sa petsa",
+    "memoryGraph": "Graph ng mga alaala",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}"
 }

@@ -10,6 +10,7 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/batch_recording.dart';
@@ -142,6 +143,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
           filePath: entity.path,
           sizeBytes: size,
           seconds: await _durationSeconds(name, entity.path, size),
+          geolocation: await readNativeBatchGeolocation(entity.path),
           jobId: _jobs[name],
           state: _stateFor(name),
         );
@@ -218,7 +220,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
         Logger.error('LocalRecordings: file missing on upload: ${rec.fileName}');
         outcome = LocalUploadOutcome.failed;
       } else {
-        final result = await SyncUploadGate.instance.upload([file]);
+        final result = await uploadNativeBatchRecording(rec, file: file);
 
         if (result.completed != null) {
           await _deleteFileOnly(rec.fileName);
@@ -410,6 +412,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
       if (dir == null) return;
       final file = File('${dir.path}/$fileName');
       if (file.existsSync()) await file.delete();
+      final sidecar = File(nativeBatchGeolocationSidecarPath(file.path));
+      if (sidecar.existsSync()) await sidecar.delete();
     } catch (e) {
       Logger.error('LocalRecordings: delete failed for $fileName: $e');
     }
@@ -513,6 +517,15 @@ class LocalRecordingsProvider extends ChangeNotifier {
     _audio.removeListener(_onAudioChanged);
     super.dispose();
   }
+}
+
+@visibleForTesting
+Future<UploadFilesResult> uploadNativeBatchRecording(
+  LocalRecording recording, {
+  required File file,
+  SyncUploadGate? uploadGate,
+}) {
+  return (uploadGate ?? SyncUploadGate.instance).upload([file], geolocation: recording.geolocation);
 }
 
 /// Counts complete length-prefixed frames (`[4-byte LE length][payload]`) in a

@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from database.firestore_read_metrics import FirestoreReadSite
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -24,8 +25,9 @@ from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
 from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
-from utils.byok import extract_byok_from_websocket, get_byok_keys, set_byok_keys
+from utils.byok import get_byok_keys
 from utils.client_device import resolve_client_device_from_headers
+from utils.journey_metrics_contract import resolve_client_kind_from_headers
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils.fair_use import (
     FAIR_USE_CHECK_INTERVAL_SECONDS,
@@ -45,8 +47,10 @@ from utils.listen_session_bootstrap import finalize_listen_connect_context, load
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
-from utils.observability.transcription import LiveSTTAttempt
+from utils.observability.journeys import ClientJourneyAttempt
+from utils.observability.transcription import LiveSTTAttempt, record_live_stt_audio_seconds
 from utils.pusher import PusherCircuitBreakerOpen
+from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -71,14 +75,26 @@ from .conversations import LiveConversationController
 from .persistence import ListenPersistence
 from .parity_capture import ListenParityCapture
 from .receiver import ListenReceiver
+from .registry import register as register_listen_session
+from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
+from utils.observability.transcription import record_listen_session_accepted
 
 logger = logging.getLogger(__name__)
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 FREEMIUM_THRESHOLD_SECONDS = 180
+
+
+def should_emit_plus_meter_warning(subscription: Any) -> bool:
+    """S18: the listen threshold event is the Plus (1,500-min) meter warning only.
+
+    Basic no longer enters on-device through this event (S17). Inactive or
+    missing subscriptions must not emit it.
+    """
+    return getattr(subscription, 'plan', None) == PlanType.plus
 
 
 def _account_deletion_blocks_owner_persistence(uid: str) -> bool:
@@ -110,11 +126,14 @@ class ListenSessionRuntime:
         self.client_device_context = request.client_device_context or resolve_client_device_from_headers(
             request.websocket.headers
         )
+        self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
+        record_listen_session_accepted(source=request.source, platform=self.client_device_context.platform)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
         self.language = request.language
         self.stt_service: Any = None
+        self.stt_service_selected: Any = None
         self.stt_language = ''
         self.stt_model = ''
         self.vocabulary: List[str] = []
@@ -135,6 +154,8 @@ class ListenSessionRuntime:
         self.pusher_close: Optional[Callable[..., Awaitable[Any]]] = None
         self.pusher_tasks: List[asyncio.Task[Any]] = []
         self.onboarding_handler: Optional[OnboardingHandler] = None
+        self.onboarding_admitted = False
+        self.onboarding_session_id: Optional[str] = None
         self.onboarding_omi_speaker_id = OnboardingHandler.OMI_SPEAKER_ID
         self.receiver: Any = None
         self.speakers: Any = None
@@ -182,6 +203,18 @@ class ListenSessionRuntime:
             self.spawn(self.asend_event(event), name='message_event')
 
     def emit_speaker_suggestion(self, speaker_id: int, person_id: str, person_name: str, segment_id: str) -> None:
+        emit_product_event(
+            uid=self.request.uid,
+            event='Speaker Identity Proposed',
+            properties={
+                'recording_id': self.recording_session_id,
+                'conversation_id': self.state.current_conversation_id,
+                'speaker_id': speaker_id,
+                'matched_existing_person': bool(person_id),
+                'auto_assign_enabled': self.request.speaker_auto_assign_enabled,
+                'proposal_source': 'live_speaker_identification',
+            },
+        )
         self.send_event(
             SpeakerLabelSuggestionEvent(
                 speaker_id=speaker_id,
@@ -203,6 +236,17 @@ class ListenSessionRuntime:
             self.state.live_transcription_attempt = LiveSTTAttempt(
                 provider=getattr(self.stt_service, 'value', self.stt_service),
                 platform=self.client_device_context.platform,
+                uid=self.request.uid,
+                recording_id=self.recording_session_id,
+                conversation_id=self.state.current_conversation_id,
+                source=self.request.source,
+                model=self.stt_model,
+                language=self.stt_language,
+            )
+        if getattr(self.state, 'client_live_transcription_attempt', None) is None:
+            self.state.client_live_transcription_attempt = ClientJourneyAttempt(
+                'live_transcription',
+                getattr(self, 'client_kind', 'unknown'),
             )
 
     def capture_client_audio(self, audio: bytes) -> None:
@@ -227,6 +271,9 @@ class ListenSessionRuntime:
         """Record the first nonempty transcript successfully delivered to the client."""
         if self.state.live_transcription_attempt is not None:
             self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
+        client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
+        if client_attempt is not None:
+            client_attempt.succeed()
 
     def _finish_live_transcription(self) -> None:
         """Terminalize an accepted attempt that never delivered a transcript."""
@@ -239,12 +286,17 @@ class ListenSessionRuntime:
             else 'cancelled'
         )
         attempt.finish(outcome, phase='teardown')
+        client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
+        if client_attempt is not None and not client_attempt.finished:
+            if outcome == 'failure':
+                client_attempt.fail('provider_error')
+            else:
+                client_attempt.cancel()
 
     async def _admit(self) -> bool:
         if not self.request.uid:
             await self.request.websocket.close(code=1008, reason='Bad uid')
             return False
-        set_byok_keys(extract_byok_from_websocket(self.request.websocket))
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
                 FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
@@ -264,17 +316,68 @@ class ListenSessionRuntime:
         if not base.user_exists:
             await request.websocket.close(code=1008, reason='Bad user')
             return False
+        # ``onboarding=enabled`` is a client hint only.  Direct-user
+        # provenance requires a short-lived backend admission derived from the
+        # durable account state (onboarding not completed). The admission is
+        # issued or refreshed here at connect time so a client that fetched
+        # onboarding state more than the admission TTL ago — or never calls
+        # the state endpoint at all — still gets a server-owned session, while
+        # completed accounts can never re-enter onboarding provenance.
+        speech_profile_redo_admitted = False
+        if request.onboarding_mode and request.speech_profile_redo:
+            # Re-recording an existing speech profile from Settings does not
+            # claim onboarding provenance, so it never touches the completed-
+            # account gate above — every account, onboarded or not, can always
+            # redo their profile. The client flag alone is only a hint: the
+            # redo is proven from durable state, an actually persisted speech
+            # profile. Without one the claim falls through to the provenance
+            # admission below, so a query parameter cannot mint the bypass.
+            # OnboardingHandler mints its own session id (see
+            # utils/onboarding.py) when none is supplied, and explicitly
+            # clearing onboarding_session_id here keeps any resulting
+            # conversation untagged as onboarding-provenance.
+            try:
+                has_profile = await self.persistence.call(get_user_has_speech_profile, request.uid)
+            except Exception as error:
+                # Fail closed: an unverifiable redo claim is treated as a
+                # plain onboarding request and judged by the gate below.
+                logger.warning('Speech profile redo check failed type=%s', type(error).__name__)
+                has_profile = False
+            if has_profile:
+                self.onboarding_admitted = True
+                self.onboarding_session_id = None
+                speech_profile_redo_admitted = True
+        if request.onboarding_mode and not speech_profile_redo_admitted:
+            try:
+                admitted = await run_blocking(db_executor, user_db.ensure_backend_onboarding_admission, request.uid)
+            except Exception as error:
+                # Issuing is best-effort: a still-valid admission from the state
+                # endpoint may exist, and the read below fails closed on its own.
+                logger.warning('Onboarding admission issue failed type=%s', type(error).__name__)
+                admitted = True
+            self.onboarding_session_id = (
+                await run_blocking(db_executor, user_db.get_backend_onboarding_admission, request.uid)
+                if admitted
+                else None
+            )
+            self.onboarding_admitted = isinstance(self.onboarding_session_id, str)
         self.user_has_credits = base.user_has_credits
         self.language = normalize_language(request.language)
         single_language_mode = should_force_single_language(
             request.onboarding_mode,
             base.transcription_prefs.get('single_language_mode', False),
         )
+        # Retained so a mid-session failover reselects under the same language policy.
+        self.multi_lang_enabled = not single_language_mode
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
-            multi_lang_enabled=not single_language_mode,
+            multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
         )
+        # The provider the serving policy chose, captured before `_create_stt_socket`
+        # can walk the fallback chain. Only the *selected* value is safe to hold onto:
+        # the serving one has to be read at use time (#11306).
+        self.stt_service_selected = self.stt_service
         self.parity_capture = ListenParityCapture.from_environ(
             principal_id=request.uid,
             session_id=getattr(self, 'session_id', ''),
@@ -331,25 +434,32 @@ class ListenSessionRuntime:
         self._build_components()
         if not self.user_has_credits:
             try:
-                await send_credit_limit_notification(request.uid)
-                await request.websocket.send_json(
-                    FreemiumThresholdReachedEvent(
-                        remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
-                    ).to_json()
-                )
-                self.state.freemium_threshold_sent = True
+                subscription = await self.persistence.call(user_db.get_user_valid_subscription, request.uid)
+                if should_emit_plus_meter_warning(subscription):
+                    await send_credit_limit_notification(request.uid)
+                    await request.websocket.send_json(
+                        FreemiumThresholdReachedEvent(
+                            remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
+                        ).to_json()
+                    )
+                    self.state.freemium_threshold_sent = True
             except Exception as error:
                 logger.error('Credit-limit notification failed type=%s', type(error).__name__)
         if FAIR_USE_ENABLED:
             self.state.fair_use_track_dg_usage = context.fair_use_track_dg_usage
             self.state.fair_use_dg_budget_exhausted = context.fair_use_dg_budget_exhausted
-        if request.onboarding_mode:
+        if request.onboarding_mode and self.onboarding_admitted:
 
             async def send_onboarding(event: Dict[str, Any]) -> None:
                 if self.state.active and request.websocket.client_state == WebSocketState.CONNECTED:
                     await request.websocket.send_json(event)
 
-            self.onboarding_handler = OnboardingHandler(request.uid, send_onboarding, self.transcripts.enqueue)
+            self.onboarding_handler = OnboardingHandler(
+                request.uid,
+                send_onboarding,
+                self.transcripts.enqueue,
+                session_id=self.onboarding_session_id,
+            )
             self.spawn(self.onboarding_handler.send_current_question(), name='onboarding_first_question')
         return True
 
@@ -457,19 +567,22 @@ class ListenSessionRuntime:
         elif self.state.remaining_seconds_cache is not None and transcription_seconds > 0:
             self.state.remaining_seconds_cache = max(0, self.state.remaining_seconds_cache - transcription_seconds)
         remaining = self.state.remaining_seconds_cache
+        subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         if remaining is not None and remaining <= FREEMIUM_THRESHOLD_SECONDS and not self.state.freemium_threshold_sent:
-            await self.asend_event(
-                FreemiumThresholdReachedEvent(remaining_seconds=remaining, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT)
-            )
-            self.state.freemium_threshold_sent = True
-            try:
-                await send_credit_limit_notification(self.request.uid)
-            except Exception as error:
-                logger.error('Credit-limit notification refresh failed type=%s', type(error).__name__)
+            if should_emit_plus_meter_warning(subscription):
+                await self.asend_event(
+                    FreemiumThresholdReachedEvent(
+                        remaining_seconds=remaining, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
+                    )
+                )
+                self.state.freemium_threshold_sent = True
+                try:
+                    await send_credit_limit_notification(self.request.uid)
+                except Exception as error:
+                    logger.error('Credit-limit notification refresh failed type=%s', type(error).__name__)
         self.user_has_credits = remaining is None or remaining > 0
         if self.user_has_credits and (remaining is None or remaining > FREEMIUM_THRESHOLD_SECONDS):
             self.state.freemium_threshold_sent = False
-        subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         if not subscription or subscription.plan == PlanType.basic:
             last_words = self.state.last_transcript_time or self.state.first_audio_byte_timestamp
             if (
@@ -501,6 +614,21 @@ class ListenSessionRuntime:
         if self.receiver.vad_gate is not None:
             speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
             speech_seconds = speech_ms // 1000
+            if speech_ms:
+                # Live provider minutes: VAD speech seconds actually sent for
+                # STT (not wall-clock, not fair-use transcription_seconds),
+                # attributed to the provider serving at flush time — failover
+                # can switch it mid-session, same read-at-use rule as
+                # _serving_provider(). The consumed delta makes each
+                # millisecond reach this counter exactly once. Custom-STT
+                # sessions returned above: their audio runs on the user's own
+                # STT and is not a provider's minutes.
+                provider = getattr(self, 'stt_service', None)
+                record_live_stt_audio_seconds(
+                    provider=getattr(provider, 'value', provider),
+                    platform=getattr(getattr(self, 'client_device_context', None), 'platform', None),
+                    seconds=speech_ms / 1000,
+                )
             if FAIR_USE_ENABLED and speech_ms:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
@@ -541,6 +669,7 @@ class ListenSessionRuntime:
                 max_audio_buffer_size=self.limits.max_audio_buffer_size,
                 max_pending_requests=self.limits.max_pending_requests,
                 max_pending_speaker_sample_requests=self.limits.max_pending_speaker_sample_requests,
+                client_kind=self.client_kind,
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: self.state.current_conversation_id,
@@ -574,9 +703,36 @@ class ListenSessionRuntime:
                 self.task_supervisor.create_lifetime_task(session.audio_bytes_consume(), name='pusher_audio')
             )
 
+    def _ready_event(self) -> MessageServiceStatusEvent:
+        """Name the provider actually serving this session on the `ready` event (#11306).
+
+        The client clears its terminal-failure state on `ready`, so a bare event leaves a
+        fallback socket that is about to die indistinguishable from a healthy session on
+        the provider the user selected. `_create_stt_socket` can walk the fallback chain
+        (#11695, #11752), so the serving provider is only knowable once the socket exists
+        — resolving it any earlier is the attribution bug #11359 fixed on the
+        terminal-failure path, which is why this reads `_serving_provider()` here rather
+        than reusing a value from bootstrap.
+
+        Both fields are optional and dropped by `exclude_none=True`, so a client that does
+        not read them sees exactly the payload it sees today.
+        """
+        if self.use_custom_stt:
+            # Custom-STT clients produce their own transcripts; no backend provider serves.
+            return MessageServiceStatusEvent(status='ready')
+        serving = self.receiver._serving_provider()
+        selected = getattr(self.stt_service_selected, 'value', self.stt_service_selected)
+        fell_back = bool(serving) and bool(selected) and serving != selected
+        return MessageServiceStatusEvent(
+            status='ready',
+            provider=serving,
+            reason=f'fallback_from_{selected}' if fell_back else None,
+        )
+
     async def run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
             return
+        register_listen_session(self)
         try:
             self.receiver.initialize_decoders()
         except Exception as error:
@@ -628,7 +784,7 @@ class ListenSessionRuntime:
                         self.task_supervisor.create_finite_task(self.speakers.load_and_run(), name='speaker_id'),
                     ]
                 )
-            self.send_event(MessageServiceStatusEvent(status='ready'))
+            self.send_event(self._ready_event())
             result = await self.task_supervisor.supervise(receive_task=receive_task)
             logger.info('Listen supervisor exited reason=%s', result.reason)
             if result.reason in {'crash', 'lifetime_done'}:
@@ -663,6 +819,7 @@ class ListenSessionRuntime:
                     logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
 
     async def _teardown_components(self) -> None:
+        unregister_listen_session(self)
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
         owner_persistence_blocked = self.request.owner_persistence_blocked.is_set()
@@ -704,7 +861,10 @@ class ListenSessionRuntime:
                     await self.conversations.process_conversation(conversation_id)
                 else:
                     conversation = await self.persistence.call(
-                        conversations_db.get_conversation, self.request.uid, conversation_id
+                        conversations_db.get_conversation,
+                        self.request.uid,
+                        conversation_id,
+                        read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
                     finalization_reason = getattr(self.state, 'finalization_reason', None)
                     if conversation and finalization_reason:

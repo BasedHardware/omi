@@ -1,6 +1,18 @@
 name: Reconcile Firestore Indexes
 
 on:
+  # A merged manifest change is a schema migration that nothing else applies:
+  # both backend deploy lanes only gate on the serving schema. Without this
+  # trigger the fix for issue #11684 sat merged and unapplied (PR #11731), so
+  # /v3/memories 503'd for ~5h on a required index that existed only on paper.
+  # This queues the migration automatically; the prod GitHub Environment's
+  # required reviewer is still what approves it (see the confirmation step).
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'firestore.indexes.json'
+      - 'backend/scripts/reconcile_firestore_field_exemptions.py'
+      - '.github/workflows/gcp_firestore_indexes.yml'
   workflow_dispatch:
     inputs:
       environment:
@@ -12,39 +24,71 @@ on:
           - development
           - prod
       confirmation:
-        description: 'Type APPLY_FIRESTORE_INDEXES to approve this create-only schema migration'
+        description: 'Type APPLY_FIRESTORE_INDEXES or APPLY_FIRESTORE_FIELD_EXEMPTIONS for the selected operation'
         required: true
         type: string
+      operation:
+        description: 'Choose the schema operation; field exemptions must target prod'
+        required: true
+        default: 'composite-indexes'
+        type: choice
+        options:
+          - composite-indexes
+          - field-exemptions
 
-# Schema writes and backend deploy readiness inspect the same persistent
-# Firestore target, so serialize them in the backend stack's environment lock.
+# Deliberately NOT the backend-stack lock. Composite reconciliation is create-only,
+# so an index state only ever moves MISSING -> CREATING -> READY and cannot invalidate
+# a readiness answer. The explicitly dispatched field-exemption operation does remove
+# single-field index entries, so it shares this schema lock but never runs automatically.
+# Keeping both schema mutations serialized here preserves one auditable owner without
+# letting a backend deploy waiting for approval block schema repair.
 concurrency:
-  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  group: firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
   cancel-in-progress: false
 
 jobs:
-  reconcile:
+  reconcile_composite_indexes:
     # This is the explicit, human-approved writer. Backend deploy workflows
     # remain read-only and can only gate on the serving schema.
-    if: github.ref == 'refs/heads/main'
-    environment: ${{ github.event.inputs.environment }}
+    #
+    # `github.event.inputs.environment` is empty on push, which would bind no
+    # GitHub Environment at all and silently bypass the prod approval. Resolve
+    # it explicitly instead: automatic runs always target prod, where the
+    # required reviewer is the approval gate for the migration.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event.inputs.operation == 'composite-indexes')
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
     permissions:
       contents: 'read'
     runs-on: ubuntu-latest
     steps:
       - name: Validate Firestore migration input
         env:
-          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          EVENT_NAME: ${{ github.event_name }}
+          RESOLVED_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
           CONFIRMATION: ${{ github.event.inputs.confirmation }}
         run: |
-          if [[ "$INPUT_ENVIRONMENT" != "development" && "$INPUT_ENVIRONMENT" != "prod" ]]; then
-            echo "Invalid environment: $INPUT_ENVIRONMENT. Must be 'development' or 'prod'."
+          set -euo pipefail
+          if [[ "$RESOLVED_ENVIRONMENT" != "development" && "$RESOLVED_ENVIRONMENT" != "prod" ]]; then
+            echo "Invalid environment: $RESOLVED_ENVIRONMENT. Must be 'development' or 'prod'."
             exit 1
           fi
-          if [[ "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then
-            echo "Refusing Firestore schema mutation without APPLY_FIRESTORE_INDEXES confirmation."
+          # A push cannot carry a typed confirmation. Its authorization is the
+          # prod GitHub Environment's required reviewer, which has already been
+          # granted before this step runs and is strictly stronger than a string
+          # typed by whoever dispatched the run. Keep the typed confirmation
+          # mandatory on the manual path so its safety is unchanged.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then
+              echo "Refusing Firestore schema mutation without APPLY_FIRESTORE_INDEXES confirmation."
+              exit 1
+            fi
+          elif [[ "$EVENT_NAME" != "push" ]]; then
+            echo "Unsupported trigger for a Firestore schema migration: $EVENT_NAME."
             exit 1
           fi
+          echo "Reconciling Firestore indexes in $RESOLVED_ENVIRONMENT via $EVENT_NAME."
 
       - name: Checkout dispatched Firestore control plane
         uses: actions/checkout@v7
@@ -80,3 +124,156 @@ jobs:
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
             --provision-missing \
             --timeout-seconds 3600
+
+      # Field overrides are deliberately not applied here: disabling automatic
+      # indexes deletes their existing entries. Fail after monotone composite
+      # repair so the unapplied saving is visible and points at the separately
+      # confirmed operation without weakening create-only reconciliation.
+      #
+      # Scoped to prod for two independent reasons. `reject_nonprod_field_exemptions`
+      # refuses the apply operation in every other environment, so unscoped this step
+      # asserts a state a non-prod run is forbidden to reach and the development
+      # reconcile fails here permanently no matter how healthy it is -- which is
+      # exactly what happened once this landed. And there is only one data plane to
+      # check: dev.overlay.yaml sets data_plane_project: based-hardware, so dev/beta
+      # `screen_activity` documents live in prod. The development environment's
+      # RUNTIME_GCP_PROJECT_ID is based-hardware-dev, so a non-prod run of this check
+      # interrogates a project that holds none of the data the exemption is about.
+      - name: Detect unapplied Firestore field exemptions
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') == 'prod' }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_field_exemptions.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --check-only
+
+  reconcile_development_composite_indexes:
+    # Development had no automatic migration path at all. An automatic run
+    # resolves its environment to prod (see the job above), and the manual
+    # dispatch is the only thing that ever targeted development -- so a merged
+    # manifest addition reached prod's review queue while development silently
+    # kept a schema that no longer matched main. Every development backend
+    # deploy then failed its Firestore readiness gate until somebody noticed
+    # and dispatched the reconcile by hand, which is exactly what happened to
+    # the `hourly_usage` (year, month) index added by PR #11979.
+    #
+    # Composite reconciliation is create-only -- an index only moves
+    # MISSING -> CREATING -> READY -- and development carries no required
+    # reviewer, so it can simply converge on the same merge that queues the
+    # production migration. Production's approval gate is untouched: this job
+    # never runs against it.
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: development
+    # The workflow-level group keys automatic runs to prod. Serialize
+    # development against its own manual dispatches instead of against them.
+    concurrency:
+      group: firestore-schema-development
+      cancel-in-progress: false
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout merged Firestore control plane
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify merged Firestore control plane
+        run: |
+          checked_sha="$(git rev-parse HEAD)"
+          if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then
+            echo "Expected merged commit $GITHUB_SHA, checked out $checked_sha."
+            exit 1
+          fi
+          echo "Reconciling development Firestore indexes from merged commit $checked_sha."
+
+      - name: Google Auth for development Firestore schema migration
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Show create-only development Firestore schema plan
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --dry-run
+
+      - name: Apply create-only development Firestore schema plan
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --provision-missing \
+            --timeout-seconds 3600
+
+  reject_nonprod_field_exemptions:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.operation == 'field-exemptions' &&
+      github.event.inputs.environment != 'prod'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "Field exemptions affect the shared production data plane; select the prod environment."
+          exit 1
+
+  apply_field_exemptions:
+    # This destructive operation is manual-only, prod-environment protected,
+    # exact-confirmed, and targets only generated indexes: [] overrides.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.operation == 'field-exemptions' &&
+      github.event.inputs.environment == 'prod'
+    environment: prod
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate destructive Firestore field-exemption input
+        env:
+          CONFIRMATION: ${{ github.event.inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRMATION" != "APPLY_FIRESTORE_FIELD_EXEMPTIONS" ]]; then
+            echo "Refusing single-field index deletion without APPLY_FIRESTORE_FIELD_EXEMPTIONS confirmation."
+            exit 1
+          fi
+
+      - name: Checkout dispatched Firestore control plane
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify dispatched Firestore control plane
+        run: |
+          checked_sha="$(git rev-parse HEAD)"
+          if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then
+            echo "Expected dispatched commit $GITHUB_SHA, checked out $checked_sha."
+            exit 1
+          fi
+          echo "Applying Firestore field exemptions from dispatched commit $checked_sha."
+
+      - name: Google Auth for Firestore field exemptions
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Show destructive Firestore field-exemption plan
+        run: |
+          python3 backend/scripts/reconcile_firestore_field_exemptions.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --dry-run
+
+      - name: Apply and verify approved Firestore field exemptions
+        run: |
+          python3 backend/scripts/reconcile_firestore_field_exemptions.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --apply \
+            --confirmation APPLY_FIRESTORE_FIELD_EXEMPTIONS

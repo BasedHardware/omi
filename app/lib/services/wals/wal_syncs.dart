@@ -9,6 +9,7 @@ import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -72,8 +73,20 @@ class WalSyncs implements IWalSync {
     return parts[2] >= 20;
   }
 
-  WalSyncs(this.listener) {
-    _phoneSync = LocalWalSyncImpl(listener);
+  WalSyncs(
+    this.listener, {
+    SyncUploadGate? phoneUploadGate,
+    DateTime Function()? phoneNow,
+    Timer Function(Duration, void Function(Timer))? phonePeriodic,
+    Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+  }) {
+    _phoneSync = LocalWalSyncImpl(
+      listener,
+      uploadGate: phoneUploadGate,
+      now: phoneNow,
+      periodic: phonePeriodic,
+      jobStatusFetcher: phoneJobStatusFetcher,
+    );
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
     _storageSync = StorageSyncImpl(listener);
@@ -189,23 +202,11 @@ class WalSyncs implements IWalSync {
   }
 
   int _estimateWalSize(Wal wal) {
-    int bytesPerSecond;
-    switch (wal.codec) {
-      case BleAudioCodec.opusFS320:
-        bytesPerSecond = 16000;
-      case BleAudioCodec.opus:
-        bytesPerSecond = 8000;
-        break;
-      case BleAudioCodec.pcm16:
-        bytesPerSecond = wal.sampleRate * 2 * wal.channel;
-        break;
-      case BleAudioCodec.pcm8:
-        bytesPerSecond = wal.sampleRate * 1 * wal.channel;
-        break;
-      default:
-        bytesPerSecond = 8000;
-    }
-    return bytesPerSecond * wal.seconds;
+    return wal.codec.estimatedRecordingBytes(
+      seconds: wal.seconds,
+      sampleRate: wal.sampleRate,
+      channels: wal.channel,
+    );
   }
 
   Future<void> deleteAllSyncedWals() async {
@@ -408,6 +409,11 @@ class WalSyncs implements IWalSync {
   double get sdCardSpeedKBps => _sdcardSync.currentSpeedKBps;
 
   bool get isFlashPageSyncing => _flashPageSync.isSyncing;
+
+  /// Why the last flash-page drain pass stopped early (reset at the start of
+  /// each flash sync). Lets the UI distinguish "pendant is recording" from a
+  /// plain transfer lull instead of reporting silent success.
+  FlashSyncStallReason get flashStallReason => _flashPageSync.lastStallReason;
 
   /// Get conversation IDs accumulated so far from completed upload batches.
   /// Returns null if no sync is in progress or no batches have completed.

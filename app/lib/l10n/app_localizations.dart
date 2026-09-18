@@ -649,7 +649,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{count} selected'**
-  String selectedCount(int count, Object s);
+  String selectedCount(int count);
 
   /// Merge button label
   ///
@@ -798,7 +798,7 @@ abstract class AppLocalizations {
   /// Filter button for user's own apps
   ///
   /// In en, this message translates to:
-  /// **'My Apps'**
+  /// **'Created by me'**
   String get myApps;
 
   /// Filter button for installed apps
@@ -1275,16 +1275,16 @@ abstract class AppLocalizations {
   /// **'Hardware'**
   String get hardwareSection;
 
-  /// V2 device undeteced dialog title
+  /// Dialog title when the connected device has no SD-card offline sync
   ///
   /// In en, this message translates to:
-  /// **'V2 undetected'**
+  /// **'Offline Sync unavailable'**
   String get v2Undetected;
 
-  /// V2 device undeteced dialog message
+  /// Dialog message when the connected device has no SD-card offline sync
   ///
   /// In en, this message translates to:
-  /// **'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.'**
+  /// **'Offline Sync needs a connected Omi device with SD-card storage. Your current device doesn\'t support it.'**
   String get v2UndetectedMessage;
 
   /// End conversation action
@@ -3504,7 +3504,7 @@ abstract class AppLocalizations {
   /// Introduction text for speech profile setup
   ///
   /// In en, this message translates to:
-  /// **'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.'**
+  /// **'Let\'s set up your speech profile. You can always change it later'**
   String get speechProfileIntro;
 
   /// Button text to begin a process
@@ -3632,12 +3632,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open Settings'**
   String get openSettings;
-
-  /// Question asking if user wants to change their display name
-  ///
-  /// In en, this message translates to:
-  /// **'Want to go by something else?'**
-  String get wantDifferentName;
 
   /// Question asking for user's name
   ///
@@ -3962,6 +3956,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Memory Deleted.'**
   String get memoryDeleted;
+
+  /// Notice shown when the memory history response is truncated
+  ///
+  /// In en, this message translates to:
+  /// **'Some memory history is unavailable. Showing the history received so far.'**
+  String get memoryHistoryPartial;
+
+  /// Filter option for retained memory history
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get memoryHistory;
+
+  /// Button that clears suppression so this memory may be used
+  ///
+  /// In en, this message translates to:
+  /// **'Allow use'**
+  String get memoryAllowUse;
+
+  /// Button that suppresses this memory from future use
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t use'**
+  String get memoryDontUse;
 
   /// Undo button text
   ///
@@ -5133,12 +5151,6 @@ abstract class AppLocalizations {
   /// **'Review and manage your captured conversations'**
   String get reviewAndManageConversations;
 
-  /// Message explaining how to get started with conversations
-  ///
-  /// In en, this message translates to:
-  /// **'Start capturing conversations with your Omi device to see them here.'**
-  String get startCapturingConversations;
-
   /// Tip about using mobile app for audio capture
   ///
   /// In en, this message translates to:
@@ -6098,12 +6110,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcribing...'**
   String get transcribing;
-
-  /// Error message when transcription fails
-  ///
-  /// In en, this message translates to:
-  /// **'Transcription failed'**
-  String get transcriptionFailed;
 
   /// Label for a discarded conversation
   ///
@@ -7101,12 +7107,6 @@ abstract class AppLocalizations {
   /// **'Preparing system audio capture'**
   String get preparingSystemAudioCapture;
 
-  /// Instructions for starting recording
-  ///
-  /// In en, this message translates to:
-  /// **'Click the button to capture audio for live transcripts, AI insights, and automatic saving.'**
-  String get clickTheButtonToCaptureAudio;
-
   /// Status when reconnecting to audio
   ///
   /// In en, this message translates to:
@@ -7185,12 +7185,6 @@ abstract class AppLocalizations {
   /// **'{count} segments'**
   String segmentsPlural(String count);
 
-  /// Empty state message for transcript
-  ///
-  /// In en, this message translates to:
-  /// **'Start recording to see live transcript'**
-  String get startRecordingToSeeTranscript;
-
   /// Recording status: paused
   ///
   /// In en, this message translates to:
@@ -7226,12 +7220,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Setting up system audio capture'**
   String get settingUpSystemAudioCapture;
-
-  /// Status when actively recording
-  ///
-  /// In en, this message translates to:
-  /// **'Capturing audio and generating transcript'**
-  String get capturingAudioAndGeneratingTranscript;
 
   /// Instruction to start system audio recording
   ///
@@ -10620,7 +10608,7 @@ abstract class AppLocalizations {
   /// Button text to listen to speech profile
   ///
   /// In en, this message translates to:
-  /// **'Listen to my speech profile ➡️'**
+  /// **'Listen to my speech profile'**
   String get listenToSpeechProfile;
 
   /// Button text to recognize other people
@@ -10644,7 +10632,7 @@ abstract class AppLocalizations {
   /// Loading message shown while uploading voice profile
   ///
   /// In en, this message translates to:
-  /// **'Uploading your voice profile....'**
+  /// **'Uploading your voice profile...'**
   String get uploadingVoiceProfile;
 
   /// Loading message shown while processing voice profile
@@ -16383,6 +16371,60 @@ abstract class AppLocalizations {
   /// **'{duration} audio saved locally'**
   String audioSavedLocally(String duration);
 
+  /// Live-capture WAL indicator while unsynced audio is uploading
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading {duration} of audio for transcription...'**
+  String uploadingAudioForTranscription(String duration);
+
+  /// Live-capture WAL indicator after a failed upload attempt that will be retried automatically
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying upload... {duration} of audio kept on your phone'**
+  String audioUploadRetrying(String duration);
+
+  /// Live-capture WAL indicator when auto-retries are exhausted and a manual retry is available
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed — {duration} of audio kept on your phone. Tap to retry.'**
+  String audioUploadFailedTapRetry(String duration);
+
+  /// Live-capture WAL indicator when the recording can no longer be uploaded (corrupted or past the recovery window)
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed — {duration} of audio kept on your phone.'**
+  String audioUploadFailedKeptLocal(String duration);
+
+  /// Live-capture empty state on audio-only setups (no photo capture source)
+  ///
+  /// In en, this message translates to:
+  /// **'Listening… a transcript will appear here.'**
+  String get listeningTranscriptWillAppear;
+
+  /// Live-capture empty state while the device has no internet connection
+  ///
+  /// In en, this message translates to:
+  /// **'Recording offline — the transcript will catch up when you\'re back online.'**
+  String get recordingOfflineTranscriptWillCatchUp;
+
+  /// Live-capture empty state when the plan is out of transcription credits
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription is unavailable — recording continues and your audio is saved.'**
+  String get transcriptionUnavailableRecordingSaved;
+
+  /// Live-capture app bar title while both audio and photos are being captured
+  ///
+  /// In en, this message translates to:
+  /// **'Capturing'**
+  String get capturing;
+
+  /// Live-capture app bar title while only photos are being captured
+  ///
+  /// In en, this message translates to:
+  /// **'Capturing photos'**
+  String get capturingPhotos;
+
   /// No description provided for @willSyncAutomatically.
   ///
   /// In en, this message translates to:
@@ -17406,7 +17448,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with the phone microphone and Omi or Limitless wearables. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -18332,6 +18374,306 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open store'**
   String get accountCutoverOpenStore;
+
+  /// Chat scope chip when asking about a specific conversation
+  ///
+  /// In en, this message translates to:
+  /// **'About: {title}'**
+  String chatScopeAbout(String title);
+
+  /// Tooltip for Ask button on conversation detail
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about this'**
+  String get askAboutThisConversation;
+
+  /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Send raw audio to Omi'**
+  String get sendRawAudioToOmi;
+
+  /// Explains that disabling raw audio forwarding preserves transcript-based cloud features
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.'**
+  String get sendRawAudioToOmiDescription;
+
+  /// Action that makes a nearby connected Omi pendant vibrate so the user can locate it
+  ///
+  /// In en, this message translates to:
+  /// **'Find'**
+  String get findDevice;
+
+  /// Snackbar shown when exporting device diagnostics to the share sheet fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share diagnostics. Please try again.'**
+  String get diagnosticsShareFailed;
+
+  /// Heading of the notice shown on an app the backend has automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'This app is disabled and cannot be installed.'**
+  String get appDisabledTitle;
+
+  /// Explains that an app was auto-disabled because its webhook endpoint kept failing
+  ///
+  /// In en, this message translates to:
+  /// **'Its endpoint failed for 72 hours in a row, so deliveries were stopped.'**
+  String get appDisabledWebhookFailures;
+
+  /// Explains that an app was disabled for a reason other than webhook failures
+  ///
+  /// In en, this message translates to:
+  /// **'It was disabled by Omi.'**
+  String get appDisabledGeneric;
+
+  /// Hint telling the app owner to repair their endpoint before re-enabling the app
+  ///
+  /// In en, this message translates to:
+  /// **'Fix the endpoint first — re-enabling re-checks every configured URL.'**
+  String get appDisabledOwnerHint;
+
+  /// Button that clears the disabled flag on an app the owner has repaired
+  ///
+  /// In en, this message translates to:
+  /// **'Re-enable'**
+  String get appReEnable;
+
+  /// Title of the dialog shown when re-enabling a disabled app is rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Could not re-enable'**
+  String get appReEnableFailedTitle;
+
+  /// Body of the dialog shown when re-enabling fails and the server gave no reason
+  ///
+  /// In en, this message translates to:
+  /// **'This app could not be re-enabled. Please try again.'**
+  String get appReEnableFailedBody;
+
+  /// States the date an app was automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled on {date}.'**
+  String appDisabledOn(String date);
+
+  /// States the last error recorded from the app's endpoint before it was disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Last error: {error}.'**
+  String appDisabledLastError(String error);
+
+  /// Tab label for the prerecorded conversation transcript
+  ///
+  /// In en, this message translates to:
+  /// **'Prerecorded'**
+  String get prerecordedTranscript;
+
+  /// Shown when offline sync stalls because the Limitless Pendant is actively recording; it cannot serve stored audio until recording stops
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantRecordingSyncBlocked;
+
+  /// Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantFullSyncBlocked;
+
+  /// Header for the calendar capture-gap group in the conversations list
+  ///
+  /// In en, this message translates to:
+  /// **'Not captured ({count})'**
+  String conversationsNotCapturedCount(int count);
+
+  /// Title shown on the speech profile page when the user already has a speech profile set up
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s Speech Profile'**
+  String speechProfileOwnerTitle(String name);
+
+  /// Label for the play/listen button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get play;
+
+  /// Label for the redo/re-record button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get redo;
+
+  /// Heading of the compact card listing the topics to speak about while recording the speech profile
+  ///
+  /// In en, this message translates to:
+  /// **'Answer with your voice:'**
+  String get answerWithYourVoice;
+
+  /// First speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'Where do you live?'**
+  String get speechProfileTopicLocation;
+
+  /// Second speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'What do you do for work?'**
+  String get speechProfileTopicWork;
+
+  /// Third speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'What is your long-term goal?'**
+  String get speechProfileTopicGoal;
+
+  /// Status when an active call transcription socket receives no audio frames
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription not receiving audio'**
+  String get transcriptionNoAudio;
+
+  /// Empty-home hint pointing at the + record button
+  ///
+  /// In en, this message translates to:
+  /// **'Tap + to start recording'**
+  String get tapPlusToStartRecording;
+
+  /// Eyebrow label on a chat task card block
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get chatBlockTask;
+
+  /// Eyebrow label on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get chatBlockGoal;
+
+  /// Eyebrow label on a chat conversation/capture link block
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get chatBlockConversation;
+
+  /// Eyebrow label on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get chatBlockMemory;
+
+  /// Eyebrow label on a chat question card block
+  ///
+  /// In en, this message translates to:
+  /// **'Question'**
+  String get chatBlockQuestion;
+
+  /// Action on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Goals'**
+  String get chatBlockOpenInGoals;
+
+  /// Action on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open conversation'**
+  String get chatBlockOpenConversation;
+
+  /// Action on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Memories'**
+  String get chatBlockOpenInMemories;
+
+  /// Status shown when a chat block's entity no longer exists
+  ///
+  /// In en, this message translates to:
+  /// **'No longer available'**
+  String get chatBlockUnavailable;
+
+  /// Header above recommended action items on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended next steps'**
+  String get chatBlockRecommendedNextSteps;
+
+  /// Retryable error when fetching memories failed instead of returning an empty list
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load memories'**
+  String get couldNotLoadMemories;
+
+  /// Short user-facing error when the knowledge graph request is non-200; must not include the response body
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load knowledge graph'**
+  String get couldNotLoadKnowledgeGraph;
+
+  /// Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording
+  ///
+  /// In en, this message translates to:
+  /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
+  String get speechToTextUnavailableDesc;
+
+  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
+  ///
+  /// In en, this message translates to:
+  /// **'Still working — this is taking longer than usual.'**
+  String get processingTakingLonger;
+
+  /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
+  String get speechProfileEnrollmentPrompt;
+
+  /// Screen-reader label for the Home tab in the bottom navigation bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get home;
+
+  /// Snackbar when toggling a memory's baseline flag fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update baseline status'**
+  String get failedToUpdateBaselineStatus;
+
+  /// Accessible name for the conversation-detail star button when the conversation is already starred
+  ///
+  /// In en, this message translates to:
+  /// **'Unstar conversation'**
+  String get unstarConversation;
+
+  /// Accessible name for the conversation-detail overflow menu
+  ///
+  /// In en, this message translates to:
+  /// **'More options'**
+  String get moreOptions;
+
+  /// Accessible name for the conversations calendar filter button
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by date'**
+  String get filterByDate;
+
+  /// Accessible name for the memories graph button
+  ///
+  /// In en, this message translates to:
+  /// **'Memory graph'**
+  String get memoryGraph;
+
+  /// Guided voice introduction copy. English source fallback pending translation review.
+  ///
+  /// In en, this message translates to:
+  /// **'{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}'**
+  String voiceIntroduction(String part);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

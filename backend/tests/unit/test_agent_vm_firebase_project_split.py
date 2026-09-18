@@ -4,12 +4,9 @@ import os
 from unittest.mock import MagicMock
 
 import firebase_admin
-import pytest
 
 from database import _client as firestore_client
 import desktop_backend
-import jobs.agent_vm_reconciler as reconciler
-from routers import desktop_agent_vm
 
 
 def test_desktop_backend_initializes_production_auth_separately_from_google_cloud_project(monkeypatch) -> None:
@@ -131,38 +128,6 @@ def test_firestore_client_pins_service_account_json_over_host_project_adc(monkey
     client.assert_called_once_with(credentials=credentials, project="based-hardware")
 
 
-def test_reconciler_initializes_production_auth_separately_from_google_cloud_project(monkeypatch) -> None:
-    initialize = MagicMock()
-    monkeypatch.setattr(firebase_admin, "get_app", MagicMock(side_effect=ValueError()))
-    monkeypatch.setattr(firebase_admin, "initialize_app", initialize)
-    monkeypatch.delenv("SERVICE_ACCOUNT_JSON", raising=False)
-    monkeypatch.setenv("FIREBASE_AUTH_PROJECT_ID", "based-hardware")
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
-
-    reconciler._init_firebase()
-
-    initialize.assert_called_once_with(options={"projectId": "based-hardware"})
-
-
-def test_agent_vm_control_requires_an_explicit_gce_project(monkeypatch) -> None:
-    monkeypatch.delenv("GCE_PROJECT_ID", raising=False)
-    monkeypatch.setenv("FIREBASE_PROJECT_ID", "based-hardware")
-
-    with pytest.raises(RuntimeError, match="GCE_PROJECT_ID"):
-        desktop_agent_vm._project()
-
-
-@pytest.mark.asyncio
-async def test_reconciler_requires_an_explicit_gce_project(monkeypatch) -> None:
-    monkeypatch.setattr(reconciler, "_init_firebase", lambda: None)
-    monkeypatch.setattr(reconciler, "load_active_release", lambda: (MagicMock(environment="development"), {}))
-    monkeypatch.delenv("GCE_PROJECT_ID", raising=False)
-    monkeypatch.setenv("FIREBASE_PROJECT_ID", "based-hardware")
-
-    with pytest.raises(RuntimeError, match="GCE_PROJECT_ID"):
-        await reconciler.run_reconciler(dry_run=True)
-
-
 def test_valid_subscription_without_provision_does_not_write_free() -> None:
     from database import users as users_db
     from models.users import PlanType
@@ -192,3 +157,40 @@ def test_desktop_chat_quota_reads_customer_firestore_without_provisioning() -> N
     assert "provision=False" in quota_source
     assert "get_customer_firestore_client()" in paywall_source
     assert "provision=False" in paywall_source
+
+
+def test_screen_vector_entitlement_reads_customer_firestore_without_provisioning() -> None:
+    import inspect
+
+    from utils.subscription import grants_cloud_screen_vectors
+
+    source = inspect.getsource(grants_cloud_screen_vectors)
+    assert "get_customer_firestore_client()" in source
+    assert "provision=False" in source
+
+
+def test_screen_vector_entitlement_does_not_write_when_customer_subscription_doc_is_missing(monkeypatch) -> None:
+    from database import users as users_db
+    from models.users import PlanType
+    from utils.subscription import grants_cloud_screen_vectors
+    import utils.subscription as subscription
+
+    uid = "uid-missing-customer-subscription"
+    subscription.clear_cloud_screen_vector_entitlement_cache(uid)
+
+    user_ref = MagicMock()
+    snapshot = MagicMock()
+    snapshot.exists = False
+    user_ref.get.return_value = snapshot
+    customer_client = MagicMock()
+    customer_client.collection.return_value.document.return_value = user_ref
+
+    monkeypatch.setattr(subscription, "get_customer_firestore_client", lambda: customer_client)
+
+    entitled = grants_cloud_screen_vectors(uid)
+    stored = users_db.get_user_valid_subscription(uid, firestore_client=customer_client, provision=False)
+
+    assert entitled is False
+    assert stored is not None
+    assert stored.plan == PlanType.basic
+    user_ref.set.assert_not_called()

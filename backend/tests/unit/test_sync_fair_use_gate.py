@@ -21,6 +21,24 @@ from utils.sync.rate_limit import (
 
 
 class TestSyncRateLimitContract:
+    @pytest.mark.parametrize('plan', ['plus', 'unlimited_v2'])
+    def test_every_paid_consumer_plan_keeps_its_identity_in_telemetry(self, plan):
+        event = build_sync_rate_limit_event(
+            uid='uid-123',
+            device_hash='a1b2c3d4',
+            app_platform='ios',
+            app_version='1.0.543',
+            subscription_plan=plan,
+            subscription_status='active',
+            fair_use_stage='warning',
+            classifier_type='free_exhausted',
+            retry_after=60,
+            backend_revision='backend-sync-00042-abc',
+            correlation_id='5d55a970-f41c-4e18-9c20-7e7c6fb9d48d',
+        )
+
+        assert event['subscription_plan'] == plan
+
     def test_retry_after_uses_bounded_fallback_for_missing_legacy_deadline(self):
         assert bounded_fair_use_retry_after(None) == DEFAULT_FAIR_USE_RETRY_AFTER_SECONDS
         assert bounded_fair_use_retry_after('invalid') == DEFAULT_FAIR_USE_RETRY_AFTER_SECONDS

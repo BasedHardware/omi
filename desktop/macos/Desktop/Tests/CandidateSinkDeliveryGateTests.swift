@@ -7,11 +7,15 @@ final class CandidateSinkDeliveryGateTests: XCTestCase {
     XCTAssertFalse(
       CandidateSinkDeliveryGate.mayPresentInteractively(
         decisionType: "task_candidate",
-        graduationSucceeded: false))
+        graduation: .stale))
+    XCTAssertFalse(
+      CandidateSinkDeliveryGate.mayPresentInteractively(
+        decisionType: "task_candidate",
+        graduation: .noFactIDs))
     XCTAssertTrue(
       CandidateSinkDeliveryGate.mayPresentInteractively(
         decisionType: "task_candidate",
-        graduationSucceeded: true))
+        graduation: .graduated))
   }
 
   func testNonTaskDecisionsDoNotRequireGraduationBeforePresent() {
@@ -19,7 +23,7 @@ final class CandidateSinkDeliveryGateTests: XCTestCase {
       XCTAssertTrue(
         CandidateSinkDeliveryGate.mayPresentInteractively(
           decisionType: decision,
-          graduationSucceeded: false),
+          graduation: .stale),
         decision)
     }
   }

@@ -21,7 +21,19 @@ on:
       - 'backend/scripts/verify_pusher_live_deployment_gate.py'
       - 'backend/scripts/verify_pusher_dev_observability.py'
       - 'backend/scripts/verify_pusher_promotion_evidence.py'
+      - 'backend/scripts/pusher_release_receipt.py'
+      - 'backend/scripts/pusher_semantic_probe.py'
+      - 'backend/scripts/pusher_prod_canary.py'
+      - 'backend/scripts/verify_pusher_live_alert_route.py'
+      - 'backend/scripts/runtime_env_capability_contracts.py'
+      - 'backend/scripts/runtime_env_validation/**'
+      - 'backend/scripts/validate-backend-runtime-env.py'
+      - 'backend/deploy/runtime_env/**'
+      - 'backend/scripts/firebase_release_probe_token.py'
+      - 'backend/testing/release_fixtures/transcription-release-probe.json'
+      - 'backend/testing/release_fixtures/transcription-release-probe.wav'
       - '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
+      - '.github/workflows/gcp_backend_pusher.yml'
 
 # Share the development pusher lock with manual deployments.
 concurrency:
@@ -63,6 +75,46 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Validate Pusher runtime capability admission before publishing
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}"
+
+      - name: Validate Firebase probe signer configuration before publishing
+        env:
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
+            echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT." >&2
+            exit 1
+          fi
+          case "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" in
+            *@based-hardware.iam.gserviceaccount.com) ;;
+            *)
+              echo "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT must belong to the based-hardware Firebase project." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Verify live finalization alert route before publishing
+        env:
+          # Dest ops Grafana (monitor.omiapi.com). Do not use GRAFANA_TOKEN; that
+          # token belongs to the TV Cloud Run instance.
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omiapi.com \
+            --token-file "$token_file" \
+            --phase prepublish
+
       - name: Build and Push Docker image
         run: |
           PUSHER_IMAGE_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}"
@@ -86,6 +138,7 @@ jobs:
         run: |
           python3 backend/scripts/verify_pusher_rollout_budget.py
           python3 backend/scripts/verify_pusher_rollout_gate.py preflight
+          python3 backend/scripts/verify_pusher_cohost_env_diff.py
           python3 backend/scripts/verify_pusher_dev_observability.py
 
       - name: Get GKE credentials
@@ -119,38 +172,103 @@ jobs:
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
 
-      - name: Record successful development Pusher qualification
+      - name: Record exact live development Pusher deployment receipt
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+          python3 backend/scripts/pusher_release_receipt.py record-live \
+            --environment "${{ vars.ENV }}" \
+            --namespace "${{ vars.ENV }}-omi-backend" \
+            --repository "$PUSHER_IMAGE_REPOSITORY" \
+            --digest "$PUSHER_IMAGE_DIGEST" \
+            --source-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-dev-deployment-receipt.json
 
-          Path("pusher-dev-qualification.json").write_text(
-              json.dumps(
-                  {
-                      "schema_version": 1,
-                      "environment": "development",
-                      "image_digest": os.environ["PUSHER_IMAGE_DIGEST"],
-                      "image_repository": os.environ["PUSHER_IMAGE_REPOSITORY"],
-                      "run_id": int(os.environ["GITHUB_RUN_ID"]),
-                      "source_sha": os.environ["GITHUB_SHA"],
-                      "workflow": "gcp_backend_pusher_auto_deploy.yml",
-                  },
-                  sort_keys=True,
-              )
-              + "\n",
-              encoding="utf-8",
-          )
-          PY
+      - name: Verify deployed development finalization telemetry and alert route
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-postrollout-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omiapi.com \
+            --token-file "$token_file" \
+            --phase postrollout \
+            --attempts 12
+
+      - name: Probe deployed development Pusher finalization semantics
+        env:
+          # The development backend authenticates against production Firebase
+          # (--firebase-project based-hardware below), while this lane's deploy
+          # identity belongs to based-hardware-dev, so signing as the deploy
+          # identity can never pass firebase_release_probe_token.py's closed
+          # signer/project_mismatch check -- the failure that froze this lane
+          # on every run since 2026-08-31. Name the Firebase project's own
+          # signer and impersonate it via IAM signJwt instead: no
+          # service-account key is staged on this backend image builder
+          # (the key-secret guard
+          # test_backend_deploy_workflows_do_not_materialize_an_ignored_service_account_key
+          # forbids one here). The deploy identity needs
+          # roles/iam.serviceAccountTokenCreator on that signer.
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -m pip install -q websockets==12.0
+          token_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; }
+          trap cleanup EXIT
+          if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
+            echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:" >&2
+            echo "a based-hardware signer this lane's deploy identity may impersonate." >&2
+            exit 1
+          fi
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "${{ vars.GCP_PROJECT_ID }}" \
+            --firebase-project based-hardware \
+            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
+            --token-output "$token_file"
+          python3 backend/scripts/pusher_semantic_probe.py \
+            --api-url https://api.omiapi.com \
+            --bearer-token-file "$token_file" \
+            --deployment-receipt pusher-dev-deployment-receipt.json \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --namespace "${{ vars.ENV }}-omi-backend" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-dev-semantic-probe.json
+
+      - name: Upload development Pusher probe diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-dev-probe-diagnostics
+          path: |
+            pusher-dev-deployment-receipt.json
+            pusher-dev-semantic-probe.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Record development Pusher qualification evidence
+        run: |
+          python3 backend/scripts/pusher_release_receipt.py record-qualification \
+            --deployment-receipt pusher-dev-deployment-receipt.json \
+            --semantic-probe-evidence pusher-dev-semantic-probe.json \
+            --output pusher-dev-qualification.json
 
       - name: Upload development Pusher qualification
         uses: actions/upload-artifact@v7
         with:
           name: pusher-dev-qualification
-          path: pusher-dev-qualification.json
+          path: |
+            pusher-dev-qualification.json
+            pusher-dev-deployment-receipt.json
+            pusher-dev-semantic-probe.json
           if-no-files-found: error
           retention-days: 30
 
       - name: Show Output
-        run: echo "Pusher deployed to development environment"
+        run: echo "Pusher deployed and semantically qualified in development; production still requires a protected attributable-canary receipt"

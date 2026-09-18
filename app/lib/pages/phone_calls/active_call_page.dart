@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/audio_route.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/pages/phone_calls/call_duration_format.dart';
 
 class ActiveCallPage extends StatefulWidget {
   const ActiveCallPage({super.key});
@@ -125,6 +126,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
                   child: _LiveTranscriptView(
                     segments: provider.transcriptSegments,
                     getSpeakerLabel: provider.getSpeakerLabel,
+                    status: provider.transcriptionStatus,
                   ),
                 ),
                 _CallControls(
@@ -160,14 +162,6 @@ class _CallInfoHeader extends StatelessWidget {
     required this.state,
   });
 
-  String _formatDuration(Duration d) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    if (d.inHours > 0) {
-      return '${twoDigits(d.inHours)}:${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}';
-    }
-    return '${twoDigits(d.inMinutes)}:${twoDigits(d.inSeconds.remainder(60))}';
-  }
-
   String _stateLabel(BuildContext context) {
     switch (state) {
       case PhoneCallState.connecting:
@@ -175,7 +169,7 @@ class _CallInfoHeader extends StatelessWidget {
       case PhoneCallState.ringing:
         return context.l10n.callStateRinging;
       case PhoneCallState.active:
-        return _formatDuration(duration);
+        return formatPhoneCallDuration(duration);
       case PhoneCallState.ended:
         return context.l10n.callStateEnded;
       case PhoneCallState.failed:
@@ -221,12 +215,26 @@ class _CallInfoHeader extends StatelessWidget {
 class _LiveTranscriptView extends StatelessWidget {
   final List<TranscriptSegment> segments;
   final String Function(TranscriptSegment) getSpeakerLabel;
+  final TranscriptionStatus status;
 
-  const _LiveTranscriptView({required this.segments, required this.getSpeakerLabel});
+  const _LiveTranscriptView({required this.segments, required this.getSpeakerLabel, required this.status});
 
   @override
   Widget build(BuildContext context) {
     if (segments.isEmpty) {
+      if (status == TranscriptionStatus.noAudio) {
+        // Do not promise a transcript the session is not receiving audio for.
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              context.l10n.transcriptionNoAudio,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.orange[300], fontSize: 14),
+            ),
+          ),
+        );
+      }
       return Center(
         child: Text(context.l10n.transcriptPlaceholder, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
       );
@@ -611,6 +619,10 @@ class _TranscriptionStatusIndicator extends StatelessWidget {
       case TranscriptionStatus.failed:
         dotColor = Colors.red;
         label = context.l10n.transcriptionUnavailable;
+        break;
+      case TranscriptionStatus.noAudio:
+        dotColor = Colors.orange;
+        label = context.l10n.transcriptionNoAudio;
         break;
       default:
         return const SizedBox.shrink();

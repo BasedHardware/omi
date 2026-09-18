@@ -135,6 +135,20 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     XCTAssertTrue(page.canonicalLifecycleExposed)
   }
 
+  func testTruncatedHeaderIsExposedOnMemoryListPage() async throws {
+    MemoryLifecycleURLStub.headers = [
+      "X-Omi-Memory-Canonical-Lifecycle-Exposed": "true",
+      "X-Omi-List-Truncated": "true",
+    ]
+    let client = await makeClient()
+
+    let page = try await client.getMemoriesPage(limit: 100, cursor: nil)
+
+    XCTAssertTrue(page.truncated)
+    XCTAssertNil(page.nextCursor)
+    XCTAssertTrue(page.canonicalLifecycleExposed)
+  }
+
   func testCursorQueryReplacesOffsetOnContinuationPages() async throws {
     MemoryLifecycleURLStub.headers = [
       "X-Omi-Memory-Next-Cursor": "uml.next"
@@ -149,4 +163,23 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     XCTAssertTrue(raw.contains("cursor=uml.prev%2Btoken"), raw)
     XCTAssertFalse(raw.contains("offset="), raw)
   }
+
+  func testBeliefCapabilityHeaderIsExposedIncludingFalse() async throws {
+    MemoryLifecycleURLStub.headers = ["X-Omi-Memory-Belief-Enabled": "false"]
+    let client = await makeClient()
+
+    let page = try await client.getMemoriesPage()
+
+    XCTAssertEqual(page.beliefEnabled, false)
+  }
+
+  func testTemporalViewIsAddedOnlyWhenRequested() async throws {
+    let client = await makeClient()
+
+    _ = try await client.getMemoriesPage(view: .history)
+
+    let url = try XCTUnwrap(MemoryLifecycleURLStub.lastRequestURL)
+    XCTAssertTrue(url.absoluteString.contains("view=history"), url.absoluteString)
+  }
+
 }

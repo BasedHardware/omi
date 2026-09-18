@@ -1,12 +1,30 @@
 from datetime import datetime
 from typing import Any, Callable, Iterable, List, Mapping, Optional
 
-from pydantic import BaseModel, Field
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class SaveFcmTokenRequest(BaseModel):
     fcm_token: str
     time_zone: str
+
+
+class SyncUserTimeZoneRequest(BaseModel):
+    time_zone: str
+
+    @field_validator("time_zone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("time_zone must be a non-empty IANA timezone")
+        try:
+            ZoneInfo(stripped)
+        except Exception as exc:
+            raise ValueError("time_zone must be a valid IANA timezone") from exc
+        return stripped
 
 
 class FcmTokenResponse(BaseModel):
@@ -35,6 +53,10 @@ class CreatePerson(BaseModel):
     name: str = Field(min_length=2, max_length=40)
 
 
+# Person photo deferred pending product input on storage: no photo/avatar/image
+# field today; GCS people_profiles/ is speech-sample audio only; the app uses
+# local speaker icons; unlike app/persona logos there is no person-photo URL or
+# upload pattern to mirror. Do not invent an optional photo string yet.
 class Person(BaseModel):
     id: str
     name: str

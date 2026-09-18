@@ -46,7 +46,10 @@
           "POSTHOG_PROJECT_ID": "WEB_ADMIN_POSTHOG_PROJECT_ID:latest",
           "POSTHOG_HOST": "WEB_ADMIN_POSTHOG_HOST:latest",
           "GOAFFPRO_ACCESS_TOKEN": "GOAFFPRO_ACCESS_TOKEN:latest",
-          "CRON_SECRET": "WEB_ADMIN_CRON_SECRET:latest"
+          "CRON_SECRET": "WEB_ADMIN_CRON_SECRET:latest",
+          "GCP_BILLING_SA_JSON": "WEB_ADMIN_GCP_BILLING_SA_JSON:latest",
+          "ADMIN_ANTHROPIC_COST_API_KEY": "WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest",
+          "ADMIN_OPENAI_COST_API_KEY": "WEB_ADMIN_OPENAI_COST_API_KEY:latest"
         },
         "remove_runtime_secrets": [
           "ANTHROPIC_API_KEY",
@@ -254,13 +257,20 @@
         "platforms": [
           "linux/amd64"
         ],
-        "flags": [
-          "--ingress=internal-and-cloud-load-balancing"
-        ],
+        "flags": {
+          "prod": [
+            "--ingress=internal-and-cloud-load-balancing"
+          ],
+          "development": []
+        },
         "runtime_secrets": {
+          "DD_API_KEY": "DD_API_KEY:latest",
           "PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY": "PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY:latest"
         },
         "remove_runtime_secrets": [
+          "OPENAI_API_KEY"
+        ],
+        "remove_runtime_env_vars": [
           "OPENAI_API_KEY"
         ]
       },
@@ -338,9 +348,14 @@
           "--target",
           "frontend",
           "--base-url",
-          "{base_url}"
+          "{base_url}",
+          "--expect-sha",
+          "{sha}"
         ],
-        "marker": "frontend:ready"
+        "marker": "frontend:ready",
+        "public_urls": {
+          "prod": "https://h.omi.me"
+        }
       },
       "traffic_promotion": "candidate_after_browser_acceptance"
     },

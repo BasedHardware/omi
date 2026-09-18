@@ -53,9 +53,14 @@ extension AppState {
     return AudioCaptureService.isPermissionDenied()
   }
 
-  /// Check if screen recording permission is denied (onboarding complete but permission not granted)
+  /// Check if screen recording permission is denied (onboarding complete, capture
+  /// intent on, permission missing). A skip during onboarding turns the intent off,
+  /// so "onboarded but never asked" no longer pulses as denied.
   func isScreenRecordingPermissionDenied() -> Bool {
-    return hasCompletedOnboarding && !CGPreflightScreenCaptureAccess()
+    SBOnboardingPermissionIntentPolicy.screenRecordingDenied(
+      hasCompletedOnboarding: hasCompletedOnboarding,
+      screenAnalysisIntentEnabled: AssistantSettings.shared.screenAnalysisEnabled,
+      permissionGranted: CGPreflightScreenCaptureAccess())
   }
 
   /// Restart the app by launching a new instance and terminating the current one
@@ -442,10 +447,18 @@ extension AppState {
   /// This verifies system audio works by briefly starting and stopping capture
   func triggerSystemAudioPermission() {
     guard #available(macOS 14.4, *) else {
+      // No process tap exists on this OS, so nothing can be granted here. Leaving
+      // the skip marker intact keeps "an explicit Grant supersedes the skip" true
+      // only where a grant is real -- otherwise pressing Grant on an unsupported
+      // macOS would silently erase a choice it cannot act on.
       log("System audio not supported on this macOS version")
       recordSystemAudioCaptureOutcome(.unsupported)
       return
     }
+
+    // This call only comes from an explicit Grant action. It supersedes a
+    // prior onboarding skip before testing the process tap.
+    UserDefaults.standard.set(false, forKey: .onboardingSystemAudioSkipped)
 
     log("System audio: Testing capture...")
     let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()

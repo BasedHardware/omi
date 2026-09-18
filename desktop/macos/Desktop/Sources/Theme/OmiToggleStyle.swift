@@ -46,21 +46,39 @@ package struct OmiToggleStyle: ToggleStyle {
     // so the style must not expand beyond the switch itself.
     HStack(spacing: OmiSpacing.sm) {
       configuration.label
-      ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-        Capsule()
-          .fill(Self.trackFill(isOn: configuration.isOn))
-          .frame(width: width, height: height)
-
-        Circle()
-          .fill(Self.knobFill)
-          .frame(width: thumbSize, height: thumbSize)
-          .padding(thumbPadding)
-          .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
-      }
-      .omiAnimation(.easeInOut(duration: 0.15), value: configuration.isOn)
-      .onTapGesture {
+      // A custom `ToggleStyle` owns activation on macOS — the framework adds no click handling
+      // around `makeBody` — and the previous bare tap gesture had two measured defects: it drops
+      // any click whose up-event drifts a few points from its down-event (the user must click
+      // again until a clean tap lands), and it produces no accessibility element at all, so the
+      // app's switches were invisible to assistive tech. A `Button` fires on up-inside-bounds
+      // however far the pointer wandered within the control and is an accessibility element by
+      // construction. `OmiToggleStyleActivationTests` holds both claims.
+      //
+      // The label is a fallback only: every call site passes an empty title, and a style cannot
+      // read a string out of `configuration.label`, so per-feature names belong at the call sites.
+      Button {
         configuration.isOn.toggle()
+      } label: {
+        ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+          Capsule()
+            .fill(Self.trackFill(isOn: configuration.isOn))
+            .frame(width: width, height: height)
+
+          Circle()
+            .fill(Self.knobFill)
+            .frame(width: thumbSize, height: thumbSize)
+            .padding(thumbPadding)
+            .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+        }
       }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Switch")
+      // The element exists (a Button is one by construction) but a switch must also *say* its
+      // state: without a value, assistive tech finds the control yet cannot tell on from off.
+      // The label stays the generic fallback — a style cannot read a string out of
+      // `configuration.label`, and per-feature names belong at the call sites.
+      .accessibilityValue(configuration.isOn ? "on" : "off")
+      .omiAnimation(.easeInOut(duration: 0.15), value: configuration.isOn)
     }
   }
 }

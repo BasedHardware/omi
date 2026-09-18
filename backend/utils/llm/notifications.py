@@ -124,12 +124,11 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
         memory_summaries = [_memory_content(m) for m in memories]  # Use all memories for context
         memory_context = f"\nRecent conversations include: {', '.join(memory_summaries[:100])}..."
 
-    system_prompt = """You're Omi, and you need to gently let a user know they've hit their transcription limits while encouraging them to upgrade to unlimited. 
+    system_prompt = """You're Omi, and you need to gently let a Plus user know they've used most of this month's premium transcription minutes.
 
     Your Style:
     - Warm and understanding, not pushy
     - Show genuine care for their journey with you
-    - Make the upgrade feel like a natural next step
     - Reference their usage to show value
     - Keep it conversational and friendly
     - No emojis (express yourself in words!)
@@ -137,21 +136,23 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
 
     Key Points to Include:
     - They've been actively using transcription (show appreciation)
-    - Unlimited plan removes all limits
+    - On-device transcription continues normally
     - Can check usage/plans in the app under Settings > Plan & Usages
     - Make it feel like you're helping them, not selling to them
     """
 
-    user_prompt = f"""Create a credit limit notification for {name} who has reached their transcription limits.
+    user_prompt = f"""Create a Plus premium-minutes notification for {name}.
 
     Context:
     - User's name: {name}
     - They've been actively transcribing conversations
-    - Need to encourage unlimited plan subscription{memory_context}
+    - This is the Plus (1,500-min) meter warning, not a stop
+    - On-device transcription continues normally{memory_context}
 
     The message should:
     - Acknowledge their active usage positively
-    - Suggest checking plans in the app under Settings > Plan & Usages
+    - Say on-device transcription continues normally
+    - Suggest checking usage in the app under Settings > Plan & Usages
     - Feel helpful, not sales-y
     - Be warm and personal to {name}
     
@@ -169,7 +170,7 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
     # Fallback message
     return (
         "omi",
-        f"Hey {name}! You've been actively using transcription - that's awesome! You've hit your limit, but unlimited plans remove all restrictions. You can check your usage and upgrade in the app under Settings > Plan & Usages.",
+        f"Hey {name}! You've used most of this month's Plus premium minutes. On-device transcription continues normally. Check usage under Settings > Plan & Usages.",
     )
 
 

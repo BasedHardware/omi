@@ -1,0 +1,172 @@
+[
+  {
+    "case_id": "correction-durable",
+    "user_text": "Correction: my tax residency is Portugal, not Spain.",
+    "candidate": {
+      "content": "User tax residency is Portugal.",
+      "kind": "durable_correction",
+      "slot": "identity.tax_residency",
+      "subject": "user",
+      "provenance": {
+        "source": "typed_chat",
+        "surface": "main_chat",
+        "turn_id": "synthetic-turn-correction-001"
+      }
+    },
+    "expected": {
+      "accepted": true,
+      "reason": "durable_user_knowledge",
+      "kind": "durable_correction",
+      "slot": "identity.tax_residency"
+    }
+  },
+  {
+    "case_id": "preference-durable",
+    "user_text": "I prefer black coffee with no sugar.",
+    "candidate": {
+      "content": "User prefers black coffee with no sugar.",
+      "kind": "durable_preference",
+      "slot": "preferences.coffee",
+      "subject": "user",
+      "provenance": {
+        "source": "typed_chat",
+        "surface": "floating_chat",
+        "turn_id": "synthetic-turn-preference-001"
+      }
+    },
+    "expected": {
+      "accepted": true,
+      "reason": "durable_user_knowledge",
+      "kind": "durable_preference",
+      "slot": "preferences.coffee"
+    }
+  },
+  {
+    "case_id": "expensive-conclusion",
+    "user_text": "After reviewing the incidents, the recurring bottleneck is waiting on the release checklist.",
+    "candidate": {
+      "content": "The recurring release bottleneck is the release checklist.",
+      "kind": "expensive_conclusion",
+      "slot": "work.omi.release_bottleneck",
+      "subject": "user",
+      "provenance": {
+        "source": "typed_chat",
+        "surface": "main_chat",
+        "turn_id": "synthetic-turn-conclusion-001",
+        "evidence_refs": ["synthetic-evidence-incident-review"]
+      }
+    },
+    "expected": {
+      "accepted": true,
+      "reason": "durable_user_knowledge",
+      "kind": "expensive_conclusion",
+      "slot": "work.omi.release_bottleneck"
+    }
+  },
+  {
+    "case_id": "task-rejected",
+    "user_text": "Remind me to send the release checklist tomorrow.",
+    "candidate": {
+      "content": "Send the release checklist tomorrow.",
+      "kind": "task",
+      "slot": "tasks.follow_up",
+      "subject": "user",
+      "provenance": {
+        "source": "typed_chat",
+        "surface": "main_chat",
+        "turn_id": "synthetic-turn-task-001"
+      }
+    },
+    "expected": {
+      "accepted": false,
+      "reason": "task",
+      "kind": "task",
+      "slot": "tasks.follow_up"
+    }
+  },
+  {
+    "case_id": "mood-rejected",
+    "user_text": "I am feeling stressed today.",
+    "candidate": {
+      "content": "User is feeling stressed today.",
+      "kind": "mood",
+      "slot": "state.current_mood",
+      "subject": "user",
+      "provenance": {
+        "source": "typed_chat",
+        "surface": "main_chat",
+        "turn_id": "synthetic-turn-mood-001"
+      }
+    },
+    "expected": {
+      "accepted": false,
+      "reason": "mood",
+      "kind": "mood",
+      "slot": "state.current_mood"
+    }
+  },
+  {
+    "case_id": "restatement-rejected",
+    "user_text": "I work in New York.",
+    "candidate": {
+      "content": "User works in New York.",
+      "kind": "durable_preference",
+      "slot": "identity.location",
+      "subject": "user",
+      "provenance": {
+        "source": "typed_chat",
+        "surface": "main_chat",
+        "turn_id": "synthetic-turn-restatement-001"
+      }
+    },
+    "existing_facts": ["User works in New York."],
+    "expected": {
+      "accepted": false,
+      "reason": "restatement",
+      "kind": "durable_preference",
+      "slot": "identity.location"
+    }
+  },
+  {
+    "case_id": "third-party-rejected",
+    "user_text": "Sarah prefers morning meetings.",
+    "candidate": {
+      "content": "Sarah prefers morning meetings.",
+      "kind": "durable_preference",
+      "slot": "people.sarah.preference",
+      "subject": "third_party",
+      "provenance": {
+        "source": "typed_chat",
+        "surface": "main_chat",
+        "turn_id": "synthetic-turn-third-party-001"
+      }
+    },
+    "expected": {
+      "accepted": false,
+      "reason": "third_party",
+      "kind": "durable_preference",
+      "slot": "people.sarah.preference"
+    }
+  },
+  {
+    "case_id": "secret-rejected",
+    "user_text": "My API key is sk-test-1234567890abcdef.",
+    "candidate": {
+      "content": "User API key is sk-test-1234567890abcdef.",
+      "kind": "durable_preference",
+      "slot": "security.api_key",
+      "subject": "user",
+      "provenance": {
+        "source": "typed_chat",
+        "surface": "main_chat",
+        "turn_id": "synthetic-turn-secret-001"
+      }
+    },
+    "expected": {
+      "accepted": false,
+      "reason": "secret",
+      "kind": "durable_preference",
+      "slot": "security.api_key"
+    }
+  }
+]

@@ -137,7 +137,7 @@ struct OMIApp: App {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
     }
-    .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the glass runs under the title bar.
+    .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
     .commands {
       CommandGroup(after: .textFormatting) {
@@ -236,7 +236,7 @@ struct OMIApp: App {
   }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation, @unchecked Sendable {
   /// The live AppDelegate instance. SwiftUI's `@NSApplicationDelegateAdaptor` does
   /// NOT make `NSApp.delegate` our `AppDelegate` — on macOS 14+ it installs an
   /// internal forwarding delegate, so `NSApp.delegate as? AppDelegate` is `nil`.
@@ -297,6 +297,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // background-service startup so the probe has no product side effects.
     if AuthStorageCanary.runIfRequested() { return }
     if UserNotificationCallbackBridge.runSignedSmokeIfRequested() { return }
+    // A keystroke nothing handled must not fall off the end of a responder chain, where AppKit
+    // answers it with the alert sound. See `UnhandledKeystrokeSink`.
+    UnhandledKeystrokeSink.installEverywhere()
     // Running from the mounted DMG / a translocated mount breaks TCC permissions
     // and Sparkle updates — install to /Applications and relaunch before any
     // services start. Returns true when this process is being replaced.
@@ -313,10 +316,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     DesktopAutomationBridge.shared.startIfNeeded()
     DesktopAutomationWindowPresentation.installIfNeeded()
+    // Watching from launch, so the first push-to-talk turn already knows
+    // whether there is a network to route to instead of guessing.
+    NetworkReachability.shared.start()
     LocalAgentAPIServer.shared.startIfNeeded()
     publishNamedBundleRuntimeManifest()
 
     runStartupSystemMaintenance()
+    pruneExpiredAgentToolOutputs()
+    // A Quick Look panel that was open when the app was force-quit or crashed left full-resolution
+    // screenshots in the temp directory, and its close handler never ran. This is the first moment
+    // anything of ours can take them off disk.
+    ScreenFrameQuickLook.purgeStaleScratch()
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
@@ -375,6 +386,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
     _ = NotificationService.shared
+    // Observe meeting completions app-wide so the action-item banner also fires
+    // while the main window is closed or backgrounded.
+    MeetingActionItemBannerService.shared.activate()
+    NotificationSettingsSyncCoordinator.shared.start()
     // Notification registration repair is deliberately user-triggered from
     // Settings. Launch must not restart usernoted/NotificationCenter or alter
     // notification registration as a passive side effect.
@@ -469,7 +484,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
+    OnboardingRerunFlag.install()
     AnalyticsManager.shared.detectAndReportCrash()
+    AnalyticsManager.shared.recoverMonitoringSessionIfNeeded()
     if let attempt = pendingUpdateRelaunch?.attempt {
       let installedVersion =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
@@ -518,7 +535,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Route completed background-agent results into live voice sessions.
     AgentCompletionVoiceDelivery.shared.start()
 
+    // Drain explicit JIT feedback queued during an offline session as soon as
+    // the app launches; the client also retries on owner restoration, app
+    // activation, and periodic network recovery.
+    Task { await JITTriggerFeedbackClient.shared.installLifecycleRetry() }
+
+    Task { await ContextWorkstreamReconciler.shared.start() }
+
     scheduleAppLifecycleMaintenance()
+
+    // Offer an integration when the user opens an app Omi can connect to.
+    //
+    // Deliberately outside the signed-in branch below: at launch, auth is often
+    // still being restored, so that branch is skipped for exactly the users who
+    // are signed in — the observer would then never be installed for the life of
+    // the process. The policy checks sign-in at decision time instead, and the
+    // coordinator re-scopes its history on `runtimeOwnerDidChange`.
+    IntegrationNudgeCoordinator.shared.start()
+    // The daily summary's day-change/wake cadence and its "new summary" notch card should not
+    // wait for the user to open Chat; arm them at launch like the other proactive coordinators.
+    Task { @MainActor in await ChatDailySummaryCoordinator.shared.activate() }
+
+    // Once per fresh install, after onboarding, the first real app the user
+    // opens gets the tap-to-ask card. Started here for the same reason as the
+    // line above — it installs its own observers and decides eligibility itself.
+    FirstRealAppCardCoordinator.shared.start()
+    ContextReminderCoordinator.shared.start()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
@@ -749,6 +791,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     }
   }
 
+  /// Expire leftover agent `tool-output` JSON so existing installs reclaim disk
+  /// on the next launch, without waiting for a chat that starts the Node runtime.
+  private func pruneExpiredAgentToolOutputs() {
+    let artifactsDirectory = URL(
+      fileURLWithPath: AgentRuntimeProcess.defaultArtifactsDirectory())
+    DispatchQueue.global(qos: .utility).async {
+      let deleted = AgentArtifactRetention.pruneExpiredToolOutputs(in: artifactsDirectory)
+      if deleted > 0 {
+        log("AppDelegate: pruned \(deleted) expired agent tool-output files")
+      }
+    }
+  }
+
   /// Set up global keyboard shortcuts
   private func setupGlobalHotkeys() {
     // Handler for Ctrl+Option+R -> Open Rewind
@@ -934,6 +989,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openItem.target = self
     menu.addItem(openItem)
 
+    let undoDictationItem = NSMenuItem(
+      title: "Undo Last Dictation", action: #selector(undoLastDictationFromMenu), keyEquivalent: "")
+    undoDictationItem.target = self
+    menu.addItem(undoDictationItem)
+
     menu.addItem(NSMenuItem.separator())
 
     // Check for Updates
@@ -1050,6 +1110,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openMainAppWindow()
   }
 
+  /// Land on the chat with `draft` in the composer, focused and unsent — the
+  /// only "ask this" entry that leaves the send to the user. `attachedFrame`
+  /// stages the first-real-app card's screen referent alongside the draft.
+  @MainActor func openMainAppChat(prefilledDraft draft: String, attachedFrame: ChatAttachment? = nil) {
+    MainChatNavigationRequestStore.shared.request(draft: draft, attachment: attachedFrame)
+    openMainAppWindow()
+  }
+
+  /// Merge an offline question only once the actual composer has restored its draft.
+  @MainActor func openMainAppChat(appendingDraft draft: String, authorization: RuntimeOwnerAuthorizationSnapshot) {
+    MainChatNavigationRequestStore.shared.request(draft: draft, disposition: .append, authorization: authorization)
+    openMainAppWindow()
+  }
+
   /// Bring the main Omi window to the front, creating it if needed. Shared by
   /// the menu-bar "Open Omi" item, the auth callback, and the floating bar's
   /// "Continue in Omi" affordance. The Dock callback summons directly, while
@@ -1059,6 +1133,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     DesktopAutomationWindowPresentation.revealForUser()
     // Capture this BEFORE any activate call mutates AppKit's notion of frontmost.
     let alreadyFrontmost = NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
+    // The screen still shows the app the user is leaving; pin it now — once
+    // Omi is front, the periodic capture skips Omi and nothing fresher exists.
+    if !alreadyFrontmost {
+      RewindFrameLoader.shared.recordSummonBoundary()
+    }
     NSApp.activate(ignoringOtherApps: true)
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
@@ -1127,7 +1206,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
   @MainActor @objc private func signOut() {
     AnalyticsManager.shared.menuBarActionClicked(action: "sign_out")
-    ProactiveAssistantsPlugin.shared.stopMonitoring()
+    ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .signOut)
     Task { @MainActor in
       try? await AuthService.shared.signOut()
     }
@@ -1217,6 +1296,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     sender.state = outcome.resultingIsOn ? .on : .off
   }
 
+  @MainActor @objc private func undoLastDictationFromMenu() {
+    PushToTalkManager.shared.undoLastDictationAfterMenuTracking()
+  }
+
+  @MainActor func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    if menuItem.action == #selector(undoLastDictationFromMenu) {
+      return PushToTalkManager.shared.canUndoLastDictation
+    }
+    return true
+  }
+
   // MARK: - NSMenuDelegate
   func menuWillOpen(_ menu: NSMenu) {
     log("AppDelegate: [MENUBAR] Menu opened by user")
@@ -1249,8 +1339,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    let shouldTerminate = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-    if shouldTerminate {
+    let isSuspendedForPermissionPrompt = ShellSummon.isSuspendedForPermissionPrompt
+    let shouldTerminate = ShellSummon.shouldTerminateAfterLastWindowClosed(
+      hasCompletedOnboarding: UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue),
+      isSuspendedForPermissionPrompt: isSuspendedForPermissionPrompt)
+    if isSuspendedForPermissionPrompt {
+      log("AppDelegate: Last window closed for a permission prompt — staying alive to receive the answer")
+    } else if shouldTerminate {
       log(
         "AppDelegate: Last onboarding window closed — terminating instead of keeping a background menu bar process"
       )
@@ -1298,6 +1393,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Mark clean exit so crash detection works on next launch
     UserDefaults.standard.set(true, forKey: "lastSessionCleanExit")
 
+    // Cheap synchronous disk stamp so a monitoring session in progress is
+    // recoverable as a clean `app_quit` at next launch instead of looking
+    // like a crash. No PostHog flush is available at terminate time, so the
+    // event itself is emitted later by AnalyticsManager.recoverMonitoringSessionIfNeeded().
+    ProactiveAssistantsPlugin.shared.stampMonitoringSessionAppQuit()
+
     // Remove window observers
     for observer in windowObservers {
       NotificationCenter.default.removeObserver(observer)
@@ -1338,8 +1439,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
 
-    // Stop recurring task scheduler
-    RecurringTaskScheduler.shared.stop()
+    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.
@@ -1374,7 +1474,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     NSLog("OMI AppDelegate: Received URL event: %@", urlString)
 
     Task { @MainActor in
-      AuthService.shared.handleOAuthCallback(url: url)
+      if !ThreeDoorsDemoPage.handleReturnURL(url) { AuthService.shared.handleOAuthCallback(url: url) }
       // Bring app to foreground after OAuth redirect — Safari stays in front otherwise.
       // NSApp.activate() alone doesn't switch macOS Spaces; ordering a window front does.
       NSApp.activate()
@@ -1387,40 +1487,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     }
   }
 
-  /// One-time migration to enable launch at login for existing users
-  /// Only runs once, and only enables if user hasn't explicitly set a preference
+  /// One-time migration to enable launch at login for existing users.
+  ///
+  /// V2 (activation-first-48h): V1 ran once for the whole install base but could
+  /// not tell "the user turned it off" from "never registered", and its
+  /// `hasCompletedOnboarding` gate plus the onboarding seed (`false` on every
+  /// fresh install) left most new users with auto-start off. V2 re-evaluates
+  /// everyone once under `LaunchAtLoginPreference`: enable unless the user
+  /// explicitly declined in Settings. The decision is pure and unit-tested;
+  /// this wrapper only supplies the live defaults and the system call.
   private func migrateLaunchAtLoginDefault() {
-    let migrationKey = "didMigrateLaunchAtLoginV1"
-
-    // Skip if migration already done
-    guard !UserDefaults.standard.bool(forKey: migrationKey) else {
+    let decision = LaunchAtLoginPreference.migrationDecision(
+      defaults: UserDefaults.standard,
+      hasCompletedOnboarding: UserDefaults.standard.bool(forKey: .hasCompletedOnboarding))
+    guard decision.shouldRun else { return }
+    guard decision.shouldEnable else {
+      LaunchAtLoginPreference.markMigrationDone(defaults: UserDefaults.standard)
+      log("LaunchAtLogin migration V2: skipped (\(decision.reason))")
       return
     }
-
-    // Mark migration as done (do this first to ensure it only runs once)
-    UserDefaults.standard.set(true, forKey: migrationKey)
-
-    // Only enable for users who have completed onboarding (existing users)
-    // New users will get this enabled at the end of onboarding
-    let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-    guard hasCompletedOnboarding else {
-      log("LaunchAtLogin migration: Skipped - user hasn't completed onboarding yet")
-      return
-    }
-
-    // Check current status - only enable if not already registered
-    // This respects users who may have explicitly disabled it via System Settings
     Task { @MainActor in
       let manager = LaunchAtLoginManager.shared
       if !manager.isEnabled {
         let success = manager.setEnabled(true)
-        log("LaunchAtLogin migration: Enabled for existing user (success: \(success))")
+        log("LaunchAtLogin migration V2: enabled for existing user (success: \(success))")
         if success {
-          AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "migration")
+          AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "migration_v2")
         }
+        // A failed registration (transient, or a non-production bundle that never
+        // registers) leaves the one shot open so the next launch retries.
+        guard success else { return }
       } else {
-        log("LaunchAtLogin migration: Already enabled, skipping")
+        log("LaunchAtLogin migration V2: already enabled, skipping")
       }
+      LaunchAtLoginPreference.markMigrationDone(defaults: UserDefaults.standard)
     }
   }
 

@@ -1,25 +1,24 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:upgrader/upgrader.dart';
 
-import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -64,15 +63,16 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/analytics/background_resource_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'widgets/battery_info_widget.dart';
 
@@ -116,6 +116,7 @@ class _HomePageProductState extends State<_HomePageProduct> {
       // Check actual system permission state — the SharedPreferences flag may
       // be stale (e.g. user granted via Settings > Permissions, or reinstall).
       final notifGranted = await Permission.notification.isGranted;
+      if (!mounted) return;
       if (notifGranted) {
         SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();
@@ -160,9 +161,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   // Freemium switch handler for auto-switch dialogs
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
 
+  late final BackgroundResourceTelemetry _backgroundResourceTelemetry = BackgroundResourceTelemetry(
+    emit: (eventName, properties) => PlatformManager.instance.analytics.track(eventName, properties: properties),
+  );
+
   CaptureProvider? _captureProvider;
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
+  Timer? _announcementTimer;
+  final List<Timer> _prewarmTimers = [];
 
   void _ensurePageInitialized(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
@@ -198,14 +205,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _prewarmRemainingTabs(int selectedIndex) {
+    for (final timer in _prewarmTimers) {
+      timer.cancel();
+    }
+    _prewarmTimers.clear();
     var delay = const Duration(milliseconds: 350);
     for (var index = 0; index < _pages.length; index++) {
       if (index == selectedIndex) continue;
       final pageIndex = index;
-      Timer(delay, () {
-        if (!mounted) return;
-        _schedulePageInitialization(pageIndex);
-      });
+      _prewarmTimers.add(
+        Timer(delay, () {
+          if (!mounted) return;
+          _schedulePageInitialization(pageIndex);
+        }),
+      );
       delay += const Duration(milliseconds: 180);
     }
   }
@@ -255,15 +268,123 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
   }
 
+  BackgroundResourceSnapshot _captureBackgroundResourceSnapshot({
+    CaptureProvider? captureProvider,
+    DeviceProvider? deviceProvider,
+    bool foregroundTaskRunning = false,
+    int backgroundDisconnectCount = 0,
+    int connectionTimeoutCount = 0,
+    int failToConnectCount = 0,
+    int reconnectCount = 0,
+    int maxReconnectDurationMs = 0,
+    int reconnectionCountTotal = 0,
+    int failToConnectCountTotal = 0,
+    bool bleHistorySaturated = false,
+    int nativeBackgroundBytesConsumed = 0,
+    int nativeBackgroundPacketsConsumed = 0,
+  }) {
+    final capture = captureProvider ?? Provider.of<CaptureProvider>(context, listen: false);
+    final devices = deviceProvider ?? Provider.of<DeviceProvider>(context, listen: false);
+    final device = devices.connectedDevice ?? devices.pairedDevice;
+    return BackgroundResourceSnapshot(
+      bleBytesReceived: capture.lifetimeBleBytesReceived,
+      websocketBytesSent: capture.lifetimeWsSocketBytesSent,
+      recordingState: capture.recordingState.name,
+      deviceConnected: devices.isConnected,
+      deviceType: device?.type.name ?? 'none',
+      batchModeEnabled: SharedPreferencesUtil().batchModeEnabled,
+      foregroundTaskRunning: foregroundTaskRunning,
+      backgroundDisconnectCount: backgroundDisconnectCount,
+      connectionTimeoutCount: connectionTimeoutCount,
+      failToConnectCount: failToConnectCount,
+      reconnectCount: reconnectCount,
+      maxReconnectDurationMs: maxReconnectDurationMs,
+      reconnectionCountTotal: reconnectionCountTotal,
+      failToConnectCountTotal: failToConnectCountTotal,
+      bleHistorySaturated: bleHistorySaturated,
+      nativeBackgroundBytesConsumed: nativeBackgroundBytesConsumed,
+      nativeBackgroundPacketsConsumed: nativeBackgroundPacketsConsumed,
+      diagnosticsDeviceId: device?.id,
+    );
+  }
+
+  Future<BackgroundResourceSnapshot> _loadBackgroundResourceSnapshot(
+    DateTime backgroundStartedAt,
+    BackgroundResourceSnapshot startSnapshot,
+  ) async {
+    final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+    final diagnosticsDeviceId = startSnapshot.diagnosticsDeviceId;
+    var foregroundTaskRunning = false;
+    try {
+      foregroundTaskRunning = await FlutterForegroundTask.isRunningService;
+    } catch (_) {}
+
+    var backgroundDisconnectCount = 0;
+    var connectionTimeoutCount = 0;
+    var failToConnectCount = 0;
+    var reconnectCount = 0;
+    var maxReconnectDurationMs = 0;
+    var reconnectionCountTotal = 0;
+    var failToConnectCountTotal = 0;
+    var bleHistorySaturated = false;
+    var nativeBackgroundBytesConsumed = 0;
+    var nativeBackgroundPacketsConsumed = 0;
+
+    if (Platform.isIOS && diagnosticsDeviceId != null) {
+      try {
+        final diagnostics = await BleHostApi().getDeviceDiagnostics(diagnosticsDeviceId);
+        final startMs = backgroundStartedAt.millisecondsSinceEpoch;
+        final recentEvents =
+            diagnostics.disconnectHistory.where((event) => event.timestamp >= startMs && !event.isManual).toList();
+        final backgroundEvents =
+            recentEvents.where((event) => event.appState == 'background' || event.appState == 'inactive').toList();
+        backgroundDisconnectCount = backgroundEvents.where((event) => event.eventType == 'disconnect').length;
+        failToConnectCount = backgroundEvents.where((event) => event.eventType == 'fail_to_connect').length;
+        connectionTimeoutCount =
+            backgroundEvents.where((event) => event.reason.toLowerCase().contains('timeout')).length;
+        final reconnectedEvents = backgroundEvents.where((event) => event.timeToReconnectMs > 0).toList();
+        reconnectCount = reconnectedEvents.length;
+        for (final event in reconnectedEvents) {
+          if (event.timeToReconnectMs > maxReconnectDurationMs) {
+            maxReconnectDurationMs = event.timeToReconnectMs;
+          }
+        }
+        reconnectionCountTotal = diagnostics.reconnectionCount;
+        failToConnectCountTotal = diagnostics.failToConnectCount;
+        bleHistorySaturated = diagnostics.disconnectHistory.length >= 20 &&
+            diagnostics.disconnectHistory.every((event) => event.timestamp >= startMs);
+        nativeBackgroundBytesConsumed = diagnostics.nativeBackgroundBytesConsumed;
+        nativeBackgroundPacketsConsumed = diagnostics.nativeBackgroundPacketsConsumed;
+      } catch (_) {}
+    }
+
+    return _captureBackgroundResourceSnapshot(
+      captureProvider: captureProvider,
+      deviceProvider: deviceProvider,
+      foregroundTaskRunning: foregroundTaskRunning,
+      backgroundDisconnectCount: backgroundDisconnectCount,
+      connectionTimeoutCount: connectionTimeoutCount,
+      failToConnectCount: failToConnectCount,
+      reconnectCount: reconnectCount,
+      maxReconnectDurationMs: maxReconnectDurationMs,
+      reconnectionCountTotal: reconnectionCountTotal,
+      failToConnectCountTotal: failToConnectCountTotal,
+      bleHistorySaturated: bleHistorySaturated,
+      nativeBackgroundBytesConsumed: nativeBackgroundBytesConsumed,
+      nativeBackgroundPacketsConsumed: nativeBackgroundPacketsConsumed,
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     String event = '';
     if (state == AppLifecycleState.paused) {
       event = 'App is paused';
-      // Stop keepalive when app goes to background
       if (mounted) {
-        Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
+        _backgroundResourceTelemetry.onPaused(_captureBackgroundResourceSnapshot());
+        Provider.of<CaptureProvider>(context, listen: false).setMetricsAppActive(false);
       }
     } else if (state == AppLifecycleState.resumed) {
       event = 'App is resumed';
@@ -272,6 +393,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if (mounted) {
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+        captureProvider.setMetricsAppActive(true);
+        unawaited(_backgroundResourceTelemetry.onResumed(_loadBackgroundResourceSnapshot));
         captureProvider.refreshInProgressConversations();
         // Heal phone-mic sessions that went silent while another app played
         // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
@@ -279,13 +402,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
-
-      // Ensure agent VM is running and restart keepalive
-      if (mounted && SharedPreferencesUtil().claudeAgentEnabled) {
-        ensureAgentVm();
-        Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
-      }
-
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple) {
         final taskProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -371,22 +487,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.addObserver(this);
     _prewarmRemainingTabs(homePageIdx);
 
-    // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
-    if (SharedPreferencesUtil().claudeAgentEnabled) {
-      print('[HomePage] claudeAgentEnabled=true, calling ensureAgentVm + starting keepalive + preConnectAgent');
-      ensureAgentVm();
-      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-      messageProvider.startVmKeepalive();
-      messageProvider.preConnectAgent();
-    } else {
-      print('[HomePage] claudeAgentEnabled=false, skipping VM ensure');
-    }
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Do not start flutter_foreground_task from location permission. On iOS
-      // that holds AVAudioSession (green mic) all day even when locationEnabled
-      // is false and nothing is capturing. CaptureController starts/stops the
-      // keep-alive only while a live capture session has audio.
+      // Android needs a foreground service to keep capture/location work alive.
+      // On iOS this plugin boots a second Flutter engine; conversation location
+      // is captured directly at recording start and first transcript instead.
+      if (Platform.isAndroid) {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+          await ForegroundUtil.initializeForegroundService();
+          await ForegroundUtil.startForegroundTask();
+        }
+      } else if (Platform.isIOS) {
+        // Stop a headless foreground-task engine persisted by an older build.
+        // Native BLE/audio background modes continue to own active capture.
+        await ForegroundUtil.stopForegroundTask();
+      }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -523,31 +638,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _checkForAnnouncements() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _announcementTimer?.cancel();
+      _announcementTimer = Timer(const Duration(seconds: 2), () async {
+        if (!mounted) return;
 
-      await Future.delayed(const Duration(seconds: 2));
+        final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
+        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+        await AnnouncementService().checkAndShowAnnouncements(
+          context,
+          announcementProvider,
+          connectedDevice: deviceProvider.connectedDevice,
+        );
+        if (!mounted) return;
 
-      if (!mounted) return;
+        // Register callback for device connection to check firmware announcements and device onboarding
+        deviceProvider.onDeviceConnected = (BtDevice device) {
+          _onDeviceConnectedForAnnouncements(device);
+          _checkDeviceOnboarding(device);
+        };
 
-      final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
-      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-      await AnnouncementService().checkAndShowAnnouncements(
-        context,
-        announcementProvider,
-        connectedDevice: deviceProvider.connectedDevice,
-      );
-
-      // Register callback for device connection to check firmware announcements and device onboarding
-      deviceProvider.onDeviceConnected = (BtDevice device) {
-        _onDeviceConnectedForAnnouncements(device);
-        _checkDeviceOnboarding(device);
-      };
-
-      // Also check if already connected right now
-      if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
-        _checkDeviceOnboarding(deviceProvider.connectedDevice!);
-      }
+        // Also check if already connected right now
+        if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
+          _checkDeviceOnboarding(deviceProvider.connectedDevice!);
+        }
+      });
     });
   }
 
@@ -682,62 +798,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               connectivityProvider.isInitialized &&
               connectivityProvider.previousConnection != isConnected) {
             previousConnection = isConnected;
-            if (!isConnected) {
-              // TODO: Re-enable when internet connection banners are redesigned
-              // Future.delayed(const Duration(seconds: 2), () {
-              //   if (mounted && !connectivityProvider.isConnected) {
-              //     ScaffoldMessenger.of(ctx).showMaterialBanner(
-              //       MaterialBanner(
-              //         content: const Text(
-              //           'No internet connection. Please check your connection.',
-              //           style: TextStyle(color: Colors.white70),
-              //         ),
-              //         backgroundColor: const Color(0xFF424242), // Dark gray instead of red
-              //         leading: const Icon(Icons.wifi_off, color: Colors.white70),
-              //         actions: [
-              //           TextButton(
-              //             onPressed: () {
-              //               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-              //             },
-              //             child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
-              //           ),
-              //         ],
-              //       ),
-              //     );
-              //   }
-              // });
-            } else {
+            if (isConnected) {
               Future.delayed(Duration.zero, () {
-                // TODO: Re-enable when internet connection banners are redesigned
-                // if (mounted) {
-                //   ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                //   ScaffoldMessenger.of(ctx).showMaterialBanner(
-                //     MaterialBanner(
-                //       content: const Text(
-                //         'Internet connection is restored.',
-                //         style: TextStyle(color: Colors.white),
-                //       ),
-                //       backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
-                //       leading: const Icon(Icons.wifi, color: Colors.white),
-                //       actions: [
-                //         TextButton(
-                //           onPressed: () {
-                //             if (mounted) {
-                //               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                //             }
-                //           },
-                //           child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
-                //         ),
-                //       ],
-                //       onVisible: () => Future.delayed(const Duration(seconds: 3), () {
-                //         if (mounted) {
-                //           ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                //         }
-                //       }),
-                //     ),
-                //   );
-                // }
-
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   if (!mounted) return;
 
@@ -818,7 +880,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               },
                             ),
                             if (home.selectedIndex == 0)
-                              Positioned(left: 16, right: 16, bottom: 78, child: _buildChatBar(context)),
+                              Positioned(
+                                left: 16,
+                                right: 16,
+                                // Derived from the nav row's own geometry so the
+                                // two cannot drift: changing the row's height or
+                                // the inset it reserves moves this with it.
+                                bottom: bottomNavChatBarOffset(context),
+                                child: Row(
+                                  children: [
+                                    Expanded(child: _buildChatBar(context)),
+                                    const SizedBox(width: 10),
+                                    const HomeRecordButton(),
+                                  ],
+                                ),
+                              ),
                           ],
                         );
                       },
@@ -844,56 +920,59 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       onTap: () {
         HapticFeedback.lightImpact();
         PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
+        Navigator.push(
+          context,
+          MaterialPageRoute(fullscreenDialog: true, builder: (context) => const ChatPage(isPivotBottom: false)),
+        );
       },
       child: Container(
-        height: 62,
+        height: kHomeChatBarHeight,
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(color: const Color(0xFF35343B), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.65),
-              blurRadius: 60,
-              spreadRadius: 14,
-              offset: const Offset(0, -16),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 32,
-              spreadRadius: 6,
-              offset: const Offset(0, -8),
-            ),
-            BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 2)),
-          ],
         ),
         child: Row(
           children: [
             const SizedBox(width: 18),
-            const Expanded(
+            Expanded(
               child: Text(
-                'Ask Omi anything about your life...',
-                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
+                context.l10n.askOmi,
+                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             GestureDetector(
+              // The mic sits inside the chat bar's own tap target, so a near miss
+              // does not do nothing: it opens text chat instead of voice. Own the
+              // bar's full height and its rounded end, not just the 42pt circle.
+              behavior: HitTestBehavior.opaque,
               onTap: () {
                 HapticFeedback.lightImpact();
                 PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat Voice');
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
+                  MaterialPageRoute(
+                    fullscreenDialog: true,
+                    builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true),
+                  ),
                 );
               },
-              child: Container(
-                width: 42,
-                height: 42,
-                margin: const EdgeInsets.only(right: 6),
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
+              child: Semantics(
+                button: true,
+                label: context.l10n.voiceMode,
+                child: Container(
+                  height: kHomeChatBarHeight,
+                  padding: const EdgeInsets.only(left: 8, right: 6),
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
+                  ),
+                ),
               ),
             ),
           ],
@@ -906,11 +985,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
+      // The trailing buttons paint 36pt circles inside 44pt touch targets, so the
+      // title gives up the 4pt the last target overhangs by. The circles stay on
+      // the 16pt margin the rest of the screen uses.
+      titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const BatteryInfoWidget(),
+          const Padding(
+            padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+            child: BatteryInfoWidget(),
+          ),
           const SizedBox.shrink(),
           Row(
             children: [
@@ -925,33 +1011,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
                   // Show sync icon only on Conversations tab and if there's a paired device OR if there are pending files on device
                   if (homeProvider.selectedIndex == 1 && (device != null || hasPendingOnDevice)) {
-                    return GestureDetector(
+                    return HeaderCircleButton(
+                      semanticLabel: context.l10n.sync,
                       onTap: () {
                         HapticFeedback.mediumImpact();
                         final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
                         Navigator.push(context, MaterialPageRoute(builder: (context) => page));
                       },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: isSyncing
-                              ? Colors.deepPurple.withValues(alpha: 0.2)
-                              : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.cloud_rounded,
-                          size: 18,
-                          color: isSyncing
-                              ? Colors.deepPurpleAccent
-                              : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
-                        ),
+                      color: isSyncing
+                          ? Colors.deepPurple.withValues(alpha: 0.2)
+                          : hasPendingOnDevice
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
+                      icon: Icon(
+                        Icons.cloud_rounded,
+                        size: 18,
+                        color: isSyncing
+                            ? Colors.deepPurpleAccent
+                            : hasPendingOnDevice
+                                ? Colors.orangeAccent
+                                : Colors.white70,
                       ),
                     );
                   }
@@ -972,134 +1051,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       // Search button - show when no active search, clicking closes search bar
                       if (shouldShowSearchButton)
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: homeProvider.showConvoSearchBar
-                                ? Colors.deepPurple.withValues(alpha: 0.5)
-                                : const Color(0xFF1F1F25),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.search, size: 18, color: Colors.white70),
-                            onPressed: () {
-                              HapticFeedback.mediumImpact();
-                              homeProvider.toggleConvoSearchBar();
-                            },
-                          ),
+                        HeaderCircleButton(
+                          semanticLabel: context.l10n.search,
+                          color: homeProvider.showConvoSearchBar
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          icon: const Icon(Icons.search, size: 18, color: Colors.white70),
+                          onTap: () {
+                            HapticFeedback.mediumImpact();
+                            homeProvider.toggleConvoSearchBar();
+                          },
                         ),
                       // Calendar button - only show when date filter is active
-                      if (convoProvider.selectedDate != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple.withValues(alpha: 0.5),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              // Open date picker to change date, cancel clears filter
-                              DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
-                              await showCupertinoModalPopup<void>(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return Container(
-                                    height: 420,
-                                    padding: const EdgeInsets.only(top: 6.0),
-                                    margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                                    color: const Color(0xFF1F1F25),
-                                    child: SafeArea(
-                                      top: false,
-                                      child: Column(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFF1F1F25),
-                                              border: Border(bottom: BorderSide(color: Color(0xFF35343B), width: 0.5)),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                CupertinoButton(
-                                                  padding: EdgeInsets.zero,
-                                                  onPressed: () async {
-                                                    // Get provider before pop to avoid using invalid context
-                                                    final provider = Provider.of<ConversationProvider>(
-                                                      context,
-                                                      listen: false,
-                                                    );
-                                                    Navigator.of(context).pop();
-                                                    await provider.clearDateFilter();
-                                                    PlatformManager.instance.analytics.calendarFilterCleared();
-                                                  },
-                                                  child: Text(
-                                                    context.l10n.removeFilter,
-                                                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                                                  ),
-                                                ),
-                                                const Spacer(),
-                                                CupertinoButton(
-                                                  padding: EdgeInsets.zero,
-                                                  onPressed: () async {
-                                                    final provider = Provider.of<ConversationProvider>(
-                                                      context,
-                                                      listen: false,
-                                                    );
-                                                    Navigator.of(context).pop();
-                                                    await provider.filterConversationsByDate(selectedDate);
-                                                    PlatformManager.instance.analytics.calendarFilterApplied(
-                                                      selectedDate,
-                                                    );
-                                                  },
-                                                  child: Text(
-                                                    context.l10n.done,
-                                                    style: const TextStyle(
-                                                      color: Colors.deepPurple,
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Material(
-                                              color: ResponsiveHelper.backgroundSecondary,
-                                              child: CalendarDatePicker2(
-                                                config: getDefaultCalendarConfig(
-                                                  firstDate: DateTime(2020),
-                                                  lastDate: DateTime.now(),
-                                                  currentDate: DateTime.now(),
-                                                ),
-                                                value: [selectedDate],
-                                                onValueChanged: (dates) {
-                                                  if (dates.isNotEmpty) {
-                                                    selectedDate = dates[0];
-                                                  }
-                                                },
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          ),
+                      if (convoProvider.selectedStartDate != null)
+                        HeaderCircleButton(
+                          semanticLabel: context.l10n.filters,
+                          color: Colors.deepPurple.withValues(alpha: 0.5),
+                          icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
+                          onTap: () async {
+                            HapticFeedback.mediumImpact();
+                            await showConversationDateRangePicker(context);
+                          },
                         ),
-                      ],
-                      const SizedBox(width: 8),
                     ],
                   );
                 },
@@ -1114,45 +1087,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   return Row(
                     children: [
                       // Export button
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            PlatformManager.instance.analytics.exportTasksBannerClicked();
-                            Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
-                          },
-                        ),
+                      HeaderCircleButton(
+                        semanticLabel: context.l10n.exportButton,
+                        icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          PlatformManager.instance.analytics.exportTasksBannerClicked();
+                          Navigator.of(
+                            context,
+                          ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
+                        },
                       ),
-                      const SizedBox(width: 8),
                       // Completed toggle
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
+                      HeaderCircleButton(
+                        semanticLabel: context.l10n.completed,
+                        color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
+                        icon: FaIcon(
+                          FontAwesomeIcons.solidCircleCheck,
+                          size: 16,
+                          color: showCompleted ? Colors.white : Colors.white70,
                         ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: FaIcon(
-                            FontAwesomeIcons.solidCircleCheck,
-                            size: 16,
-                            color: showCompleted ? Colors.white : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            actionItemsProvider.toggleShowCompletedView();
-                          },
-                        ),
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          actionItemsProvider.toggleShowCompletedView();
+                        },
                       ),
-                      const SizedBox(width: 8),
                     ],
                   );
                 },
@@ -1161,69 +1120,57 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               Consumer<HomeProvider>(
                 builder: (context, homeProvider, _) {
                   if (homeProvider.selectedIndex != 3) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: PullDownButton(
-                      itemBuilder: (context) => [
-                        PullDownMenuItem(
-                          title: context.l10n.createAnApp,
-                          subtitle: context.l10n.createAndShareYourApp,
-                          iconWidget: const Icon(Icons.apps, size: 18),
-                          onTap: () {
-                            PlatformManager.instance.analytics.pageOpened('Submit App');
-                            routeToPage(context, const AddAppPage());
-                          },
-                        ),
-                        PullDownMenuItem(
-                          title: context.l10n.addMcpServer,
-                          subtitle: context.l10n.connectExternalAiTools,
-                          iconWidget: const Icon(Icons.cable, size: 18),
-                          onTap: () {
-                            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
-                            routeToPage(context, const AddMcpServerPage());
-                          },
-                        ),
-                      ],
-                      buttonBuilder: (context, showMenu) => GestureDetector(
+                  return PullDownButton(
+                    itemBuilder: (context) => [
+                      PullDownMenuItem(
+                        title: context.l10n.createAnApp,
+                        subtitle: context.l10n.createAndShareYourApp,
+                        iconWidget: const Icon(Icons.apps, size: 18),
                         onTap: () {
-                          HapticFeedback.mediumImpact();
-                          showMenu();
+                          PlatformManager.instance.analytics.pageOpened('Submit App');
+                          routeToPage(context, const AddAppPage());
                         },
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                          child: const Icon(Icons.add, size: 18, color: Colors.white70),
-                        ),
                       ),
+                      PullDownMenuItem(
+                        title: context.l10n.addMcpServer,
+                        subtitle: context.l10n.connectExternalAiTools,
+                        iconWidget: const Icon(Icons.cable, size: 18),
+                        onTap: () {
+                          PlatformManager.instance.analytics.pageOpened('Add MCP Server');
+                          routeToPage(context, const AddMcpServerPage());
+                        },
+                      ),
+                    ],
+                    buttonBuilder: (context, showMenu) => HeaderCircleButton(
+                      semanticLabel: context.l10n.createAnApp,
+                      icon: const Icon(Icons.add, size: 18, color: Colors.white70),
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        showMenu();
+                      },
                     ),
                   );
                 },
               ),
               // Settings button - always visible
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    PlatformManager.instance.analytics.pageOpened('Settings');
-                    String language = SharedPreferencesUtil().userPrimaryLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                      }
+              HeaderCircleButton(
+                semanticLabel: context.l10n.settings,
+                icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  PlatformManager.instance.analytics.pageOpened('Settings');
+                  String language = SharedPreferencesUtil().userPrimaryLanguage;
+                  bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                  String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                  SettingsDrawer.show(context);
+                  if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                      hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                      transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                    if (context.mounted) {
+                      context.read<CaptureProvider>().onRecordProfileSettingChanged();
                     }
-                  },
-                ),
+                  }
+                },
               ),
             ],
           ),
@@ -1236,11 +1183,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    _announcementTimer?.cancel();
+    _announcementTimer = null;
+    for (final timer in _prewarmTimers) {
+      timer.cancel();
+    }
+    _prewarmTimers.clear();
     WidgetsBinding.instance.removeObserver(this);
-    // Stop VM keepalive timer
-    try {
-      Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
-    } catch (_) {}
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
     // Remove capture provider listener using stored reference
@@ -1264,7 +1213,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
-    ForegroundUtil.stopForegroundTask();
+    if (Platform.isAndroid) {
+      ForegroundUtil.stopForegroundTask();
+    }
     super.dispose();
   }
 }

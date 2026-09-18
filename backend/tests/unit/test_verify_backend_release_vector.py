@@ -287,7 +287,7 @@ def test_legacy_binding_migration_rejects_multi_container_services_without_mutat
         commands.append(command)
         return SimpleNamespace(stdout=json.dumps(multi_container_service))
 
-    with pytest.raises(ValueError, match='exactly one container'):
+    with pytest.raises(ValueError, match='exactly one application container'):
         preflight.migrate_legacy_public_bindings(
             services=('backend',), env='dev', project='based-hardware-dev', region='us-central1', runner=runner
         )
@@ -460,37 +460,80 @@ def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_onl
             'Google Auth for read-only Firestore inventory'
         )
         if workflow.name == 'gcp_backend_auto_dev.yml':
-            assert readiness.index('Verify Release Eligibility proof is current main') < readiness.index(
+            assert readiness.index('Resolve and verify the newest proven main source') < readiness.index(
                 'Require read-only Firestore credentials'
             )
 
 
-def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
-    """Static guard: serving-schema writes stay outside backend deployment workflows."""
+def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
+    """Static guard: serving-schema writes stay outside backend deployment workflows.
+
+    The lane is no longer dispatch-only. #11684/#11731: the manifest fix merged
+    and nothing applied it, so /v3/memories 503'd for ~5h. A merged manifest
+    change now triggers the migration, and the prod GitHub Environment's
+    required reviewer -- not a typed string a push cannot supply -- is what
+    approves it. The typed confirmation is still mandatory on the manual path.
+
+    The lock also left the backend-stack domain: reconciliation is create-only
+    and monotone, so it cannot invalidate a readiness answer, while sharing the
+    group let a `waiting` deploy approval hold schema repair hostage during the
+    same incident.
+    """
 
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_firestore_indexes.yml'
     text = workflow.read_text(encoding='utf-8')
+    resolved_environment = (
+        "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
+    )
 
     assert 'workflow_dispatch:' in text
     assert 'APPLY_FIRESTORE_INDEXES' in text
-    assert "if: github.ref == 'refs/heads/main'" in text
-    assert 'group: deploy-backend-stack-${{ github.event.inputs.environment }}' in text
-    assert 'environment: ${{ github.event.inputs.environment }}' in text
+    assert 'if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then' in text
+    assert 'elif [[ "$EVENT_NAME" != "push" ]]; then' in text
+    assert "github.ref == 'refs/heads/main'" in text
+    assert "  push:\n    branches: [ \"main\" ]\n    paths:\n      - 'firestore.indexes.json'\n" in text
+    # An empty environment binds no GitHub Environment and bypasses the prod
+    # approval; an unresolved group serializes nothing.
+    assert f'group: firestore-schema-{resolved_environment}' in text
+    assert f'environment: {resolved_environment}' in text
+    assert 'group: deploy-backend-stack-' not in text
+    assert 'environment: ${{ github.event.inputs.environment }}' not in text
     assert 'ref: ${{ github.sha }}' in text
     assert 'git rev-parse HEAD' in text
     assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
     assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
-    assert text.count('--provision-missing') == 1
+    composite = text.split('\n  reconcile_composite_indexes:', 1)[1].split(
+        '\n  reconcile_development_composite_indexes:', 1
+    )[0]
+    # Development converges its own schema on the same merge. It is a separate
+    # job precisely so the reviewed production migration above keeps its gate;
+    # assert the two lanes stay one-apply-each rather than counting globally.
+    development = text.split('\n  reconcile_development_composite_indexes:', 1)[1].split(
+        '\n  reject_nonprod_field_exemptions:', 1
+    )[0]
+    field_exemptions = text.split('\n  apply_field_exemptions:', 1)[1]
+
+    assert composite.count('--provision-missing') == 1
+    assert development.count('--provision-missing') == 1
     assert '--provision-missing \\\n            --dry-run' not in text
-    assert text.count('--dry-run') == 1
-    assert '--check-only' not in text
+    assert composite.count('--dry-run') == 1
+    assert development.count('--dry-run') == 1
     assert 'vars.RUNTIME_GCP_PROJECT_ID' in text
+
+    # The development lane must never bind production, and must not be able to
+    # run from a manual dispatch that selected prod.
+    assert 'environment: development' in development
+    assert 'group: firestore-schema-development' in development
+    assert "github.event_name == 'push'" in development
+    assert 'environment: prod' not in development
+    assert 'github.event.inputs.environment' not in development
+    assert 'reconcile_firestore_field_exemptions.py' not in development
 
     plan_step = '- name: Show create-only Firestore schema plan'
     apply_step = '- name: Apply approved Firestore schema plan and wait for readiness'
     verification_step = '- name: Verify dispatched Firestore control plane'
-    plan = text.split(plan_step, 1)[1].split(apply_step, 1)[0]
-    apply = text.split(apply_step, 1)[1]
+    plan = composite.split(plan_step, 1)[1].split(apply_step, 1)[0]
+    apply = composite.split(apply_step, 1)[1]
     assert text.index(verification_step) < text.index(plan_step)
     assert text.index(plan_step) < text.index(apply_step)
     assert '--provision-missing' not in plan
@@ -498,6 +541,19 @@ def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
     assert '--dry-run' in plan
     assert '--dry-run' not in apply
     assert '--timeout-seconds 3600' in apply
+
+    # Firestore documents `gcloud firestore indexes fields update --disable-indexes`
+    # as an explicit field override that does not affect composites. Keep that
+    # destructive operation manual/prod-only and distinct from the monotone lane.
+    assert "github.event.inputs.operation == 'field-exemptions'" in field_exemptions
+    assert "github.event.inputs.environment == 'prod'" in field_exemptions
+    assert 'environment: prod' in field_exemptions
+    assert 'APPLY_FIRESTORE_FIELD_EXEMPTIONS' in field_exemptions
+    assert field_exemptions.count('--dry-run') == 1
+    assert field_exemptions.count('--apply') == 1
+    assert '--confirmation APPLY_FIRESTORE_FIELD_EXEMPTIONS' in field_exemptions
+    assert 'reconcile_firestore_field_exemptions.py' in composite
+    assert '--check-only' in composite
 
 
 def test_static_manual_deploy_requires_an_admitted_main_source() -> None:
@@ -1073,14 +1129,26 @@ def test_deploy_stages_workflow_owned_control_and_validation_sources_inside_admi
     assert 'COPY backend/ .' in dockerfile
     assert '.deploy-control' not in dockerfile
     assert '.deploy-workflow-source' not in dockerfile
+    before_validation = deploy[
+        deploy.index('Validate backend runtime env before deploy') : deploy.index(
+            'Migrate legacy public Cloud Run bindings'
+        )
+    ]
     validation_steps = [
-        deploy[deploy.index('Validate backend runtime env before deploy') : deploy.index('Build runtime image')],
+        before_validation,
         deploy[
             deploy.index('Validate backend runtime env after deploy') : deploy.index(
                 'Resolve transcription candidate URL'
             )
         ],
     ]
+    assert deploy.index('Render backend runtime env') < deploy.index('Validate backend runtime env before deploy')
+    assert deploy.index('Validate backend runtime env before deploy') < deploy.index(
+        'Deploy ${{ inputs.service }} to Cloud Run'
+    )
+    assert '--state-output "$RUNNER_TEMP/backend-runtime-env-state.json"' in deploy
+    assert '--cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"' in before_validation
+    assert '--check-rendered-cloud-run' not in before_validation
     assert all('--workflow-root "$DEPLOY_WORKFLOW_ROOT"' in step for step in validation_steps)
     assert all('--manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml"' in step for step in validation_steps)
     for action_name in (

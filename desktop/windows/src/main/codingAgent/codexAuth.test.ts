@@ -7,18 +7,17 @@ import {
   validateOpenAiKey,
   type FetchLike
 } from './codexAuth'
-import type { ByokProvider } from '../../shared/byok'
 
 /** In-memory stand-in for ByokKeyStore's get/set/clear (no Electron safeStorage). */
-function makeFakeStore(initial: Partial<Record<ByokProvider, string>> = {}) {
-  const data: Partial<Record<ByokProvider, string>> = { ...initial }
+function makeFakeStore() {
+  let codexKey: string | null = null
   return {
-    getKey: vi.fn((p: ByokProvider) => data[p] ?? null),
-    setKey: vi.fn((p: ByokProvider, k: string) => {
-      data[p] = k.trim()
+    getCodexKey: vi.fn(() => codexKey),
+    setCodexKey: vi.fn((k: string) => {
+      codexKey = k.trim()
     }),
-    clearKey: vi.fn((p: ByokProvider) => {
-      delete data[p]
+    clearCodexKey: vi.fn(() => {
+      codexKey = null
     })
   }
 }
@@ -60,7 +59,7 @@ describe('saveCodexApiKey', () => {
     __setCodexKeyStoreForTests(store)
     const r = await saveCodexApiKey('  sk-good  ', async () => ({ ok: true, status: 200 }))
     expect(r).toEqual({ ok: true, hasKey: true, warning: undefined })
-    expect(store.setKey).toHaveBeenCalledWith('openai', 'sk-good')
+    expect(store.setCodexKey).toHaveBeenCalledWith('sk-good')
     expect(getCodexApiKey()).toBe('sk-good')
     expect(codexApiKeyStatus()).toEqual({ hasKey: true })
   })
@@ -74,7 +73,7 @@ describe('saveCodexApiKey', () => {
       error: 'nope'
     }))
     expect(r.ok).toBe(false)
-    expect(store.setKey).not.toHaveBeenCalled()
+    expect(store.setCodexKey).not.toHaveBeenCalled()
   })
 
   it('stores anyway when OpenAI is unreachable, with a soft warning', async () => {
@@ -88,14 +87,14 @@ describe('saveCodexApiKey', () => {
     expect(r.ok).toBe(true)
     expect(r.hasKey).toBe(true)
     expect(r.warning).toMatch(/reach/i)
-    expect(store.setKey).toHaveBeenCalledWith('openai', 'sk-offline')
+    expect(store.setCodexKey).toHaveBeenCalledWith('sk-offline')
   })
 
   it('clears the key when saved blank', async () => {
-    const store = makeFakeStore({ openai: 'sk-old' })
+    const store = makeFakeStore()
     __setCodexKeyStoreForTests(store)
     const r = await saveCodexApiKey('   ')
     expect(r).toEqual({ ok: true, hasKey: false })
-    expect(store.clearKey).toHaveBeenCalledWith('openai')
+    expect(store.clearCodexKey).toHaveBeenCalled()
   })
 })

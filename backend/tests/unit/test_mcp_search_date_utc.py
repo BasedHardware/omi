@@ -257,7 +257,9 @@ class TestSseSearchUtcBounds:
             captured.update(start_date=kwargs.get('start_date'), end_date=kwargs.get('end_date'))
             return []
 
-        with patch.object(mcp_sse_router.conversations_db, 'get_conversations', side_effect=_get_conversations):
+        with patch.object(
+            mcp_sse_router.conversations_db, 'get_mcp_conversation_cards', side_effect=_get_conversations
+        ):
             mcp_sse_router.execute_tool(
                 'user-1', 'get_conversations', {'start_date': '2026-08-01', 'end_date': '2026-08-02'}
             )

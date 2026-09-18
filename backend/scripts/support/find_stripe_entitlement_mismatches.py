@@ -23,40 +23,25 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, cast
 
 from google.cloud import firestore
 
-# Keep in sync with backend/utils/subscription.py and production Cloud Run env.
-# Env vars override these defaults when present.
-DEFAULT_PRICE_TO_PLAN = {
-    # Current Operator
-    "price_1TMxVM1F8wnoWYvw9uaoYX7V": "operator",
-    "price_1TMxVM1F8wnoWYvwNfXdF6LW": "operator",
-    # Current Architect / legacy Pro
-    "price_1TAfBB1F8wnoWYvw8XBFM1dX": "architect",
-    "price_1TLFac1F8wnoWYvwtPxZhtzE": "architect",
-    # Current/legacy Neo / Unlimited
-    "price_1RtJPm1F8wnoWYvwhVJ38kLb": "unlimited",
-    "price_1RtJQ71F8wnoWYvwKMPaGlGY": "unlimited",
-    "price_1TNIHd1F8wnoWYvwkIrekcQZ": "unlimited",
-    "price_1TNIHd1F8wnoWYvwlKywJ8TO": "unlimited",
-}
+# Keep the script executable as ``python scripts/support/...`` from backend/.
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
-ENV_PRICE_PLAN_KEYS = {
-    "STRIPE_OPERATOR_MONTHLY_PRICE_ID": "operator",
-    "STRIPE_OPERATOR_ANNUAL_PRICE_ID": "operator",
-    "STRIPE_ARCHITECT_MONTHLY_PRICE_ID": "architect",
-    "STRIPE_ARCHITECT_ANNUAL_PRICE_ID": "architect",
-    "STRIPE_PRO_MONTHLY_PRICE_ID": "architect",
-    "STRIPE_PRO_ANNUAL_PRICE_ID": "architect",
-    "STRIPE_UNLIMITED_MONTHLY_PRICE_ID": "unlimited",
-    "STRIPE_UNLIMITED_ANNUAL_PRICE_ID": "unlimited",
-    "STRIPE_NEO_MONTHLY_PRICE_ID": "unlimited",
-    "STRIPE_NEO_ANNUAL_PRICE_ID": "unlimited",
-}
+from config.plan_catalog import (  # noqa: E402 - path bootstrap above is intentional
+    BILLING_ENV_VAR_PLAN_TYPES,
+    PAID_PLAN_IDS,
+    RECOGNIZED_STRIPE_PRICE_PLAN_TYPES,
+)
 
-PAID_PLANS = {"unlimited", "operator", "architect"}
+DEFAULT_PRICE_TO_PLAN = {price_id: plan.value for price_id, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()}
+ENV_PRICE_PLAN_KEYS = {env_var: plan.value for env_var, plan in BILLING_ENV_VAR_PLAN_TYPES.items()}
+PAID_PLANS = set(PAID_PLAN_IDS)
 
 
 @dataclass

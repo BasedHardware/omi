@@ -2,7 +2,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:permission_handler/permission_handler.dart';
+// hide PermissionStatus: flutter_contacts has its own PermissionStatus enum, and this
+// file never spells out permission_handler's version by name (only inferred via `var`).
+import 'package:permission_handler/permission_handler.dart' hide PermissionStatus;
 import 'package:intl_country_data/intl_country_data.dart';
 import 'package:provider/provider.dart';
 
@@ -52,9 +54,9 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
 
   Future<void> _loadContacts() async {
     try {
-      bool hasPermission = await FlutterContacts.requestPermission(readonly: true);
+      final status = await FlutterContacts.permissions.request(PermissionType.read);
       if (!mounted) return;
-      if (!hasPermission) {
+      if (status != PermissionStatus.granted && status != PermissionStatus.limited) {
         setState(() {
           _permissionDenied = true;
           _loadingContacts = false;
@@ -62,9 +64,9 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         return;
       }
 
-      var contacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      var contacts = await FlutterContacts.getAll(properties: {ContactProperty.phone});
       contacts = contacts.where((c) => c.phones.isNotEmpty).toList();
-      contacts.sort((a, b) => a.displayName.compareTo(b.displayName));
+      contacts.sort((a, b) => (a.displayName ?? '').compareTo(b.displayName ?? ''));
 
       if (mounted) {
         setState(() {
@@ -89,7 +91,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         _filteredContacts = _contacts;
       } else {
         _filteredContacts = _contacts.where((c) {
-          return c.displayName.toLowerCase().contains(query.toLowerCase()) ||
+          return (c.displayName ?? '').toLowerCase().contains(query.toLowerCase()) ||
               c.phones.any((p) => p.number.contains(query));
         }).toList();
       }
@@ -220,7 +222,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                   if (status.isPermanentlyDenied || status.isDenied) {
                     await openAppSettings();
                   } else {
-                    await FlutterContacts.requestPermission(readonly: true);
+                    await FlutterContacts.permissions.request(PermissionType.read);
                   }
                   _loadContacts();
                 },
@@ -276,11 +278,12 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                   itemBuilder: (context, index) {
                     var contact = _filteredContacts[index];
                     var phone = contact.phones.first;
+                    var name = contact.displayName ?? '';
                     return _ContactRow(
-                      name: contact.displayName,
-                      phone: '${phone.label.name} ${phone.number}',
-                      initial: contact.displayName.isNotEmpty ? contact.displayName[0].toUpperCase() : '?',
-                      onCall: () => _makeCall(phone.number, contactName: contact.displayName),
+                      name: name,
+                      phone: '${phone.label.label.name} ${phone.number}',
+                      initial: name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      onCall: () => _makeCall(phone.number, contactName: name),
                     );
                   },
                 ),

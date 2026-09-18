@@ -139,6 +139,62 @@ enum QueryShellMode: Equatable, Sendable {
   /// Omi; the spine/search surface stays one `esc` (or `‹ Results`) away rather than being the
   /// landing page.
   static let homeDefault: QueryShellMode = .answer
+
+  var stableName: String {
+    switch self {
+    case .results: return "results"
+    case .answer: return "answer"
+    }
+  }
+}
+
+/// The query-shell Home publishes its live mode here so `chat_composer_snapshot` can report
+/// placeholder and mode without mounting a second composer.
+@MainActor
+enum QueryShellComposerAutomation {
+  static var mode: QueryShellMode = .homeDefault
+
+  static func publish(_ mode: QueryShellMode) {
+    self.mode = mode
+  }
+
+  static var placeholder: String { QueryComposerPlaceholder.text(mode: mode) }
+}
+
+/// Shape `chat_composer_snapshot` returns. One function so the handler and the tests cannot disagree
+/// about placeholder/mode.
+enum ChatComposerAutomationSnapshot {
+  static func detail(
+    draft: String,
+    stagedAttachments: Int,
+    firstAttachment: String,
+    mode: QueryShellMode
+  ) -> [String: String] {
+    [
+      "main": draft,
+      "mainStagedAttachments": String(stagedAttachments),
+      "mainStagedFirstAttachment": firstAttachment,
+      "placeholder": QueryComposerPlaceholder.text(mode: mode),
+      "mode": mode.stableName,
+    ]
+  }
+}
+
+/// **What the empty composer says.**
+///
+/// The chat composer used to say `Ask a follow-up…` whenever it stood under the conversation,
+/// including the moment after the reader cleared it: an invitation to follow up on nothing. It now
+/// says the one thing it always means — `Ask Omi` — whatever the transcript holds. Only the search
+/// placement carries a different prompt, because it is a different control.
+enum QueryComposerPlaceholder {
+  static let chat = "Ask Omi"
+
+  static func text(mode: QueryShellMode) -> String {
+    switch mode {
+    case .results: return RewindSearchMetrics.placeholder
+    case .answer: return chat
+    }
+  }
 }
 
 /// The `home_*` bridge actions, as the search-text transition each one promises.
@@ -212,15 +268,18 @@ enum QueryShellSubmit: Equatable, Sendable {
 
   /// No `commandHeld`. Which key was pressed stopped being information the moment both keys meant
   /// the same thing; a parameter nothing branches on is the next thing to grow a branch back.
-  static func resolve(text: String) -> QueryShellSubmit {
-    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .none : .ask
+  ///
+  /// `hasAttachments`: a file or conversation staged with no words is a message — `⏎` sends it, and
+  /// the provider asks the model about what was attached. Only a bare, empty composer is inert.
+  static func resolve(text: String, hasAttachments: Bool = false) -> QueryShellSubmit {
+    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !hasAttachments ? .none : .ask
   }
 }
 
 /// **One submit, resolved once — including what the field is left holding.**
 ///
 /// The text is a *message*, and a composer that keeps the message it just sent is a composer you
-/// have to empty by hand before you can write the next one: the `Ask a follow-up…` placeholder was
+/// have to empty by hand before you can write the next one: the `Ask Omi` placeholder was
 /// unreachable, a second `⏎` re-sent the question verbatim, and emptying the field to type a
 /// follow-up used to throw the whole conversation away because an empty field was read as "take me
 /// back to the list".
@@ -233,7 +292,8 @@ enum QueryShellSubmit: Equatable, Sendable {
 /// which is why there is no longer a `commandHeld` to disambiguate.
 struct QueryShellSubmission: Equatable, Sendable {
   let action: QueryShellSubmit
-  /// The trimmed question to send. Non-nil only for `.ask`.
+  /// The trimmed question to send. Non-nil only for `.ask` — and empty for an attachment-only send,
+  /// where the staged items are the message.
   let question: String?
   /// What the field holds afterwards.
   let text: String
@@ -241,8 +301,8 @@ struct QueryShellSubmission: Equatable, Sendable {
   /// inert key must never move the reader.
   let mode: QueryShellMode?
 
-  static func resolve(text: String) -> Self {
-    switch QueryShellSubmit.resolve(text: text) {
+  static func resolve(text: String, hasAttachments: Bool = false) -> Self {
+    switch QueryShellSubmit.resolve(text: text, hasAttachments: hasAttachments) {
     case .none:
       return Self(action: .none, question: nil, text: text, mode: nil)
     case .ask:
@@ -252,6 +312,53 @@ struct QueryShellSubmission: Equatable, Sendable {
         text: "",
         mode: .answer)
     }
+  }
+}
+
+// MARK: - Send accounting
+
+/// **The submit/retry ledger for the query shell's single send path.** The view
+/// delegates every send decision here so the exactly-once question accounting
+/// the rating prompt depends on is executable in tests, not view-private glue:
+/// a resolved submit counts as one asked question and remembers itself for
+/// `Try again`; a retry re-sends that SAME question and never counts again.
+struct QueryShellSendLedger: Equatable, Sendable {
+  struct Plan: Equatable, Sendable {
+    let question: String
+    /// Whether this emission advances the rating-prompt question counter.
+    let countsAsQuestion: Bool
+  }
+
+  private(set) var lastAskedQuestion = ""
+
+  /// A resolved submission — the one place a NEW question enters the send path.
+  /// A busy provider yields no plan at all: Return during an active send would
+  /// be rejected by ChatProvider anyway, so it must neither dispatch nor count
+  /// (nor overwrite the question 'Try again' would re-send). Planning mutates
+  /// nothing — only `recordAccepted` commits state, so a send ChatProvider
+  /// rejects asynchronously leaves the ledger exactly as it was.
+  ///
+  /// An empty question is a resolved attachment-only send, not a blank field:
+  /// `QueryShellSubmission` already turned a bare empty composer into no
+  /// question at all, so it is admitted and counts like any other.
+  func planSubmit(_ question: String?, providerBusy: Bool = false) -> Plan? {
+    guard !providerBusy, let question else { return nil }
+    return Plan(question: question, countsAsQuestion: true)
+  }
+
+  /// Called from ChatProvider's `onAccepted` — the send is really in flight,
+  /// so NOW the question becomes what 'Try again' re-sends.
+  mutating func recordAccepted(_ plan: Plan) {
+    if plan.countsAsQuestion {
+      lastAskedQuestion = plan.question
+    }
+  }
+
+  /// `Try again` on a failed turn: the same logical question, so it keeps the
+  /// analytics event but never re-counts toward the rating prompt.
+  func planRetry() -> Plan? {
+    guard !lastAskedQuestion.isEmpty else { return nil }
+    return Plan(question: lastAskedQuestion, countsAsQuestion: false)
   }
 }
 
@@ -280,19 +387,17 @@ enum QueryShellRoute: Equatable, CaseIterable, Sendable {
   /// The established page that owns this destination. Never a shell-local surface (INV-NAV-1).
   var navItem: SidebarNavItem {
     switch self {
-    case .conversation, .memories, .brainMap: return .conversations
-    case .rewind: return .rewind
+    case .conversation, .memories, .brainMap, .rewind: return .conversations
     }
   }
 
-  /// Which of the Memory hub's own three views to select on arrival, for the three that share its
-  /// page. `nil` means the destination is a page of its own.
+  /// Which Brain view to select on arrival.
   var memoryDestination: MemoryHubDestination? {
     switch self {
     case .conversation: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
-    case .rewind: return nil
+    case .rewind: return .rewind
     }
   }
 }
@@ -370,18 +475,19 @@ enum QueryShellLayout {
 
   // The hero bar.
 
-  /// Roomy: this is a place to type, not a control strip.
-  static let barMinHeight: CGFloat = 64
-  static let barPaddingHorizontal: CGFloat = 18
-  static let barPaddingVertical: CGFloat = 12
+  /// Search is a persistent utility, not a hero. Keep it large enough to scan
+  /// and focus while returning the vertical space to the page it filters.
+  static let barMinHeight: CGFloat = 48
+  static let barPaddingHorizontal: CGFloat = 14
+  static let barPaddingVertical: CGFloat = 6
   /// The animated mark at the leading edge.
-  static let markDiameter: CGFloat = 26
-  /// The push-to-talk disc. Larger than the composer's 32 because it is the bar's only round target.
-  static let micDiameter: CGFloat = 38
+  static let markDiameter: CGFloat = 22
+  /// The push-to-talk disc. Larger than the compact in-panel controls because it is the bar's only round target.
+  static let micDiameter: CGFloat = 32
 
   /// Between the hero row's controls. It is set at the query face, so it can afford more air than
   /// the chat row inside the panel, which uses `OmiSpacing.sm`.
-  static let heroRowSpacing: CGFloat = 14
+  static let heroRowSpacing: CGFloat = 10
 
   /// The glyph the hero's two quiet controls share — the paperclip and the mic, which are the same
   /// kind of thing and must not be two sizes.
@@ -395,7 +501,7 @@ enum QueryShellLayout {
   /// The query's point size. Visibly larger than every other run on the surface, and deliberately
   /// under `Font.inkDisplayThreshold` (22) so it resolves to the reading face rather than the display
   /// one — a search field is type you read, not a headline.
-  static let queryFontSize: CGFloat = 21
+  static let queryFontSize: CGFloat = 17
 
   // The composer inside the bar.
   //
@@ -406,16 +512,16 @@ enum QueryShellLayout {
   // one line is and where it stops.
 
   /// One laid-out line of the query face — `NSLayoutManager.defaultLineHeight` for
-  /// `NSFont.systemFont(ofSize: 21)`, measured rather than estimated. `QueryComposerTests` checks it
+  /// `NSFont.systemFont(ofSize: 17)`, measured rather than estimated. `QueryComposerTests` checks it
   /// against the platform every run, because the ceiling below is a whole number of these and an
   /// approximate line height shows as a sixth line half-drawn at the bottom edge of the glass.
-  static let composerLineHeight: CGFloat = 24
+  static let composerLineHeight: CGFloat = 20
 
   /// The text container's breathing room, top and bottom.
   static let composerInsetVertical: CGFloat = 6
 
   /// **The resting height is the height it always was.** One line plus its insets is 37, which the
-  /// 38 pt push-to-talk disc beside it already sets — so an empty bar is exactly as tall as before
+  /// 32 pt push-to-talk disc beside it already sets — so an empty bar is exactly as tall as before
   /// (`barMinHeight`) and nothing on the surface moves until there is a second line to show.
   static var composerMinHeight: CGFloat { composerLineHeight + composerInsetVertical * 2 }
 
@@ -448,7 +554,7 @@ enum QueryShellLayout {
   /// paperclip frame, a 28 pt text pill and a 38 pt mic disc, each drawn in a different visual
   /// language. Three loud controls at three sizes is not a cluster, it is a queue — and the loudest
   /// of them was the least important. One diameter, and only one of them filled.
-  static let panelComposerControlDiameter: CGFloat = 32
+  static let panelComposerControlDiameter: CGFloat = 28
 
   /// The one glyph size the quiet controls share, so the paperclip and the mic read as the same
   /// kind of thing rather than as two unrelated icons that happened to land beside each other.
@@ -456,7 +562,7 @@ enum QueryShellLayout {
 
   /// **The text's breathing room, chosen so one line is exactly a control tall.**
   ///
-  /// `(32 − 17) / 2`. It is derived rather than picked because when one laid-out line of the chat
+  /// `(28 − 17) / 2`. It is derived rather than picked because when one laid-out line of the chat
   /// face is the same height as the disc beside it, the row's baseline and the glyphs' centres
   /// coincide — at rest and at the ceiling, whichever way the row aligns. A round number here buys a
   /// permanent point or two of vertical drift between the reader's own words and the button that
@@ -469,7 +575,7 @@ enum QueryShellLayout {
   /// than from a declared row height, which is what keeps the padding symmetric: the placeholder
   /// starts this far in from the fill's leading edge, the send disc ends this far from its trailing
   /// one, and there is the same air above and below.
-  static let panelComposerShellInset: CGFloat = 10
+  static let panelComposerShellInset: CGFloat = 7
 
   static var panelComposerMinEditorHeight: CGFloat {
     panelComposerLineHeight + panelComposerInsetVertical * 2
@@ -499,7 +605,7 @@ enum QueryShellLayout {
 
   /// **The air between the pill and the panel holding it**, so the composer reads as an object
   /// *inside* the panel rather than as the panel's own bottom edge. On top of the panel's padding
-  /// this leaves 22 pt at the sides and 16 pt underneath.
+  /// this leaves 20 pt at the sides and 14 pt underneath.
   static let panelComposerEdgeInset: CGFloat = OmiSpacing.xs
   static let panelComposerBottomInset: CGFloat = OmiSpacing.xxs
 
@@ -522,12 +628,12 @@ enum QueryShellLayout {
   // The results panel.
 
   static let panelPaddingHorizontal: CGFloat = 16
-  static let panelPaddingTop: CGFloat = 14
-  static let panelPaddingBottom: CGFloat = 12
+  static let panelPaddingTop: CGFloat = 10
+  static let panelPaddingBottom: CGFloat = 10
   /// Between the `Filter ›` row and the chips under it.
-  static let panelHeaderSpacing: CGFloat = 10
+  static let panelHeaderSpacing: CGFloat = 6
   static let chipSpacing: CGFloat = 6
-  static let chipHeight: CGFloat = 26
+  static let chipHeight: CGFloat = 28
 
   /// The floor under the panel body, so an empty result set is still a panel and not a sliver.
   static let minimumBodyHeight: CGFloat = 120

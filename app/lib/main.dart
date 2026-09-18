@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/services/dev_controls/semantic_controls.dart';
 import 'package:marionette_flutter/marionette_flutter.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -25,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
@@ -36,6 +38,9 @@ import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_local.dart' as local;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
+import 'package:omi/startup_auth.dart';
+import 'package:omi/startup_failure_app.dart';
+import 'package:omi/startup_firebase.dart';
 import 'package:omi/startup_routing.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -46,6 +51,8 @@ import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_composition.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -70,11 +77,13 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/analytics/app_session_telemetry.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
@@ -85,10 +94,34 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
+/// Firebase parameters for the current flavor, resolved identically in every engine.
+FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
+    ? local.DefaultFirebaseOptions.currentPlatform
+    : prod.DefaultFirebaseOptions.currentPlatform;
+
+/// The single Firebase entry point for every Flutter engine in the app.
+///
+/// See [ensureFirebaseApp] for why `Firebase.apps.isEmpty` was never a valid
+/// guard and why `[core/duplicate-app]` must not kill startup.
+Future<FirebaseApp> _ensureFirebaseApp() {
+  final options = _firebaseOptionsForFlavor();
+  return ensureFirebaseApp<FirebaseApp>(
+    existingApp: () => Firebase.apps.isEmpty ? null : Firebase.app(),
+    configuredProjectId: options.projectId,
+    initializeApp: () => Firebase.initializeApp(options: options),
+    projectIdOf: (app) => app.options.projectId,
+    validateProject: (projectId) => Env.validateFirebaseProject(projectId: projectId),
+  );
+}
+
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  // Same path as _init(). This runs in a SEPARATE Flutter engine and used to call
+  // Firebase.initializeApp() with no arguments, so it could bring [DEFAULT] up
+  // from the platform resources with parameters that differ from the ones the UI
+  // engine uses. Now both engines resolve the parameters the same way.
+  await _ensureFirebaseApp();
   await NotificationChannelStrings.loadAppLocale();
 
   await AwesomeNotifications().initialize(null, [
@@ -120,6 +153,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       channelKey,
       isAppInForeground: false,
     );
+  } else if (ChatAnswerNotificationHandler.isChatAnswerData(data)) {
+    // Click-to-talk / chat answers: local BigText + navigate_to (#4375).
+    // Must live in this single background entrypoint — do not re-register a
+    // second onBackgroundMessage handler from NotificationService.
+    await ChatAnswerNotificationHandler.handle(data, channelKey, isAppInForeground: false);
   }
 }
 
@@ -140,18 +178,7 @@ Future _init() async {
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
-  if (Firebase.apps.isEmpty) {
-    final profile = Env.profile;
-    final options = profile == AppEnvironmentProfile.localDev
-        ? local.DefaultFirebaseOptions.currentPlatform
-        : prod.DefaultFirebaseOptions.currentPlatform;
-    Env.validateFirebaseProject(projectId: options.projectId);
-    await Firebase.initializeApp(options: options);
-  } else {
-    // Firebase may already be initialized by native SDK (macOS)
-    debugPrint('Firebase already initialized.');
-    Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);
-  }
+  await _ensureFirebaseApp();
 
   if (Env.profile.usesFirebaseAuthEmulator) {
     await FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort);
@@ -174,9 +201,14 @@ Future _init() async {
     Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 
-  bool isAuth = (await AuthService.instance.getIdToken()) != null;
+  bool isAuth = await resolveStartupAuth(() => AuthService.instance.getIdToken());
   if (isAuth) {
-    PlatformManager.instance.analytics.identify();
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    PlatformManager.instance.analytics.identify(
+      authMethod:
+          firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
+      userCreatedAt: firebaseUser?.metadata.creationTime,
+    );
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
@@ -225,10 +257,29 @@ void main() {
       // Ensure
       if (kDebugMode) {
         MarionetteBinding.ensureInitialized();
+        // Typed semantic controls for the seeded-journey lane: same debug VM
+        // service transport as Marionette, installed only in eligible
+        // local-dev test builds (inert everywhere else, including
+        // production-flavor debug builds).
+        SemanticControls.instance.installIfEligible();
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }
-      await _init();
+      try {
+        await _init();
+      } catch (error, stack) {
+        // Startup failed before the first frame. Without this the launch
+        // storyboard stays on screen forever: runApp() is never reached, and the
+        // zone handler below only calls debugPrint, which goes nowhere in
+        // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
+        // day of investigation for exactly this reason — the app looked hung
+        // when it had in fact thrown a precise, actionable StateError.
+        if (Firebase.apps.isNotEmpty) {
+          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        }
+        runApp(StartupFailureApp(error: error, stack: stack));
+        return;
+      }
       runApp(const MyApp());
     },
     (error, stack) {
@@ -254,11 +305,14 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
+
   @override
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
+    _appSessionTelemetry.recordColdStart();
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
     }
@@ -291,8 +345,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      _appSessionTelemetry.recordResumed();
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
+      _appSessionTelemetry.recordBackgrounded();
       SyncReconciler.instance.onBackground();
       _onAppPaused();
     } else if (state == AppLifecycleState.detached) {
@@ -311,7 +367,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       providers: [
         ListenableProvider(create: (context) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-        ChangeNotifierProvider(create: (context) => ConversationProvider()),
+        ChangeNotifierProvider(create: (context) => createProductionConversationProvider()),
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
@@ -322,7 +378,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
             CaptureProvider>(
-          create: (context) => CaptureProvider(),
+          create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
@@ -331,7 +387,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               usageProvider: usage,
             );
             return (previous?..updateExternalActions(externalActions)) ??
-                CaptureProvider(externalActions: externalActions);
+                composeProductionCaptureProvider(
+                  externalActions: externalActions,
+                  localSegmentStore: LocalSegmentStore.appSupport(),
+                );
           },
         ),
         ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(

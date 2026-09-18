@@ -223,13 +223,6 @@ actor RewindIndexer {
     lastEncodedFrameTimestamp = timestamp
   }
 
-  private func hasMetadata(focusStatus: String?, extractedTasks: [String]?, insight: String?) -> Bool {
-    if focusStatus != nil { return true }
-    if extractedTasks?.isEmpty == false { return true }
-    if insight?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false { return true }
-    return false
-  }
-
   // MARK: - Frame Processing
 
   /// Process a captured frame from ProactiveAssistantsPlugin
@@ -303,12 +296,18 @@ actor RewindIndexer {
         }
       }
 
+      // Persist the JPEG we already have so the timeline can show this frame before its
+      // video chunk finalizes (video storage wins once the chunk is readable).
+      let livePath =
+        (try? await RewindStorage.shared.saveLiveScreenshot(
+          jpegData: frame.jpegData, timestamp: frame.captureTime)) ?? ""
+
       // Create database record with video reference and OCR results
       let screenshot = Screenshot(
         timestamp: frame.captureTime,
         appName: frame.appName,
         windowTitle: frame.windowTitle,
-        imagePath: "",
+        imagePath: livePath,
         videoChunkPath: encodedFrame.videoChunkPath,
         frameOffset: encodedFrame.frameOffset,
         ocrText: ocrText,
@@ -327,7 +326,8 @@ actor RewindIndexer {
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
+            id: id, timestamp: frame.captureTime, ocrText: ocrText, appName: frame.appName,
+            windowTitle: frame.windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
         }
       }
@@ -344,6 +344,22 @@ actor RewindIndexer {
       logError("RewindIndexer: Failed to process frame", error: error)
       await RewindDatabase.shared.reportQueryError(error)
     }
+  }
+
+  /// JPEG-encode a frame and stash it as a live preview for the still-unfinalized video chunk.
+  /// Returns "" when encoding or storage is unavailable — the frame then stays hidden until its
+  /// chunk finalizes, exactly as before live previews existed.
+  private static func saveLiveJPEG(cgImage: CGImage, timestamp: Date) async -> String {
+    let data = NSMutableData()
+    guard
+      let destination = CGImageDestinationCreateWithData(data as CFMutableData, "public.jpeg" as CFString, 1, nil)
+    else { return "" }
+    CGImageDestinationAddImage(
+      destination, cgImage, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { return "" }
+    return
+      (try? await RewindStorage.shared.saveLiveScreenshot(jpegData: data as Data, timestamp: timestamp))
+      ?? ""
   }
 
   /// Process a frame directly from a CGImage (macOS 14+ path, avoids JPEG decode round-trip)
@@ -404,11 +420,15 @@ actor RewindIndexer {
         }
       }
 
+      // Persist a JPEG so the timeline can show this frame before its video chunk finalizes
+      // (video storage wins once the chunk is readable).
+      let livePath = await Self.saveLiveJPEG(cgImage: cgImage, timestamp: captureTime)
+
       let screenshot = Screenshot(
         timestamp: captureTime,
         appName: appName,
         windowTitle: windowTitle,
-        imagePath: "",
+        imagePath: livePath,
         videoChunkPath: encodedFrame.videoChunkPath,
         frameOffset: encodedFrame.frameOffset,
         ocrText: ocrText,
@@ -427,7 +447,7 @@ actor RewindIndexer {
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
+            id: id, timestamp: captureTime, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
         }
       }
@@ -449,135 +469,6 @@ actor RewindIndexer {
           databaseURL: nil,
           error: error,
           appIsTerminating: RewindDatabase.isTerminationInProgress))
-      await RewindDatabase.shared.reportQueryError(error)
-    }
-  }
-
-  /// Process a frame with additional metadata (focus status, etc.)
-  func processFrame(
-    _ frame: CapturedFrame,
-    focusStatus: String?,
-    extractedTasks: [String]?,
-    insight: String?,
-    exclusionSnapshot: RewindCaptureExclusionSnapshot? = nil
-  ) async {
-    guard await ensureInitialized() else { return }
-    guard let snapshot = exclusionSnapshot ?? RewindCaptureExclusionGeneration.snapshot(appName: frame.appName),
-      snapshot.appName == frame.appName,
-      RewindCaptureExclusionGeneration.isCurrent(snapshot)
-    else { return }
-    scheduleRetentionCleanupIfDue()
-
-    do {
-      // Convert JPEG to CGImage for video encoding.
-      // Wrap in autoreleasepool so the NSImage and its internal Obj-C
-      // representations are released promptly instead of accumulating.
-      let cgImage: CGImage? = autoreleasepool {
-        guard let nsImage = NSImage(data: frame.jpegData) else { return nil }
-        return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-      }
-
-      guard let cgImage = cgImage else {
-        logError("RewindIndexer: Failed to create CGImage from frame data")
-        return
-      }
-
-      let dedupeSignature = makeFrameDedupeSignature(
-        cgImage: cgImage, appName: frame.appName, windowTitle: frame.windowTitle)
-      let carriesMetadata = hasMetadata(focusStatus: focusStatus, extractedTasks: extractedTasks, insight: insight)
-      if !carriesMetadata, await shouldSkipFrameForDedupe(dedupeSignature, timestamp: frame.captureTime) {
-        return
-      }
-
-      // Add frame to video encoder
-      let encodedFrame = try await encodeFrameIfCurrent(
-        image: cgImage, timestamp: frame.captureTime, snapshot: snapshot)
-
-      // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
-      guard let encodedFrame = encodedFrame else { return }
-      guard !ownerTransitionSuspended else { return }
-
-      // OCR gating: throttle frequency, deduplicate, then check battery
-      var ocrText: String?
-      var ocrDataJson: String?
-      var isIndexed = false
-
-      framesSinceLastOCR += 1
-      if framesSinceLastOCR < ocrEveryNthFrame {
-        recordOCROutcome(.skippedFrequency)
-        isIndexed = true
-      } else if await RewindOCRService.shared.shouldSkipOCR(for: cgImage) {
-        recordOCROutcome(.skippedDedup)
-        isIndexed = true
-      } else {
-        framesSinceLastOCR = 0
-        recordOCROutcome(.ran)
-        do {
-          let ocrResult = try await Task(priority: .utility) {
-            try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
-          }.value
-          ocrText = ocrResult.fullText
-          if let data = try? JSONEncoder().encode(ocrResult) {
-            ocrDataJson = String(data: data, encoding: .utf8)
-          }
-          isIndexed = true
-        } catch {
-          logError("RewindIndexer: OCR failed for frame with metadata: \(error)")
-        }
-      }
-
-      // Encode tasks and insight as JSON
-      var tasksJson: String?
-      if let tasks = extractedTasks, !tasks.isEmpty {
-        let data = try JSONEncoder().encode(tasks)
-        tasksJson = String(data: data, encoding: .utf8)
-      }
-
-      let adviceJson: String? = insight
-
-      let screenshot = Screenshot(
-        timestamp: frame.captureTime,
-        appName: frame.appName,
-        windowTitle: frame.windowTitle,
-        imagePath: "",
-        videoChunkPath: encodedFrame.videoChunkPath,
-        frameOffset: encodedFrame.frameOffset,
-        ocrText: ocrText,
-        ocrDataJson: ocrDataJson,
-        isIndexed: isIndexed,
-        focusStatus: focusStatus,
-        extractedTasksJson: tasksJson,
-        adviceJson: adviceJson,
-        deviceName: currentComputerName,
-        clientDeviceId: currentClientDeviceId
-      )
-
-      guard !ownerTransitionSuspended else { return }
-      let inserted = try await insertScreenshotIfCurrent(screenshot, snapshot: snapshot)
-      guard RewindCaptureExclusionGeneration.isCurrent(snapshot) else { return }
-      if !carriesMetadata {
-        markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
-      }
-
-      // Embed OCR text for semantic search (non-blocking)
-      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
-        Task(priority: .utility) {
-          await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
-            ownerSnapshot: snapshot.ownerSnapshot)
-        }
-      }
-
-      // Notify that a new frame was captured (for live UI updates)
-      DispatchQueue.main.async {
-        NotificationCenter.default.post(name: .rewindFrameCaptured, object: nil)
-      }
-
-    } catch {
-      if await discardAbandonedVideoChunkIfNeeded(error) {
-        return
-      }
-      logError("RewindIndexer: Failed to process frame with metadata", error: error)
       await RewindDatabase.shared.reportQueryError(error)
     }
   }

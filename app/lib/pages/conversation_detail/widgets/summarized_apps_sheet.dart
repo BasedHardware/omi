@@ -32,8 +32,8 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
       builder: (context, scrollController) {
         return Consumer<ConversationDetailProvider>(
           builder: (context, provider, _) {
-            final summarizedApp = provider.getSummarizedApp();
-            final currentAppId = summarizedApp?.appId;
+            final currentSelection = provider.getSummarySelection();
+            final currentAppId = currentSelection.isApp ? currentSelection.appId : null;
             final conversationId = provider.conversation.id;
 
             PlatformManager.instance.analytics.summarizedAppSheetViewed(
@@ -139,6 +139,12 @@ class _AppsListState extends State<_AppsList> {
     }
   }
 
+  // The fetch is done, whatever it came back with. Without this flag "empty" and
+  // "still loading" are indistinguishable: both fetches swallow their errors into
+  // empty lists, so the sheet stayed in the skeleton forever for anyone without a
+  // single installed template.
+  bool _loaded = false;
+
   Future<void> _fetchApps() async {
     try {
       await Future.wait([
@@ -147,6 +153,10 @@ class _AppsListState extends State<_AppsList> {
       ]);
     } catch (e) {
       Logger.debug('Error fetching apps: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _loaded = true);
+      }
     }
   }
 
@@ -227,7 +237,7 @@ class _AppsListState extends State<_AppsList> {
     final enabledApps = widget.provider.cachedEnabledConversationApps;
     final suggestedApps = widget.provider.cachedSuggestedApps;
 
-    final isLoading = enabledApps.isEmpty && suggestedApps.isEmpty;
+    final isLoading = !_loaded && enabledApps.isEmpty && suggestedApps.isEmpty;
 
     if (isLoading) {
       return _buildShimmerLoading();
@@ -352,7 +362,8 @@ class _AppsListState extends State<_AppsList> {
   void _handleAppTap(BuildContext context, App app) async {
     // Reprocess with the selected app
     final provider = context.read<ConversationDetailProvider>();
-    final previousAppId = provider.getSummarizedApp()?.appId;
+    final previousSelection = provider.getSummarySelection();
+    final previousAppId = previousSelection.isApp ? previousSelection.appId : null;
     final conversationId = provider.conversation.id;
 
     PlatformManager.instance.analytics.summarizedAppSelected(
@@ -404,7 +415,8 @@ class _AppsListState extends State<_AppsList> {
       PlatformManager.instance.analytics.summarizedAppSelected(
         conversationId: conversationId,
         selectedAppId: app.id,
-        previousAppId: conversationProvider.getSummarizedApp()?.appId,
+        previousAppId:
+            conversationProvider.getSummarySelection().isApp ? conversationProvider.getSummarySelection().appId : null,
       );
 
       // Track the last used app

@@ -3,32 +3,77 @@ import Combine
 import OmiTheme
 import SwiftUI
 
-struct ExportsSection: View {
-  let statuses: [MemoryExportDestination: MemoryExportStatus]
-  let onSelectDestination: (MemoryExportDestination) -> Void
+struct MemoryExportCatalogEntry: Identifiable {
+  let destination: MemoryExportDestination
+  let title: String?
+  let subtitle: String?
+  let description: String?
 
-  // Claude/Claude Code and ChatGPT/Codex each share one choice. Their setup
-  // sheets keep the cloud and CLI paths distinct without making this list uneven.
-  private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?, description: String?)]
-  {
-    MemoryExportDestination.allCases.compactMap { d in
-      switch d {
+  var id: String { destination.id }
+  var resolvedTitle: String { title ?? destination.title }
+  var resolvedSubtitle: String { subtitle ?? destination.subtitle }
+  var resolvedDescription: String { description ?? destination.description }
+}
+
+enum MemoryExportCatalog {
+  static let entries: [MemoryExportCatalogEntry] =
+    MemoryExportDestination.allCases.compactMap { destination in
+      switch destination {
       case .claudeCode, .codex:
         return nil
       case .claude:
-        return (
-          .claude, "Claude / Claude Code", nil,
-          "Claude Code (CLI) or Claude cloud — choose in setup."
+        return MemoryExportCatalogEntry(
+          destination: .claude,
+          title: "Claude / Claude Code",
+          subtitle: nil,
+          description: "Claude Code (CLI) or Claude cloud — choose in setup."
         )
       case .chatgpt:
-        return (
-          .chatgpt, "ChatGPT / Codex", "ChatGPT app or Codex CLI",
-          "Add Omi in ChatGPT or connect Codex locally — choose in setup."
+        return MemoryExportCatalogEntry(
+          destination: .chatgpt,
+          title: "ChatGPT / Codex",
+          subtitle: "ChatGPT app or Codex CLI",
+          description: "Add Omi in ChatGPT or connect Codex locally — choose in setup."
         )
       default:
-        return (d, nil, nil, nil)
+        return MemoryExportCatalogEntry(
+          destination: destination, title: nil, subtitle: nil, description: nil)
       }
     }
+
+  static func matching(_ searchText: String) -> [MemoryExportCatalogEntry] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return entries }
+
+    return
+      entries
+      .filter { entry in
+        [entry.resolvedTitle, entry.resolvedSubtitle, entry.resolvedDescription]
+          .contains { $0.localizedCaseInsensitiveContains(query) }
+      }
+      .sorted { matchRank($0, query: query) < matchRank($1, query: query) }
+  }
+
+  private static func matchRank(_ entry: MemoryExportCatalogEntry, query: String) -> Int {
+    if entry.resolvedTitle.localizedCaseInsensitiveCompare(query) == .orderedSame { return 0 }
+    if entry.resolvedTitle.range(
+      of: query, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil
+    {
+      return 1
+    }
+    return 2
+  }
+}
+
+struct ExportsSection: View {
+  let statuses: [MemoryExportDestination: MemoryExportStatus]
+  var searchText = ""
+  var title = "Exports"
+  var entriesOverride: [MemoryExportCatalogEntry]? = nil
+  let onSelectDestination: (MemoryExportDestination) -> Void
+
+  private var entries: [MemoryExportCatalogEntry] {
+    entriesOverride ?? MemoryExportCatalog.matching(searchText)
   }
 
   private func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
@@ -65,24 +110,27 @@ struct ExportsSection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      Text("Exports")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
+      Text(title)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
         .foregroundColor(Ink.primary)
 
-      LazyVGrid(
-        columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
-        alignment: .leading,
-        spacing: OmiSpacing.md
-      ) {
-        ForEach(entries, id: \.destination.id) { entry in
-          MemoryExportRow(
-            destination: entry.destination,
-            titleOverride: entry.title,
-            subtitleOverride: entry.subtitle,
-            descriptionOverride: entry.description,
-            status: status(for: entry.destination)
-          ) {
-            onSelectDestination(entry.destination)
+      if entries.isEmpty {
+        Text("No exports match “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”.")
+          .scaledFont(size: OmiType.body)
+          .foregroundStyle(Ink.secondary)
+          .padding(.vertical, OmiSpacing.md)
+      } else {
+        VStack(spacing: 0) {
+          ForEach(entries) { entry in
+            MemoryExportRow(
+              destination: entry.destination,
+              titleOverride: entry.title,
+              subtitleOverride: entry.subtitle,
+              descriptionOverride: entry.description,
+              status: status(for: entry.destination)
+            ) {
+              onSelectDestination(entry.destination)
+            }
           }
         }
       }
@@ -90,7 +138,7 @@ struct ExportsSection: View {
   }
 }
 
-private struct MemoryExportRow: View {
+struct MemoryExportRow: View {
   let destination: MemoryExportDestination
   var titleOverride: String? = nil
   var subtitleOverride: String? = nil
@@ -111,7 +159,7 @@ private struct MemoryExportRow: View {
     case .obsidian:
       return status.isConfigured ? "Sync" : "Connect"
     case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
-      return "Open"
+      return status.hasConnection ? "Open" : "Connect"
     }
   }
 
@@ -127,73 +175,56 @@ private struct MemoryExportRow: View {
     return status.hasConnection ? "Connected" : "Not connected"
   }
 
-  private var statusSecondaryText: String? {
-    if let lastExportedAt = status.lastExportedAt {
-      let relative = RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date())
-      return "Exported \(relative)"
+  private var rowSecondaryText: String {
+    if status.exportedCount > 0 || status.hasConnection {
+      if let lastExportedAt = status.lastExportedAt {
+        let relative = RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date())
+        return "Exported \(relative)"
+      }
+      if let detailText = status.detailText, !detailText.isEmpty {
+        return detailText
+      }
+      return statusPrimaryText
     }
-    return status.detailText
+    if let descriptionOverride {
+      return descriptionOverride
+    }
+    if let subtitleOverride {
+      return subtitleOverride
+    }
+    let subtitle = destination.subtitle
+    return subtitle.isEmpty ? destination.description : subtitle
   }
 
-  // Mirrors ImportConnectorCard so the Imports and Exports grids read as one
-  // system: identical icon block, description slot, and status/action footer.
+  // Mirrors ImportConnectorRow: one horizontal row with the integration name,
+  // a single status line, and the action pill — no stacked description block that
+  // wraps "Claude / Claude Code" away from its Connect control.
   var body: some View {
     Button(action: action) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        HStack(spacing: OmiSpacing.md) {
-          ConnectorBrandIcon(
-            brand: destination.brand, size: 50, cornerRadius: OmiChrome.smallControlRadius)
+      HStack(spacing: OmiSpacing.md) {
+        ConnectorBrandIcon(brand: destination.brand, size: 34, cornerRadius: 9)
 
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text(titleOverride ?? destination.title)
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(Ink.primary)
-              .lineLimit(1)
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+          Text(titleOverride ?? destination.title)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
+            .lineLimit(1)
+            .truncationMode(.tail)
 
-            Text(subtitleOverride ?? destination.subtitle)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .lineLimit(1)
-          }
-
-          Spacer()
+          Text(rowSecondaryText)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
 
-        Text(descriptionOverride ?? destination.description)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .lineLimit(2)
-          .multilineTextAlignment(.leading)
+        Spacer(minLength: 12)
 
-        HStack {
-          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-            Text(statusPrimaryText)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(
-                status.hasConnection || status.exportedCount > 0
-                  ? Ink.primary : Ink.secondary)
-
-            if let statusSecondaryText {
-              Text(statusSecondaryText)
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-                .lineLimit(1)
-            }
-          }
-
-          Spacer()
-
-          ImportConnectorActionButton(
-            title: actionTitle, isConnected: showsConnectedState)
-        }
+        ImportConnectorActionButton(title: actionTitle, isConnected: showsConnectedState)
       }
-      .padding(OmiSpacing.md)
-      .background(isHovering ? Ink.rowFillHover : Ink.rowFill)
-      .cornerRadius(OmiChrome.smallControlRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(Ink.rowFillHover, lineWidth: 1)
-      )
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
+      .background(isHovering ? Ink.wash : Color.clear)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -494,6 +525,7 @@ struct MemoryExportDestinationSheet: View {
   @StateObject private var model = MemoryExportDestinationSheetModel()
   @State private var showManualSetup = false
   @State private var permissionRefreshID = 0
+  @State private var isDisconnecting = false
 
   private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common)
     .autoconnect()
@@ -527,6 +559,10 @@ struct MemoryExportDestinationSheet: View {
       // memory pack) never clips inside the fixed-height sheet.
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          if let entry = IntegrationNudgeCatalog.exportEntry(destinationID: destination.rawValue) {
+            IntegrationValueSection(entry: entry)
+          }
+
           content
 
           if let statusMessage = model.statusMessage {
@@ -815,23 +851,34 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
-    HStack(alignment: .top, spacing: OmiSpacing.sm) {
-      Image(systemName: "checkmark.seal.fill")
-        .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundColor(Ink.listeningGreen)
-        .padding(.top, 1)
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text(completion.title)
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(alignment: .top, spacing: OmiSpacing.sm) {
+        Image(systemName: "checkmark.seal.fill")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(Ink.primary)
-        if destination == .claudeCode {
-          ClaudeCodeRestartSubtitle()
-        } else {
-          Text(completion.subtitle)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+          .foregroundColor(Ink.listeningGreen)
+          .padding(.top, 1)
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text(completion.title)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(Ink.primary)
+          if destination == .claudeCode {
+            ClaudeCodeRestartSubtitle()
+          } else {
+            Text(completion.subtitle)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
         }
+      }
+      if destination.cloudOAuthClientID != nil {
+        Button(isDisconnecting ? "Disconnecting…" : "Disconnect") {
+          disconnectCloudConnection()
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(Ink.secondary)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .disabled(isDisconnecting)
       }
     }
     .padding(OmiSpacing.md)
@@ -843,6 +890,23 @@ struct MemoryExportDestinationSheet: View {
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .stroke(Ink.listeningGreen.opacity(0.22), lineWidth: 1))
     )
+  }
+
+  private func disconnectCloudConnection() {
+    guard !isDisconnecting else { return }
+    isDisconnecting = true
+    model.errorMessage = nil
+    model.statusMessage = nil
+    Task { @MainActor in
+      do {
+        statuses[destination] = try await MemoryExportService.shared
+          .disconnectCloudOAuthConnection(for: destination)
+        model.statusMessage = "Disconnected from \(destination.title)."
+      } catch {
+        model.errorMessage = "Couldn't disconnect \(destination.title). Try again."
+      }
+      isDisconnecting = false
+    }
   }
 
   private var isConnected: Bool {

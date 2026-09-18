@@ -11,10 +11,8 @@ import SwiftUI
 // Modes:
 //   --export-views <dir>              Export all standalone page views
 //   --export-fullpages <dir>          Export full pages (sidebar + content)
-//   --export-onboarding <dir>         Export onboarding steps
 //   --export-single <index> <dir>     Export a single standalone view (subprocess)
 //   --export-fullpage-single <index> <dir>  Export a single full page (subprocess)
-//   --export-onboarding-single <index> <dir>  Export a single onboarding step (subprocess)
 
 @MainActor
 enum ViewExporter {
@@ -23,17 +21,16 @@ enum ViewExporter {
     let args = CommandLine.arguments
     return args.contains("--export-views") || args.contains("--export-single")
       || args.contains("--export-fullpages") || args.contains("--export-fullpage-single")
-      || args.contains("--export-onboarding") || args.contains("--export-onboarding-single")
   }
 
   static func outputDir() -> String {
     let args = CommandLine.arguments
-    for flag in ["--export-views", "--export-fullpages", "--export-onboarding"] {
+    for flag in ["--export-views", "--export-fullpages"] {
       if let idx = args.firstIndex(of: flag), idx + 1 < args.count {
         return args[idx + 1]
       }
     }
-    for flag in ["--export-single", "--export-fullpage-single", "--export-onboarding-single"] {
+    for flag in ["--export-single", "--export-fullpage-single"] {
       if let idx = args.firstIndex(of: flag), idx + 2 < args.count {
         return args[idx + 2]
       }
@@ -49,21 +46,6 @@ enum ViewExporter {
         "01-sign-in",
         { AnyView(SignInView(authState: AuthState.shared)) },
         CGSize(width: 900, height: 600)
-      ),
-
-      (
-        "02-dashboard",
-        {
-          AnyView(
-            DashboardPage(
-              viewModel: DashboardViewModel(),
-              appState: AppState(),
-              appProvider: AppProvider(),
-              chatProvider: previewChatProvider(),
-              memoriesViewModel: MemoriesViewModel(),
-              selectedIndex: .constant(0)))
-        },
-        CGSize(width: 900, height: 700)
       ),
 
       (
@@ -94,18 +76,6 @@ enum ViewExporter {
         "11-desktop-home",
         { AnyView(DesktopHomeView().environmentObject(AppState())) },
         CGSize(width: 1200, height: 800)
-      ),
-
-      (
-        "12-onboarding",
-        { AnyView(OnboardingView(appState: AppState(), chatProvider: ChatProvider())) },
-        CGSize(width: 900, height: 600)
-      ),
-
-      (
-        "13-daily-score",
-        { AnyView(DailyScoreWidget(dailyScore: nil)) },
-        CGSize(width: 400, height: 350)
       ),
 
       (
@@ -155,44 +125,9 @@ enum ViewExporter {
     return (entry.0, entry.1(), entry.2)
   }
 
-  static var standaloneViewCount: Int { 18 }
-
-  private static let onboardingExportSteps: [(String, Int)] = [
-    ("01-name", 0),
-    ("02-language", 1),
-    ("03-howdidyouhear", 2),
-    ("04-trust", 3),
-    ("05-screen-recording", 4),
-    ("06-disk-access", 5),
-    ("07-file-scan", 6),
-    ("08-microphone", 7),
-    ("09-accessibility", 8),
-    ("10-automation", 9),
-    ("11-floating-bar-shortcut", 10),
-    ("12-floating-bar", 11),
-    ("13-voice-shortcut", 12),
-    ("14-voice-demo", 13),
-    ("15-data-sources", 14),
-    ("16-exports", 15),
-    ("17-goal", 16),
-    ("18-tasks", 17),
-  ]
-
-  static func onboardingViewAt(_ index: Int) -> (String, AnyView, CGSize)? {
-    guard index >= 0 && index < onboardingExportSteps.count else { return nil }
-    let step = onboardingExportSteps[index]
-    let appState = AppState()
-    appState.hasCompletedOnboarding = false
-    let view = OnboardingView(
-      appState: appState,
-      chatProvider: ChatProvider(),
-      exportStepOverride: step.1,
-      isExportPreview: true
-    )
-    return (step.0, AnyView(view), CGSize(width: 900, height: 600))
-  }
-
-  static var onboardingViewCount: Int { onboardingExportSteps.count }
+  /// Must equal the number of entries in the `standaloneViewAt` registry above;
+  /// `runBatch` iterates `0..<count`, so a mismatch spawns failing "unknown-N" exports.
+  static var standaloneViewCount: Int { 14 }
 
   // MARK: - Full page registry (sidebar + content)
 
@@ -279,19 +214,6 @@ enum ViewExporter {
     // Pages that can be shown with the sidebar
     let pages: [(String, Int, () -> AnyView)] = [
       (
-        "full-dashboard", 0,
-        {
-          AnyView(
-            DashboardPage(
-              viewModel: DashboardViewModel(),
-              appState: AppState(),
-              appProvider: AppProvider(),
-              chatProvider: ChatProvider(),
-              memoriesViewModel: previewMemoriesViewModel(),
-              selectedIndex: .constant(0)))
-        }
-      ),
-      (
         "full-conversations", 1,
         {
           AnyView(
@@ -358,8 +280,7 @@ enum ViewExporter {
             appState: topBarAppState,
             memoriesViewModel: topBarMemories,
             tasksStore: topBarTasks,
-            sinceDate: Date(),
-            onRewind: {}
+            sinceDate: Date()
           )
           pageContent
         }
@@ -594,21 +515,6 @@ enum ViewExporter {
       exit(1)
     }
 
-    // Single onboarding step mode
-    if let idx = args.firstIndex(of: "--export-onboarding-single"),
-      idx + 1 < args.count,
-      let viewIndex = Int(args[idx + 1])
-    {
-      let dir = outputDir()
-      try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-      if let (name, view, size) = onboardingViewAt(viewIndex) {
-        NSLog("ViewExporter: [onboarding-single] Rendering \(name)...")
-        let success = exportView(name: name, view: view, size: size, dir: dir)
-        exit(success ? 0 : 1)
-      }
-      exit(1)
-    }
-
     // Batch standalone views
     if args.contains("--export-views") {
       let dir = outputDir()
@@ -632,19 +538,6 @@ enum ViewExporter {
         flag: "--export-fullpage-single",
         dir: dir,
         viewNameAt: { fullPageViewAt($0)?.0 ?? "unknown-\($0)" }
-      )
-    }
-
-    // Batch onboarding steps
-    if args.contains("--export-onboarding") {
-      let dir = outputDir()
-      try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-      runBatch(
-        mode: "onboarding",
-        count: onboardingViewCount,
-        flag: "--export-onboarding-single",
-        dir: dir,
-        viewNameAt: { onboardingViewAt($0)?.0 ?? "unknown-\($0)" }
       )
     }
 

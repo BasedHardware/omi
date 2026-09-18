@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>local-firebase-auth-emulator-api-key</string>
+	<string>AIzaSyDEMOOMILOCALFAKEKEY00000000000000</string>
 	<key>BUNDLE_ID</key>
 	<string>com.friend-app-with-wearable.ios12.development</string>
 	<key>GCM_SENDER_ID</key>
 	<string>000000000000</string>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:000000000000:ios:omi-dev-local</string>
+	<string>1:000000000000:ios:0000000000000000</string>
 	<key>IS_ADS_ENABLED</key>
 	<false/>
 	<key>IS_ANALYTICS_ENABLED</key>

@@ -128,7 +128,7 @@ class LanguageSelectionDialog {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.deepPurple),
+                          borderSide: const BorderSide(color: Colors.white),
                         ),
                       ),
                     ),
@@ -147,10 +147,9 @@ class LanguageSelectionDialog {
 
                                 return ListTile(
                                   title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                                  trailing:
-                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
+                                  trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.white) : null,
                                   selected: isSelected,
-                                  selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
+                                  selectedTileColor: Colors.white.withValues(alpha: 0.12),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   onTap: () {
                                     setState(() {
@@ -220,9 +219,10 @@ class LanguageSelectionDialog {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.3),
-                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.3),
+                    foregroundColor: Colors.black,
+                    disabledForegroundColor: Colors.black.withValues(alpha: 0.4),
                   ),
                   child: Text(context.l10n.confirm),
                 ),

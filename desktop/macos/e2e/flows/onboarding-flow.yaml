@@ -2,32 +2,23 @@ version: 2
 name: onboarding-flow
 tier: manual
 description: >
-  Onboarding orchestration after BYOK removal. Reset into onboarding, walk Goal → Tasks,
-  and confirm there is no Bring Your Own Keys step and the 2nd-brain label has no background.
+  Onboarding orchestration and durable permission skips. Reset into onboarding, skip
+  private-data permissions, prove activation/relaunch stays quiet, then walk Goal → Tasks.
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationFirstUsePopupActions.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/ThreeDoorsDemoPage.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingChatPersistence.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingPromptSuggestions.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingExportsStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingDataSourcesStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFileScanStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarShortcutStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingGoalStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingHowDidYouHearStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingLanguageStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingPermissionStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingTasksStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingTrustStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingWelcomeStepView.swift
   - desktop/macos/Desktop/Sources/PostOnboardingPromptViews.swift
   - desktop/macos/Desktop/Sources/FileIndexing/FileIndexingView.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexScanPolicy.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingAnswerWriteGate.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/AnalyticsManager+OnboardingSteps.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/OnboardingOpenerComposer.swift
   - desktop/macos/Desktop/Sources/MainWindow/OnboardingOpenerView.swift
@@ -43,6 +34,7 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingGlassChrome.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingIntroGate.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingPermissionRuntime.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingPermissionIntentPolicy.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBPostOnboardingGuidance.swift
   - desktop/macos/Desktop/Sources/FileIndexing/OnboardingLoadingAnimation.swift
 preconditions:
@@ -57,16 +49,28 @@ steps:
         - "What's your name"
 
   - id: S2
+    name: Skip private-data permissions
+    do: "At Microphone, System Audio, Screen Recording, and Files, choose Skip. Confirm Files advances immediately without a scan or a Files & Folders prompt."
+
+  - id: S3
     name: Advance to Goal
     do: "Skip or complete earlier steps until the Goal screen. Confirm progress reaches Goal without a Bring Your Own Keys / API keys page."
 
-  - id: S3
+  - id: S4
     name: Goal continues to Tasks
     do: "Continue or Skip on Goal. The next screen must be Tasks (not Bring your own keys)."
     expect:
       text_visible:
         - "Take me to Omi"
 
-  - id: S4
+  - id: S5
     name: 2nd brain label has no background
     do: "On any split onboarding step with the graph pane, confirm 'This is your 2nd brain' has no pill fill and no bottom gradient behind the label."
+
+  - id: S6
+    name: Permission skips survive automatic lifecycle work
+    do: "Finish onboarding, switch to another app and back, then quit and reopen Omi. Confirm no microphone, system-audio, screen-recording, notification, or Files & Folders consent UI appears. Trigger an automatic file rescan without Full Disk Access and confirm existing indexed rows under Documents, Desktop, and Downloads remain present."
+
+  - id: S7
+    name: A skip does not read as denied in the sidebar
+    do: "With onboarding finished and Screen Recording and Accessibility both skipped, open the sidebar permission rows. Confirm neither is shown as denied: a skip is a deliberate choice, not macOS refusing, and flagging it red asks the user to undo a decision they just made. Then grant Screen Recording from the sidebar and confirm the row stops offering it."

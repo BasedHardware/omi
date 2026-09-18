@@ -157,6 +157,6 @@ def test_mcp_sse_transport_authenticates_full_api_key_context_without_inferred_s
     assert "mcp_api_key_db.get_api_key_auth_result(token)" in source
     assert 'record_api_key_repairs(key_kind="mcp", operation="auth"' in source
     assert "scopes=tuple(user_data.get(\"scopes\") or ())" in source
-    assert "memory_context=_mcp_memory_context_from_api_key_user_data(user_data)" in source
+    assert "memory_context=_mcp_memory_context_from_auth_data(user_data)" in source
     assert "auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)" in source
     assert "user_id = auth_context.uid" in source

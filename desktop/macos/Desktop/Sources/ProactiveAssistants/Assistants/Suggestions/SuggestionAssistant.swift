@@ -16,7 +16,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - ProactiveAssistant Protocol
 
   nonisolated let identifier = "suggestion"
-  nonisolated let displayName = "Live Suggestions"
+  nonisolated let displayName = "Focus Notifications"
 
   var isEnabled: Bool {
     get async {
@@ -24,10 +24,16 @@ actor SuggestionAssistant: ProactiveAssistant {
       // on `!ContextBucketsFeature.isEnabled`, betting the context director would replace
       // live suggestions — it delivered almost nothing, and with the flag at 100% of all
       // users focus nudges went silent fleet-wide with no error logged (Aug 13–14 2026).
-      // If the director is ever meant to replace this assistant again, that must be an
-      // explicit, evidenced change — never a side effect of a rollout flag.
+      //
+      // The JIT ambient lane *is* the explicit, evidenced replacement (owner decision
+      // 2026-09-01): it emits `focus_nudge` under the same Focus badge and Settings toggle,
+      // and `JITProactivityLaneState` is set only from the backend's own admission verdict
+      // per context visit — so an unknown or disabled rollout keeps this assistant live.
+      // The migration is judged by delivered-per-kind-per-day on the dogfood account, not
+      // by the flag flipping.
       await MainActor.run {
         SuggestionAssistantSettings.shared.isEnabled
+          && !JITProactivityLaneState.isActive(ownerID: RuntimeOwnerIdentity.currentOwnerId())
       }
     }
   }
@@ -37,7 +43,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   /// The shared delay (`AssistantSettings.analysisDelay`, 60s) exists so assistants do
   /// not analyze while the user is still moving around. A minute is far too long for a
   /// suggestion about the screen in front of you, so this assistant takes the frames and
-  /// enforces its own, much shorter settle window instead (`settleInterval`).
+  /// enforces its own, much shorter settle window instead (`SuggestionPacing.settleInterval`).
   var needsFrameDuringDelay: Bool {
     get async { true }
   }
@@ -47,18 +53,10 @@ actor SuggestionAssistant: ProactiveAssistant {
   private let geminiClient: GeminiClient
   private let telemetryModel: SuggestionAssistantTelemetry.Model
 
-  /// Dwell before a context is worth spending on — level-aware, see
-  /// `SuggestionGatePolicy.requiredDwell(frequencyLevel:)` (10 s at Maximum, 30 s otherwise).
-  private static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
-    SuggestionGatePolicy.requiredDwell(frequencyLevel: frequencyLevel)
-  }
-
-  /// Hard ceiling on paid evaluations per day, so cost is a number we choose rather than a
-  /// function of how much the user alt-tabs.
-  private static let dailyEvaluationBudget = 40
-
-  /// Frames are still accepted this early so dwell can be measured from the switch.
-  private let settleInterval: TimeInterval = 6.0
+  /// Last observed notification frequency level, refreshed on every context switch and
+  /// evaluation so synchronous gates can pace by level without an actor hop per frame.
+  /// Defaults to Balanced so a not-yet-read level never triggers Maximum pacing.
+  private var cachedFrequencyLevel: Int = 3
 
   private var dailyBudget = SuggestionDailyBudget()
 
@@ -68,12 +66,12 @@ actor SuggestionAssistant: ProactiveAssistant {
   private var pendingWindowTitle: String?
 
   private var lastEvaluationAt: Date?
-  private var recentSuggestions: [String] = []
-  private let maxRecentSuggestions = 10
+  private var recentSuggestions: [SuggestionDeduplication.Remembered] = []
 
   /// The commitments handed to the evaluation currently in flight, kept so delivery can
   /// hold a `commitment` nudge to what the model was actually shown.
-  private var commitmentsInFlight: [String] = []
+  private var commitmentsInFlight: [SuggestionCommitment] = []
+  private var nudgeLedgerPersistence: SuggestionTaskNudgeLedgerPersisting = SuggestionTaskNudgeLedgerDefaults()
 
   /// Goals, cached because grounding must stay off the network — a fetch on this path would
   /// blow through the window in which a suggestion is still about the current screen. A
@@ -105,7 +103,8 @@ actor SuggestionAssistant: ProactiveAssistant {
     self.geminiClient = try GeminiClient(
       apiKey: apiKey,
       model: model,
-      fallbackModel: "gemini-2.5-flash"
+      fallbackModel: "gemini-2.5-flash",
+      workload: .maintenance
     )
     telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)
   }
@@ -123,13 +122,17 @@ actor SuggestionAssistant: ProactiveAssistant {
     )
     pendingApp = newApp
     pendingWindowTitle = newWindowTitle
+    // Refreshed per switch so the synchronous `shouldAnalyze` gate can pace by level
+    // without hopping actors on every frame.
+    cachedFrequencyLevel = await MainActor.run { NotificationService.currentFrequencyLevel() }
   }
 
   /// Every branch here is mechanical. No model call happens until all of them pass, which
   /// is what makes the cost contract testable.
   func shouldAnalyze(frameNumber: Int, timeSinceLastAnalysis: TimeInterval) -> Bool {
     guard let switchedAt = pendingContextSwitchAt else { return false }
-    guard Date().timeIntervalSince(switchedAt) >= settleInterval else { return false }
+    let settle = SuggestionPacing.settleInterval(frequencyLevel: cachedFrequencyLevel)
+    guard Date().timeIntervalSince(switchedAt) >= settle else { return false }
     return true
   }
 
@@ -138,8 +141,9 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
-    let frequencyLevel = await MainActor.run { NotificationService.currentFrequencyLevel() }
-    let cooldown = await cooldownInterval
+    let level = await MainActor.run { NotificationService.currentFrequencyLevel() }
+    cachedFrequencyLevel = level
+    let cooldown = SuggestionPacing.cooldown(base: await cooldownInterval, frequencyLevel: level)
 
     let now = Date()
     let dwell = pendingContextSwitchAt.map { now.timeIntervalSince($0) } ?? 0
@@ -148,12 +152,15 @@ actor SuggestionAssistant: ProactiveAssistant {
       isEnabled: enabled,
       isAppExcluded: excluded,
       now: now,
-      lastEvaluationAt: lastEvaluationAt,
-      cooldown: SuggestionGatePolicy.cooldown(base: cooldown, frequencyLevel: frequencyLevel),
+      lastEvaluationAt: SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: lastEvaluationAt,
+        anchor: pendingContextSwitchAt,
+        frequencyLevel: level),
+      cooldown: cooldown,
       dwell: dwell,
-      requiredDwell: Self.requiredDwell(frequencyLevel: frequencyLevel),
+      requiredDwell: SuggestionPacing.requiredDwell(frequencyLevel: level),
       evaluationsToday: dailyBudget.countToday(now: now),
-      dailyBudget: Self.dailyEvaluationBudget
+      dailyBudget: SuggestionPacing.dailyEvaluationBudget(frequencyLevel: level)
     )
 
     guard decision.allowsEvaluation else {
@@ -187,10 +194,16 @@ actor SuggestionAssistant: ProactiveAssistant {
     await MainActor.run {
       AnalyticsManager.shared.suggestionAssistantGateOutcome(.eligible)
     }
-    clearPendingContext()
+    // Calm levels consume the context: one evaluation per arrival, then quiet until the
+    // user moves somewhere new. Maximum re-arms so staying on the same feed keeps
+    // producing nudges every cooldown interval — that sustained cadence is the level's
+    // entire point, and cooldown + the daily budget still bound the spend.
+    if !SuggestionPacing.rearmsAfterEvaluation(frequencyLevel: level) {
+      clearPendingContext()
+    }
     lastEvaluationAt = now
     dailyBudget.recordEvaluation(now: now)
-    commitmentsInFlight = grounding.openCommitments
+    commitmentsInFlight = grounding.commitmentRecords
 
     do {
       return try await evaluate(frame: frame, grounding: grounding)
@@ -223,12 +236,23 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     // Overdue and due-today work is relevant regardless of what is on screen, and reading
     // it is free — it is already resident in the store.
-    let alwaysRelevant = await MainActor.run {
-      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks)
+    let alwaysRelevant = await MainActor.run { () -> [SuggestionCommitment] in
+      let flagOn = NegativeFeedbackRemediationFeature.isEnabled
+      let ledger = flagOn ? SuggestionTaskNudgeLedgerDefaults().load() : SuggestionTaskNudgeLedger()
+      let now = Date()
+      return (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks)
         .prefix(15)
-        .map(Self.describeCommitment)
+        .compactMap { task in
+          if flagOn {
+            guard
+              SuggestionTaskNudgePolicy.isEligible(
+                taskId: task.id, dueAt: task.dueAt, ledger: ledger, now: now)
+            else { return nil }
+          }
+          return SuggestionCommitment(id: task.id, text: Self.describeCommitment(task))
+        }
     }
-    grounding.openCommitments = Array(alwaysRelevant)
+    grounding.commitmentRecords = Array(alwaysRelevant)
 
     grounding.goals = currentOwnerGoals()
     refreshGoalsIfStale()
@@ -243,13 +267,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     let lookbackStart = Date().addingTimeInterval(-30 * 24 * 60 * 60)
 
     do {
-      let commitments = try await ActionItemStorage.shared.searchFTS(
-        query: searchTerm,
-        limit: 10,
-        includeCompleted: false
-      )
-      let scoped = commitments.map(\.description).filter { !grounding.openCommitments.contains($0) }
-      grounding.openCommitments.append(contentsOf: scoped)
+      let flagOn = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+      if !flagOn {
+        let commitments = try await ActionItemStorage.shared.searchFTS(
+          query: searchTerm,
+          limit: 10,
+          includeCompleted: false
+        )
+        let existingTexts = Set(grounding.commitmentRecords.map(\.text))
+        for item in commitments where !existingTexts.contains(item.description) {
+          let id = item.backendId ?? item.description
+          grounding.commitmentRecords.append(SuggestionCommitment(id: id, text: item.description))
+        }
+      }
     } catch {
       logError("Suggestion: commitment grounding unavailable", error: error)
     }
@@ -424,7 +454,8 @@ actor SuggestionAssistant: ProactiveAssistant {
         AnalyticsManager.shared.suggestionAssistantEvaluationFailed(
           identity: identity,
           shape: shape,
-          latency: Date().timeIntervalSince(startedAt)
+          latency: Date().timeIntervalSince(startedAt),
+          reason: SuggestionAssistantTelemetry.EvaluationFailureReason(error)
         )
       }
       throw error
@@ -432,18 +463,40 @@ actor SuggestionAssistant: ProactiveAssistant {
   }
 
   private func buildPrompt(frame: CapturedFrame, grounding: SuggestionGrounding) -> String {
+    Self.userPrompt(
+      appName: frame.appName,
+      windowTitle: frame.windowTitle,
+      groundingText: grounding.promptSections(),
+      recentSuggestions: recentSuggestions.map(\.text),
+      now: Date()
+    )
+  }
+
+  /// The per-evaluation user prompt. Static with an injected clock so tests can pin
+  /// the rendered request from a fixed instant. The suggestion lane judges on-screen
+  /// dates (the "scheduled this for 2026" class) and commitment timing, so every
+  /// request carries today's date — date-only, in the user turn, keeping the system
+  /// prompt byte-stable for prefix caching (SCA-358).
+  static func userPrompt(
+    appName: String,
+    windowTitle: String?,
+    groundingText: String,
+    recentSuggestions: [String],
+    now: Date,
+    timeZone: TimeZone = .current
+  ) -> String {
     var sections: [String] = []
 
     sections.append(
       """
       == WHAT THE USER IS DOING RIGHT NOW ==
-      App: \(frame.appName)
-      Window: \(frame.windowTitle ?? "(no title)")
+      App: \(appName)
+      Window: \(windowTitle ?? "(no title)")
+      Today is \(ChatPromptBuilder.currentCalendarDay(at: now, timeZone: timeZone)).
       The attached screenshot is their screen at this moment.
       """
     )
 
-    let groundingText = grounding.promptSections()
     if !groundingText.isEmpty {
       sections.append(groundingText)
     }
@@ -512,17 +565,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
     let telemetryIdentity = SuggestionAssistantTelemetry.NotificationIdentity(result.telemetryIdentity)
     let ownerID = RuntimeOwnerIdentity.currentOwnerId()
-    let threshold = await minConfidence
+    let threshold = SuggestionPacing.minConfidence(
+      base: await minConfidence, frequencyLevel: cachedFrequencyLevel)
 
     let outcome = SuggestionDeliveryPolicy.decide(
       hasOwner: ownerID != nil,
       confidence: suggestion.confidence,
       threshold: threshold,
-      isDuplicate: SuggestionDeduplication.isDuplicate(suggestion.suggestion, of: recentSuggestions),
+      isDuplicate: SuggestionDeduplication.isDuplicate(
+        suggestion.suggestion, of: recentSuggestions.map(\.text)),
       isGroundedCommitment: SuggestionCommitmentGuard.isGrounded(
         suggestion: suggestion.suggestion,
         category: suggestion.category,
-        openCommitments: commitmentsInFlight
+        openCommitments: commitmentsInFlight.map(\.text)
       )
     )
 
@@ -557,10 +612,11 @@ actor SuggestionAssistant: ProactiveAssistant {
       return .rejectedOwner
     }
 
-    recentSuggestions.append(suggestion.suggestion)
-    if recentSuggestions.count > maxRecentSuggestions {
-      recentSuggestions.removeFirst(recentSuggestions.count - maxRecentSuggestions)
-    }
+    recentSuggestions = SuggestionDeduplication.remembering(
+      .init(text: suggestion.suggestion, category: suggestion.category),
+      in: recentSuggestions,
+      frequencyLevel: cachedFrequencyLevel
+    )
 
     await deliver(
       suggestion,
@@ -587,15 +643,24 @@ actor SuggestionAssistant: ProactiveAssistant {
     ownerID: String,
     telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
   ) async {
+    let taskId = SuggestionCommitmentGuard.groundedTaskId(
+      suggestion: suggestion.suggestion,
+      category: suggestion.category,
+      commitments: commitmentsInFlight
+    )
+    var detail = suggestion.suggestion
+    if let taskId {
+      detail = "task_id=\(taskId)\n\(suggestion.suggestion)"
+    }
     let context = FloatingBarNotificationContext(
-      sourceTitle: "Suggestion",
+      sourceTitle: "Focus",
       assistantId: identifier,
       sourceApp: nil,
       windowTitle: nil,
       contextSummary: result.contextSummary,
       currentActivity: result.currentActivity,
       reasoning: suggestion.reasoning,
-      detail: suggestion.suggestion
+      detail: detail
     )
 
     log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
@@ -603,12 +668,17 @@ actor SuggestionAssistant: ProactiveAssistant {
     await MainActor.run {
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
-        title: "Suggestion",
+        title: "Focus",
         message: suggestion.suggestion,
         assistantId: identifier,
         context: context,
         suggestionTelemetryIdentity: telemetryIdentity
       )
+      if NegativeFeedbackRemediationFeature.isEnabled, let taskId {
+        var ledger = SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).load()
+        SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
+        SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
+      }
     }
   }
 
@@ -644,10 +714,10 @@ actor SuggestionAssistant: ProactiveAssistant {
       now: now,
       lastEvaluationAt: nil,
       cooldown: 0,
-      dwell: Self.requiredDwell(frequencyLevel: gateState.2),
-      requiredDwell: Self.requiredDwell(frequencyLevel: gateState.2),
+      dwell: SuggestionPacing.requiredDwell(frequencyLevel: gateState.2),
+      requiredDwell: SuggestionPacing.requiredDwell(frequencyLevel: gateState.2),
       evaluationsToday: dailyBudget.countToday(now: now),
-      dailyBudget: Self.dailyEvaluationBudget)
+      dailyBudget: SuggestionPacing.dailyEvaluationBudget(frequencyLevel: gateState.2))
     guard gateState.1, gateState.2 > 0, decision.allowsEvaluation else {
       if !gateState.1 { return ["outcome": "skipped_notifications_disabled"] }
       if gateState.2 == 0 { return ["outcome": "skipped_frequency_off"] }
@@ -655,7 +725,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
 
     let grounding = await assembleGrounding(for: frame)
-    commitmentsInFlight = grounding.openCommitments
+    commitmentsInFlight = grounding.commitmentRecords
 
     guard !grounding.isEmpty else {
       return ["outcome": "no_grounding", "commitments": "0"]

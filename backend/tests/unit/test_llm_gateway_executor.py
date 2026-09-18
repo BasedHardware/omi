@@ -11,6 +11,7 @@ from llm_gateway.gateway.credentials import build_byok_credential_context, build
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
     GatewayCredentialFailureError,
+    GatewayInvalidRequestError,
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
@@ -37,6 +38,52 @@ LANE_ID = 'omi:auto:chat-structured'
 CHAT_AGENT_LANE_ID = 'omi:auto:chat-agent'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
 LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
+
+
+@pytest.mark.asyncio
+async def test_jit_budget_reserve_and_settle_use_db_executor(monkeypatch):
+    reservation = object()
+    calls: list[tuple[object, object, tuple[object, ...], dict[str, object]]] = []
+
+    async def fake_run_blocking(pool, function, *args, **kwargs):
+        calls.append((pool, function, args, kwargs))
+        if function is executor.reserve_jit_provider_attempt:
+            return reservation
+        return True
+
+    monkeypatch.setattr(executor, 'run_blocking', fake_run_blocking)
+
+    assert (
+        await executor.reserve_jit_attempt(
+            owner_uid='user-123',
+            run_id='jit-run',
+            contract_version='jit-cloud-qa-v1',
+            max_attempts=3,
+            max_spend_micro_usd=50_000,
+            provider='openai',
+            model='gpt-5.6-luna',
+            input_tokens=10,
+            cached_input_tokens=0,
+            output_tokens=20,
+            cache_write_tokens=0,
+            cache_ttl=None,
+        )
+        is reservation
+    )
+    assert await executor.settle_jit_attempt(
+        reservation,
+        provider='openai',
+        model='gpt-5.6-luna',
+        metadata=None,
+        status='failed',
+    )
+
+    assert [call[0] for call in calls] == [executor.db_executor, executor.db_executor]
+    assert calls[0][1] is executor.reserve_jit_provider_attempt
+    assert calls[1][1] is executor.settle_jit_provider_attempt
+    assert calls[0][3]['owner_uid'] == 'user-123'
+    assert calls[0][3]['run_id'] == 'jit-run'
+    assert calls[1][3]['reservation'] is reservation
 
 
 @pytest.mark.asyncio
@@ -288,6 +335,34 @@ async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
 
 
 @pytest.mark.asyncio
+async def test_executor_stops_jit_attempts_at_qualification_ceiling():
+    route = active_route_with_fallbacks([]).model_copy(
+        update={'retry': type(gateway_config().route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=3)}
+    )
+    resolved = resolve_chat_completion_route(config_with_active_route(route), valid_request())
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            fake_success_response(route.primary),
+        ]
+    )
+    trace = AttemptTrace()
+
+    with pytest.raises(GatewayInvalidRequestError, match='JIT provider attempt budget exhausted'):
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=trace,
+            max_provider_attempts=2,
+        )
+
+    assert len(provider.calls) == 2
+    assert len(trace.attempts) == 2
+
+
+@pytest.mark.asyncio
 async def test_executor_retries_with_only_the_remaining_request_deadline(monkeypatch):
     active_route = active_route_with_fallbacks([])
     active_route = active_route.model_copy(
@@ -334,6 +409,136 @@ async def test_executor_attempt_trace_retains_each_retry_and_fallback() -> None:
     assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2, 1]
     assert trace.attempts[-1].configured_model == 'gpt-4o-mini'
     assert trace.attempts[-1].fallback_reason == FailureClass.TIMEOUT_BEFORE_OUTPUT.value
+
+
+@pytest.mark.asyncio
+async def test_jit_unknown_provider_failure_is_returned_without_retry_or_fallback(monkeypatch):
+    fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
+    route = active_route_with_fallbacks([fallback_ref]).model_copy(
+        update={'retry': type(active_route_with_fallbacks([]).retry)(max_attempts=3)}
+    )
+    resolved = resolve_chat_completion_route(config_with_active_route(route), valid_request())
+    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)])
+    settlements: list[dict[str, object]] = []
+
+    async def reserve(**_kwargs):
+        return object()
+
+    async def settle(_reservation, **kwargs):
+        settlements.append(kwargs)
+        return True
+
+    monkeypatch.setattr(executor, 'reserve_jit_attempt', reserve)
+    monkeypatch.setattr(executor, 'settle_jit_attempt', settle)
+
+    with pytest.raises(GatewayProviderFailureError) as raised:
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=AttemptTrace(),
+            max_provider_attempts=3,
+            jit_max_spend_micro_usd=50_000,
+            jit_owner_uid='user-123',
+            jit_run_id='jit-unknown-cost',
+            jit_contract_version='jit-cloud-qa-v1',
+        )
+
+    assert raised.value.failure_class == FailureClass.PROVIDER_5XX_OMI_PAID
+    assert len(provider.calls) == 1
+    assert len(settlements) == 1
+    assert settlements[0]['status'] == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_jit_reservation_that_outlives_deadline_is_released_without_provider_call(monkeypatch):
+    route = active_route_with_fallbacks([])
+    config = config_with_active_route(route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider()
+    reservation = object()
+    settlements: list[dict[str, object]] = []
+    clock = iter([0.0, 2.0])
+    monkeypatch.setattr(executor, 'monotonic', lambda: next(clock), raising=False)
+
+    async def reserve(**_kwargs):
+        return reservation
+
+    async def settle(_reservation, **kwargs):
+        settlements.append(kwargs)
+        return True
+
+    monkeypatch.setattr(executor, 'reserve_jit_attempt', reserve)
+    monkeypatch.setattr(executor, 'settle_jit_attempt', settle)
+
+    response, error = await executor._attempt_provider(
+        resolved,
+        route,
+        provider,
+        route.primary,
+        omi_credentials(),
+        attempt_trace=AttemptTrace(),
+        max_provider_attempts=3,
+        jit_max_spend_micro_usd=50_000,
+        jit_owner_uid='user-123',
+        jit_run_id='jit-deadline-release',
+        jit_contract_version='jit-cloud-qa-v1',
+        fallback_reason=None,
+        deadline_monotonic=1.0,
+    )
+
+    assert response is None
+    assert error is not None and error.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
+    assert provider.calls == []
+    assert settlements == [
+        {
+            'provider': route.primary.provider,
+            'model': route.primary.model,
+            'metadata': None,
+            'status': 'released',
+            'release_without_provider': True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_jit_success_with_rejected_settlement_is_recorded_as_accounting_error(monkeypatch):
+    route = active_route_with_fallbacks([])
+    resolved = resolve_chat_completion_route(config_with_active_route(route), valid_request())
+    provider = FakeChatCompletionProvider([fake_success_response(route.primary)])
+    trace = AttemptTrace()
+
+    async def reserve(**_kwargs):
+        return object()
+
+    async def reject_settlement(_reservation, **_kwargs):
+        return False
+
+    monkeypatch.setattr(executor, 'reserve_jit_attempt', reserve)
+    monkeypatch.setattr(executor, 'settle_jit_attempt', reject_settlement)
+
+    response, error = await executor._attempt_provider(
+        resolved,
+        route,
+        provider,
+        route.primary,
+        omi_credentials(),
+        attempt_trace=trace,
+        max_provider_attempts=3,
+        jit_max_spend_micro_usd=50_000,
+        jit_owner_uid='user-123',
+        jit_run_id='jit-settlement-failure',
+        jit_contract_version='jit-cloud-qa-v1',
+        fallback_reason=None,
+        deadline_monotonic=executor.monotonic() + 10_000.0,
+    )
+
+    assert response is None
+    assert isinstance(error, GatewayInvalidRequestError)
+    assert len(provider.calls) == 1
+    assert len(trace.attempts) == 1
+    assert trace.attempts[0].outcome == 'error'
+    assert trace.attempts[0].error_class == 'jit_budget_settlement_failed'
 
 
 @pytest.mark.asyncio

@@ -144,7 +144,7 @@ class TestSpeechProfileEmbeddingExtraction:
     @patch('routers.speech_profile.set_speech_profile_duration')
     @patch('routers.speech_profile.apply_vad_for_speech_profile')
     def test_extraction_called_after_upload(self, mock_vad, mock_duration, mock_upload, mock_extract, mock_store):
-        """extract_embedding should be called with the file path after upload."""
+        """extract_embedding should be called with the file path before upload."""
         mock_extract.return_value = np.random.randn(1, 512).astype(np.float32)
 
         from routers.speech_profile import upload_profile
@@ -186,6 +186,7 @@ class TestSpeechProfileEmbeddingExtraction:
 
         mock_extract.assert_called_once()
         mock_store.assert_called_once()
+        mock_upload.assert_called_once()
         # Verify embedding was flattened to list
         stored_embedding = mock_store.call_args[0][1]
         assert isinstance(stored_embedding, list)
@@ -196,10 +197,10 @@ class TestSpeechProfileEmbeddingExtraction:
     @patch('routers.speech_profile.upload_profile_audio', return_value='https://storage.example.com/profile.wav')
     @patch('routers.speech_profile.set_speech_profile_duration')
     @patch('routers.speech_profile.apply_vad_for_speech_profile')
-    def test_extraction_failure_does_not_block_upload(
-        self, mock_vad, mock_duration, mock_upload, mock_extract, mock_store
-    ):
-        """Upload should succeed even if embedding extraction fails."""
+    def test_extraction_failure_fails_the_request(self, mock_vad, mock_duration, mock_upload, mock_extract, mock_store):
+        """A 200 must mean the enroll embedding actually stored (#12765)."""
+        from fastapi import HTTPException
+
         from routers.speech_profile import upload_profile
 
         import struct
@@ -232,12 +233,67 @@ class TestSpeechProfileEmbeddingExtraction:
                         mock_audio.duration_seconds = 10.0
                         mock_aseg.from_wav.return_value = mock_audio
 
-                        result = upload_profile(mock_file, uid='test-uid')
+                        try:
+                            upload_profile(mock_file, uid='test-uid')
+                            raise AssertionError('upload_profile should fail when embedding extract fails')
+                        except HTTPException as exc:
+                            assert exc.status_code == 503
 
-        # Upload still succeeded
-        assert result == {"url": "https://storage.example.com/profile.wav"}
-        # Store was NOT called since extraction failed
+        mock_upload.assert_not_called()
         mock_store.assert_not_called()
+
+    @patch('routers.speech_profile.set_user_speaker_embedding', side_effect=Exception("firestore down"))
+    @patch('routers.speech_profile.extract_embedding')
+    @patch('routers.speech_profile.upload_profile_audio', return_value='https://storage.example.com/profile.wav')
+    @patch('routers.speech_profile.set_speech_profile_duration')
+    @patch('routers.speech_profile.apply_vad_for_speech_profile')
+    def test_embedding_store_failure_skips_upload(self, mock_vad, mock_duration, mock_upload, mock_extract, mock_store):
+        """A Firestore voiceprint miss must not overwrite the live profile audio."""
+        from fastapi import HTTPException
+
+        from routers.speech_profile import upload_profile
+
+        import struct
+        import io
+        import wave
+
+        mock_extract.return_value = np.random.randn(1, 512).astype(np.float32)
+
+        buf = io.BytesIO()
+        with wave.open(buf, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(struct.pack(f'<{16000 * 5}h', *([0] * (16000 * 5))))
+
+        mock_file = MagicMock()
+        mock_file.filename = 'speech_profile.wav'
+        mock_file.file.read.return_value = buf.getvalue()
+
+        with patch('routers.speech_profile.av') as mock_av:
+            mock_container = MagicMock()
+            mock_container.duration = 5_000_000
+            mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+            mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
+            mock_av.time_base = 1_000_000
+
+            with patch('routers.speech_profile.os.makedirs'):
+                with patch('builtins.open', MagicMock()):
+                    with patch('routers.speech_profile.AudioSegment') as mock_aseg:
+                        mock_audio = MagicMock()
+                        mock_audio.frame_rate = 16000
+                        mock_audio.duration_seconds = 10.0
+                        mock_aseg.from_wav.return_value = mock_audio
+
+                        try:
+                            upload_profile(mock_file, uid='test-uid')
+                            raise AssertionError('upload_profile should fail when embedding store fails')
+                        except HTTPException as exc:
+                            assert exc.status_code == 503
+
+        mock_store.assert_called_once()
+        mock_upload.assert_not_called()
+        mock_duration.assert_not_called()
 
 
 # ─── Transcribe Firestore Loading Path ───────────────────────────────────────
@@ -613,47 +669,18 @@ class TestDimensionMismatchGuard:
         distance = compare_embeddings(emb, emb)
         assert distance < 0.001
 
-    def test_is_same_speaker_dimension_mismatch_returns_false(self):
-        """is_same_speaker should return (False, 2.0) on dimension mismatch."""
-        from utils.stt.speaker_embedding import is_same_speaker
-
-        emb_256 = np.random.RandomState(1).randn(1, 256).astype(np.float32)
-        emb_512 = np.random.RandomState(2).randn(1, 512).astype(np.float32)
-
-        is_match, distance = is_same_speaker(emb_256, emb_512)
-        assert is_match is False
-        assert distance == 2.0
-
-    def test_find_best_match_skips_dimension_mismatch(self):
-        """find_best_match should not crash on mixed-dimension candidates."""
-        from utils.stt.speaker_embedding import find_best_match
+    def test_select_speaker_match_skips_dimension_mismatch(self):
+        """A stale 512-dim candidate scores 2.0 and can never win against a 256-dim match."""
+        from utils.stt.speaker_embedding import compare_embeddings
+        from utils.stt.speaker_match import select_speaker_match
 
         query = np.random.RandomState(1).randn(1, 256).astype(np.float32)
-        # Mix of 256-dim (matching) and 512-dim (stale) candidates
-        candidates = [
-            np.random.RandomState(2).randn(1, 512).astype(np.float32),  # stale 512-dim
-            query.copy(),  # exact match, 256-dim
-            np.random.RandomState(3).randn(1, 512).astype(np.float32),  # stale 512-dim
-        ]
-
-        result = find_best_match(query, candidates)
-        assert result is not None
-        best_idx, best_distance = result
-        assert best_idx == 1  # should match the 256-dim copy
-        assert best_distance < 0.001
-
-    def test_find_best_match_all_mismatched_returns_none(self):
-        """find_best_match returns None when all candidates have wrong dimension."""
-        from utils.stt.speaker_embedding import find_best_match
-
-        query = np.random.RandomState(1).randn(1, 256).astype(np.float32)
-        candidates = [
-            np.random.RandomState(2).randn(1, 512).astype(np.float32),
-            np.random.RandomState(3).randn(1, 512).astype(np.float32),
-        ]
-
-        result = find_best_match(query, candidates)
-        assert result is None  # all return 2.0, above threshold
+        stale = np.random.RandomState(2).randn(1, 512).astype(np.float32)
+        decision = select_speaker_match(
+            {'stale': compare_embeddings(query, stale), 'match': compare_embeddings(query, query.copy())}
+        )
+        assert decision.person_id == 'match'
+        assert select_speaker_match({'stale': compare_embeddings(query, stale)}).person_id is None
 
     def test_mixed_dim_cache_loads_all_relies_on_compare_guard(self):
         """Cache loads ALL embeddings regardless of dimension; compare_embeddings handles mismatches.

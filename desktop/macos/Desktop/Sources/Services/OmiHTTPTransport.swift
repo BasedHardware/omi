@@ -114,7 +114,7 @@ struct OmiHTTPTransport {
     // calls this request triggers. Sent per-request; never stored server-side.
     if includeBYOK, APIKeyService.isByokActive {
       let health = await MainActor.run { CredentialHealthManager.shared }
-      let snapshot = APIKeyService.byokSnapshot
+      let snapshot = APIKeyService.activeBYOKSnapshot
       for (provider, entry) in snapshot {
         let canAttach = await MainActor.run {
           health.canUseBYOK(provider: provider, fingerprint: entry.fingerprint)

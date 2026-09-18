@@ -3,38 +3,39 @@ import SwiftUI
 
 extension RewindPage {
   var rewindToggle: some View {
-    ZStack {
-      Capsule()
-        // Green for on. `Ink.listeningGreen` is the palette's "this is live" colour and the one
-        // that reads as on without a label; the accent was doing that job in blue while every
-        // other live indicator in the app was green.
-        .fill(
-          screenCaptureHealth == .active
-            ? Ink.listeningGreen
-            : (screenCaptureHealth == .stopped ? Ink.errorRed : PageGlass.warning)
-        )
-        .frame(width: 36, height: 20)
+    Button {
+      toggleMonitoring(enabled: !isMonitoring)
+    } label: {
+      ZStack {
+        Capsule()
+          // The adjacent text supplies the state; colour is a redundant signal.
+          .fill(
+            screenCaptureHealth == .active
+              ? Ink.listeningGreen
+              : (screenCaptureHealth == .stopped ? Ink.errorRed : PageGlass.warning)
+          )
+          .frame(width: 36, height: 20)
 
-      Circle()
-        .fill(Ink.surface)
-        .frame(width: 16, height: 16)
-        .shadow(color: .black.opacity(0.08), radius: 1, x: 0, y: 1)
-        .offset(x: isMonitoring ? 8 : -8)
-        .omiAnimation(.easeInOut(duration: 0.15), value: isMonitoring)
+        Circle()
+          .fill(Ink.surface)
+          .frame(width: 16, height: 16)
+          .shadow(color: .black.opacity(0.08), radius: 1, x: 0, y: 1)
+          .offset(x: isMonitoring ? 8 : -8)
+          .omiAnimation(.easeInOut(duration: 0.15), value: isMonitoring)
+
+        if isTogglingMonitoring {
+          ProgressView()
+            .scaleEffect(0.5)
+        }
+      }
     }
+    .buttonStyle(.plain)
+    .disabled(isTogglingMonitoring)
     .opacity(isTogglingMonitoring ? 0.5 : 1.0)
-    .overlay {
-      if isTogglingMonitoring {
-        ProgressView()
-          .scaleEffect(0.5)
-      }
-    }
-    .onTapGesture {
-      if !isTogglingMonitoring {
-        toggleMonitoring(enabled: !isMonitoring)
-      }
-    }
     .help(screenCaptureHealth.rewindToggleHelp)
+    .accessibilityLabel("Screen capture")
+    .accessibilityValue(screenCaptureHealth.statusText)
+    .accessibilityHint(isMonitoring ? "Turn screen capture off" : "Turn screen capture on")
   }
 
   private func toggleMonitoring(enabled: Bool) {

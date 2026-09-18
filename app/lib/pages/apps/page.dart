@@ -89,13 +89,6 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
             Expanded(
               child: ExploreInstallPage(key: _exploreInstallPageKey, scrollController: _scrollController),
             ),
-            // const Expanded(
-            //     child: TabBarView(
-            //   children: [
-            //     ExploreInstallPage(),
-            //     ManageCreatePage(),
-            //   ],
-            // )),
           ],
         ),
       ),

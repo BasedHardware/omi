@@ -31,9 +31,13 @@ def record_usage(
     memories_created: int = 0,
     speech_seconds: int = 0,
     idempotency_key: Optional[str] = None,
+    cost_usd: float | None = None,
+    cost_status: str = 'missing',
+    cost_exclusion: str | None = None,
 ):
     """Records hourly usage stats for a user."""
     now = datetime.now(timezone.utc)
+    effective_cost_exclusion = cost_exclusion or ('provider_cost_not_recorded' if cost_status != 'complete' else None)
     updates = {
         'transcription_seconds': transcription_seconds,
         'words_transcribed': words_transcribed,
@@ -42,6 +46,21 @@ def record_usage(
         'speech_seconds': speech_seconds,
     }
     if idempotency_key:
-        user_usage_db.update_hourly_usage_once(uid, now, updates, idempotency_key)
+        user_usage_db.update_hourly_usage_once(
+            uid,
+            now,
+            updates,
+            idempotency_key,
+            cost_usd=cost_usd,
+            cost_status=cost_status,
+            cost_exclusion=effective_cost_exclusion,
+        )
     else:
-        user_usage_db.update_hourly_usage(uid, now, updates)
+        user_usage_db.update_hourly_usage(
+            uid,
+            now,
+            updates,
+            cost_usd=cost_usd,
+            cost_status=cost_status,
+            cost_exclusion=effective_cost_exclusion,
+        )

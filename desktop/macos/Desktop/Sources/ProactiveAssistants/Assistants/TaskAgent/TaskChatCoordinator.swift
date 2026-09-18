@@ -44,7 +44,10 @@ final class TaskChatCoordinator: ObservableObject {
   private var suppressUnreadPersistence = false
   private var isResettingOwnerProjection = false
 
-  private let chatProvider: ChatProvider
+  /// The one provider (INV-6). Exposed so the task panel can build the same
+  /// content-block context every other Chat surface uses, without a second
+  /// provider or transcript.
+  let chatProvider: ChatProvider
   private let workstreamAPI: any TaskWorkstreamAPI
   private let persistWorkstreamLink: @MainActor (String, String, String, LocalMutationAuthorization) async -> Void
   private let ownerIDProvider: @MainActor () -> String?
@@ -405,32 +408,6 @@ final class TaskChatCoordinator: ObservableObject {
       rehydratedWorkstreamIds.remove(workstreamId)
     }
     if activeTaskId == taskId { closeChat() }
-  }
-
-  // MARK: - Background work
-
-  func investigateInBackground(for task: TaskActionItem) async {
-    guard let lease = captureOwnerLease() else { return }
-    await openThread(for: task, createIfNeeded: true, revealPanel: false, lease: lease)
-    guard isCurrent(lease) else { return }
-    // openThread can early-exit (isOpening) or fail without resetting state when
-    // revealPanel is false — activeTaskState may still belong to a previous task.
-    // Never send this task's prompt into another task's thread.
-    guard activeTaskId == task.id, let state = activeTaskState, !state.isSending else { return }
-    // Stamp before sending: RecurringTaskScheduler gates re-investigation on this.
-    try? await ActionItemStorage.shared.updateAgentStartedAt(
-      taskId: task.id,
-      startedAt: Date(),
-      authorization: LocalMutationAuthorization {
-        RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
-      }
-    )
-    await state.sendMessage(
-      TaskAgentSettings.shared.buildCanonicalTaskPrompt(for: task),
-      taskContext: activeContextPacket
-    )
-    guard isCurrent(lease) else { return }
-    await refreshActiveThread()
   }
 
   // MARK: - Resolution
@@ -1063,7 +1040,8 @@ final class TaskChatCoordinator: ObservableObject {
         onClose: {
           coordinator.closeChat()
           window?.close()
-        }
+        },
+        onOpenRewindEvidence: nil
       )
       let hostingView = NSHostingView(rootView: panel)
       if let existing = window {

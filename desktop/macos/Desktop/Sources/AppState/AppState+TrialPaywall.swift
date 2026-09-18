@@ -26,7 +26,7 @@ extension AppState {
   /// the persisted `desktop_isPaywalled` flag, which can lag behind BYOK
   /// activation. Use this anywhere that only has UserDefaults access.
   nonisolated static var isPaywalledEffective: Bool {
-    !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: .desktopIsPaywalled)
   }
 
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.
@@ -217,11 +217,18 @@ extension AppState {
     return missing
   }
 
-  /// Check if notification permission was explicitly denied
+  /// Check if notification permission was explicitly denied.
+  ///
+  /// Reads the actual TCC answer (`notificationAuthorizationStatus`, cached from
+  /// `checkNotificationPermission()`) rather than inferring denial from "not yet
+  /// granted". `notDetermined` is not denied: it means the user was never asked,
+  /// and macOS typically will not even list an app under System Settings ->
+  /// Notifications until it has called `requestAuthorization` once — so routing
+  /// a never-asked user to "open System Settings" was a dead end. See
+  /// `NotificationPermissionPolicy.enableAction(for:)`, the single source of
+  /// truth this must never disagree with.
   func isNotificationPermissionDenied() -> Bool {
-    // We need to check synchronously, so use a semaphore pattern
-    // This is cached from checkNotificationPermission() calls
-    return hasCompletedOnboarding && !hasNotificationPermission
+    hasCompletedOnboarding && notificationAuthorizationStatus == .denied
   }
 
   /// Open notification preferences in System Settings (directly to Omi's settings)

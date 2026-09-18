@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from models.memory_evidence import SourceState
 from models.product_memory import (
@@ -36,6 +36,7 @@ def sync_canonical_memory_vector(
     *,
     projection_commit_id: Optional[str] = None,
     on_hard_failure: Optional[Callable[[], None]] = None,
+    db_client: Any = None,
 ) -> bool:
     """Converge one live canonical item without indexing restricted content."""
     if set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
@@ -57,6 +58,7 @@ def sync_canonical_memory_vector(
     try:
         from database.vector_db import upsert_canonical_memory_vector
 
+        # upsert_canonical_memory_vector carries its own external-write fence.
         result = upsert_canonical_memory_vector(item, projection_commit_id=projection_commit_id)
     except Exception:
         logger.exception(

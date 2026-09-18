@@ -21,14 +21,13 @@ enum UpdateChannel: String, CaseIterable {
     }
   }
 
-  /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta.
+  /// App display name from bundle identity: "Omi Beta" only for the sidecar app.
   /// Local hot-swap builds (self-beta.sh) stamp `OMISelfBuild=true` into Info.plist, so
-  /// they show "Omi Beta (dev)" — a clear signal you're on a locally-rebuilt bundle, not a
+  /// they show a "(dev)" suffix — a clear signal you're on a locally-rebuilt bundle, not a
   /// Codemagic-distributed one. A real Codemagic build never sets the key, and when it later
   /// replaces the hot-swap bundle via Sparkle the suffix disappears.
   static var appDisplayName: String {
-    let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-    let base = (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
+    let base = AppBuild.isBetaProductionBundle ? "Omi Beta" : "omi"
     let isSelfBuild = (Bundle.main.object(forInfoDictionaryKey: "OMISelfBuild") as? Bool) ?? false
     return isSelfBuild ? "\(base) (dev)" : base
   }
@@ -520,6 +519,12 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       terminal?.result == .networkUnavailable
       || (terminal == nil
         && checkAttemptTracker.lastCompletedWasExpectedAutomaticOffline(for: diagnostics))
+    // Sparkle delivers `didAbortWithError` more than once per check. The
+    // authoritative terminal is deduplicated by consuming the attempt identity;
+    // the legacy event has no identity, so it needs the same guard or one failed
+    // check is reported once per callback.
+    let isDuplicateFailureCallback =
+      terminal == nil && checkAttemptTracker.isDuplicateOfLastTerminal(diagnostics)
     // Always drop a quiet-moment wait on abort so the deferred install cannot
     // fire after we clear progress flags (stale "Update waiting…" / surprise relaunch).
     discardDeferredInstall()
@@ -556,11 +561,18 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync("Sparkle: Installation failed (error 4005), will retry on next check")
       }
 
+      if isDuplicateFailureCallback {
+        logSync("Sparkle: Ignoring duplicate update check failure callback for analytics")
+      }
+
       // Keep the legacy diagnostic event for existing dashboards. The new
       // `Update Check Completed` event is the authoritative denominator and is
-      // emitted at most once by the tracker above.
+      // emitted at most once by the tracker above; the legacy event now honours
+      // the same one-terminal-per-check contract.
       Task { @MainActor in
-        AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
+        if !isDuplicateFailureCallback {
+          AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
+        }
         self.viewModel?.lastUpdateFailure = diagnostics
         self.viewModel?.updateRestartImminent = false
         self.viewModel?.updateDeferredForActiveRecording = false
@@ -914,15 +926,6 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   private init() {
-    if AppBuild.allowsSparkleUpdates {
-      // Restore beta for users whose preference was overwritten by the March 27 bug
-      AppBuild.migrateBetaChannelOverwrite()
-
-      if UserDefaults.standard.string(forKey: kUpdateChannelKey) == nil {
-        AppBuild.syncUpdateChannelOnFirstLaunch()
-      }
-    }
-
     // Preview builds must not use the shared update feed. Do not start Sparkle for those
     // artifacts; its manual and background entry points are guarded below as well.
     updaterController = SPUStandardUpdaterController(
@@ -935,11 +938,9 @@ final class UpdaterViewModel: ObservableObject {
     automaticallyChecksForUpdates = updaterController.updater.automaticallyChecksForUpdates
     automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
-    // Initialize update channel from UserDefaults
-    // Normalize legacy "staging" → "beta" and "better" → "beta"
-    var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    if storedChannel == "staging" || storedChannel == "better" { storedChannel = "beta" }
-    updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
+    // Identity pins the Sparkle channel. Leftover UserDefaults from the retired
+    // Stable channel picker must not opt Stable.app into beta-channel zips.
+    updateChannel = AppBuild.isBetaProductionBundle ? .beta : .stable
 
     // Wire up delegate back-reference
     updaterDelegate.viewModel = self
@@ -1031,18 +1032,5 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   /// The active channel label
-  @Published var activeChannelLabel: String = {
-    let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    return (raw == "beta" || raw == "staging") ? "Beta" : ""
-  }()
-
-  /// Returns true if switching to stable would be a downgrade (current build > latest stable build)
-  var isDowngradeToStable: Bool {
-    guard let currentBuild = Int(buildNumber),
-      let stableBuild = latestStableBuildNumber
-    else {
-      return false
-    }
-    return currentBuild > stableBuild
-  }
+  @Published var activeChannelLabel: String = AppBuild.isBetaProductionBundle ? "Beta" : ""
 }

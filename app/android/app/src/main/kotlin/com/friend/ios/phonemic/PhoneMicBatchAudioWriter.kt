@@ -1,8 +1,10 @@
 package com.friend.ios.phonemic
 
 import com.friend.ios.batch.BaseBatchAudioWriter
+import com.friend.ios.batch.persistNativeBatchGeolocationSidecar
 
 import android.content.Context
+import java.io.File
 
 /**
  * Batch (transcribe-later) capture sink for the phone microphone — the Kotlin peer of
@@ -44,11 +46,23 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         private set
 
     private var lastFrameMs: Long = 0
+    private var currentAudioFile: File? = null
 
     // Latched false->true storage-full edge, drained once per transition by the
     // controller's heartbeat so a single onCaptureError fires per storage-full event.
     private var pendingStorageFullReport = false
     private var wasStorageFull = false
+
+    override fun onOpenedLocked(partFile: File) {
+        val audioFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
+        currentAudioFile = audioFile
+        persistCurrentGeolocationSidecar()
+    }
+
+    private fun persistCurrentGeolocationSidecar() {
+        val audioFile = currentAudioFile ?: return
+        persistNativeBatchGeolocationSidecar(audioFile, stringPref("phoneBatchGeolocation"), TAG)
+    }
 
     /**
      * Append the opus packets for one converted PCM chunk. Called on the writer's serial
@@ -85,9 +99,9 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
             }
 
             if (!isOpenLocked) {
-                val startSec = now / 1000
                 // codec opus_fs320 (20ms frames), 16kHz mono — mirrors the BLE/pendant
                 // batch naming so the Dart scanner (`audio_omibatch*`) and backend both match.
+                val startSec = nextPhoneMicBatchStartSec(File(dirPath), marker, now / 1000)
                 val name = "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin$PART_SUFFIX"
                 if (!openLocked(dirPath, name, startSec, now)) {
                     noteStorageFullTransitionLocked() // open refused — likely the free-space guard
@@ -97,6 +111,10 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
             }
 
             if (!writeFramesLocked(packets)) return
+            // Location capture intentionally starts after native audio. Retry
+            // until its fenced preference arrives; the sidecar helper never
+            // overwrites an existing recording-owned snapshot.
+            persistCurrentGeolocationSidecar()
             sessionFramesWritten += packets.size
             lastFrameMs = now
             maybeFsyncLocked(now)
@@ -124,6 +142,8 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         }
 
     override fun onClosedLocked() {
+        persistCurrentGeolocationSidecar()
+        currentAudioFile = null
         lastFrameMs = 0
     }
 
@@ -146,4 +166,15 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         private const val MAX_FILE_SECONDS = 900L // 15 min per file
         private const val GAP_MS = 30_000L // start a new file after this silence gap
     }
+}
+
+internal fun nextPhoneMicBatchStartSec(dir: File, marker: String, initialStartSec: Long): Long {
+    var startSec = initialStartSec
+    while (File(dir, "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin").exists() ||
+        File(dir, "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin${BaseBatchAudioWriter.PART_SUFFIX}")
+            .exists()
+    ) {
+        startSec++
+    }
+    return startSec
 }

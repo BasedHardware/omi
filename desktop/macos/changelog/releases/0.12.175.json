@@ -1,0 +1,9 @@
+{
+  "version": "0.12.175",
+  "date": "2026-08-15",
+  "changes": [
+    "Notifications now appear even when the Ask Omi floating bar is disabled: the card pops up briefly and the bar hides itself again. Only the Notifications toggle controls whether notifications are shown.",
+    "Opening a task from the dashboard that was already cancelled or deleted now says it is no longer available, instead of switching to Tasks and selecting nothing",
+    "Proactive context now connects related work across apps — reading a PR, chatting about it, and drafting an email on the same project share one workstream's context — and reacts after 2 seconds on a page instead of 8"
+  ]
+}

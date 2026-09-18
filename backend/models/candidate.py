@@ -218,6 +218,10 @@ class CandidateRecord(BaseModel):
     result_workstream_id: Optional[StableId] = None
     created_at: datetime
     resolved_at: Optional[datetime] = None
+    # A pending suggestion the user never acts on dies on its own. Cleared on
+    # resolution: an accepted/rejected Candidate is the audit link to its task
+    # and must outlive the suggestion window.
+    expires_at: Optional[datetime] = None
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema: Any, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
@@ -286,6 +290,7 @@ class CandidateRecord(BaseModel):
             'result_workstream_id',
             'created_at',
             'resolved_at',
+            'expires_at',
         }
         proposal = CandidateCreate.model_validate(
             {key: item for key, item in value.items() if key not in record_fields and item is not None}
@@ -323,6 +328,7 @@ class CandidateRecord(BaseModel):
             'result_workstream_id',
             'created_at',
             'resolved_at',
+            'expires_at',
         }
         return CandidateCreate.model_validate(
             {

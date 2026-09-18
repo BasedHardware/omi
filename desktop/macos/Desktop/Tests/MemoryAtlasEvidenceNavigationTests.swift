@@ -115,7 +115,7 @@ final class MemoryAtlasEvidenceNavigationTests: XCTestCase {
   }
 
   private func atlasSource() throws -> String {
-    try read("Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift")
+    try read("Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasInspector.swift")
   }
 
   private func read(_ relativePath: String) throws -> String {

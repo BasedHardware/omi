@@ -23,6 +23,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -109,7 +110,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         }
 
         return SliverPadding(
-          padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20, top: 20),
+          padding: EdgeInsets.only(bottom: bottomNavBarClearance(context), left: 20, right: 20, top: 20),
           sliver: SliverList.separated(
             itemCount: filteredApps.length,
             separatorBuilder: (context, index) => const SizedBox(height: 8),
@@ -144,7 +145,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         }).toList();
 
         return SliverPadding(
-          padding: const EdgeInsets.only(top: 8, bottom: 100),
+          padding: EdgeInsets.only(top: 8, bottom: bottomNavBarClearance(context)),
           sliver: SliverList.builder(
             itemCount: filteredGroups.length,
             itemBuilder: (context, index) {
@@ -375,7 +376,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         _buildShimmerCategorySection(),
         _buildShimmerCategorySection(),
         _buildShimmerCategorySection(),
-        const SizedBox(height: 100),
+        SizedBox(height: bottomNavBarClearance(context)),
       ],
     );
   }
@@ -395,16 +396,15 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             bool isSearchActive,
             bool isFilterActive,
             int filterCount,
-            bool isMyAppsSelected,
             bool isInstalledSelected,
             int visibleFilterCount,
             String? firstFilterText,
           })>(
         selector: (context, provider) {
-          // Calculate visible filters (excluding "My Apps" and "Installed Apps")
+          // Installed has its own control; every other filter shows as a chip.
           final visibleFilters = provider.filters.entries.where((entry) {
             if (entry.key == 'Apps') {
-              return entry.value != 'My Apps' && entry.value != 'Installed Apps';
+              return entry.value != 'Installed Apps';
             }
             return true;
           }).toList();
@@ -416,7 +416,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             isSearchActive: provider.isSearchActive(),
             isFilterActive: provider.isFilterActive(),
             filterCount: provider.filters.length,
-            isMyAppsSelected: provider.isFilterSelected('My Apps', 'Apps'),
             isInstalledSelected: provider.isFilterSelected('Installed Apps', 'Apps'),
             visibleFilterCount: visibleFilters.length,
             firstFilterText: visibleFilters.isNotEmpty ? filterValueToString(visibleFilters.first.value) : null,
@@ -428,7 +427,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
               HapticFeedback.mediumImpact();
               await context.read<AppProvider>().forceRefreshApps();
             },
-            color: Colors.deepPurpleAccent,
+            color: Colors.black,
             backgroundColor: Colors.white,
             child: CustomScrollView(
               controller: widget.scrollController,
@@ -450,15 +449,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                 duration: const Duration(milliseconds: 200),
                                 curve: Curves.easeInOut,
                                 width: (!state.isSearchActive &&
-                                        (state.isMyAppsSelected ||
-                                            state.isInstalledSelected ||
-                                            state.visibleFilterCount > 0))
+                                        (state.isInstalledSelected || state.visibleFilterCount > 0))
                                     ? 44
                                     : null,
                                 child: (!state.isSearchActive &&
-                                        (state.isMyAppsSelected ||
-                                            state.isInstalledSelected ||
-                                            state.visibleFilterCount > 0))
+                                        (state.isInstalledSelected || state.visibleFilterCount > 0))
                                     ? SizedBox(
                                         height: 44,
                                         child: Container(
@@ -470,16 +465,13 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             onPressed: () {
                                               // Clear all filters and expand search
                                               final provider = context.read<AppProvider>();
-                                              if (state.isMyAppsSelected) {
-                                                provider.addOrRemoveFilter('My Apps', 'Apps');
-                                              }
                                               if (state.isInstalledSelected) {
                                                 provider.addOrRemoveFilter('Installed Apps', 'Apps');
                                               }
                                               // Clear other filters
                                               final visibleFilters = state.filters.entries.where((entry) {
                                                 if (entry.key == 'Apps') {
-                                                  return entry.value != 'My Apps' && entry.value != 'Installed Apps';
+                                                  return entry.value != 'Installed Apps';
                                                 }
                                                 return true;
                                               }).toList();
@@ -556,84 +548,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                       ),
                               ),
 
-                              const SizedBox(width: 8),
-
-                              // My Apps button - expands when selected
-                              state.isMyAppsSelected
-                                  ? Expanded(
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 200),
-                                        curve: Curves.easeInOut,
-                                        height: 44,
-                                        decoration: BoxDecoration(
-                                          color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
-                                          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                        ),
-                                        child: TextButton.icon(
-                                          onPressed: () {
-                                            HapticFeedback.mediumImpact();
-                                            final provider = context.read<AppProvider>();
-                                            final wasSelected = provider.isFilterSelected('My Apps', 'Apps');
-                                            provider.addOrRemoveFilter('My Apps', 'Apps');
-                                            provider.applyFilters();
-                                            PlatformManager.instance.analytics.appsTypeFilter(
-                                              'My Apps',
-                                              !wasSelected,
-                                            );
-                                          },
-                                          icon: const FaIcon(
-                                            FontAwesomeIcons.solidUser,
-                                            size: 16,
-                                            color: Colors.white,
-                                          ),
-                                          label: Text(
-                                            context.l10n.myApps,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : SizedBox(
-                                      width: 44,
-                                      height: 44,
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 200),
-                                        curve: Curves.easeInOut,
-                                        decoration: BoxDecoration(
-                                          color: AppStyles.backgroundSecondary,
-                                          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                        ),
-                                        child: IconButton(
-                                          onPressed: () {
-                                            HapticFeedback.mediumImpact();
-                                            final provider = context.read<AppProvider>();
-                                            final wasSelected = provider.isFilterSelected('My Apps', 'Apps');
-                                            provider.addOrRemoveFilter('My Apps', 'Apps');
-                                            provider.applyFilters();
-                                            PlatformManager.instance.analytics.appsTypeFilter(
-                                              'My Apps',
-                                              !wasSelected,
-                                            );
-                                          },
-                                          icon: const FaIcon(
-                                            FontAwesomeIcons.solidUser,
-                                            size: 16,
-                                            color: Colors.white,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                      ),
-                                    ),
-
-                              const SizedBox(width: 8),
-
                               // Installed Apps button - expands when selected
                               state.isInstalledSelected
                                   ? Expanded(
@@ -642,7 +556,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                         curve: Curves.easeInOut,
                                         height: 44,
                                         decoration: BoxDecoration(
-                                          color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                                          color: Colors.white.withValues(alpha: 0.22),
                                           borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                         ),
                                         child: TextButton.icon(
@@ -720,7 +634,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                         curve: Curves.easeInOut,
                                         height: 44,
                                         decoration: BoxDecoration(
-                                          color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                                          color: Colors.white.withValues(alpha: 0.22),
                                           borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                         ),
                                         child: TextButton.icon(
@@ -765,7 +679,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             curve: Curves.easeInOut,
                                             decoration: BoxDecoration(
                                               color: state.visibleFilterCount > 0
-                                                  ? Colors.deepPurpleAccent.withValues(alpha: 0.5)
+                                                  ? Colors.white.withValues(alpha: 0.22)
                                                   : AppStyles.backgroundSecondary,
                                               borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                             ),

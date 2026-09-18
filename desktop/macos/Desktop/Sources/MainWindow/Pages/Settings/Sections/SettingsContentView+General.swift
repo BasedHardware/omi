@@ -20,7 +20,7 @@ import WebKit
 // tint is `Ink.primary`, which is what the rest of the pane is set in.
 extension SettingsContentView {
   var generalSection: some View {
-    VStack(spacing: OmiSpacing.xl) {
+    VStack(spacing: OmiSpacing.sm) {
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         HStack(spacing: OmiSpacing.lg) {
@@ -69,7 +69,7 @@ extension SettingsContentView {
 
       // One recording policy; no independent enable switch or system-audio mode.
       settingsCard(settingId: "general.audiorecording") {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
           HStack(spacing: OmiSpacing.lg) {
             SettingsIconTile(symbol: "mic.fill")
 
@@ -93,7 +93,7 @@ extension SettingsContentView {
 
       // Notifications toggle
       settingsCard(settingId: "general.notifications") {
-        VStack(spacing: OmiSpacing.md) {
+        VStack(spacing: OmiSpacing.xs) {
           HStack(spacing: OmiSpacing.lg) {
             SettingsIconTile(symbol: "bell.fill")
 
@@ -177,7 +177,7 @@ extension SettingsContentView {
 
       // Font Size
       settingsCard(settingId: "general.fontsize") {
-        VStack(spacing: OmiSpacing.md) {
+        VStack(spacing: OmiSpacing.sm) {
           HStack(spacing: OmiSpacing.lg) {
             SettingsIconTile(symbol: "textformat.size")
 
@@ -240,6 +240,76 @@ extension SettingsContentView {
         }
       }
 
+      // Transparency
+      settingsCard(settingId: "general.transparency") {
+        transparencyCard
+      }
+
+    }
+  }
+
+  /// How much of the desktop the glass lets through.
+  ///
+  /// The slider binds straight to the published value, so every glass surface — this pane's own
+  /// panel included — follows the thumb while it is still down. Under the system's Reduce
+  /// Transparency setting the ground is opaque no matter what the slider says, so the control is
+  /// dimmed and says why rather than moving a value that changes nothing.
+  private var transparencyCard: some View {
+    let reduced = reduceTransparencyObserver.isEnabled
+    return VStack(spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.lg) {
+        SettingsIconTile(symbol: "circle.lefthalf.filled")
+
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Transparency")
+            .scaledFont(size: 16, weight: .semibold)
+            .foregroundColor(Ink.primary)
+
+          Text(
+            reduced
+              ? "Off while Reduce Transparency is on in System Settings"
+              : "Glass: \(Int((glassTransparencySettings.transparency * 100).rounded()))%"
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+        }
+
+        Spacer()
+
+        // Reset rewrites the same value the slider does, which changes just as little under Reduce
+        // Transparency, so it wears the slider's disabled state rather than contradicting the caption.
+        if !glassTransparencySettings.isDefault {
+          Button("Reset") {
+            glassTransparencySettings.resetToDefault()
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(reduced)
+          .opacity(reduced ? 0.45 : 1)
+        }
+      }
+
+      HStack(spacing: OmiSpacing.md) {
+        Image(systemName: "square.fill")
+          .scaledFont(size: 12)
+          .foregroundColor(Ink.secondary)
+          .help("Solid")
+
+        Slider(
+          value: $glassTransparencySettings.transparency,
+          in: InkGlassTransparencySettings.range
+        )
+        .tint(Ink.accent)
+        // The side icons' tooltips do not attach to the control, so without this VoiceOver reads a
+        // bare percentage with no word for what it is.
+        .accessibilityLabel("Transparency")
+
+        Image(systemName: "square.dotted")
+          .scaledFont(size: 12)
+          .foregroundColor(Ink.secondary)
+          .help("Clear")
+      }
+      .disabled(reduced)
+      .opacity(reduced ? 0.45 : 1)
     }
   }
 
@@ -251,10 +321,22 @@ extension SettingsContentView {
     Binding(
       get: { audioRecordingMode },
       set: { mode in
+        let previousMode = audioRecordingMode
         audioRecordingModeRaw = mode.rawValue
         AnalyticsManager.shared.settingToggled(
           setting: "audio_recording_mode_\(mode.rawValue)", enabled: mode != .off)
         AssistantSettings.shared.audioRecordingMode = mode
+        // The mode-change observer restores capture automatically, and automatic
+        // starts never raise the TCC sheet. Enabling listening here IS an explicit
+        // user action, so it owns the one-shot permission request itself (same
+        // contract as the Listen control's `cycleListening`).
+        if AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
+          currentMode: previousMode,
+          requestedMode: mode,
+          permissionGranted: appState.hasMicrophonePermission)
+        {
+          appState.requestMicrophonePermission()
+        }
       }
     )
   }
@@ -286,8 +368,8 @@ private struct AudioRecordingModeSwitcher: View {
   var body: some View {
     HStack(spacing: 2) {
       segment(.off, label: "Off")
-      segment(.always, label: "Always On")
-      segment(.onlyMeetings, label: "Only Meetings")
+      segment(.always, label: "Always")
+      segment(.onlyMeetings, label: "Meetings")
     }
     .padding(3)
     .background(
@@ -298,7 +380,7 @@ private struct AudioRecordingModeSwitcher: View {
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
         .strokeBorder(Ink.hairline, lineWidth: 1)
     )
-    .frame(width: 310)
+    .frame(width: 230)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Audio Recording")
   }

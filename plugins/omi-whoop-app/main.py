@@ -8,7 +8,7 @@ import os
 import sys
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from urllib.parse import urlencode
 
 import requests
@@ -47,6 +47,7 @@ WHOOP_REDIRECT_URI = os.getenv("WHOOP_REDIRECT_URI", "http://localhost:8080/auth
 WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth"
 WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 WHOOP_API_BASE = "https://api.prod.whoop.com/developer/v1"
+WHOOP_REQUEST_TIMEOUT = 10
 
 # Scopes needed for Whoop access
 WHOOP_SCOPES = [
@@ -114,13 +115,14 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
                 "client_secret": WHOOP_CLIENT_SECRET,
                 "refresh_token": refresh_token,
                 "grant_type": "refresh_token"
-            }
+            },
+            timeout=WHOOP_REQUEST_TIMEOUT
         )
 
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return None
     except Exception as e:
         log(f"Error refreshing token: {e}")
@@ -140,24 +142,59 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=WHOOP_REQUEST_TIMEOUT)
         else:
             return None
 
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Whoop API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            log(f"Whoop API error: {response.status_code}")
+            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
         log(f"Whoop API request error: {e}")
         return {"error": str(e)}
 
 
+# Safety cap on continuation pages per collection; a real Whoop week of data
+# never needs anywhere near this many pages.
+MAX_COLLECTION_PAGES = 20
+
+
+def whoop_fetch_all_records(uid: str, endpoint: str, params: dict) -> Tuple[Optional[List[dict]], Optional[str]]:
+    """Fetch every page of a Whoop collection endpoint, following next_token/nextToken.
+
+    Returns (records, None) on success, or (None, error) if any page failed, so
+    callers can tell an empty collection apart from an incomplete fetch.
+    """
+    records: List[dict] = []
+    page_params = dict(params)
+
+    for _ in range(MAX_COLLECTION_PAGES):
+        result = whoop_api_request(uid, "GET", endpoint, params=page_params)
+        if not result or "error" in result:
+            return None, result.get("error", "Unknown error") if result else "No response from Whoop"
+
+        records.extend(result.get("records", []))
+        next_token = result.get("next_token")
+        if not next_token:
+            return records, None
+
+        page_params = dict(params)
+        page_params["nextToken"] = next_token
+
+    return records, None
+
+
 def format_recovery_score(recovery: dict) -> str:
     """Format recovery score for display."""
-    score = recovery.get("score", {})
+    if not isinstance(recovery, dict):
+        return "No recovery data available"
+    score = recovery.get("score")
+    if not isinstance(score, dict):
+        return "No recovery score available"
+
     recovery_score = score.get("recovery_score")
     hrv = score.get("hrv_rmssd_milli")
     rhr = score.get("resting_heart_rate")
@@ -167,11 +204,16 @@ def format_recovery_score(recovery: dict) -> str:
     if recovery_score is None:
         return "No recovery score available"
 
+    try:
+        recovery_score_val = float(recovery_score)
+    except (ValueError, TypeError):
+        return "No recovery score available"
+
     # Determine recovery zone
-    if recovery_score >= 67:
+    if recovery_score_val >= 67:
         zone = "Green (High)"
         emoji = "🟢"
-    elif recovery_score >= 34:
+    elif recovery_score_val >= 34:
         zone = "Yellow (Moderate)"
         emoji = "🟡"
     else:
@@ -179,25 +221,42 @@ def format_recovery_score(recovery: dict) -> str:
         emoji = "🔴"
 
     parts = [
-        f"{emoji} **Recovery: {recovery_score}%** ({zone})",
+        f"{emoji} **Recovery: {recovery_score_val:.0f}%** ({zone})",
         ""
     ]
 
-    if hrv:
-        parts.append(f"**HRV:** {hrv:.1f} ms")
-    if rhr:
-        parts.append(f"**Resting HR:** {rhr:.0f} bpm")
-    if spo2:
-        parts.append(f"**SpO2:** {spo2:.1f}%")
-    if skin_temp:
-        parts.append(f"**Skin Temp:** {skin_temp:.1f}°C")
+    if hrv is not None:
+        try:
+            parts.append(f"**HRV:** {float(hrv):.1f} ms")
+        except (ValueError, TypeError):
+            pass
+    if rhr is not None:
+        try:
+            parts.append(f"**Resting HR:** {float(rhr):.0f} bpm")
+        except (ValueError, TypeError):
+            pass
+    if spo2 is not None:
+        try:
+            parts.append(f"**SpO2:** {float(spo2):.1f}%")
+        except (ValueError, TypeError):
+            pass
+    if skin_temp is not None:
+        try:
+            parts.append(f"**Skin Temp:** {float(skin_temp):.1f}°C")
+        except (ValueError, TypeError):
+            pass
 
     return "\n".join(parts)
 
 
 def format_strain_score(cycle: dict) -> str:
     """Format strain score for display."""
-    score = cycle.get("score", {})
+    if not isinstance(cycle, dict):
+        return "No strain data available"
+    score = cycle.get("score")
+    if not isinstance(score, dict):
+        return "No strain data available"
+
     strain = score.get("strain")
     kilojoule = score.get("kilojoule")
     average_hr = score.get("average_heart_rate")
@@ -206,14 +265,19 @@ def format_strain_score(cycle: dict) -> str:
     if strain is None:
         return "No strain data available"
 
+    try:
+        strain_val = float(strain)
+    except (ValueError, TypeError):
+        return "No strain data available"
+
     # Determine strain level
-    if strain >= 18:
+    if strain_val >= 18:
         level = "Very High (Overreaching)"
         emoji = "🔴"
-    elif strain >= 14:
+    elif strain_val >= 14:
         level = "High"
         emoji = "🟠"
-    elif strain >= 10:
+    elif strain_val >= 10:
         level = "Medium"
         emoji = "🟡"
     else:
@@ -221,31 +285,53 @@ def format_strain_score(cycle: dict) -> str:
         emoji = "🟢"
 
     parts = [
-        f"{emoji} **Day Strain: {strain:.1f}** ({level})",
+        f"{emoji} **Day Strain: {strain_val:.1f}** ({level})",
         ""
     ]
 
-    if kilojoule:
-        calories = kilojoule * 0.239006  # Convert kJ to kcal
-        parts.append(f"**Calories Burned:** {calories:.0f} kcal")
-    if average_hr:
-        parts.append(f"**Average HR:** {average_hr:.0f} bpm")
-    if max_hr:
-        parts.append(f"**Max HR:** {max_hr:.0f} bpm")
+    if kilojoule is not None:
+        try:
+            calories = float(kilojoule) * 0.239006  # Convert kJ to kcal
+            parts.append(f"**Calories Burned:** {calories:.0f} kcal")
+        except (ValueError, TypeError):
+            pass
+    if average_hr is not None:
+        try:
+            parts.append(f"**Average HR:** {float(average_hr):.0f} bpm")
+        except (ValueError, TypeError):
+            pass
+    if max_hr is not None:
+        try:
+            parts.append(f"**Max HR:** {float(max_hr):.0f} bpm")
+        except (ValueError, TypeError):
+            pass
 
     return "\n".join(parts)
 
 
 def format_sleep(sleep: dict) -> str:
     """Format sleep data for display."""
-    score = sleep.get("score", {})
-    stage_summary = score.get("stage_summary", {})
+    if not isinstance(sleep, dict):
+        return "No sleep data available"
+    score = sleep.get("score")
+    if not isinstance(score, dict):
+        return "No sleep data available"
 
-    total_sleep = stage_summary.get("total_in_bed_time_milli", 0)
-    total_awake = stage_summary.get("total_awake_time_milli", 0)
-    total_light = stage_summary.get("total_light_sleep_time_milli", 0)
-    total_slow = stage_summary.get("total_slow_wave_sleep_time_milli", 0)
-    total_rem = stage_summary.get("total_rem_sleep_time_milli", 0)
+    stage_summary = score.get("stage_summary")
+    if not isinstance(stage_summary, dict):
+        stage_summary = {}
+
+    def _safe_float(val, default=0.0):
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+
+    total_sleep = _safe_float(stage_summary.get("total_in_bed_time_milli"), 0.0)
+    total_awake = _safe_float(stage_summary.get("total_awake_time_milli"), 0.0)
+    total_light = _safe_float(stage_summary.get("total_light_sleep_time_milli"), 0.0)
+    total_slow = _safe_float(stage_summary.get("total_slow_wave_sleep_time_milli"), 0.0)
+    total_rem = _safe_float(stage_summary.get("total_rem_sleep_time_milli"), 0.0)
 
     sleep_performance = score.get("sleep_performance_percentage")
     sleep_consistency = score.get("sleep_consistency_percentage")
@@ -253,9 +339,9 @@ def format_sleep(sleep: dict) -> str:
     respiratory_rate = score.get("respiratory_rate")
 
     def ms_to_hours(ms):
-        return ms / (1000 * 60 * 60) if ms else 0
+        return ms / (1000 * 60 * 60) if ms else 0.0
 
-    total_hours = ms_to_hours(total_sleep - total_awake)
+    total_hours = ms_to_hours(max(0.0, total_sleep - total_awake))
     light_hours = ms_to_hours(total_light)
     deep_hours = ms_to_hours(total_slow)
     rem_hours = ms_to_hours(total_rem)
@@ -266,29 +352,47 @@ def format_sleep(sleep: dict) -> str:
     parts.append(f"  Light: {light_hours:.1f}h | Deep: {deep_hours:.1f}h | REM: {rem_hours:.1f}h")
     parts.append("")
 
-    if sleep_performance:
-        parts.append(f"**Sleep Performance:** {sleep_performance:.0f}%")
-    if sleep_efficiency:
-        parts.append(f"**Sleep Efficiency:** {sleep_efficiency:.0f}%")
-    if sleep_consistency:
-        parts.append(f"**Sleep Consistency:** {sleep_consistency:.0f}%")
-    if respiratory_rate:
-        parts.append(f"**Respiratory Rate:** {respiratory_rate:.1f} breaths/min")
+    if sleep_performance is not None:
+        try:
+            parts.append(f"**Sleep Performance:** {float(sleep_performance):.0f}%")
+        except (ValueError, TypeError):
+            pass
+    if sleep_efficiency is not None:
+        try:
+            parts.append(f"**Sleep Efficiency:** {float(sleep_efficiency):.0f}%")
+        except (ValueError, TypeError):
+            pass
+    if sleep_consistency is not None:
+        try:
+            parts.append(f"**Sleep Consistency:** {float(sleep_consistency):.0f}%")
+        except (ValueError, TypeError):
+            pass
+    if respiratory_rate is not None:
+        try:
+            parts.append(f"**Respiratory Rate:** {float(respiratory_rate):.1f} breaths/min")
+        except (ValueError, TypeError):
+            pass
 
     return "\n".join(parts)
 
 
 def format_workout(workout: dict) -> str:
     """Format workout data for display."""
+    if not isinstance(workout, dict):
+        return "No workout data available"
     sport_id = workout.get("sport_id", 0)
-    score = workout.get("score", {})
+    score = workout.get("score")
+    if not isinstance(score, dict):
+        score = {}
 
     strain = score.get("strain")
     average_hr = score.get("average_heart_rate")
     max_hr = score.get("max_heart_rate")
     kilojoule = score.get("kilojoule")
     distance = score.get("distance_meter")
-    zone_duration = score.get("zone_duration", {})
+    zone_duration = score.get("zone_duration")
+    if not isinstance(zone_duration, dict):
+        zone_duration = {}
 
     start = workout.get("start")
     end = workout.get("end")
@@ -309,14 +413,14 @@ def format_workout(workout: dict) -> str:
 
     # Calculate duration
     duration_str = ""
-    if start and end:
+    if start and end and isinstance(start, str) and isinstance(end, str):
         try:
             start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
             end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
             duration = end_dt - start_dt
             minutes = int(duration.total_seconds() / 60)
             duration_str = f"{minutes} min"
-        except:
+        except Exception:
             pass
 
     parts = [f"**{sport_name}**"]
@@ -324,19 +428,34 @@ def format_workout(workout: dict) -> str:
         parts[0] += f" ({duration_str})"
     parts.append("")
 
-    if strain:
-        parts.append(f"**Strain:** {strain:.1f}")
-    if kilojoule:
-        calories = kilojoule * 0.239006
-        parts.append(f"**Calories:** {calories:.0f} kcal")
-    if distance:
-        km = distance / 1000
-        miles = km * 0.621371
-        parts.append(f"**Distance:** {km:.2f} km ({miles:.2f} mi)")
-    if average_hr:
-        parts.append(f"**Avg HR:** {average_hr:.0f} bpm")
-    if max_hr:
-        parts.append(f"**Max HR:** {max_hr:.0f} bpm")
+    if strain is not None:
+        try:
+            parts.append(f"**Strain:** {float(strain):.1f}")
+        except (ValueError, TypeError):
+            pass
+    if kilojoule is not None:
+        try:
+            calories = float(kilojoule) * 0.239006
+            parts.append(f"**Calories:** {calories:.0f} kcal")
+        except (ValueError, TypeError):
+            pass
+    if distance is not None:
+        try:
+            km = float(distance) / 1000
+            miles = km * 0.621371
+            parts.append(f"**Distance:** {km:.2f} km ({miles:.2f} mi)")
+        except (ValueError, TypeError):
+            pass
+    if average_hr is not None:
+        try:
+            parts.append(f"**Avg HR:** {float(average_hr):.0f} bpm")
+        except (ValueError, TypeError):
+            pass
+    if max_hr is not None:
+        try:
+            parts.append(f"**Max HR:** {float(max_hr):.0f} bpm")
+        except (ValueError, TypeError):
+            pass
 
     return "\n".join(parts)
 
@@ -504,7 +623,7 @@ async def tool_get_recovery(request: Request):
 
         recovery = records[0]
         cycle_id = recovery.get("cycle_id")
-        created_at = recovery.get("created_at", "")[:10]
+        created_at = str(recovery.get("created_at") or "")[:10]
 
         result_parts = [
             f"**Recovery for {created_at}**",
@@ -555,7 +674,7 @@ async def tool_get_strain(request: Request):
             return ChatToolResponse(result="No strain data available for this date.")
 
         cycle = records[0]
-        start_date = cycle.get("start", "")[:10]
+        start_date = str(cycle.get("start") or "")[:10]
 
         result_parts = [
             f"**Strain for {start_date}**",
@@ -604,7 +723,7 @@ async def tool_get_sleep(request: Request):
             return ChatToolResponse(result="No sleep data available for this date.")
 
         sleep = records[0]
-        end_date = sleep.get("end", "")[:10]
+        end_date = str(sleep.get("end") or "")[:10]
 
         result_parts = [
             f"**Sleep ending {end_date}**",
@@ -627,8 +746,17 @@ async def tool_get_workouts(request: Request):
         log(f"=== GET_WORKOUTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        raw_days = body.get("days")
+        try:
+            days = min(max(1, int(raw_days)), 30) if raw_days is not None else 7
+        except (ValueError, TypeError):
+            days = 7
+
+        raw_max_results = body.get("max_results")
+        try:
+            max_results = min(max(1, int(raw_max_results)), 50) if raw_max_results is not None else 10
+        except (ValueError, TypeError):
+            max_results = 10
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -698,39 +826,40 @@ async def tool_get_weekly_summary(request: Request):
             "limit": 7
         }
 
-        # Fetch recovery, cycles, and sleep
-        recovery_result = whoop_api_request(uid, "GET", "/recovery", params=params)
-        cycle_result = whoop_api_request(uid, "GET", "/cycle", params=params)
-        sleep_result = whoop_api_request(uid, "GET", "/activity/sleep", params=params)
+        # Fetch recovery, cycles, sleep, and workouts, following pagination for each
+        recovery_records, recovery_error = whoop_fetch_all_records(uid, "/recovery", params)
+        cycle_records, cycle_error = whoop_fetch_all_records(uid, "/cycle", params)
+        sleep_records, sleep_error = whoop_fetch_all_records(uid, "/activity/sleep", params)
+        workout_records, workout_error = whoop_fetch_all_records(uid, "/activity/workout", params)
 
         # Calculate averages
         recovery_scores = []
-        if recovery_result and "records" in recovery_result:
-            for r in recovery_result["records"]:
-                score = r.get("score", {}).get("recovery_score")
-                if score is not None:
-                    recovery_scores.append(score)
+        for r in recovery_records or []:
+            score = r.get("score", {}).get("recovery_score")
+            if score is not None:
+                recovery_scores.append(score)
 
         strain_scores = []
-        if cycle_result and "records" in cycle_result:
-            for c in cycle_result["records"]:
-                strain = c.get("score", {}).get("strain")
-                if strain is not None:
-                    strain_scores.append(strain)
+        for c in cycle_records or []:
+            strain = c.get("score", {}).get("strain")
+            if strain is not None:
+                strain_scores.append(strain)
 
         sleep_hours = []
-        if sleep_result and "records" in sleep_result:
-            for s in sleep_result["records"]:
-                summary = s.get("score", {}).get("stage_summary", {})
-                total = summary.get("total_in_bed_time_milli", 0)
-                awake = summary.get("total_awake_time_milli", 0)
-                sleep_ms = total - awake
-                if sleep_ms > 0:
-                    sleep_hours.append(sleep_ms / (1000 * 60 * 60))
+        for s in sleep_records or []:
+            summary = s.get("score", {}).get("stage_summary", {})
+            total = summary.get("total_in_bed_time_milli", 0)
+            awake = summary.get("total_awake_time_milli", 0)
+            sleep_ms = total - awake
+            if sleep_ms > 0:
+                sleep_hours.append(sleep_ms / (1000 * 60 * 60))
 
         result_parts = ["**Weekly Summary (Last 7 Days)**", ""]
 
-        if recovery_scores:
+        if recovery_error:
+            log(f"Weekly summary: recovery fetch failed: {recovery_error}")
+            result_parts.append("**Recovery:** Temporarily unavailable")
+        elif recovery_scores:
             avg_recovery = sum(recovery_scores) / len(recovery_scores)
             min_recovery = min(recovery_scores)
             max_recovery = max(recovery_scores)
@@ -738,14 +867,20 @@ async def tool_get_weekly_summary(request: Request):
         else:
             result_parts.append("**Recovery:** No data")
 
-        if strain_scores:
+        if cycle_error:
+            log(f"Weekly summary: strain fetch failed: {cycle_error}")
+            result_parts.append("**Strain:** Temporarily unavailable")
+        elif strain_scores:
             avg_strain = sum(strain_scores) / len(strain_scores)
             total_strain = sum(strain_scores)
             result_parts.append(f"**Strain:** Avg {avg_strain:.1f} (Total: {total_strain:.1f})")
         else:
             result_parts.append("**Strain:** No data")
 
-        if sleep_hours:
+        if sleep_error:
+            log(f"Weekly summary: sleep fetch failed: {sleep_error}")
+            result_parts.append("**Sleep:** Temporarily unavailable")
+        elif sleep_hours:
             avg_sleep = sum(sleep_hours) / len(sleep_hours)
             min_sleep = min(sleep_hours)
             max_sleep = max(sleep_hours)
@@ -754,9 +889,11 @@ async def tool_get_weekly_summary(request: Request):
             result_parts.append("**Sleep:** No data")
 
         # Add workout count
-        workout_result = whoop_api_request(uid, "GET", "/activity/workout", params=params)
-        workout_count = len(workout_result.get("records", [])) if workout_result else 0
-        result_parts.append(f"**Workouts:** {workout_count}")
+        if workout_error:
+            log(f"Weekly summary: workout fetch failed: {workout_error}")
+            result_parts.append("**Workouts:** Temporarily unavailable")
+        else:
+            result_parts.append(f"**Workouts:** {len(workout_records)}")
 
         return ChatToolResponse(result="\n".join(result_parts))
 
@@ -1044,12 +1181,13 @@ async def whoop_callback(
                 "code": code,
                 "grant_type": "authorization_code",
                 "redirect_uri": WHOOP_REDIRECT_URI
-            }
+            },
+            timeout=WHOOP_REQUEST_TIMEOUT
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            log(f"Token exchange failed: {response.status_code}")
+            return HTMLResponse(content=f"Token exchange failed: {response.status_code}", status_code=400)
 
         token_data = response.json()
         access_token = token_data.get("access_token")

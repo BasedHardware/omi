@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-config-target-identified-by-count-not-identity",
+  "violated_contract": "A check that reads or rewrites one component's configuration must select that component by identity, never by asserting it is the only one present. Counting is a proxy for identity that holds only until something legitimately adds a second component, and when it breaks it rejects a correctly configured service rather than reporting real drift.",
+  "canonical_prevention": "Select the target by name or role and exclude known companions explicitly, sharing one definition of those companions with whatever attaches them. Reserve a cardinality assertion for the set that remains after companions are excluded, so the check still fails a genuinely ambiguous shape.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/preflight-cloud-run-deploy.py",
+    "backend/tests/unit/test_preflight_cloud_run_deploy.py"
+  ],
+  "evidence_prs": [11998],
+  "scope_hints": [
+    "backend/scripts/preflight-cloud-run-deploy.py",
+    "backend/scripts/attach_cloud_run_gmp_sidecar.py",
+    ".github/actions/deploy-backend-stack/action.yml"
+  ],
+  "status": "open"
+}

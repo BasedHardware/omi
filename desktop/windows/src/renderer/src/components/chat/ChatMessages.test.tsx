@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, fireEvent, screen } from '@testing-library/react'
 import { ChatMessages } from './ChatMessages'
 import type { ChatMsg } from '../../hooks/useChat'
+import type { ChatEvidenceReferenceEnvelope } from '../../../../shared/knowledgeLedger'
 
 // Render markdown as plain text — we only care about the copy affordance here,
 // not how RevealMarkdown paints (that has its own test).
@@ -245,5 +246,107 @@ describe('ChatMessages — shared-thread agent cards (B4)', () => {
     render(<ChatMessages messages={[user('go'), spawnCard()]} sending={true} variant="overlay" />)
     expect(screen.queryByRole('status', { name: 'Omi is thinking' })).toBeNull()
     expect(screen.getByText('Build the report')).not.toBeNull()
+  })
+})
+
+const evidenceEnvelope = (): ChatEvidenceReferenceEnvelope => ({
+  schemaVersion: 1,
+  references: [
+    {
+      id: 'summary-1',
+      kind: 'conversation_summary',
+      state: 'available',
+      title: 'Conversation summary',
+      summary: 'A bounded conversation reference.',
+      conversationId: 'conversation-1',
+      metadata: {}
+    },
+    {
+      id: 'loading-1',
+      kind: 'conversation_segment',
+      state: 'loading',
+      title: 'Transcript segment',
+      metadata: {}
+    },
+    {
+      id: 'offline-1',
+      kind: 'screen',
+      state: 'offline',
+      frameId: 'frame-offline',
+      metadata: {}
+    },
+    {
+      id: 'pruned-1',
+      kind: 'keyframe',
+      state: 'pruned',
+      frameId: 'frame-pruned',
+      metadata: {}
+    },
+    {
+      id: 'failed-1',
+      kind: 'request',
+      state: 'failed',
+      requestId: 'request-1',
+      errorMessage: 'The requested frame could not be loaded.',
+      metadata: {}
+    },
+    {
+      id: 'future-1',
+      kind: 'unknown',
+      state: 'unknown',
+      title: 'Future evidence',
+      metadata: {}
+    }
+  ]
+})
+
+describe('ChatMessages — supplemental evidence', () => {
+  it('renders answer text first and honestly shows every non-actionable state', () => {
+    const answer = 'The answer remains available even when evidence is not.'
+    render(
+      <ChatMessages
+        messages={[
+          { id: 'answer-1', role: 'assistant', content: answer, evidence: evidenceEnvelope() }
+        ]}
+        sending={false}
+        variant="main"
+      />
+    )
+
+    const answerNode = screen.getByText(answer)
+    const evidenceRegion = screen.getByRole('region', { name: 'Supporting evidence' })
+    expect(
+      answerNode.compareDocumentPosition(evidenceRegion) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(screen.getByText('Available')).not.toBeNull()
+    expect(screen.getByText('Loading')).not.toBeNull()
+    expect(screen.getByText('Unavailable offline')).not.toBeNull()
+    expect(screen.getByText('No longer available')).not.toBeNull()
+    expect(screen.getByText('Failed to load')).not.toBeNull()
+    expect(screen.getByText('Unavailable', { exact: true })).not.toBeNull()
+    expect(screen.getByText('The requested frame could not be loaded.')).not.toBeNull()
+    expect(
+      screen.getByText('This evidence is from an unsupported version and cannot be opened here.')
+    ).not.toBeNull()
+    expect(evidenceRegion.querySelectorAll('a,button')).toHaveLength(0)
+  })
+
+  it('keeps the answer when the optional envelope has no references', () => {
+    render(
+      <ChatMessages
+        messages={[
+          {
+            id: 'answer-2',
+            role: 'assistant',
+            content: 'Plain answer',
+            evidence: { schemaVersion: 1, references: [] }
+          }
+        ]}
+        sending={false}
+        variant="overlay"
+      />
+    )
+    expect(screen.getByText('Plain answer')).not.toBeNull()
+    expect(screen.queryByRole('region', { name: 'Supporting evidence' })).toBeNull()
   })
 })

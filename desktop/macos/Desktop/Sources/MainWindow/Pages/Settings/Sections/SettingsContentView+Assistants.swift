@@ -335,11 +335,6 @@ extension SettingsContentView {
           }  // end if taskEnabled
         }
       }
-
-      // Task Agent Settings (merged into Task Assistant subsection)
-      settingsCard(settingId: "advanced.taskassistant.agent") {
-        TaskAgentSettingsView()
-      }
     }
   }
 
@@ -870,33 +865,6 @@ extension SettingsContentView {
         }
       }
 
-      settingsCard(settingId: "advanced.preferences.legacyhome") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "rectangle.split.2x1")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 24, height: 24)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Use old Home design")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
-
-            Text("Show the previous chat-first dashboard instead of the simplified Home")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
-          }
-
-          Spacer()
-
-          // Same card shape, same trailing slot, same kind of preference as the two rows it sits
-          // between — an AppKit checkbox here is a second switch vocabulary in one stack.
-          Toggle("", isOn: $useLegacyHomeDesign)
-            .toggleStyle(OmiToggleStyle())
-            .labelsHidden()
-        }
-      }
-
       settingsCard(settingId: "advanced.preferences.speaknotifications") {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "speaker.wave.2")
@@ -947,6 +915,10 @@ extension SettingsContentView {
             isOn: Binding(
               get: { launchAtLoginManager.isEnabled },
               set: { newValue in
+                // Record the user's explicit choice before touching the system
+                // so a failed unregister still counts as "declined" and the
+                // default-on migration never overrides it.
+                LaunchAtLoginPreference.recordUserChoice(enabled: newValue)
                 if launchAtLoginManager.setEnabled(newValue) {
                   AnalyticsManager.shared.launchAtLoginChanged(enabled: newValue, source: "user")
                 }
@@ -994,6 +966,33 @@ extension SettingsContentView {
       // Rescan Files
       settingsCard(settingId: "advanced.troubleshooting.rescanfiles") {
         RescanFilesRow(showConfirmation: $showRescanFilesAlert)
+      }
+
+      // Reset Integration Suggestions
+      settingsCard(settingId: "advanced.troubleshooting.resetintegrationsuggestions") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "sparkles.rectangle.stack")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Reset Integration Suggestions")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text("Clears every integration's suggestion history, including ones you hid, so Omi can offer them again")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Button("Reset") {
+            IntegrationNudgeStore.shared.resetAll()
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        }
       }
     }
   }

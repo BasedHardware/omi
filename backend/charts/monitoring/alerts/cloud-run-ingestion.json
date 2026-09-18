@@ -1,0 +1,425 @@
+[
+  {
+    "uid": "omi-cloud-run-metric-names-unnormalized",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Cloud Run Ingestion",
+    "title": "Cloud Run metrics - names did not normalize",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count({job=\"cloud-run-application-metrics\", __name__=~\"stackdriver_.*_omi_.*\"}) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Cloud Run application metrics are arriving under Stackdriver-mangled names instead of their plain omi_ names",
+      "threshold": "> 0 un-normalized omi series on the cloud-run-application-metrics job for 15m",
+      "user_impact": "No user impact by itself, but every alert and dashboard built on these metrics is silently matching nothing, so a real user-facing failure on a Cloud Run path could pass unnoticed.",
+      "scope": "The metric_relabel_configs rewrite on the cloud-run-application-metrics scrape job.",
+      "verification": "List the raw series names on that job in Grafana Explore and compare them with the rewrite regex in the kube-prometheus-stack values.",
+      "safe_next_action": "Correct the rewrite regex to match the observed names and re-upgrade the monitoring release; do not add alerts against the mangled names.",
+      "runbook": "backend/docs/runbooks/cloud-run-metrics-ingestion.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "observability",
+      "alert_identity": "omi-cloud-run-metric-names-unnormalized",
+      "component": "observability",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-cloud-run-egress-query-rejected",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Cloud Run Ingestion",
+    "title": "Cloud Run metrics - egress query rejected by Cloud Monitoring",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(stackdriver_monitoring_last_scrape_error{job=\"cloud-run-application-metrics\"}) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "The Cloud Run metrics exporter is failing its Cloud Monitoring queries, so no omi_ series are being imported",
+      "threshold": "stackdriver_monitoring_last_scrape_error > 0 on the cloud-run-application-metrics job for 15m",
+      "user_impact": "No direct user impact, but every Cloud Run journey metric stops arriving while the exporter Deployment stays Available and its Prometheus target stays up. Panels render empty and read as no traffic rather than no ingestion, so a real user-facing failure on a Cloud Run path can run unnoticed for as long as this is firing.",
+      "scope": "The dedicated Cloud Run metrics Stackdriver exporter and the Cloud Monitoring filter it is deployed with.",
+      "verification": "kubectl logs the <env>-omi-cloud-run-metrics-exporter Deployment. A rejected filter logs an HTTP 400 per descriptor naming the offending expression; a missing or expired Monitoring Viewer grant on its GSA logs 403.",
+      "safe_next_action": "Read the 400 back to the filter in backend/charts/monitoring/prometheus-stackdriver-exporter/<env>_omi_cloud_run_metrics_exporter.yaml, correct it, and re-run the Deploy Cloud Run Metrics Egress workflow for that environment. Cloud Monitoring rejects AND mixed with OR across resource.labels restrictions; express a disjunction as one_of(...). This egress is read-only, so nothing has to be rolled back to stop it.",
+      "runbook": "backend/docs/runbooks/cloud-run-metrics-ingestion.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "observability",
+      "alert_identity": "omi-cloud-run-egress-query-rejected",
+      "component": "observability",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-cloud-run-egress-down",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Cloud Run Ingestion",
+    "title": "Cloud Run metrics - egress exporter is down",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "min(up{job=\"cloud-run-application-metrics\"}) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "The Cloud Run metrics exporter is not being scraped, so no omi_ series can reach Prometheus",
+      "threshold": "up < 1 on the cloud-run-application-metrics job for 15m; an absent job counts as down",
+      "user_impact": "No direct user impact, but every Cloud Run journey metric stops arriving. This is the case the query-rejected alert cannot see: a crashlooping or unscraped exporter publishes no error metric at all, so an error-based rule reads healthy while nothing is ingested and panels render as no traffic.",
+      "scope": "The <env>-omi-cloud-run-metrics-exporter Deployment and the Prometheus job that scrapes it.",
+      "verification": "kubectl get pods -n <env>-omi-monitoring for the exporter. CrashLoopBackOff with \"Liveness probe failed: context deadline exceeded\" means a collection is outrunning the probe or scrape budget; compare scrape_duration_seconds against the job scrape_timeout.",
+      "safe_next_action": "Check whether the exporter is being killed mid-collection rather than failing: this path collects from Cloud Monitoring inline, so growth in Cloud Run series makes scrapes longer, and CPU limits or probe timeouts sized for an idle exporter will kill it once real data arrives. Raise capacity and the scrape budget in the exporter values and re-run Deploy Cloud Run Metrics Egress. Read-only egress, so nothing needs rolling back.",
+      "runbook": "backend/docs/runbooks/cloud-run-metrics-ingestion.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "observability",
+      "alert_identity": "omi-cloud-run-egress-down",
+      "component": "observability",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  }
+]

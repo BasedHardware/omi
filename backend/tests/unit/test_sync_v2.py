@@ -1269,6 +1269,11 @@ class TestAsyncCoordinatorScenarios:
 # ---------------------------------------------------------------------------
 
 
+async def _passthrough_resolve_geolocation(geolocation):
+    """Stub for utils.conversations.location: identity, like the real resolver on a geocode miss."""
+    return geolocation
+
+
 def _install_sync_observability_stubs():
     """Stub observability modules + metrics for routers.sync imports.
 
@@ -1307,6 +1312,9 @@ class TestAsyncCoordinatorBehavioral:
         prior_outcomes = sys.modules.get('utils.stt.outcomes')
         from utils.stt import outcomes as actual_outcomes
 
+        prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
+        from utils.stt import speaker_match as actual_speaker_match
+
         heavy_deps = [
             'redis',
             'database',
@@ -1316,6 +1324,7 @@ class TestAsyncCoordinatorBehavioral:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.firestore_read_metrics',
             'firebase_admin',
             'google',
             'google.cloud',
@@ -1325,6 +1334,7 @@ class TestAsyncCoordinatorBehavioral:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.geolocation',
             'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
@@ -1338,6 +1348,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
+            'utils.conversations.location',
             'utils.other',
             'utils.other.endpoints',
             'utils.other.storage',
@@ -1370,6 +1381,12 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
+
         sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
             return_value=False
         )
@@ -1380,6 +1397,12 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        saved_modules['utils.stt.speaker_match'] = prior_speaker_match
+        # Keep the decision policy real (pure, dependency-free): the sync pipeline now
+        # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
+        # decision whose fields blow up the %.3f log formatting even on an empty match set.
+        sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
@@ -1606,6 +1629,28 @@ class TestAsyncCoordinatorBehavioral:
         pipeline.conversations_db.update_conversation.assert_called_once_with(
             'uid', 'current-conversation', {'audio_files': [{'path': 'current.opus'}]}
         )
+
+    def test_limitless_discard_recovery_emits_one_creation_webhook(self, fenced_worker_module):
+        """A pendant conversation becomes webhook-visible when merged speech revives it."""
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+        limitless_source = pipeline.ConversationSource.limitless
+        original = types.SimpleNamespace(source=limitless_source, discarded=True)
+        recovered = types.SimpleNamespace(source=limitless_source, discarded=False)
+
+        pipeline.conversations_db.get_conversation = MagicMock(return_value={'id': 'limitless-conversation'})
+        pipeline.deserialize_conversation = MagicMock(return_value=original)
+        pipeline.process_conversation = MagicMock(return_value=recovered)
+        pipeline._run_conversation_created_webhook = MagicMock()
+        pipeline.submit_with_context = MagicMock(side_effect=lambda _executor, fn, *args: fn(*args))
+
+        pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en')
+
+        pipeline._run_conversation_created_webhook.assert_called_once_with('uid-1', recovered)
+
+        original.discarded = False
+        pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en')
+        pipeline._run_conversation_created_webhook.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_durable_completion_offloads_epoch_and_terminal_metric(self, fenced_worker_module):
@@ -3017,6 +3062,9 @@ class TestV2EndpointExecution:
         prior_outcomes = sys.modules.get('utils.stt.outcomes')
         from utils.stt import outcomes as actual_outcomes
 
+        prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
+        from utils.stt import speaker_match as actual_speaker_match
+
         heavy_deps = [
             'redis',
             'database',
@@ -3026,6 +3074,7 @@ class TestV2EndpointExecution:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.firestore_read_metrics',
             'firebase_admin',
             'google',
             'google.cloud',
@@ -3035,6 +3084,7 @@ class TestV2EndpointExecution:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.geolocation',
             'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
@@ -3048,6 +3098,7 @@ class TestV2EndpointExecution:
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
+            'utils.conversations.location',
             'utils.other',
             'utils.other.endpoints',
             'utils.other.storage',
@@ -3080,6 +3131,12 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
+
         sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
             return_value=False
         )
@@ -3088,6 +3145,12 @@ class TestV2EndpointExecution:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        saved_modules['utils.stt.speaker_match'] = prior_speaker_match
+        # Keep the decision policy real (pure, dependency-free): the sync pipeline now
+        # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
+        # decision whose fields blow up the %.3f log formatting even on an empty match set.
+        sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint

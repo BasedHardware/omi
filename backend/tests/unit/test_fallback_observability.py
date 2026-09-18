@@ -94,6 +94,15 @@ def test_firestore_malformed_document_labels_are_bounded():
     assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'
 
 
+def test_web_search_security_reasons_keep_their_exact_labels():
+    # The Anthropic web-search gate records these reasons; if they are not
+    # allowlisted they all collapse to ``other`` and the security withhold
+    # paths become indistinguishable in metrics.
+    assert fallback_mod.bucket_reason('private_tool_output_in_context') == 'private_tool_output_in_context'
+    assert fallback_mod.bucket_reason('not_authorized') == 'not_authorized'
+    assert fallback_mod.bucket_reason('authorization_unavailable') == 'authorization_unavailable'
+
+
 def test_record_fallback_never_raises_on_metric_or_log_failure(monkeypatch):
     class BoomCounter:
         def labels(self, **_labels):

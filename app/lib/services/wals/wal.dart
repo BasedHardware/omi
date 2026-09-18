@@ -1,6 +1,7 @@
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
@@ -46,8 +47,45 @@ enum SyncMethod { ble }
 ///                  a Retry the user would spend forever
 enum WalSyncDisplayState { syncing, uploaded, synced, waiting, retrying, failed, corrupted, outsideRecoveryWindow }
 
-/// Max automatic sync attempts before a recording is considered [WalSyncDisplayState.failed].
-/// Mirrors the `maxRetries` used by the auto-sync loop in capture_provider.
+/// Worst user-facing sync outcome across a set of WALs, so an aggregate
+/// indicator (the live-capture one) can name the state that matters instead
+/// of always claiming a healthy local save. Ordering: a WAL that can no
+/// longer upload on its own (failed/corrupted/outside the recovery window)
+/// outranks one that is retrying, which outranks one that is uploading;
+/// healthy/quiet states lose to everything.
+WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
+  WalSyncDisplayState? worst;
+  for (final wal in wals) {
+    final state = wal.syncDisplayState;
+    if (worst == null || _syncOutcomeRank(state) > _syncOutcomeRank(worst)) {
+      worst = state;
+    }
+  }
+  return worst;
+}
+
+/// Whether the state is terminal for automatic uploads and a deliberate
+/// retry can still help (the sync pages' "Failed — tap Retry" case, which
+/// resets the auto-retry budget). Corrupted and out-of-window recordings
+/// cannot be retried into success.
+bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
+
+int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
+      WalSyncDisplayState.failed => 4,
+      WalSyncDisplayState.corrupted => 4,
+      WalSyncDisplayState.outsideRecoveryWindow => 4,
+      WalSyncDisplayState.retrying => 3,
+      WalSyncDisplayState.syncing => 2,
+      WalSyncDisplayState.uploaded => 1,
+      WalSyncDisplayState.synced => 1,
+      WalSyncDisplayState.waiting => 1,
+    };
+
+/// Max automatic sync attempts before a recording is considered
+/// [WalSyncDisplayState.failed]. This is the budget itself, not a display
+/// mirror: `isAutoUploadEligible` in local_wal_sync.dart drops a recording that
+/// has spent it from every automatic drain, so the label and the behaviour
+/// cannot drift apart. Only the per-recording manual Retry ignores it.
 const int walMaxAutoRetries = 3;
 
 class WalStats {
@@ -124,6 +162,9 @@ class Wal {
   /// The conversation this WAL belongs to. Stamped when ConversationProcessingStartedEvent
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
+
+  /// Canonical start-time location snapshot for delayed/offline finalization.
+  Geolocation? geolocation;
 
   /// Number of sync retry attempts for this WAL.
   int retryCount;
@@ -209,6 +250,7 @@ class Wal {
     this.syncedFrameOffset = 0,
     this.originalStorage,
     this.conversationId,
+    this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
     this.jobId,
@@ -237,6 +279,9 @@ class Wal {
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
+      geolocation: json['geolocation'] is Map<String, dynamic>
+          ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
+          : null,
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
@@ -263,6 +308,7 @@ class Wal {
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
+      'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,

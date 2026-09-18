@@ -500,6 +500,19 @@ final class ConversationRepository {
     }
   }
 
+  /// Replace a conversation in local state with a freshly-fetched server
+  /// version. Used after reprocess so the row sees the new `status` and full
+  /// `structured` payload (not just title), which matters when reprocess
+  /// transitions a `.failed` conversation back to `.completed`.
+  func replace(_ conversation: ServerConversation) {
+    let session = cacheWriteScope.capture()
+    replaceVisible(conversation)
+    emit(.server)
+    Task {
+      try? await local.store(conversation, scope: cacheWriteScope, generation: session)
+    }
+  }
+
   func moveToFolder(id: String, folderId: String?) async throws {
     let operation = MutationOperation.folder(requested: folderId, mutationId: UUID())
     try await mutate(id: id, operation: operation) {

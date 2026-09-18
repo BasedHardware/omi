@@ -23,7 +23,12 @@
 // so a job started under user A can never write A's vector after A signs out.
 import { EMBED_DIM, dot } from '../rewind/embedVector'
 import { embedBatch, embedOne, type EmbedSession } from '../rewind/embeddingClient'
-import { getBackendSession, getSessionEpoch } from '../assistants/core/session'
+import {
+  getBackendSession,
+  getSessionEpoch,
+  isSessionExpired,
+  pullFreshSession
+} from '../assistants/core/session'
 import type { TaskEmbeddingSource } from '../../shared/types'
 import {
   getAllActionItemEmbeddings,
@@ -93,6 +98,37 @@ function readSession(): EmbedSession | null {
 function isExpectedBackendStop(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : ''
   return /\b(402|429)\b/.test(msg)
+}
+
+function isProxyAuthExpired(error: unknown): boolean {
+  return error instanceof Error && /\bstatus 401\b/.test(error.message)
+}
+
+/** Pre-emptive pull when the shared token is already past skew, then the current
+ *  session. Same class as Rewind's `liveEmbedSession` — the hidden-window push
+ *  can stall, and a locally-expired JWT is a doomed 401. */
+async function liveSession(): Promise<EmbedSession | null> {
+  if (isSessionExpired()) await pullFreshSession()
+  return readSession()
+}
+
+/** Run an embedding call with pull-based freshness: pre-check, then 401 → pull
+ *  + retry once, but only when the epoch did not move (account switch / sign-out
+ *  is the caller's persist-guard, not a hot retry). */
+async function withFreshEmbedSession<T>(run: (session: EmbedSession) => Promise<T>): Promise<T> {
+  const first = await liveSession()
+  if (!first) throw new Error('backend session unavailable')
+  try {
+    return await run(first)
+  } catch (caught) {
+    if (!isProxyAuthExpired(caught)) throw caught
+    const epoch = getSessionEpoch()
+    await pullFreshSession()
+    if (getSessionEpoch() !== epoch) throw caught
+    const second = readSession()
+    if (!second || second.token === first.token) throw caught
+    return await run(second)
+  }
 }
 
 /** Persist one vector as a row BLOB on its source table. */
@@ -168,10 +204,9 @@ export function removeFromIndex(source: TaskEmbeddingSource, id: number): void {
  * caller can fall back. The client L2-normalizes the vector already.
  */
 export async function embedQuery(text: string): Promise<Float32Array | null> {
-  const session = readSession()
-  if (!session || !text.trim()) return null
+  if (!text.trim()) return null
   try {
-    const vec = await embedOne(session, text, 'RETRIEVAL_QUERY')
+    const vec = await withFreshEmbedSession((session) => embedOne(session, text, 'RETRIEVAL_QUERY'))
     return vec.length === EMBED_DIM ? vec : null
   } catch (e) {
     console.warn(`[task-embed] query embed failed: ${(e as Error).message}`)
@@ -207,11 +242,12 @@ export async function generateEmbeddingForTask(
   id: number,
   text: string
 ): Promise<void> {
-  const session = readSession()
-  if (!session || !text.trim()) return
+  if (!text.trim()) return
   const epoch = getSessionEpoch()
   try {
-    const vec = await embedOne(session, text, 'RETRIEVAL_DOCUMENT')
+    const vec = await withFreshEmbedSession((session) =>
+      embedOne(session, text, 'RETRIEVAL_DOCUMENT')
+    )
     if (getSessionEpoch() !== epoch) return // session changed mid-request; drop
     if (vec.length !== EMBED_DIM) return
     persistEmbedding(source, id, vec)
@@ -245,8 +281,7 @@ export async function backfillMissing(): Promise<void> {
   let embedded = 0
   for (const source of ['action_item', 'staged_task'] as const) {
     while (embedded < BACKFILL_MAX_PER_LAUNCH) {
-      const session = readSession()
-      if (!session) return // signed out mid-sweep; the next launch resumes it
+      if (!(await liveSession())) return // signed out mid-sweep; the next launch resumes it
       const limit = Math.min(BACKFILL_PAGE, BACKFILL_MAX_PER_LAUNCH - embedded)
       const rows = missingPage(source, limit)
       if (rows.length === 0) break // this source is fully embedded
@@ -254,10 +289,12 @@ export async function backfillMissing(): Promise<void> {
       const epoch = getSessionEpoch()
       let vectors: (Float32Array | null)[]
       try {
-        vectors = await embedBatch(
-          session,
-          rows.map((r) => r.description),
-          'RETRIEVAL_DOCUMENT'
+        vectors = await withFreshEmbedSession((session) =>
+          embedBatch(
+            session,
+            rows.map((r) => r.description),
+            'RETRIEVAL_DOCUMENT'
+          )
         )
       } catch (e) {
         if (isExpectedBackendStop(e)) return // quota/rate limited — stop quietly

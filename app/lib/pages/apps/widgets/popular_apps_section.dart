@@ -159,7 +159,7 @@ class PopularAppsSection extends StatelessWidget {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                const Icon(Icons.star_rounded, color: Color(0xFF8B5CF6), size: 14),
+                                const Icon(Icons.star_rounded, color: Colors.white, size: 14),
                                 const SizedBox(width: 4),
                                 Text(
                                   app.getRatingAvg()!,
@@ -188,13 +188,18 @@ class PopularAppsSection extends StatelessWidget {
                       width: 72,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: app.enabled ? Colors.grey.shade700 : const Color(0xFF8B5CF6),
+                        color: app.enabled ? Colors.grey.shade700 : Colors.white,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Center(
                         child: Text(
                           app.enabled ? context.l10n.open : 'Enable',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                          // Black on the white "Enable" fill, white on the grey "Open" one.
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: app.enabled ? Colors.white : Colors.black,
+                          ),
                         ),
                       ),
                     ),

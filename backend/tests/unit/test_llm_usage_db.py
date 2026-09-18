@@ -74,11 +74,17 @@ class _FakeCollection:
 
 
 class _FakeUserRef:
-    def __init__(self, collection):
+    def __init__(self, collection, subscription_plan=None):
         self._collection = collection
+        self._subscription_plan = subscription_plan
 
     def collection(self, name):
         return self._collection
+
+    def get(self, *_args):
+        if self._subscription_plan is None:
+            return _FakeDocSnapshot({}, exists=False)
+        return _FakeDocSnapshot({'subscription': {'plan': self._subscription_plan}})
 
 
 def test_record_llm_usage_sanitizes_model_with_dots():
@@ -103,8 +109,51 @@ def test_record_llm_usage_sanitizes_model_with_dots():
     call = doc_ref.set_calls[0]
     assert call["merge"] is True
     # Check that '.' is replaced with '_'
-    assert "chat.gpt-4_1-mini.input_tokens" in call["data"]
-    assert "chat.gpt-4_1-mini.output_tokens" in call["data"]
+    # Asserted on the STORED SHAPE, not on a dotted key in the payload. These assertions used to read
+    # `"chat.gpt-4_1-mini.input_tokens" in call["data"]`, which is why the nesting defect was invisible:
+    # the payload was exactly right and Firestore stored it as one field whose NAME contained dots,
+    # because a dot is a field path in update() and a literal character in set().
+    assert set(call["data"]["chat"]["gpt-4_1-mini"]) >= {"input_tokens", "output_tokens"}
+
+
+def test_bucket_attribution_maps_legacy_pro_and_omits_unmeasured_cost():
+    doc_ref = _FakeDocRef()
+    collection = _FakeCollection(doc_ref)
+    user_ref = _FakeUserRef(collection, subscription_plan='pro')
+
+    with patch.object(llm_usage, 'db') as patched_db:
+        patched_db.collection.return_value.document.return_value = user_ref
+        llm_usage.record_llm_usage_bucket('user', input_tokens=10, output_tokens=5)
+
+    data = doc_ref.set_calls[0]['data']
+    assert 'cost_usd' not in data.get('desktop_chat', {})
+    assert 'cost_usd' not in data.get('desktop_chat_omi', {})
+    architect = data['plan_usage']['architect']
+    assert architect['desktop_chat']['input_tokens'] == 10
+    assert architect['desktop_chat']['output_tokens'] == 5
+    assert architect['_metadata']['cost_status_counts']['missing'] == 1
+
+
+def test_bucket_complete_cost_is_joinable_to_catalog_plan():
+    doc_ref = _FakeDocRef()
+    collection = _FakeCollection(doc_ref)
+    user_ref = _FakeUserRef(collection, subscription_plan='operator')
+
+    with patch.object(llm_usage, 'db') as patched_db:
+        patched_db.collection.return_value.document.return_value = user_ref
+        llm_usage.record_llm_usage_bucket(
+            'user',
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.25,
+            cost_status='complete',
+        )
+
+    data = doc_ref.set_calls[0]['data']
+    assert data['desktop_chat']['cost_usd'] == 0.25
+    operator = data['plan_usage']['operator']
+    assert operator['desktop_chat']['cost_usd'] == 0.25
+    assert operator['_metadata']['cost_status_counts']['complete'] == 1
 
 
 def test_record_llm_usage_sanitizes_model_with_slash():
@@ -128,8 +177,7 @@ def test_record_llm_usage_sanitizes_model_with_slash():
     call = doc_ref.set_calls[0]
     assert call["merge"] is True
     # Check that both '/' and '.' are replaced with '_'
-    assert "chat.google_gemini-flash-1_5-8b.input_tokens" in call["data"]
-    assert "chat.google_gemini-flash-1_5-8b.output_tokens" in call["data"]
+    assert set(call["data"]["chat"]["google_gemini-flash-1_5-8b"]) >= {"input_tokens", "output_tokens"}
 
 
 def test_record_llm_usage_skips_zero_tokens():
@@ -228,7 +276,7 @@ def test_record_llm_usage_sanitizes_all_special_chars():
     assert len(doc_ref.set_calls) == 1
     call = doc_ref.set_calls[0]
     # All special chars should be replaced with '_'
-    assert "chat.foo_bar_baz_qux_quux_corge_grault_garply.input_tokens" in call["data"]
+    assert "input_tokens" in call["data"]["chat"]["foo_bar_baz_qux_quux_corge_grault_garply"]
 
 
 def test_record_llm_usage_nonzero_input_only():

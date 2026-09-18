@@ -1057,7 +1057,7 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("returns a typed failure when a 620 KiB session listing cannot persist its full output", async () => {
+  it("keeps a 620 KiB session listing successful when artifact persistence is unavailable", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const surfaceContextSentinel = "UNSAVED_CONTEXT_SENTINEL".repeat(26_000);
     const result = await kernel.executeRun({
@@ -1072,23 +1072,32 @@ describe("agent control tools", () => {
     vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
       throw new Error("deterministic artifact persistence failure");
     });
+    const degraded = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
       ownerId: "owner",
     });
-    const failed = parseToolResult(raw);
+    const projected = parseToolResult(raw);
 
     expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
     expect(raw).not.toContain("UNSAVED_CONTEXT_SENTINEL");
-    expect(failed).toMatchObject({
-      ok: false,
-      error: { code: "tool_result_exceeded_provider_budget" },
+    expect(projected).toMatchObject({
+      ok: true,
       toolResultEnvelope: {
-        status: "failed",
-        truncated: false,
-        fullOutputRef: null,
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: "artifact:unavailable",
       },
     });
+    // The degraded record is a pipe-safe operational stderr line, not
+    // error-level console output.
+    expect(degraded.mock.calls.some(([chunk]) => {
+      const line = String(chunk);
+      return line.includes("area=tool_result_projection")
+        && line.includes("outcome=degraded")
+        && !line.includes("UNSAVED_CONTEXT_SENTINEL");
+    })).toBe(true);
+    degraded.mockRestore();
     store.close();
   });
 
@@ -1227,6 +1236,45 @@ describe("agent control tools", () => {
         fullOutputRef: expect.stringMatching(/^artifact:/),
       },
     });
+    store.close();
+  });
+
+  it("reports direct-control artifact persistence failure with the original byte count", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "DIRECT_PERSIST_FAILURE_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "direct persistence failure", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+    vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
+      throw new Error("deterministic direct-control persistence failure");
+    });
+
+    const raw = await handleAgentControlToolCall(
+      { ...ownerContext(kernel), trustedUserControl: true },
+      "get_agent_run",
+      { ownerId: "owner", runId: result.run.runId },
+    );
+    const failed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(failed).toMatchObject({
+      ok: false,
+      error: {
+        code: "tool_output_persist_failed",
+        originalBytes: expect.any(Number),
+      },
+      toolResultEnvelope: {
+        status: "failed",
+        truncated: false,
+        fullOutputRef: null,
+      },
+    });
+    expect(failed.error.originalBytes).toBeGreaterThan(128 * 1024);
     store.close();
   });
 
@@ -2606,6 +2654,152 @@ describe("agent control tools", () => {
     });
     expect(spawned.session.defaultAdapterId).toBe("pi-mono");
     expect(adapter.executed).toHaveLength(1);
+    store.close();
+  });
+
+  it("normalizes a legacy Codex adapter alias only on an authorized managed Pi spawn", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const surface = {
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "voice-codex-alias",
+    };
+    const coordinator = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: surface,
+      defaultAdapterId: "pi-mono",
+      modelProfile: "omi-sonnet",
+      providerBoundary: "managed_cloud",
+      executionRole: "coordinator",
+    });
+    const parent = await kernel.executeRun({
+      ownerId: "owner",
+      surfaceKind: surface.surfaceKind,
+      externalRefKind: surface.externalRefKind,
+      externalRefId: surface.externalRefId,
+      defaultAdapterId: "pi-mono",
+      adapterId: "pi-mono",
+      modelProfile: "omi-sonnet",
+      model: "omi-sonnet",
+      providerBoundary: "managed_cloud",
+      executionRole: "coordinator",
+      clientId: "realtime",
+      requestId: "voice-parent-codex-alias",
+      prompt: "Delegate this",
+      cwd: "/tmp",
+    });
+
+    const spawned = parseToolResult(await handleAgentControlToolCall(
+      {
+        ...ownerContext(kernel),
+        defaultAdapterId: "pi-mono",
+        providerBoundary: "managed_cloud",
+        callerSessionId: coordinator.agentSessionId,
+        executionRole: "coordinator",
+        authorizedCallerRunId: parent.run.runId,
+        authorizedProducerJournal: {
+          schemaVersion: 1,
+          surface,
+          continuityKey: "voice-codex-alias",
+          pillId: "pill-codex-alias",
+          userText: "Delegate this",
+          assistantText: "Delegating",
+          objective: "Use the managed provider",
+          title: "Managed child",
+        },
+        authorizedToolInvocation: {
+          invocationId: "voice-codex-alias-invocation",
+          runId: parent.run.runId,
+          attemptId: parent.attempt!.attemptId,
+          toolName: "spawn_agent",
+        },
+      },
+      "spawn_agent",
+      {
+        objective: "Use the managed provider",
+        adapterId: "codex",
+        visible: true,
+        externalRefId: "pill-codex-alias",
+        requestId: "voice-codex-alias-child",
+        clientId: "realtime",
+        ownerId: "owner",
+      },
+    ));
+
+    expect(spawned.ok).toBe(true);
+    expect(spawned.session).toMatchObject({
+      defaultAdapterId: "pi-mono",
+      providerBoundary: "managed_cloud",
+    });
+    await waitUntil(() => adapter.executed.length >= 2
+      && store.allRows("SELECT status FROM runs").every((row) => row.status === "succeeded"));
+    store.close();
+  });
+
+  it("does not normalize a Codex alias from signed direct control", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const result = parseToolResult(await handleAgentControlToolCall(
+      {
+        ...ownerContext(kernel),
+        defaultAdapterId: "pi-mono",
+        providerBoundary: "managed_cloud",
+        trustedUserControl: true,
+      },
+      "spawn_agent",
+      {
+        objective: "do not reinterpret a direct adapter override",
+        adapterId: "codex",
+        requestId: "direct-codex-alias",
+        clientId: "desktop-floating-pill",
+        ownerId: "owner",
+      },
+    ));
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed", message: "Unknown production adapter: codex" },
+    });
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
+  it("projects response-observed providers separately from the requested model", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    adapter.deferResult();
+    const execution = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      model: "omi-sonnet",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    adapter.resolveDeferred({
+      text: "provider-aware answer",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-5.6-luna"],
+    });
+    const completed = await execution;
+    expect(JSON.parse(store.getRow("SELECT result_json FROM runs WHERE run_id = ?", [completed.run.runId]).result_json)).toMatchObject({
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-5.6-luna"],
+    });
+
+    const inspected = parseToolResult(await handleAgentControlToolCall(
+      ownerContext(kernel),
+      "get_agent_run",
+      { ownerId: "owner", runId: completed.run.runId },
+    ));
+    expect(inspected.run).toMatchObject({
+      requestedModelId: "omi-sonnet",
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-5.6-luna"],
+      result: {
+        providerTargets: ["openai-codex"],
+        modelsUsed: ["gpt-5.6-luna"],
+      },
+    });
     store.close();
   });
 

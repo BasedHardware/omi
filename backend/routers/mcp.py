@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from utils.executors import db_executor, postprocess_executor
+from utils.executors import postprocess_executor
 from utils.mcp_data import date_only_to_utc_epoch
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -24,6 +24,7 @@ import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from models.conversation import AppResult
+from models.screen_activity import ScreenActivityCoverage
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
@@ -42,6 +43,10 @@ from dependencies import (
 )
 from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
+from utils.memory.default_read_rollout import (
+    MemoryReadDecision,
+    read_default_read_rollout,
+)
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
@@ -90,6 +95,7 @@ class McpScreenActivityAppSummary(BaseModel):
 class McpScreenActivitySummaryResponse(BaseModel):
     apps: Dict[str, McpScreenActivityAppSummary] = {}
     total_screenshots: int = 0
+    coverage: Optional[ScreenActivityCoverage] = None
 
 
 @router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)

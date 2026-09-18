@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+# Cheap pre-push always uses this interpreter. desktop-flow-lint imports PyYAML;
+# harness wrappers import python-dotenv via dev_harness.cli. A directory named
+# `.venv` is not proof it can run those gates (Spine A: incomplete venv made
+# `git push` fail at check_desktop_flow_lint_if_needed).
+dev_harness_venv_covers_cheap_gates() {
+  local python_bin="$1"
+  [ -n "$python_bin" ] || return 1
+  "$python_bin" -c 'import dotenv, yaml' >/dev/null 2>&1
+}
+
 # Print the canonical locked backend interpreter when setup has created it.
 dev_harness_canonical_python() {
   local repo_root candidate
@@ -8,6 +18,10 @@ dev_harness_canonical_python() {
     "$repo_root/backend/.venv/bin/python" \
     "$repo_root/backend/.venv/Scripts/python.exe"; do
     if [ -x "$candidate" ]; then
+      if ! dev_harness_venv_covers_cheap_gates "$candidate"; then
+        echo "dev-harness: $candidate exists but cannot import yaml and dotenv (incomplete venv); ignoring it. Run: make lane-bootstrap" >&2
+        continue
+      fi
       printf '%s\n' "$candidate"
       return
     fi
@@ -35,6 +49,10 @@ dev_harness_python() {
     "$repo_root/backend/venv/bin/python" \
     "$repo_root/backend/venv/Scripts/python.exe"; do
     if [ -x "$candidate" ]; then
+      if ! dev_harness_venv_covers_cheap_gates "$candidate"; then
+        echo "dev-harness: $candidate exists but cannot import yaml and dotenv (incomplete venv); ignoring it. Run: make lane-bootstrap" >&2
+        continue
+      fi
       printf '%s\n' "$candidate"
       return
     fi
@@ -87,4 +105,25 @@ dev_harness_pythonpath() {
     fi
   fi
   printf '%s\n' "$value"
+}
+
+# Name the provisioning step instead of letting an import traceback stand in for
+# it. The harness's own prerequisite check lives inside the Python CLI, so an
+# interpreter without backend/requirements.txt installed dies at
+# `import dev_harness.cli` before that check can report anything.
+dev_harness_require_cli() {
+  local python_bin="$1"
+  local pythonpath="$2"
+  local probe
+
+  if probe="$(PYTHONPATH="$pythonpath" "$python_bin" -c 'import dev_harness.cli' 2>&1)"; then
+    return 0
+  fi
+
+  {
+    echo "Omi dev harness is not provisioned: $python_bin cannot import dev_harness.cli"
+    printf '%s\n' "$probe" | tail -n 1 | sed 's/^/  /'
+    echo "Run \`make lane-bootstrap\` first (Python 3.11 venv + cheap-gate packages). Uvicorn/pyright: \`make lane-backend\`. Locked pylock sync remains \`make setup-backend\`."
+  } >&2
+  return 1
 }

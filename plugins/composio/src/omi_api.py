@@ -76,10 +76,9 @@ def create_fact(user_id: str, text: str, source: str = "other", source_spec: Opt
         logger.info("Successfully created fact in OMI")
         return True
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error creating fact: {e}")
+        logger.error(f"Error creating fact: {type(e).__name__}")
         if 'response' in locals():
             logger.error(f"Response status: {response.status_code}")
-            logger.error(f"Response text: {response.text}")
         return False
 
 

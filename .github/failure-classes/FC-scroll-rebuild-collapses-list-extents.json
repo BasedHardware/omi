@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-scroll-rebuild-collapses-list-extents",
+  "violated_contract": "A scrolling list of intrinsically sized children (chat markdown, citation rows) must keep stable sliver extents across a user drag. setState on every pointer-move, or changing ListView padding when follow-mode flips, may cache a tight/zero child extent so already-visible text and citation titles scrunch after a tiny scroll even though first paint and newly appended messages looked fine.",
+  "canonical_prevention": "Rebuild the transcript only when follow-mode actually changes; keep list padding independent of follow-mode. Cover with a ListView.builder drag that asserts citation RenderBox height and title text still present — pumping AIMessage in a SingleChildScrollView is not this contract.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/chat_scroll_layout_test.dart",
+    "app/lib/pages/chat/chat_scroll_policy.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/chat/**"
+  ],
+  "status": "open"
+}

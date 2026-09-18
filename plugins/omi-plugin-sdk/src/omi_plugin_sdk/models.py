@@ -57,6 +57,11 @@ class ActionItem(BaseModel):
     capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     capture_owner: Optional[Literal['user', 'other', 'unknown']] = None
+    owner_name: Optional[str] = Field(default=None, description="The person's name when the owner is known")
+    context: Optional[str] = Field(default=None, description='One line explaining why or how the item matters')
+    due_certainty: Optional[Literal['confirmed', 'tentative']] = Field(
+        default=None, description='Whether the due date was confirmed or only discussed tentatively'
+    )
     concrete_deliverable: Optional[bool] = Field(
         default=None,
         description='True only when the commitment names a concrete deliverable or outcome',
@@ -121,6 +126,14 @@ class ActionItemsExtraction(BaseModel):
     )
 
 
+class Section(BaseModel):
+    heading: str = Field(description='A descriptive heading chosen for this conversation')
+    body_markdown: str = Field(description='Free-form markdown containing the section details')
+    source_segment_ids: List[str] = Field(
+        default_factory=list, description='Transcript segment IDs that directly support this section'
+    )
+
+
 class Structured(BaseModel):
     title: str = Field(description="A title/name for this conversation", default="")
     overview: str = Field(
@@ -129,6 +142,9 @@ class Structured(BaseModel):
     )
     emoji: str = Field(description="An emoji to represent the conversation", default="🧠")
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
+    sections: List[Section] = Field(
+        description='Detailed, free-form note sections in the model-chosen structure', default_factory=list
+    )
     action_items: List[ActionItem] = Field(
         description="A list of action items from the conversation", default_factory=list
     )

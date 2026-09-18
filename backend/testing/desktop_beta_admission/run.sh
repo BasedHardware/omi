@@ -12,7 +12,9 @@ elif command -v uv >/dev/null 2>&1; then
   python_command=(
     uv run --no-project --python "$python_version"
     --with "google-cloud-firestore==2.20.0"
-    --with "prometheus-client==0.21.1" -- python
+    --with "fastapi==0.121.0"
+    --with "prometheus-client==0.21.1"
+    --with "redis==5.0.8" -- python
   )
 else
   echo "Missing backend/.venv and uv. Run backend/scripts/sync-python-deps.sh first." >&2
@@ -63,7 +65,16 @@ printf -v quoted_python_command ' %q' "${python_command[@]}"
 printf -v quoted_test_path '%q' "$repo_root/backend/testing/desktop_beta_admission/firestore_contention_test.py"
 printf -v quoted_python_path '%q' "$repo_root/backend"
 runner_command="FIRESTORE_EMULATOR_HOST=127.0.0.1:${emulator_port} GOOGLE_CLOUD_PROJECT=demo-desktop-beta GCLOUD_PROJECT=demo-desktop-beta PYTHONPATH=${quoted_python_path}${quoted_python_command} ${quoted_test_path}"
-firebase_command=(npx --prefix "$repo_root" --yes "firebase-tools@${firebase_tools_version}" emulators:exec --only firestore --project demo-desktop-beta --config "$emulator_config" "$runner_command")
+# Prefer the checked-in firebase-tools when it matches the pin: `npx --prefix`
+# resolves its bin path against the CURRENT directory on some npm versions, and
+# this script deliberately launches from an isolated temp dir (firebase writes
+# debug logs to cwd), which surfaced as `sh: firebase: command not found`.
+local_firebase="$repo_root/node_modules/.bin/firebase"
+if [[ -x "$local_firebase" && "$("$local_firebase" --version 2>/dev/null)" == "$firebase_tools_version" ]]; then
+  firebase_command=("$local_firebase" emulators:exec --only firestore --project demo-desktop-beta --config "$emulator_config" "$runner_command")
+else
+  firebase_command=(npx --prefix "$repo_root" --yes "firebase-tools@${firebase_tools_version}" emulators:exec --only firestore --project demo-desktop-beta --config "$emulator_config" "$runner_command")
+fi
 
 # Firebase writes its debug logs to the current directory, so never launch it
 # from the checkout. The supervisor owns and drains the Firebase process group,

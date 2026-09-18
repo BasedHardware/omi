@@ -199,21 +199,17 @@ class TestPremiumOpenRouter:
 # ---------------------------------------------------------------------------
 # Premium profile — Anthropic (via get_model + anthropic_client)
 # ---------------------------------------------------------------------------
-class TestPremiumAnthropic:
-    """Test chat_agent via Anthropic client (get_model, not get_llm)."""
+class TestPremiumChatAgent:
+    """Test chat_agent via get_llm (OpenAI/Luna)."""
 
-    @pytest.mark.asyncio
-    async def test_chat_agent_anthropic(self):
+    def test_chat_agent_luna(self):
         model = get_model('chat_agent')
-        assert model == 'claude-sonnet-4-6', f"chat_agent should be claude-sonnet-4-6, got {model}"
+        assert model == 'gpt-5.6-luna', f"chat_agent should be gpt-5.6-luna, got {model}"
         assert model == ANTHROPIC_AGENT_MODEL
 
-        response = await anthropic_client.messages.create(
-            model=model,
-            max_tokens=50,
-            messages=[{"role": "user", "content": SIMPLE_PROMPT}],
-        )
-        text = response.content[0].text.strip()
+        llm = get_llm('chat_agent')
+        response = llm.invoke(SIMPLE_PROMPT)
+        text = response.content.strip() if hasattr(response, 'content') else str(response).strip()
         assert text, f"chat_agent ({model}) returned empty response"
         print(f"  chat_agent ({model}): {text[:60]}")
 

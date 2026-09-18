@@ -289,7 +289,12 @@ data class BleDeviceDiagnostics (
    * Count of connect attempts that never reached didConnect. Surfaces the
    * silent-failure path separately from established-then-dropped disconnects.
    */
-  val failToConnectCount: Long
+  val failToConnectCount: Long,
+  /** BLE bytes consumed by native offline writers since the app most recently
+   * entered the background. These packets intentionally never reach Dart. */
+  val nativeBackgroundBytesConsumed: Long,
+  /** BLE notification packets represented by [nativeBackgroundBytesConsumed]. */
+  val nativeBackgroundPacketsConsumed: Long
 )
  {
   companion object {
@@ -298,7 +303,9 @@ data class BleDeviceDiagnostics (
       val reconnectionCount = pigeonVar_list[1] as Long
       val connectedAt = pigeonVar_list[2] as Long
       val failToConnectCount = pigeonVar_list[3] as Long
-      return BleDeviceDiagnostics(disconnectHistory, reconnectionCount, connectedAt, failToConnectCount)
+      val nativeBackgroundBytesConsumed = pigeonVar_list[4] as Long
+      val nativeBackgroundPacketsConsumed = pigeonVar_list[5] as Long
+      return BleDeviceDiagnostics(disconnectHistory, reconnectionCount, connectedAt, failToConnectCount, nativeBackgroundBytesConsumed, nativeBackgroundPacketsConsumed)
     }
   }
   fun toList(): List<Any?> {
@@ -307,6 +314,8 @@ data class BleDeviceDiagnostics (
       reconnectionCount,
       connectedAt,
       failToConnectCount,
+      nativeBackgroundBytesConsumed,
+      nativeBackgroundPacketsConsumed,
     )
   }
   override fun equals(other: Any?): Boolean {

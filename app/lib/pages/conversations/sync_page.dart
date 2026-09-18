@@ -16,11 +16,14 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/sync/sync_card_progress_line.dart';
 import 'package:omi/utils/sync_confirmation.dart';
+import 'widgets/sync_error_card.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
+import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 
 Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
@@ -516,12 +519,12 @@ class _SyncPageState extends State<SyncPage> {
         case SyncPhase.downloadingFromDevice:
           title = l.syncCardDownloadingTitle;
           subtitle = _progressLine(s, speedStr);
-          action = _statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
+          action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           break;
         case SyncPhase.uploadingToCloud:
           title = l.syncCardUploadingTitle;
           subtitle = _progressLine(s, null);
-          action = _statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
+          action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           break;
         case SyncPhase.processingOnServer:
           title = l.syncCardProcessing;
@@ -535,7 +538,7 @@ class _SyncPageState extends State<SyncPage> {
           title = l.syncCardUploadingTitle;
           subtitle = _progressLine(s, speedStr);
           if (syncProvider.isSdCardSyncing) {
-            action = _statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
+            action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           }
           break;
       }
@@ -544,11 +547,16 @@ class _SyncPageState extends State<SyncPage> {
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
-      // Uploaded WAL counts are queue state, not server segment progress.
-      subtitle = l.syncProcessingBackgroundHint;
+      final counts = syncProvider.offlineServerProcessingCounts;
+      subtitle = SyncCardProgressLine.serverProcessingSubtitle(
+            processed: counts.processed,
+            total: counts.total,
+            counterLabel: (p, t) => l.processingProgress(p, t),
+          ) ??
+          l.syncProcessingBackgroundHint;
     } else if (readyToSync > 0) {
       title = l.syncCardReadyCount(readyToSync);
-      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () {
+      action = statusActionPill(l.sync, Colors.deepPurpleAccent, () {
         if (context.read<ConnectivityProvider>().isConnected) {
           _handleSyncWals(context, syncProvider);
         } else {
@@ -608,53 +616,19 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   String? _progressLine(SyncState s, String? speedStr) {
-    final cur = s.currentFile ?? 0;
-    final tot = s.totalFiles ?? 0;
-    final parts = <String>[];
-    if (tot > 0) parts.add(context.l10n.syncCardProgressOf(cur, tot));
-    if (speedStr != null) parts.add(speedStr);
-    return parts.isEmpty ? null : parts.join(' · ');
-  }
-
-  Widget _statusActionPill(String label, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(100)),
-        child: Text(
-          label,
-          style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
-        ),
-      ),
+    return SyncCardProgressLine.subtitle(
+      phase: s.phase,
+      currentFile: s.currentFile,
+      totalFiles: s.totalFiles,
+      counterLabel: (processed, total) => context.l10n.syncCardProgressOf(processed, total),
+      speedSuffix: speedStr,
     );
   }
 
   Widget _buildSyncErrorCard(SyncProvider syncProvider) {
-    final errorMessage = syncProvider.syncError!;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _formatErrorMessage(context, errorMessage),
-              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          _statusActionPill(context.l10n.retry, Colors.redAccent, () => syncProvider.retrySync()),
-        ],
-      ),
+    return SyncErrorCard(
+      message: _formatErrorMessage(context, syncProvider.syncError!),
+      onRetry: () => syncProvider.retrySync(),
     );
   }
 

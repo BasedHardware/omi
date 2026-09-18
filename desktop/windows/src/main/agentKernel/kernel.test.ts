@@ -22,6 +22,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { AgentRuntimeKernel } from './kernel'
 import { AdapterRegistry } from './adapterRegistry'
 import { SqliteAgentStore, type DatabaseFactory } from './store'
+import {
+  DEFAULT_DELEGATION_MAX_BUDGET_USD,
+  DEFAULT_DELEGATION_MAX_DEPTH,
+  HARD_DELEGATION_MAX_BUDGET_USD,
+  HARD_DELEGATION_MAX_DEPTH
+} from './kernelSupport'
 import type {
   AdapterAttemptContext,
   AdapterAttemptResult,
@@ -1240,6 +1246,54 @@ describe('AgentRuntimeKernel — delegateAgent', () => {
     await expect(
       kernel.delegateAgent(delegation(parentRunId, { maxBudgetUsd: 11 }))
     ).rejects.toThrow(/maxBudgetUsd must be greater than 0 and at most 10/)
+  })
+
+  // The two cases above reject 0 and 11, and 0 and 6, which leaves the end of
+  // each range untested — and the end is what the error message promises the
+  // caller: "at most 10", "between 1 and 5". Moving either comparison one step
+  // rejects the exact maximum the message advertises, and a mutation audit
+  // confirmed nothing here noticed.
+  it('allows a delegation at exactly the budget ceiling', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+    const parentRunId = await parentRun(kernel)
+
+    await expect(
+      kernel.delegateAgent(
+        delegation(parentRunId, { maxBudgetUsd: HARD_DELEGATION_MAX_BUDGET_USD })
+      )
+    ).resolves.toBeTruthy()
+  })
+
+  it('allows a delegation at exactly the depth ceiling', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+    const parentRunId = await parentRun(kernel)
+
+    await expect(
+      kernel.delegateAgent(delegation(parentRunId, { maxDepth: HARD_DELEGATION_MAX_DEPTH }))
+    ).resolves.toBeTruthy()
+  })
+
+  it('gives a delegation that names no budget the documented default', async () => {
+    // The default is the allowance a delegated agent gets when the caller says
+    // nothing, so it is the number that decides what an ordinary delegation may
+    // spend. Nothing read it: cutting it from 5 to 1 left the suite green,
+    // because every case above passes an explicit value.
+    const { kernel } = newKernel(fakeAdapter())
+    const parentRunId = await parentRun(kernel)
+
+    const created = await kernel.delegateAgent(delegation(parentRunId))
+    // The resolved bounds are recorded in the delegation's request payload,
+    // which is what a later audit of "what was this agent allowed to spend"
+    // reads. Asserting the literal as well as the constant so that moving the
+    // constant is a visible change and not a silently-tracking one.
+    const request = JSON.parse(created.delegation.requestJson) as {
+      maxBudgetUsd: number
+      maxDepth: number
+    }
+    expect(request.maxBudgetUsd).toBe(5)
+    expect(request.maxBudgetUsd).toBe(DEFAULT_DELEGATION_MAX_BUDGET_USD)
+    expect(request.maxDepth).toBe(3)
+    expect(request.maxDepth).toBe(DEFAULT_DELEGATION_MAX_DEPTH)
   })
 
   it('refuses to delegate from another owner’s run', async () => {

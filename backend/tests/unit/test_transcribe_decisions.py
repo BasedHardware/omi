@@ -149,7 +149,6 @@ def test_speech_profile_and_speaker_id_gates():
     assert should_load_speech_profile(use_custom_stt=False, is_multi_channel=False, include_speech_profile=True) is True
     assert should_load_speech_profile(use_custom_stt=True, is_multi_channel=False, include_speech_profile=True) is False
     assert should_load_speech_profile(use_custom_stt=False, is_multi_channel=True, include_speech_profile=True) is False
-
     assert (
         should_enable_speaker_identification(
             use_custom_stt=False,

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-drain-stall-completes-silently",
+  "violated_contract": "When a device-storage drain protocol enters a state where it is structurally unable to serve stored data — e.g. a mode that makes drain and recording mutually exclusive, or full storage that stays armed for recording and yields no pages — a stall caused by that state must be classified and surfaced to the user as an actionable error, never allowed to fall through to a generic \"completed, nothing new\" success state. Silent completion after a classifiable stall hides that the transfer never happened and that the user must act (e.g. stop recording) to unblock it.",
+  "canonical_prevention": "FlashPageWalSyncImpl re-queries device status on a stall while still in batch mode and classifies it via FlashSyncStallReason (recordingSuspected, deviceFull), exposed through WalSyncs.flashStallReason. SyncProvider._performSync checks the classified reason before its fallback branch and maps a classified stall with no new conversations to a user-facing, localized error state instead of toCompleted(). Regression tests replay each classified-stall path and assert the state is error, not completed.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/flash_page_stall_classification_test.dart",
+    "app/test/providers/sync_provider_flash_stall_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/**",
+    "app/lib/providers/sync_provider.dart"
+  ],
+  "status": "open"
+}

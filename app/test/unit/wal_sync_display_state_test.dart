@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/wals/wal.dart';
 
 /// Pure mapping that the entire sync UI + provider classification depends on.
@@ -93,6 +94,63 @@ void main() {
     });
   });
 
+  group('worstSessionSyncState', () {
+    test('empty session -> null (nothing to report)', () {
+      expect(worstSessionSyncState(const []), isNull);
+    });
+
+    test('a single healthy WAL reports its own state', () {
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.miss)]),
+        WalSyncDisplayState.waiting,
+      );
+    });
+
+    test('failed outranks retrying, syncing and waiting', () {
+      expect(
+        worstSessionSyncState([
+          makeWal(status: WalStatus.miss, retryCount: 1),
+          makeWal(status: WalStatus.miss, isSyncing: true),
+          makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries),
+          makeWal(status: WalStatus.miss),
+        ]),
+        WalSyncDisplayState.failed,
+        reason: 'the indicator must name the WAL that needs the user, not the busiest one',
+      );
+    });
+
+    test('retrying outranks syncing and waiting', () {
+      expect(
+        worstSessionSyncState([
+          makeWal(status: WalStatus.miss, isSyncing: true),
+          makeWal(status: WalStatus.miss, retryCount: 1),
+        ]),
+        WalSyncDisplayState.retrying,
+      );
+    });
+
+    test('corrupted and outsideRecoveryWindow are terminal like failed', () {
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.corrupted)]),
+        WalSyncDisplayState.corrupted,
+      );
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.outsideRecoveryWindow)]),
+        WalSyncDisplayState.outsideRecoveryWindow,
+      );
+    });
+
+    test('only failed is retryable', () {
+      for (final state in WalSyncDisplayState.values) {
+        expect(
+          isRetryableSyncState(state),
+          state == WalSyncDisplayState.failed,
+          reason: '$state must not offer a retry that cannot succeed',
+        );
+      }
+    });
+  });
+
   group('Wal jobId/uploadedAt persistence', () {
     test('round-trips through toJson/fromJson', () {
       final w = makeWal(status: WalStatus.uploaded, jobId: 'job-xyz')..uploadedAt = 1700000123;
@@ -116,5 +174,25 @@ void main() {
       expect(back.uploadedAt, 0);
       expect(back.status, WalStatus.miss);
     });
+  });
+
+  test('recording location round-trips for delayed sync', () {
+    final capturedAt = DateTime.utc(2026, 8, 1, 12, 30);
+    final wal = makeWal(status: WalStatus.miss)
+      ..geolocation = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.0060,
+        accuracy: 8.5,
+        time: capturedAt,
+        captureSource: 'current_position',
+      );
+
+    final restored = Wal.fromJson(wal.toJson());
+
+    expect(restored.geolocation?.latitude, 40.7128);
+    expect(restored.geolocation?.longitude, -74.0060);
+    expect(restored.geolocation?.accuracy, 8.5);
+    expect(restored.geolocation?.time, capturedAt);
+    expect(restored.geolocation?.captureSource, 'current_position');
   });
 }

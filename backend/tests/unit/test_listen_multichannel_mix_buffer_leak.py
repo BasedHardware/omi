@@ -28,14 +28,15 @@ def _make_receiver(audio_bytes_send):
             request=SimpleNamespace(codec='pcm', sample_rate=TARGET_SAMPLE_RATE, websocket=None),
             use_custom_stt=True,
             audio_bytes_send=audio_bytes_send,
-            state=SimpleNamespace(last_audio_received_time=0.0),
+            state=SimpleNamespace(last_audio_received_time=0.0, first_audio_byte_timestamp=1.0),
         ),
         channel_id_to_index={0: 0, 1: 1},
         multi_opus_decoders=[None, None],
         stt_sockets_multi=[None, None],
         channel_mix_buffers=[bytearray(), bytearray()],
     )
-    # Bind the real _capture so the mock exercises actual capture delegation.
+    # Bind the real _mark_first_audio so first-audio gating runs in this fake too.
+    recv._mark_first_audio = MethodType(receiver.ListenReceiver._mark_first_audio, recv)
     recv._capture = MethodType(receiver.ListenReceiver._capture, recv)
     return recv
 
@@ -78,3 +79,62 @@ def test_multichannel_client_pcm_reaches_optional_parity_capture():
     asyncio.run(_feed(recv, [(0, pcm)]))
 
     assert captured == [pcm]
+
+
+def _make_photo_receiver(*, use_custom_stt: bool):
+    async def _noop_event(_event):
+        return None
+
+    recv = SimpleNamespace(
+        host=SimpleNamespace(
+            use_custom_stt=use_custom_stt,
+            request=SimpleNamespace(uid='test-uid'),
+            asend_event=_noop_event,
+            transcripts=SimpleNamespace(photo_buffer=[]),
+        ),
+        image_chunks={},
+    )
+    return recv
+
+
+async def _process_photo(recv, image_b64: str = 'ZmFrZS1pbWFnZQ=='):
+    await receiver.ListenReceiver._process_photo(recv, image_b64, 'temp-1')
+
+
+def test_custom_stt_photo_runs_description_without_llm_byok_key(monkeypatch):
+    """Regression for #7690's revert: custom-STT sessions were storing photos
+    with a "Custom STT: photo description skipped" placeholder instead of a real
+    description. Descriptions must run regardless of BYOK state."""
+    recv = _make_photo_receiver(use_custom_stt=True)
+    described = []
+
+    async def _describe(_uid, _img):
+        described.append(1)
+        return 'a description'
+
+    monkeypatch.setattr(receiver, 'describe_image', _describe)
+
+    asyncio.run(_process_photo(recv))
+
+    assert described, 'describe_image was skipped for a custom-STT session'
+    assert len(recv.host.transcripts.photo_buffer) == 1
+    photo = recv.host.transcripts.photo_buffer[0]
+    assert photo.discarded is False
+    assert photo.description == 'a description'
+
+
+def test_photo_description_failure_stores_a_discarded_placeholder(monkeypatch):
+    """describe_image failures must not drop the photo."""
+    recv = _make_photo_receiver(use_custom_stt=True)
+
+    async def _describe(_uid, _img):
+        raise RuntimeError('vision unavailable')
+
+    monkeypatch.setattr(receiver, 'describe_image', _describe)
+
+    asyncio.run(_process_photo(recv))
+
+    assert len(recv.host.transcripts.photo_buffer) == 1
+    photo = recv.host.transcripts.photo_buffer[0]
+    assert photo.discarded is True
+    assert photo.description == 'Could not generate description.'

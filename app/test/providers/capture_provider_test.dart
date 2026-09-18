@@ -12,15 +12,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/enums.dart';
 
@@ -89,6 +94,9 @@ BtDevice _device({required String id, required DeviceType type, String name = 'T
 /// start one, and each attempt can be released independently.
 class _GatedSocketCaptureProvider extends CaptureProvider {
   final List<Completer<void>> gates = [];
+  final List<_IdentifiedSocketService> sockets = [];
+  int? lastSubscribedId;
+  bool returnSockets = false;
 
   int get openCalls => gates.length;
 
@@ -99,12 +107,17 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     required String language,
     required bool force,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     final gate = Completer<void>();
     gates.add(gate);
     await gate.future;
-    return null;
+    if (!returnSockets) return null;
+    final socket = _IdentifiedSocketService(gates.length - 1, (id) => lastSubscribedId = id);
+    sockets.add(socket);
+    return socket;
   }
 
   void release(int attempt) => gates[attempt].complete();
@@ -116,6 +129,156 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
   }
 }
 
+class _NullSocketCaptureProvider extends CaptureProvider {
+  @override
+  Future<TranscriptSegmentSocketService?> openConversationSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    String? source,
+    String? clientConversationId,
+    CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
+  }) async =>
+      null;
+}
+
+class _CountingSocketCaptureProvider extends CaptureProvider {
+  _CountingSocketCaptureProvider({super.audioCodecLoader});
+
+  int openCalls = 0;
+
+  @override
+  Future<TranscriptSegmentSocketService?> openConversationSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    String? source,
+    String? clientConversationId,
+    CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
+  }) async {
+    openCalls++;
+    return null;
+  }
+}
+
+class _CountingConversationLocationCapture extends ConversationLocationCapture {
+  int calls = 0;
+  final List<bool> promptIfDeniedArgs = [];
+
+  @override
+  Future<Geolocation?> captureAndUpload({bool promptIfDenied = true}) async {
+    calls++;
+    promptIfDeniedArgs.add(promptIfDenied);
+    return Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026));
+  }
+}
+
+class _HangingConversationLocationCapture extends ConversationLocationCapture {
+  int calls = 0;
+  final Completer<Geolocation?> _done = Completer<Geolocation?>();
+
+  @override
+  Future<Geolocation?> captureAndUpload({bool promptIfDenied = true}) async {
+    calls++;
+    return _done.future;
+  }
+
+  @override
+  Future<Geolocation?> capture({bool promptIfDenied = true}) async {
+    calls++;
+    return _done.future;
+  }
+
+  @override
+  Future<void> uploadCompatibilitySnapshot(Geolocation geolocation) async {}
+
+  void complete() {
+    if (!_done.isCompleted) {
+      _done.complete(Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026)));
+    }
+  }
+}
+
+class _FakeBatchMicRecorder implements IMicRecorderService {
+  int startBatchCalls = 0;
+
+  @override
+  Future<void> start({
+    required Function(Uint8List bytes) onByteReceived,
+    Function()? onRecording,
+    Function()? onStop,
+    Function()? onInitializing,
+    Function()? onStalled,
+    Function(bool began)? onInterruption,
+  }) async {}
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    startBatchCalls++;
+  }
+
+  @override
+  void stop() {}
+
+  @override
+  void probeStallAfterForeground() {}
+}
+
+class _IdentifiedSocketService extends TranscriptSegmentSocketService {
+  _IdentifiedSocketService(this.id, this.onSubscribed)
+      : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
+
+  final int id;
+  final void Function(int id) onSubscribed;
+
+  @override
+  void subscribe(Object context, ITransctiptSegmentSocketServiceListener listener) {
+    onSubscribed(id);
+    throw StateError('test socket subscribed');
+  }
+}
+
+class _TrackingSocket implements IPureSocket {
+  @override
+  PureSocketStatus get status => PureSocketStatus.connected;
+
+  @override
+  Future<bool> connect() async => true;
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  void send(dynamic message) {}
+
+  @override
+  void setListener(IPureSocketListener listener) {}
+
+  @override
+  void onMessage(dynamic message) {}
+
+  @override
+  void onConnected() {}
+
+  @override
+  void onClosed() {}
+
+  @override
+  void onError(Object err, StackTrace trace) {}
+}
+
 /// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
 /// config reading Env.apiBaseUrl) don't hit a LateInitializationError.
 class _TestEnvFields implements EnvFields {
@@ -123,8 +286,6 @@ class _TestEnvFields implements EnvFields {
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => null;
-  @override
-  String? get googleMapsApiKey => null;
   @override
   String? get intercomAppId => null;
   @override
@@ -192,6 +353,102 @@ void main() {
     expect(provider.suggestionsBySegmentId.containsKey('a'), false);
     expect(provider.taggingSegmentIds.contains('a'), false);
     expect(provider.hasTranscripts, true);
+  });
+
+  test('first transcript refreshes conversation location without a foreground task', () async {
+    final locationCapture = _CountingConversationLocationCapture();
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+      inProgressConversationLoader: () async {},
+    );
+
+    provider.onSegmentReceived([_segment('first', 'hello')]);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(locationCapture.calls, 1);
+    provider.dispose();
+  });
+
+  test('streamDeviceRecording does not wait for location capture', () async {
+    final locationCapture = _HangingConversationLocationCapture();
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
+
+    await provider.streamDeviceRecording().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+        );
+    expect(locationCapture.calls, 1);
+    locationCapture.complete();
+    provider.dispose();
+  });
+
+  test('phone batch starts native audio before waiting for location metadata', () async {
+    await SharedPreferencesUtil().remove('phoneBatchGeolocation');
+    final locationCapture = _HangingConversationLocationCapture();
+    final micRecorder = _FakeBatchMicRecorder();
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+      microphonePermissionRequester: () async => true,
+      phoneMicBatchRecorder: micRecorder,
+    );
+
+    await provider.startPhoneMicBatchForTesting().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('phone batch start blocked on location capture'),
+        );
+
+    expect(micRecorder.startBatchCalls, 1);
+    expect(provider.recordingState, RecordingState.record);
+    expect(locationCapture.calls, 1);
+    var preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('phoneBatchGeolocation'), isNull);
+
+    locationCapture.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('phoneBatchGeolocation'), isNotNull);
+    provider.dispose();
+  });
+
+  test('homepage no-device streamDeviceRecording is check-only', () async {
+    final locationCapture = _CountingConversationLocationCapture();
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-check-only',
+    );
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture, recordingTelemetry: telemetry);
+
+    await provider.streamDeviceRecording();
+    expect(locationCapture.calls, 1);
+    expect(locationCapture.promptIfDeniedArgs, [false]);
+    expect(events, isEmpty, reason: 'a no-device homepage entry must not emit Recording Start Failed');
+    expect(telemetry.recordingId, isNull);
+    provider.dispose();
+  });
+
+  test('failed device streamDeviceRecording emits capture_unavailable', () async {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-device-fail',
+    );
+    // Batch mode skips the transcription socket, so this stays hermetic: a
+    // device is requested, but no BLE connection exists, so start cannot
+    // reach deviceRecord.
+    SharedPreferencesUtil().batchModeEnabled = true;
+    addTearDown(() => SharedPreferencesUtil().batchModeEnabled = false);
+    final provider = CaptureProvider(recordingTelemetry: telemetry);
+
+    await provider.streamDeviceRecording(
+      device: _device(id: 'omi-1', type: DeviceType.omi),
+    );
+
+    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
+    expect(events.single.properties['failure_class'], 'capture_unavailable');
+    expect(events.single.properties['recording_id'], 'recording-device-fail');
+    provider.dispose();
   });
 
   test('active capture identity survives deletion of the first segment', () {
@@ -720,6 +977,47 @@ void main() {
       provider.onClosed();
 
       expect(provider.recordingState, RecordingState.stop);
+      expect(provider.keepAliveScheduledForTesting, isFalse);
+      provider.dispose();
+    });
+
+    test('schedules reconnect only for an active device capture', () {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+      provider.updateRecordingState(RecordingState.deviceRecord);
+
+      provider.onClosed();
+
+      expect(provider.keepAliveScheduledForTesting, isTrue);
+      provider.updateRecordingState(RecordingState.stop);
+      provider.onClosed();
+      expect(provider.keepAliveScheduledForTesting, isFalse);
+      provider.dispose();
+    });
+
+    test('does not reconnect after device capture stops while codec lookup is pending', () async {
+      final codec = Completer<BleAudioCodec>();
+      final provider = _CountingSocketCaptureProvider(audioCodecLoader: (_) => codec.future);
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+      provider.updateRecordingState(RecordingState.deviceRecord);
+
+      final reconnect = provider.reconnectActiveCaptureForTesting();
+      await Future<void>.delayed(Duration.zero);
+      provider.updateRecordingState(RecordingState.stop);
+      codec.complete(BleAudioCodec.opus);
+      await reconnect;
+
+      expect(provider.openCalls, 0);
+      provider.dispose();
+    });
+
+    test('system audio capture remains eligible for websocket reconnect', () async {
+      final provider = _CountingSocketCaptureProvider();
+      provider.updateRecordingState(RecordingState.systemAudioRecord);
+
+      await provider.reconnectActiveCaptureForTesting();
+
+      expect(provider.openCalls, 1);
       provider.dispose();
     });
 
@@ -975,6 +1273,21 @@ void main() {
       provider.dispose();
     });
 
+    test('keeps native Omi background audio disabled when Custom STT raw forwarding is off', () async {
+      await SharedPreferencesUtil().saveCustomSttConfig(
+        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
+      );
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      final result = await provider.setBackgroundModeEnabled(true);
+
+      expect(result, isTrue);
+      expect(SharedPreferencesUtil().backgroundModeEnabled, isTrue);
+      expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+      provider.dispose();
+    });
+
     test('enable preserves foreground-ready when foreground streaming is already active', () async {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
@@ -1058,6 +1371,52 @@ void main() {
       expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
 
       provider.dispose();
+    });
+  });
+
+  group('unsupported Custom STT codec privacy recovery', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      await SharedPreferencesUtil().saveCustomSttConfig(
+        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
+      );
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
+    });
+
+    tearDown(() async {
+      await SharedPreferencesUtil().saveCustomSttConfig(CustomSttConfig.defaultConfig);
+    });
+
+    test('disables native Omi audio and schedules a websocket retry', () {
+      fakeAsync((async) {
+        final provider = _NullSocketCaptureProvider();
+        provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+        provider.updateRecordingState(RecordingState.deviceRecord);
+        final timersBefore = async.pendingTimers.length;
+        var completed = false;
+
+        provider.changeAudioRecordProfile(audioCodec: BleAudioCodec.lc3FS1030).then((_) => completed = true);
+        async.flushMicrotasks();
+
+        expect(completed, isTrue);
+        expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+        expect(async.pendingTimers.length, timersBefore + 1);
+        provider.dispose();
+      });
+    });
+
+    test('does not schedule a websocket retry when capture is idle', () {
+      fakeAsync((async) {
+        final provider = CaptureProvider();
+        final timersBefore = async.pendingTimers.length;
+
+        provider.changeAudioRecordProfile(audioCodec: BleAudioCodec.lc3FS1030);
+        async.flushMicrotasks();
+
+        expect(async.pendingTimers.length, timersBefore);
+        provider.dispose();
+      });
     });
   });
 
@@ -1275,6 +1634,31 @@ void main() {
       provider.dispose();
     });
 
+    test('does not install a stale socket after a newer forced attempt', () async {
+      final provider = _GatedSocketCaptureProvider();
+      provider.returnSockets = true;
+
+      final first = startAttempt(provider);
+      await settle();
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2);
+
+      provider.release(1);
+      try {
+        await forced;
+      } catch (error) {
+        expect(error, isA<StateError>());
+      }
+      expect(provider.lastSubscribedId, 1);
+
+      provider.release(0);
+      await first;
+      expect(provider.lastSubscribedId, 1);
+      provider.dispose();
+    });
+
     test('stays gated while a forced attempt with the same parameters runs', () async {
       final provider = _GatedSocketCaptureProvider();
 
@@ -1318,6 +1702,57 @@ void main() {
       await first;
       await other;
       provider.dispose();
+    });
+  });
+
+  group('in-progress conversation poll cycle', () {
+    // The socket starts this cycle on every connect. Restarting an already
+    // running cycle put its attempt counter back to zero, so a connection that
+    // reconnects more often than the give-up window kept the app polling
+    // GET /v1/conversations?...&statuses=in_progress indefinitely instead of
+    // ever reaching the cap.
+    test('a reconnect mid-cycle does not reset the attempt counter', () {
+      fakeAsync((async) {
+        final provider = CaptureProvider(inProgressConversationLoader: () async {});
+        provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+        provider.updateRecordingState(RecordingState.deviceRecord);
+
+        provider.startInProgressConversationRefreshForTesting();
+        async.elapse(const Duration(seconds: 10));
+        async.flushMicrotasks();
+
+        final attemptsBeforeReconnect = provider.inProgressConversationRefreshAttemptsForTesting;
+        expect(attemptsBeforeReconnect, greaterThan(0));
+
+        // Simulate a socket reconnect landing while the cycle is still running.
+        provider.startInProgressConversationRefreshForTesting();
+
+        expect(
+          provider.inProgressConversationRefreshAttemptsForTesting,
+          attemptsBeforeReconnect,
+          reason: 'a reconnect must not restart an already-running poll cycle',
+        );
+
+        provider.dispose();
+      });
+    });
+
+    test('the cycle self-terminates at its cap when nothing interrupts it', () {
+      fakeAsync((async) {
+        var loadCalls = 0;
+        final provider = CaptureProvider(inProgressConversationLoader: () async => loadCalls++);
+        provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+        provider.updateRecordingState(RecordingState.deviceRecord);
+
+        provider.startInProgressConversationRefreshForTesting();
+        async.elapse(const Duration(seconds: 90));
+        async.flushMicrotasks();
+
+        expect(provider.inProgressConversationRefreshActiveForTesting, isFalse);
+        expect(loadCalls, 30);
+
+        provider.dispose();
+      });
     });
   });
 }

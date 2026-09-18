@@ -95,6 +95,36 @@ extension SettingsContentView {
         RewindStorageSummary(stats: $rewindStats)
       }
 
+      // Meeting Note Screenshots
+      settingsCard(settingId: "rewind.meetingnotescreenshots") {
+        HStack {
+          Image(systemName: "photo.on.rectangle.angled")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Meeting Screenshots")
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
+
+            Text("Add a few screenshots of what was on screen to a meeting's note")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Toggle("", isOn: $meetingNoteScreenshotsEnabled)
+            .toggleStyle(OmiToggleStyle())
+            .labelsHidden()
+            .onChange(of: meetingNoteScreenshotsEnabled) { _, newValue in
+              guard !isSyncingMeetingNoteScreenshotsFromServer else { return }
+              updateMeetingNoteScreenshotsSetting(enabled: newValue)
+            }
+        }
+        .task { await loadMeetingNoteScreenshotsSetting() }
+      }
+
       // Excluded Apps
       settingsCard(settingId: "rewind.excludedapps") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
@@ -241,4 +271,51 @@ extension SettingsContentView {
 
   // MARK: - Transcription Section
 
+  // MARK: - Meeting note screenshots setting
+
+  /// Read-on-appear for the account-level gate (`GET v1/screen-frame-egress/settings`, contract
+  /// §6). `meetingNoteScreenshotsEnabled`'s `@AppStorage` default is the offline cache this toggle
+  /// (and `MeetingNoteScreenshotsFeature.isEnabled`) reads synchronously, so this call only ever
+  /// reconciles that cache with the account's real value — e.g. after the setting changed on
+  /// another device, or after a reinstall wiped the local mirror. It never blocks the toggle: on
+  /// failure the cache is simply left as it was.
+  func loadMeetingNoteScreenshotsSetting() async {
+    do {
+      let settings = try await APIClient.shared.getScreenFrameSettings()
+      guard settings.meetingNoteScreenshotsEnabled != meetingNoteScreenshotsEnabled else { return }
+      // Setting this directly would itself fire the toggle's `onChange` and PATCH the value we
+      // just GET-ed straight back to the server. The flag tells that handler to stand down for
+      // this one assignment.
+      isSyncingMeetingNoteScreenshotsFromServer = true
+      meetingNoteScreenshotsEnabled = settings.meetingNoteScreenshotsEnabled
+      isSyncingMeetingNoteScreenshotsFromServer = false
+    } catch {
+      logError("Failed to load meeting note screenshots setting", error: error)
+    }
+  }
+
+  /// Write-on-change for the same account-level gate (`PATCH v1/screen-frame-egress/settings`).
+  ///
+  /// Every other settings writer in this app (`updateDailySummarySettings`, `updateLanguage`,
+  /// `updatePrivateCloudSync`, …, in `SettingsContentView+SettingsUpdates.swift`) fires the PATCH
+  /// and only logs a failure, leaving the toggle exactly where the user left it. That is fine when
+  /// the toggle is just a cached mirror of a server value the UI re-reads next time. This one is
+  /// different: `MeetingNoteScreenshotsFeature.isEnabled` reads the *local* `UserDefaults` mirror
+  /// synchronously as the actual feature gate, so a write that silently failed would leave the
+  /// screenshot pipeline running (or stopped) here while the account — and every other device, and
+  /// the web surface reading the same setting — disagreed. Nothing else in this file guards a
+  /// settings write against that, so this one reverts the toggle to its last-known-good value
+  /// instead of leaving that lie on screen.
+  func updateMeetingNoteScreenshotsSetting(enabled: Bool) {
+    Task {
+      do {
+        let _ = try await APIClient.shared.updateScreenFrameSettings(enabled: enabled)
+      } catch {
+        logError("Failed to update meeting note screenshots setting", error: error)
+        isSyncingMeetingNoteScreenshotsFromServer = true
+        meetingNoteScreenshotsEnabled = !enabled
+        isSyncingMeetingNoteScreenshotsFromServer = false
+      }
+    }
+  }
 }

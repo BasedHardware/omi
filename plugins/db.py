@@ -1,3 +1,4 @@
+import ast
 import os
 from typing import List
 
@@ -94,11 +95,15 @@ def get_upsert_segment_to_transcript_plugin(
     plugin_id: str, session_id: str, new_segments: list[TranscriptSegment]
 ) -> List[dict]:
     key = f'plugin:{plugin_id}:session:{session_id}:transcript_segments'
-    segments = r.get(key)
-    if not segments:
+    raw = r.get(key)
+    if not raw:
         segments = []
     else:
-        segments = eval(segments)
+        try:
+            parsed = ast.literal_eval(raw.decode('utf-8') if isinstance(raw, bytes) else raw)
+        except (ValueError, SyntaxError):
+            parsed = None
+        segments = [s for s in parsed if isinstance(s, dict)] if isinstance(parsed, list) else []
 
     segments.extend([segment.dict() for segment in new_segments])
 

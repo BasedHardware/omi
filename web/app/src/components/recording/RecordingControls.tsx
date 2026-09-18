@@ -35,7 +35,7 @@ function LevelMeter({ level, label }: { level: number; label: string }) {
       <span className="text-xs text-text-quaternary w-12">{label}</span>
       <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
         <motion.div
-          className="h-full bg-purple-primary rounded-full"
+          className="h-full bg-text-primary rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(100, level * 100)}%` }}
           transition={{ duration: 0.1 }}
@@ -86,7 +86,7 @@ export function RecordingControls({
           className={cn(
             'p-2 rounded-lg transition-colors',
             'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
           {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -99,7 +99,7 @@ export function RecordingControls({
           className={cn(
             'p-2 rounded-lg transition-colors',
             'text-error hover:bg-error/10',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
           {isProcessing ? (
@@ -124,8 +124,8 @@ export function RecordingControls({
           />
         )}
         {isPaused && <div className="w-3 h-3 rounded-full bg-yellow-500" />}
-        {isInitializing && <Loader2 className="w-5 h-5 text-purple-primary animate-spin" />}
-        {isProcessing && <Loader2 className="w-5 h-5 text-purple-primary animate-spin" />}
+        {isInitializing && <Loader2 className="w-5 h-5 text-text-primary animate-spin" />}
+        {isProcessing && <Loader2 className="w-5 h-5 text-text-primary animate-spin" />}
 
         <span className="text-2xl font-mono text-text-primary tabular-nums">
           {formatDuration(duration)}
@@ -159,7 +159,7 @@ export function RecordingControls({
           className={cn(
             'p-4 rounded-full transition-all',
             'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
           {isPaused ? <Play className="w-6 h-6" /> : <Pause className="w-6 h-6" />}
@@ -172,7 +172,7 @@ export function RecordingControls({
           className={cn(
             'p-5 rounded-full transition-all',
             'bg-error text-white hover:bg-error/80',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
           {isProcessing ? (

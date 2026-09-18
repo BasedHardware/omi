@@ -39,6 +39,14 @@ curl -X POST http://localhost:8080/tools/search_papers \
   -d '{"query":"retrieval augmented generation", "limit":3}'
 ```
 
+Category-only search (any official arXiv category, e.g. `physics.acc-ph`):
+
+```bash
+curl -X POST http://localhost:8080/tools/search_papers \
+  -H "Content-Type: application/json" \
+  -d '{"category":"physics.acc-ph"}'
+```
+
 Fetch details:
 
 ```bash

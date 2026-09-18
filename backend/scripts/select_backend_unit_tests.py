@@ -68,14 +68,18 @@ FULL_RUN_GLOBS = (
     'backend/utils/encryption.py',
 )
 
-# These paths participate in the location-context contract below. They are
-# intentionally narrow exceptions to the generic model/database full-suite
-# fallback so local pre-push feedback remains focused; CI still owns --all.
-NARROW_LOCATION_CONTEXT_PATHS = frozenset(
+# Intentionally narrow exceptions to the generic model/database full-suite
+# fallback so local pre-push feedback stays focused; CI still owns --all.
+# Every entry must be mapped to a narrow area in AREA_TESTS below, so the
+# exception still selects that area's contracts instead of nothing.
+NARROW_FULL_RUN_EXCEPTIONS = frozenset(
     {
+        # location-context consent area
         'backend/database/users.py',
         'backend/models/geolocation.py',
         'backend/models/users.py',
+        # in-app CSAT surface
+        'backend/database/csat.py',
     }
 )
 
@@ -110,6 +114,34 @@ MONITORING_CONTRACT_SOURCES = (
 AREA_TESTS = (
     (
         (
+            'backend/config/plan_catalog',
+            'backend/scripts/generate_plan_catalog.py',
+            'backend/models/users.py',
+            'backend/utils/subscription.py',
+            'backend/utils/overage.py',
+            'backend/utils/fair_use.py',
+            'backend/utils/sync/rate_limit.py',
+            'backend/scripts/support/find_stripe_entitlement_mismatches.py',
+            'backend/routers/payment.py',
+            'backend/routers/desktop_proactivity.py',
+            'backend/database/phone_call_config.py',
+        ),
+        (),
+        (
+            'tests/unit/test_plan_catalog_contract.py',
+            'tests/unit/test_subscription_*.py',
+            'tests/unit/test_user_subscription_wire_contract.py',
+            'tests/unit/test_stripe_*.py',
+            'tests/unit/test_payment_price_id_validation.py',
+            'tests/unit/test_chat_quota.py',
+            'tests/unit/test_fair_use_*.py',
+            'tests/unit/test_phone_call*.py',
+            'tests/unit/test_desktop_proactivity.py',
+            'tests/unit/test_sync_fair_use_gate.py',
+        ),
+    ),
+    (
+        (
             'backend/database/users.py',
             'backend/models/geolocation.py',
             'backend/models/users.py',
@@ -120,6 +152,14 @@ AREA_TESTS = (
         ),
         (),
         ('tests/unit/test_location_context_consent.py', 'tests/unit/test_chat_async_offload.py'),
+    ),
+    (
+        (
+            'backend/database/csat.py',
+            'backend/routers/csat.py',
+        ),
+        (),
+        ('tests/unit/test_csat.py', 'tests/unit/test_desktop_rest_inventory.py'),
     ),
     (
         ('backend/llm_gateway/',),
@@ -219,6 +259,11 @@ AREA_TESTS = (
         ('tests/unit/test_apps_*.py', 'tests/unit/test_app_*.py', 'tests/unit/test_create_persona_user_none.py'),
     ),
     (
+        ('backend/utils/social.py',),
+        (),
+        ('tests/unit/test_social_*.py',),
+    ),
+    (
         ('backend/routers/folders', 'backend/services/folders/', 'backend/utils/folders'),
         (),
         ('tests/unit/test_folder_*.py',),
@@ -298,7 +343,7 @@ def normalize_changed_path(path: str) -> str:
 
 
 def is_full_run_path(path: str) -> bool:
-    if path in NARROW_LOCATION_CONTEXT_PATHS:
+    if path in NARROW_FULL_RUN_EXCEPTIONS:
         return False
     if path in FULL_RUN_PATHS:
         return True

@@ -7,9 +7,10 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/app_detail/reviews_section.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -127,7 +128,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(context.l10n.failedToSendReply(e.toString())),
+                                content: Text(context.l10n.failedToSendReply(readableError(e))),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -136,14 +137,15 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           isSubmitting.value = false;
                         }
                       },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
                 child: submitting
                     ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          // The button surface is now white, so a white spinner would be invisible.
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                         ),
                       )
                     : Text(context.l10n.send),
@@ -273,9 +275,9 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Colors.deepPurple : Colors.grey.shade800.withValues(alpha: 0.5),
+          color: selected ? Colors.white.withValues(alpha: 0.22) : Colors.grey.shade800.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? Colors.deepPurple : Colors.grey.shade700, width: 1),
+          border: Border.all(color: selected ? Colors.white : Colors.grey.shade700, width: 1),
         ),
         child: Text(
           label,
@@ -336,7 +338,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
+                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
                           ),
                         );
                       }),
@@ -397,11 +399,11 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                 icon: FaIcon(
                   review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply,
                   size: 12,
-                  color: Colors.deepPurple,
+                  color: Colors.white,
                 ),
                 label: Text(
                   review.response.isNotEmpty ? context.l10n.editReply : context.l10n.reply,
-                  style: const TextStyle(color: Colors.deepPurple, fontSize: 13),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ),
             ),

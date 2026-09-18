@@ -120,7 +120,12 @@ class TranscriptionService: @unchecked Sendable {
   /// Resolution order: explicit OMI_PYTHON_API_URL → production https://api.omi.me/
   /// NOTE: Do NOT fall back to OMI_DESKTOP_API_URL — that points to the Rust desktop-backend
   /// (Cloud Run), which does not have /v2/voice-message/* or /v4/listen endpoints.
-  private static let pythonBackendBaseURL: String = DesktopBackendEnvironment.pythonBaseURL()
+  // Resolve at use time. BundleEnvironment loads the packaged tuple during
+  // startup, and a static snapshot could otherwise freeze a value touched
+  // before that load (or retain a prior value in an in-process test).
+  static var pythonBackendBaseURL: String {
+    DesktopBackendEnvironment.pythonBaseURL()
+  }
 
   private static func sanitizedContextKeywords(_ keywords: [String]) -> [String] {
     let stopWords: Set<String> = [
@@ -453,7 +458,12 @@ class TranscriptionService: @unchecked Sendable {
 
     // BYOK: attach user keys so the transcription backend can use the user's
     // Deepgram token for this session (and any downstream LLM calls).
-    for (provider, entry) in APIKeyService.byokSnapshot {
+    if let entry = APIKeyService.activeBYOKSnapshot[.deepgram] {
+      request.setValue(entry.key, forHTTPHeaderField: BYOKProvider.deepgram.headerName)
+    }
+    if let provider = APIKeyService.selectedBYOKLLMProvider,
+      let entry = APIKeyService.activeBYOKSnapshot[provider]
+    {
       request.setValue(entry.key, forHTTPHeaderField: provider.headerName)
     }
 
@@ -635,7 +645,15 @@ class TranscriptionService: @unchecked Sendable {
 
       case .failure(let error):
         guard self.isConnected else { return }
-        logError("TranscriptionService: Receive error", error: error)
+        // The server's close frame, when there was one, is the only thing that
+        // says *why* the socket went away; `handleDisconnection` drops the task
+        // and its delegate, so it has to be read here or not at all.
+        let task = self.webSocketTask
+        let reason = task?.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        logError(
+          "TranscriptionService: Receive error (closeCode=\(task?.closeCode.rawValue ?? -1)"
+            + (reason.isEmpty ? ")" : " reason=\(reason))"),
+          error: error)
         self.handleDisconnection()
       }
     }
@@ -760,7 +778,16 @@ extension TranscriptionService {
     request.httpMethod = "POST"
     request.setValue(authHeader, forHTTPHeaderField: "Authorization")
     request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-    for (provider, entry) in APIKeyService.byokSnapshot {
+    // Same provenance header the WebSocket upgrade sends (see connect):
+    // without it the backend labels desktop PTT dictation journeys
+    // client_platform=unknown on the voice_rest_pcm route.
+    request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
+    if let entry = APIKeyService.activeBYOKSnapshot[.deepgram] {
+      request.setValue(entry.key, forHTTPHeaderField: BYOKProvider.deepgram.headerName)
+    }
+    if let provider = APIKeyService.selectedBYOKLLMProvider,
+      let entry = APIKeyService.activeBYOKSnapshot[provider]
+    {
       request.setValue(entry.key, forHTTPHeaderField: provider.headerName)
     }
     request.httpBody = audioData

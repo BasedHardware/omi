@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "set_version": "jit-retrieval-v1",
+  "provenance": "synthetic-only; no model calls, user data, or live services",
+  "cases": [
+    {
+      "case_id": "literal-editor",
+      "category": "literal",
+      "query": "What editor do I prefer for backend work?",
+      "bounds": {
+        "max_summary_cards": 1,
+        "max_summary_card_chars": 260,
+        "max_window_chars": 360,
+        "max_window_turns": 4
+      },
+      "summary_cards": [
+        {
+          "card_id": "card-literal-editor",
+          "conversation_id": "conv-literal-1",
+          "title": "Backend editor preference",
+          "summary": "The user prefers VS Code for backend work.",
+          "entities": ["VS Code"],
+          "happened_at": "2026-08-18",
+          "window_refs": ["window-literal-editor"]
+        }
+      ],
+      "windows": [
+        {
+          "window_id": "window-literal-editor",
+          "conversation_id": "conv-literal-1",
+          "evidence_ref": "ev:conv-literal-1:turn-3",
+          "turns": [
+            {"turn_id": "turn-2", "speaker": "user", "text": "I am standardizing my backend editor setup."},
+            {"turn_id": "turn-3", "speaker": "user", "text": "I prefer VS Code for backend work."}
+          ]
+        }
+      ],
+      "candidate_answer": {
+        "text": "VS Code is the stated backend editor preference.",
+        "cited_refs": ["ev:conv-literal-1:turn-3"]
+      }
+    },
+    {
+      "case_id": "paraphrased-morning-drink",
+      "category": "paraphrased",
+      "query": "Which drink do I usually choose for morning meetings?",
+      "bounds": {
+        "max_summary_cards": 1,
+        "max_summary_card_chars": 280,
+        "max_window_chars": 380,
+        "max_window_turns": 4
+      },
+      "summary_cards": [
+        {
+          "card_id": "card-paraphrased-drink",
+          "conversation_id": "conv-paraphrase-1",
+          "title": "Morning meeting ritual",
+          "summary": "Morning meetings usually start with black coffee.",
+          "entities": ["coffee"],
+          "happened_at": "2026-08-17",
+          "window_refs": ["window-paraphrased-drink"]
+        }
+      ],
+      "windows": [
+        {
+          "window_id": "window-paraphrased-drink",
+          "conversation_id": "conv-paraphrase-1",
+          "evidence_ref": "ev:conv-paraphrase-1:turn-5",
+          "turns": [
+            {"turn_id": "turn-4", "speaker": "assistant", "text": "You have an early planning meeting tomorrow."},
+            {"turn_id": "turn-5", "speaker": "user", "text": "I usually choose black coffee for morning meetings."}
+          ]
+        }
+      ],
+      "candidate_answer": {
+        "text": "The morning-meeting drink is black coffee.",
+        "cited_refs": ["ev:conv-paraphrase-1:turn-5"]
+      }
+    },
+    {
+      "case_id": "entity-project-atlas",
+      "category": "entity",
+      "query": "What did I decide for Project Atlas?",
+      "bounds": {
+        "max_summary_cards": 1,
+        "max_summary_card_chars": 280,
+        "max_window_chars": 400,
+        "max_window_turns": 4
+      },
+      "summary_cards": [
+        {
+          "card_id": "card-entity-atlas",
+          "conversation_id": "conv-entity-1",
+          "title": "Project Atlas rollout",
+          "summary": "Project Atlas ships behind a staged rollout.",
+          "entities": ["Project Atlas", "staged rollout"],
+          "happened_at": "2026-08-16",
+          "window_refs": ["window-entity-atlas"]
+        }
+      ],
+      "windows": [
+        {
+          "window_id": "window-entity-atlas",
+          "conversation_id": "conv-entity-1",
+          "evidence_ref": "ev:conv-entity-1:turn-7",
+          "turns": [
+            {"turn_id": "turn-6", "speaker": "user", "text": "We need a safer release plan for Project Atlas."},
+            {"turn_id": "turn-7", "speaker": "user", "text": "I decided Project Atlas should ship behind a staged rollout."}
+          ]
+        }
+      ],
+      "candidate_answer": {
+        "text": "Project Atlas was assigned a staged rollout.",
+        "cited_refs": ["ev:conv-entity-1:turn-7"]
+      }
+    },
+    {
+      "case_id": "temporal-dentist",
+      "category": "temporal",
+      "query": "What was the outcome of the 2026-08-20 dentist appointment?",
+      "bounds": {
+        "max_summary_cards": 1,
+        "max_summary_card_chars": 300,
+        "max_window_chars": 420,
+        "max_window_turns": 4
+      },
+      "summary_cards": [
+        {
+          "card_id": "card-temporal-dentist",
+          "conversation_id": "conv-temporal-1",
+          "title": "Dentist appointment outcome",
+          "summary": "The 2026-08-20 appointment moved the follow-up to September.",
+          "entities": ["dentist appointment"],
+          "happened_at": "2026-08-20",
+          "window_refs": ["window-temporal-dentist"]
+        }
+      ],
+      "windows": [
+        {
+          "window_id": "window-temporal-dentist",
+          "conversation_id": "conv-temporal-1",
+          "evidence_ref": "ev:conv-temporal-1:turn-2",
+          "turns": [
+            {"turn_id": "turn-1", "speaker": "assistant", "text": "Your dentist appointment was on 2026-08-20."},
+            {"turn_id": "turn-2", "speaker": "user", "text": "The follow-up moved to September after that appointment."}
+          ]
+        }
+      ],
+      "candidate_answer": {
+        "text": "The follow-up was moved to September.",
+        "cited_refs": ["ev:conv-temporal-1:turn-2"]
+      }
+    },
+    {
+      "case_id": "multi-conversation-accessibility",
+      "category": "multi-conversation",
+      "query": "Compare my decisions about accessibility.",
+      "bounds": {
+        "max_summary_cards": 2,
+        "max_summary_card_chars": 300,
+        "max_window_chars": 700,
+        "max_window_turns": 4
+      },
+      "summary_cards": [
+        {
+          "card_id": "card-multi-accessibility-atlas",
+          "conversation_id": "conv-multi-1",
+          "title": "Accessibility review decision",
+          "summary": "Project Atlas accessibility review uses keyboard-first acceptance tests.",
+          "entities": ["Project Atlas", "accessibility"],
+          "happened_at": "2026-08-14",
+          "window_refs": ["window-multi-accessibility-atlas"]
+        },
+        {
+          "card_id": "card-multi-accessibility-mobile",
+          "conversation_id": "conv-multi-2",
+          "title": "Accessibility release decision",
+          "summary": "The mobile accessibility release keeps dynamic type in its acceptance checklist.",
+          "entities": ["mobile", "accessibility"],
+          "happened_at": "2026-08-15",
+          "window_refs": ["window-multi-accessibility-mobile"]
+        }
+      ],
+      "windows": [
+        {
+          "window_id": "window-multi-accessibility-atlas",
+          "conversation_id": "conv-multi-1",
+          "evidence_ref": "ev:conv-multi-1:turn-4",
+          "turns": [
+            {"turn_id": "turn-3", "speaker": "user", "text": "For Atlas accessibility, keyboard-first tests are the acceptance gate."},
+            {"turn_id": "turn-4", "speaker": "user", "text": "That is the decision for this review."}
+          ]
+        },
+        {
+          "window_id": "window-multi-accessibility-mobile",
+          "conversation_id": "conv-multi-2",
+          "evidence_ref": "ev:conv-multi-2:turn-6",
+          "turns": [
+            {"turn_id": "turn-5", "speaker": "user", "text": "The mobile accessibility checklist must retain dynamic type."},
+            {"turn_id": "turn-6", "speaker": "user", "text": "That is the release decision."}
+          ]
+        }
+      ],
+      "candidate_answer": {
+        "text": "The decisions were keyboard-first acceptance tests for Atlas and dynamic type in the mobile checklist.",
+        "cited_refs": ["ev:conv-multi-1:turn-4", "ev:conv-multi-2:turn-6"]
+      }
+    },
+    {
+      "case_id": "ambiguous-person-alex",
+      "category": "ambiguous-person",
+      "query": "What did Alex recommend?",
+      "bounds": {
+        "max_summary_cards": 2,
+        "max_summary_card_chars": 300,
+        "max_window_chars": 600,
+        "max_window_turns": 4
+      },
+      "summary_cards": [
+        {
+          "card_id": "card-ambiguous-alex-chen",
+          "conversation_id": "conv-ambiguous-1",
+          "title": "Alex recommendation",
+          "summary": "Alex recommended a pilot for the Atlas onboarding flow.",
+          "entities": ["Alex Chen", "Project Atlas"],
+          "happened_at": "2026-08-12",
+          "window_refs": ["window-ambiguous-alex-chen"]
+        },
+        {
+          "card_id": "card-ambiguous-alex-rivera",
+          "conversation_id": "conv-ambiguous-2",
+          "title": "Alex recommendation",
+          "summary": "Alex recommended postponing the redesign until research.",
+          "entities": ["Alex Rivera", "redesign"],
+          "happened_at": "2026-08-13",
+          "window_refs": ["window-ambiguous-alex-rivera"]
+        }
+      ],
+      "windows": [
+        {
+          "window_id": "window-ambiguous-alex-chen",
+          "conversation_id": "conv-ambiguous-1",
+          "evidence_ref": "ev:conv-ambiguous-1:turn-3",
+          "turns": [
+            {"turn_id": "turn-3", "speaker": "user", "text": "Alex Chen recommended a pilot for the Atlas onboarding flow."}
+          ]
+        },
+        {
+          "window_id": "window-ambiguous-alex-rivera",
+          "conversation_id": "conv-ambiguous-2",
+          "evidence_ref": "ev:conv-ambiguous-2:turn-5",
+          "turns": [
+            {"turn_id": "turn-5", "speaker": "user", "text": "Alex Rivera recommended postponing the redesign until research."}
+          ]
+        }
+      ],
+      "candidate_answer": {
+        "text": "Which Alex do you mean?",
+        "cited_refs": []
+      }
+    },
+    {
+      "case_id": "not-found-constellation",
+      "category": "not-found",
+      "query": "What is my favorite constellation?",
+      "bounds": {
+        "max_summary_cards": 2,
+        "max_summary_card_chars": 280,
+        "max_window_chars": 500,
+        "max_window_turns": 4
+      },
+      "summary_cards": [
+        {
+          "card_id": "card-not-found-calendar",
+          "conversation_id": "conv-not-found-1",
+          "title": "Calendar planning",
+          "summary": "The planning conversation covers a review schedule.",
+          "entities": ["calendar"],
+          "happened_at": "2026-08-11",
+          "window_refs": ["window-not-found-calendar"]
+        },
+        {
+          "card_id": "card-not-found-cooking",
+          "conversation_id": "conv-not-found-2",
+          "title": "Cooking plan",
+          "summary": "The conversation covers a simple dinner recipe.",
+          "entities": ["recipe"],
+          "happened_at": "2026-08-10",
+          "window_refs": ["window-not-found-cooking"]
+        }
+      ],
+      "windows": [
+        {
+          "window_id": "window-not-found-calendar",
+          "conversation_id": "conv-not-found-1",
+          "evidence_ref": "ev:conv-not-found-1:turn-2",
+          "turns": [
+            {"turn_id": "turn-2", "speaker": "user", "text": "The review schedule is still tentative."}
+          ]
+        },
+        {
+          "window_id": "window-not-found-cooking",
+          "conversation_id": "conv-not-found-2",
+          "evidence_ref": "ev:conv-not-found-2:turn-4",
+          "turns": [
+            {"turn_id": "turn-4", "speaker": "user", "text": "The dinner recipe needs one more ingredient."}
+          ]
+        }
+      ],
+      "candidate_answer": {
+        "text": "I do not have enough evidence to answer that.",
+        "cited_refs": []
+      }
+    }
+  ]
+}

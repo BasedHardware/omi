@@ -35,7 +35,7 @@ def execute():
         aseg = cast(
             Any, AudioSegment.from_wav(file_path)
         )  # pyright: ignore[reportUnknownMemberType]  # pydub has no type stubs
-        if aseg.duration_seconds < 5 or aseg.duration_seconds > 120:
+        if aseg.duration_seconds < 5 or aseg.duration_seconds > 180:
             print('Invalid duration for', uid)
             return
         upload_profile_audio(file_path, uid)

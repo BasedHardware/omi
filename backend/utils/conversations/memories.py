@@ -5,6 +5,7 @@ import database._client as db_client_module
 import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
+from utils.free_tier_memory_policy import managed_memory_formation_suppressed
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.memory_authority import MemorySystem
 from utils.memory.memory_service import MemoryService
@@ -104,8 +105,15 @@ def process_external_integration_memory(
             memory_db.app_id = app_id
             saved_memories.append(memory_db)
 
-    # Extract memories from text if provided
-    if memory_data.text and len(memory_data.text.strip()) > 0:
+    # Extract memories from text if provided. Model-formed memories are plan-gated
+    # (§1.8): an app-provided explicit fact is data the app already holds and is
+    # written as before, but luna extraction must not run for a plan the policy
+    # denies.
+    if (
+        memory_data.text
+        and len(memory_data.text.strip()) > 0
+        and not managed_memory_formation_suppressed(uid, f'external_integration:{app_id}')
+    ):
         extracted_memories = extract_memories_from_text(
             uid,
             memory_data.text,
@@ -165,6 +173,10 @@ def process_external_integration_memory(
 
 
 def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> List[MemoryDB]:
+    # §1.8: the persona/twitter persona producer is one of the ungated managed
+    # formation doors flip-review F-3 closed — gate before any extractor spend.
+    if managed_memory_formation_suppressed(uid, 'twitter_persona'):
+        return []
     # Extract memories from tweets using the LLM
     language = users_db.get_user_language_preference(uid)
     extracted_memories = extract_memories_from_text(uid, tweets_text, "twitter_tweets", language=language)

@@ -2,8 +2,7 @@ import Foundation
 import OmiSupport
 
 extension Notification.Name {
-  /// Posted on MainActor after the runtime handshake makes direct control
-  /// tools admissible. Carries no owner id or request content.
+  /// Posted on MainActor after the runtime handshake makes direct control tools admissible.
   static let agentRuntimeDidBecomeReady = Notification.Name("com.omi.desktop.agentRuntimeDidBecomeReady")
 }
 
@@ -230,6 +229,7 @@ actor AgentRuntimeProcess {
     "journal_import_remote_turn",
     "runtime_adapter_availability",
     "chat_first_capability_projection",
+    "request_scoped_model_credentials",
   ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
 
@@ -312,40 +312,6 @@ actor AgentRuntimeProcess {
       let requestId: String
     }
 
-    enum Kind: Equatable {
-      case initMessage
-      case textDelta
-      case thinkingDelta
-      case toolUse
-      case authorizedToolExecution
-      case toolActivity
-      case toolResultDisplay
-      case result
-      case error
-      case authRequired
-      case authSuccess
-      case cancelAck
-      case controlToolResult
-      case journalOperationResult
-      case journalTurnChanged
-      case journalBackendSync
-      case journalBackendDelete
-      case journalBackendReconcile
-      case chatFirstDeferralDelivery
-      case defaultExecutionProfileConfigured
-      case surfaceSessionResolved
-      case sessionExecutionProfileMigrated
-      case contextSourceUpdated
-      case contextSnapshot
-      case legacyMainChatSessionsImported
-      case externalSurfaceRunBeginResult
-      case externalSurfaceToolResult
-      case externalSurfaceRunCompleteResult
-      case chatFirstHarnessExecutorResult
-      case ownerRuntimeRevoked
-      case unknown(String)
-    }
-
     let kind: Kind
     let requestId: String?
     let clientId: String?
@@ -375,12 +341,14 @@ actor AgentRuntimeProcess {
 
     private static func kind(for type: String) -> Kind {
       switch type {
+      case "model_headers_request": return .modelHeadersRequest
       case "init": return .initMessage
       case "text_delta": return .textDelta
       case "thinking_delta": return .thinkingDelta
       case "tool_use": return .toolUse
       case "authorized_tool_execution": return .authorizedToolExecution
       case "tool_activity": return .toolActivity
+      case "turn_activity": return .turnActivity
       case "tool_result_display": return .toolResultDisplay
       case "result": return .result
       case "error": return .error
@@ -454,6 +422,7 @@ actor AgentRuntimeProcess {
     let originatingUserText: String?
     let onTextDelta: AgentBridge.TextDeltaHandler
     let onToolActivity: AgentBridge.ToolActivityHandler
+    let onTurnActivity: AgentBridge.TurnActivityHandler
     let onThinkingDelta: AgentBridge.ThinkingDeltaHandler
     let onToolResultDisplay: AgentBridge.ToolResultDisplayHandler
     let onAuthRequired: AgentBridge.AuthRequiredHandler
@@ -1097,6 +1066,7 @@ actor AgentRuntimeProcess {
     sessionID: String,
     turnID: String,
     prompt: String,
+    promptIsSynthetic: Bool = false,
     mode: ExternalSurfaceRunMode
   ) async throws -> ExternalSurfaceRunBinding {
     guard
@@ -1139,6 +1109,7 @@ actor AgentRuntimeProcess {
         sessionId: sessionID,
         turnId: turnID,
         prompt: prompt,
+        promptIsSynthetic: promptIsSynthetic,
         mode: mode
       ),
       expectedKind: .externalSurfaceRunBeginResult,
@@ -1153,6 +1124,8 @@ actor AgentRuntimeProcess {
       result["ownerId"] as? String == ownerID,
       result["sessionId"] as? String == sessionID,
       result["turnId"] as? String == turnID,
+      let surfaceKind = result["surfaceKind"] as? String,
+      !surfaceKind.isEmpty,
       let runID = result["runId"] as? String,
       !runID.isEmpty,
       let attemptID = result["attemptId"] as? String,
@@ -1160,14 +1133,25 @@ actor AgentRuntimeProcess {
     else {
       throw ExternalSurfaceAuthorityError(code: "malformed_external_surface_begin_result")
     }
-    return ExternalSurfaceRunBinding(
+    let binding = ExternalSurfaceRunBinding(
       ownerID: ownerID,
       sessionID: sessionID,
+      surfaceKind: surfaceKind,
       turnID: turnID,
       runID: runID,
       attemptID: attemptID,
       duplicate: result["duplicate"] as? Bool ?? false
     )
+    await MainActor.run {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+      AgentRuntimeStatusStore.shared.recordAcceptedRun(
+        surface: .externalRun(surfaceKind: binding.surfaceKind, runId: binding.runID),
+        sessionId: binding.sessionID,
+        runId: binding.runID,
+        attemptId: binding.attemptID,
+        statusText: "Running")
+    }
+    return binding
   }
 
   func invokeExternalSurfaceTool(
@@ -1234,6 +1218,7 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
+    finalText: String? = nil,
     errorCode: String? = nil,
     transitionCleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
   ) async throws -> ExternalSurfaceRunCompletion {
@@ -1278,6 +1263,7 @@ actor AgentRuntimeProcess {
         requestId: requestId,
         binding: binding,
         terminalStatus: terminalStatus,
+        finalText: finalText,
         errorCode: errorCode
       ),
       expectedKind: .externalSurfaceRunCompleteResult,
@@ -1299,12 +1285,34 @@ actor AgentRuntimeProcess {
     else {
       throw ExternalSurfaceAuthorityError(code: "malformed_external_surface_complete_result")
     }
-    return ExternalSurfaceRunCompletion(
+    let completion = ExternalSurfaceRunCompletion(
       runID: binding.runID,
       attemptID: binding.attemptID,
       terminalStatus: confirmedStatus,
-      duplicate: result["duplicate"] as? Bool ?? false
+      duplicate: result["duplicate"] as? Bool ?? false,
+      finalTextPersisted: result["finalTextPersisted"] as? Bool ?? false,
+      journalMaterialized: result["journalMaterialized"] as? Bool ?? false
     )
+    if let authorizationSnapshot {
+      await MainActor.run {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        let projectionStatus: AgentRunProjectionStatus
+        switch completion.terminalStatus {
+        case .completed: projectionStatus = .succeeded
+        case .failed: projectionStatus = .failed
+        case .cancelled: projectionStatus = .cancelled
+        }
+        AgentRuntimeStatusStore.shared.recordConfirmedTerminalRun(
+          surface: .externalRun(surfaceKind: binding.surfaceKind, runId: binding.runID),
+          sessionId: binding.sessionID,
+          runId: binding.runID,
+          attemptId: binding.attemptID,
+          status: projectionStatus,
+          statusText: ExternalSurfaceRunAnswer.normalized(finalText),
+          errorMessage: projectionStatus == .failed ? errorCode : nil)
+      }
+    }
+    return completion
   }
 
   private func assertCurrentExternalOwner(_ ownerID: String) throws {
@@ -1503,72 +1511,6 @@ actor AgentRuntimeProcess {
     return message
   }
 
-  static func externalSurfaceRunBeginWireMessage(
-    clientId: String,
-    requestId: String,
-    ownerId: String,
-    sessionId: String,
-    turnId: String,
-    prompt: String,
-    mode: ExternalSurfaceRunMode
-  ) -> [String: Any] {
-    var message = protocolEnvelope(
-      type: "external_surface_run_begin",
-      clientId: clientId,
-      requestId: requestId,
-      ownerId: ownerId
-    )
-    message["sessionId"] = sessionId
-    message["turnId"] = turnId
-    message["prompt"] = prompt
-    message["mode"] = mode.rawValue
-    return message
-  }
-
-  static func externalSurfaceToolInvokeWireMessage(
-    clientId: String,
-    requestId: String,
-    binding: ExternalSurfaceRunBinding,
-    invocationId: String,
-    toolName: String,
-    input: [String: Any]
-  ) -> [String: Any] {
-    var message = protocolEnvelope(
-      type: "external_surface_tool_invoke",
-      clientId: clientId,
-      requestId: requestId,
-      ownerId: binding.ownerID
-    )
-    message["sessionId"] = binding.sessionID
-    message["runId"] = binding.runID
-    message["attemptId"] = binding.attemptID
-    message["invocationId"] = invocationId
-    message["toolName"] = toolName
-    message["input"] = input
-    return message
-  }
-
-  static func externalSurfaceRunCompleteWireMessage(
-    clientId: String,
-    requestId: String,
-    binding: ExternalSurfaceRunBinding,
-    terminalStatus: ExternalSurfaceRunTerminalStatus,
-    errorCode: String?
-  ) -> [String: Any] {
-    var message = protocolEnvelope(
-      type: "external_surface_run_complete",
-      clientId: clientId,
-      requestId: requestId,
-      ownerId: binding.ownerID
-    )
-    message["sessionId"] = binding.sessionID
-    message["runId"] = binding.runID
-    message["attemptId"] = binding.attemptID
-    message["terminalStatus"] = terminalStatus.rawValue
-    if let errorCode, !errorCode.isEmpty { message["errorCode"] = errorCode }
-    return message
-  }
-
   static func queryWireMessage(
     clientId: String,
     requestId: String,
@@ -1581,7 +1523,10 @@ actor AgentRuntimeProcess {
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
-    reasoningEffort: String? = nil
+    reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
+    jitKnowledgeToolsEnabled: Bool = false
   ) -> [String: Any] {
     var message = protocolEnvelope(
       type: "query",
@@ -1597,6 +1542,15 @@ actor AgentRuntimeProcess {
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
+    if let jitBudget { message["jitBudget"] = jitBudget.wireDictionary }
+    if let jitCostEvidenceProjection {
+      message["jitCostEvidenceProjection"] = jitCostEvidenceProjection.value
+    }
+    // UX gate only: the backend independently re-checks JIT entitlement on
+    // every /v1/agent/execute-tool call. Omitted (not `false`) when the
+    // rollout verdict isn't `enabled`, matching how the runtime treats an
+    // absent field as false.
+    if jitKnowledgeToolsEnabled { message["jitKnowledgeToolsEnabled"] = true }
     if let expectedContext {
       message["expectedContextSnapshotVersion"] = expectedContext.version
       message["expectedContextSnapshotGeneration"] = expectedContext.generation
@@ -2046,8 +2000,7 @@ actor AgentRuntimeProcess {
   }
 
   @discardableResult
-  func refreshAuthToken(
-    _ token: String,
+  func confirmModelCredentials(
     expectedOwnerId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) -> Bool {
@@ -2058,8 +2011,7 @@ actor AgentRuntimeProcess {
     }
     let activeOwnerId = currentOwnerId()
     guard
-      let message = Self.refreshTokenWireMessage(
-        token: token,
+      let message = Self.modelCredentialsReadyWireMessage(
         expectedOwnerId: expectedOwnerId,
         currentOwnerId: activeOwnerId
       )
@@ -2078,17 +2030,15 @@ actor AgentRuntimeProcess {
     return sent
   }
 
-  nonisolated static func refreshTokenWireMessage(
-    token: String,
+  nonisolated static func modelCredentialsReadyWireMessage(
     expectedOwnerId: String,
     currentOwnerId: String?
   ) -> [String: Any]? {
     let expected = expectedOwnerId.trimmingCharacters(in: .whitespacesAndNewlines)
     let current = currentOwnerId?.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !token.isEmpty, !expected.isEmpty, current == expected else { return nil }
+    guard !expected.isEmpty, current == expected else { return nil }
     return [
-      "type": "refresh_token",
-      "token": token,
+      "type": "refresh_owner",
       "ownerId": expected,
     ]
   }
@@ -2294,7 +2244,7 @@ actor AgentRuntimeProcess {
   /// process. With the process paused it emits no further events, so an in-flight
   /// chat send stalls exactly like a hung ACP subprocess — driving the
   /// StallDetector to `.stalled` (20s) and, if held long enough, ChatProvider's
-  /// 180s send watchdog (CHAT-02). A safety auto-resume fires after `durationMs`
+  /// 60s send watchdog (CHAT-02). A safety auto-resume fires after `durationMs`
   /// (hard-capped) so the process can never stay frozen if `debugResumeStream`
   /// is never called. Non-production bundles only.
   func debugSuspendStream(durationMs: Int) -> [String: String] {
@@ -2380,9 +2330,12 @@ actor AgentRuntimeProcess {
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
+    onTurnActivity: @escaping AgentBridge.TurnActivityHandler,
     onThinkingDelta: @escaping AgentBridge.ThinkingDeltaHandler,
     onToolResultDisplay: @escaping AgentBridge.ToolResultDisplayHandler,
     onAuthRequired: @escaping AgentBridge.AuthRequiredHandler,
@@ -2390,6 +2343,10 @@ actor AgentRuntimeProcess {
   ) async throws -> AgentBridge.QueryResult {
     guard isBridgeReady else { throw BridgeError.stopped }
     try assertAuthorization(authorizationSnapshot)
+
+    // See AgentRuntimeProcess+JITKnowledgeToolsGate.swift: fail-closed UX gate only.
+    let jitKnowledgeToolsEnabled = await Self.resolvedJitKnowledgeToolsEnabled(
+      authorizationSnapshot: authorizationSnapshot)
 
     return try await withCheckedThrowingContinuation { continuation in
       let surfaceRef = surface
@@ -2400,6 +2357,7 @@ actor AgentRuntimeProcess {
         originatingUserText: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
+        onTurnActivity: onTurnActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,
@@ -2424,7 +2382,10 @@ actor AgentRuntimeProcess {
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
-        reasoningEffort: reasoningEffort
+        reasoningEffort: reasoningEffort,
+        jitBudget: jitBudget,
+        jitCostEvidenceProjection: jitCostEvidenceProjection,
+        jitKnowledgeToolsEnabled: jitKnowledgeToolsEnabled
       )
       sendJson(queryDict)
     }
@@ -2593,31 +2554,16 @@ actor AgentRuntimeProcess {
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
-    if !rustBase.isEmpty {
-      env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
-    } else if preferredAdapterId == .piMono {
+    env = Self.childBackendRoutingEnvironment(baseEnvironment: env, rustBase: rustBase)
+    if rustBase.isEmpty && preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
 
     Self.removeInheritedBYOKEnvironment(from: &env)
-    let byok = await Self.usableBYOKEnvironment()
-    try assertStartupAuthority(
-      authorizationSnapshot,
-      expectedAuthorityEpoch: admissionAuthorityEpoch)
-    for (key, value) in byok.values {
-      env[key] = value
-    }
-    if APIKeyService.isByokActive {
-      if !byok.suppressedProviders.isEmpty {
-        for provider in byok.suppressedProviders {
-          log(
-            "CredentialHealth: context=agent_runtime_env failure_class=byok_invalid_suppressed provider=\(provider.rawValue)"
-          )
-        }
-      }
-      log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
-    }
+    env.removeValue(forKey: "OMI_AUTH_TOKEN")
+    env.removeValue(forKey: "OMI_API_KEY")
+    env["OMI_MODEL_CREDENTIALS"] = "on_demand"
 
     let shouldFetchManagedToken = AgentRuntimeCredentialPolicy.requiresManagedCredentials(
       requestedCredentials: requiresCredentials,
@@ -2641,15 +2587,13 @@ actor AgentRuntimeProcess {
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
-    if let hermeticFaultModelToken {
-      env["OMI_AUTH_TOKEN"] = hermeticFaultModelToken
+    if hermeticFaultModelToken != nil {
       log("AgentRuntimeProcess: starting non-production fault-model runtime without Firebase auth")
     } else if let authHeader,
-      let token = Self.bearerToken(from: authHeader)
+      Self.bearerToken(from: authHeader) != nil
     {
       startupPermissionGrantedChecked = requiresPiMonoCredentials
       startupPermissionGranted = requiresPiMonoCredentials
-      env["OMI_AUTH_TOKEN"] = token
     } else if requiresPiMonoCredentials {
       startupPermissionGrantedChecked = true
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
@@ -2685,6 +2629,27 @@ actor AgentRuntimeProcess {
       env.removeValue(forKey: "PLAYWRIGHT_USE_EXTENSION")
       env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
+
+    // User-managed local skills and MCP servers (~/.omi). Skills re-read per
+    // turn for the prompt catalog, but the pi-mono extension registers its MCP
+    // proxy tools once per spawn, so a file change reaches chat through the
+    // ChatProvider respawn on .omiUserMcpDidChange (debounced, never mid-turn).
+    // The OAuth refresh is unawaited: a stale token costs one server a 401
+    // (fail-open), and its write notifies, so the refreshed token applies
+    // without waiting for the next session.
+    env["OMI_USER_SKILLS_DIR"] = LocalSkillsStore.rootURL.path
+    // The disabled toggle must bind the tools too, not just the prompt catalog:
+    // load_skill/search_skills refuse names on this list.
+    if let disabledSkillsEnv = ChatProvider.disabledSkillsRuntimeEnvValue() {
+      env["OMI_DISABLED_SKILLS"] = disabledSkillsEnv
+    } else {
+      env.removeValue(forKey: "OMI_DISABLED_SKILLS")
+    }
+    // Skills dropped by hand never run the UI save path, so the ACP lane's
+    // plugin gate would silently miss them; write the manifest before spawn.
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
+    env["OMI_LOCAL_MCP_FILE"] = LocalMcpStore.fileURL.path
+    Task { await LocalMcpStore.refreshExpiredTokens() }
 
     try assertStartupAuthority(
       authorizationSnapshot,
@@ -2730,7 +2695,7 @@ actor AgentRuntimeProcess {
       try proc.run()
       markRuntimeOwnerAuthorityDirty()
       let launchedAuthorityEpoch = runtimeOwnerAuthorityEpoch
-      if env["OMI_AUTH_TOKEN"]?.isEmpty == false {
+      if env["OMI_MODEL_CREDENTIALS"] == "on_demand" {
         synchronizedRuntimeCredentialOwnerID = authorizationSnapshot.ownerID
       }
       startReadingStdout()
@@ -2814,19 +2779,19 @@ actor AgentRuntimeProcess {
 
     var candidateValues: [String: String] = [:]
     var suppressedProviders: [BYOKProvider] = []
-    for provider in BYOKProvider.allCases {
-      guard let key = APIKeyService.byokKey(provider) else { continue }
-      let fingerprint = APIKeyService.byokFingerprint(key)
-      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint) {
-        candidateValues[byokEnvironmentKey(for: provider)] = key
+    for (provider, entry) in APIKeyService.activeBYOKSnapshot {
+      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: entry.fingerprint) {
+        candidateValues[byokEnvironmentKey(for: provider)] = entry.key
       } else {
         suppressedProviders.append(provider)
       }
     }
-    guard suppressedProviders.isEmpty, candidateValues.count == BYOKProvider.allCases.count else {
+    guard let selectedProvider = APIKeyService.selectedBYOKLLMProvider,
+      candidateValues[byokEnvironmentKey(for: selectedProvider)] != nil
+    else {
       return ([:], suppressedProviders)
     }
-    return (candidateValues, [])
+    return (candidateValues, suppressedProviders)
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
@@ -3177,6 +3142,24 @@ actor AgentRuntimeProcess {
     }
 
     switch message.kind {
+    case .modelHeadersRequest:
+      guard let requestID = message.payload["requestId"] as? String,
+        let ownerID = message.payload["ownerId"] as? String,
+        let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+        authorization.ownerID == ownerID
+      else { return }
+      let forceRefresh = message.payload["forceRefresh"] as? Bool ?? false
+      let generation = processGeneration
+      Task {
+        let reply = await AgentModelCredentials.resolve(ownerID: ownerID, forceRefresh: forceRefresh)
+        guard generation == processGeneration,
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+        else { return }
+        var result: [String: Any] = [:]
+        if let headers = reply.headers { result["headers"] = headers }
+        if let code = reply.failureCode { result["failureCode"] = code }
+        _ = sendJson(["type": "model_headers_result", "requestId": requestID, "result": result])
+      }
     case .initMessage:
       let handshake: RuntimeHandshake
       do {
@@ -3244,6 +3227,9 @@ actor AgentRuntimeProcess {
         message.payload["toolUseId"] as? String,
         message.payload["input"] as? [String: Any]
       )
+
+    case .turnActivity:
+      routedRequest(for: message)?.onTurnActivity()
 
     case .toolResultDisplay:
       routedRequest(for: message)?.onToolResultDisplay(
@@ -3709,8 +3695,9 @@ actor AgentRuntimeProcess {
         suppressedByStreamingTail: message.payload["suppressedByStreamingTail"] as? Bool ?? false,
         materializationStoppedByTail: message.payload["materializationStoppedByTail"] as? Bool ?? false,
         materializationReceipts: Self.chatFirstMaterializationReceipts(
-          from: message.payload["materializationReceipts"]
-        ),
+          from: message.payload["materializationReceipts"]),
+        materializationRejections: Self.chatFirstRejections(from: message.payload["materializationRejections"]),
+        materializationDeferrals: Self.chatFirstDeferrals(from: message.payload["materializationDeferrals"]),
         coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
           from: message.payload["coldStartSequenceTerminalReceipts"]
         ),
@@ -4000,7 +3987,7 @@ actor AgentRuntimeProcess {
         journalRequest.continuation.resume(throwing: BridgeError.authMissing)
         return
       }
-      log("AgentRuntimeProcess: journal operation failed (code-only)")
+      log(Self.chatFirstJournalFailureLog(failure: failure, payload: message.payload, raw: raw))
       journalRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
       )
@@ -4034,32 +4021,6 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: agent error (raw): \(raw)")
     }
     request.continuation.resume(throwing: bridgeError)
-  }
-
-  private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
-    let payload = message.payload
-    let omiSessionId = payload["sessionId"] as? String ?? ""
-    let adapterSessionId = payload["adapterSessionId"] as? String
-    return AgentBridge.QueryResult(
-      text: payload["text"] as? String ?? "",
-      costUsd: payload["costUsd"] as? Double ?? 0,
-      omiSessionId: omiSessionId,
-      runId: payload["runId"] as? String ?? "",
-      attemptId: payload["attemptId"] as? String ?? "",
-      adapterSessionId: adapterSessionId,
-      terminalStatus: payload["terminalStatus"] as? String,
-      failure: AgentRuntimeFailure.parse(from: payload["failure"]),
-      inputTokens: payload["inputTokens"] as? Int ?? 0,
-      outputTokens: payload["outputTokens"] as? Int ?? 0,
-      cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
-      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
-      artifacts: AgentArtifactProjection.parseList(
-        fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
-      ),
-      completionDeltaArtifacts: AgentArtifactProjection.parseList(
-        fromJSONArray: payload["completionDeltaArtifacts"] as? [[String: Any]] ?? []
-      )
-    )
   }
 
   @discardableResult

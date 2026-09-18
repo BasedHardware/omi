@@ -164,19 +164,75 @@ def test_backend_source_or_deploy_input_change_proceeds(git_repo: Path, relative
     assert outputs == {'applies': 'true'}
 
 
-def test_stale_relevant_sha_reaches_and_fails_the_existing_admission_guard(git_repo: Path) -> None:
+def test_relevant_sha_left_behind_by_a_later_merge_still_reaches_admission(git_repo: Path) -> None:
+    """Scope must not strand a backend change that main has moved past.
+
+    This is the case the previous version of this test only claimed to cover:
+    it built a later main SHA but never handed it to scope, so scope saw the
+    backend commit as main's tip and the assertion proved nothing. Passing it
+    exercises the real path -- scope used to green-no-op here, and because the
+    later commit no-ops on its own unrelated diff, the backend change never
+    deployed at all.
+    """
     relevant_sha = _commit(git_repo, 'backend/main.py')
-    outputs, _summary = _run_scope(git_repo, relevant_sha)
-    admission = _load_admission_script()
+    later_main_sha = _commit(git_repo, 'desktop/macos/README.md')
+
+    outputs, _summary = _run_scope(git_repo, relevant_sha, main_sha=later_main_sha)
 
     assert outputs == {'applies': 'true'}
-    with pytest.raises(admission.AutomaticReleaseAdmissionError, match='still equal current main'):
+
+
+def test_admission_accepts_a_target_newer_than_the_trigger(git_repo: Path) -> None:
+    """Admission deploys the newest proven commit, not the triggering one."""
+    trigger_sha = _commit(git_repo, 'backend/main.py')
+    newer_sha = _commit(git_repo, 'backend/other.py')
+    admission = _load_admission_script()
+
+    admission.validate(
+        admission.AutomaticReleaseIdentity(
+            sha=newer_sha,
+            trigger_sha=trigger_sha,
+            main_sha=newer_sha,
+            run_attempt='1',
+            sha_is_ancestor_of_main=True,
+            trigger_is_ancestor_of_sha=True,
+        )
+    )
+
+
+def test_admission_refuses_a_target_older_than_the_trigger(git_repo: Path) -> None:
+    """Actions concurrency is not FIFO, so a late run must not downgrade dev."""
+    older_sha = _commit(git_repo, 'backend/main.py')
+    trigger_sha = _commit(git_repo, 'backend/other.py')
+    admission = _load_admission_script()
+
+    with pytest.raises(admission.AutomaticReleaseAdmissionError, match='older than the triggering release SHA'):
+        admission.validate(
+            admission.AutomaticReleaseIdentity(
+                sha=older_sha,
+                trigger_sha=trigger_sha,
+                main_sha=trigger_sha,
+                run_attempt='1',
+                sha_is_ancestor_of_main=True,
+                trigger_is_ancestor_of_sha=False,
+            )
+        )
+
+
+def test_unmerged_sha_is_still_rejected(git_repo: Path) -> None:
+    """Resolving a target replaces tip-equality; it does not relax merged-ness."""
+    relevant_sha = _commit(git_repo, 'backend/main.py')
+    admission = _load_admission_script()
+
+    with pytest.raises(admission.AutomaticReleaseAdmissionError, match='merged into current main'):
         admission.validate(
             admission.AutomaticReleaseIdentity(
                 sha=relevant_sha,
+                trigger_sha=relevant_sha,
                 main_sha='a' * 40,
-                checkout_sha='a' * 40,
                 run_attempt='1',
+                sha_is_ancestor_of_main=False,
+                trigger_is_ancestor_of_sha=True,
             )
         )
 

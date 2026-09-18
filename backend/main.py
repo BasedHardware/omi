@@ -4,9 +4,15 @@ import logging
 import os
 
 from utils.env_loader import firebase_admin_options, load_backend_env
+from utils.firebase_admin_runtime import (
+    firebase_verify_only_credential,
+    install_firebase_auth_mutation_guard,
+    install_google_adc_guard,
+)
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
+install_google_adc_guard()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,14 +20,17 @@ logger = logging.getLogger(__name__)
 import firebase_admin
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
+from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
 
 prepare_google_credentials()
+install_firebase_auth_mutation_guard()
 
 from routers import (
     chat,
     firmware,
+    static_map,
     transcribe,
     omni_relay,
     auto_model,
@@ -35,7 +44,9 @@ from routers import (
     payment,
     integration,
     conversations,
+    conversation_mutations,
     memories,
+    memory_use,
     api_key_management,
     mcp,
     mcp_sse,
@@ -46,6 +57,7 @@ from routers import (
     candidates,
     chat_first,
     chat_first_e2e,
+    daily_summary_e2e,
     task_integrations,
     integrations,
     x_connector,
@@ -67,30 +79,45 @@ from routers import (
     tools,
     metrics,
     fair_use_admin,
+    feedback_admin,
     staged_tasks,
     focus_sessions,
     advice,
     chat_sessions,
+    chat_generation,
     desktop_agent_vm,
     desktop_chat,
     desktop_core,
+    desktop_prompts,
     desktop_proxy,
     desktop_realtime,
     desktop_screen_crisp,
+    frame_requests,
+    referrals,
     desktop_tts_updates,
     scores,
+    stt,
     tts,
     memory_admin,
     memory_product,
     task_recommendations,
     conversation_finalization,
     public_shared_conversation_chat,
+    screen_frames,
+    jit_ledger_snapshot,
+    csat,
+    jit_rollout,
+    email_preferences,
 )
+from routers.listen.registry import proactive_message_dispatcher
 
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
+from utils.jit_rollout import close_posthog_control_plane
+from utils.free_tier_cohort import close_free_tier_control_plane
+from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -99,9 +126,15 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.stt.streaming import validate_streaming_stt_env
+from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
+from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
+from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
+from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
+from utils.other.local_storage import local_storage_root_from_env
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -111,7 +144,10 @@ validate_stripe_price_ids()
 
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
 _firebase_admin_options = firebase_admin_options()
-if _auth_emulator_host:
+_verify_only_credential = firebase_verify_only_credential()
+if _verify_only_credential is not None:
+    firebase_admin.initialize_app(_verify_only_credential, options=_firebase_admin_options)
+elif _auth_emulator_host:
     for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH"):
         os.environ.pop(_adc_key, None)
     _firebase_project_id = (
@@ -126,6 +162,11 @@ else:
     firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 app = FastAPI()
+
+_local_storage_root = local_storage_root_from_env()
+if _local_storage_root is not None:
+    _local_storage_root.mkdir(parents=True, exist_ok=True)
+    app.mount('/_local/storage', StaticFiles(directory=_local_storage_root), name='local-storage')
 
 # Explicit, default-deny CORS: this API is Bearer-token authenticated (mobile/
 # desktop apps, not ambient browser cookies), so no cross-origin browser
@@ -142,12 +183,23 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=['*'],
     allow_headers=['*'],
+    expose_headers=[
+        'X-Omi-Memory-As-Of',
+        'X-Omi-Memory-Belief-Enabled',
+        'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+        'X-Omi-Memory-Default-Delete-Supported',
+        'X-Omi-Memory-Device-Scope-Supported',
+        'X-Omi-Memory-Next-Cursor',
+        'X-Omi-List-Truncated',
+    ],
 )
 
 app.include_router(transcribe.router)
+app.include_router(static_map.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
+app.include_router(conversation_mutations.router)
 app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
 app.include_router(account_cutover.router)
@@ -157,17 +209,26 @@ if is_chat_first_e2e_harness_runtime():
     # The fixture router has its own runtime check as defense in depth.  It is
     # intentionally absent from dev/prod route tables, not merely disabled.
     app.include_router(chat_first_e2e.router)
+    # Same stage boundary, same defense in depth: the desktop memory-review flow
+    # needs a daily summary carrying `memories_learned`, which only the nightly
+    # job produces in a deployable environment.
+    app.include_router(daily_summary_e2e.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
 app.include_router(memories.router)
+app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
-# app.include_router(screenpipe.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(referrals.router)
+app.include_router(csat.router)
+app.include_router(feedback_admin.router)
+app.include_router(email_preferences.router)
+app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
@@ -207,18 +268,25 @@ app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
+app.include_router(chat_generation.router)
 app.include_router(scores.router)
+app.include_router(stt.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
 app.include_router(task_recommendations.router)
+app.include_router(jit_ledger_snapshot.router)
+app.include_router(jit_rollout.router)
 app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
+app.include_router(frame_requests.router)
 app.include_router(desktop_tts_updates.router)
+app.include_router(screen_frames.router)
+jit_rollout.validate_jit_rollout_contract(app)
 
 
 methods_timeout = {
@@ -237,6 +305,10 @@ paths_timeout = {
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
+    # STT proxy: 30s slot wait + 300s parakeet client budget (get_stt_proxy_client)
+    # + headroom for auth and the multipart spool read; the default POST timeout
+    # would cut long files off mid-transcription.
+    "/v1/stt/transcribe": os.environ.get('HTTP_STT_TRANSCRIBE_TIMEOUT', 350),
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
@@ -248,7 +320,9 @@ app.add_middleware(BYOKMiddleware)
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    start_metrics_sidecar_server()
     validate_account_deletion_dispatch_configuration()
+    validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
@@ -267,7 +341,19 @@ async def startup_event():
         run_blocking(db_executor, _drain_stale_processing_conversations),
         name='startup_stale_processing_reconcile',
     )
+    start_background_task(
+        run_blocking(db_executor, _drain_abandoned_byok_finalization_jobs),
+        name='startup_byok_abandonment_reconcile',
+    )
+    start_background_task(
+        run_blocking(db_executor, _drain_meeting_receipts),
+        name='startup_meeting_receipt_reconcile',
+    )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
+    start_background_task(
+        proactive_message_dispatcher(),
+        name='proactive_message_dispatcher',
+    )
 
 
 def _drain_pending_deletion_wipes():
@@ -316,6 +402,26 @@ def _drain_stale_processing_conversations():
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
 
 
+def _drain_abandoned_byok_finalization_jobs():
+    """Best-effort disposition of BYOK finalization jobs no live session can claim."""
+    try:
+        result = reconcile_abandoned_byok_finalization_jobs()
+        if result.get('abandoned'):
+            logger.info(f"Startup byok-abandonment reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup byok-abandonment reconciliation failed: {e}")
+
+
+def _drain_meeting_receipts():
+    """Best-effort repair of missing meeting receipt intents and historical receipts."""
+    try:
+        result = reconcile_meeting_receipts()
+        if result.get('repaired') or result.get('backfilled'):
+            logger.info(f"Startup meeting-receipt reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup meeting-receipt reconciliation failed: {e}")
+
+
 def _listen_finalization_reconcile_interval_seconds() -> int:
     """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
     try:
@@ -343,12 +449,32 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
+        try:
+            byok_result = await run_blocking(db_executor, reconcile_abandoned_byok_finalization_jobs)
+            if byok_result.get('abandoned'):
+                logger.info(f"Periodic byok-abandonment reconciliation: {byok_result}")
+        except Exception as e:
+            logger.error(f"Periodic byok-abandonment reconciliation failed: {e}")
+        try:
+            receipt_result = await run_blocking(db_executor, reconcile_meeting_receipts)
+            if receipt_result.get('repaired') or receipt_result.get('backfilled'):
+                logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
+        except Exception as e:
+            logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
+        try:
+            await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
+        except Exception as e:
+            logger.error(f"Periodic durable-queue age publish failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
+    await shutdown_managed_spend_ledger()
     await close_all_clients()
+    close_posthog_control_plane()
+    close_free_tier_control_plane()
+    stop_metrics_sidecar_server()
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']

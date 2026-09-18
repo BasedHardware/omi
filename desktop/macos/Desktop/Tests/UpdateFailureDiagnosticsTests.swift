@@ -17,12 +17,21 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     )
   }
 
-  func testManualDownloadURLPreservesBetaChannel() {
+  func testManualDownloadURLIgnoresLegacyChannelDefault() {
+    // The sidecar design pins the channel to bundle identity; the old
+    // update_channel default must no longer steer a stable install to beta.
     UserDefaults.standard.set("beta", forKey: "update_channel")
 
     XCTAssertEqual(
       AppBuild.manualDownloadURL.absoluteString,
-      "https://api.omi.me/v2/desktop/download/latest?channel=beta"
+      "https://api.omi.me/v2/desktop/download/latest?channel=stable"
+    )
+  }
+
+  func testOmiBetaInstallURLRequestsBetaIdentity() {
+    XCTAssertEqual(
+      AppBuild.omiBetaInstallURL.absoluteString,
+      "https://api.omi.me/v2/desktop/download/latest?channel=beta&identity=beta"
     )
   }
 

@@ -206,7 +206,7 @@ final class ShellWindowChromeTests: XCTestCase {
       "the panels inside draw their own ambient shadow; the shell does not add an outer frame shadow")
     XCTAssertTrue(
       WindowGlass.hasTitlebar(ShellWindowChrome.glassKind),
-      "the transparent title bar remains a drag handle, and ⌘W routes from the mask")
+      "the hidden title bar stays so ⌘W routes from the mask; the top bar occupies that band")
   }
 
   /// …and `dress` really applies it, in both presentations. The mapping above is a value; this is the

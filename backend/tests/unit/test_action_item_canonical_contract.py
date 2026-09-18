@@ -18,6 +18,11 @@ import routers.action_items as action_items_router
 from utils.task_intelligence import task_links
 
 
+@pytest.fixture(autouse=True)
+def _isolate_task_change_wake(monkeypatch):
+    monkeypatch.setattr(action_items_router, 'run_task_changed_wake', lambda *_args, **_kwargs: None)
+
+
 def test_create_update_and_response_round_trip_every_canonical_field():
     payload = {
         'description': 'Send the budget',
@@ -107,6 +112,38 @@ def test_released_macos_request_shapes_remain_compatible_at_route_boundary():
     assert 'category' not in create.storage_payload()
     assert update.storage_payload()['due_at'] is None
     assert 'clear_due_at' not in update.storage_payload()
+
+
+def test_owner_change_emits_bounded_assignee_correction_after_durable_update(monkeypatch):
+    existing = {'id': 'task-1', 'description': 'Send budget', 'owner': 'unknown', 'completed': False}
+    updated = {**existing, 'owner': 'user', 'conversation_id': 'conversation-1'}
+    emitted = []
+    monkeypatch.setattr(action_items_router, '_get_valid_action_item', lambda *_: existing)
+    monkeypatch.setattr(action_items_router.action_items_db, 'update_action_item', lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(action_items_router.action_items_db, 'get_action_item', lambda *_: updated)
+    monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(action_items_router, 'emit_product_event', lambda **event: emitted.append(event))
+
+    result = action_items_router.update_action_item(
+        'task-1',
+        ActionItemUpdateRequest(owner='user'),
+        uid='user-1',
+    )
+
+    assert result.owner == 'user'
+    assert emitted == [
+        {
+            'uid': 'user-1',
+            'event': 'Task Assignee Corrected',
+            'properties': {
+                'action_item_id': 'task-1',
+                'conversation_id': 'conversation-1',
+                'previous_assignee': 'unknown',
+                'new_assignee': 'user',
+                'field_changed': 'owner',
+            },
+        }
+    ]
 
 
 @pytest.mark.parametrize(
@@ -226,6 +263,9 @@ def test_action_item_lists_hide_soft_retired_rows_before_pagination(monkeypatch)
     }
     query = MagicMock()
     query.order_by.return_value = query
+    query.select.return_value = query
+    query.limit.return_value = query
+    query.offset.return_value = query
     query.stream.return_value = [retired, active]
     collection = MagicMock()
     collection.where.return_value = query

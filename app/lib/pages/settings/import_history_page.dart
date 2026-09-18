@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -39,6 +40,20 @@ String formatImportJobTimestamp(AppLocalizations l10n, DateTime createdAt, {Date
     return l10n.yesterdayAtTime(time);
   }
   return '${local.day}/${local.month}/${local.year} at $time';
+}
+
+class ImportJobCountChip {
+  final int count;
+  final bool skipped;
+
+  const ImportJobCountChip({required this.count, required this.skipped});
+}
+
+List<ImportJobCountChip> importJobCountChips({int? created, int? skipped}) {
+  return [
+    if ((created ?? 0) > 0) ImportJobCountChip(count: created!, skipped: false),
+    if ((skipped ?? 0) > 0) ImportJobCountChip(count: skipped!, skipped: true),
+  ];
 }
 
 class ImportHistoryPage extends StatefulWidget {
@@ -215,7 +230,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.importErrorGeneric(e.toString())), backgroundColor: Colors.red.shade700),
+          SnackBar(content: Text(context.l10n.importErrorGeneric(readableError(e))), backgroundColor: Colors.red.shade700),
         );
       }
     }
@@ -515,24 +530,37 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   ],
                 ),
               ),
-              // Conversations count badge (extreme right)
-              if (job.conversationsCreated != null && job.conversationsCreated! > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        context.l10n.nConversations(job.conversationsCreated!),
-                        style: TextStyle(color: Colors.green.shade400, fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.check_circle, color: Colors.green.shade400, size: 14),
-                    ],
+              for (final chip in importJobCountChips(
+                created: job.conversationsCreated,
+                skipped: job.conversationsSkipped,
+              ))
+                Padding(
+                  padding: EdgeInsets.only(left: chip.skipped && (job.conversationsCreated ?? 0) > 0 ? 6 : 0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: chip.skipped ? Colors.white.withValues(alpha: 0.12) : Colors.green.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          context.l10n.nConversations(chip.count),
+                          style: TextStyle(
+                            color: chip.skipped ? Colors.white70 : Colors.green.shade400,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          chip.skipped ? Icons.history : Icons.check_circle,
+                          color: chip.skipped ? Colors.white70 : Colors.green.shade400,
+                          size: 14,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
             ],

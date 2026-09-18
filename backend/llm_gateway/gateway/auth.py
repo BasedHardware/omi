@@ -11,6 +11,7 @@ from pydantic import Field, ValidationError, field_validator
 from llm_gateway.gateway.metrics import observe_auth_rejection, report_observation_failure
 from llm_gateway.gateway.request_context import request_id_for
 from llm_gateway.gateway.schemas import StrictBaseModel
+from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,10 @@ CALLER_HEADER = 'x-omi-service-caller'
 USER_UID_HEADER = 'x-omi-user-uid'
 TENANT_ID_HEADER = 'x-omi-tenant-id'
 USAGE_FEATURE_HEADER = 'x-omi-llm-feature'
+APP_PLATFORM_HEADER = 'x-omi-app-platform'
+# Closed enum. Anything else is unattributed rather than stored as free-form
+# client text, so the cost ledger's platform dimension stays aggregatable.
+ALLOWED_APP_PLATFORMS = frozenset({'desktop', 'mobile', 'web'})
 
 
 class ServiceCaller(StrictBaseModel):
@@ -40,6 +45,20 @@ class ServiceCaller(StrictBaseModel):
         pattern=r'^[a-zA-Z0-9_.-]+$',
         exclude=True,
     )
+    app_platform: str | None = Field(default=None, exclude=True)
+
+    @field_validator('app_platform', mode='before')
+    @classmethod
+    def normalize_app_platform(cls, value: str | None) -> str | None:
+        """Accept only the closed platform enum; unknown values are unattributed.
+
+        A junk or unrecognized header must not reject the request — attribution is
+        best-effort accounting metadata, not authentication.
+        """
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip().lower()
+        return normalized if normalized in ALLOWED_APP_PLATFORMS else None
 
     @field_validator('name', mode='before')
     @classmethod
@@ -84,6 +103,7 @@ def require_service_auth(request: Request) -> ServiceCaller:
             user_uid=request.headers.get(USER_UID_HEADER),
             tenant_id=request.headers.get(TENANT_ID_HEADER),
             usage_feature=request.headers.get(USAGE_FEATURE_HEADER),
+            app_platform=request.headers.get(APP_PLATFORM_HEADER),
         )
     except ValidationError as exc:
         _record_auth_rejection(request, 'invalid_caller')
@@ -91,6 +111,14 @@ def require_service_auth(request: Request) -> ServiceCaller:
     if caller.name not in allowed_service_callers():
         _record_auth_rejection(request, 'caller_not_allowed')
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='service caller is not allowed')
+    try:
+        enforce_jit_qa_uid(caller.user_uid or '')
+    except JITQAAdmissionError:
+        _record_auth_rejection(request, 'qa_uid_not_allowed')
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='user is not admitted to the isolated QA plane',
+        )
 
     return caller
 

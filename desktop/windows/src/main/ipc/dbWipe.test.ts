@@ -46,6 +46,34 @@ describe('wipeUserDataOn (sign-out teardown)', () => {
       expect(count(db, t)).toBe(1)
     }
   })
+
+  it('wipes legacy user data when an additive JIT bootstrap left mirror tables absent', () => {
+    const db = makeSeededDb()
+    const optionalJitTables = USER_DATA_TABLES.filter((table) => table.startsWith('jit_'))
+    for (const table of optionalJitTables) db.exec(`DROP TABLE ${table}`)
+
+    wipeUserDataOn(db)
+
+    for (const table of USER_DATA_TABLES) {
+      if (optionalJitTables.includes(table)) continue
+      expect(count(db, table)).toBe(0)
+    }
+  })
+
+  it('does not clear install-scoped JIT cleanup authority during account wipe', () => {
+    const db = makeSeededDb()
+    db.exec('CREATE TABLE jit_keyframe_pin (v INTEGER)')
+    db.exec('CREATE TABLE jit_keyframe_cleanup_outbox (v INTEGER)')
+    db.prepare('INSERT INTO jit_keyframe_pin (v) VALUES (1)').run()
+    db.prepare('INSERT INTO jit_keyframe_cleanup_outbox (v) VALUES (1)').run()
+
+    wipeUserDataOn(db)
+
+    // The caller drains these rows' physical image paths first. A failed unlink
+    // must leave both records available to the launch retry worker.
+    expect(count(db, 'jit_keyframe_pin')).toBe(1)
+    expect(count(db, 'jit_keyframe_cleanup_outbox')).toBe(1)
+  })
 })
 
 // Drift guard: every table in the REAL schema must be wiped on sign-out (or be
@@ -57,7 +85,13 @@ describe('wipeUserDataOn (sign-out teardown)', () => {
 const WIPE_EXEMPT = new Set<string>([
   // app_meta holds app-level flags (clean-exit, launch-at-login migrated) that must
   // survive an account switch — not user content. Owned by Track 4 (see dbWipe.ts).
-  'app_meta'
+  'app_meta',
+  // JIT pins and their cleanup outbox are install-scoped unlink authority. The
+  // account wipe queues/drains their physical image files first and retains
+  // failed rows for a later retry; deleting these tables here would strand a
+  // file or clear the only retry record.
+  'jit_keyframe_pin',
+  'jit_keyframe_cleanup_outbox'
 ])
 
 // Pull table names straight from source so the guard tracks db.ts / dbMigrations.ts

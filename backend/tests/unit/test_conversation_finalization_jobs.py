@@ -9,6 +9,7 @@ from google.api_core.exceptions import Aborted
 
 from database import conversation_finalization_jobs as jobs
 from database import firestore_transaction_retry
+from utils.listen_pusher_session import FINALIZATION_IN_FLIGHT_ERROR
 
 
 class _PhotoCollection:
@@ -101,7 +102,7 @@ def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
 
 def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material():
     transaction = _Transaction()
-    conversation_ref = _conversation()
+    conversation_ref = _conversation({'client_platform': 'android'})
     collection = _Collection({})
 
     intent = jobs._create_or_get_finalization_intent_txn(
@@ -124,7 +125,7 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert job['dispatch_generation'] == 1
     assert job['status'] == 'queued'
     assert job['fanout_key'] == 'fanout-key'
-    assert job['fanout_status'] == 'pending'
+    assert (job['fanout_status'], job['client_platform']) == ('pending', 'android')
     forbidden = {'byok_keys', 'transcript', 'transcript_segments', 'authorization', 'raw_error'}
     assert forbidden.isdisjoint(job)
     assert transaction.updates[0][1]['status'] == 'processing'
@@ -408,10 +409,10 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     first = _Transaction()
 
     claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 0, 'created_at': None}
     claim_update = first.updates[0][1]
     assert claim_update['status'] == 'leased'
-    assert claim_update['attempt_count'] == 1
+    assert 'attempt_count' not in claim_update
 
     ref.data = ref.data | claim_update
     duplicate = _Transaction()
@@ -422,6 +423,29 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
         'created_at': None,
     }
     assert duplicate.updates == []
+
+
+def test_live_lease_rejection_matches_the_listen_in_flight_wire_error():
+    """Pin the string the live session keys its in-flight branch on.
+
+    pusher reports a rejected claim as `job_<status>`; listen must recognise the
+    live-lease rejection as healthy in-flight work rather than a failed attempt.
+    """
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'attempt_count': 1,
+            'lease_expires_at': now + timedelta(seconds=300),
+        },
+    )
+
+    claim = jobs._claim_finalization_job_txn(_Transaction(), ref, 2, False, 1500, now)
+
+    assert f"job_{claim['status']}" == FINALIZATION_IN_FLIGHT_ERROR
+    assert claim['status'] not in jobs.TERMINAL_JOB_STATUSES
 
 
 def test_expired_worker_lease_can_be_safely_reclaimed():
@@ -438,9 +462,52 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     transaction = _Transaction()
 
     claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 2, 'created_at': None}
-    assert transaction.updates[0][1]['attempt_count'] == 2
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
+    assert 'attempt_count' not in transaction.updates[0][1]
     assert transaction.updates[0][1]['lease_epoch'] == 1
+
+
+def test_session_handoff_reclaim_does_not_burn_the_processing_attempt_budget():
+    """Reconnects reclaim an expired lease; that is not a failed processing try."""
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'attempt_count': 0,
+            'lease_epoch': 3,
+            'lease_expires_at': now - timedelta(seconds=1),
+        },
+    )
+
+    for _ in range(5):
+        transaction = _Transaction()
+        claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
+        assert claim['status'] == 'claimed'
+        assert claim['attempt_count'] == 0
+        assert 'attempt_count' not in transaction.updates[0][1]
+        ref.data = ref.data | transaction.updates[0][1]
+        ref.data['lease_expires_at'] = now - timedelta(seconds=1)
+
+
+def test_retryable_processing_failure_increments_the_attempt_budget():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'lease_epoch': 4,
+            'attempt_count': 0,
+            'requires_byok': False,
+        },
+    )
+    transaction = _Transaction()
+
+    assert jobs._mark_finalization_retryable_txn(transaction, ref, 2, 4, 'processing_failed', now) is True
+    assert transaction.updates[0][1]['attempt_count'] == 1
+    assert transaction.updates[0][1]['last_failure_code'] == 'processing_failed'
 
 
 def test_finalization_completion_requires_durable_fanout_completion():
@@ -470,11 +537,80 @@ def test_finalization_completion_requires_durable_fanout_completion():
 
     completed_fanout = _Transaction()
     assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now) is True
+    assert 'meeting_treatment_eligible' not in completed_fanout.updates[0][1]
     ref.data = ref.data | completed_fanout.updates[0][1]
 
     completed = _Transaction()
     assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
     assert completed.updates[0][1]['terminal_outcome'] == 'success'
+
+
+def test_meeting_receipt_is_created_once_on_existing_job_and_projected_to_conversation():
+    now = _now()
+    conversation_ref = _completed_finalization_conversation()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+        },
+    )
+    jobs_collection = _Collection({'job-1': job_ref})
+
+    first = _Transaction()
+    receipt = jobs._record_meeting_receipt_txn(
+        first,
+        conversation_ref,
+        jobs_collection,
+        'uid-1',
+        'conversation-1',
+        'job-1',
+        True,
+        'eligible',
+        1720.0,
+        1719.8,
+        now,
+    )
+
+    assert receipt['job_id'] == 'job-1'
+    assert first.updates[0][0] is job_ref
+    assert first.updates[0][1]['meeting_treatment_reason'] == 'eligible'
+    assert first.updates[1][0] is conversation_ref
+    assert first.updates[1][1]['meeting_treatment_eligible'] is True
+
+    job_ref.data = job_ref.data | first.updates[0][1]
+    replay = _Transaction()
+    replayed = jobs._record_meeting_receipt_txn(
+        replay,
+        conversation_ref,
+        jobs_collection,
+        'uid-1',
+        'conversation-1',
+        'job-1',
+        False,
+        'too_short',
+        1.0,
+        1.0,
+        now + timedelta(minutes=1),
+    )
+
+    assert replayed['meeting_treatment_eligible'] is True
+    assert replayed['meeting_treatment_reason'] == 'eligible'
+    assert replay.updates == [
+        (
+            conversation_ref,
+            {
+                'finalization_job_id': 'job-1',
+                'meeting_treatment_eligible': True,
+                'meeting_treatment_reason': 'eligible',
+                'meeting_duration_s': 1720.0,
+                'meeting_dedup_speech_s': 1719.8,
+            },
+        )
+    ]
 
 
 def test_admitted_terminal_replay_updates_its_shard_once():
@@ -717,7 +853,7 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
 
     reclaim = _Transaction()
     new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now)
-    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 1, 'created_at': None}
+    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 0, 'created_at': None}
     ref.data = ref.data | reclaim.updates[0][1]
 
     stale_completion = _Transaction()
@@ -841,29 +977,39 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
             return Ref()
 
     class JobQuery:
-        def where(self, field, operator, _value):
-            assert (field, operator) == ('reconcile_after_at', '<=')
+        def __init__(self):
+            self.filtered_statuses: list[str] = []
+
+        def where(self, *, filter):
+            assert (filter.field_path, filter.op_string) == ('status', '==')
+            self.filtered_statuses.append(filter.value)
+            return self
+
+        def order_by(self, field):
+            assert field == 'created_at'
             return self
 
         def limit(self, value):
-            assert value == 100
+            assert value == 1
             return self
 
         def stream(self):
             return iter(())
 
     projection = Projection()
+    job_query = JobQuery()
 
     class Client:
         def collection(self, name):
             if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
                 return projection
             assert name == jobs.FINALIZATION_JOBS_COLLECTION
-            return JobQuery()
+            return job_query
 
     summary = jobs.get_finalization_job_summary(firestore_client=Client())
 
     assert len(projection.read_ids) == jobs.FINALIZATION_PROJECTION_SHARD_COUNT
+    assert sorted(job_query.filtered_statuses) == sorted(jobs.NONTERMINAL_JOB_STATUSES)
     assert summary == {
         'accepted': 8,
         'success': 1,
@@ -878,6 +1024,64 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
         'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': 0.0,
     }
+
+
+def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
+    """A BYOK job is invisible to ``reconcile_after_at`` and must still age.
+
+    ``_resume_blocked_byok_job_txn`` and the BYOK retry path delete
+    ``reconcile_after_at`` outright, so the old due-page implementation reported
+    0 while those jobs sat unfinished indefinitely.  Asking ``status`` directly
+    is what makes them visible.
+    """
+
+    created_at = datetime.now(timezone.utc) - timedelta(days=30)
+
+    class Snapshot:
+        def __init__(self, data):
+            self.exists = data is not None
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class Projection:
+        def document(self, doc_id):
+            class Ref:
+                def get(self):
+                    return Snapshot(None)
+
+            return Ref()
+
+    class JobQuery:
+        def __init__(self):
+            self._status: str | None = None
+
+        def where(self, *, filter):
+            self._status = filter.value
+            return self
+
+        def order_by(self, field):
+            return self
+
+        def limit(self, value):
+            return self
+
+        def stream(self):
+            if self._status != 'queued':
+                return iter(())
+            # No ``reconcile_after_at`` key at all — exactly the resumed BYOK shape.
+            return iter([Snapshot({'status': 'queued', 'requires_byok': True, 'created_at': created_at})])
+
+    class Client:
+        def collection(self, name):
+            if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
+                return Projection()
+            return JobQuery()
+
+    summary = jobs.get_finalization_job_summary(firestore_client=Client())
+
+    assert summary['oldest_nonterminal_age_seconds'] > 29 * 24 * 3600
 
 
 class _BoundedReplayCollection:
@@ -1309,6 +1513,51 @@ def test_renew_processing_lease_refreshes_only_a_live_processing_row():
     assert jobs._renew_processing_lease_txn(transaction, discarded, now) is False
     # Only the still-processing, non-discarded row was refreshed.
     assert transaction.updates == [(processing, {'processing_admitted_at': now})]
+
+
+def test_reacquire_deferred_processing_claims_only_an_explicit_deferred_row():
+    transaction = _Transaction()
+    now = _now()
+    deferred = _Ref('deferred', {'status': 'processing', 'deferred': True})
+    already_claimed = _Ref('already-claimed', {'status': 'processing', 'deferred': False})
+
+    assert jobs._reacquire_deferred_processing_txn(transaction, deferred, now) is True
+    assert jobs._reacquire_deferred_processing_txn(transaction, already_claimed, now) is False
+    assert transaction.updates == [
+        (deferred, {'status': 'processing', 'deferred': False, 'processing_admitted_at': now})
+    ]
+
+
+def test_reacquire_deferred_processing_reopens_a_failed_retry_terminal():
+    transaction = _Transaction()
+    now = _now()
+    retryable = _Ref('retryable', {'status': 'completed', 'deferred': True})
+    discarded = _Ref('discarded', {'status': 'completed', 'deferred': True, 'discarded': True})
+    failed = _Ref('failed', {'status': 'failed', 'deferred': True})
+
+    assert jobs._reacquire_deferred_processing_txn(transaction, retryable, now) is True
+    assert jobs._reacquire_deferred_processing_txn(transaction, discarded, now) is False
+    assert jobs._reacquire_deferred_processing_txn(transaction, failed, now) is False
+    assert transaction.updates == [
+        (retryable, {'status': 'processing', 'deferred': False, 'processing_admitted_at': now})
+    ]
+
+
+def test_recover_deferred_processing_failure_atomically_rearms_retry():
+    transaction = _Transaction()
+    processing = _Ref('processing', {'status': 'processing', 'deferred': False})
+    completed = _Ref('completed', {'status': 'completed', 'deferred': False})
+    already_deferred = _Ref('already-deferred', {'status': 'processing', 'deferred': True})
+    discarded = _Ref('discarded', {'status': 'processing', 'deferred': False, 'discarded': True})
+
+    assert jobs._recover_deferred_processing_failure_txn(transaction, processing) is True
+    assert jobs._recover_deferred_processing_failure_txn(transaction, completed) is True
+    assert jobs._recover_deferred_processing_failure_txn(transaction, already_deferred) is False
+    assert jobs._recover_deferred_processing_failure_txn(transaction, discarded) is False
+    assert transaction.updates == [
+        (processing, {'status': 'completed', 'deferred': True}),
+        (completed, {'status': 'completed', 'deferred': True}),
+    ]
 
 
 def test_advance_cursor_succeeds_when_generation_matches():

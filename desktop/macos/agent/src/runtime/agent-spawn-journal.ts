@@ -467,7 +467,14 @@ function compactDisplayText(value: unknown, fallback: string, maxBytes: number):
     if (Buffer.byteLength(bounded + character, "utf8") > limit) break;
     bounded += character;
   }
-  return `${bounded}${suffix}`;
+  // Trim back to a word boundary so a receipt reads as a shortened phrase rather
+  // than a severed one ("Research the launch pl…"). Only when a boundary exists
+  // late enough that trimming does not gut the text.
+  const lastBoundary = bounded.search(/\s+\S*$/);
+  if (lastBoundary > 0 && lastBoundary >= Math.floor(bounded.length / 2)) {
+    bounded = bounded.slice(0, lastBoundary);
+  }
+  return `${bounded.trimEnd()}${suffix}`;
 }
 
 function jsonObject(value: unknown): Record<string, unknown> {
@@ -597,21 +604,27 @@ export function ensureAgentSpawnJournal(
       };
     }
 
-    let userTurn = recordJournalTurn(store, {
-      ownerId: input.ownerId,
-      conversationId,
-      turnId: userTurnId,
-      role: "user",
-      surfaceKind: descriptor.surface.surfaceKind,
-      origin,
-      status: "completed",
-      content: descriptor.userText,
-      contentBlocks: [],
-      resources: [],
-      metadataJson,
-      createdAtMs: userCreatedAtMs,
-    }).turn;
-    if (userTurn.status !== "completed") {
+    // No user text means nothing the user actually said reached this run — a
+    // realtime tool authorized without a transcript, for example. Writing a row
+    // anyway attributes an internal instruction to the user, and recentTurns
+    // replays it to the model as canonical history on the next turn.
+    let userTurn = descriptor.userText.trim()
+      ? recordJournalTurn(store, {
+        ownerId: input.ownerId,
+        conversationId,
+        turnId: userTurnId,
+        role: "user",
+        surfaceKind: descriptor.surface.surfaceKind,
+        origin,
+        status: "completed",
+        content: descriptor.userText,
+        contentBlocks: [],
+        resources: [],
+        metadataJson,
+        createdAtMs: userCreatedAtMs,
+      }).turn
+      : null;
+    if (userTurn && userTurn.status !== "completed") {
       userTurn = updateJournalTurn(store, {
         ownerId: input.ownerId,
         conversationId,
@@ -732,7 +745,9 @@ export function parseAgentSpawnProducerJournalDescriptor(value: unknown): AgentS
     ...(raw.producerRunId === undefined
       ? {}
       : { producerRunId: boundedText(raw.producerRunId, "producerJournal.producerRunId", 512) }),
-    userText: boundedText(raw.userText, "producerJournal.userText", 64 * 1024),
+    // Empty is legitimate and meaningful: it says no user speech reached this
+    // run, so no user turn may be journaled. Only the *shape* is validated here.
+    userText: optionalBoundedText(raw.userText, "producerJournal.userText", 64 * 1024),
     assistantText: boundedText(raw.assistantText, "producerJournal.assistantText", 64 * 1024),
     objective: boundedText(raw.objective, "producerJournal.objective", 64 * 1024),
     title: boundedText(raw.title, "producerJournal.title", 1_024),
@@ -919,6 +934,16 @@ function objectField(input: Record<string, unknown>, key: string): Record<string
     throw new Error(`Agent spawn journal ${key} is not an object`);
   }
   return value as Record<string, unknown>;
+}
+
+/// Like `boundedText`, but an empty string is a valid value rather than an error.
+function optionalBoundedText(value: unknown, field: string, maxBytes: number): string {
+  if (typeof value !== "string") throw new Error(`${field} must be a string`);
+  const text = value.trim();
+  if (Buffer.byteLength(text, "utf8") > maxBytes) {
+    throw new Error(`${field} must be bounded`);
+  }
+  return text;
 }
 
 function boundedText(value: unknown, field: string, maxBytes: number): string {

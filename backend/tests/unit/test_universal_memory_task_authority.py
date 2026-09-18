@@ -67,7 +67,11 @@ def test_released_memory_surfaces_have_one_service_authority():
     )
     for relative in MEMORY_SURFACE_FILES:
         source = (BACKEND / relative).read_text(encoding="utf-8")
-        assert "MemoryService" in source, relative
+        if relative == "utils/retrieval/tools/preference_tools.py":
+            assert "utils.memory.knowledge_ledger" in source, relative
+            assert "save_fact(" in source, relative
+        else:
+            assert "MemoryService" in source, relative
         assert not any(marker in source for marker in forbidden), relative
 
 

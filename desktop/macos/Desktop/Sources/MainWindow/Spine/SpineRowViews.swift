@@ -34,9 +34,6 @@ enum SpineMetrics {
   static let gutterWidth: CGFloat = 68
   /// Between the gutter's hairline and the content.
   static let gutterGap: CGFloat = 16
-  /// How far an attached row is indented past the conversation that produced it. Zero when one kind
-  /// is soloed, which is what turns the spine back into a flat clock.
-  static let attachmentIndent: CGFloat = 12
   /// The strip's thumbnail. 118 × 74 is 16:10, which is the shape of the screens these came off.
   static let thumbnailWidth: CGFloat = 118
   static let thumbnailHeight: CGFloat = 74
@@ -64,6 +61,10 @@ enum SpineMetrics {
   /// separate memories, but they all came out of one conversation.
   static let memoryGap: CGFloat = OmiSpacing.md
 
+  /// How far a memory line's hover wash bleeds past its text, so the affordance reads as a row
+  /// rather than as a highlight sitting inside one.
+  static let memoryHoverInset: CGFloat = OmiSpacing.sm
+
   /// Where the clock sits inside a row, measured from the top of that row's content, so the timestamp
   /// lands on the first line of whatever the row turned out to be.
   ///
@@ -89,21 +90,24 @@ enum SpineMetrics {
 /// One spine row: its place on the clock, then whatever it is.
 struct SpineRowView: View {
   let row: SpineRow
-  /// True while the whole spine is shown, so attached rows indent. Soloed rows pass `false` and
-  /// state their own time instead.
+  /// True while the whole spine is shown, so an attached row tucks in close under the conversation
+  /// above it. Soloed rows pass `false` and state their own time instead.
   let showsIndent: Bool
   let onOpenConversation: (ServerConversation) -> Void
+  let onOpenMemory: (SpineMemory) -> Void
   let onToggleTask: (TaskActionItem) -> Void
   let onToggleStar: (ServerConversation) -> Void
-  let onOpenMoment: (SpineMoment) -> Void
+  let onOpenMoment: (SpineMoment, [SpineMoment]) -> Void
+  let onShowAllMoments: () -> Void
   let onOpenBrainMap: () -> Void
 
   /// An attached row has no timestamp of its own while the conversation above it owns the minute;
   /// the moment it is soloed it needs one, because there is no longer anything above it to inherit.
   private var showsTimestamp: Bool { !row.isAttached }
 
-  /// True while this row is a child of the conversation above it — which decides both how far it
-  /// indents and how much air it gets, because those are the same statement made twice.
+  /// True while this row is a child of the conversation above it, which decides how much air it
+  /// gets. Every row sits on the one leading grid — attachment is air and the rail, never a
+  /// horizontal offset, so the same kind of row reads as the same kind of row wherever it lands.
   private var isNested: Bool { row.isAttached && showsIndent }
 
   /// A card row starts with its own padding before any type; an inline row starts with the type.
@@ -119,7 +123,7 @@ struct SpineRowView: View {
     HStack(alignment: .top, spacing: 0) {
       gutter
       content
-        .padding(.leading, SpineMetrics.gutterGap + (isNested ? SpineMetrics.attachmentIndent : 0))
+        .padding(.leading, SpineMetrics.gutterGap)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     // The whole rhythm, in one place. Every row's content view draws from its own top edge, so the
@@ -166,7 +170,8 @@ struct SpineRowView: View {
     case .memories(let memories):
       SpineMemoriesRow(
         memories: memories,
-        showsTimestamps: !row.isAttached && !showsIndent
+        showsTimestamps: !row.isAttached && !showsIndent,
+        onOpen: onOpenMemory
       )
     case .tasks(let tasks):
       SpineTasksRow(
@@ -175,7 +180,8 @@ struct SpineRowView: View {
         onToggle: onToggleTask
       )
     case .moments(let shown, let total):
-      SpineMomentsRow(moments: shown, total: total, onOpen: onOpenMoment)
+      SpineMomentsRow(
+        moments: shown, total: total, onOpen: onOpenMoment, onShowAll: onShowAllMoments)
     case .brainMap(let map):
       SpineBrainMapRow(map: map, onOpen: onOpenBrainMap)
     }
@@ -261,13 +267,15 @@ struct SpineMemoriesRow: View {
   let memories: [SpineMemory]
   /// Set when the row is soloed and there is no conversation above it to own the minute.
   let showsTimestamps: Bool
+  let onOpen: (SpineMemory) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
       ForEach(memories) { memory in
         SpineMemoryLine(
           memory: memory,
-          showsTimestamp: showsTimestamps && memories.count > 1
+          showsTimestamp: showsTimestamps && memories.count > 1,
+          onOpen: { onOpen(memory) }
         )
       }
     }
@@ -283,6 +291,8 @@ struct SpineMemoriesRow: View {
 private struct SpineMemoryLine: View {
   let memory: SpineMemory
   let showsTimestamp: Bool
+  let onOpen: () -> Void
+  @State private var isHovered = false
 
   private var copy: SpineMemoryCopy { SpineFormat.memoryCopy(memory.text) }
 
@@ -319,6 +329,21 @@ private struct SpineMemoryLine: View {
     }
     // Two runs of one sentence: read as one utterance, not as a label and then a fragment.
     .accessibilityElement(children: .combine)
+    // **A memory line used to be inert.** Every other row kind in the spine — conversation, task,
+    // moment, brain map — carried an action; `.memories` shipped with none, so the one row that
+    // names what Omi learned was the one row you could not open. The hit region is the whole line
+    // rather than the sentence, so the dash and the timestamp are not dead pixels beside it.
+    .contentShape(Rectangle())
+    .onTapGesture(perform: onOpen)
+    .onHover { isHovered = $0 }
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+        .fill(isHovered ? Ink.rowFillHover : .clear)
+        .padding(.horizontal, -SpineMetrics.memoryHoverInset)
+    )
+    .accessibilityAddTraits(.isButton)
+    .accessibilityHint("Opens this memory")
+    .accessibilityIdentifier("spine-memory-\(memory.id)")
   }
 }
 
@@ -369,7 +394,16 @@ struct SpineTasksRow: View {
 struct SpineMomentsRow: View {
   let moments: [SpineMoment]
   let total: Int
-  let onOpen: (SpineMoment) -> Void
+  /// The tile that was clicked, and the strip it belongs to. The strip travels with it because the
+  /// viewer steps left and right through whatever set it is given, so handing over one frame would
+  /// be handing over a viewer with its arrow keys disabled.
+  let onOpen: (SpineMoment, [SpineMoment]) -> Void
+  /// The rest of the day, on the Rewind page. This is where navigating-to-Rewind went when
+  /// clicking a tile stopped doing it: the caption is the thing that says there are 184 of these,
+  /// so the caption is the honest place to offer the other 176.
+  let onShowAll: () -> Void
+
+  @State private var isHoveringCount = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -379,15 +413,25 @@ struct SpineMomentsRow: View {
       // below them and one line above the next row: a line belonging to neither thing it sat
       // between. Above the tiles it is unambiguously theirs, and it lands on the timestamp beside it.
       if total > moments.count {
-        Text(
-          "\(SpineFormat.number(moments.count)) of \(SpineFormat.plural(total, "moment", "moments"))"
-        )
-        .inkStyle(.statusLabel, color: Ink.secondary)
+        Button(action: onShowAll) {
+          Text(
+            "\(SpineFormat.number(moments.count)) of \(SpineFormat.plural(total, "moment", "moments"))"
+          )
+          .inkStyle(.statusLabel, color: Ink.secondary)
+          .underline(isHoveringCount, pattern: .solid)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHoveringCount = $0 }
+        .help("Show all of this hour in Rewind")
+        .accessibilityHint(Text("Opens Rewind"))
       }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 9) {
           ForEach(moments) { moment in
-            SpineMomentTile(moment: moment, onOpen: { onOpen(moment) })
+            SpineMomentTile(
+              moment: moment,
+              onOpen: { onOpen(moment, moments) },
+              onShowAll: onShowAll)
           }
         }
         .padding(.vertical, 2)
@@ -439,6 +483,12 @@ struct SpineStripFade: View {
 struct SpineMomentTile: View {
   let moment: SpineMoment
   let onOpen: () -> Void
+  /// The rest of the day, on the Rewind page.
+  ///
+  /// On the tile as well as on the caption, because the caption only exists when the strip is
+  /// truncated — a row of eight or fewer moments has no caption, and without this it would have no
+  /// route to Rewind at all now that clicking a tile opens the frame instead of navigating.
+  let onShowAll: () -> Void
 
   @State private var image: NSImage?
   @State private var isHovering = false
@@ -486,8 +536,13 @@ struct SpineMomentTile: View {
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
     .help(moment.label)
+    .contextMenu {
+      Button("Quick Look", action: onOpen)
+      Divider()
+      Button("Show All in Rewind", action: onShowAll)
+    }
     .accessibilityLabel(Text("\(moment.label), \(moment.appName), \(SpineFormat.time(moment.timestamp))"))
-    .accessibilityHint(Text("Opens Rewind at this moment"))
+    .accessibilityHint(Text("Opens this moment in Quick Look"))
     .task(id: moment.id) {
       // Synchronous cache hit first, so a tile scrolling back into view never flashes an empty well.
       let screenshot = moment.screenshot

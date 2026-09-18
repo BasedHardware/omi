@@ -14,7 +14,7 @@
 // generateNow cadence); create stamps the day so the auto timer won't also fire.
 import { getAppSettings, setAppSettings } from '../../appSettings'
 import { getBackendSession } from '../core/session'
-import { fetchGoalContext } from './context'
+import { activeGoalCount, fetchGoalContext, fetchGoals } from './context'
 import {
   buildCandidateWith,
   createCandidateWith,
@@ -88,9 +88,19 @@ export async function runGoalGenerationIfDue(): Promise<void> {
       console.warn('[goals] cleanup failed:', e instanceof Error ? e.name : 'Error')
     )
 
-    const context = await fetchGoalContext()
+    // Cap check first, on one cheap read. Reaching the cap is the ordinary resting
+    // state for an engaged user, and this bail deliberately does NOT stamp the day
+    // (so finishing a goal at noon can still generate a replacement) — which means
+    // the tick repeats every 4 hours indefinitely. Behind the full context build that
+    // cost five reads a time; in front of it, one.
+    const goals = await fetchGoals()
+    if (goals === null) return // session vanished mid-run
+    if (activeGoalCount(goals) >= MAX_ACTIVE_GOALS) return
+
+    // Hand the goals on so proceeding costs the same four remaining reads it always
+    // did, rather than asking for the same list twice.
+    const context = await fetchGoalContext(goals)
     if (!context) return // session vanished mid-run
-    if (context.activeGoalCount >= MAX_ACTIVE_GOALS) return
 
     // Generate reusing the already-fetched context (no double fetch), then create
     // directly — a background job has no preview surface.

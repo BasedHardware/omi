@@ -75,6 +75,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(authSource.contains("func performLightSessionInvalidation()"))
     XCTAssertTrue(authSource.contains("clearTokens()"))
     XCTAssertTrue(authSource.contains("commitSignedOutSession("))
+    XCTAssertTrue(authSource.contains("commitLightInvalidatedSession("))
 
     // Nuclear signOut still wipes onboarding — invalidate must not.
     let signOutRange = authSource.range(of: "func signOut(")
@@ -87,23 +88,46 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(signOutSnippet.contains("OnboardingFlow.clearPersistedState()"))
     XCTAssertTrue(signOutSnippet.contains("userDidSignOut"))
 
-    let invalidateRange = authSource.range(of: "func performLightSessionInvalidation()")
-    XCTAssertNotNil(invalidateRange)
-    let invalidateSnippet = String(authSource[invalidateRange!.lowerBound...]).prefix(500)
+    let invalidateRange = try XCTUnwrap(authSource.range(of: "func performLightSessionInvalidation()"))
+    let invalidateSnippet = String(authSource[invalidateRange.lowerBound...]).prefix(900)
     XCTAssertFalse(invalidateSnippet.contains("clearPersistedState"))
     XCTAssertFalse(invalidateSnippet.contains("onboardingStep"))
     XCTAssertFalse(invalidateSnippet.contains("userDidSignOut"))
     XCTAssertFalse(invalidateSnippet.contains("stopTranscription"))
+    XCTAssertFalse(invalidateSnippet.contains("commitSignedOutSession"))
+    XCTAssertTrue(invalidateSnippet.contains("commitLightInvalidatedSession"))
   }
 
   func testChatProviderStopsBridgeOnSessionInvalidateWithoutFullReset() throws {
-    let source = try sourceFile("Providers/ChatProvider.swift")
-    XCTAssertTrue(source.contains("sessionDidInvalidate"))
-    XCTAssertTrue(source.contains("sessionInvalidateObserver"))
-    let invalidateBlock = source.range(of: "sessionDidInvalidate — stopping agent bridge")
-    XCTAssertNotNil(invalidateBlock)
-    let snippet = String(source[invalidateBlock!.lowerBound...]).prefix(400)
+    let provider = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(provider.contains("makeAuthSessionNotificationObserver"))
+    XCTAssertTrue(provider.contains("stopAgentBridgeAfterSessionInvalidation"))
+    let invalidateBlock = try XCTUnwrap(provider.range(of: "sessionDidInvalidate — stopping agent bridge"))
+    let snippet = String(provider[invalidateBlock.lowerBound...]).prefix(400)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
+  }
+
+  func testChatProviderReloadsSessionsAfterAuthentication() throws {
+    let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
+    XCTAssertTrue(authExtension.contains("reloadChatSessionsAfterAuthentication"))
+    XCTAssertTrue(authExtension.contains("sessionDidAuthenticate"))
+    let authBlock = try XCTUnwrap(authExtension.range(of: "sessionDidAuthenticate — reloading chat sessions"))
+    let snippet = String(authExtension[authBlock.lowerBound...]).prefix(350)
+    XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
+  }
+
+  func testRestoreAuthStatePreservesReauthOwnerWithoutSignedInBoolean() throws {
+    let source = try sourceFile("AuthService.swift")
+    let restoreRange = try XCTUnwrap(source.range(of: "private func restoreAuthState(attempt:"))
+    let restoreSnippet = String(source[restoreRange.lowerBound...]).prefix(2200)
+    XCTAssertTrue(restoreSnippet.contains("preservedReauthOwnerId()"))
+    XCTAssertTrue(restoreSnippet.contains("restorePreservedReauthOwner"))
+    let ownerTransition = try sourceFile("Auth/AuthOwnerTransition.swift")
+    XCTAssertTrue(ownerTransition.contains("transition(to: .needsReauth)"))
+    let listenerRange = try XCTUnwrap(source.range(of: "private func setupAuthStateListener()"))
+    let listenerSnippet = String(source[listenerRange.lowerBound...]).prefix(3200)
+    XCTAssertTrue(listenerSnippet.contains("handleFirebaseNilUserWithoutSavedSignedIn()"))
+    XCTAssertTrue(ownerTransition.contains("preserving needsReauth"))
   }
 
   func testRefreshIdTokenUsesClassifierNotBlanket400() throws {
@@ -169,6 +193,33 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(state.isSignedIn)
   }
 
+  /// The restoring phase's escape must not be defusable: pin that the
+  /// watchdog arms before the restore's first await and resolves on the phase
+  /// alone, with the launch attempt named only as a diagnostic.
+  func testRestoreWatchdogArmsBeforeTheRestoreAndResolvesOnPhaseAlone() throws {
+    let source = try sourceFile("AuthService.swift")
+    let configureRange = try XCTUnwrap(source.range(of: "func configure() async {"))
+    let armRange = try XCTUnwrap(
+      source.range(of: "armRestoringPhaseWatchdog(attempt: attempt)"))
+    let restoreRange = try XCTUnwrap(
+      source.range(of: "await restoreAuthState(attempt: attempt)"))
+    XCTAssertLessThan(
+      configureRange.lowerBound, armRange.lowerBound,
+      "the watchdog arms inside configure")
+    XCTAssertLessThan(
+      armRange.lowerBound, restoreRange.lowerBound,
+      "the watchdog arms before the restore can suspend on its own awaits")
+
+    let watchdogRange = try XCTUnwrap(
+      source.range(of: "func armRestoringPhaseWatchdog(attempt:"))
+    let watchdog = String(source[watchdogRange.lowerBound...]).prefix(1800)
+    XCTAssertTrue(watchdog.contains("AuthState.shared.isRestoringAuth"))
+    XCTAssertTrue(watchdog.contains("transition(to: .recoveryRequired)"))
+    XCTAssertFalse(
+      watchdog.contains("isSessionAttemptCurrent(attempt) else { return"),
+      "an attempt-gated watchdog is defused by exactly the interleaving it exists for")
+  }
+
   func testPersistedSignedInBooleanIsOnlyARestoreHint() throws {
     let app = try sourceFile("OmiApp.swift")
     XCTAssertTrue(app.contains("self.sessionPhase = savedSignedIn ? .restoring : .signedOut"))
@@ -197,7 +248,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("docs/product/invariants/auth-session.md")
+      .appendingPathComponent("product/invariants/auth-session.md")
     XCTAssertTrue(FileManager.default.fileExists(atPath: path.path))
     let text = try String(contentsOf: path, encoding: .utf8)
     XCTAssertTrue(text.contains("INV-AUTH-1"))

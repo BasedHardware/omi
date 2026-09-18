@@ -3,6 +3,46 @@ import Combine
 import SwiftUI
 @preconcurrency import UserNotifications
 
+/// Whether a cloud-published proactive message earns a desktop delivery.
+///
+/// Pure so the decision is testable without a runtime owner, a notification
+/// service, or a live listen socket — the handler previously had no way to
+/// assert "shown here, suppressed there", only that it did not crash.
+///
+/// This deliberately stops at *routing*. Once a message is admitted it goes to
+/// `NotificationService`, which owns the master toggle, the frequency throttle,
+/// the snooze and the presence withholding. Re-deciding any of those here would
+/// give the cloud a second, divergent copy of the user's notification policy,
+/// which is the exact failure this type exists to prevent.
+enum ProactiveListenAdmission {
+  enum Reason: String, Equatable {
+    case emptyMessage
+    case noRuntimeOwner
+  }
+
+  enum Outcome: Equatable {
+    case deliver(title: String, message: String, assistantId: String)
+    case skip(Reason)
+  }
+
+  static let fallbackAssistantID = "proactive-listen"
+
+  static func decide(
+    appID: String,
+    title: String,
+    message: String,
+    hasRuntimeOwner: Bool
+  ) -> Outcome {
+    guard !message.isEmpty else { return .skip(.emptyMessage) }
+    // A stale listen session must not deliver to whoever is signed in now.
+    guard hasRuntimeOwner else { return .skip(.noRuntimeOwner) }
+    return .deliver(
+      title: title,
+      message: message,
+      assistantId: appID.isEmpty ? fallbackAssistantID : appID)
+  }
+}
+
 @MainActor
 extension AppState {
   func handleBackendSegments(_ segments: [TranscriptionService.BackendSegment]) {
@@ -13,6 +53,18 @@ extension AppState {
 
       // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
       let speakerId = segment.speaker_id ?? 0
+
+      // Barge-in interruption: if the user speaks while voice playback is active,
+      // halt playback immediately so Omi never talks over the user.
+      if VoiceBargeInPolicy.shouldInterrupt(
+        isUser: segment.is_user,
+        speaker: speakerId,
+        text: segment.text,
+        isSpeaking: FloatingBarVoicePlaybackService.shared.isSpeaking
+      ) {
+        log("Transcription [BARGE-IN]: User spoke mid-playback; interrupting voice output")
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+      }
 
       // Convert backend segment to local SpeakerSegment
       let translations = (segment.translations ?? []).map {
@@ -47,6 +99,12 @@ extension AppState {
         )
         segmentsToPersist.append(segment)
       } else if sttSession.useLocalSTT {
+        // Echo dedup is local-STT-only by architecture: only the local engine
+        // runs the two capture lanes (mic + system-audio tap) that produce
+        // cross-lane playback duplicates. Cloud mode mixes mic and system into
+        // one mono stream, so the same playback cannot transcribe twice and
+        // is_user comes from backend diarization — running this dedup there
+        // would risk suppressing real speech with no echo to remove.
         switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
         case .accept:
           appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
@@ -106,6 +164,7 @@ extension AppState {
     totalWordCount += newSegment.text.split(separator: " ").count
     speakerSegments.append(newSegment)
     totalSegmentCount += 1
+    captureAttempt?.noteSpeech()
     segmentsToPersist.append(segment)
     log(
       "Transcript [ADD] Speaker \(newSegment.speaker) [\(String(format: "%.1f", newSegment.start))s-\(String(format: "%.1f", newSegment.end))s]: \(segment.text.prefix(80))"
@@ -441,7 +500,7 @@ extension AppState {
       // BYOK users must never be paywalled. The backend exempts them, but a
       // heartbeat/Firestore lag can briefly let this event slip through right
       // after activation — ignore it so we don't kill a BYOK user's capture.
-      if APIKeyService.isByokActive {
+      if APIKeyService.hasTranscriptionBYOK {
         log("Paywall: ignoring freemium threshold — BYOK active locally")
         if isPaywalled { isPaywalled = false }
         break
@@ -458,7 +517,7 @@ extension AppState {
         stopTranscription()
       }
       Task { @MainActor in
-        ProactiveAssistantsPlugin.shared.stopMonitoring()
+        ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .paywall)
       }
 
     case "translating":
@@ -519,6 +578,43 @@ extension AppState {
 
     case "photo_described":
       log("Transcription: Photo described event (not used on desktop)")
+
+    case "proactive_message":
+      let appId = event.raw["app_id"] as? String ?? ""
+      let title = event.raw["title"] as? String ?? "Omi"
+      let message = event.raw["message"] as? String ?? ""
+      // The message body is user conversation content; log only its provenance.
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      let admission = ProactiveListenAdmission.decide(
+        appID: appId,
+        title: title,
+        message: message,
+        hasRuntimeOwner: authorizationSnapshot != nil)
+      guard case .deliver(let deliveryTitle, let deliveryMessage, let assistantId) = admission,
+        let authorizationSnapshot
+      else {
+        if case .skip(let reason) = admission {
+          log("Transcription: Dropping proactive_message — \(reason.rawValue)")
+        }
+        break
+      }
+      log("Transcription: Proactive message from \(assistantId)")
+      // Deliver through NotificationService rather than the floating-bar primitive.
+      // A cloud interjection is proactive in exactly the sense the user's controls
+      // mean: routing it here keeps the master toggle, the off-by-default migration,
+      // the frequency throttle, and the snooze/presence withholding on one door,
+      // instead of giving the cloud a path that ignores all of them. It also owns
+      // the spoken delivery (`isProactive: respectFrequency`), so the caller does
+      // not need its own NotificationSpeechOnDelivery.
+      NotificationService.shared.sendNotification(
+        ownerID: authorizationSnapshot.ownerID,
+        title: deliveryTitle,
+        message: deliveryMessage,
+        assistantId: assistantId,
+        sound: .default,
+        respectFrequency: true,
+        authorizationSnapshot: authorizationSnapshot
+      )
 
     default:
       log("Transcription: Unhandled event type: \(event.type)")

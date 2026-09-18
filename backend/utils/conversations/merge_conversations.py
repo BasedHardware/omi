@@ -10,9 +10,10 @@ This module provides functions for merging multiple conversations into one.
 
 import copy
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import database.conversations as conversations_db
 from database._client import db as firestore_db
@@ -22,7 +23,13 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
+from utils.memory.retraction_scope import (
+    canonical_intake_is_fenced,
+    historical_source_conversation_ids,
+    retraction_can_be_skipped,
+)
 from utils.conversations.datetime_utils import coerce_utc_datetime
+from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
@@ -32,8 +39,17 @@ from utils.other.storage import (
     list_audio_chunks,
     _get_storage_client,
     private_cloud_sync_bucket,
-    _get_extension_for_path,
 )
+
+try:
+    from utils.other.storage import owner_storage_write_gate
+except ImportError:
+    # Narrow test-double compatibility for import-isolated merge tests whose
+    # storage module predates the owner-write fence.
+    def owner_storage_write_gate(uid: Any, bucket: Any = None) -> Any:
+        return nullcontext()
+
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -259,6 +275,12 @@ def perform_merge_async(
         # Private cloud sync: True if any has it
         private_cloud_sync_enabled = any(c.get("private_cloud_sync_enabled", False) for c in sorted_convs)
 
+        # Custom STT: True if any source was transcribed on a third-party
+        # provider, so the merged conversation keeps accurate provenance (#7690).
+        # A custom-STT source must not be able to shed the marker by merging with
+        # a normal-STT one.
+        uses_custom_stt = any(c.get('uses_custom_stt', False) for c in sorted_convs)
+
         # Discarded: only if ALL are discarded
         discarded = all(c.get("discarded", False) for c in sorted_convs)
 
@@ -299,6 +321,7 @@ def perform_merge_async(
             geolocation=geolocation,
             visibility=visibility,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
+            uses_custom_stt=uses_custom_stt,
             discarded=discarded,
             status=ConversationStatus.processing,
             client_device_id=client_device_id,
@@ -306,8 +329,10 @@ def perform_merge_async(
             external_data={"merge_metadata": merge_metadata},
         )
 
-        # 7. Save stub conversation to database
-        lifecycle_service.create_processing_conversation(uid, new_conversation.model_dump())
+        # 7. Save stub conversation to database. The modeled field's None
+        # default is omitted, never stamped: persist is merge=True, so a
+        # dumped None would become an explicit Firestore key.
+        lifecycle_service.create_processing_conversation(uid, omit_null_processing_state(new_conversation.model_dump()))
 
         # Build the conversation-level playback artifact for the merged conversation.
         # Fingerprint-named task: dedups with the enqueue process_conversation may
@@ -345,7 +370,16 @@ def perform_merge_async(
             # If not reprocessing, just mark as completed
             lifecycle_service.complete(uid, new_conversation_id)
 
-        # 9. Delete ALL source conversations and their related data
+        # 9. Delete ALL source conversations and their related data.
+        # One history pass for the whole merge: the per-source scan would
+        # otherwise repeat it for every source, and the heavy cohort reaches
+        # ~6.3k live rows. Only needed while the fence is closed, which is the
+        # only state where the scan runs at all.
+        historical_source_ids = (
+            historical_source_conversation_ids(uid, memory_service=MemoryService(db_client=firestore_db))
+            if canonical_intake_is_fenced()
+            else None
+        )
         for conv in sorted_convs:
 
             def mark_source_deletion_started() -> None:
@@ -356,6 +390,7 @@ def perform_merge_async(
                 uid,
                 conv["id"],
                 on_authoritative_retraction=mark_source_deletion_started,
+                historical_source_ids=historical_source_ids,
             )
 
         # 10. Send FCM notification
@@ -517,7 +552,8 @@ def _copy_audio_chunks_for_merge(
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
             source_blob = bucket.blob(chunk["path"])
-            bucket.copy_blob(source_blob, bucket, new_path)
+            with owner_storage_write_gate(uid, bucket):
+                bucket.copy_blob(source_blob, bucket, new_path)
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -575,6 +611,7 @@ def _delete_conversation_and_related_data(
     conversation_id: str,
     *,
     on_authoritative_retraction: Optional[Callable[[], None]] = None,
+    historical_source_ids: Optional[Set[str]] = None,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -592,14 +629,26 @@ def _delete_conversation_and_related_data(
 
     try:
         memory_service = MemoryService(db_client=firestore_db)
-        if on_authoritative_retraction is None:
-            memory_service.retract_conversation_memories(uid, conversation_id)
-        else:
-            memory_service.retract_conversation_memories(
-                uid,
-                conversation_id,
-                on_authoritative_commit=on_authoritative_retraction,
-            )
+        skip_retraction = retraction_can_be_skipped(
+            uid,
+            conversation_id,
+            memory_service=memory_service,
+            db_client=firestore_db,
+            historical_source_ids=historical_source_ids,
+        )
+        if not skip_retraction:
+            if on_authoritative_retraction is None:
+                memory_service.retract_conversation_memories(uid, conversation_id)
+            else:
+                memory_service.retract_conversation_memories(
+                    uid,
+                    conversation_id,
+                    on_authoritative_commit=on_authoritative_retraction,
+                )
+        elif on_authoritative_retraction is not None:
+            # Nothing to retract, but everything below this point still destroys
+            # source state, so failure handling must treat the source as started.
+            on_authoritative_retraction()
     except Exception as e:
         logger.error(f"Error deleting memories for {conversation_id}: {e}")
         # Every account uses canonical source retraction.  Source deletion must

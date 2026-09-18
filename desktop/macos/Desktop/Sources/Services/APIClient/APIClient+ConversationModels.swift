@@ -11,6 +11,30 @@ enum ConversationStatus: String, Codable {
   case failed = "failed"
 }
 
+/// What the conversation row/header should communicate about a conversation's
+/// state. Computed from `status`, `isLocked`, and `structured.title` together
+/// so the UI can show a meaningful label instead of collapsing every empty-
+/// title case to "Untitled".
+enum ConversationDisplayState: Equatable {
+  /// Normal: LLM produced a title.
+  case titled(String)
+  /// Pipeline is still running. Title will arrive soon.
+  case processing
+  /// Stored with the raw transcript only; the backend enriches it the first
+  /// time it is opened (free-tier desktop capture). Nothing is running.
+  case awaitingFirstOpen
+  /// Conversation is locked (subscription gating). Title intentionally hidden.
+  case locked
+  /// Processing finished but the title slot is empty AND the transcript has
+  /// recoverable content — usually a silent LLM failure. Surface a reprocess
+  /// affordance.
+  case untitledRecoverable
+  /// Empty/very short capture — genuinely nothing to title. No CTA.
+  case untitledEmpty
+  /// Pipeline reported failure. Reprocess affordance offered.
+  case failed
+}
+
 enum ConversationSource: String, Codable {
   case friend
   case omi
@@ -51,6 +75,7 @@ struct ConversationFinalizationStatusResponse: Decodable, Equatable {
   let retryable: Bool
   let attemptCount: Int
   let taskRetryCount: Int
+  let meetingTreatmentEligible: Bool?
 
   enum CodingKeys: String, CodingKey {
     case jobID = "job_id"
@@ -59,6 +84,7 @@ struct ConversationFinalizationStatusResponse: Decodable, Equatable {
     case retryable
     case attemptCount = "attempt_count"
     case taskRetryCount = "task_retry_count"
+    case meetingTreatmentEligible = "meeting_treatment_eligible"
   }
 }
 
@@ -75,10 +101,20 @@ enum TranscriptPresenceState: Equatable {
 struct CaptureAudioFile: Codable, Equatable, Identifiable {
   let id: String
   let duration: TimeInterval
+  /// Unix time of the part's earliest chunk: where its media timeline starts
+  /// on the wall clock. Nil for a part the device never stamped.
+  let firstChunkTimestamp: TimeInterval?
 
   init(_ wire: OmiAPI.AudioFile) {
     id = wire.id
     duration = wire.duration
+    firstChunkTimestamp = wire.chunkTimestamps.min()
+  }
+
+  init(id: String, duration: TimeInterval, firstChunkTimestamp: TimeInterval?) {
+    self.id = id
+    self.duration = duration
+    self.firstChunkTimestamp = firstChunkTimestamp
   }
 }
 
@@ -119,6 +155,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.audioFiles == rhs.audioFiles
       && lhs.conversationAudio == rhs.conversationAudio
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
+      && lhs.localSummary == rhs.localSummary
   }
 
   let id: String
@@ -129,6 +166,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let finishedAt: Date?
 
   var structured: Structured
+  /// Attribution for the selected display-only on-device summary.
+  var localSummary: ConversationLocalSummary?
   var transcriptSegments: [TranscriptSegment]
   var transcriptSegmentsIncluded: Bool
   let geolocation: Geolocation?
@@ -162,6 +201,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case startedAt = "started_at"
     case finishedAt = "finished_at"
     case structured
+    case localSummary = "local_summary"
     case transcriptSegments = "transcript_segments"
     case geolocation
     case photos
@@ -183,7 +223,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     // The domain model adapts wire string-dates into Date via the APIClient
     // decoder's ISO8601 strategy, preserves tolerant defaults, and tracks
     // whether transcript_segments was present in the response.
-    let wire = try OmiAPI.Conversation(from: decoder)
+    let wire = try ConversationProjectionRendering.decodeWire(from: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
 
     id = wire.id
@@ -191,7 +231,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
     startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
     finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = Structured(wire.structured)
+    let rendered = ConversationProjectionRendering.resolve(
+      wire, transcriptIncluded: container.contains(.transcriptSegments))
+    structured = rendered.structured
+    localSummary =
+      try rendered.localSummary ?? container.decodeIfPresent(ConversationLocalSummary.self, forKey: .localSummary)
     // container.contains distinguishes `"transcript_segments": null` (present,
     // empty) from the key being absent (omitted). wire.transcriptSegments is
     // nil for both, so we must check the container directly.
@@ -260,7 +304,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     starred: Bool,
     folderId: String?,
     inputDeviceName: String?,
-    deferred: Bool = false
+    deferred: Bool = false,
+    localSummary: ConversationLocalSummary? = nil
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -268,6 +313,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.startedAt = startedAt
     self.finishedAt = finishedAt
     self.structured = structured
+    self.localSummary = localSummary
     self.transcriptSegments = transcriptSegments
     self.transcriptSegmentsIncluded = transcriptSegmentsIncluded
     self.geolocation = geolocation
@@ -287,9 +333,91 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.deferred = deferred
   }
 
-  /// Returns the title from structured data, or a fallback
+  /// Returns the title from structured data, or a fallback.
+  ///
+  /// Prefer ``displayTitle`` in UI surfaces — it disambiguates between "no
+  /// title because still processing", "no title because locked", and "no
+  /// title because the LLM gave up" instead of collapsing all three to a
+  /// flat "Untitled Conversation" string. This getter stays for callers
+  /// that need a single plain string (exports, log lines, copy-to-clipboard).
   var title: String {
     structured.title.isEmpty ? "Untitled Conversation" : structured.title
+  }
+
+  /// What a row/header should actually render for this conversation's state.
+  ///
+  /// Four cases the UI used to collapse into the same "Untitled" string:
+  /// 1. processing / in-progress / merging → "Processing…" (no real title yet)
+  /// 2. locked (subscription gating) → "Locked"
+  /// 3. completed but empty title + non-trivial transcript → "Untitled" with
+  ///    a reprocess affordance — the LLM didn't produce a title, usually a
+  ///    transient processing failure that's recoverable.
+  /// 4. genuinely empty/short capture → "Untitled", no CTA (probably ambient
+  ///    noise; pushing reprocess would just burn tokens).
+  var displayState: ConversationDisplayState {
+    if isLocked {
+      return .locked
+    }
+    switch status {
+    case .inProgress, .processing, .merging:
+      // A deferred row wears `processing` on the wire only so the client
+      // re-fetches on open. Nothing is running for it, so it must not look
+      // like — or be timed like — a live pipeline.
+      return deferred ? .awaitingFirstOpen : .processing
+    case .failed:
+      return .failed
+    case .completed:
+      if !structured.title.isEmpty {
+        return .titled(structured.title)
+      }
+      // Heuristic: a "real" conversation has at least one transcript segment
+      // long enough to plausibly have content (≥ 5 words). Below that, it's
+      // probably ambient/accidental capture and we shouldn't push reprocess.
+      let hasRecoverableContent = transcriptSegments.contains { seg in
+        seg.text.split(whereSeparator: { $0.isWhitespace }).count >= 5
+      }
+      return hasRecoverableContent ? .untitledRecoverable : .untitledEmpty
+    }
+  }
+
+  /// Identity for a row that has no LLM title yet: the first substantive
+  /// transcript line, or the recording time when the transcript is not loaded.
+  /// Never the pipeline status — that belongs in the badge.
+  var provisionalTitle: String {
+    ConversationProcessingProgress.provisionalTitle(from: transcriptSegments)
+      ?? "Recording at \(Self.provisionalTimeFormatter.string(from: startedAt ?? createdAt))"
+  }
+
+  /// True when `provisionalTitle` quotes the transcript rather than the clock.
+  var hasTranscriptProvisionalTitle: Bool {
+    ConversationProcessingProgress.provisionalTitle(from: transcriptSegments) != nil
+  }
+
+  private static let provisionalTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "h:mm a"
+    return f
+  }()
+
+  /// The string a row/header should display in the title slot.
+  var displayTitle: String {
+    switch displayState {
+    case .titled(let title): return title
+    case .processing, .awaitingFirstOpen: return provisionalTitle
+    case .locked: return "Locked"
+    case .failed: return "Failed to process"
+    case .untitledRecoverable, .untitledEmpty: return "Untitled"
+    }
+  }
+
+  /// True when the conversation has content but no title and the user can
+  /// recover it by re-running the LLM processing step. Drives the "Reprocess"
+  /// affordance in the UI.
+  var canReprocess: Bool {
+    switch displayState {
+    case .untitledRecoverable, .failed: return true
+    default: return false
+    }
   }
 
   /// Returns the overview/summary from structured data
@@ -297,14 +425,44 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     structured.overview
   }
 
-  /// Returns duration in seconds based on start/finish times or transcript
+  /// Returns duration in seconds: the transcript span when the record carries
+  /// usable transcript segments, the wall window when it does not (including
+  /// records whose segments all fail validation).
+  ///
+  /// `started_at` is the live-socket streaming-session origin, not the moment
+  /// this conversation's speech began, so `finished_at - started_at` over-counts
+  /// by however long the socket had already been open — an 8s dictation scrap
+  /// read as 42m45s here while mobile showed 8s (#4056). Mirrors the backend
+  /// helper `utils/conversations/duration.py` and the Flutter
+  /// `ServerConversation.getDurationInSeconds`; the shared vectors live in
+  /// `contracts/parity/conversation_duration.json`.
+  ///
+  /// A list response that omits `transcript_segments` leaves nothing to measure,
+  /// so those rows still report the wall window — the same answer mobile gives.
   var durationInSeconds: Int {
-    if let start = startedAt, let end = finishedAt {
-      return Int(end.timeIntervalSince(start))
+    if let span = transcriptSpanSeconds {
+      // A finite segment end can still exceed Int.max (a malformed persisted
+      // segment), where Int(Double) would trap and crash the client. Clamp in
+      // Double space first: Double(Int.max) rounds up to 2^63, so converting
+      // that boundary back to Int traps — compare before converting.
+      let bounded = max(span, 0)
+      return bounded >= Double(Int.max) ? Int.max : Int(bounded)
     }
-    // Fallback to transcript duration
-    guard let lastSegment = transcriptSegments.last else { return 0 }
-    return Int(lastSegment.end)
+    guard let start = startedAt, let end = finishedAt else { return 0 }
+    return max(0, Int(end.timeIntervalSince(start)))
+  }
+
+  /// Largest valid segment `end`, or nil when no segment can answer. Segments
+  /// with blank text, non-finite bounds, or `end < start` are ignored.
+  private var transcriptSpanSeconds: Double? {
+    var span: Double?
+    for segment in transcriptSegments {
+      guard !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+      guard segment.start.isFinite, segment.end.isFinite, segment.end >= segment.start else { continue }
+      let end = max(0, segment.end)
+      span = span.map { Swift.max($0, end) } ?? end
+    }
+    return span
   }
 
   /// Formatted duration string (e.g., "5m 30s")
@@ -344,6 +502,28 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 }
 
+/// One headed block of the conversation's written summary. The overview may be a compatibility
+/// projection of these sections or an explicit legacy/user-edited body; the selection policy owns
+/// which representation is displayed.
+struct SummarySection: Codable, Equatable, Identifiable {
+  var id: String { heading }
+  let heading: String
+  let bodyMarkdown: String
+  let sourceSegmentIDs: [String]
+
+  init(heading: String, bodyMarkdown: String, sourceSegmentIDs: [String] = []) {
+    self.heading = heading
+    self.bodyMarkdown = bodyMarkdown
+    self.sourceSegmentIDs = sourceSegmentIDs
+  }
+
+  init(_ wire: OmiAPI.Section) {
+    heading = wire.heading
+    bodyMarkdown = wire.bodyMarkdown
+    sourceSegmentIDs = wire.sourceSegmentIds ?? []
+  }
+}
+
 struct Structured: Codable, Equatable {
   var title: String
   let overview: String
@@ -351,6 +531,8 @@ struct Structured: Codable, Equatable {
   let category: String
   let actionItems: [ActionItem]
   let events: [Event]
+  /// Headed summary blocks. Older captures may omit them; the selection policy then uses overview.
+  let sections: [SummarySection]
 
   init(from decoder: Decoder) throws {
     // Schema authority: OmiAPI.Structured (generated from app-client OpenAPI).
@@ -368,6 +550,7 @@ struct Structured: Codable, Equatable {
     }
     actionItems = (wire.actionItems ?? []).map(ActionItem.init)
     events = (wire.events ?? []).map(Event.init)
+    sections = (wire.sections ?? []).map(SummarySection.init)
   }
 
   init(_ wire: OmiAPI.Structured) {
@@ -381,12 +564,14 @@ struct Structured: Codable, Equatable {
     }
     actionItems = (wire.actionItems ?? []).map(ActionItem.init)
     events = (wire.events ?? []).map(Event.init)
+    sections = (wire.sections ?? []).map(SummarySection.init)
   }
 
   func encode(to encoder: Encoder) throws {
     let actionItemsWire = actionItems.map {
       OmiAPI.ActionItem(
-        candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed,
+        candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: $0.captureOwner,
+        completed: $0.completed,
         completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
         dueAt: nil, ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
         targetTaskId: $0.targetTaskID, updatedAt: nil)
@@ -400,12 +585,17 @@ struct Structured: Codable, Equatable {
         title: $0.title
       )
     }
+    let sectionsWire = sections.map {
+      OmiAPI.Section(
+        bodyMarkdown: $0.bodyMarkdown, heading: $0.heading, sourceSegmentIds: $0.sourceSegmentIDs)
+    }
     let wire = OmiAPI.Structured(
       actionItems: actionItemsWire,
       category: OmiAPI.CategoryEnum(rawValue: category),
       emoji: emoji,
       events: eventsWire,
       overview: overview,
+      sections: sectionsWire,
       title: title
     )
     try wire.encode(to: encoder)
@@ -418,7 +608,8 @@ struct Structured: Codable, Equatable {
     emoji: String,
     category: String,
     actionItems: [ActionItem],
-    events: [Event]
+    events: [Event],
+    sections: [SummarySection] = []
   ) {
     self.title = title
     self.overview = overview
@@ -426,6 +617,7 @@ struct Structured: Codable, Equatable {
     self.category = category
     self.actionItems = actionItems
     self.events = events
+    self.sections = sections
   }
 }
 
@@ -434,9 +626,13 @@ struct ActionItem: Codable, Identifiable, Equatable {
   let description: String
   let completed: Bool
   let deleted: Bool
+  /// Extraction ownership from the backend (`capture_owner`), e.g. "user" when
+  /// the item is the user's own commitment. Optional: legacy captures and
+  /// locally cached rows predate the field.
+  let captureOwner: String?
   /// Canonical task linkage is optional on legacy captures. When present, the
-  /// chat-first archive uses this opaque ID for a typed deep link rather than
-  /// inferring a task from the description.
+  /// canonical conversation detail uses this opaque ID for a typed deep link
+  /// rather than inferring a task from the description.
   let targetTaskID: String?
   let sourceSegmentIDs: [String]
 
@@ -444,12 +640,14 @@ struct ActionItem: Codable, Identifiable, Equatable {
     description: String,
     completed: Bool,
     deleted: Bool,
+    captureOwner: String? = nil,
     targetTaskID: String? = nil,
     sourceSegmentIDs: [String] = []
   ) {
     self.description = description
     self.completed = completed
     self.deleted = deleted
+    self.captureOwner = captureOwner
     self.targetTaskID = targetTaskID
     self.sourceSegmentIDs = sourceSegmentIDs
   }
@@ -461,6 +659,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.description = wire.description_
     self.completed = wire.completed ?? false
     self.deleted = false
+    self.captureOwner = wire.captureOwner
     self.targetTaskID = wire.targetTaskId
     self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
   }
@@ -470,6 +669,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.description = wire.description_
     self.completed = wire.completed ?? false
     self.deleted = false
+    self.captureOwner = wire.captureOwner
     self.targetTaskID = wire.targetTaskId
     self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
   }
@@ -479,7 +679,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
       candidateAction: nil,
       captureConfidence: nil,
       captureKind: nil,
-      captureOwner: nil,
+      captureOwner: captureOwner,
       completed: completed,
       completedAt: nil,
       concreteDeliverable: nil,
@@ -696,12 +896,17 @@ typealias Geolocation = OmiAPI.Geolocation
 struct ConversationPhoto: Codable, Identifiable {
   let id: String
   let base64: String
+  let contentType: String?
+  let storageId: String?
   let description: String?
   let createdAt: Date
   let discarded: Bool
 
   enum CodingKeys: String, CodingKey {
-    case id, base64, description
+    case id, base64
+    case contentType = "content_type"
+    case storageId = "storage_id"
+    case description
     case createdAt = "created_at"
     case discarded
   }
@@ -710,6 +915,8 @@ struct ConversationPhoto: Codable, Identifiable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
     base64 = try container.decodeIfPresent(String.self, forKey: .base64) ?? ""
+    contentType = try container.decodeIfPresent(String.self, forKey: .contentType)
+    storageId = try container.decodeIfPresent(String.self, forKey: .storageId)
     description = try container.decodeIfPresent(String.self, forKey: .description)
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
     discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
@@ -721,6 +928,8 @@ struct ConversationPhoto: Codable, Identifiable {
   init(_ wire: OmiAPI.ConversationPhoto) {
     self.id = wire.id ?? UUID().uuidString
     self.base64 = wire.base64
+    self.contentType = wire.contentType
+    self.storageId = wire.storageId
     self.description = wire.description_
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -853,5 +1062,32 @@ struct MoveToFolderRequest: Encodable {
 
   enum CodingKeys: String, CodingKey {
     case folderId = "folder_id"
+  }
+}
+
+/// A calendar-detected meeting participant the summary can be emailed to.
+struct ConversationShareRecipient: Codable, Equatable {
+  let name: String?
+  let email: String
+
+  /// Compact label for a "Send to …" control: first name when known, else the
+  /// email's local part.
+  var shortLabel: String {
+    if let name, !name.isEmpty {
+      return name.split(separator: " ").first.map(String.init) ?? name
+    }
+    return email.split(separator: "@").first.map(String.init) ?? email
+  }
+}
+
+struct ConversationShareRecipientsResponse: Codable {
+  let recipients: [ConversationShareRecipient]
+}
+
+struct ConversationShareEmailResponse: Codable {
+  let sentTo: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case sentTo = "sent_to"
   }
 }

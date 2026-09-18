@@ -22,14 +22,16 @@ enum SuggestionCategory: String, Codable {
 /// moment it is relevant, so a source that is slow or empty simply contributes nothing.
 struct SuggestionGrounding: Sendable {
   var memories: [String] = []
-  var openCommitments: [String] = []
+  var commitmentRecords: [SuggestionCommitment] = []
   var relatedScreens: [String] = []
   /// What the user is actually trying to achieve. Without this the assistant can only say
   /// "you have a task"; with it, it can say why the current screen is not that.
   var goals: [String] = []
 
+  var openCommitments: [String] { commitmentRecords.map(\.text) }
+
   var isEmpty: Bool {
-    memories.isEmpty && openCommitments.isEmpty && relatedScreens.isEmpty && goals.isEmpty
+    memories.isEmpty && commitmentRecords.isEmpty && relatedScreens.isEmpty && goals.isEmpty
   }
 
   /// Preamble for the grounding block.
@@ -150,18 +152,19 @@ enum SuggestionGatePolicy {
   /// How long the user must sit in a context before it is worth an evaluation.
   ///
   /// Maximum (level 5) is an explicit "show me everything, fast": open TikTok and the
-  /// nudge should land in seconds, so dwell drops to 10 s there. Every other level keeps
+  /// nudge should land in under ten seconds end-to-end, so dwell drops to 4 s there. Every other level keeps
   /// the deliberate 30 s — passing through a window is not a request for advice.
   static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
-    frequencyLevel >= 5 ? 10 : 30
+    SuggestionPacing.requiredDwell(frequencyLevel: frequencyLevel)
   }
 
   /// Between-nudge cooldown, from the user's configured base.
   ///
-  /// Maximum caps it at 30 s — a user who chose "Maximum" wants back-to-back nudges, not
+  /// Maximum caps it at 20 s — a user who chose "Maximum" wants a nudge under every half
+  /// minute, not
   /// one per three minutes. Every other level keeps the configured value untouched.
   static func cooldown(base: TimeInterval, frequencyLevel: Int) -> TimeInterval {
-    frequencyLevel >= 5 ? min(base, 30) : base
+    SuggestionPacing.cooldown(base: base, frequencyLevel: frequencyLevel)
   }
 
   /// Ordered cheapest-first, and every branch is free. Switching apps is not evidence that
@@ -453,23 +456,35 @@ enum SuggestionCommitmentGuard {
     openCommitments: [String]
   ) -> Bool {
     guard category == .commitment else { return true }
+    return groundedTaskId(
+      suggestion: suggestion,
+      category: category,
+      commitments: openCommitments.map { SuggestionCommitment(id: $0, text: $0) }
+    ) != nil
+  }
+
+  static func groundedTaskId(
+    suggestion: String,
+    category: SuggestionCategory,
+    commitments: [SuggestionCommitment]
+  ) -> String? {
+    guard category == .commitment else { return nil }
 
     let suggestionTokens = contentTokens(suggestion)
-    guard !suggestionTokens.isEmpty else { return false }
+    guard !suggestionTokens.isEmpty else { return nil }
 
-    return openCommitments.contains { commitment in
-      let commitmentTokens = contentTokens(commitment)
-      guard !commitmentTokens.isEmpty else { return false }
+    for commitment in commitments {
+      let commitmentTokens = contentTokens(commitment.text)
+      guard !commitmentTokens.isEmpty else { continue }
       let shared = commitmentTokens.intersection(suggestionTokens)
-      guard shared.count >= minimumSharedTokens else { return false }
+      guard shared.count >= minimumSharedTokens else { continue }
 
-      // Naming something only that commitment contains is a reference, however short the
-      // nudge and however long the task. Otherwise fall back to proportional coverage,
-      // which is what stops "send the update" from matching every commitment that happens
-      // to contain both words.
-      if !shared.subtracting(genericTaskWords).isEmpty { return true }
-      return Double(shared.count) / Double(commitmentTokens.count) >= requiredCoverage
+      if !shared.subtracting(genericTaskWords).isEmpty { return commitment.id }
+      if Double(shared.count) / Double(commitmentTokens.count) >= requiredCoverage {
+        return commitment.id
+      }
     }
+    return nil
   }
 }
 
@@ -480,6 +495,39 @@ enum SuggestionCommitmentGuard {
 enum SuggestionDeduplication {
   /// Jaccard overlap at or above this is treated as the same suggestion.
   static let similarityThreshold = 0.6
+
+  /// A delivered suggestion, remembered with its category so trimming can retain task
+  /// nudges at levels whose screen-nudge window is deliberately empty.
+  struct Remembered: Equatable, Sendable {
+    let text: String
+    let category: SuggestionCategory
+  }
+
+  /// The dedup window after remembering a delivery, trimmed per category.
+  ///
+  /// Trimming the whole window to one level-wide depth is how beta 0.12.172 delivered the
+  /// same due-today task three times in quick succession: at Maximum that depth is 0 by
+  /// design (staying on a feed is meant to keep producing fresh screen nudges), so the
+  /// just-delivered task nudge was forgotten before the next evaluation and `isDuplicate`
+  /// had nothing to compare against. Each category keeps its own depth instead, so the
+  /// empty screen-nudge window can never evict a remembered task.
+  static func remembering(
+    _ delivered: Remembered,
+    in window: [Remembered],
+    frequencyLevel: Int
+  ) -> [Remembered] {
+    var kept: [Remembered] = []
+    var counts: [SuggestionCategory: Int] = [:]
+    for entry in (window + [delivered]).reversed() {
+      let depth = SuggestionPacing.dedupMemory(
+        frequencyLevel: frequencyLevel, category: entry.category)
+      if counts[entry.category, default: 0] < depth {
+        kept.append(entry)
+        counts[entry.category, default: 0] += 1
+      }
+    }
+    return kept.reversed()
+  }
 
   static func normalize(_ text: String) -> Set<String> {
     let lowered = text.lowercased()
@@ -504,5 +552,93 @@ enum SuggestionDeduplication {
 
   static func isDuplicate(_ candidate: String, of recent: [String]) -> Bool {
     recent.contains { similarity(candidate, $0) >= similarityThreshold }
+  }
+}
+
+/// Pacing knobs for the suggestion assistant, derived from the user's notification
+/// frequency level. Maximum (5) is deliberately relentless — the user asked for a nudge
+/// within seconds of opening a leisure app and another one under half a minute later for
+/// as long as it stays open. Every other level keeps the long-standing calm defaults,
+/// byte-for-byte: this enum is the only place the two regimes are allowed to differ.
+enum SuggestionPacing {
+  static let maximumLevel = 5
+
+  /// How long the user must stay in a context before it is worth spending on.
+  static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= maximumLevel ? 4 : 30
+  }
+
+  /// How long after a switch frames are considered settled enough to analyze.
+  static func settleInterval(frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= maximumLevel ? 2 : 6
+  }
+
+  /// Minimum gap between paid evaluations. Maximum caps the user-configurable base so a
+  /// stale 180s stored setting cannot defeat the level; a base the user already set
+  /// below the cap is respected.
+  static func cooldown(base: TimeInterval, frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= maximumLevel ? min(base, 20) : base
+  }
+
+  /// Paid-evaluation ceiling per day. A 20-second cadence demo would exhaust the calm
+  /// budget in minutes; Maximum is an explicit opt-in to that spend.
+  static func dailyEvaluationBudget(frequencyLevel: Int) -> Int {
+    frequencyLevel >= maximumLevel ? 600 : 40
+  }
+
+  /// Confidence bar. Maximum trades precision for cadence — the level's contract is a
+  /// steady stream, and a 70% nudge beats silence there; other levels keep the user's
+  /// configured bar untouched.
+  static func minConfidence(base: Double, frequencyLevel: Int) -> Double {
+    frequencyLevel >= maximumLevel ? min(base, 0.65) : base
+  }
+
+  /// How many recent suggestions the dedup window remembers, per category. Maximum keeps
+  /// none for screen nudges: the user asked to be nagged off the feed for as long as they
+  /// stay on it, so repeat-suppression there would defeat the level's entire point. But a
+  /// commitment nudge is about a task, not the screen, and re-firing the identical task
+  /// every cooldown is a broken record, not the promised cadence — 0.12.172 shipped one
+  /// due-today task three times in a row this way. Commitment nudges therefore keep the
+  /// calm 10-deep window at every level; calm levels keep 10 for everything.
+  static func dedupMemory(frequencyLevel: Int, category: SuggestionCategory) -> Int {
+    if category == .commitment { return 10 }
+    return frequencyLevel >= maximumLevel ? 0 : 10
+  }
+
+  /// Whether an eligible evaluation leaves the context armed. Calm levels evaluate once
+  /// per arrival; Maximum keeps evaluating the same context every cooldown interval for
+  /// as long as the user stays, which is the sustained-nudge cadence the level promises.
+  static func rearmsAfterEvaluation(frequencyLevel: Int) -> Bool {
+    frequencyLevel >= maximumLevel
+  }
+
+  /// The cooldown baseline for a gate check. At Maximum, arriving in a NEW context
+  /// (anchor newer than the last evaluation) waives the remaining cooldown — "open
+  /// TikTok, nudge in seconds" must hold even if a nudge fired somewhere else moments
+  /// ago. Staying in the same context keeps the anchor older than the last evaluation,
+  /// so repeats remain paced by the cooldown, and the daily budget still bounds spend.
+  static func effectiveLastEvaluation(
+    lastEvaluationAt: Date?,
+    anchor: Date?,
+    frequencyLevel: Int
+  ) -> Date? {
+    guard frequencyLevel >= maximumLevel, let last = lastEvaluationAt, let anchor else {
+      return lastEvaluationAt
+    }
+    return anchor > last ? nil : last
+  }
+
+  /// Whether same-context heartbeats force a full capture (no preview-similarity skip,
+  /// no backoff growth). Maximum's cadence needs a real frame every base heartbeat even
+  /// on a mostly-static page; calm levels keep the cost-saving preview path.
+  static func forcesHeartbeatCapture(frequencyLevel: Int) -> Bool {
+    frequencyLevel >= maximumLevel
+  }
+
+  /// Idle window before screen capture pauses. Watching a feed or a video produces no
+  /// input; at Maximum the user has explicitly asked to be nudged during exactly that,
+  /// so capture stays live for five minutes of stillness instead of one.
+  static func captureIdleThreshold(frequencyLevel: Int, base: TimeInterval) -> TimeInterval {
+    frequencyLevel >= maximumLevel ? max(base, 300) : base
   }
 }

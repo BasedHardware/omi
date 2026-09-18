@@ -4,6 +4,16 @@
 # The ledger deliberately marks models without a card as `unpriced`, rather
 # than pretending their COGS are zero. Update cards from the provider's public
 # pricing page and create a new ID when a rate changes.
+#
+# Long-context tier: some providers publish a second, pricier band once a
+# request's total input context (cached + uncached + cache-write tokens)
+# crosses a threshold; the higher rates then apply to the whole request, not
+# just the tokens past the boundary. A card represents this with the
+# `long_context_*` fields alongside its normal (short-context) fields; a card
+# with none of those fields is single-tier and unaffected. This is additive
+# schema, not a rate change to the short-context fields, so it does not by
+# itself require a new rate_card_id — see the OpenAI GPT-5.6 cards below for
+# the reasoning on why their existing ID was kept.
 rate_cards:
   - rate_card_id: openai.gpt-5-nano.2026-07-17
     provider: openai
@@ -19,6 +29,25 @@ rate_cards:
     cached_input_micro_usd_per_million: 20000
     output_micro_usd_per_million: 1250000
 
+  # The GPT-5.6 family (Luna/Sol/Terra) shares one context window and one
+  # long-context boundary: requests whose total input context exceeds
+  # 272,000 tokens bill input, cached input, and cache writes at 2x, and
+  # output at 1.5x, for the entire request. The 272,000-token figure is not
+  # recorded anywhere else in this repo (no gateway config or doc encodes a
+  # GPT-5.6 context threshold) — it comes from the provider's published
+  # pricing, cross-checked across independent pricing trackers on
+  # 2026-08-15: eesel.ai/blog/gpt-5-6-pricing, cometapi.com/gpt-5-6-pricing,
+  # requesty.ai/models/openai-responses/gpt-5.6-luna, and
+  # openrouter.ai/openai/gpt-5.6-terra. All agree on "more than 272K input
+  # tokens" as the boundary (i.e. the short tier covers <=272,000 tokens).
+  #
+  # Luna's long-context fields are added to its existing 2026-07-30 card
+  # rather than a new rate_card_id: the short-context values are unchanged,
+  # and 2026-07-30 was already the effective date of the provider's full
+  # (short + long) GPT-5.6 price list — only this card's short-tier-only
+  # schema was incomplete, not the provider's actual rates on that date. Sol
+  # and Terra are brand-new cards (not previously priced at all), dated to
+  # the same 2026-07-30 price list per the sources above.
   - rate_card_id: openai.gpt-5.6-luna.2026-07-30
     provider: openai
     model: gpt-5.6-luna
@@ -26,6 +55,37 @@ rate_cards:
     cached_input_micro_usd_per_million: 20000
     output_micro_usd_per_million: 1200000
     cache_write_micro_usd_per_million: 250000
+    long_context_threshold_tokens: 272000
+    long_context_input_micro_usd_per_million: 400000
+    long_context_cached_input_micro_usd_per_million: 40000
+    long_context_output_micro_usd_per_million: 1800000
+    long_context_cache_write_micro_usd_per_million: 500000
+
+  - rate_card_id: openai.gpt-5.6-sol.2026-07-30
+    provider: openai
+    model: gpt-5.6-sol
+    input_micro_usd_per_million: 5000000
+    cached_input_micro_usd_per_million: 500000
+    output_micro_usd_per_million: 30000000
+    cache_write_micro_usd_per_million: 6250000
+    long_context_threshold_tokens: 272000
+    long_context_input_micro_usd_per_million: 10000000
+    long_context_cached_input_micro_usd_per_million: 1000000
+    long_context_output_micro_usd_per_million: 45000000
+    long_context_cache_write_micro_usd_per_million: 12500000
+
+  - rate_card_id: openai.gpt-5.6-terra.2026-07-30
+    provider: openai
+    model: gpt-5.6-terra
+    input_micro_usd_per_million: 2000000
+    cached_input_micro_usd_per_million: 200000
+    output_micro_usd_per_million: 12000000
+    cache_write_micro_usd_per_million: 2500000
+    long_context_threshold_tokens: 272000
+    long_context_input_micro_usd_per_million: 4000000
+    long_context_cached_input_micro_usd_per_million: 400000
+    long_context_output_micro_usd_per_million: 18000000
+    long_context_cache_write_micro_usd_per_million: 5000000
 
   - rate_card_id: vertex.gemini-2.5-flash.2026-07-17
     provider: gemini

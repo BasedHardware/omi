@@ -362,12 +362,72 @@ struct NotificationSettingsResponse: Codable {
   }
 }
 
-enum SubscriptionPlanType: String, Codable {
+enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
   case basic  // display "Free"
+  case plus
   case unlimited  // legacy — display "Unlimited (legacy)"
+  case unlimitedV2
   case architect  // display "Architect" ($400/mo, cost_usd quota)
   case pro  // backward compat: old Firestore docs may still say "pro"
   case `operator`  // new — display "Operator"
+  case unknown(String)
+
+  init(rawValue: String) {
+    switch rawValue {
+    case "basic": self = .basic
+    case "plus": self = .plus
+    case "unlimited": self = .unlimited
+    case "unlimited_v2": self = .unlimitedV2
+    case "architect": self = .architect
+    case "pro": self = .pro
+    case "operator": self = .operator
+    default: self = .unknown(rawValue)
+    }
+  }
+
+  var rawValue: String {
+    switch self {
+    case .basic: return "basic"
+    case .plus: return "plus"
+    case .unlimited: return "unlimited"
+    case .unlimitedV2: return "unlimited_v2"
+    case .architect: return "architect"
+    case .pro: return "pro"
+    case .operator: return "operator"
+    case .unknown(let rawValue): return rawValue
+    }
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    self.init(rawValue: try container.decode(String.self))
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    try container.encode(rawValue)
+  }
+
+  /// Copy that is safe to show when the backend sends a plan introduced after this build.
+  var displayName: String {
+    switch self {
+    case .basic: return "Free"
+    case .plus: return "Plus"
+    case .unlimited: return "Unlimited (legacy)"
+    case .unlimitedV2: return "Unlimited"
+    case .architect, .pro: return "Architect"
+    case .operator: return "Operator"
+    case .unknown: return "Plan unavailable"
+    }
+  }
+
+  /// Unknown identities must not be treated as paid until their capabilities are known.
+  var hasPaidCapability: Bool {
+    switch self {
+    case .basic, .unknown: return false
+    case .plus, .unlimited, .unlimitedV2, .architect, .pro, .operator: return true
+    }
+  }
 }
 
 enum SubscriptionStatusType: String, Codable {

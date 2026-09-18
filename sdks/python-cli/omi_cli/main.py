@@ -105,6 +105,10 @@ def _version_callback(value: bool) -> None:
         typer.echo(f"omi-cli {__version__}")
         raise typer.Exit(code=0)
 
+def _profile_completion(incomplete: str) -> list[str]:
+    """Return configured profile names matching the partially typed value."""
+    return [name for name in cfg.load().list_profiles() if name.startswith(incomplete)]
+
 
 @app.callback()
 def _root(
@@ -115,6 +119,7 @@ def _root(
         "--profile",
         "-p",
         help="Profile to use from ~/.omi/config.toml. Falls back to $OMI_PROFILE then 'default'.",
+        autocompletion=_profile_completion,
     ),
     api_base: Optional[str] = typer.Option(
         None,
@@ -148,8 +153,37 @@ def _root(
 
 
 @app.command(help="Print the omi-cli version.")
-def version() -> None:
-    typer.echo(f"omi-cli {__version__}")
+def version(typer_ctx: typer.Context) -> None:
+    ctx: AppContext = typer_ctx.obj
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"version": __version__})
+    else:
+        typer.echo(f"omi-cli {__version__}")
+
+
+@app.command(help="Ask a natural-language question, answered from your own Omi conversations.")
+def ask(
+    typer_ctx: typer.Context,
+    question: str = typer.Argument(..., help='Your question, e.g. "what did I decide about pricing last week?"'),
+    limit: int = typer.Option(5, "--limit", min=1, max=10, help="How many conversations to ground the answer on."),
+    timezone: str = typer.Option("UTC", "--timezone", help="IANA timezone for resolving relative dates."),
+) -> None:
+    ctx: AppContext = typer_ctx.obj
+    with ctx.make_client() as client:
+        result = client.post(
+            "/v1/dev/user/ask",
+            json_body={"question": question, "limit": limit, "timezone": timezone},
+        )
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
+        return
+    payload = result or {}
+    typer.echo(payload.get("answer", ""))
+    sources = payload.get("sources") or []
+    if sources:
+        typer.echo("\nSources:")
+        for s in sources:
+            typer.echo(f"  - {s.get('title') or 'Untitled'} ({s.get('created_at') or ''})  [{s.get('id')}]")
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +224,8 @@ def main() -> None:
     * :class:`typer.Exit` — Typer's "clean exit at this code", e.g. from
       ``--version``. Pass through.
     * KeyboardInterrupt / EOFError — Ctrl-C / Ctrl-D. Conventional 130.
+    * :class:`click.Abort` — prompt interruption (subclasses RuntimeError, not
+      KeyboardInterrupt, so it needs its own rung). Same "Aborted." + 130.
     * Anything else — last-chance handler. Print a clean line, exit 1.
     """
     global _LAST_RENDERER
@@ -210,6 +246,13 @@ def main() -> None:
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
+    except click.Abort:
+        # Ctrl-C during an interactive prompt (Click raises click.Abort, which
+        # subclasses RuntimeError — not KeyboardInterrupt — so it must be caught
+        # explicitly, otherwise it falls through to the generic handler with an
+        # empty str() and prints "unexpected error: ").
+        sys.stderr.write("\nAborted.\n")
+        sys.exit(130)
     except (KeyboardInterrupt, EOFError):
         sys.stderr.write("\nAborted.\n")
         sys.exit(130)

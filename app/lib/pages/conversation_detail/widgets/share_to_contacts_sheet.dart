@@ -13,6 +13,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/share_links.dart';
 
 /// Contact with phone number for sharing
 class ShareableContact {
@@ -75,7 +76,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     });
 
     // Request contacts permission using flutter_contacts' own method
-    final permissionGranted = await FlutterContacts.requestPermission();
+    final status = await FlutterContacts.permissions.request(PermissionType.readWrite);
+    final permissionGranted = status == PermissionStatus.granted || status == PermissionStatus.limited;
 
     if (!permissionGranted) {
       if (!mounted) return;
@@ -89,17 +91,18 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
 
     try {
       // Fetch contacts with phone numbers
-      final contacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      final contacts = await FlutterContacts.getAll(properties: {ContactProperty.phone});
 
       // Filter contacts that have phone numbers and create ShareableContact list
       final shareableContacts = <ShareableContact>[];
       for (final contact in contacts) {
         for (final phone in contact.phones) {
           if (phone.number.isNotEmpty) {
+            final displayName = contact.displayName;
             shareableContacts.add(
               ShareableContact(
                 id: '${contact.id}_${phone.number}',
-                displayName: contact.displayName.isNotEmpty ? contact.displayName : phone.number,
+                displayName: displayName != null && displayName.isNotEmpty ? displayName : phone.number,
                 phoneNumber: _cleanPhoneNumber(phone.number),
               ),
             );
@@ -184,7 +187,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       }
 
       // Build the share link and message
-      final shareLink = 'https://h.omi.me/conversations/${widget.conversation.id}';
+      final shareLink = conversationShareUrl(widget.conversation.id);
       final message = l10n.heresWhatWeDiscussed(shareLink);
 
       // Build recipients string (comma-separated phone numbers)

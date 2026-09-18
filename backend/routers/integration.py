@@ -90,7 +90,16 @@ async def _resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[G
             db_executor, get_google_maps_location, geolocation.latitude, geolocation.longitude
         )
         if enriched:
-            return enriched
+            return enriched.model_copy(
+                update={
+                    'latitude': geolocation.latitude,
+                    'longitude': geolocation.longitude,
+                    'captured_at': geolocation.captured_at,
+                    'capture_source': geolocation.capture_source,
+                    'accuracy': geolocation.accuracy,
+                    'altitude': geolocation.altitude,
+                }
+            )
     return geolocation
 
 

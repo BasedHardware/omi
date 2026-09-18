@@ -110,13 +110,14 @@ def purge_stale_review_conflicts_for_memories(
     *,
     reason: str = "source_memory_deleted",
     db_client: Any = None,
+    include_legacy_commits: bool = False,
+    preserve_source_replacement_receipts: bool = False,
 ) -> List[str]:
-    """Tombstone and redact indexed review projections that reference removed memories."""
+    """Purge every review-derived record that references removed memories."""
     target_ids = sorted({memory_id for memory_id in memory_ids if memory_id})
     if not target_ids:
         return []
 
-    now = datetime.now(timezone.utc)
     purged: Set[str] = set()
     seen_documents: Set[str] = set()
     client = db_client if db_client is not None else db
@@ -162,45 +163,90 @@ def purge_stale_review_conflicts_for_memories(
                         continue
                     seen_documents.add(document_path)
 
-                    candidate_raw: object = item.get('candidate')
-                    candidate: Dict[str, Any] = (
-                        cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
-                    )
-                    candidate_id: Any = candidate.get('id')
-                    redacted_candidate = {'id': candidate_id} if candidate_id else {}
-                    has_previous_status = 'previous_status' in item
-                    already_redacted = (
-                        item.get('status') == 'tombstoned'
-                        and has_previous_status
-                        and candidate == redacted_candidate
-                        and item.get('permitted_uses') == []
-                        and all(field in item for field in ('reason', 'resolved_at', 'updated_at'))
-                    )
-                    if not already_redacted:
-                        was_tombstoned = item.get('status') == 'tombstoned'
-                        doc.reference.update(
-                            {
-                                'status': 'tombstoned',
-                                'previous_status': (
-                                    item.get('previous_status') if has_previous_status else item.get('status')
-                                ),
-                                'reason': item.get('reason') if was_tombstoned and 'reason' in item else reason,
-                                'candidate': redacted_candidate,
-                                'permitted_uses': [],
-                                'resolved_at': (
-                                    item.get('resolved_at') if was_tombstoned and 'resolved_at' in item else now
-                                ),
-                                'updated_at': (
-                                    item.get('updated_at') if was_tombstoned and 'updated_at' in item else now
-                                ),
-                            }
-                        )
+                    # Review IDs are deterministic hashes of candidate/source
+                    # material, so even a redacted row is a dictionary oracle.
+                    # The server-keyed deletion receipt is the only surviving
+                    # audit fence; remove this derived document whole.
+                    doc.reference.delete()
                     purged.add(str(item.get('review_id') or doc.id))
 
                 if len(page) < REVIEW_PURGE_PAGE_SIZE:
                     break
                 cursor = page[-1]
+    _purge_correction_history_for_memories(
+        uid,
+        target_ids,
+        reason=reason,
+        db_client=client,
+    )
+    if include_legacy_commits:
+        memory_ledger.purge_canonical_privacy_history_for_memories(
+            uid,
+            target_ids,
+            firestore_client=client,
+            preserve_source_replacement_receipts=preserve_source_replacement_receipts,
+        )
     return sorted(purged)
+
+
+def _contains_deleted_memory_identity(value: Any, target_ids: Set[str]) -> bool:
+    """Find exact legacy memory identities in arbitrarily shaped correction audit data."""
+
+    if isinstance(value, str):
+        return value in target_ids
+    if isinstance(value, dict):
+        return any(_contains_deleted_memory_identity(child, target_ids) for child in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return any(_contains_deleted_memory_identity(child, target_ids) for child in value)
+    return False
+
+
+def _purge_correction_history_for_memories(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    reason: str,
+    db_client: Any,
+) -> List[str]:
+    """Exhaustively scrub legacy and current correction rows for deleted IDs.
+
+    Older rows predate ``fact_id``/``referenced_memory_ids`` fields and can hold
+    content in nested mutation structures.  A bounded page scan is therefore
+    required for privacy completeness; it is deliberately not a silent indexed
+    prefix lookup.
+    """
+
+    target_ids = {memory_id for memory_id in memory_ids if memory_id}
+    if not target_ids:
+        return []
+    users_ref = db_client.collection(users_collection)
+    if hasattr(users_ref, 'document'):
+        corrections_ref = users_ref.document(uid).collection(corrections_collection)
+    else:
+        corrections_ref = db_client.collection(f'{users_collection}/{uid}/{corrections_collection}')
+    query = corrections_ref.order_by('__name__')
+    cursor: Any = None
+    scrubbed: List[str] = []
+    while True:
+        page_query = query.start_after(cursor) if cursor is not None else query
+        page = list(page_query.limit(REVIEW_PURGE_PAGE_SIZE).stream())
+        if not page:
+            break
+        for doc in page:
+            raw = doc.to_dict()
+            item = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+            if not _contains_deleted_memory_identity(item, target_ids):
+                continue
+            # Legacy correction document IDs embed review/fact identities, so
+            # payload redaction alone cannot meet source-identifier deletion.
+            # The canonical deletion receipt is the bounded audit authority;
+            # derived correction history is removed completely.
+            doc.reference.delete()
+            scrubbed.append(str(item.get('correction_id') or doc.id))
+        if len(page) < REVIEW_PURGE_PAGE_SIZE:
+            break
+        cursor = page[-1]
+    return sorted(scrubbed)
 
 
 def _review_referenced_memory_ids(item: Dict[str, Any]) -> Set[str]:
@@ -617,6 +663,55 @@ def resolution_mutations(
     return []
 
 
+def _build_correction_record(
+    uid: str,
+    *,
+    item: Dict[str, Any],
+    decision: str,
+    prior_head_diff: List[Dict[str, Any]],
+    final_correction: Optional[Dict[str, Any]] = None,
+    reason: str = '',
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    created_at = now or datetime.now(timezone.utc)
+    raw_review_id = str(item.get('review_id') or '')
+    correction_id = (
+        f"correction:{hashlib.sha256(f'{uid}:{raw_review_id}:{decision}'.encode()).hexdigest()}"
+        if decision in {'accept', 'reject'}
+        else f"correction:{raw_review_id}:{decision}"
+    )
+    candidate_raw: object = item.get('candidate')
+    candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
+    final: Dict[str, Any] = final_correction if final_correction is not None else {}
+    fact_id = item.get('fact_id') or candidate.get('id')
+    raw_conflict_ids = item.get('conflict_with')
+    conflict_ids = raw_conflict_ids if isinstance(raw_conflict_ids, list) else []
+    referenced_memory_ids = sorted({value for value in [fact_id, *conflict_ids] if isinstance(value, str) and value})
+    # Accept does not alter the candidate, so retaining a second plaintext copy
+    # in correction history adds no user value and creates a post-commit race:
+    # explicit deletion could scrub the review, then a delayed resolver could
+    # recreate the content here. Keep accept/reject as opaque, content-free
+    # decision audit; only an actual correction retains the corrected history.
+    privacy_redacted = decision in {'accept', 'reject'}
+    record: Dict[str, Any] = {
+        'correction_id': correction_id,
+        'review_id': None if privacy_redacted else item.get('review_id'),
+        'fact_id': None if privacy_redacted else fact_id,
+        'candidate': {} if privacy_redacted else item.get('candidate'),
+        'evidence_set': [] if privacy_redacted else candidate.get('evidence', []),
+        'prior_head_state': [] if privacy_redacted else prior_head_diff,
+        'final_correction': {} if privacy_redacted else final,
+        'referenced_memory_ids': [] if privacy_redacted else referenced_memory_ids,
+        'decision': decision,
+        'reason': f'review_queue_{decision}' if privacy_redacted else reason,
+        'status': (
+            'privacy_scrubbed' if decision == 'reject' else 'content_free_audit' if decision == 'accept' else 'recorded'
+        ),
+        'created_at': created_at,
+    }
+    return record
+
+
 def record_correction(
     uid: str,
     *,
@@ -626,22 +721,15 @@ def record_correction(
     final_correction: Optional[Dict[str, Any]] = None,
     reason: str = '',
 ) -> Dict[str, Any]:
-    now = datetime.now(timezone.utc)
-    correction_id = f"correction:{item.get('review_id')}:{decision}"
-    candidate_raw: object = item.get('candidate')
-    candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
-    final: Dict[str, Any] = final_correction if final_correction is not None else {}
-    record: Dict[str, Any] = {
-        'correction_id': correction_id,
-        'review_id': item.get('review_id'),
-        'candidate': item.get('candidate'),
-        'evidence_set': candidate.get('evidence', []),
-        'prior_head_state': prior_head_diff,
-        'final_correction': final,
-        'decision': decision,
-        'reason': reason,
-        'created_at': now,
-    }
+    record = _build_correction_record(
+        uid,
+        item=item,
+        decision=decision,
+        prior_head_diff=prior_head_diff,
+        final_correction=final_correction,
+        reason=reason,
+    )
+    correction_id = str(record['correction_id'])
     db.collection(users_collection).document(uid).collection(corrections_collection).document(correction_id).set(record)
     return record
 
@@ -741,12 +829,32 @@ def resolve_review_conflict(
         'updated_at': now,
         'resolution_commit_id': commit_obj.get('commit_id'),
     }
-    db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).update(update)
+    if effective_decision == 'drop':
+        # Drop has no canonical mutation to carry the review resolution. Scrub
+        # the selected derived row directly and retain only a fixed,
+        # content-free decision audit.
+        db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).update(
+            {
+                **update,
+                'reason': 'review_queue_drop',
+                'candidate': {},
+                'source_commit_id': None,
+                'source_short_term_id': None,
+                'source_item_revision': None,
+                'source_content_hash': None,
+                'veracity': None,
+                'impact': None,
+                'permitted_uses': [],
+            }
+        )
     if item.get('source_short_term_id'):
         short_term_db.mark_consolidated(uid, item['source_short_term_id'], update.get('resolution_commit_id'))
 
-    correction_record: Optional[Dict[str, Any]] = None
-    if effective_decision in ('accept', 'reject', 'correct'):
+    correction_record_raw = commit_result_dict.get('correction')
+    correction_record: Optional[Dict[str, Any]] = (
+        cast(Dict[str, Any], correction_record_raw) if isinstance(correction_record_raw, dict) else None
+    )
+    if effective_decision == 'reject':
         correction_record = record_correction(
             uid,
             item=item,
@@ -756,12 +864,24 @@ def resolve_review_conflict(
             reason=reason,
         )
 
+    resolved_projection = {
+        **item,
+        **update,
+        'candidate': {},
+        'source_commit_id': None,
+        'source_short_term_id': None,
+        'source_item_revision': None,
+        'source_content_hash': None,
+        'veracity': None,
+        'impact': None,
+        'permitted_uses': [],
+    }
     return {
         'status': 'resolved',
         'decision': effective_decision,
         'commit': commit_result_dict.get('commit'),
         'correction': correction_record,
-        'item': {**item, **update},
+        'item': resolved_projection,
     }
 
 
@@ -785,47 +905,23 @@ def _persist_non_active_review_resolution(
     commit_raw: object = commit_result_dict.get('commit')
     commit_obj: Dict[str, Any] = cast(Dict[str, Any], commit_raw) if isinstance(commit_raw, dict) else {}
     resolution_commit_id: Any = commit_obj.get('commit_id')
+    opaque_review_id = hashlib.sha256(f"{uid}:{review_id}".encode()).hexdigest()
     persist_non_active_route_outcome(
         NonActiveRouteOutcome(
             uid=uid,
             route=route,
-            idempotency_key=f"review_queue:{review_id}:{decision}",
-            source_ids=_review_resolution_source_ids(item),
-            reason=reason or f"review_queue_{decision}",
-            run_id=f"review_queue:{review_id}",
+            idempotency_key=f"review_queue:{opaque_review_id}:{decision}",
+            source_ids=[hashlib.sha256(f"{uid}:{review_id}:{decision}".encode()).hexdigest()],
+            reason=f"review_queue_{decision}",
+            run_id=f"review_queue:{opaque_review_id}",
             patch_id=None,
             audit_metadata={
                 'route_store_source': 'review_queue',
                 'decision': decision,
-                'review_id': review_id,
-                'fact_id': item.get('fact_id'),
-                'conflict_with': item.get('conflict_with') or [],
-                'source_commit_id': item.get('source_commit_id'),
-                'source_short_term_id': item.get('source_short_term_id'),
                 'resolution_commit_id': resolution_commit_id,
             },
         )
     )
-
-
-def _review_resolution_source_ids(item: Dict[str, Any]) -> List[str]:
-    source_ids: List[Any] = [
-        item.get('review_id'),
-        item.get('fact_id'),
-        item.get('source_commit_id'),
-        item.get('source_short_term_id'),
-    ]
-    candidate_raw: object = item.get('candidate')
-    candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
-    evidence_iterable: List[Any] = cast(List[Any], candidate.get('evidence') or candidate.get('evidence_set') or [])
-    for evidence in evidence_iterable:
-        if isinstance(evidence, dict):
-            evidence_dict: Dict[str, Any] = cast(Dict[str, Any], evidence)
-            source_ids.append(evidence_dict.get('evidence_id'))
-            source_ids.append(evidence_dict.get('source_id'))
-        elif evidence:
-            source_ids.append(str(evidence))
-    return sorted({source_id for source_id in source_ids if source_id})
 
 
 def append_resolution_commit(
@@ -841,15 +937,47 @@ def append_resolution_commit(
     # mutate the protected historical memory collection.  Import lazily to
     # avoid the canonical adapter -> review queue module cycle; the operation
     # itself still runs only after this module is fully initialized.
+    from database.memory_apply_store import CanonicalReviewResolution
+    from utils.memory.canonical_memory_adapter import refine_canonical_memory, write_canonical_external_memory
     from utils.memory.memory_service import MemoryService
 
     memory_service = MemoryService(db_client=db)
+    atomic_correction_record: Optional[Dict[str, Any]] = None
+    candidate_raw: object = item.get("candidate")
+    candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
     if decision == "accept":
-        candidate_raw: object = item.get("candidate")
-        candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
         conflict_with_raw: object = item.get("conflict_with")
         conflict_with: List[str] = cast(List[str], conflict_with_raw) if isinstance(conflict_with_raw, list) else []
-        memory_service.write(uid, accepted_fact(candidate))
+        review_id = str(item.get("review_id") or "").strip()
+        fact_id = str(item.get("fact_id") or candidate.get("id") or "").strip()
+        if not review_id or not fact_id:
+            raise ValueError("legacy review acceptance is missing its identity")
+        # The review row is read and resolved inside the same Firestore
+        # transaction that admits the canonical memory. Explicit deletion
+        # scrubs this row while holding the account destructive gate, so a
+        # stale in-memory candidate cannot be reissued after deletion wins.
+        atomic_correction_record = _build_correction_record(
+            uid,
+            item=item,
+            decision=decision,
+            prior_head_diff=mutations,
+            final_correction=correction,
+            reason="review_queue_accept",
+        )
+        write_canonical_external_memory(
+            uid,
+            accepted_fact(candidate),
+            db_client=db,
+            review_resolution=CanonicalReviewResolution(
+                review_id=review_id,
+                memory_id=fact_id,
+                decision="accept",
+                reason="review_queue_accept",
+                authority=item.get("authority"),
+                expected_candidate=copy.deepcopy(candidate),
+                correction_record=atomic_correction_record,
+            ),
+        )
         _delete_review_conflicts_idempotently(memory_service, uid, conflict_with)
     if decision == "correct":
         correction_dict: Dict[str, Any] = correction if correction is not None else {}
@@ -857,17 +985,38 @@ def append_resolution_commit(
         arg_changes_raw: object = correction_dict.get("arg_changes")
         arg_changes: Dict[str, Any] = cast(Dict[str, Any], arg_changes_raw) if isinstance(arg_changes_raw, dict) else {}
         if arg_changes:
-            memory_service.refine(uid, str(target_id), arg_changes)
+            target_memory_id = str(target_id)
+            memory_service._ensure_canonical_target(uid, target_memory_id)  # pyright: ignore[reportPrivateUsage]
+            atomic_correction_record = _build_correction_record(
+                uid,
+                item=item,
+                decision=decision,
+                prior_head_diff=mutations,
+                final_correction=correction,
+                reason="review_queue_correct",
+            )
+            refine_canonical_memory(
+                uid,
+                target_memory_id,
+                arg_changes,
+                db_client=db,
+                review_resolution=CanonicalReviewResolution(
+                    review_id=str(item.get("review_id") or ""),
+                    memory_id=str(item.get("fact_id") or candidate.get("id") or ""),
+                    decision="correct",
+                    reason="review_queue_correct",
+                    authority=item.get("authority"),
+                    expected_candidate=copy.deepcopy(candidate),
+                    mutation_target_memory_id=target_memory_id,
+                    correction_record=atomic_correction_record,
+                ),
+            )
     if decision == 'reject':
         fact_id: Any = item.get('fact_id')
         _delete_review_conflicts_idempotently(memory_service, uid, [str(fact_id)])
-    return memory_ledger.append_commit(
-        uid,
-        None,
-        mutations,
-        run_id=f"review_queue:{item.get('review_id')}",
-        use_current_head=True,
-    )
+    if atomic_correction_record is not None:
+        return {"commit": None, "correction": atomic_correction_record}
+    return {"commit": None}
 
 
 def _delete_review_conflicts_idempotently(memory_service: Any, uid: str, memory_ids: List[str]) -> None:

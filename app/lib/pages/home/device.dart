@@ -1,3 +1,4 @@
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -243,7 +244,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(e.toString())), backgroundColor: Colors.red),
+        SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(readableError(e))), backgroundColor: Colors.red),
       );
     }
   }

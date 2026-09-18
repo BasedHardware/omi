@@ -1138,5 +1138,125 @@
       "repeat_interval": "5m"
     },
     "record": null
+  },
+  {
+    "id": 85,
+    "uid": "omi-cr-start-fail",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend",
+    "title": "Cloud Run - instance start failures",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "deuxlwt1d569sb",
+        "model": {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\" AND (textPayload:\"STARTUP TCP probe failed\" OR textPayload:\"instance could not start successfully\")",
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "count",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-09-01T18:44:52Z",
+    "noDataState": "OK",
+    "execErrState": "OK",
+    "for": "5m",
+    "isPaused": false,
+    "keep_firing_for": "0s",
+    "labels": {
+      "alert_identity": "omi-cr-start-fail",
+      "component": "api",
+      "impact": "product",
+      "instatus_component": "api",
+      "severity": "critical"
+    },
+    "annotations": {
+      "safe_next_action": "Do not deploy a new Cloud Run revision (starts will fail). Check GCP status for us-central1. Wait for instance starts to succeed.",
+      "scope": "Cloud Run revisions in based-hardware matching STARTUP TCP probe failed or instance could not start successfully.",
+      "summary": "Cloud Run instances are failing to start (STARTUP TCP probe / instance could not start).",
+      "threshold": "> 0 matching log lines in 5m (zero baseline)",
+      "user_impact": "New requests queue or hang while warm minScale instances can still return /health 200. This is the 2026-09-01 us-central1 failure mode.",
+      "verification": "Cloud Logging: resource.type=cloud_run_revision AND textPayload:STARTUP TCP probe failed. Contrast api.omi.me vs a warm instance."
+    },
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]

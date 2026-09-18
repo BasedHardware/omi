@@ -279,6 +279,14 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
                 if data_dict.get('photos'):
                     return data_dict
 
+                # New conversation documents carry an authoritative marker maintained
+                # transactionally with photo writes. Avoid an empty subcollection query
+                # for the overwhelmingly common no-photo case. Legacy documents omit the
+                # marker and deliberately keep the lookup so their response cannot change.
+                if data_dict.get('has_photos') is False:
+                    data_dict['photos'] = []
+                    return data_dict
+
                 conversation_id = data_dict['id']
                 photos = photos_getter(uid=uid, conversation_id=conversation_id)
                 data_dict['photos'] = photos

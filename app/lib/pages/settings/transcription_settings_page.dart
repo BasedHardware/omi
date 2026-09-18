@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -46,6 +47,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _showAdvanced = false;
   bool _showLogs = true;
   bool _isSaving = false;
+  bool _sendRawAudioToOmi = true;
   String? _validationError;
 
   // On-device model download state
@@ -193,6 +195,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _hostController.text = config?.host ?? '127.0.0.1';
     _portController.text = (config?.port ?? 8080).toString();
     _urlController.text = config?.url ?? '';
+    _sendRawAudioToOmi = config?.sendRawAudioToOmi ?? true;
 
     // Auto-detect model for on-device whisper if not set
     if (_selectedProvider == SttProvider.onDeviceWhisper && _urlController.text.isEmpty) {
@@ -375,6 +378,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     String? url,
     String? host,
     int? port,
+    bool? sendRawAudioToOmi,
   }) {
     final current = _configsPerProvider[_selectedProvider];
     final providerDefaults = SttProviderConfig.get(_selectedProvider);
@@ -392,6 +396,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       params: current?.params,
       audioFieldName: current?.audioFieldName,
       schemaJson: current?.schemaJson,
+      sendRawAudioToOmi: sendRawAudioToOmi ?? current?.sendRawAudioToOmi ?? _sendRawAudioToOmi,
     );
   }
 
@@ -459,6 +464,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       params: params,
       audioFieldName: audioFieldName,
       schemaJson: schemaJson,
+      sendRawAudioToOmi: _sendRawAudioToOmi,
     );
   }
 
@@ -587,7 +593,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.errorSaving(e.toString())), backgroundColor: Colors.red.shade700),
+          SnackBar(content: Text(context.l10n.errorSaving(readableError(e))), backgroundColor: Colors.red.shade700),
         );
       }
     } finally {
@@ -611,6 +617,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       if (config.params != null) 'params': config.params,
       if (config.audioFieldName != null) 'audio_field_name': config.audioFieldName,
       if (config.schemaJson != null) 'schema': config.schemaJson,
+      'send_raw_audio_to_omi': config.sendRawAudioToOmi,
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
@@ -739,6 +746,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _urlController.text = config.url ?? '';
         _hostController.text = config.host ?? '127.0.0.1';
         _portController.text = (config.port ?? 8080).toString();
+        _sendRawAudioToOmi = config.sendRawAudioToOmi;
 
         // Update JSON configs
         if (config.requestType != null || config.headers != null || config.params != null) {
@@ -820,6 +828,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     _buildProviderSection(),
                     const SizedBox(height: 20),
                     _buildConfigSection(),
+                    const SizedBox(height: 20),
+                    _buildRawAudioForwardingSetting(),
                     const SizedBox(height: 10),
                     _buildAdvancedSection(),
                     _buildLogsSection(),
@@ -990,7 +1000,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 children: [
                   const Icon(Icons.battery_alert, color: Colors.orange, size: 24),
                   const SizedBox(width: 8),
-                  Text(context.l10n.highResourceUsage, style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  Expanded(
+                    child: Text(
+                      context.l10n.highResourceUsage,
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ),
                 ],
               ),
               content: Column(
@@ -1024,12 +1039,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     if (!proceed) return;
 
+    await _saveCurrentProviderConfig();
+    if (!mounted) return;
+
     setState(() {
       _useCustomStt = true;
       _selectedProvider = SttProvider.onDeviceWhisper;
-      if (!isIOS) {
-        _checkLocalModel();
-      }
+      _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
       PlatformManager.instance.analytics.transcriptionSourceSelected(
         source: isIOS ? 'custom_on_device_ios' : 'custom_on_device',
       );
@@ -1056,7 +1072,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
   }
 
-  void _selectMode(TranscriptionMode mode) {
+  Future<void> _selectMode(TranscriptionMode mode) async {
     switch (mode) {
       case TranscriptionMode.omi:
         setState(() {
@@ -1066,15 +1082,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
         break;
       case TranscriptionMode.onDevice:
-        _switchToOnDevice();
+        await _switchToOnDevice();
         break;
       case TranscriptionMode.cloudProvider:
+        if (_selectedProvider == SttProvider.onDeviceWhisper) {
+          await _saveCurrentProviderConfig();
+          if (!mounted) return;
+        }
         setState(() {
           _useCustomStt = true;
           _omiParakeet = false;
           // Leaving on-device: fall back to a real BYO cloud provider.
           if (_selectedProvider == SttProvider.onDeviceWhisper) {
             _selectedProvider = SttProvider.openai;
+            _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
           }
         });
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'custom_cloud');
@@ -1115,8 +1136,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               items: TranscriptionMode.values
                   .map((m) => DropdownMenuItem<TranscriptionMode>(value: m, child: Text(_modeLabel(m))))
                   .toList(),
-              onChanged: (m) {
-                if (m != null && m != mode) _selectMode(m);
+              onChanged: (m) async {
+                if (m != null && m != mode) await _selectMode(m);
               },
             ),
           ),
@@ -1163,6 +1184,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     if (_isCodecCompatible || !_useCustomStt) return const SizedBox.shrink();
 
     final codecReason = _connectedDeviceCodec?.customSttUnsupportedReason ?? 'unsupported format';
+    final warningText = _sendRawAudioToOmi
+        ? context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason)
+        : context.l10n.transcriptionUnavailable;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -1170,10 +1194,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 14),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason),
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-            ),
+            child: Text(warningText, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
           ),
         ],
       ),
@@ -1298,6 +1319,32 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [_buildApiKeyInput(), const SizedBox(height: 20), _buildLanguageSelector()],
+    );
+  }
+
+  Widget _buildRawAudioForwardingSetting() {
+    return Material(
+      color: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade800),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile(
+        value: _sendRawAudioToOmi,
+        onChanged: (value) {
+          setState(() {
+            _sendRawAudioToOmi = value;
+            _updateCurrentProviderConfig(sendRawAudioToOmi: value);
+          });
+        },
+        secondary: const Icon(Icons.cloud_upload_outlined, color: Colors.white70),
+        title: Text(context.l10n.sendRawAudioToOmi, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        subtitle: Text(
+          context.l10n.sendRawAudioToOmiDescription,
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+        ),
+      ),
     );
   }
 
@@ -1889,10 +1936,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         if (mounted) {
           setState(() {
             _isDownloadingModel = false;
-            _modelDownloadStatus = context.l10n.errorWithMessage(e.toString());
+            _modelDownloadStatus = context.l10n.errorWithMessage(readableError(e));
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.downloadErrorWithMessage(e.toString())), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text(context.l10n.downloadErrorWithMessage(readableError(e))), backgroundColor: Colors.red),
           );
         }
       }
@@ -2002,6 +2050,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               params: null,
               audioFieldName: null,
               schemaJson: current.schemaJson,
+              sendRawAudioToOmi: current.sendRawAudioToOmi,
             );
           }
           _regenerateRequestJson(_selectedProvider);
@@ -2164,6 +2213,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 params: current.params,
                 audioFieldName: current.audioFieldName,
                 schemaJson: schemaJson,
+                sendRawAudioToOmi: current.sendRawAudioToOmi,
               );
             } catch (_) {}
           }
@@ -2299,7 +2349,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Widget _buildBottomBar() {
     return Container(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: MediaQuery.of(context).padding.bottom + 16),
+      // The SafeArea below adds the system inset; adding it here as well left
+      // twice the inset of dead space under the content on inset devices.
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D0D),
         border: Border(top: BorderSide(color: Colors.grey.shade900)),
@@ -2552,7 +2604,9 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
 
   Widget _buildBottomBar() {
     return Container(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: MediaQuery.of(context).padding.bottom + 16),
+      // The SafeArea below adds the system inset; adding it here as well left
+      // twice the inset of dead space under the content on inset devices.
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D0D),
         border: Border(top: BorderSide(color: Colors.grey.shade900)),

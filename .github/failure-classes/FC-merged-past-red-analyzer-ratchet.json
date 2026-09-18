@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-merged-past-red-analyzer-ratchet",
+  "violated_contract": "A PR whose Dart Analyze & Tests job is red must not merge to main. The analyzer ratchet fails closed on unused_import above a baseline of 0; merging past that red check lands new unused imports on main and blocks every later PR that runs the mobile job.",
+  "canonical_prevention": "Keep unused_import at baseline 0. Delete the unused import lines; never raise the baseline to clear a red Dart Analyze & Tests check, and never merge while that check is red.",
+  "canonical_prevention_artifact": [
+    "app/scripts/analyze_ratchet.sh",
+    "app/analysis_baseline.json",
+    ".github/workflows/mobile-app-checks.yml"
+  ],
+  "evidence_prs": [12563],
+  "scope_hints": [
+    "app/lib/",
+    "app/scripts/analyze_ratchet.sh",
+    "app/analysis_baseline.json",
+    ".github/workflows/mobile-app-checks.yml"
+  ],
+  "status": "open"
+}

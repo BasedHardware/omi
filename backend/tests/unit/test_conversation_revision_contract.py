@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import database.conversations as conversations_db
 from models.conversation import Conversation, ConversationMutationResponse
+from models.conversation_photo import ConversationPhoto
 from models.structured import Structured
 
 
@@ -69,6 +70,32 @@ class _Transaction:
 
     def update(self, ref, data):
         ref.update(data)
+
+
+class _PhotoRef:
+    def __init__(self):
+        self.set_calls = []
+
+    def set(self, data, **kwargs):
+        self.set_calls.append((data, kwargs))
+
+
+class _PhotoCollection:
+    def __init__(self):
+        self.refs = {}
+
+    def document(self, photo_id):
+        return self.refs.setdefault(photo_id, _PhotoRef())
+
+
+class _PhotoConversationRef(_ConversationRef):
+    def __init__(self, snapshot):
+        super().__init__(snapshot)
+        self.photos = _PhotoCollection()
+
+    def collection(self, name):
+        assert name == 'photos'
+        return self.photos
 
 
 def test_document_update_time_is_exposed_as_server_revision():
@@ -201,6 +228,7 @@ def test_first_processing_write_still_creates_complete_document(monkeypatch):
     assert options == {}
     assert 'updated_at' not in written
     assert written['structured']['title'] == 'Generated title'
+    assert written['has_photos'] is False
 
 
 def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch):
@@ -220,6 +248,24 @@ def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch
 
     assert len(ref.create_calls) == 1
     assert 'updated_at' not in ref.create_calls[0]
+    assert ref.create_calls[0]['has_photos'] is False
+
+
+def test_storing_photos_sets_authoritative_parent_marker(monkeypatch):
+    ref = _PhotoConversationRef(_Snapshot({'data_protection_level': 'standard'}))
+    client = _Firestore(ref)
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    stored = conversations_db.store_conversation_photos(
+        'user-1',
+        'conversation-1',
+        [ConversationPhoto(id='photo-1', base64='encoded')],
+        firestore_client=client,
+    )
+
+    assert stored is True
+    assert ref.update_calls == [{'has_content': True, 'has_photos': True}]
+    assert ref.photos.refs['photo-1'].set_calls[0][0]['id'] == 'photo-1'
 
 
 def test_processing_transaction_reloads_user_fields_when_firestore_retries(monkeypatch):

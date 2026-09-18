@@ -218,6 +218,48 @@ import XCTest
       XCTAssertEqual(buffered.pendingVideoFrameCount, 0)
     }
 
+    func testWarmGeminiFlushesBufferedScreenFrameWhenTheActivityWindowOpens() async {
+      // The PTT-down frame usually finishes encoding before activityStart. It must ride this
+      // turn (flushed at activityStart), not wait for a reconnect that never comes.
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+      _ = await session.inputLifecycleSnapshot()
+
+      session.sendVideoFrame(Data([9, 9]), mime: "image/jpeg")
+      let buffered = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(buffered.pendingVideoFrameCount, 1, "no activity window yet: frame waits")
+
+      session.beginInputTurn()
+      let opened = await session.inputLifecycleSnapshot()
+      XCTAssertTrue(opened.activityOpen)
+      XCTAssertEqual(opened.pendingVideoFrameCount, 0, "activityStart flushes the frame into the turn")
+    }
+
+    func testGeminiCommitDropsAFrameThatMissedItsTurnWindow() async {
+      // A frame encoded after activityEnd belongs to a finished turn. It must never be
+      // carried into the next turn as a stale screen.
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+      session.beginInputTurn()
+      session.commitInputTurn()
+      _ = await session.inputLifecycleSnapshot()
+
+      let finishedTurn = VoiceTurnID()
+      session.sendVideoFrame(Data([7]), mime: "image/jpeg", turnID: finishedTurn)
+      let late = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(late.pendingVideoFrameCount, 1)
+
+      session.beginInputTurn(turnID: VoiceTurnID(), responseID: VoiceResponseID("next"))
+      let next = await session.inputLifecycleSnapshot()
+      XCTAssertTrue(next.activityOpen)
+      XCTAssertEqual(next.pendingVideoFrameCount, 0, "a frame from a finished turn is dropped, not sent")
+      XCTAssertFalse(
+        session.sentVideoFramesForTesting.contains(Data([7]).base64EncodedString()),
+        "the earlier turn's screen never reaches the new turn")
+    }
+
     func testGeminiScreenshotToolResultCarriesPixelsInsideTheMatchingFunctionResponse() throws {
       let descriptor = RealtimeScreenEvidenceDescriptor(
         evidenceID: "evidence-1",
@@ -252,6 +294,23 @@ import XCTest
       XCTAssertEqual(inlineData?["mimeType"], "image/jpeg")
       XCTAssertEqual(inlineData?["data"], "AQID")
       XCTAssertEqual(inlineData?["displayName"], "live-screenshot.jpg")
+    }
+
+    func testGeminiThinkDeeperToolResultPinsTheCanonicalSpokenAnswer() throws {
+      let output = #"{"ok":true,"text":"About six weeks.","toolResultEnvelope":{"version":1}}"#
+      let wire = RealtimeHubSession.geminiToolResponse(
+        callId: "call-1",
+        name: HubTool.thinkDeeper.rawValue,
+        output: output,
+        screenEvidence: nil)
+      let toolResponse = try XCTUnwrap(wire["toolResponse"] as? [String: Any])
+      let responses = try XCTUnwrap(toolResponse["functionResponses"] as? [[String: Any]])
+      let body = try XCTUnwrap(responses.first?["response"] as? [String: Any])
+
+      XCTAssertEqual(body["result"] as? String, output)
+      XCTAssertEqual(body["spoken_answer"] as? String, "About six weeks.")
+      XCTAssertTrue((body["delivery_instruction"] as? String ?? "").contains("Do not add"))
+      XCTAssertTrue((body["delivery_instruction"] as? String ?? "").contains("earlier topic"))
     }
 
     func testGeminiPostToolContinuationOpensASeparateInternalActivityTurn() {
@@ -374,17 +433,88 @@ import XCTest
 
       let acceptedBeforeReady = await session.sendBackgroundAgentContext("agent finished")
       let coldSnapshot = await session.inputLifecycleSnapshot()
-      XCTAssertFalse(acceptedBeforeReady, "a closed socket must not accept background context")
+      XCTAssertEqual(acceptedBeforeReady, .retry, "a closed socket must not accept background context")
       XCTAssertEqual(coldSnapshot.pendingTextInputCount, 0, "background context must not be buffered")
 
       session.markReadyForTesting()
       let acceptedWhenReady = await session.sendBackgroundAgentContext("agent finished")
       let readySnapshot = await session.inputLifecycleSnapshot()
-      XCTAssertTrue(acceptedWhenReady, "an open OpenAI session accepts background context immediately")
+      XCTAssertEqual(acceptedWhenReady, .delivered, "an open OpenAI session accepts background context immediately")
       XCTAssertEqual(readySnapshot.pendingTextInputCount, 0, "an accepted send leaves nothing buffered")
+      XCTAssertEqual(
+        readySnapshot.testingLastConversationItemRole, "system",
+        "background context must never impersonate a user utterance")
     }
 
-    func testGeminiBackgroundAgentContextRefusesWithoutAnActivityWindow() async {
+    func testTrustedTurnInstructionRefusesWhenTheSessionCannotAcceptContext() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+
+      let refusedWhileCold = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertFalse(refusedWhileCold, "a closed socket must refuse a trusted turn instruction")
+
+      session.markReadyForTesting()
+      let acceptedWhenReady = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertTrue(acceptedWhenReady, "an open OpenAI session accepts a trusted turn instruction")
+    }
+
+    func testGeminiTrustedTurnInstructionRefusesWithoutAnActivityWindow() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+
+      let accepted = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertFalse(accepted, "Gemini must refuse a trusted instruction with no activity window")
+    }
+
+    func testTrustedTurnInstructionUsesOpenAIResponseCreateInstructions() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+      session.markReadyForTesting()
+      _ = await session.inputLifecycleSnapshot()
+
+      let accepted = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertTrue(accepted, "an open OpenAI session accepts a trusted instruction by parking it")
+      let parked = await session.inputLifecycleSnapshot()
+      XCTAssertNil(
+        parked.testingLastResponseInstruction,
+        "parking must not send response.create yet")
+      XCTAssertNil(
+        parked.testingLastConversationItemRole,
+        "a trusted instruction must not be a durable conversation item")
+
+      session.commitInputTurn()
+      let committed = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(committed.testingResponseCreateCount, 1)
+      XCTAssertEqual(committed.testingLastResponseInstruction, "TURN INSTRUCTION")
+      XCTAssertNil(
+        committed.testingLastConversationItemRole,
+        "response.create instructions must not create a system conversation item")
+    }
+
+    func testGeminiFlushesAParkedTrustedInstructionBeforeAPendingCommitClosesTheWindow() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+      _ = await session.inputLifecycleSnapshot()
+
+      let refusedWhileIdle = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertFalse(refusedWhileIdle)
+
+      session.commitInputTurn()
+      session.beginInputTurn()
+      let committed = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(
+        committed.testingLastRealtimeInputText, "TURN INSTRUCTION",
+        "the parked instruction must land inside the activity window before activityEnd")
+      XCTAssertFalse(committed.activityOpen)
+      XCTAssertFalse(committed.pendingCommit)
+
+      let replay = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertTrue(replay, "a flushed instruction is confirmed on retry without a second send")
+    }
+
+    func testGeminiBackgroundAgentContextIsUnsupportedWithoutWritingUserInput() async {
       // Gemini can only accept text inside an open activity window; without one,
       // sendTextInput would buffer. Background context must instead refuse so the
       // caller keeps its checkpoint unadvanced and retries when a window opens.
@@ -396,8 +526,10 @@ import XCTest
       let snapshot = await session.inputLifecycleSnapshot()
 
       XCTAssertFalse(snapshot.activityOpen)
-      XCTAssertFalse(accepted, "Gemini must refuse background context with no open activity window")
+      XCTAssertEqual(accepted, .unsupported, "Gemini has no safe mid-session system-context channel")
       XCTAssertEqual(snapshot.pendingTextInputCount, 0, "refused background context must not be buffered")
+      XCTAssertNil(
+        snapshot.testingLastRealtimeInputText, "background text must never enter Gemini's user activity stream")
     }
 
     func testOpenAITransportCloseImmediatelyMakesSessionNonSendableBeforeControllerTeardown() async {
@@ -476,7 +608,7 @@ import XCTest
       XCTAssertEqual(completed.inputIdentityCount, 0)
     }
 
-    func testBackgroundAgentContextRefusesGeminiWhileWarmIdleThenSendsWhenWindowOpens() async {
+    func testGeminiBackgroundAgentContextRemainsUnsupportedWhenInputWindowOpens() async {
       let delegate = RealtimeHubSessionDelegateSpy()
       let session = makeSession(provider: .gemini, delegate: delegate)
       session.markReadyForTesting()
@@ -486,28 +618,33 @@ import XCTest
       // stopOnQueue/abandonInputTurn, so reporting success would advance the
       // exactly-once checkpoint on a completion that is then lost.
       let refusedWhileIdle = await session.sendBackgroundAgentContext("agent finished")
-      XCTAssertFalse(refusedWhileIdle)
+      XCTAssertEqual(refusedWhileIdle, .unsupported)
 
-      // A turn opens the activity window — now the session can accept context.
+      // A user turn opening the activity window cannot make the same realtime-input
+      // channel safe for unrelated background text.
       session.beginInputTurn()
-      let sentAfterWindow = await session.sendBackgroundAgentContext("agent finished")
-      XCTAssertTrue(sentAfterWindow)
+      let refusedAfterWindow = await session.sendBackgroundAgentContext("agent finished")
+      let snapshot = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(refusedAfterWindow, .unsupported)
+      XCTAssertNil(
+        snapshot.testingLastRealtimeInputText,
+        "opening a user input window must not turn background output into a competing user message")
     }
 
-    func testBackgroundAgentContextReturnsFalseWhenTheConfirmedSendFails() async {
+    func testBackgroundAgentContextReturnsRetryWhenTheConfirmedSendFails() async {
       let delegate = RealtimeHubSessionDelegateSpy()
       let session = makeSession(provider: .openai, delegate: delegate)
       session.markReadyForTesting()
 
       // The checkpoint advances on this `true`, so `true` must mean confirmed
-      // delivery: a failed provider send must report false, not fire-and-forget.
+      // delivery: a failed provider send must report retry, not fire-and-forget.
       session.setTestingForcedSendError(RealtimeHubSessionTestError.forced)
       let failedSend = await session.sendBackgroundAgentContext("agent finished")
-      XCTAssertFalse(failedSend)
+      XCTAssertEqual(failedSend, .retry)
 
       session.setTestingForcedSendError(nil)
       let confirmedSend = await session.sendBackgroundAgentContext("agent finished")
-      XCTAssertTrue(confirmedSend)
+      XCTAssertEqual(confirmedSend, .delivered)
     }
 
     private func makeSession(

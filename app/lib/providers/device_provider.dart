@@ -33,6 +33,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
+typedef FindDeviceRunner = Future<bool> Function(BtDevice device);
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
@@ -53,6 +54,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BtDevice? pairedDevice;
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
+  final FindDeviceRunner _findDeviceRunner;
+  Future<bool>? _findDeviceRequest;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   StreamSubscription? _bleChargingStatusListener;
   int batteryLevel = -1;
@@ -88,35 +91,59 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _discoveryTimer;
+  Timer? _disconnectRescanTimer;
+  Timer? _firmwarePromptTimer;
+  bool _isDisposed = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
-  DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader})
-      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics {
+  DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader, FindDeviceRunner? findDeviceRunner})
+      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
     ServiceManager.instance().device.subscribe(this, this);
-    BleBridge.instance.pairingLostCallback = _showPairingLostDialog;
+    BleBridge.instance.pairingLostCallback = _handlePairingLost;
+  }
+
+  void _handlePairingLost() {
+    ServiceManager.instance().device.requireStaleBondRecovery();
+    _discoveryTimer?.cancel();
+    updateConnectingStatus(false);
+    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+    if (pairedDeviceId.isNotEmpty) {
+      unawaited(ServiceManager.instance().device.disconnectDevice(pairedDeviceId));
+    }
+    _showPairingLostDialog();
   }
 
   void _showPairingLostDialog() {
     if (_pairingLostDialogShowing) return;
-    final context = globalNavigatorKey.currentContext;
-    if (context == null || !context.mounted) return;
 
-    _pairingLostDialogShowing = true;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => ConfirmationDialog(
-        title: dialogContext.l10n.bluetooth,
-        description: dialogContext.l10n.deviceUnpairedMessage,
-        confirmText: dialogContext.l10n.gotIt,
-        onConfirm: () => Navigator.of(dialogContext).pop(),
-        onCancel: () {},
-      ),
-    ).whenComplete(() => _pairingLostDialogShowing = false);
+    void present() {
+      if (_pairingLostDialogShowing) return;
+      final context = globalNavigatorKey.currentContext;
+      if (context == null || !context.mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => present());
+        return;
+      }
+
+      _pairingLostDialogShowing = true;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => ConfirmationDialog(
+          title: dialogContext.l10n.bluetooth,
+          description: dialogContext.l10n.deviceUnpairedMessage,
+          confirmText: dialogContext.l10n.gotIt,
+          onConfirm: () => Navigator.of(dialogContext).pop(),
+          onCancel: () {},
+        ),
+      ).whenComplete(() => _pairingLostDialogShowing = false);
+    }
+
+    present();
   }
 
   void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
@@ -218,8 +245,50 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
+  Future<bool> findDevice() {
+    final device = connectedDevice ?? pairedDevice;
+    if (!isConnected ||
+        device == null ||
+        device.type != DeviceType.omi ||
+        FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device)) {
+      return Future.value(false);
+    }
+
+    final existingRequest = _findDeviceRequest;
+    if (existingRequest != null) return existingRequest;
+
+    late final Future<bool> request;
+    request = _runFindDevice(device).whenComplete(() {
+      if (identical(_findDeviceRequest, request)) {
+        _findDeviceRequest = null;
+      }
+    });
+    _findDeviceRequest = request;
+    return request;
+  }
+
+  Future<bool> _runFindDevice(BtDevice device) async {
+    try {
+      return await _findDeviceRunner(device);
+    } catch (e) {
+      Logger.debug('DeviceProvider: Failed to play find-device pattern: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _defaultFindDeviceRunner(BtDevice device) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(device.id).timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        Logger.debug('DeviceProvider: Timed out finding the active device connection');
+        return null;
+      },
+    );
+    return await connection?.playFindDevicePattern() ?? false;
+  }
+
   Future _bleDisconnectDevice(BtDevice btDevice) async {
-    await ServiceManager.instance().device.disconnectDevice();
+    await ServiceManager.instance().device.disconnectDevice(btDevice.id);
   }
 
   Future<int> _retrieveBatteryLevel(String deviceId) async {
@@ -374,7 +443,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   /// Kicks off a single connection attempt. Native handles auto-reconnect after this.
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
+    if (_isDisposed) return;
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+
+    if (ServiceManager.instance().device.staleBondRecoveryRequired) {
+      Logger.debug('initiateConnection ($caller): blocked until stale bond recovery');
+      return;
+    }
 
     // Already connected — nothing to do
     if (isConnected || connectedDevice != null) return;
@@ -400,10 +475,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _startDiscoveryScanning() {
+    if (_isDisposed) return;
     _discoveryTimer?.cancel();
     _runDiscoveryScan();
     _discoveryTimer = Timer.periodic(const Duration(seconds: 10), (_) => _runDiscoveryScan());
   }
+
+  void stopDiscoveryScanning() {
+    _discoveryTimer?.cancel();
+    _discoveryTimer = null;
+  }
+
+  @visibleForTesting
+  void startDiscoveryScanningForTesting() => _startDiscoveryScanning();
+
+  @visibleForTesting
+  bool get hasActiveDiscoveryTimer => _discoveryTimer?.isActive ?? false;
 
   Future<void> _runDiscoveryScan() async {
     if (SharedPreferencesUtil().btDevice.id.isNotEmpty || isConnected) {
@@ -426,6 +513,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       updateConnectingStatus(false);
       return;
     }
+
+    ServiceManager.instance().device.clearStaleBondRecoveryRequirement();
 
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
     if (pairedDeviceId.isEmpty) {
@@ -464,13 +553,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    _isDisposed = true;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
-    if (BleBridge.instance.pairingLostCallback == _showPairingLostDialog) {
+    if (BleBridge.instance.pairingLostCallback == _handlePairingLost) {
       BleBridge.instance.pairingLostCallback = null;
     }
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
     _discoveryTimer?.cancel();
+    _disconnectRescanTimer?.cancel();
+    _firmwarePromptTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
@@ -493,7 +585,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Batch mode: the native writer finalizes the in-progress recording on
     // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
     // so the new recording shows up in the conversations list.
-    Future.delayed(const Duration(seconds: 1), () {
+    _disconnectRescanTimer?.cancel();
+    _disconnectRescanTimer = Timer(const Duration(seconds: 1), () {
+      if (_isDisposed) return;
       localRecordingsProvider?.refresh();
     });
 
@@ -510,6 +604,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       deviceType: 'omi',
       isConnected: false,
     );
+
+    // #3328: do not create a user-facing disconnect / "wear your Omi" push.
+    // Onboard storage keeps recording across BLE drops; backend daily wear
+    // reminder is also off.
 
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
@@ -750,7 +848,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // Show firmware update dialog if needed
       if (hasUpdate && _havingNewFirmware) {
         // Use a small delay to ensure the UI is ready
-        Future.delayed(const Duration(milliseconds: 500), () {
+        _firmwarePromptTimer?.cancel();
+        _firmwarePromptTimer = Timer(const Duration(milliseconds: 500), () {
+          if (_isDisposed) return;
           if (!_isCurrentFirmwareCheckSession(checkSession)) return;
           final context = globalNavigatorKey.currentContext;
           if (context != null && context.mounted) {
@@ -877,7 +977,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         }
 
         await Future.delayed(retryDelay);
-        if (!_isCurrentFirmwareCheckSession(checkSession)) {
+        if (_isDisposed || !_isCurrentFirmwareCheckSession(checkSession)) {
           return false;
         }
       }

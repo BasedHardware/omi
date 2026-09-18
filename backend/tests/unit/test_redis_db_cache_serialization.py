@@ -109,6 +109,21 @@ def test_apps_reviews_batch_round_trip(fake_redis: _FakeRedis) -> None:
     }
 
 
+class _MaxMemoryRedis(_FakeRedis):
+    def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+
+
+def test_cache_user_geolocation_fail_open_on_maxmemory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(redis_db, "r", _MaxMemoryRedis())
+    redis_db.cache_user_geolocation("uid-1", {"latitude": 37.77, "longitude": -122.42})
+
+
+def test_cache_user_name_fail_open_on_maxmemory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(redis_db, "r", _MaxMemoryRedis())
+    redis_db.cache_user_name("uid-1", "Ada")
+
+
 def test_set_generic_cache_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
     redis_db.set_generic_cache("apps:marketplace", {"ok": True}, ttl=120)
     assert fake_redis.expire_calls == []
@@ -123,7 +138,7 @@ def test_set_generic_cache_without_ttl_omits_ex(fake_redis: _FakeRedis) -> None:
     assert fake_redis.expire_calls == []
 
 
-def test_cache_user_name_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
+def test_cache_set_fail_open_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
     redis_db.cache_user_name("uid-1", "Ada", ttl=3600)
     assert fake_redis.expire_calls == []
     assert fake_redis.set_calls == [{'key': 'users:uid-1:name', 'value': 'Ada', 'ex': 3600}]

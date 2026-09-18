@@ -1,31 +1,58 @@
 """Tests for Model QoS profile system in utils/llm/clients.py."""
 
+from __future__ import annotations
+
 import os
 import sys
-import types
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.llm.model_config import UnknownLLMFeature
+
 # ---------------------------------------------------------------------------
-# Pre-mock heavy deps before any imports touch them
+# Isolated load of utils.llm.clients against in-memory langchain stubs.
+# Stubs live only inside the module fixture (never at import/collection).
 # ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
+# Names previously imported at module top from utils.llm.clients. Bound from the
+# freshly loaded module object inside `_qos_isolated_clients` so tests keep using
+# the same bare names without seeing a process-global clients import.
+_CLIENTS_EXPORTS = (
+    'MODEL_QOS_PROFILES',
+    '_ANTHROPIC_ONLY_FEATURES',
+    '_PERPLEXITY_ONLY_FEATURES',
+    '_PINNED_FEATURES',
+    '_STRUCTURED_OUTPUT_FEATURES',
+    '_active_profile',
+    '_active_profile_name',
+    '_byok_profile',
+    '_byok_profile_name',
+    '_effective_byok_provider',
+    '_get_or_create_gemini_llm',
+    '_get_or_create_openai_llm',
+    '_get_or_create_openrouter_llm',
+    '_llm_cache',
+    'get_llm',
+    'get_model',
+    'get_provider',
+    'get_qos_info',
+    'supports_cache_retention',
+    'supports_prompt_cache',
+)
 
-def _install_module(name: str, **attrs) -> types.ModuleType:
-    module = types.ModuleType(name)
-    for attr, value in attrs.items():
-        setattr(module, attr, value)
-    if '.' in name:
-        parent_name, child_name = name.rsplit('.', 1)
-        parent = sys.modules.setdefault(parent_name, types.ModuleType(parent_name))
-        if not hasattr(parent, '__path__'):
-            parent.__path__ = []
-        setattr(parent, child_name, module)
-    sys.modules[name] = module
-    return module
+_STUB_LEAK_NAMES = (
+    'langchain_core',
+    'langchain_openai',
+    'anthropic',
+    'tiktoken',
+    'utils.byok',
+    'firebase_admin',
+)
 
 
 class _BaseCallbackHandler:
@@ -71,6 +98,13 @@ class _ChatGoogleGenerativeAI(_BaseChatModel):
         self.model = self.model_name
 
 
+class _ChatAnthropic(_BaseChatModel):
+    def __init__(self, **kwargs):
+        self._constructor_kwargs = dict(kwargs)
+        self.model_name = kwargs.get('model')
+        self.model = self.model_name
+
+
 class _OpenAIEmbeddings:
     def __init__(self, **_kwargs):
         pass
@@ -97,55 +131,83 @@ class _AsyncAnthropic:
         pass
 
 
-_install_module('anthropic', AsyncAnthropic=_AsyncAnthropic)
-_install_module('langchain_core')
-_install_module('langchain_core.callbacks', BaseCallbackHandler=_BaseCallbackHandler)
-_install_module('langchain_core.outputs', LLMResult=_LLMResult)
-_install_module('langchain_core.language_models', BaseChatModel=_BaseChatModel)
-_install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser)
-_install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
-_install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
-_install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
+def _stub_mod(name: str, **attrs) -> ModuleType:
+    module = ModuleType(name)
+    for attr, value in attrs.items():
+        setattr(module, attr, value)
+    return module
 
-_HEAVY_MOCKS = {
-    'firebase_admin': MagicMock(),
-    'firebase_admin.firestore': MagicMock(),
-    'google.cloud.firestore': MagicMock(),
-    'google.cloud.firestore_v1': MagicMock(),
-    'google.cloud.firestore_v1.base_query': MagicMock(),
-    'database': MagicMock(),
-    'database._client': MagicMock(),
-    'database.llm_usage': MagicMock(),
-}
 
-for _mod, _mock in _HEAVY_MOCKS.items():
-    sys.modules.setdefault(_mod, _mock)
+def _stub_pkg(name: str) -> AutoMockModule:
+    module = AutoMockModule(name)
+    module.__path__ = []  # type: ignore[attr-defined]
+    return module
 
-for _package, _path in {
-    'utils': BACKEND_DIR / 'utils',
-    'utils.llm': BACKEND_DIR / 'utils' / 'llm',
-}.items():
-    module = sys.modules.get(_package)
-    if module is None or not hasattr(module, '__path__'):
-        module = types.ModuleType(_package)
-        sys.modules[_package] = module
-    module.__path__ = [str(_path)]
-    if '.' in _package:
-        parent_name, child_name = _package.rsplit('.', 1)
-        setattr(sys.modules[parent_name], child_name, module)
 
-_clients_stub = sys.modules.get('utils.llm.clients')
-if _clients_stub is not None and not hasattr(_clients_stub, 'MODEL_QOS_PROFILES'):
-    sys.modules.pop('utils.llm.clients', None)
+def _qos_fakes() -> dict[str, ModuleType | None]:
+    tiktoken_mod = _stub_mod('tiktoken')
+    tiktoken_mod.encoding_for_model = MagicMock(return_value=_Encoding())
+    byok = _stub_mod(
+        'utils.byok',
+        get_byok_key=MagicMock(return_value=None),
+        get_byok_llm_provider=MagicMock(return_value=None),
+        get_byok_uid=MagicMock(return_value=None),
+    )
+    return {
+        'anthropic': _stub_mod('anthropic', AsyncAnthropic=_AsyncAnthropic),
+        'langchain_core': _stub_pkg('langchain_core'),
+        'langchain_core.callbacks': _stub_mod('langchain_core.callbacks', BaseCallbackHandler=_BaseCallbackHandler),
+        'langchain_core.outputs': _stub_mod('langchain_core.outputs', LLMResult=_LLMResult),
+        'langchain_core.language_models': _stub_mod('langchain_core.language_models', BaseChatModel=_BaseChatModel),
+        'langchain_core.output_parsers': _stub_mod(
+            'langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser
+        ),
+        'langchain_openai': _stub_mod('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings),
+        'langchain_google_genai': _stub_mod('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI),
+        'langchain_anthropic': _stub_mod('langchain_anthropic', ChatAnthropic=_ChatAnthropic),
+        'tiktoken': tiktoken_mod,
+        'utils.byok': byok,
+        'firebase_admin': _stub_pkg('firebase_admin'),
+        'firebase_admin.firestore': AutoMockModule('firebase_admin.firestore'),
+        'google.cloud.firestore': AutoMockModule('google.cloud.firestore'),
+        'google.cloud.firestore_v1': AutoMockModule('google.cloud.firestore_v1'),
+        'google.cloud.firestore_v1.base_query': AutoMockModule('google.cloud.firestore_v1.base_query'),
+        'database._client': AutoMockModule('database._client'),
+        'database.llm_usage': AutoMockModule('database.llm_usage'),
+        # Reload against the langchain stubs above; a cached real providers/usage_tracker
+        # would keep the real ChatOpenAI class and break isinstance checks vs stubs.
+        'utils.llm.providers': None,
+        'utils.llm.usage_tracker': None,
+    }
 
-_usage_tracker_stub = sys.modules.get('utils.llm.usage_tracker')
-if _usage_tracker_stub is not None and not hasattr(_usage_tracker_stub, 'get_usage_callback'):
-    sys.modules.pop('utils.llm.usage_tracker', None)
 
-# Set required env vars before importing clients
-os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-key-for-unit-tests')
-os.environ.setdefault('ANTHROPIC_API_KEY', 'sk-ant-test-fake-key')
+def _module_has_file(mod: object) -> bool:
+    file_attr = getattr(mod, '__file__', None)
+    return isinstance(file_attr, str) and bool(file_attr)
+
+
+def _assert_no_qos_stub_leak(prior: dict[str, ModuleType | None]) -> None:
+    """After teardown, named deps are restored; no *new* fileless stubs remain.
+
+    ``tests/conftest.py`` installs a ``tiktoken`` ModuleType stub (no ``__file__``)
+    for the whole session. Restoring that exact object is not a leak from this file.
+    """
+    leaked = []
+    for name in _STUB_LEAK_NAMES:
+        mod = sys.modules.get(name)
+        expected = prior.get(name)
+        if mod is not expected:
+            leaked.append(
+                f'{name} not restored (was {type(expected).__name__ if expected else None}, '
+                f'now {type(mod).__name__ if mod else None})'
+            )
+            continue
+        if mod is None or _module_has_file(mod):
+            continue
+        if expected is not None and not _module_has_file(expected):
+            continue
+        leaked.append(f'{name} ({type(mod).__name__})')
+    assert not leaked, f'stub modules leaked into sys.modules: {", ".join(leaked)}'
 
 
 def _clients_subprocess_script(assertion: str) -> str:
@@ -167,6 +229,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'langchain_core.output_parsers',",
         "    'langchain_core.outputs',",
         "    'langchain_google_genai',",
+        "    'langchain_anthropic',",
         "    'langchain_openai',",
         "    'tiktoken',",
         "    'database',",
@@ -183,29 +246,28 @@ def _clients_subprocess_script(assertion: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-# Now import the module under test
-from utils.llm.clients import (
-    MODEL_QOS_PROFILES,
-    _ANTHROPIC_ONLY_FEATURES,
-    _PERPLEXITY_ONLY_FEATURES,
-    _PINNED_FEATURES,
-    _STRUCTURED_OUTPUT_FEATURES,
-    _active_profile,
-    _active_profile_name,
-    _byok_profile,
-    _byok_profile_name,
-    _effective_byok_provider,
-    _get_or_create_gemini_llm,
-    _get_or_create_openai_llm,
-    _get_or_create_openrouter_llm,
-    _llm_cache,
-    get_llm,
-    get_model,
-    get_provider,
-    get_qos_info,
-    supports_cache_retention,
-    supports_prompt_cache,
-)
+@pytest.fixture(scope='module', autouse=True)
+def _qos_isolated_clients():
+    """Load ``utils.llm.clients`` fresh against langchain stubs; restore sys.modules after.
+
+    Yield stays inside ``stub_modules`` so in-test ``from langchain_openai import ChatOpenAI``
+    and ``import utils.llm.clients`` see the stub/fresh objects. Teardown restores the
+    process so later-collected files never observe a bare ``langchain_core`` package.
+    """
+    os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-key-for-unit-tests')
+    os.environ.setdefault('ANTHROPIC_API_KEY', 'sk-ant-test-fake-key')
+    prior = {name: sys.modules.get(name) for name in _STUB_LEAK_NAMES}
+    with stub_modules(_qos_fakes()):
+        clients = load_module_fresh(
+            'utils.llm.clients',
+            os.path.join(str(BACKEND_DIR), 'utils', 'llm', 'clients.py'),
+        )
+        g = globals()
+        for name in _CLIENTS_EXPORTS:
+            g[name] = getattr(clients, name)
+        yield clients
+    _assert_no_qos_stub_leak(prior)
+
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -231,7 +293,6 @@ class TestModelQosProfiles:
         """Each profile should have features across expected providers."""
         for profile_name, profile in MODEL_QOS_PROFILES.items():
             providers = {provider for _model, provider in profile.values()}
-            assert 'anthropic' in providers, f'{profile_name} missing Anthropic models'
             assert 'perplexity' in providers, f'{profile_name} missing Perplexity models'
             assert 'openrouter' in providers, f'{profile_name} should have OpenRouter (wrapped_analysis)'
         # OpenAI-based profiles must have OpenAI provider
@@ -245,16 +306,20 @@ class TestModelQosProfiles:
     def test_all_profiles_use_the_authorized_two_tier_openai_map(self):
         luna_features = {
             'conv_action_items',
+            'wake_word_adjudication',
             'conv_structure',
             'conv_app_result',
             'daily_summary',
             'external_structure',
             'memories',
+            'x_memory_extraction_flex',
             'learnings',
             'memory_conflict',
+            'memory_conflict_flex',
             'knowledge_graph',
             'memory_l1',
             'memory_l2',
+            'memory_l2_flex',
             'chat_responses',
             'chat_extraction',
             'chat_graph',
@@ -268,6 +333,9 @@ class TestModelQosProfiles:
             'persona_clone',
             'persona_chat_premium',
             'desktop_proactive_reasoning',
+            'file_chat_vision',
+            'file_chat_documents',
+            'chat_agent',
         }
         nano_features = {
             'conv_app_select',
@@ -294,7 +362,7 @@ class TestModelQosProfiles:
         assert premium['onboarding'] == ('gemini-2.5-flash-lite', 'gemini')
         assert premium['app_integration'] == ('gemini-2.5-flash-lite', 'gemini')
         assert premium['trends'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['chat_agent'] == ('claude-sonnet-4-6', 'anthropic')
+        assert premium['chat_agent'] == ('gpt-5.6-luna', 'openai')
         assert premium['web_search'] == ('sonar-pro', 'perplexity')
 
     def test_max_profile_model_variants(self):
@@ -304,7 +372,6 @@ class TestModelQosProfiles:
         expected = {
             'gpt-5.6-luna',
             'gpt-5-nano',
-            'claude-sonnet-4-6',
             'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
             'sonar-pro',
@@ -321,6 +388,7 @@ class TestModelQosProfiles:
             'learnings',
             'chat_graph',
             'proactive_notification',
+            'wake_word_adjudication',
         ]
         for feature in new_features:
             for profile_name, profile in MODEL_QOS_PROFILES.items():
@@ -328,20 +396,22 @@ class TestModelQosProfiles:
 
 
 class TestGetModel:
-    """Verify get_model() resolution: pinned > env override > profile > fallback."""
+    """Verify get_model() resolution: pinned > env override > profile. Unknown features raise."""
 
     def test_returns_profile_default(self):
         assert get_model('conv_action_items') == MODEL_QOS_PROFILES[_active_profile_name]['conv_action_items'][0]
 
     def test_unknown_feature_falls_back_to_luna(self):
-        assert get_model('totally_unknown_feature') == 'gpt-5.6-luna'
+        """Fail closed: never a silent fall-through to luna."""
+        with pytest.raises(UnknownLLMFeature):
+            get_model('totally_unknown_feature')
 
     def test_pinned_feature_ignores_profile(self):
         assert get_model('fair_use') == 'gpt-5.6-luna'
 
-    def test_anthropic_feature_returns_model_string(self):
+    def test_chat_agent_returns_luna(self):
         model = get_model('chat_agent')
-        assert 'claude' in model
+        assert model == 'gpt-5.6-luna'
 
     def test_persona_chat_returns_model_string(self):
         model = get_model('persona_chat')
@@ -371,10 +441,17 @@ class TestGetLlm:
         assert llm1 is llm2
 
     def test_different_models_return_different_instances(self):
-        # memories and conv_structure both resolve to Luna in premium.
+        llm1 = get_llm('memories')
+        llm2 = get_llm('persona_chat')
+        assert llm1 is not llm2
+
+    def test_foreground_timeout_does_not_share_cached_client(self):
+        # Both resolve to Luna in premium, but conv_structure carries
+        # FOREGROUND_REQUEST_TIMEOUT_SECONDS and request_timeout is part of the
+        # client cache key.
         llm1 = get_llm('memories')
         llm2 = get_llm('conv_structure')
-        assert llm1 is llm2
+        assert llm1 is not llm2
 
     def test_streaming_returns_different_instance(self):
         llm = get_llm('conv_action_items')
@@ -458,15 +535,8 @@ class TestGetOrCreateLlmBehavioral:
             _llm_cache.clear()
             _llm_cache.update(saved)
 
-    def test_explicit_cache_options_are_not_sent_to_the_gateway(self):
-        """The caller accepts explicit cache options and sends none of them.
-
-        The field is a contract between this caller and the gateway, and the
-        two deploy from separate pipelines, so a gateway predating the field
-        rejects the whole request. Sending it broke conversation structuring for
-        every request that routed through the gateway. Accepting the argument
-        keeps the call sites unchanged while nothing goes on the wire.
-        """
+    def test_explicit_cache_options_are_sent_in_extra_body_without_a_cache_key(self):
+        """Explicit mode reaches the wire even when the request opts out of cache writes."""
         from unittest.mock import patch as _patch
 
         import utils.llm.clients as clients_mod
@@ -485,7 +555,7 @@ class TestGetOrCreateLlmBehavioral:
             clients_mod.get_llm('conv_structure', prompt_cache_options=options)
 
         assert 'prompt_cache_options' not in captured, 'must not be bound as a named argument'
-        assert 'prompt_cache_options' not in captured.get('extra_body', {}), 'must not travel in the request body'
+        assert captured['extra_body'] == {'prompt_cache_options': options}
 
     def test_streaming_instance_has_streaming_flag(self):
         from unittest.mock import patch as _patch
@@ -548,7 +618,7 @@ class TestCacheKeySafety:
 
     def test_cache_key_models_contains_expected(self):
         assert supports_prompt_cache('gpt-5.6-luna')
-        assert supports_cache_retention('gpt-5.6-luna')
+        assert not supports_cache_retention('gpt-5.6-luna')
         assert not supports_prompt_cache('claude-sonnet-4-6')
 
 
@@ -570,7 +640,7 @@ class TestGetQosInfo:
 
     def test_provider_classification_correct(self):
         info = get_qos_info()
-        assert info['chat_agent']['provider'] == 'anthropic'
+        assert info['chat_agent']['provider'] == 'openai'
         assert info['web_search']['provider'] == 'perplexity'
         assert info['conv_action_items']['provider'] == 'openai'
         # persona_chat uses direct OpenAI API in both profiles
@@ -583,7 +653,7 @@ class TestGetQosInfo:
     def test_get_provider_matches_profile(self):
         """get_provider() returns the explicit provider from the profile."""
         assert get_provider('conv_action_items') == 'openai'
-        assert get_provider('chat_agent') == 'anthropic'
+        assert get_provider('chat_agent') == 'openai'
         assert get_provider('web_search') == 'perplexity'
         assert get_provider('wrapped_analysis') == 'openrouter'
         assert get_provider('followup') == 'gemini'
@@ -603,8 +673,9 @@ class TestPinnedFeatures:
 class TestProviderClassification:
     """Verify provider routing from profile entries."""
 
-    def test_chat_agent_is_anthropic_only(self):
-        assert 'chat_agent' in _ANTHROPIC_ONLY_FEATURES
+    def test_chat_agent_is_not_anthropic_only(self):
+        assert 'chat_agent' not in _ANTHROPIC_ONLY_FEATURES
+        assert _ANTHROPIC_ONLY_FEATURES == set()
 
     def test_web_search_is_perplexity_only(self):
         assert 'web_search' in _PERPLEXITY_ONLY_FEATURES
@@ -631,9 +702,9 @@ class TestProviderClassification:
 class TestProviderSafetyGuard:
     """Verify get_llm() rejects Anthropic/Perplexity features and cross-provider overrides."""
 
-    def test_get_llm_rejects_anthropic_only_feature(self):
-        with pytest.raises(ValueError, match='Anthropic'):
-            get_llm('chat_agent')
+    def test_get_llm_accepts_chat_agent(self):
+        llm = get_llm('chat_agent')
+        assert hasattr(llm, 'invoke')
 
     def test_get_llm_rejects_perplexity_only_feature(self):
         with pytest.raises(ValueError, match='Perplexity'):
@@ -713,7 +784,7 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/llm/conversation_processing.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         for key in [
             'conv_folder',
             'conv_discard',
@@ -731,16 +802,17 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/llm/memories.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         for key in ['memories', 'learnings', 'memory_category', 'memory_conflict']:
             assert key in calls, f"Missing get_llm('{key}') in memories.py"
-        assert calls.count('memories') == 3, "memories should appear exactly three times"
+        # 4th call site: the daily-sweep summary agent reuses the same memories QoS route.
+        assert calls.count('memories') == 4, "memories should appear exactly four times"
 
     def test_knowledge_graph_all_keys(self):
         import re
 
         source = self._read_source("utils/llm/knowledge_graph.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert calls.count('knowledge_graph') == 2, "knowledge_graph should appear exactly twice"
 
     def test_followup_key(self):
@@ -755,7 +827,7 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/llm/chat.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'chat_responses' in calls
         assert 'chat_extraction' in calls
 
@@ -763,7 +835,7 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/llm/persona.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'persona_clone' in calls
         assert calls.count('persona_clone') >= 4, "persona_clone should appear in multiple clone functions"
         # Dynamic persona_chat/persona_chat_premium routing via feature variable
@@ -773,7 +845,7 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/llm/goals.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'goals' in calls, "Missing get_llm('goals') in goals.py"
         assert 'goals_advice' in calls, "Missing get_llm('goals_advice') in goals.py"
 
@@ -781,14 +853,14 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/llm/notifications.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'notifications' in calls
 
     def test_app_generator_py_all_keys(self):
         import re
 
         source = self._read_source("utils/llm/app_generator.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'app_generator' in calls
         assert 'app_integration' in calls
         assert calls.count('app_integration') >= 2, "app_integration should appear in multiple functions"
@@ -797,7 +869,7 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/retrieval/graph.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'chat_graph' in calls
 
     def test_perplexity_tools_key(self):
@@ -823,7 +895,7 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/llm/external_integrations.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'external_structure' in calls
         assert calls.count('external_structure') >= 2, "external_structure should appear at least twice"
         assert 'daily_summary_simple' in calls, "Missing get_llm('daily_summary_simple') in external_integrations.py"
@@ -833,7 +905,7 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/llm/proactive_notification.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'proactive_notification' in calls
         assert calls.count('proactive_notification') >= 4, "proactive_notification should appear in 4 functions"
 
@@ -841,7 +913,7 @@ class TestExpandedCallsiteCoverage:
         import re
 
         source = self._read_source("utils/wrapped/generate_2025.py")
-        calls = re.findall(r"get_llm\('(\w+)'", source)
+        calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         assert 'wrapped_analysis' in calls
 
     def test_onboarding_key(self):
@@ -1005,7 +1077,6 @@ class TestBYOKProfile:
         bk = MODEL_QOS_PROFILES['byok']
         for feature, (model, provider) in bk.items():
             if feature in (
-                'chat_agent',
                 'web_search',
                 'wrapped_analysis',
                 'translation',
@@ -1014,6 +1085,7 @@ class TestBYOKProfile:
                 'onboarding',
                 'app_integration',
                 'trends',
+                'screen_frame_judge',
             ):
                 continue
             assert provider == 'openai', f'byok {feature} should be openai, got {provider}'
@@ -1025,7 +1097,6 @@ class TestBYOKProfile:
         expected = {
             'gpt-5.6-luna',
             'gpt-5-nano',
-            'claude-sonnet-4-6',
             'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
             'sonar-pro',
@@ -1080,8 +1151,8 @@ class TestEffectiveBYOKProvider:
     def test_gemini_passthrough(self):
         assert _effective_byok_provider('gemini-2.5-flash', 'gemini') == 'gemini'
 
-    def test_openrouter_gemini_maps_to_gemini(self):
-        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'gemini'
+    def test_openrouter_gemini_uses_openrouter_key(self):
+        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'openrouter'
 
     def test_openrouter_non_gemini_stays_openrouter(self):
         assert _effective_byok_provider('anthropic/claude-3.5-sonnet', 'openrouter') == 'openrouter'
@@ -1105,6 +1176,7 @@ class TestStructuredOutputFeatureTracking:
             'translation',
             'conv_app_select',
             'external_structure',
+            'screen_frame_judge',
             'trends',
             'what_matters_now',
         }
@@ -1116,19 +1188,20 @@ class TestStructuredOutputFeatureTracking:
                 assert feature in profile, f'{feature} missing from {profile_name}'
 
     def test_premium_gemini_structured_output(self):
-        """In premium profile, translation and trends use structured output on Gemini."""
+        """In premium profile, translation, trends, and screen_frame_judge use structured output on Gemini."""
         premium = MODEL_QOS_PROFILES['premium']
         gemini_so = {f for f in _STRUCTURED_OUTPUT_FEATURES if premium[f][1] == 'gemini'}
         assert gemini_so == {
             'translation',
             'trends',
-        }, f'Expected translation and trends on Gemini SO in premium, got {gemini_so}'
+            'screen_frame_judge',
+        }, f'Expected translation, trends, and screen_frame_judge on Gemini SO in premium, got {gemini_so}'
 
     def test_byok_no_gemini_structured_output(self):
-        """BYOK routes structured output to OpenAI except managed translation."""
+        """BYOK routes structured output to OpenAI except managed translation/trends/screen_frame_judge."""
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
-            if feature in {'translation', 'trends'}:
+            if feature in {'translation', 'trends', 'screen_frame_judge'}:
                 assert profile[feature] == ('gemini-2.5-flash-lite', 'gemini')
                 continue
             assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'
@@ -1217,3 +1290,42 @@ class TestGeminiThinkingBudget:
 
         opts = get_route_options('chat', 'gemini-2.5-flash-lite', 'gemini')
         assert opts.get('thinking_budget') == 0
+
+
+def test_company_paid_profiles_and_pins_never_resolve_pro_or_image_gemini():
+    """SCA-481 fail-closed selection guard: Pro-text and image-output Gemini
+    shapes are PayGo-only SKUs and can never serve managed (company-paid)
+    extraction/proactivity/summarization traffic. BYOK may keep Pro."""
+    from utils.llm import model_config
+
+    # The shipped configuration must pass its own import-time guard.
+    model_config.validate_no_prohibited_company_paid_models(
+        model_config.MODEL_QOS_PROFILES, model_config._PINNED_FEATURES
+    )
+
+    bad_profiles = {
+        'premium': {'memories': ('gemini-3-pro-preview', 'gemini')},
+        'max': {},
+        'byok': {},
+    }
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models(bad_profiles, {})
+
+    bad_profiles = {
+        'premium': {'chat_agent': ('gemini-3.1-flash-image', 'gemini')},
+        'max': {},
+        'byok': {},
+    }
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models(bad_profiles, {})
+
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models({}, {'fair_use': ('imagen-4.0-generate-001', 'gemini')})
+
+    # BYOK pays for what it asks: a Pro pin on the byok profile stays legal.
+    byok_pro = {
+        'premium': {},
+        'max': {},
+        'byok': {'persona_chat_premium': ('gemini-3-pro-preview', 'gemini')},
+    }
+    model_config.validate_no_prohibited_company_paid_models(byok_pro, {})

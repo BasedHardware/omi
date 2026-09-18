@@ -70,6 +70,10 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches backend/Dockerfile UV_VERSION.
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
 

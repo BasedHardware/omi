@@ -90,6 +90,11 @@ extension APIClient {
     let limit: Int
   }
 
+  struct SearchChunksRequest: Encodable {
+    let query: String
+    let limit: Int
+  }
+
   struct CreateActionItemRequest: Encodable {
     let description: String
     let dueAt: String?
@@ -175,6 +180,26 @@ extension APIClient {
       includeTranscript: includeTranscript)
     return try await post(
       "v1/tools/conversations/search",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// Semantic search over raw transcript chunks — the verbatim layer behind
+  /// `toolSearchConversations`, whose summary matching drops exact dates, names,
+  /// and numbers. Typed sources reuse kind "conversation" with the PARENT
+  /// conversation id, so chunk citations share the summary results' ref
+  /// namespace. Older backends return the same envelope with no sources.
+  func toolSearchConversationChunks(
+    query: String,
+    limit: Int = 5,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ToolResponse {
+    let body = SearchChunksRequest(query: query, limit: limit)
+    return try await post(
+      "v1/tools/conversations/search-chunks",
       body: body,
       customBaseURL: nil,
       expectedOwnerId: expectedOwnerId,
@@ -292,6 +317,38 @@ extension APIClient {
     )
     return try await post(
       "v1/tools/calendar-events",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  // MARK: - JIT Knowledge Ledger Tools (generic passthrough)
+
+  /// Response envelope for `POST /v1/agent/execute-tool` (backend/routers/agent_tools.py).
+  /// This is a distinct, narrower contract than `ToolResponse` above: no `sources`, and
+  /// failures come back as a populated `error` string rather than an HTTP error.
+  struct AgentExecuteToolResponse: Decodable {
+    let result: String?
+    let error: String?
+  }
+
+  /// Generic dispatch for the seven JIT-gated knowledge-ledger tools (search_knowledge,
+  /// read_playbook, search_historical_facts, get_entity_timeline_tool, save_playbook,
+  /// create_standing_trigger, close_fact). They share one backend route keyed by
+  /// `tool_name`, so there is no per-tool typed wrapper the way the `/v1/tools/*` routes
+  /// above have. The backend independently re-checks the JIT rollout for `toolName` on
+  /// every call; a 404 there means the tool is unavailable for this user regardless of
+  /// what the desktop manifest advertised.
+  func executeAgentTool(
+    toolName: String,
+    params: [String: Any],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AgentExecuteToolResponse {
+    let body = OmiAnyCodable(["tool_name": toolName, "params": params] as [String: Any])
+    return try await post(
+      "v1/agent/execute-tool",
       body: body,
       customBaseURL: nil,
       expectedOwnerId: expectedOwnerId,

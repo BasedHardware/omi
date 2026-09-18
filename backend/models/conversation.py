@@ -1,6 +1,6 @@
 from datetime import datetime
 from collections.abc import Mapping
-from typing import Dict, List, Literal, Optional
+from typing import Annotated, Dict, List, Literal, Optional, Union
 import uuid
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
+from models.client_processing import ClientProcessing
 from models.conversation_enums import (
+    CategoryEnum,
+    ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
     ConversationVisibility,
@@ -31,6 +34,11 @@ __all__ = [
     'Conversation',
     'ConversationFinalizationStatusResponse',
     'ConversationMutationResponse',
+    'ConversationSyncConflictResponse',
+    'ConversationSyncOperation',
+    'ConversationSyncMutationRequest',
+    'ConversationSyncMutationResponse',
+    'ConversationSyncState',
     'ConversationPostProcessing',
     'CreateConversation',
     'CreateConversationResponse',
@@ -41,9 +49,21 @@ __all__ = [
     'MergeConversationsResponse',
     'PluginResult',
     'SearchRequest',
+    'SetConversationStarredOperation',
+    'SetConversationTitleOperation',
+    'TranscriptMatchSnippet',
+    'SharedActionItem',
+    'SharedAppResult',
     'SharedConversationChatHistoryMessage',
     'SharedConversationChatRequest',
     'SharedConversationChatResponse',
+    'SharedConversationResponse',
+    'SharedEvent',
+    'SharedPerson',
+    'SharedPluginResult',
+    'SharedStructured',
+    'SharedTranscriptSegment',
+    'project_shared_conversation',
     'SetConversationActionItemsStateRequest',
     'SetConversationEventsStateRequest',
     'TestPromptRequest',
@@ -94,6 +114,106 @@ class SharedConversationChatResponse(BaseModel):
     model_config = {'extra': 'forbid'}
 
     message: str = Field(min_length=1, strict=True)
+
+
+class SharedActionItem(BaseModel):
+    """Public share projection of an action item."""
+
+    model_config = {'extra': 'ignore'}
+
+    description: str
+    completed: bool = False
+
+
+class SharedEvent(BaseModel):
+    """Public share projection of a structured event."""
+
+    model_config = {'extra': 'ignore'}
+
+    title: str
+    description: str = ''
+    start: datetime
+    duration: int = 30
+    created: bool = False
+
+
+class SharedStructured(BaseModel):
+    """Public share projection of conversation structure."""
+
+    model_config = {'extra': 'ignore'}
+
+    title: str = ''
+    overview: str = ''
+    emoji: str = '🧠'
+    category: CategoryEnum = CategoryEnum.other
+    action_items: List[SharedActionItem] = Field(default_factory=list)
+    events: List[SharedEvent] = Field(default_factory=list)
+
+
+class SharedTranscriptSegment(BaseModel):
+    """Public share projection of a transcript turn."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: Optional[str] = None
+    text: str
+    speaker: Optional[str] = 'SPEAKER_00'
+    speaker_id: Optional[int] = None
+    is_user: bool
+    person_id: Optional[str] = None
+    start: float
+    end: float
+
+
+class SharedAppResult(BaseModel):
+    model_config = {'extra': 'ignore'}
+
+    app_id: Optional[str]
+    content: str
+
+
+class SharedPluginResult(BaseModel):
+    model_config = {'extra': 'ignore'}
+
+    plugin_id: Optional[str]
+    content: str
+
+
+class SharedPerson(BaseModel):
+    """Speaker-label projection for a shared conversation."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: str
+    name: str
+
+
+# Explicit allowlist: do not inherit Conversation and do not extra='allow'.
+# New Conversation fields and stored-document extras must not appear here.
+class SharedConversationResponse(BaseModel):
+    """Public unauthenticated shared-conversation payload. Only declared fields are returned."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: str
+    created_at: datetime
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    language: Optional[str] = None
+    source: Optional[ConversationSource] = ConversationSource.omi
+    status: Optional[ConversationStatus] = ConversationStatus.completed
+    visibility: ConversationVisibility = ConversationVisibility.private
+    structured: SharedStructured
+    transcript_segments: List[SharedTranscriptSegment] = Field(default_factory=list)
+    apps_results: List[SharedAppResult] = Field(default_factory=list)
+    plugins_results: List[SharedPluginResult] = Field(default_factory=list)
+    people: List[SharedPerson] = Field(default_factory=list)
+
+
+def project_shared_conversation(conversation: 'Conversation', people: List[Person]) -> SharedConversationResponse:
+    payload = conversation.model_dump()
+    payload['people'] = [{'id': person.id, 'name': person.name} for person in people]
+    return SharedConversationResponse.model_validate(payload)
 
 
 # TODO: remove this class when the app is updated to use apps_results
@@ -156,6 +276,18 @@ class ConversationAudio(BaseModel):
     built_at: Optional[datetime] = None
 
 
+class TranscriptMatchSnippet(BaseModel):
+    """Grep-style transcript hit returned on conversation search for seek-to-moment UX."""
+
+    text: str
+    segment_id: Optional[str] = None
+    start: Optional[float] = None
+    end: Optional[float] = None
+    start_ms: Optional[int] = None
+    end_ms: Optional[int] = None
+    speaker_id: Optional[int] = None
+
+
 class Conversation(BaseModel):
     id: str
     created_at: datetime
@@ -169,7 +301,21 @@ class Conversation(BaseModel):
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
+    # True when this conversation was transcribed on a third-party (custom STT)
+    # provider, so no Omi transcription credits were consumed. Provenance only:
+    # post-processing does not gate on it — custom-STT conversations get the same
+    # Omi-paid enrichment as any other. The marker keeps custom-STT spend
+    # queryable, and feeds the isolated fair-use lane (#7690).
+    uses_custom_stt: bool = False
+
     structured: Structured
+    # Untrusted client-authored display projection. Sibling of structured, never
+    # inside it or external_data. Display only — never an input to intelligence.
+    client_processing: Optional[ClientProcessing] = None
+    # Why `structured` holds the §1.7 deterministic minimum instead of an
+    # enriched summary. Server-authored; absent on every enriched conversation.
+    # Clients read `client_processing` first — see the enum's docstring.
+    processing_state: Optional[ConversationProcessingState] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -177,6 +323,20 @@ class Conversation(BaseModel):
     audio_files: List[AudioFile] = []
     conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
+
+    # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
+    # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read
+    # should pay for, so nothing ever populated it and the field was permanently None. A field
+    # that always says nothing is worse than absent on the most widely consumed model in the
+    # product: it tells every client — iOS, Android, web — that a conversation carries its
+    # screenshots inline, when the only way to get them is
+    # GET /v1/conversations/{id}/screenshots. It also pulled ConversationScreenFrameSet into the
+    # mobile Dart schema group, where the generator could not resolve it. Callers that want the
+    # set inline: utils.screen_frames.enforcement.build_frame_set_response.
+    # Per-conversation opt-out of including screenshots in the public shared
+    # note. Default true (David's ruling 2026-08-20) — shared notes include
+    # screenshots unless the owner explicitly turns this off.
+    screenshot_sharing_enabled: bool = True
 
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
@@ -188,6 +348,9 @@ class Conversation(BaseModel):
     app_id: Optional[str] = None
 
     discarded: bool = False
+    # True for conversations created via an external data import (e.g. Limitless ZIP).
+    # Distinct from source=limitless, which also covers pendant/sync uploads of Limitless audio.
+    imported: bool = False
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 
@@ -212,6 +375,12 @@ class Conversation(BaseModel):
     # Capture-device provenance (optional; absent on legacy conversations).
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+
+    # Read projection of the authoritative finalization-job meeting receipt.
+    meeting_treatment_eligible: bool = False
+    meeting_treatment_reason: Optional[str] = None
+    meeting_duration_s: Optional[float] = None
+    meeting_dedup_speech_s: Optional[float] = None
 
     def __init__(self, **data):
         raw_segments = data.get('transcript_segments')
@@ -275,6 +444,74 @@ class ConversationMutationResponse(BaseModel):
 
     status: str
     conversation: Conversation
+
+
+class SetConversationTitleOperation(BaseModel):
+    """User-owned title mutation carried by the durable sync endpoint."""
+
+    model_config = {'extra': 'forbid'}
+
+    type: Literal['set_title'] = 'set_title'
+    title: str = Field(min_length=1, max_length=256, strict=True)
+
+
+class SetConversationStarredOperation(BaseModel):
+    """User-owned starred mutation carried by the durable sync endpoint."""
+
+    model_config = {'extra': 'forbid'}
+
+    type: Literal['set_starred'] = 'set_starred'
+    starred: bool = Field(strict=True)
+
+
+ConversationSyncOperation = Annotated[
+    Union[SetConversationTitleOperation, SetConversationStarredOperation],
+    Field(discriminator='type'),
+]
+
+
+class ConversationSyncMutationRequest(BaseModel):
+    """One immutable client intent against a known canonical revision."""
+
+    model_config = {'extra': 'forbid'}
+
+    client_mutation_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]*$',
+        strict=True,
+    )
+    base_revision: datetime
+    operation: ConversationSyncOperation
+
+
+class ConversationSyncState(BaseModel):
+    """Compact canonical projection needed to settle an optimistic mutation."""
+
+    revision: datetime
+    title: Optional[str] = None
+    starred: bool = False
+    folder_id: Optional[str] = None
+    visibility: ConversationVisibility = ConversationVisibility.private
+
+
+class ConversationSyncMutationResponse(BaseModel):
+    """Durable response replayed byte-for-byte for one mutation id."""
+
+    status: Literal['ok'] = 'ok'
+    client_mutation_id: str
+    conversation_id: str
+    conversation: ConversationSyncState
+
+
+class ConversationSyncConflictResponse(BaseModel):
+    """Typed immutable conflict recorded for a stale mutation attempt."""
+
+    status: Literal['conflict'] = 'conflict'
+    code: Literal['base_revision_mismatch', 'mutation_id_reused', 'revision_unavailable']
+    client_mutation_id: str
+    conversation_id: str
+    conversation: Optional[ConversationSyncState] = None
 
 
 class CreateConversation(BaseModel):
@@ -348,6 +585,9 @@ class ConversationFinalizationStatusResponse(BaseModel):
     retryable: bool
     attempt_count: int
     task_retry_count: int
+    meeting_treatment_eligible: bool = False
+    terminal_outcome: Literal['success', 'failure', 'stale', 'unknown'] = 'unknown'
+    fanout_status: Literal['pending', 'leased', 'completed', 'fenced', 'unknown'] = 'unknown'
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app

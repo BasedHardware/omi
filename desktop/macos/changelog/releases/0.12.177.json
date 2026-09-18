@@ -1,0 +1,9 @@
+{
+  "version": "0.12.177",
+  "date": "2026-08-16",
+  "changes": [
+    "Proactive context notifications now remember far more of what was already sent and carry substantially more of a context's history, so they repeat themselves less and pick up on longer-running work",
+    "Proactive context facts are now clearer, plain-language, actionable sentences",
+    "Proactive context notifications no longer repeat a point already delivered, and stay silent when they would only narrate what is already on screen"
+  ]
+}

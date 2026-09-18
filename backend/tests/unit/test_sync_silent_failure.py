@@ -277,7 +277,6 @@ class TestDeepgramRetryBehavioral:
 
         stubs = [
             'deepgram',
-            'fal_client',
             'models',
             'models.transcript_segment',
             'utils.other.endpoints',
@@ -291,7 +290,6 @@ class TestDeepgramRetryBehavioral:
 
         sys.modules['deepgram'].DeepgramClient = MagicMock()
         sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
-        sys.modules['fal_client'].submit = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
         sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
@@ -696,6 +694,7 @@ _STUB_MODULES = [
     'models',
     'models.conversation',
     'models.conversation_enums',
+    'models.geolocation',
     'models.sync_audio',
     'models.transcript_segment',
     'database._client',
@@ -750,6 +749,12 @@ class TestProcessSegmentReal:
         for mod_name in _STUB_MODULES:
             sys.modules[mod_name] = ModuleType(mod_name)
         sys.modules['models'].__path__ = []
+
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
@@ -1315,7 +1320,6 @@ class TestProcessSegmentReal:
 
 _CHAT_STUB_MODULES = [
     'deepgram',
-    'fal_client',
     'models',
     'models.chat',
     'models.conversation',
@@ -1366,7 +1370,6 @@ class TestVoiceMessageRuntimeErrorHandling:
 
         sys.modules['deepgram'].DeepgramClient = MagicMock()
         sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
-        sys.modules['fal_client'].submit = MagicMock()
         sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
         sys.modules['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
@@ -1386,6 +1389,8 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.notifications'].send_notification = MagicMock()
         sys.modules['utils.notifications'].send_notification_async = AsyncMock()
+        sys.modules['utils.notifications'].send_client_displayed_notification = MagicMock()
+        sys.modules['utils.notifications'].send_client_displayed_notification_async = AsyncMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
         sys.modules['utils.log_sanitizer'].sanitize = lambda v: v

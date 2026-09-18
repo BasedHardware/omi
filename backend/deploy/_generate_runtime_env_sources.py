@@ -52,7 +52,7 @@ GKE_CONFIG_MAP_KEYS_PROD_ONLY = [
 
 STT_LITERALS = {
     'STT_PRERECORDED_MODEL': 'parakeet,modulate-velma-2',
-    'STT_SERVICE_MODELS': 'dg-nova-3,modulate-velma-2,parakeet',
+    'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet',
 }
 
 
@@ -180,15 +180,6 @@ def _project_fields(env: str, env_config: ConfigDict) -> ConfigDict:
         'compute_project': compute,
         'data_plane_project': data_plane,
     }
-
-
-def _inject_config_map(env_config: ConfigDict, env: str) -> ConfigDict:
-    result = deepcopy(env_config)
-    gke = result.setdefault('gke', {})
-    if not isinstance(gke, dict):
-        return result
-    gke['config_map'] = _build_config_map_section(env)
-    return result
 
 
 def _strip_legacy_project_keys(env_config: ConfigDict) -> ConfigDict:

@@ -38,4 +38,12 @@ describe('budgetSegments', () => {
     expect(out.length).toBe(1)
     expect(out[0].app).toBe('A')
   })
+
+  it('keeps a truncated first segment when one segment exceeds the whole budget', () => {
+    const segs: ScreenSegment[] = [{ app: 'A', windowTitle: 'a', text: 'x'.repeat(100) }]
+    const out = budgetSegments(segs, 40)
+    expect(out.length).toBe(1)
+    expect(out[0].text.length).toBe(40)
+    expect(out[0].app).toBe('A')
+  })
 })

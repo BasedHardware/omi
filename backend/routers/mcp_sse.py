@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 from pydantic import BaseModel
 
 import firebase_admin.auth
+from google.api_core import exceptions as google_api_exceptions
 from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
@@ -84,6 +85,7 @@ from utils.mcp_analytics import (
     schedule_mcp_tool_call,
 )
 from utils.observability.api_keys import record_api_key_repairs
+from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from utils.other.endpoints import (
     cutover_enforcement_enabled,
     enforce_account_cutover_http_access,
@@ -100,10 +102,23 @@ MCP_AUTHORIZATION_SERVER_URL = os.getenv("MCP_AUTHORIZATION_SERVER_URL", "https:
 MCP_AUTHORIZATION_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/authorize"
 MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
+# How long a client should wait before retrying once the token store is down.
+# Kept short: the outages this covers (quota, transient Firestore unavailability)
+# clear on their own, and MCP clients hold no session state to rebuild.
+MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS = int(os.getenv("MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS", "30"))
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
 MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
+MCP_MEMORY_LIST_DEFAULT_LIMIT = 20
+MCP_MEMORY_LIST_MAX_LIMIT = 100
+MCP_MEMORY_LIST_MAX_SCAN = 200
+MCP_CONVERSATION_LIST_MAX_LIMIT = 100
+MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS = 120
+MCP_CONVERSATION_FETCH_MAX_SEGMENTS = 500
+MCP_CONVERSATION_FETCH_DEFAULT_MAX_CHARS = 24_000
+MCP_CONVERSATION_FETCH_MAX_CHARS = 100_000
+MCP_CONVERSATION_SEARCH_SNIPPET_CHARS = 240
 
 
 def _enforce_mcp_cutover_access(uid: str) -> None:
@@ -164,18 +179,17 @@ class MCPAuthContext:
     memory_context: Optional[ProductAuthorizationContext] = None
 
 
-def _mcp_memory_context_from_api_key_user_data(user_data: Dict[str, Any]) -> ProductAuthorizationContext:
+def _mcp_memory_context_from_auth_data(user_data: Dict[str, Any]) -> ProductAuthorizationContext:
     verified_auth = McpVerifiedAuth(
-        uid=user_data["user_id"],
-        app_id=user_data.get("app_id"),
-        key_id=user_data.get("key_id"),
+        uid=user_data.get("user_id") or user_data["uid"],
+        app_id=user_data.get("app_id") or user_data.get("client_id"),
+        key_id=user_data.get("key_id") or user_data.get("grant_id"),
         scopes=tuple(user_data.get("scopes") or ()),
     )
     return build_mcp_default_memory_read_context(verified_auth)
 
 
 def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[ProductAuthorizationContext]:
-    """Validate an MCP API key and return its memory product auth context."""
     if not authorization:
         return None
 
@@ -193,11 +207,16 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
         return None
     enforce_account_deletion_http_access(user_data["user_id"])
     _enforce_mcp_cutover_access(user_data["user_id"])
-    return _mcp_memory_context_from_api_key_user_data(user_data)
+    return _mcp_memory_context_from_auth_data(user_data)
 
 
 def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:
-    """Validate Authorization and return an MCP auth context."""
+    """Validate Authorization and return an MCP auth context.
+
+    Raises 503 (never 401) when the token store itself is unreachable: a client
+    told "unauthorized" discards its token and restarts the whole OAuth dance,
+    which is the wrong answer to a transient backend outage.
+    """
     if not authorization:
         return None
 
@@ -205,6 +224,23 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     if authorization.startswith("Bearer "):
         token = authorization[7:]
 
+    try:
+        return _authenticate_mcp_token(token)
+    except google_api_exceptions.GoogleAPIError as exc:
+        logger.warning("MCP auth lookup failed against the token store: %s", exc)
+        raise mcp_auth_store_unavailable_exception() from exc
+
+
+def mcp_auth_store_unavailable_exception() -> HTTPException:
+    """Return a retryable failure for an unreachable MCP token store."""
+    return HTTPException(
+        status_code=503,
+        detail="MCP authentication is temporarily unavailable. Please retry shortly.",
+        headers={"Retry-After": str(MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS)},
+    )
+
+
+def _authenticate_mcp_token(token: str) -> Optional[MCPAuthContext]:
     if token.startswith("omi_mcp_"):
         auth_result = mcp_api_key_db.get_api_key_auth_result(token)
         record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
@@ -219,7 +255,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
             scopes=list(user_data.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
             app_id=user_data.get("app_id"),
             key_id=user_data.get("key_id"),
-            memory_context=_mcp_memory_context_from_api_key_user_data(user_data),
+            memory_context=_mcp_memory_context_from_auth_data(user_data),
         )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
@@ -234,6 +270,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         client_id=oauth_context.get("client_id"),
         resource=oauth_context.get("resource"),
         grant_id=oauth_context.get("grant_id"),
+        memory_context=_mcp_memory_context_from_auth_data(oauth_context),
     )
 
 
@@ -285,7 +322,6 @@ TOOL_REQUIRED_SCOPE = {
     "get_chat_messages": "chat.read",
     "get_people": "people.read",
     "get_screen_activity": "screen_activity.read",
-    "get_daily_summaries": "conversations.read",
 }
 
 
@@ -327,7 +363,10 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "get_memories",
-        "description": "Retrieve a list of memories. A memory is a known fact about the user across multiple domains.",
+        "description": (
+            "Retrieve durable facts known about the user across domains. This is not recent conversation history; "
+            "for today, yesterday, last week, or another time window use date-bounded get_conversations instead."
+        ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": MEMORIES_READ_SECURITY,
         "inputSchema": {
@@ -339,7 +378,13 @@ MCP_TOOLS: List[Dict[str, Any]] = [
                     "description": "Categories to filter by",
                     "default": [],
                 },
-                "limit": {"type": "integer", "description": "Number of memories to retrieve", "default": 100},
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of durable memories to retrieve",
+                    "default": MCP_MEMORY_LIST_DEFAULT_LIMIT,
+                    "minimum": 1,
+                    "maximum": MCP_MEMORY_LIST_MAX_LIMIT,
+                },
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
                 "sort": {
                     "type": "string",
@@ -411,7 +456,11 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "get_conversations",
-        "description": "Retrieve a list of conversation metadata. To get full transcripts, use get_conversation_by_id.",
+        "description": (
+            "First choice for recency questions such as today, yesterday, or last week: pass start_date and "
+            "end_date. Returns small conversation cards only. Deep-read only a few relevant ids with "
+            "get_conversation_by_id."
+        ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
@@ -425,27 +474,53 @@ MCP_TOOLS: List[Dict[str, Any]] = [
                     "description": "Categories to filter by",
                     "default": [],
                 },
-                "limit": {"type": "integer", "description": "Number of conversations to retrieve", "default": 20},
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of conversation cards to retrieve",
+                    "default": 20,
+                    "minimum": 1,
+                    "maximum": MCP_CONVERSATION_LIST_MAX_LIMIT,
+                },
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
             },
         },
     },
     {
         "name": "get_conversation_by_id",
-        "description": "Retrieve a conversation by ID including each segment of the transcript.",
+        "description": (
+            "Deep-read one conversation card and a bounded transcript. Use only for a few ids selected from "
+            "get_conversations or search_conversations; the response reports truncated=true when clipped."
+        ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "conversation_id": {"type": "string", "description": "The ID of the conversation to retrieve"}
+                "conversation_id": {"type": "string", "description": "The ID of the conversation to retrieve"},
+                "max_segments": {
+                    "type": "integer",
+                    "description": "Maximum transcript segments to return",
+                    "default": MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS,
+                    "minimum": 1,
+                    "maximum": MCP_CONVERSATION_FETCH_MAX_SEGMENTS,
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "description": "Maximum total transcript text characters to return",
+                    "default": MCP_CONVERSATION_FETCH_DEFAULT_MAX_CHARS,
+                    "minimum": 1,
+                    "maximum": MCP_CONVERSATION_FETCH_MAX_CHARS,
+                },
             },
             "required": ["conversation_id"],
         },
     },
     {
         "name": "search_memories",
-        "description": "Semantic search across the user's memories. Returns memories ranked by relevance to the query.",
+        "description": (
+            "Semantic search across durable facts known about the user. This is not for recent conversations; "
+            "use search_conversations with start_date and end_date for a topic inside a time window."
+        ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": MEMORIES_READ_SECURITY,
         "inputSchema": {
@@ -466,9 +541,9 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "search_conversations",
         "description": (
-            "Search the user's conversations by relevance to the query. Matches both conversation "
-            "summaries and transcript content when available, and returns match_snippets from "
-            "transcript segments (grep-style context) alongside each hit."
+            "Search for a topic inside the user's conversations, preferably with start_date and end_date. "
+            "Returns small cards plus short match snippets; deep-read only a few relevant ids with "
+            "get_conversation_by_id."
         ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": CONVERSATIONS_READ_SECURITY,
@@ -683,9 +758,9 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "get_screen_activity",
         "description": (
-            "Retrieve the user's desktop screen activity (Rewind) — what apps and windows they used and the OCR'd "
-            "on-screen text, ordered by time. Pass summary=true for an aggregated per-app usage breakdown instead "
-            "of raw rows. High-signal context on what the user actually does day to day."
+            "Retrieve synced desktop screen observations (Rewind): apps, windows and OCR text ordered by time. "
+            "Use summary=true for per-app counts and coverage; check coverage.truncated. Counts do not measure "
+            "usage duration or intent. Capture and sync completeness are unknown."
         ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": SCREEN_ACTIVITY_READ_SECURITY,
@@ -697,7 +772,7 @@ MCP_TOOLS: List[Dict[str, Any]] = [
                 "app": {"type": "string", "description": "Filter to a single app name"},
                 "summary": {
                     "type": "boolean",
-                    "description": "Return an aggregated per-app usage summary instead of raw rows",
+                    "description": "Return per-app observation counts and coverage instead of raw rows",
                     "default": False,
                 },
                 "limit": {
@@ -812,6 +887,14 @@ def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
     ) from exc
 
 
+def _raise_conversation_index_error(exc: FailedPrecondition) -> NoReturn:
+    raise ToolExecutionError(
+        "Conversations aren't queryable right now because a search index is still being built. "
+        "Retry in a few minutes.",
+        code=-32009,
+    ) from exc
+
+
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
     """Parse a yyyy-mm-dd MCP argument into a UTC-anchored datetime, or None when absent.
 
@@ -826,6 +909,58 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         return parse_date_only_utc(value)
     except ValueError:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
+
+
+def _conversation_card(conversation: Dict[str, Any]) -> Dict[str, Any]:
+    redact_conversation_for_list(conversation)
+    structured_raw = conversation.get("structured")
+    structured = structured_raw if isinstance(structured_raw, dict) else {}
+    return {
+        "id": conversation.get("id"),
+        "created_at": conversation.get("created_at"),
+        "started_at": conversation.get("started_at"),
+        "finished_at": conversation.get("finished_at"),
+        "language": conversation.get("language"),
+        "structured": {
+            key: structured.get(key) for key in ("title", "overview", "category", "emoji") if key in structured
+        },
+    }
+
+
+def _bounded_transcript_segments(
+    segments: Any,
+    *,
+    max_segments: int,
+    max_chars: int,
+) -> Tuple[List[Dict[str, Any]], bool]:
+    source = [segment for segment in segments if isinstance(segment, dict)] if isinstance(segments, list) else []
+    bounded: List[Dict[str, Any]] = []
+    used_chars = 0
+    truncated = False
+    allowed_keys = ("id", "text", "speaker_id", "is_user", "person_id", "start", "end")
+
+    for index, segment in enumerate(source):
+        if index >= max_segments or used_chars >= max_chars:
+            truncated = True
+            break
+        text = str(segment.get("text") or "")
+        remaining_chars = max_chars - used_chars
+        if len(text) > remaining_chars:
+            if remaining_chars > 3:
+                text = text[: remaining_chars - 3].rstrip() + "..."
+            else:
+                text = text[:remaining_chars]
+            truncated = True
+        item = {key: segment.get(key) for key in allowed_keys if key in segment}
+        item["text"] = text
+        bounded.append(item)
+        used_chars += len(text)
+        if truncated:
+            break
+
+    if len(bounded) < len(source):
+        truncated = True
+    return bounded, truncated
 
 
 def execute_tool(
@@ -849,7 +984,13 @@ def execute_tool(
         raw_categories: object = arguments.get("categories", [])
         categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
         try:
-            limit = parse_mcp_int(arguments.get("limit"), "limit", default=100, minimum=1, maximum=500)
+            limit = parse_mcp_int(
+                arguments.get("limit"),
+                "limit",
+                default=MCP_MEMORY_LIST_DEFAULT_LIMIT,
+                minimum=1,
+                maximum=MCP_MEMORY_LIST_MAX_LIMIT,
+            )
             offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
             reviewed = parse_optional_mcp_bool(arguments.get("reviewed"), "reviewed")
             manually_added = parse_optional_mcp_bool(arguments.get("manually_added"), "manually_added")
@@ -893,6 +1034,7 @@ def execute_tool(
             updated_after=updated_after,
             sort=sort,
             categories=valid_categories or None,
+            max_scan=MCP_MEMORY_LIST_MAX_SCAN,
         )
         # Apply locked content truncation
         for memory in result["memories"]:
@@ -995,7 +1137,13 @@ def execute_tool(
         raw_categories = arguments.get("categories", [])
         categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
         try:
-            limit = parse_mcp_int(arguments.get("limit"), "limit", default=20, minimum=1, maximum=1000)
+            limit = parse_mcp_int(
+                arguments.get("limit"),
+                "limit",
+                default=20,
+                minimum=1,
+                maximum=MCP_CONVERSATION_LIST_MAX_LIMIT,
+            )
             offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
@@ -1015,46 +1163,64 @@ def execute_tool(
             except ValueError:
                 pass
 
-        conversations = conversations_db.get_conversations(
-            user_id,
-            limit,
-            offset,
-            include_discarded=False,
-            statuses=["completed"],
-            start_date=start_dt,
-            end_date=end_dt,
-            categories=valid_categories,
-        )
-
-        # Simplify conversation data
-        simple_conversations: List[Dict[str, Any]] = []
-        for conv in conversations:
-            redact_conversation_for_list(conv)
-            simple_conversations.append(
-                {
-                    "id": conv.get("id"),
-                    "started_at": conv.get("started_at"),
-                    "finished_at": conv.get("finished_at"),
-                    "structured": conv.get("structured"),
-                    "language": conv.get("language"),
-                }
+        try:
+            conversations = conversations_db.get_mcp_conversation_cards(
+                user_id,
+                limit,
+                offset,
+                start_date=start_dt,
+                end_date=end_dt,
+                categories=valid_categories,
             )
+        except FailedPrecondition as e:
+            _raise_conversation_index_error(e)
 
-        return {"conversations": simple_conversations}
+        return {"conversations": [_conversation_card(conversation) for conversation in conversations]}
 
     elif tool_name == "get_conversation_by_id":
         conversation_id = arguments.get("conversation_id")
         if not conversation_id:
             raise ToolExecutionError("conversation_id is required")
 
-        conversation = conversations_db.get_conversation(user_id, conversation_id)
-        if not conversation:
+        try:
+            max_segments = parse_mcp_int(
+                arguments.get("max_segments"),
+                "max_segments",
+                default=MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS,
+                minimum=1,
+                maximum=MCP_CONVERSATION_FETCH_MAX_SEGMENTS,
+            )
+            max_chars = parse_mcp_int(
+                arguments.get("max_chars"),
+                "max_chars",
+                default=MCP_CONVERSATION_FETCH_DEFAULT_MAX_CHARS,
+                minimum=1,
+                maximum=MCP_CONVERSATION_FETCH_MAX_CHARS,
+            )
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+
+        conversations = conversations_db.get_mcp_conversations_by_id(
+            user_id,
+            [str(conversation_id)],
+            include_transcript=True,
+            include_discarded=True,
+        )
+        if not conversations:
             raise ToolExecutionError("Conversation not found", code=-32001)
+        conversation = conversations[0]
 
         if conversation.get('is_locked', False):
             raise ToolExecutionError("A paid plan is required to access this conversation.", code=-32002)
 
-        return {"conversation": conversation}
+        transcript_segments, truncated = _bounded_transcript_segments(
+            conversation.get("transcript_segments"),
+            max_segments=max_segments,
+            max_chars=max_chars,
+        )
+        result = _conversation_card(conversation)
+        result["transcript_segments"] = transcript_segments
+        return {"conversation": result, "truncated": truncated}
 
     elif tool_name == "search_memories":
         query = arguments.get("query")
@@ -1095,42 +1261,47 @@ def execute_tool(
             end_dt = end_of_day_utc(end_dt)
         ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
-        conversation_ids = resolve_mcp_conversation_search_ids(
-            user_id,
-            query,
-            limit=limit,
-            starts_at=starts_at,
-            ends_at=ends_at,
-            query_vectors=vector_db.query_vectors,
-            search_transcript_chunks=vector_db.search_transcript_chunks,
-            embed_query=vector_db.embeddings.embed_query,
-        )
+        try:
+            conversation_ids = resolve_mcp_conversation_search_ids(
+                user_id,
+                query,
+                limit=limit,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                query_vectors=vector_db.query_vectors,
+                search_transcript_chunks=vector_db.search_transcript_chunks,
+                embed_query=vector_db.embeddings.embed_query,
+            )
+        except FailedPrecondition as e:
+            _raise_conversation_index_error(e)
         if not conversation_ids:
             return {"conversations": []}
 
-        conversations = conversations_db.get_conversations_by_id(user_id, conversation_ids)
+        try:
+            conversations = conversations_db.get_mcp_conversations_by_id(
+                user_id,
+                conversation_ids,
+                include_transcript=True,
+            )
+        except FailedPrecondition as e:
+            _raise_conversation_index_error(e)
 
-        # Simplify and handle locked content
         results: List[Dict[str, Any]] = []
         for conv in conversations:
-            structured = conv.get("structured")
-            if conv.get("is_locked", False) and structured:
-                structured = dict(structured)
-                structured['action_items'] = []
-                structured['events'] = []
+            redact_conversation_for_list(conv)
             snippets: List[Dict[str, Any]] = []
             if not conv.get("is_locked", False):
-                snippets = attach_match_snippets_to_conversations([conv], query)[0].get("match_snippets") or []
-            results.append(
-                {
-                    "id": conv.get("id"),
-                    "started_at": conv.get("started_at"),
-                    "finished_at": conv.get("finished_at"),
-                    "structured": structured,
-                    "language": conv.get("language"),
-                    "match_snippets": snippets,
-                }
-            )
+                snippets = (
+                    attach_match_snippets_to_conversations(
+                        [conv],
+                        query,
+                        max_chars=MCP_CONVERSATION_SEARCH_SNIPPET_CHARS,
+                    )[0].get("match_snippets")
+                    or []
+                )
+            card = _conversation_card(conv)
+            card["match_snippets"] = snippets
+            results.append(card)
 
         return {"conversations": results}
 
@@ -1430,6 +1601,7 @@ def handle_mcp_message(
                 }
             return error, None
         except Exception:
+            logger.exception("hosted MCP tool call failed tool=%s", tool_name)
             schedule_mcp_tool_call(
                 uid=mcp_auth_context.uid,
                 tool_name=tool_name,
@@ -1441,7 +1613,7 @@ def handle_mcp_message(
                 duration_ms=(time.monotonic() - started_at) * 1_000,
                 result_count=0,
             )
-            raise
+            return create_mcp_error(msg_id, -32009, "Tool temporarily unavailable. Retry shortly."), None
 
         schedule_mcp_tool_call(
             uid=mcp_auth_context.uid,
@@ -1514,6 +1686,16 @@ class McpTokenResponse(BaseModel):
     scope: str
 
 
+def _effective_resource(resource: Optional[str]) -> str:
+    # RFC 8707 resource indicators are optional; connector clients such as claude.ai
+    # omit the parameter entirely. An omitted indicator at the authorization step binds
+    # the grant to this deployment's canonical resource — the audience advertised in
+    # the protected-resource metadata. Cross-plane clients with a second allowed
+    # resource must keep sending it explicitly, and a present-but-invalid value
+    # (an empty string included) still fails validate_resource exactly as before.
+    return MCP_RESOURCE_URL if resource is None else resource
+
+
 def _validate_authorize_request(
     response_type: str,
     client_id: str,
@@ -1565,13 +1747,14 @@ def mcp_authorize(
     response_type: str,
     client_id: str,
     redirect_uri: str,
-    resource: str,
+    resource: Optional[str] = None,
     state: Optional[str] = None,
     scope: Optional[str] = None,
     code_challenge: Optional[str] = None,
     code_challenge_method: Optional[str] = None,
 ):
     """OAuth authorize endpoint."""
+    resource = _effective_resource(resource)
     try:
         client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
@@ -1611,13 +1794,14 @@ async def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
-    resource: str = Form(...),
+    resource: Optional[str] = Form(None),
     firebase_id_token: str = Form(...),
     state: Optional[str] = Form(None),
     scope: Optional[str] = Form(None),
     code_challenge: Optional[str] = Form(None),
     code_challenge_method: Optional[str] = Form(None),
 ):
+    resource = _effective_resource(resource)
     try:
         _, scopes = await run_blocking(
             db_executor,
@@ -1640,6 +1824,11 @@ async def mcp_authorize_consent(
         if isinstance(e, ValueError):
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
+
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
 
     try:
         _, code = await run_blocking(
@@ -1671,6 +1860,9 @@ async def mcp_token(request: Request):
     grant_type = request_data.get("grant_type")
     code = request_data.get("code")
     redirect_uri = request_data.get("redirect_uri")
+    # RFC 8707: at the token endpoint an omitted resource indicator keeps the audience
+    # stored on the code / refresh-token document, so no server-side default here —
+    # None flows through and only an explicit value is validated and matched.
     resource = request_data.get("resource")
     code_verifier = request_data.get("code_verifier")
     refresh_token = request_data.get("refresh_token")
@@ -1685,9 +1877,11 @@ async def mcp_token(request: Request):
         return _oauth_error("invalid_client", "Invalid client", status_code=401)
 
     if grant_type == "authorization_code":
-        if not code or not redirect_uri or not code_verifier or not resource:
-            return _oauth_error("invalid_request", "code, redirect_uri, resource, and code_verifier are required")
-        if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
+        if not code or not redirect_uri or not code_verifier:
+            return _oauth_error("invalid_request", "code, redirect_uri, and code_verifier are required")
+        if resource is not None and not await run_blocking(
+            db_executor, mcp_oauth_db.validate_resource, client, resource
+        ):
             return _oauth_error("invalid_target", "Invalid resource")
         token_pair = await run_blocking(
             db_executor,
@@ -1703,9 +1897,11 @@ async def mcp_token(request: Request):
         return token_pair
 
     if grant_type == "refresh_token":
-        if not refresh_token or not resource:
-            return _oauth_error("invalid_request", "refresh_token and resource are required")
-        if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
+        if not refresh_token:
+            return _oauth_error("invalid_request", "refresh_token is required")
+        if resource is not None and not await run_blocking(
+            db_executor, mcp_oauth_db.validate_resource, client, resource
+        ):
             return _oauth_error("invalid_target", "Invalid resource")
         token_pair = await run_blocking(
             db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import shutil
@@ -198,7 +199,15 @@ class ManifestContractTests(unittest.TestCase):
     def test_ci_lane_is_reachable_from_repo_checks(self) -> None:
         workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
         self.assertRegex(workflow, r"run_checks\.py\s+--lane\s+ci")
-        self.assertIn("--skip-pr-body-checks", workflow)
+        # #9744: main pushes must pass a body through --pr-body-file (not
+        # --skip-pr-body-checks). #11835: the body must be the squash commit
+        # message PLUS the live merged PR body, because this repo squashes
+        # with the commit list rather than the PR description.
+        self.assertNotIn("--skip-pr-body-checks", workflow)
+        self.assertRegex(workflow, r"git log -1 --format=%B HEAD")
+        self.assertRegex(workflow, r"pr_metadata\.py")
+        self.assertRegex(workflow, r"--from-commit-body-file")
+        self.assertRegex(workflow, r"--pr-body-file")
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
 
@@ -285,6 +294,196 @@ class ManifestContractTests(unittest.TestCase):
 
 
 class RunnerBehaviorTests(unittest.TestCase):
+    def _prepare_cli_fixture(
+        self,
+        root: Path,
+        checks: list[dict[str, object]],
+        *,
+        changed_files: tuple[str, ...] = ("backend/example.py",),
+    ) -> tuple[Path, Path]:
+        """Create a tiny committed repo that exercises the real runner CLI."""
+        scripts = root / "checks"
+        scripts.mkdir(parents=True)
+        runs_file = root / "runs.txt"
+        manifest_lines = ["checks:"]
+        for spec in checks:
+            check_id = str(spec["id"])
+            script = scripts / f"{check_id}.py"
+            exit_code = int(spec.get("exit_code", 0))
+            script.write_text(
+                "from pathlib import Path\n"
+                f"Path({json.dumps(str(runs_file))}).open('a', encoding='utf-8').write({json.dumps(check_id + chr(10))})\n"
+                f"raise SystemExit({exit_code})\n",
+                encoding="utf-8",
+            )
+            triggers = spec.get("triggers", ("backend/**",))
+            manifest_lines.extend(
+                [
+                    f"  - id: {check_id}",
+                    f"    command: [\"python3\", \"checks/{check_id}.py\"]",
+                    f"    triggers: {json.dumps(list(triggers))}",
+                    "    lanes: [\"local\", \"ci\"]",
+                    f"    reason: {spec.get('reason', 'fixture check')}",
+                    f"    requires_pr_body: {'true' if spec.get('requires_pr_body', False) else 'false'}",
+                ]
+            )
+            if spec.get("platforms"):
+                manifest_lines.append(f"    platforms: {json.dumps(list(spec['platforms']))}")
+        manifest = root / ".github/checks-manifest.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
+        changed = root / "changed-files.txt"
+        changed.write_text("".join(f"{path}\n" for path in changed_files), encoding="utf-8")
+
+        env = os.environ.copy()
+        for key in tuple(env):
+            if key.startswith("GIT_"):
+                del env[key]
+        subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+        subprocess.run(["git", "-C", str(root), "add", "."], check=True, env=env)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-qm",
+                "fixture",
+            ],
+            check=True,
+            env=env,
+        )
+        return manifest, changed
+
+    def _run_cli(self, root: Path, manifest: Path, changed: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+        runner = REPO_ROOT / ".github/scripts/run_checks.py"
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        return subprocess.run(
+            [
+                sys.executable,
+                str(runner),
+                "--root",
+                str(root),
+                "--manifest",
+                str(manifest),
+                "--changed-files",
+                str(changed),
+                "--base",
+                "HEAD",
+                "--head",
+                "HEAD",
+                "--lane",
+                "ci",
+                "--platform",
+                "linux",
+                *extra,
+            ],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_metadata_only_selects_body_checks_for_matching_path_and_platform(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-linux", "requires_pr_body": True, "platforms": ("linux",)},
+                    {"id": "source-linux"},
+                    {"id": "body-macos", "requires_pr_body": True, "platforms": ("macos",)},
+                    {
+                        "id": "body-unrelated",
+                        "requires_pr_body": True,
+                        "triggers": ("app/**",),
+                    },
+                ],
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only", "--list")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("SELECTED body-linux", result.stdout)
+        self.assertNotIn("SELECTED source-linux", result.stdout)
+        self.assertNotIn("SELECTED body-macos", result.stdout)
+        self.assertNotIn("SELECTED body-unrelated", result.stdout)
+
+    def test_metadata_only_runs_all_failures_and_returns_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-first", "requires_pr_body": True, "exit_code": 3},
+                    {"id": "body-second", "requires_pr_body": True, "exit_code": 4},
+                ],
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only")
+            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(runs, ["body-first", "body-second"])
+        self.assertIn("<== FAIL body-first", result.stdout)
+        self.assertIn("<== FAIL body-second", result.stdout)
+        self.assertIn("Manifest checks failed: body-first, body-second", result.stderr)
+
+    def test_metadata_only_success_returns_zero_without_running_source_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-pass", "requires_pr_body": True},
+                    {"id": "source-fails", "exit_code": 9},
+                ],
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only")
+            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(runs, ["body-pass"])
+        self.assertIn("Manifest checks passed: 1 check(s).", result.stdout)
+
+    def test_default_mode_runs_source_checks_and_remains_fail_fast(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-pass", "requires_pr_body": True},
+                    {"id": "source-fails", "exit_code": 7},
+                    {"id": "source-after-failure", "exit_code": 8},
+                ],
+            )
+            result = self._run_cli(root, manifest, changed)
+            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(runs, ["body-pass", "source-fails"])
+        self.assertIn("Manifest checks failed: source-fails", result.stderr)
+        self.assertNotIn("==> source-after-failure", result.stdout)
+
+    def test_metadata_only_rejects_conflicting_selection_flags(self) -> None:
+        runner = REPO_ROOT / ".github/scripts/run_checks.py"
+        for flags in (("--skip-pr-body-checks",), ("--check-id", "source-check")):
+            with self.subTest(flags=flags):
+                result = subprocess.run(
+                    [sys.executable, str(runner), "--lane", "ci", "--metadata-only", *flags],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--metadata-only cannot combine", result.stderr)
+
     def test_run_git_decodes_unicode_checkout_path_as_utf8(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "路径 checkout"
@@ -503,9 +702,6 @@ esac
                 "rayban-dat-xcode-graph",
                 "rayban-dat-build-wrapper",
             },
-            ".github/workflows/desktop_qualify_beta.yml": {
-                "desktop-release-one-path-contract",
-            },
         }
         for path, expected in expected_by_path.items():
             windows = {check.id for check in resolve_checks(manifest, [path], "ci", platform="windows")}
@@ -516,11 +712,11 @@ esac
     def test_shared_windows_entrypoints_route_their_behavioral_contracts(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         expected_by_path = {
+            ".github/workflows/gcp_storage_lifecycle.yml": {"pr-preflight-contract-tests"},
             "Makefile": {"dev-harness-unit-tests", "setup-pre-push-prerequisites"},
             "scripts/dev-harness/_resolve_python.sh": {
                 "dev-harness-unit-tests",
                 "desktop-release-process-guards",
-                "pre-tag-readiness-contract",
             },
             "scripts/pre-push-singleflight": {"pr-preflight-contract-tests"},
             ".github/scripts/preflight_runner.py": {"pr-preflight-contract-tests"},
@@ -532,7 +728,6 @@ esac
                 "check-manifest-contract",
                 "desktop-release-process-guards",
                 "desktop-swiftlint-config",
-                "pre-tag-readiness-behavior",
             },
         }
         for path, expected in expected_by_path.items():
@@ -562,7 +757,34 @@ esac
             selected = {check.id for check in resolve_checks(manifest, ["app/lib/example.dart"], lane)}
             self.assertIn("failure-class-protocol", selected)
 
-    def test_main_push_excludes_only_pr_body_checks(self) -> None:
+    def test_main_push_includes_pr_body_checks_when_body_supplied(self) -> None:
+        """#9744: main pushes now pass the merge-commit body through
+        --pr-body-file, so body-requiring checks (product-invariants,
+        failure-class-protocol) must run — not be silently skipped."""
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                ["app/lib/example.dart"],
+                "ci",
+                include_pr_body_checks=True,
+            )
+        }
+        self.assertIn("product-invariants", selected)
+        self.assertIn("failure-class-protocol", selected)
+        self.assertIn("diff-hygiene", selected)
+
+    def test_product_invariants_diffs_three_dot_from_base_not_a_changed_files_list(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "product-invariants")
+        self.assertIn("{base}", check.command)
+        self.assertIn("{head}", check.command)
+        self.assertNotIn("{changed_files}", check.command)
+
+    def test_main_push_without_body_still_excludes_pr_body_checks(self) -> None:
+        """Fail-closed: a main push with no body must NOT run body-requiring
+        checks (they would fail on empty text), preserving the old skip."""
         manifest = load_manifest(MANIFEST_PATH)
         selected = {
             check.id
@@ -577,11 +799,22 @@ esac
         self.assertNotIn("failure-class-protocol", selected)
         self.assertIn("diff-hygiene", selected)
 
+    def test_every_pr_body_consuming_check_is_excluded_from_post_merge_runs(self) -> None:
+        # Post-merge runs have no PR body, so a check whose escape hatch lives
+        # there would fail on main forever.
+        manifest = load_manifest(MANIFEST_PATH)
+        for check in manifest.checks:
+            if "{pr_body_file}" in check.command:
+                self.assertTrue(
+                    check.requires_pr_body,
+                    f"{check.id} consumes the PR body, so it must declare requires_pr_body: true",
+                )
+
     def test_line_count_ratchet_receives_pr_body_metadata(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         check = next(check for check in manifest.checks if check.id == "product-file-line-count-ratchet")
 
-        self.assertFalse(check.requires_pr_body)
+        self.assertTrue(check.requires_pr_body)
         self.assertIn("{pr_body_file}", check.command)
         self.assertIn("{target_base}", check.command)
         self.assertIn("{head}", check.command)
@@ -591,7 +824,10 @@ esac
             "ci",
             include_pr_body_checks=False,
         )
-        self.assertIn(check, selected)
+        self.assertNotIn(check, selected)
+        self.assertIn(check, resolve_checks(manifest, ["backend/routers/example.py"], "ci"))
+        self.assertIn(check, resolve_checks(manifest, ["app/lib/pages/chat/page.dart"], "ci"))
+        self.assertIn("app/lib/**/*.dart", check.triggers)
 
         command = command_for_check(
             check,
@@ -662,8 +898,7 @@ cat > "{python}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
-  [[ "$2" == "import yaml" ]]
-  exit
+  exit 0
 fi
 printf '%s\\n' "$@" > "{root / 'guard-args.txt'}"
 PYTHON
@@ -740,8 +975,7 @@ cat > "{python}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
-  [[ "$2" == "import yaml" ]]
-  exit
+  exit 0
 fi
 printf '%s\\n' "$@" > "{root / 'compose-args.txt'}"
 PYTHON

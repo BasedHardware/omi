@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Moje aplikacije",
+    "myApps": "Ustvarjeno od mene",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -1780,10 +1780,6 @@
     "openSettings": "Odpri nastavitve",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "Želite biti znani pod drugim imenom?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "Kako se imenujete?",
     "@whatsYourName": {
@@ -10780,5 +10776,62 @@
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
-    "accountCutoverOpenStore": "Otevřít obchod"
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeAbout": "O: {title}",
+    "askAboutThisConversation": "Vprašaj o tem",
+    "sendRawAudioToOmi": "Pošiljaj neobdelan zvok v Omi",
+    "sendRawAudioToOmiDescription": "Izklopite, da preprečite pošiljanje neobdelanega zvoka v Omi. Prepisi in podatki, potrebni za funkcije v oblaku, se lahko še vedno pošiljajo v Omi.",
+    "findDevice": "Poišči",
+    "diagnosticsShareFailed": "Diagnostike ni bilo mogoče deliti. Poskusi znova.",
+    "appDisabledTitle": "Ta aplikacija je onemogočena in je ni mogoče namestiti.",
+    "appDisabledWebhookFailures": "Njena končna točka je odpovedovala 72 ur zapored, zato je bila dostava ustavljena.",
+    "appDisabledGeneric": "Onemogočila jo je Omi.",
+    "appDisabledOwnerHint": "Najprej popravi končno točko — ponovna omogočitev znova preveri vsak nastavljen URL.",
+    "appReEnable": "Znova omogoči",
+    "appReEnableFailedTitle": "Ponovna omogočitev ni uspela",
+    "appReEnableFailedBody": "Te aplikacije ni bilo mogoče znova omogočiti. Poskusi znova.",
+    "appDisabledOn": "Onemogočeno {date}.",
+    "appDisabledLastError": "Zadnja napaka: {error}.",
+    "prerecordedTranscript": "Vnaprej posneto",
+    "pendantRecordingSyncBlocked": "Pendant še vedno snema, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte.",
+    "pendantFullSyncBlocked": "Pomnilnik Pendanta je poln in je še vedno v načinu snemanja, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte.",
+    "conversationsNotCapturedCount": "Ni posneto ({count})",
+    "transcriptionNoAudio": "Transkripcija ne prejema zvoka",
+    "chatBlockTask": "Opravilo",
+    "chatBlockGoal": "Cilj",
+    "chatBlockConversation": "Pogovor",
+    "chatBlockMemory": "Spomin",
+    "chatBlockQuestion": "Vprašanje",
+    "chatBlockOpenInGoals": "Odpri v Ciljih",
+    "chatBlockOpenConversation": "Odpri pogovor",
+    "chatBlockOpenInMemories": "Odpri v Spominih",
+    "chatBlockUnavailable": "Ni več na voljo",
+    "chatBlockRecommendedNextSteps": "Priporočeni naslednji koraki",
+    "couldNotLoadMemories": "Spominov ni bilo mogoče naložiti",
+    "couldNotLoadKnowledgeGraph": "Grafa znanja ni bilo mogoče naložiti",
+    "speechProfileOwnerTitle": "Glasovni profil: {name}",
+    "play": "Predvajaj",
+    "redo": "Posnemi znova",
+    "answerWithYourVoice": "Odgovorite z glasom:",
+    "speechProfileTopicLocation": "Kje živite?",
+    "speechProfileTopicWork": "Kaj delate?",
+    "speechProfileTopicGoal": "Kaj je vaš dolgoročni cilj?",
+    "speechToTextUnavailableDesc": "Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.",
+    "memoryHistoryPartial": "Del zgodovine spominov ni na voljo. Prikazana je doslej prejeta zgodovina.",
+    "memoryHistory": "Zgodovina",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Tapnite + za začetek snemanja",
+    "processingTakingLonger": "Še poteka — traja dlje kot običajno.",
+    "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.",
+    "home": "Domov",
+    "failedToUpdateBaselineStatus": "Posodobitev osnovnega statusa je spodletela.",
+    "memoryAllowUse": "Dovoli uporabo",
+    "memoryDontUse": "Ne uporabljaj",
+    "unstarConversation": "Odstrani zvezdico s pogovora",
+    "moreOptions": "Več možnosti",
+    "filterByDate": "Filtriraj po datumu",
+    "memoryGraph": "Graf spominov",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}"
 }

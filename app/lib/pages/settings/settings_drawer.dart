@@ -17,7 +17,6 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/models/subscription.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -141,14 +140,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               SizedBox(width: 24, height: 24, child: icon),
               const SizedBox(width: 16),
               Expanded(
-                child: Row(
+                // Wrap so a long or enlarged title wraps by word and the tags
+                // flow beside or below it instead of overflowing the row
+                // (#12898).
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     Text(
                       title,
                       style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
-                    if (showBetaTag) ...[
-                      const SizedBox(width: 8),
+                    if (showBetaTag)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
@@ -165,9 +169,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           ),
                         ),
                       ),
-                    ],
-                    if (showNewTag) ...[
-                      const SizedBox(width: 8),
+                    if (showNewTag)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
@@ -184,8 +186,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           ),
                         ),
                       ),
-                    ],
-                    if (trailingChip != null) ...[const SizedBox(width: 8), trailingChip],
+                    if (trailingChip != null) trailingChip,
                   ],
                 ),
               ),
@@ -799,12 +800,21 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       child: Row(
                         children: [
-                          GestureDetector(
+                          Semantics(
+                            button: true,
+                            label: context.l10n.search,
+                            excludeSemantics: true,
                             onTap: () {
                               setState(() => _isSearching = true);
                               Future.microtask(() => _searchFocusNode.requestFocus());
                             },
-                            child: const Icon(Icons.search, color: Colors.white, size: 22),
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _isSearching = true);
+                                Future.microtask(() => _searchFocusNode.requestFocus());
+                              },
+                              child: const Icon(Icons.search, color: Colors.white, size: 22),
+                            ),
                           ),
                           Expanded(
                             child: Center(

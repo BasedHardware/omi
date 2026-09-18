@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       current_release_id: {description: 'Exact broken macOS Beta tag currently served', required: true, type: string}
-      target_release_id: {description: 'Exact retained T2-qualified known-good macOS tag', required: true, type: string}
+      target_release_id: {description: 'Exact retained known-good macOS tag', required: true, type: string}
       expected_generation: {description: 'Exact current macos-beta pointer generation', required: true, type: string}
       incident_url: {description: 'Omi GitHub issue or discussion documenting the incident', required: true, type: string}
       reason: {description: 'Observed failure and containment reason', required: true, type: string}

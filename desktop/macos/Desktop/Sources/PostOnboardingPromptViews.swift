@@ -3,47 +3,34 @@ import SwiftUI
 
 /// The first thing a new user sees once onboarding closes.
 ///
-/// This used to be a bare list of questions, which answered "what could I ask"
-/// but not the thing people actually get stuck on: the setup window vanishes and
-/// the app becomes invisible, so they do not know where Omi went or how to bring
-/// it back. The orientation cues above the questions name the real affordances —
-/// the menu bar item, the chord the user picked minutes ago, whether the mic is
-/// live — and each is emitted only when it genuinely exists.
+/// Modelled on the "How would you like to use Flow first?" card: pick one of the things people
+/// actually come to Omi for, see where it happens, press one button and be there. It used to list
+/// orientation cues and generic questions, which told the user what they *could* ask and left them on
+/// an empty Home to work out where. Every case here is a concrete place — a Minecraft world, a Figma
+/// file, a compose box, a product page — and "Try it now" opens it with the question already in the
+/// bar, so the first ask is grounded in a screen with something on it.
 ///
-/// Escapable three ways (Got it, the close button, tapping outside) and never
-/// shown again once dismissed.
+/// Escapable three ways (the close button, tapping outside, or trying a case) and never shown again
+/// once dismissed.
 struct TryAskingPopupView: View {
-  let suggestions: [String]
-  let onAsk: (String) -> Void
+  let onTry: (FirstUseCase) -> Void
   let onDismiss: () -> Void
 
-  /// Three keeps the card readable at its minimum height; the rest stay on the
-  /// dashboard banner and the home ask bar.
-  private static let visibleSuggestionLimit = 3
+  @State private var selected: FirstUseCase = .game
 
-  /// Read live rather than persisted: by the time this renders, `ShortcutSettings`
-  /// and the microphone TCC state are the authorities on what the user can
-  /// actually do, and a shortcut changed since onboarding must not be misreported.
-  @MainActor
-  private var cues: [SBOrientationCue] {
-    var setup = SBSetupSnapshot()
-    setup.canHear = AudioCaptureService.checkPermission()
-    let recordingMode =
-      AppState.current?.audioRecordingMode.rawValue
-      ?? AssistantSettings.shared.audioRecordingMode.rawValue
-    setup.listening = SBSetupSnapshot.Listening(
-      audioRecordingModeRaw: recordingMode,
-      canHear: setup.canHear)
-    return SBPostOnboardingGuidance.orientationCues(
-      openShortcutTokens: ShortcutSettings.shared.askOmiShortcut.displayTokens,
-      talkShortcutTokens: ShortcutSettings.shared.pttShortcut.displayTokens,
-      setup: setup)
+  /// The user's real "bring me back" chord, read live from `ShortcutSettings` so a chord changed
+  /// since onboarding is never misreported. Empty when none is set, in which case the line is
+  /// simply not shown.
+  private var openShortcutKeys: [String] {
+    ShortcutSettings.shared.askOmiShortcut.displayTokens
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
   }
 
   var body: some View {
     GeometryReader { proxy in
-      let popupWidth = min(max(proxy.size.width - 72, 560), 660)
-      let popupHeight = min(max(proxy.size.height - 80, 360), 520)
+      let popupWidth = min(max(proxy.size.width - 72, 640), 820)
+      let popupHeight = min(max(proxy.size.height - 96, 400), 470)
 
       ZStack {
         // The dim belongs to the shell's surface, not to the window: this popup is an overlay on the
@@ -51,15 +38,18 @@ struct TryAskingPopupView: View {
         // full-bleed dim here was a dark rectangle stamped on the desktop. See `ShellModalScrim`.
         ShellModalScrim(onTap: onDismiss)
 
-        VStack {
-          popupContent
+        HStack(alignment: .top, spacing: OmiSpacing.xxl) {
+          chooser
+            .frame(width: 272)
+            .frame(maxHeight: .infinity, alignment: .top)
+
+          FirstUseCasePreview(useCase: selected)
+            .animation(.easeOut(duration: 0.22), value: selected)
         }
         .frame(width: popupWidth, height: popupHeight)
         .padding(OmiSpacing.xxl)
         // The card paints no ground of its own: the glass owns the material, the 22 pt corner, the
-        // faint edge and the one ambient shadow. It used to draw all four itself — an opaque near-
-        // black fill, a 28 pt corner, a white stroke and a second shadow — which on a light-pinned
-        // page is a dark slab with a bright outline where a pane of glass should be.
+        // faint edge and the one ambient shadow.
         .inkGlassPanel()
         .overlay(alignment: .topTrailing) {
           Button(action: onDismiss) {
@@ -73,152 +63,129 @@ struct TryAskingPopupView: View {
               )
           }
           .buttonStyle(.plain)
+          .accessibilityLabel("Close")
           .padding(OmiSpacing.lg)
         }
       }
     }
+    // The automation bridge drives the same two controls a click does (`first_use_popup_select`,
+    // `first_use_popup_try`), so a flow can exercise the real handlers without the cursor.
+    .onReceive(NotificationCenter.default.publisher(for: .firstUsePopupSelect)) { note in
+      guard let id = note.userInfo?["id"] as? String, let useCase = FirstUseCase.named(id) else { return }
+      selected = useCase
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .firstUsePopupTry)) { _ in
+      log("TryAskingPopupView: try received, selected=\(selected.id)")
+      onTry(selected)
+    }
   }
 
-  private var popupContent: some View {
-    ScrollView(.vertical, showsIndicators: false) {
-      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-        HStack(spacing: OmiSpacing.sm) {
-          Image(systemName: "checkmark.circle.fill")
-            .font(.system(size: 11, weight: .semibold))
-          Text("You're set up")
-            .font(.system(size: 12, weight: .semibold))
+  private var chooser: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "checkmark.circle.fill")
+          .font(.system(size: 11, weight: .semibold))
+        Text("You're set up")
+          .font(.system(size: 12, weight: .semibold))
+      }
+      .foregroundColor(Ink.secondary)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
+      .background(
+        Capsule()
+          .fill(Ink.rowFill)
+      )
+
+      Text("How would you like to use Omi first?")
+        .inkStyle(.stepHeadline, color: Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      VStack(spacing: OmiSpacing.sm) {
+        ForEach(FirstUseCase.all) { useCase in
+          useCaseChip(useCase)
         }
-        .foregroundColor(Ink.secondary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.xs)
-        .background(
-          Capsule()
-            .fill(Ink.rowFill)
-        )
+      }
 
-        // The system's display face, not a system serif: `InkType` carries the tracking and the
-        // leading with the size, and a 32 pt run assembled by hand loses both.
-        Text("Here's how to reach me.")
-          .inkStyle(.stepHeadline, color: Ink.primary)
+      Spacer(minLength: OmiSpacing.md)
 
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          ForEach(cues) { cue in
-            orientationRow(cue)
-          }
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        Button {
+          onTry(selected)
+        } label: {
+          Text("Try it now")
         }
+        .buttonStyle(OmiButtonStyle(.primary))
+        .accessibilityIdentifier("first_use_popup_try")
 
-        if !suggestions.isEmpty {
-          Text("TRY ASKING")
-            .font(.system(size: 11, weight: .semibold))
-            .tracking(0.8)
-            .foregroundColor(Ink.secondary)
-            .padding(.top, OmiSpacing.xs)
+        Text("Opens \(selected.siteName).")
+          .font(.system(size: 12))
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
 
-          VStack(spacing: OmiSpacing.sm) {
-            ForEach(Array(suggestions.prefix(Self.visibleSuggestionLimit)), id: \.self) { suggestion in
-              suggestionRow(suggestion)
+        if !openShortcutKeys.isEmpty {
+          HStack(spacing: OmiSpacing.xs) {
+            Text("Bring me back anytime with")
+              .font(.system(size: 12))
+              .foregroundColor(Ink.secondary)
+              .lineLimit(1)
+            HStack(spacing: 3) {
+              ForEach(Array(openShortcutKeys.enumerated()), id: \.offset) { _, key in
+                Text(key)
+                  .font(.system(size: 11, weight: .semibold, design: .rounded))
+                  .foregroundColor(Ink.primary)
+                  .padding(.horizontal, 5)
+                  .padding(.vertical, 2)
+                  .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                      .fill(Ink.rowFill)
+                  )
+                  .overlay(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                      .stroke(Ink.separator, lineWidth: 1)
+                  )
+              }
             }
           }
         }
-
-        HStack {
-          Spacer(minLength: 0)
-          Button(action: onDismiss) {
-            Text("Got it")
-              .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(Ink.primary)
-              .padding(.horizontal, OmiSpacing.lg)
-              .padding(.vertical, OmiSpacing.sm)
-              .background(
-                Capsule()
-                  .fill(Ink.rowFill)
-              )
-              .overlay(
-                Capsule()
-                  .stroke(Ink.separator, lineWidth: 1)
-              )
-          }
-          .buttonStyle(.plain)
-        }
-        .padding(.top, OmiSpacing.xs)
-      }
-      .frame(maxWidth: .infinity, alignment: .topLeading)
-      .padding(OmiSpacing.md)
-    }
-  }
-
-  /// One "where I am / how you reach me" line. The chord chips render the user's
-  /// real shortcut tokens, so a user who picked ⌘↩ is never told to press ⌘O.
-  private func orientationRow(_ cue: SBOrientationCue) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.md) {
-      Image(systemName: cue.symbol)
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundColor(Ink.secondary)
-        .frame(width: 18, alignment: .center)
-
-      Text(cue.title)
-        .font(.system(size: 14))
-        .foregroundColor(Ink.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-        .multilineTextAlignment(.leading)
-
-      Spacer(minLength: OmiSpacing.sm)
-
-      if !cue.keys.isEmpty {
-        HStack(spacing: 4) {
-          ForEach(Array(cue.keys.enumerated()), id: \.offset) { _, key in
-            Text(key)
-              .font(.system(size: 12, weight: .semibold, design: .rounded))
-              .foregroundColor(Ink.primary)
-              .padding(.horizontal, 7)
-              .padding(.vertical, 3)
-              .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                  .fill(Ink.rowFill)
-              )
-              .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                  .stroke(Ink.separator, lineWidth: 1)
-              )
-          }
-        }
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .padding(.top, OmiSpacing.xs)
+    .padding(.leading, OmiSpacing.xs)
   }
 
-  private func suggestionRow(_ suggestion: String) -> some View {
-    Button {
-      onAsk(suggestion)
+  /// One selectable case. The selected chip inverts the label ladder — `Ink.primary` fill,
+  /// `Ink.surface` label — the same contrast pair the primary button uses, so "which one is chosen"
+  /// reads at a glance without an accent colour.
+  private func useCaseChip(_ useCase: FirstUseCase) -> some View {
+    let isSelected = useCase == selected
+    return Button {
+      selected = useCase
     } label: {
       HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "sparkles")
+        Image(systemName: useCase.symbol)
           .font(.system(size: 12, weight: .semibold))
-          .foregroundColor(Ink.secondary)
-
-        Text(suggestion)
-          .font(.system(size: 15, weight: .medium))
-          .multilineTextAlignment(.leading)
-
+          .frame(width: 16, alignment: .center)
+        Text(useCase.label)
+          .font(.system(size: 14, weight: .medium))
         Spacer(minLength: 0)
-
-        Image(systemName: "arrow.up.right")
-          .font(.system(size: 11, weight: .bold))
-          .foregroundColor(Ink.secondary)
       }
       .contentShape(Rectangle())
-      .foregroundColor(Ink.primary)
+      .foregroundColor(isSelected ? Ink.surface : Ink.primary)
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .fill(Ink.rowFill.opacity(0.82))
+          .fill(isSelected ? Ink.primary : Ink.rowFill.opacity(0.82))
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .stroke(Ink.separator, lineWidth: 1)
+          .stroke(isSelected ? Color.clear : Ink.separator, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
+    .accessibilityIdentifier("first_use_popup_case_\(useCase.id)")
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 }
 

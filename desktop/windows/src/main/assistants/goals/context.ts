@@ -219,6 +219,30 @@ export async function assembleGoalContext(f: GoalContextFetchers): Promise<GoalC
   }
 }
 
+/** How many of these goals are still active. The ONE definition of the cap gate's
+ *  number: `assembleGoalContext` reports it as `activeGoalCount`, and the auto-
+ *  generation gate reads it straight off the goal list, so the cap cannot come to mean
+ *  two different things depending on which path evaluated it. */
+export function activeGoalCount(goals: RawGoal[]): number {
+  return goals.filter((g) => !isProgressComplete(g)).length
+}
+
+/** Just the goal list: ONE `GET /v1/goals/all` and none of the other four reads.
+ *  `null` = no session (nothing to decide on).
+ *
+ *  This exists so the auto-generation cap can be checked BEFORE the expensive context
+ *  build. A user sitting at the cap is the steady state, not the exception, and that
+ *  user used to re-pay all five reads — including 500 memories and 100 conversations —
+ *  on every 4-hourly tick, forever, because the bail does not stamp the day.
+ *
+ *  Hand the result back to `fetchGoalContext` so a run that does proceed reuses it
+ *  instead of asking for the same list twice. */
+export async function fetchGoals(): Promise<RawGoal[] | null> {
+  const session = getBackendSession()
+  if (!session) return null
+  return realFetchers(session).fetchGoals()
+}
+
 /** Mac's insufficient-context guard (throws `insufficientContext` there): skip
  *  generation entirely unless there is at least one memory OR conversation OR
  *  task. Goal history alone is not enough to reason from. */
@@ -228,8 +252,22 @@ export function hasSufficientContext(data: GoalContextData): boolean {
 
 /** Production entry: assemble the bundle for the current session, or null when
  *  there is no session (a soft no-op — nothing to fetch with). */
-export async function fetchGoalContext(): Promise<GoalContextData | null> {
+/** Serve `fetchGoals` from a list the caller already has, leaving the other four reads
+ *  alone. The cap gate fetches goals before deciding whether to build the context, so
+ *  without this a run that proceeds would ask for the same list a second time. Split
+ *  out from `fetchGoalContext` because that one needs a live session, and this is the
+ *  part worth testing. */
+export function withPrefetchedGoals(
+  f: GoalContextFetchers,
+  goals?: RawGoal[]
+): GoalContextFetchers {
+  return goals ? { ...f, fetchGoals: async () => goals } : f
+}
+
+export async function fetchGoalContext(
+  prefetchedGoals?: RawGoal[]
+): Promise<GoalContextData | null> {
   const session = getBackendSession()
   if (!session) return null
-  return assembleGoalContext(realFetchers(session))
+  return assembleGoalContext(withPrefetchedGoals(realFetchers(session), prefetchedGoals))
 }

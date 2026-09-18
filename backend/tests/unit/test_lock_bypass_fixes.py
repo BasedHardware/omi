@@ -708,6 +708,105 @@ class TestMemoryToolFiltering:
             call('test-uid', limit=500, offset=2),
         ]
 
+    def test_get_memories_temporal_view_filters_suppressed_rows(self):
+        """Model-facing temporal reads must never format owner-use suppression."""
+        from models.memories import MemoryDB
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        suppressed_payload = _make_memory(memory_id='suppressed')
+        suppressed_payload['content'] = 'SUPPRESSED_MODEL_SECRET'
+        suppressed_payload['arguments'] = {'memory_use': {'suppressed': True}}
+        visible_payload = _make_memory(locked=False, memory_id='visible')
+        visible_payload['content'] = 'VISIBLE_TEMPORAL_MEMORY'
+        suppressed = MemoryDB.model_validate(suppressed_payload)
+        visible = MemoryDB.model_validate(visible_payload)
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+        ):
+            memory_service.return_value.read_page.return_value = SimpleNamespace(
+                memories=(suppressed, visible), next_cursor=None, truncated=False
+            )
+            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'useful_now'}, config=config)
+
+        assert 'VISIBLE_TEMPORAL_MEMORY' in result
+        assert 'SUPPRESSED_MODEL_SECRET' not in result
+        memory_service.return_value.read_page.assert_called_once()
+
+    def test_get_memories_temporal_empty_continuation_is_bounded(self):
+        """Filtered empty cursor pages must stop at the fixed scan budget."""
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+        ):
+            memory_service.return_value.read_page.side_effect = lambda *args, **kwargs: SimpleNamespace(
+                memories=(), next_cursor='still-more', truncated=False
+            )
+            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'history'}, config=config)
+
+        assert 'bounded scan reached its safety limit' in result
+        assert memory_service.return_value.read_page.call_count == 10
+
+    def test_get_memories_temporal_truncated_page_without_cursor_is_disclosed(self):
+        """A budget-truncated page with no continuation cursor must surface an
+        honest partial-scan note instead of a silently complete result."""
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+        ):
+            memory_service.return_value.read_page.side_effect = lambda *args, **kwargs: SimpleNamespace(
+                memories=(), next_cursor=None, truncated=True
+            )
+            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'history'}, config=config)
+
+        assert 'bounded scan reached its safety limit' in result
+        memory_service.return_value.read_page.assert_called_once()
+
+    def test_get_memories_temporal_ranges_use_evidence_date(self):
+        """A delayed extraction is found by capture date, not processing date."""
+        from models.memories import MemoryDB
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        delayed_payload = _make_memory(locked=False, memory_id='delayed')
+        delayed_payload['content'] = 'CAPTURED_IN_JULY'
+        delayed_payload['created_at'] = '2026-09-14T00:00:00+00:00'
+        delayed_payload['updated_at'] = '2026-09-14T00:00:00+00:00'
+        delayed_payload['as_of'] = '2026-07-10T00:00:00+00:00'
+        delayed = MemoryDB.model_validate(delayed_payload)
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with (
+            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
+            patch.object(memory_tools, 'MemoryService') as memory_service,
+            patch.object(memory_tools.MemoryDB, 'get_memories_as_str', return_value='CAPTURED_IN_JULY'),
+        ):
+            memory_service.return_value.read_page.return_value = SimpleNamespace(
+                memories=(delayed,), next_cursor=None, truncated=False
+            )
+            result = get_memories_tool.invoke(
+                {
+                    'limit': 10,
+                    'view': 'history',
+                    'start_date': '2026-07-01T00:00:00+00:00',
+                    'end_date': '2026-07-31T23:59:59+00:00',
+                },
+                config=config,
+            )
+
+        assert 'CAPTURED_IN_JULY' in result
+
     def test_search_memories_filters_locked(self):
         """search_memories_tool must exclude locked memories from results."""
         from models.memories import MemoryDB
@@ -863,22 +962,30 @@ class TestMcpSseLockRedaction:
     """M5: MCP SSE get_conversations must redact locked conversation structured data."""
 
     def test_mcp_sse_redacts_locked(self):
-        """MCP SSE execute_tool('get_conversations') must clear action_items/events for locked."""
-        import database.conversations as conversations_db
+        """MCP SSE conversation cards must expose no action items or events for locked rows."""
+        from routers import mcp_sse
 
-        conversations_db.get_conversations = MagicMock(
-            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        )
-
-        from routers.mcp_sse import execute_tool
-
-        result = execute_tool('test-uid', 'get_conversations', {})
+        conversations = [
+            _make_conversation(locked=True),
+            _make_conversation(locked=False, conversation_id='conv-2'),
+        ]
+        with patch.object(mcp_sse.conversations_db, 'get_mcp_conversation_cards', return_value=conversations) as fetch:
+            result = mcp_sse.execute_tool('test-uid', 'get_conversations', {})
         convs = result['conversations']
 
-        assert convs[0]['structured']['action_items'] == []
-        assert convs[0]['structured']['events'] == []
+        fetch.assert_called_once_with(
+            'test-uid',
+            20,
+            0,
+            start_date=None,
+            end_date=None,
+            categories=[],
+        )
+        assert 'action_items' not in convs[0]['structured']
+        assert 'events' not in convs[0]['structured']
         assert convs[0]['structured']['title'] == 'Test Conversation'
-        assert len(convs[1]['structured']['action_items']) == 1
+        assert 'action_items' not in convs[1]['structured']
+        assert 'events' not in convs[1]['structured']
 
     def test_mcp_sse_search_memories_filters_locked_and_backfills_limit(self):
         """MCP SSE search delegates filtering and limiting to universal authority."""
@@ -988,7 +1095,7 @@ class TestUsersLockEnforcement:
 
         memory_service = MagicMock()
         exported_memory = MagicMock(model_dump=MagicMock(return_value={"id": "mem-1"}))
-        memory_service.iter_export_memories.return_value = iter([exported_memory])
+        memory_service.iter_portability_export_memories.return_value = iter([exported_memory])
 
         # The export generator lives in services.users.data_export, which binds
         # these helpers at module level. Patch the service-level symbols so the
@@ -1000,23 +1107,19 @@ class TestUsersLockEnforcement:
                     "services.users.data_export.get_standalone_action_items",
                     return_value=[],
                 ):
-                    with patch("services.users.data_export.MemoryService", return_value=memory_service):
-                        from routers.users import export_all_user_data
+                    with patch("services.users.data_export._iter_user_subcollection", return_value=iter(())):
+                        with patch(
+                            "services.users.data_export._iter_user_nested_subcollection",
+                            return_value=iter(()),
+                        ):
+                            with patch("services.users.data_export.MemoryService", return_value=memory_service):
+                                from services.users.data_export import iter_user_data_export
 
-                        response = export_all_user_data(uid="test-uid")
-
-                        # Consume body inside patches — the generator is lazy.
-                        # StreamingResponse wraps sync generators as async iterators,
-                        # so iterate the underlying generator directly.
-                        import asyncio
-
-                        async def _consume():
-                            parts = []
-                            async for chunk in response.body_iterator:
-                                parts.append(chunk)
-                            return "".join(parts)
-
-                        body = asyncio.run(_consume())
+                                # Exercise the export producer directly and keep every
+                                # user-data source hermetic. This test module can be
+                                # collected after the real data-export module, so its
+                                # import-time dependency stubs are not reliable isolation.
+                                body = "".join(iter_user_data_export(uid="test-uid"))
 
         import json
 
@@ -1026,7 +1129,7 @@ class TestUsersLockEnforcement:
         assert data["conversations"][0]["is_locked"] is True
         assert data["conversations"][1]["id"] == "conv-2"
         assert data["memories"] == [{"id": "mem-1"}]
-        memory_service.iter_export_memories.assert_called_once_with("test-uid", include_archive=True)
+        memory_service.iter_portability_export_memories.assert_called_once_with("test-uid", include_archive=True)
 
 
 # =============================================================================
@@ -1087,15 +1190,20 @@ class TestScheduledDailySummaryLockFilter:
                 daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
                 daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
                 with patch('utils.other.notifications.send_notification'):
+                    import utils.other.notifications as notifications_module
                     from utils.other.notifications import _send_summary_notification
 
                     _send_summary_notification(('test-uid', 'token', 'UTC'))
 
-        # generate_comprehensive_daily_summary must be called only with unlocked conversations
-        mock_gen.assert_called_once()
-        conversations_passed = mock_gen.call_args[0][1]
-        assert len(conversations_passed) == 1
-        assert conversations_passed[0].id == 'conv-2'
+        # generate_comprehensive_daily_summary must be called only with unlocked conversations.
+        # The tick now also backfills behind the current day, so the exact expected count is the
+        # current day plus the backfill cap — pinned, not `>= 1`, because a loose bound here would
+        # hide the one regression that matters: backfill spending unbounded LLM calls.
+        assert mock_gen.call_count == 1 + notifications_module._DAILY_SUMMARY_BACKFILL_GENERATE_CAP
+        for call in mock_gen.call_args_list:
+            conversations_passed = call[0][1]
+            assert len(conversations_passed) == 1
+            assert conversations_passed[0].id == 'conv-2'
 
     def test_scheduled_summary_skips_when_all_locked(self):
         """_send_summary_notification returns early when all conversations are locked."""
@@ -1346,6 +1454,20 @@ class TestIntegrationSearchLockRedaction:
 
 class TestPromptDataLockFilter:
     """get_prompt_data (shared utility) must exclude locked memories."""
+
+    @pytest.fixture(autouse=True)
+    def clear_prompt_cache(self):
+        import sys
+
+        if 'utils.llms.memory' in sys.modules:
+            mod = sys.modules['utils.llms.memory']
+            if hasattr(mod, '_prompt_data_cache'):
+                mod._prompt_data_cache.clear()
+        yield
+        if 'utils.llms.memory' in sys.modules:
+            mod = sys.modules['utils.llms.memory']
+            if hasattr(mod, '_prompt_data_cache'):
+                mod._prompt_data_cache.clear()
 
     def test_get_prompt_data_filters_locked_memories(self):
         """get_prompt_data must not include locked memories in prompt context."""

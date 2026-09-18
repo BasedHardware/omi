@@ -33,10 +33,23 @@ router = APIRouter(
     tags=["iq-rating"],
 )
 
-# API credentials
-OMI_APP_ID = os.getenv("OMI_APP_ID", "01KCMNCPS9K8EV50BEJ37C0RH7")
-OMI_APP_SECRET = os.getenv("OMI_APP_SECRET", "sk_d151b7b791931b66b6781163ee3a5773")
+# API credentials — required from the environment. No defaults: the app fails
+# fast at startup if they are missing. The check deliberately lives in a
+# startup hook rather than at import time — the plugins image-import smoke
+# imports this module without the variables (no app lifecycle runs there),
+# while a real deployment must not serve unconfigured.
+OMI_APP_ID = os.getenv("OMI_APP_ID")
+OMI_APP_SECRET = os.getenv("OMI_APP_SECRET")
 OMI_BASE_API_URL = os.getenv("OMI_BASE_API_URL", "https://api.omi.me")
+
+
+@router.on_event("startup")
+async def require_omi_credentials() -> None:
+    if not OMI_APP_ID or not OMI_APP_SECRET:
+        raise RuntimeError(
+            "iq_rating plugin requires the OMI_APP_ID and OMI_APP_SECRET environment "
+            "variables to be set (deployed service env, shell, etc.)"
+        )
 
 # OpenAI for name filtering
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -279,9 +292,14 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
             
             if response.status_code == 200:
                 result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                choices = result.get("choices") if isinstance(result, dict) else None
+                if choices and isinstance(choices, list) and isinstance(choices[0], dict):
+                    message = choices[0].get("message")
+                    answer = message.get("content", "").strip() if isinstance(message, dict) else ""
+                else:
+                    answer = ""
                 
-                if answer.upper() != "NONE":
+                if answer and answer.upper() != "NONE":
                     batch_valid = [n.strip() for n in answer.split(",") if n.strip()]
                     valid_names.extend(batch_valid)
             else:
@@ -1001,7 +1019,9 @@ def calculate_iq_with_ai(people_dict: dict) -> dict:
     # Prepare batch for AI analysis
     people_to_analyze = []
     for name_lower, data in people_dict.items():
-        context = " | ".join(data.get("context_snippets", [])[:10])  # More snippets
+        raw_snippets = data.get("context_snippets", []) if isinstance(data, dict) else []
+        snippets_list = list(raw_snippets) if isinstance(raw_snippets, (list, tuple)) else []
+        context = " | ".join([str(s) for s in snippets_list[:10] if s is not None])  # More snippets
         if context:
             people_to_analyze.append({
                 "name": data["name"],
@@ -1065,7 +1085,12 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
             
             if response.status_code == 200:
                 result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                choices = result.get("choices") if isinstance(result, dict) else None
+                if choices and isinstance(choices, list) and isinstance(choices[0], dict):
+                    message = choices[0].get("message")
+                    answer = message.get("content", "").strip() if isinstance(message, dict) else ""
+                else:
+                    answer = ""
                 
                 # Parse JSON from response
                 try:

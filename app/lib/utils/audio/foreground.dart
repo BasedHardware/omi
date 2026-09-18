@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -15,6 +14,13 @@ void _startForegroundCallback() {
 class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
 
+  static const Duration _lastKnownMaxAge = Duration(minutes: 5);
+
+  bool _isLastKnownFresh(Position position) {
+    final age = DateTime.now().toUtc().difference(position.timestamp.toUtc());
+    return !age.isNegative && age <= _lastKnownMaxAge;
+  }
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
@@ -22,10 +28,34 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   }
 
   Future _locationInBackground() async {
+    // Periodic refresh from FOREGROUND_SERVICE_LOCATION. while-in-use is
+    // enough; do not request ACCESS_BACKGROUND_LOCATION (Play Store
+    // prominent-disclosure). This isolate has no Activity, so it never prompts.
     if (await Geolocator.isLocationServiceEnabled()) {
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        var locationData = await Geolocator.getCurrentPosition();
+        Position? lastKnown;
+        try {
+          lastKnown = await Geolocator.getLastKnownPosition() ??
+              await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
+        } catch (_) {}
+        late final Position locationData;
+        if (lastKnown != null && _isLastKnownFresh(lastKnown)) {
+          locationData = lastKnown;
+        } else {
+          try {
+            locationData = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+            ).timeout(const Duration(seconds: 8));
+          } catch (e) {
+            if (lastKnown == null) {
+              Object loc = {'error': 'Location fix failed: $e'};
+              FlutterForegroundTask.sendDataToMain(loc);
+              return;
+            }
+            locationData = lastKnown;
+          }
+        }
         if (_locationUpdatedAt == null ||
             _locationUpdatedAt!.isBefore(DateTime.now().subtract(const Duration(minutes: 5)))) {
           Object loc = {
@@ -70,7 +100,6 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 class ForegroundUtil {
   static bool _isInitialized = false;
   static bool _isStarting = false;
-  static const _audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
 
   static Future<void> requestPermissions() async {
     // Android 13+, you need to allow notification permission to display foreground service notification.
@@ -137,38 +166,6 @@ class ForegroundUtil {
     } catch (e) {
       Logger.debug('ForegroundService initialization failed: $e');
       _isInitialized = false;
-    }
-  }
-
-  /// Start the keep-alive only if it is not already running. Unlike
-  /// [startForegroundTask], this does not restart a live service (restart
-  /// would bounce the iOS audio session).
-  static Future<ServiceRequestResult> ensureForegroundTask() async {
-    try {
-      if (await FlutterForegroundTask.isRunningService) {
-        Logger.debug('ForegroundTask already running, not restarting');
-        return const ServiceRequestSuccess();
-      }
-    } catch (e) {
-      Logger.debug('ForegroundTask running-state check failed: $e');
-    }
-    return startForegroundTask();
-  }
-
-  /// Release AVAudioSession after BLE/wearable capture stops. Phone-mic and
-  /// CallKit paths deactivate themselves; this is the matching teardown for
-  /// `configureForBluetooth` / FGS audio. No-op on Android.
-  ///
-  /// Returns false when native deactivation fails so the caller can retry
-  /// instead of treating cleanup as done.
-  static Future<bool> deactivateBluetoothAudioSession() async {
-    if (!Platform.isIOS) return true;
-    try {
-      await _audioSessionChannel.invokeMethod('deactivateForBluetooth');
-      return true;
-    } catch (e) {
-      Logger.debug('deactivateForBluetooth failed: $e');
-      return false;
     }
   }
 

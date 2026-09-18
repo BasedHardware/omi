@@ -26,6 +26,8 @@ _mock_vad_prob = None  # When set, overrides _mock_is_speech for exact probabili
 
 import numpy as np
 
+from utils.metrics import OMI_VAD_GATE_AUDIO_SECONDS_TOTAL, OMI_VAD_GATE_SESSIONS_TOTAL
+
 
 def _mock_run_vad_window(window, state, context):
     """Mock run_vad_window that returns controlled probability.
@@ -1201,6 +1203,41 @@ class TestCostMetrics:
         metrics = gate.get_metrics()
         assert metrics['bytes_sent'] == len(chunk)
         assert metrics['bytes_skipped'] == 0
+
+    @pytest.mark.parametrize('mode', ['active', 'shadow'])
+    def test_prometheus_audio_and_session_counters_match_byte_accounting(self, mode):
+        """Prometheus seconds should match the gate's sent/skipped byte semantics."""
+        sent_counter = OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='sent', mode=mode)
+        skipped_counter = OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='skipped', mode=mode)
+        session_counter = OMI_VAD_GATE_SESSIONS_TOTAL.labels(mode=mode)
+        sent_before = sent_counter._value.get()
+        skipped_before = skipped_counter._value.get()
+        sessions_before = session_counter._value.get()
+
+        gate = self._make_gate(mode=mode)
+        assert session_counter._value.get() == sessions_before + 1
+
+        chunk = _make_pcm(30)
+        t = 1000.0
+        _set_vad_speech(False)
+        for i in range(20):
+            gate.process_audio(chunk, t + i * 0.03)
+        if mode == 'active':
+            assert skipped_counter._value.get() > skipped_before
+        else:
+            assert sent_counter._value.get() > sent_before
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(chunk, t + 0.60 + i * 0.03)
+
+        metrics = gate.get_metrics()
+        bytes_per_second = gate.sample_rate * gate.channels * 2
+        sent_seconds = sent_counter._value.get() - sent_before
+        skipped_seconds = skipped_counter._value.get() - skipped_before
+
+        assert sent_seconds == pytest.approx(metrics['bytes_sent'] / bytes_per_second)
+        assert skipped_seconds == pytest.approx(metrics['bytes_skipped'] / bytes_per_second)
+        assert sent_seconds + skipped_seconds == pytest.approx(metrics['bytes_received'] / bytes_per_second)
 
 
 class TestStructuredMetricsLog:

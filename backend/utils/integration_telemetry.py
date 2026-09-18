@@ -196,6 +196,12 @@ def _get_posthog_client() -> Optional[Any]:
     return _posthog_client
 
 
+def get_posthog_client_for_decisions() -> Optional[Any]:
+    """Return the server-owned PostHog client for fail-closed rollout reads."""
+
+    return _get_posthog_client()
+
+
 def _provider_status_code(error: Any, explicit_status_code: Any = None) -> Optional[int]:
     if explicit_status_code is not None:
         try:

@@ -8,6 +8,16 @@ allowed-tools: Bash, Read, Glob, Grep
 
 This skill teaches you the Omi Flutter mobile app's navigation structure, screen architecture, and widget patterns. Use it when developing features (to understand how the app works), fixing bugs (to navigate to the affected screen), or verifying changes (to confirm your code works in the live app).
 
+> **Verifying changes (agents and contributors):** this skill drives a *live*
+> app on an emulator/device and assumes a manually-authenticated session
+> against a real or local backend — it is an exploration and physical-device
+> tool. The canonical fast verification path is the seeded local lane with
+> synthetic auth: `make mobile-verify ARGS="fast --paths <changed-file>"` —
+> no device, no OAuth, loopback fixtures. See
+> [`scripts/dev-harness/MOBILE_VERIFY.md`](../../scripts/dev-harness/MOBILE_VERIFY.md)
+> and [`MOBILE_SESSIONS.md`](../../scripts/dev-harness/MOBILE_SESSIONS.md).
+> Physical-device evidence remains a separately reported lane (SCA-491).
+
 ## How to Explore the App
 
 You can interact with the running app via `agent-flutter` — a CLI that taps widgets, reads the widget tree, and captures screenshots through Flutter's Marionette debug protocol.
@@ -122,7 +132,7 @@ Onboarding (wrapper.dart) — step wizard
 └── 11: Complete (complete_screen.dart) → Home
 
 Home (home/page.dart) — main app after auth, 4-slot bottom nav
-├── ["Ask Omi anything…" input bar] → Chat (chat/page.dart) — full-width bar above bottom nav, not a tab
+├── ["Ask Omi" input bar] → Chat (chat/page.dart) — full-width bar above bottom nav, not a tab
 │   ├── Message history, "Ask anything" field, AI responses
 │   └── AI-message action row: Copy ("✨ Message copied to clipboard" snackbar), thumbs up, thumbs down, Share
 ├── [mic in the bar] → Chat with voice auto-start
@@ -249,7 +259,7 @@ Speech Profile (speech_profile/page.dart)
   slot 3 = Apps marketplace ("Search 1500+ Apps" / "Featured")
 
 **Chat entry point (not a bottom-nav tab):**
-- Open chat by tapping the "Ask Omi anything…" input bar on the home screen — a full-width gesture
+- Open chat by tapping the "Ask Omi" input bar on the home screen — a full-width gesture
   element directly above the bottom nav (~y=756, w≈382 on a 414pt-wide screen; verified iOS 2026-07-11)
 
 **Settings gear:**

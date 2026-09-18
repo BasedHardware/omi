@@ -36,6 +36,18 @@ export async function getPayload<T>(key: string): Promise<{ data: T; freshAt: nu
   }
 }
 
+// Stamp a payload with the age of the data it carries. Every consumer route
+// serves precomputed payloads at any age (no TTL eviction), so without this a
+// broken precompute cron looks identical to live data forever. `freshAt` is
+// epoch ms: the moment the payload was computed on a cache hit, or `Date.now()`
+// on a fresh inline compute.
+export function withFreshness<T extends object>(
+  data: T,
+  freshAt: number,
+): T & { freshAt: number } {
+  return { ...data, freshAt };
+}
+
 export async function setPayload(key: string, data: unknown): Promise<void> {
   try {
     const payload = JSON.stringify(data);

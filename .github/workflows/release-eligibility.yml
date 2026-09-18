@@ -3,6 +3,7 @@ name: Release Eligibility
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,16 +13,28 @@ jobs:
     name: Release Eligibility
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout exact main SHA
+      - name: Checkout exact SHA
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+
+      - name: Resolve deterministic-check range
+        id: range
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "before=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+            echo "after=${{ github.event.after }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "before=$(git rev-parse --verify HEAD^)" >> "$GITHUB_OUTPUT"
+            echo "after=$(git rev-parse --verify HEAD)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Verify release eligibility
         uses: ./.github/actions/release-eligibility
         with:
           ref: ${{ github.ref }}
           sha: ${{ github.sha }}
-          before: ${{ github.event.before }}
-          after: ${{ github.event.after }}
+          before: ${{ steps.range.outputs.before }}
+          after: ${{ steps.range.outputs.after }}

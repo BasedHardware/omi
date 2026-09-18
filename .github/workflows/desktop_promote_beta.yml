@@ -1,7 +1,7 @@
 name: Promote Signed Desktop Candidate
 
 # Manual/reusable retry only. Normal Beta promotion happens inside the
-# successful Codemagic release build; qualification runs never trigger this.
+# successful Codemagic release build; signed-smoke promotion never triggers this.
 on:
   workflow_call:
     inputs:

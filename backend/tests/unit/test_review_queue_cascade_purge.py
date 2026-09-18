@@ -46,6 +46,7 @@ def review_queue():
         "arg_changes": arg_changes,
     }
     ledger_stub.append_commit = MagicMock()
+    ledger_stub.purge_legacy_memory_commits_for_memories = MagicMock(return_value=[])
 
     fakes = {
         "database._client": MagicMock(),
@@ -70,6 +71,9 @@ class _FakeDocRef:
     def update(self, payload):
         self._store[self.path].update(payload)
         self._update_log.append((self.path, dict(payload)))
+
+    def delete(self):
+        self._store.pop(self.path, None)
 
 
 class _FakeDoc:
@@ -362,44 +366,54 @@ def test_purge_drops_pending_items_referencing_deleted_memory(monkeypatch, revie
                 "fact_id": "mem_deleted",
                 "conflict_with": [],
                 "status": "accepted",
+                "reason": "private legacy review explanation",
             },
         },
     )
 
     db = _FakeDb(store)
+    correction_path = f"users/{uid}/memory_corrections/correction-private"
+    unrelated_correction_path = f"users/{uid}/memory_corrections/correction-unrelated"
+    store[correction_path] = {
+        "correction_id": "correction-private",
+        "review_id": "review-hit-fact",
+        "candidate": {"id": "mem_deleted", "content": "deleted correction plaintext"},
+        "evidence_set": [{"source_id": "private-source", "quote": "deleted quote"}],
+        "prior_head_state": [{"fact_id": "mem_deleted", "content": "prior private state"}],
+        "final_correction": {"content": "private replacement"},
+        "reason": "private explanation",
+    }
+    store[unrelated_correction_path] = {
+        "correction_id": "correction-unrelated",
+        "candidate": {"id": "mem_alive", "content": "still retained"},
+    }
     store[f"users/{uid}/memory_review_queue/review-hit-fact"].pop("created_at")
     monkeypatch.setattr(review_queue, "db", db)
 
     purged = review_queue.purge_stale_review_conflicts_for_memories(uid, ["mem_deleted"])
 
     assert sorted(purged) == ["review-hit-conflict", "review-hit-fact", "review-resolved"]
-    dropped = store[f"users/{uid}/memory_review_queue/review-hit-fact"]
-    assert dropped["status"] == "tombstoned"
-    assert dropped["candidate"] == {"id": "mem_deleted"}
-    assert dropped["permitted_uses"] == []
+    assert f"users/{uid}/memory_review_queue/review-hit-fact" not in store
+    assert f"users/{uid}/memory_review_queue/review-hit-conflict" not in store
     assert store[f"users/{uid}/memory_review_queue/review-unrelated"]["status"] == "pending"
-    resolved = store[f"users/{uid}/memory_review_queue/review-resolved"]
-    assert resolved["status"] == "tombstoned"
-    assert resolved["previous_status"] == "accepted"
-    assert resolved["candidate"] == {}
-    assert resolved["permitted_uses"] == []
+    assert f"users/{uid}/memory_review_queue/review-resolved" not in store
+    assert correction_path not in store
+    assert not any(path.startswith(f"users/{uid}/memory_corrections/") and "review-hit-fact" in path for path in store)
+    assert store[unrelated_correction_path]["candidate"]["content"] == "still retained"
     assert db.query_log[0]["filters"] == (("fact_id", "in", ["mem_deleted"]),)
     assert db.query_log[0]["order_fields"] == ("__name__",)
     assert db.query_log[0]["limit"] == 100
     assert db.query_log[1]["filters"] == (("conflict_with", "array_contains_any", ["mem_deleted"]),)
 
-    original_audit = {key: resolved[key] for key in ("previous_status", "reason", "resolved_at", "updated_at")}
     first_update_count = len(db.update_log)
 
     replayed = review_queue.purge_stale_review_conflicts_for_memories(
         uid,
         ["mem_deleted"],
-        reason="different_replay_reason",
     )
 
-    assert sorted(replayed) == ["review-hit-conflict", "review-hit-fact", "review-resolved"]
+    assert replayed == []
     assert len(db.update_log) == first_update_count
-    assert {key: resolved[key] for key in ("previous_status", "reason", "resolved_at", "updated_at")} == original_audit
 
 
 def test_purge_chunks_target_ids_and_pages_matches_in_document_order(monkeypatch, review_queue):
@@ -448,15 +462,16 @@ def test_purge_chunks_target_ids_and_pages_matches_in_document_order(monkeypatch
     )
 
     assert purged == sorted(items)
-    assert len(db.update_log) == len(items)
-    chunk_values = {tuple(entry["filters"][0][2]) for entry in db.query_log}
+    assert not any(path.startswith(f"users/{uid}/memory_review_queue/") for path in store)
+    review_query_log = [entry for entry in db.query_log if entry["filters"]]
+    chunk_values = {tuple(entry["filters"][0][2]) for entry in review_query_log}
     assert chunk_values == {
         tuple(f"mem-{index:03d}" for index in range(30)),
         ("mem-030",),
     }
     first_chunk_pages = [
         entry
-        for entry in db.query_log
+        for entry in review_query_log
         if entry["filters"][0][0] == "fact_id"
         and tuple(entry["filters"][0][2]) == tuple(f"mem-{index:03d}" for index in range(30))
     ]

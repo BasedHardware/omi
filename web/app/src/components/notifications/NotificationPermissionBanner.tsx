@@ -21,18 +21,18 @@ export function NotificationPermissionBanner() {
   // Permission not yet requested
   if (permission === 'default') {
     return (
-      <div className="px-4 py-3 bg-purple-primary/10 border-b border-purple-primary/20">
+      <div className="px-4 py-3 bg-white/[0.08] border-b border-white/25">
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-            <Bell className="w-4 h-4 text-purple-primary" />
+          <div className="w-8 h-8 rounded-full bg-white/[0.14] flex items-center justify-center flex-shrink-0">
+            <Bell className="w-4 h-4 text-text-primary" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-text-primary">
               Enable push notifications
             </p>
             <p className="text-xs text-text-tertiary mt-0.5">
-              Get notified about tasks, daily summaries, and more even when
-              you&apos;re not using Omi
+              Get notified about tasks, daily summaries, and more even when you&apos;re
+              not using Omi
             </p>
             <div className="flex items-center gap-2 mt-2">
               <button
@@ -40,9 +40,9 @@ export function NotificationPermissionBanner() {
                 disabled={isLoading || isRequesting}
                 className={cn(
                   'px-3 py-1.5 rounded-lg text-sm font-medium',
-                  'bg-purple-primary text-white',
-                  'hover:bg-purple-secondary transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'bg-text-primary text-bg-primary',
+                  'hover:bg-text-primary/90 transition-colors',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 {isRequesting ? 'Enabling...' : 'Enable notifications'}
@@ -80,8 +80,7 @@ export function NotificationPermissionBanner() {
               Notifications are blocked
             </p>
             <p className="text-xs text-text-tertiary mt-0.5">
-              To enable notifications, you&apos;ll need to update your browser
-              settings:
+              To enable notifications, you&apos;ll need to update your browser settings:
             </p>
             <ol className="text-xs text-text-tertiary mt-2 space-y-1 list-decimal list-inside">
               <li>Click the lock icon in your browser address bar</li>
@@ -94,8 +93,8 @@ export function NotificationPermissionBanner() {
               rel="noopener noreferrer"
               className={cn(
                 'inline-flex items-center gap-1 mt-2',
-                'text-xs text-purple-primary hover:text-purple-secondary',
-                'transition-colors'
+                'text-xs text-text-primary hover:text-text-secondary',
+                'transition-colors',
               )}
             >
               Learn more

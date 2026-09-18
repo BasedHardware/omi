@@ -8,6 +8,7 @@ final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
     "Desktop/Sources/Chat/AgentBridge.swift",  // query result wire decode
     "Desktop/Sources/Chat/AgentRuntimeProcess.swift",  // JSONL transport decode
     "Desktop/Sources/Chat/AgentClient.swift",  // facade over AgentBridge.QueryResult
+    "Desktop/Sources/Chat/AgentQueryResult.swift",  // QueryResult type + wire decode (extracted from AgentBridge/AgentRuntimeProcess)
   ]
 
   private let forbiddenIdentifiers = [

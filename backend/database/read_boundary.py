@@ -157,6 +157,37 @@ def _parse_strict(
         ) from error
 
 
+def parse_payload_strict(
+    model: ModelParser[T],
+    payload: Mapping[str, Any],
+    *,
+    document_path: str,
+) -> T:
+    """Parse a Firestore-derived payload without bypassing the shared boundary.
+
+    Transaction helpers sometimes need to validate a candidate mapping after a
+    snapshot has been read and before it is written back. Keep those mappings on
+    the same credential-safe error path as direct snapshot reads.
+    """
+
+    try:
+        return _parse(model, payload)
+    except (ValidationError, TypeError) as error:
+        error_types = _error_types(error)
+        error_fields = _error_fields(error)
+        logger.warning(
+            'Malformed Firestore-derived payload path=%s validation_fields=%s validation_types=%s',
+            document_path,
+            error_fields,
+            error_types,
+        )
+        raise MalformedDocError(
+            document_path=document_path,
+            error_types=error_types,
+            error_fields=error_fields,
+        ) from error
+
+
 def _record_drop() -> None:
     record_fallback(
         component='firestore_read',

@@ -51,8 +51,6 @@ class OnboardingKnowledgeGraphStep extends StatelessWidget {
                     trackOpenEvent: false,
                     showAppBar: false,
                     showShareButton: false,
-                    autoRebuildIfEmpty: true,
-                    hideRebuildButtonWhenEmpty: true,
                     initialZoom: 0.72,
                   ),
                 ),

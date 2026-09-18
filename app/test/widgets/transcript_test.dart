@@ -319,6 +319,105 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('a drag started during an in-flight live follow wins and never re-pins', (tester) async {
+      await pumpTranscript(tester);
+
+      // A live tick starts the 500ms follow animation toward the new edge.
+      segments = [
+        ...segments,
+        TranscriptSegment(
+          id: 'live-follow-race',
+          text: List.filled(80, 'new live words').join(' '),
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          start: segments.length.toDouble(),
+          end: segments.length + 1.0,
+          translations: const [],
+        ),
+      ];
+      contentVersion++;
+      await pumpTranscript(tester, settle: false);
+      // Leave the follow mid-flight: the first 500ms pass is still animating.
+      await tester.pump(const Duration(milliseconds: 490));
+
+      // The reader starts dragging up slowly from the live edge. The first
+      // pixels stay inside the at-bottom band where a lost gesture used to be
+      // forgotten and re-pinned by the next live tick.
+      final gesture = await tester.startGesture(tester.getCenter(find.byType(ListView)));
+      for (var step = 0; step < 3; step++) {
+        await gesture.moveBy(const Offset(0, 12));
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+
+      // Another live tick lands while the gesture is still active.
+      segments = [
+        ...segments,
+        TranscriptSegment(
+          id: 'live-follow-race-2',
+          text: List.filled(80, 'more live words').join(' '),
+          speaker: 'SPEAKER_01',
+          isUser: false,
+          personId: null,
+          start: segments.length.toDouble(),
+          end: segments.length + 1.0,
+          translations: const [],
+        ),
+      ];
+      contentVersion++;
+      await pumpTranscript(tester, settle: false);
+      await tester.pump(const Duration(milliseconds: 40));
+
+      for (var step = 0; step < 4; step++) {
+        await gesture.moveBy(const Offset(0, 20));
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+
+      // The drag owns the position: it stays away from the live edge instead
+      // of being yanked back by the competing follow.
+      expect(controller.position.maxScrollExtent - controller.offset, greaterThan(48));
+      expect(scrollState.isAtBottom, isFalse);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // Completing the gesture must not re-pin to the live edge.
+      expect(controller.position.maxScrollExtent - controller.offset, greaterThan(48));
+      expect(scrollState.isAtBottom, isFalse);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+    });
+
+    testWidgets('same-ID growth of the live segment holds an unfollowed reading position', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.pumpAndSettle();
+
+      final preservedOffset = controller.offset;
+      expect(scrollState.isAtBottom, isFalse);
+
+      final last = segments.last;
+      segments = [
+        ...segments.take(segments.length - 1),
+        TranscriptSegment(
+          id: last.id,
+          text: List.filled(80, 'revised live tail text').join(' '),
+          speaker: last.speaker,
+          isUser: last.isUser,
+          personId: last.personId,
+          start: last.start,
+          end: last.end,
+          translations: const [],
+        ),
+      ];
+      contentVersion++;
+      await pumpTranscript(tester);
+
+      expect(controller.offset, closeTo(preservedOffset, 0.1));
+      expect(scrollState.isAtBottom, isFalse);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+    });
+
     testWidgets('same-ID transcript growth keeps following the live edge', (tester) async {
       await pumpTranscript(tester);
 

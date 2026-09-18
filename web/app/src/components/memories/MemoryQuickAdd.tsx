@@ -65,9 +65,9 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
           'flex items-center gap-2 w-full px-3 py-2.5',
           'rounded-lg border border-dashed border-bg-quaternary',
           'text-text-tertiary hover:text-text-secondary',
-          'hover:border-purple-primary/50 hover:bg-bg-tertiary',
+          'hover:border-white/50 hover:bg-bg-tertiary',
           'transition-all duration-150',
-          disabled && 'opacity-50 cursor-not-allowed'
+          disabled && 'opacity-50 cursor-not-allowed',
         )}
       >
         <Plus className="w-4 h-4" />
@@ -83,10 +83,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.15 }}
       onSubmit={handleSubmit}
-      className={cn(
-        'rounded-lg border border-purple-primary/50',
-        'bg-bg-secondary p-3 space-y-3'
-      )}
+      className={cn('rounded-lg border border-white/50', 'bg-bg-secondary p-3 space-y-3')}
     >
       {/* Input */}
       <input
@@ -100,7 +97,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
         className={cn(
           'w-full bg-transparent',
           'text-sm text-text-primary placeholder:text-text-quaternary',
-          'outline-none'
+          'outline-none',
         )}
       />
 
@@ -116,7 +113,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
             'transition-colors',
             visibility === 'public'
               ? 'text-success hover:bg-success/10'
-              : 'text-warning hover:bg-warning/10'
+              : 'text-warning hover:bg-warning/10',
           )}
         >
           {visibility === 'public' ? (
@@ -141,7 +138,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
             className={cn(
               'px-3 py-1 text-xs rounded',
               'text-text-tertiary hover:text-text-secondary',
-              'transition-colors'
+              'transition-colors',
             )}
           >
             Cancel
@@ -151,10 +148,10 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
             disabled={!content.trim() || isSubmitting}
             className={cn(
               'px-3 py-1 text-xs rounded',
-              'bg-purple-primary hover:bg-purple-secondary',
-              'text-white font-medium',
+              'bg-white hover:bg-white/90',
+              'text-black font-medium',
               'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
             {isSubmitting ? 'Adding...' : 'Add Memory'}

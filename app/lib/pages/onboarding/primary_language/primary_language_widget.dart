@@ -134,7 +134,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.deepPurple),
+                borderSide: const BorderSide(color: Colors.white),
               ),
             ),
           ),
@@ -154,9 +154,9 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
 
                       return ListTile(
                         title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
+                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.white) : null,
                         selected: isSelected,
-                        selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
+                        selectedTileColor: Colors.white.withValues(alpha: 0.12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         onTap: () {
                           setState(() {
@@ -279,7 +279,9 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
         // Bottom drawer card - wraps content
         Container(
           width: double.infinity,
-          padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
+          // The SafeArea below adds the system inset; adding it here as well left
+          // twice the inset of dead space under the content on inset devices.
+          padding: const EdgeInsets.fromLTRB(32, 26, 32, 8),
           decoration: const BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),

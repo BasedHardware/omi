@@ -63,7 +63,7 @@ def test_vision_stream_sends_max_completion_tokens():
     ]
 
     with patch.object(cf, '_get_async_openai', lambda: fake_client):
-        asyncio.run(cf.FileChatTool._ask_vision_stream(tool, 'what is this?', files, _Callback()))
+        asyncio.run(cf.FileChatTool._ask_files_stream(tool, 'what is this?', files, _Callback()))
 
     assert 'max_tokens' not in captured
     assert captured['max_completion_tokens'] == 2048

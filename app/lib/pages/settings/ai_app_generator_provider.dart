@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -200,7 +201,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error generating app: $e');
       _state = GenerationState.error;
-      _errorMessage = globalNavigatorKey.currentContext!.l10n.aiGenErrorOccurredWithDetails(e.toString());
+      _errorMessage = globalNavigatorKey.currentContext!.l10n.aiGenErrorOccurredWithDetails(readableError(e));
       notifyListeners();
       return false;
     }

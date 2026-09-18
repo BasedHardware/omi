@@ -112,6 +112,26 @@ final class UntrustedNotificationContextTests: XCTestCase {
     XCTAssertTrue(flat(guardText).lowercased().contains("untrusted"))
   }
 
+  func testClassificationInstructionIsNeverQuotedInsideTheUntrustedVoiceWrapper() {
+    let card = typedBlock(body: "You told Sarah you'd send the deck")
+    let wrapped = NotchCardVoiceDelivery.contextBlock(for: card)
+    XCTAssertFalse(
+      wrapped.contains("[[interject:"),
+      "classification is turn instruction — wrapping it tells the hub to ignore it")
+    let composed = InterjectVoiceFeedbackRouting.composePromptSuffix(
+      cardBlock: card, attachClassification: true)
+    XCTAssertTrue(composed.hasPrefix(card))
+    XCTAssertTrue(composed.contains("</floating_bar_notification_context>"))
+    let afterClose = composed.components(separatedBy: "</floating_bar_notification_context>")[1]
+    XCTAssertTrue(
+      afterClose.contains(InterjectVoiceFeedbackRouting.classificationInstruction),
+      "classification must sit outside the untrusted block")
+    XCTAssertTrue(afterClose.contains("record_interject_feedback"))
+    XCTAssertFalse(
+      afterClose.contains("[[interject:"),
+      "the hub instruction must not re-teach a speakable token")
+  }
+
   // MARK: - Suggestion grounding
 
   /// Grounding carries raw OCR from pages the user viewed — the same untrusted class.

@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Мои апликации",
+    "myApps": "Создадено од мене",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -1780,10 +1780,6 @@
     "openSettings": "Отворете поставки",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "Сакате да использите некое друго име?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "Кое е вашето име?",
     "@whatsYourName": {
@@ -10780,5 +10776,62 @@
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
-    "accountCutoverOpenStore": "Otevřít obchod"
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeAbout": "За: {title}",
+    "askAboutThisConversation": "Прашај за ова",
+    "sendRawAudioToOmi": "Испраќај необработено аудио до Omi",
+    "sendRawAudioToOmiDescription": "Исклучете за да спречите испраќање необработено аудио до Omi. Транскриптите и податоците потребни за облачните функции сè уште може да се испраќаат до Omi.",
+    "findDevice": "Пронајди",
+    "diagnosticsShareFailed": "Дијагностиката не можеше да се сподели. Обидете се повторно.",
+    "appDisabledTitle": "Оваа апликација е оневозможена и не може да се инсталира.",
+    "appDisabledWebhookFailures": "Нејзината крајна точка не работеше 72 часа по ред, па испораките беа запрени.",
+    "appDisabledGeneric": "Ја оневозможи Omi.",
+    "appDisabledOwnerHint": "Прво поправете ја крајната точка — повторното овозможување повторно ја проверува секоја конфигурирана URL адреса.",
+    "appReEnable": "Овозможи повторно",
+    "appReEnableFailedTitle": "Повторното овозможување не успеа",
+    "appReEnableFailedBody": "Оваа апликација не можеше повторно да се овозможи. Обидете се повторно.",
+    "appDisabledOn": "Оневозможена на {date}.",
+    "appDisabledLastError": "Последна грешка: {error}.",
+    "prerecordedTranscript": "Претходно снимено",
+    "pendantRecordingSyncBlocked": "Pendant сè уште снима, па складираното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
+    "pendantFullSyncBlocked": "Меморијата на Pendant е полна и тој сè уште е во режим на снимање, па зачуваното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
+    "conversationsNotCapturedCount": "Не е снимено ({count})",
+    "transcriptionNoAudio": "Транскрипцијата не прима аудио",
+    "chatBlockTask": "Задача",
+    "chatBlockGoal": "Цел",
+    "chatBlockConversation": "Разговор",
+    "chatBlockMemory": "Спомен",
+    "chatBlockQuestion": "Прашање",
+    "chatBlockOpenInGoals": "Отвори во Цели",
+    "chatBlockOpenConversation": "Отвори разговор",
+    "chatBlockOpenInMemories": "Отвори во Спомени",
+    "chatBlockUnavailable": "Веќе не е достапно",
+    "chatBlockRecommendedNextSteps": "Препорачани следни чекори",
+    "couldNotLoadMemories": "Не можеа да се вчитаат спомените",
+    "couldNotLoadKnowledgeGraph": "Не можеше да се вчита графот на знаење",
+    "speechProfileOwnerTitle": "Гласовен профил на {name}",
+    "play": "Пушти",
+    "redo": "Сними повторно",
+    "answerWithYourVoice": "Одговорете со глас:",
+    "speechProfileTopicLocation": "Каде живеете?",
+    "speechProfileTopicWork": "Што работите?",
+    "speechProfileTopicGoal": "Која е вашата долгорочна цел?",
+    "speechToTextUnavailableDesc": "Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.",
+    "memoryHistoryPartial": "Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.",
+    "memoryHistory": "Историја",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Допрете + за да започнете со снимање",
+    "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
+    "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.",
+    "home": "Почетна",
+    "failedToUpdateBaselineStatus": "Неуспешно ажурирање на основниот статус.",
+    "memoryAllowUse": "Дозволи употреба",
+    "memoryDontUse": "Не користи",
+    "unstarConversation": "Отстрани ѕвезда од разговорот",
+    "moreOptions": "Повеќе опции",
+    "filterByDate": "Филтрирај по датум",
+    "memoryGraph": "Граф на спомени",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}"
 }

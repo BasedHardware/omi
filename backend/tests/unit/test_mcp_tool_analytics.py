@@ -205,16 +205,16 @@ def test_tool_execution_error_analytics_preserves_error_semantics(monkeypatch):
     ]
 
 
-def test_unexpected_tool_errors_are_recorded_and_propagated(monkeypatch):
+def test_unexpected_tool_errors_are_recorded_and_return_retryable_json_rpc_error(monkeypatch):
     events = []
     monkeypatch.setattr(mcp_sse, "schedule_mcp_tool_call", lambda **event: events.append(event))
 
     with patch.object(mcp_sse, "execute_tool", side_effect=RuntimeError("private failure")):
-        with pytest.raises(RuntimeError, match="private failure"):
-            mcp_sse.handle_mcp_message(
-                _auth(), {"id": 7, "method": "tools/call", "params": {"name": "get_memories", "arguments": {}}}
-            )
+        response, _ = mcp_sse.handle_mcp_message(
+            _auth(), {"id": 7, "method": "tools/call", "params": {"name": "get_memories", "arguments": {}}}
+        )
 
+    assert response['error'] == {'code': -32009, 'message': 'Tool temporarily unavailable. Retry shortly.'}
     assert events[0]["outcome"] == "error"
     assert events[0]["authorization_outcome"] == "not_applicable"
     assert events[0]["error_category"] == "internal"

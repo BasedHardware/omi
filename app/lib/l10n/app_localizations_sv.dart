@@ -244,7 +244,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get searchConversations => 'Sök konversationer...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count valda';
   }
 
@@ -323,7 +323,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get searchApps => 'Sök appar...';
 
   @override
-  String get myApps => 'Mina appar';
+  String get myApps => 'Skapad av mig';
 
   @override
   String get installedApps => 'Installerade appar';
@@ -1861,9 +1861,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get openSettings => 'Öppna inställningar';
 
   @override
-  String get wantDifferentName => 'Vill du kallas något annat?';
-
-  @override
   String get whatsYourName => 'Vad heter du?';
 
   @override
@@ -2042,6 +2039,19 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get memoryDeleted => 'Minne borttaget.';
+
+  @override
+  String get memoryHistoryPartial =>
+      'En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.';
+
+  @override
+  String get memoryHistory => 'Historik';
+
+  @override
+  String get memoryAllowUse => 'Tillåt användning';
+
+  @override
+  String get memoryDontUse => 'Använd inte';
 
   @override
   String get undo => 'Ångra';
@@ -2652,9 +2662,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get reviewAndManageConversations => 'Granska och hantera dina inspelade konversationer';
 
   @override
-  String get startCapturingConversations => 'Börja fånga konversationer med din Omi-enhet för att se dem här.';
-
-  @override
   String get useMobileAppToCapture => 'Använd din mobilapp för att spela in ljud';
 
   @override
@@ -3151,9 +3158,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transcribing => 'Transkriberar...';
-
-  @override
-  String get transcriptionFailed => 'Transkription misslyckades';
 
   @override
   String get discardedConversation => 'Kasserat samtal';
@@ -3679,10 +3683,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Förbereder systemljudupptagning';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'Klicka på knappen för att fånga ljud för livetranskriptioner, AI-insikter och automatisk sparning.';
-
-  @override
   String get reconnecting => 'Återansluter...';
 
   @override
@@ -3728,9 +3728,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'Starta inspelning för att se livetranskription';
-
-  @override
   String get paused => 'Pausad';
 
   @override
@@ -3749,9 +3746,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'Konfigurerar systemljudupptagning';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'Fångar ljud och genererar transkription';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'Klicka för att börja spela in systemljud';
@@ -8767,6 +8761,43 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
+
+  @override
   String get willSyncAutomatically => 'synkroniseras automatiskt';
 
   @override
@@ -9844,4 +9875,226 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Öppna butik';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Om: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Fråga om detta';
+
+  @override
+  String get sendRawAudioToOmi => 'Skicka rått ljud till Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Stäng av för att förhindra att rått ljud skickas till Omi. Transkriptioner och data som molnfunktioner behöver kan fortfarande skickas till Omi.';
+
+  @override
+  String get findDevice => 'Hitta';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiken kunde inte delas. Försök igen.';
+
+  @override
+  String get appDisabledTitle => 'Den här appen är inaktiverad och kan inte installeras.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Dess endpoint misslyckades 72 timmar i rad, så leveranserna stoppades.';
+
+  @override
+  String get appDisabledGeneric => 'Den inaktiverades av Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Åtgärda endpointen först — vid återaktivering kontrolleras varje konfigurerad URL på nytt.';
+
+  @override
+  String get appReEnable => 'Återaktivera';
+
+  @override
+  String get appReEnableFailedTitle => 'Kunde inte återaktivera';
+
+  @override
+  String get appReEnableFailedBody => 'Den här appen kunde inte återaktiveras. Försök igen.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Inaktiverad den $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Senaste fel: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Förinspelat';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant spelar fortfarande in, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera igen.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Lagringen på din Pendant är full och den är fortfarande i inspelningsläge, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera sedan igen.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Inte fångat ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Röstprofil för $name';
+  }
+
+  @override
+  String get play => 'Spela upp';
+
+  @override
+  String get redo => 'Spela in igen';
+
+  @override
+  String get answerWithYourVoice => 'Svara med din röst:';
+
+  @override
+  String get speechProfileTopicLocation => 'Var bor du?';
+
+  @override
+  String get speechProfileTopicWork => 'Vad jobbar du med?';
+
+  @override
+  String get speechProfileTopicGoal => 'Vad är ditt långsiktiga mål?';
+
+  @override
+  String get transcriptionNoAudio => 'Transkrieringen tar inte emot ljud';
+
+  @override
+  String get tapPlusToStartRecording => 'Tryck på + för att börja spela in';
+
+  @override
+  String get chatBlockTask => 'Uppgift';
+
+  @override
+  String get chatBlockGoal => 'Mål';
+
+  @override
+  String get chatBlockConversation => 'Konversation';
+
+  @override
+  String get chatBlockMemory => 'Minne';
+
+  @override
+  String get chatBlockQuestion => 'Fråga';
+
+  @override
+  String get chatBlockOpenInGoals => 'Öppna i Mål';
+
+  @override
+  String get chatBlockOpenConversation => 'Öppna konversation';
+
+  @override
+  String get chatBlockOpenInMemories => 'Öppna i Minnen';
+
+  @override
+  String get chatBlockUnavailable => 'Inte längre tillgänglig';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Rekommenderade nästa steg';
+
+  @override
+  String get couldNotLoadMemories => 'Kunde inte läsa in minnen';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kunde inte läsa in kunskapsgrafen';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.';
+
+  @override
+  String get processingTakingLonger => 'Fortfarande igång — det tar längre tid än vanligt.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder.';
+
+  @override
+  String get home => 'Hem';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Det gick inte att uppdatera baslinjestatus.';
+
+  @override
+  String get unstarConversation => 'Ta bort stjärna från konversation';
+
+  @override
+  String get moreOptions => 'Fler alternativ';
+
+  @override
+  String get filterByDate => 'Filtrera efter datum';
+
+  @override
+  String get memoryGraph => 'Minnesgraf';
+
+  @override
+  String voiceIntroduction(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try another prompt',
+        'start': 'Start speaking',
+        'skipPrompt': 'Skip this prompt',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint':
+            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
+        'saveVoice': 'Save voice profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set up my voice later',
+        'keep': 'Save selected answers',
+        'without': 'Continue without saving answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add another sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and finish',
+        'retryRemaining': 'Retry remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue with what is saved',
+        'reviewAnswers': 'Review answers',
+        'originalGoal': 'Use original wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 }
