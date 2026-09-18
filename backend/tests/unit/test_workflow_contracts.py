@@ -472,10 +472,10 @@ def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
     # installs Flutter without this pin (or a mismatched version) fails
     # because the two counts diverge. The floor is the historical four
     # (generated-files, analyze-and-test, journeys-hermetic,
-    # android-compile-smoke); android-unit-tests adds one more.
+    # android-compile-smoke); android-unit-tests and ios-compile-check add two.
     action_count = mobile_checks.count("uses: subosito/flutter-action")
     assert action_count == mobile_checks.count(pinned)
-    assert action_count >= 5
+    assert action_count >= 6
 
 
 def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_parallel():
@@ -544,6 +544,55 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     assert "dart-tests-kiritimati" not in jobs
     assert "Pacific/Kiritimati" not in mobile_checks
     assert "Pacific/Pago_Pago" not in mobile_checks
+
+
+def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_free():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    detect_changes = (repo / ".github/actions/detect-changes/action.yml").read_text(encoding="utf-8")
+    jobs = _github_jobs(mobile_checks)
+    ios = jobs["ios-compile-check"]
+    changes = jobs["changes"]
+    resolver = _load_repo_script("pre_push_ci_prediction")
+
+    assert "name: iOS Compile Check" in mobile_checks
+    assert "runs-on: macos-26" in ios
+    assert "needs: changes" in ios
+    assert "has_app_ios_compile" in ios
+    assert "has_app_ios_compile" in changes
+    assert "has_app_ios_compile:" in detect_changes
+    assert "timeout-minutes: 40" in ios
+    assert "fetch-depth: 1" in ios
+    assert "run-swift-ci.sh --select-toolchain" in ios
+    assert "hashFiles('app/ios/Podfile.lock')" in ios
+    assert "GoogleService-Info-Local.plist" in ios
+    assert "flutter build ios --simulator --debug --flavor dev --no-codesign -d \"$IOS_SIMULATOR_UDID\"" in ios
+    assert "simctl" in ios
+    assert "IOS_SIMULATOR_UDID" in ios
+    assert "${{ secrets." not in ios
+    assert "ios-compile-check.yml" not in mobile_checks
+
+    dart = "app/lib/pages/chat/page.dart"
+    dart_outputs = resolver.github_outputs(
+        resolver.resolve_impact([dart], read_text=lambda path: {dart: "class ChatPage {}"}.get(path))
+    )
+    assert dart_outputs["has_app_ios_compile"] == "false"
+    assert dart_outputs["has_app_compile_smoke"] == "true"
+
+    swift = "app/ios/Runner/AppDelegate.swift"
+    swift_outputs = resolver.github_outputs(resolver.resolve_impact([swift]))
+    assert swift_outputs["has_app_ios_compile"] == "true"
+
+    workflow = ".github/workflows/mobile-app-checks.yml"
+    workflow_outputs = resolver.github_outputs(resolver.resolve_impact([workflow]))
+    assert workflow_outputs["has_app_ios_compile"] == "true"
+
+    # Stacked PRs whose base is not main must still start this workflow.
+    # `pull_request: branches: main` skipped the entire run for #14358.
+    header = mobile_checks.split("jobs:", 1)[0]
+    assert "pull_request:" in header
+    assert "push:\n    branches: main" in header
+    assert "pull_request:\n    branches:" not in header
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():
