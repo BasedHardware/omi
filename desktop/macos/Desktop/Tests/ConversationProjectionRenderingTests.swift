@@ -48,7 +48,7 @@ final class ConversationProjectionRenderingTests: XCTestCase {
       as [[String: Any]]
     {
       let conversation = try ProjectionRenderingFixture.decode {
-        var segments = $0["transcript_segments"] as! [[String: Any]]
+        var segments = ProjectionRenderingFixture.objects($0, "transcript_segments")
         segments[0].merge(change) { _, new in new }
         $0["transcript_segments"] = segments
       }
@@ -86,7 +86,7 @@ final class ConversationProjectionRenderingTests: XCTestCase {
       ["events": [["title": "Cloud event", "start": "2026-09-18T00:00:00Z"]]],
     ] {
       let conversation = try ProjectionRenderingFixture.decode {
-        var structured = $0["structured"] as! [String: Any]
+        var structured = ProjectionRenderingFixture.object($0, "structured")
         structured["title"] = "Cloud title"
         structured.merge(enrichment) { _, new in new }
         $0["structured"] = structured
@@ -99,14 +99,14 @@ final class ConversationProjectionRenderingTests: XCTestCase {
 
   func testActionMergePreservesCompletedAndReopenedCanonicalItems() throws {
     let conversation = try ProjectionRenderingFixture.decode {
-      var structured = $0["structured"] as! [String: Any]
+      var structured = ProjectionRenderingFixture.object($0, "structured")
       structured["action_items"] = [
         ["description": "Send notes", "completed": true, "target_task_id": "task-1"],
         ["description": "Book room", "completed": false],
         ["description": "User added", "completed": false],
       ]
       $0["structured"] = structured
-      var projection = $0["client_processing"] as! [String: Any]
+      var projection = ProjectionRenderingFixture.object($0, "client_processing")
       projection["action_items"] = [
         ["description": "Send notes", "completed": false],
         ["description": "Book room", "completed": true],
@@ -136,7 +136,7 @@ final class ConversationProjectionRenderingTests: XCTestCase {
     let current = try ProjectionRenderingFixture.decode()
     let server = try ProjectionRenderingFixture.decode {
       $0.removeValue(forKey: "transcript_segments")
-      var projection = $0["client_processing"] as! [String: Any]
+      var projection = ProjectionRenderingFixture.object($0, "client_processing")
       projection["transcript_sha256"] = String(repeating: "a", count: 64)
       $0["client_processing"] = projection
     }
@@ -165,6 +165,32 @@ final class ConversationProjectionRenderingTests: XCTestCase {
 
 /// Python v5 known-answer digest, shared with TranscriptHashTests; never computed by the code under test.
 enum ProjectionRenderingFixture {
+  /// Read a nested fixture object without a force cast, which SwiftLint bans.
+  ///
+  /// A silent `?? [:]` would be worse than the force cast it replaces: a
+  /// mistyped key would mutate nothing, the fixture would decode unchanged,
+  /// and the assertion would pass for the wrong reason. A miss is a test
+  /// failure, reported at the caller.
+  static func object(
+    _ json: [String: Any], _ key: String, file: StaticString = #filePath, line: UInt = #line
+  ) -> [String: Any] {
+    guard let value = json[key] as? [String: Any] else {
+      XCTFail("fixture key '\(key)' is not an object", file: file, line: line)
+      return [:]
+    }
+    return value
+  }
+
+  static func objects(
+    _ json: [String: Any], _ key: String, file: StaticString = #filePath, line: UInt = #line
+  ) -> [[String: Any]] {
+    guard let value = json[key] as? [[String: Any]] else {
+      XCTFail("fixture key '\(key)' is not an array of objects", file: file, line: line)
+      return []
+    }
+    return value
+  }
+
   static func decode(_ mutate: (inout [String: Any]) -> Void = { _ in }) throws -> ServerConversation {
     var json: [String: Any] = [
       "id": "projection-test", "created_at": "2026-09-18T00:00:00Z", "updated_at": "2026-09-18T00:01:00Z",

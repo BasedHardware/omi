@@ -79,7 +79,7 @@ final class ConversationProjectionPersistenceTests: XCTestCase {
     let nextList = try ProjectionRenderingFixture.decode {
       $0["updated_at"] = "2026-09-18T00:04:00Z"
       $0.removeValue(forKey: "transcript_segments")
-      var projection = $0["client_processing"] as! [String: Any]
+      var projection = ProjectionRenderingFixture.object($0, "client_processing")
       projection["transcript_sha256"] = String(repeating: "a", count: 64)
       $0["client_processing"] = projection
     }
@@ -92,7 +92,7 @@ final class ConversationProjectionPersistenceTests: XCTestCase {
 
   func testOlderCloudCannotFillEmptyFieldsOfNewerProjection() async throws {
     let projected = try ProjectionRenderingFixture.decode {
-      var projection = $0["client_processing"] as! [String: Any]
+      var projection = ProjectionRenderingFixture.object($0, "client_processing")
       projection["structure"] = ["title": "Local", "overview": "", "category": "other"]
       projection["action_items"] = []
       $0["client_processing"] = projection
