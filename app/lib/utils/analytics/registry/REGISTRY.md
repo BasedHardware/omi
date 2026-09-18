@@ -19,7 +19,9 @@ C8 owns unadopted legacy events, including Memory Created/getTranscript statisti
 C7 makes no privacy claim for them. Unsafe events need reviewed replacements,
 not byte-preserving migration. The pending emission oracle checks literal sink
 payloads through both ready and pre-init queues; active constructor tests alone
-prove only type safety.
+prove only type safety. Oracle imports restrict the legacy manager to
+AnalyticsManager: TypedEvents must resolve through the direct registry library,
+not the manager’s convenience re-export.
 The raw-call scanner checks known analytics receivers in adopted files. Aliases, dynamic dispatch and legacy manager methods can evade this
 lexical tripwire; it is not data-flow proof. TypedEvents.emit alone may make one
 AnalyticsManager().track call; direct SDK capture is forbidden there. Generated sealed
