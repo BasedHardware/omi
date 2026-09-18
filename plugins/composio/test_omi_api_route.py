@@ -1,0 +1,82 @@
+"""Hermetic regression test for the Composio memory integration route."""
+
+import importlib.util
+from pathlib import Path
+import sys
+from types import ModuleType, SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+
+def load_module():
+    fastapi = ModuleType("fastapi")
+
+    class APIRouter:
+        def __init__(self, **_kwargs):
+            pass
+
+        def post(self, *_args, **_kwargs):
+            return lambda handler: handler
+
+        get = post
+
+    fastapi.APIRouter = APIRouter
+    fastapi.Depends = lambda value: value
+    fastapi.HTTPException = type("HTTPException", (Exception,), {})
+    fastapi.Request = type("Request", (), {})
+    fastapi.status = SimpleNamespace(HTTP_200_OK=200, HTTP_500_INTERNAL_SERVER_ERROR=500)
+
+    pydantic = ModuleType("pydantic")
+    pydantic.BaseModel = type("BaseModel", (), {})
+    dotenv = ModuleType("dotenv")
+    dotenv.load_dotenv = lambda: None
+
+    requests = ModuleType("requests")
+    requests.exceptions = SimpleNamespace(RequestException=RuntimeError)
+    requests.post = lambda *args, **kwargs: None
+
+    src = ModuleType("src")
+    src.__path__ = []
+    db = ModuleType("src.db")
+    db.get_pending_memories = lambda *_args, **_kwargs: []
+    db.update_memory_status = lambda *_args, **_kwargs: None
+    db.get_all_memories = lambda *_args, **_kwargs: []
+
+    spec = importlib.util.spec_from_file_location("src.omi_api", Path(__file__).parent / "src" / "omi_api.py")
+    module = importlib.util.module_from_spec(spec)
+    with patch.dict(
+        sys.modules,
+        {
+            "fastapi": fastapi,
+            "pydantic": pydantic,
+            "dotenv": dotenv,
+            "requests": requests,
+            "src": src,
+            "src.db": db,
+        },
+    ):
+        spec.loader.exec_module(module)
+    return module
+
+
+app = load_module()
+
+
+class OmiApiRouteTests(unittest.TestCase):
+    def test_create_fact_posts_to_memories_route(self):
+        app.APP_ID = "app-1"
+        app.API_KEY = "test-key"
+        response = SimpleNamespace(status_code=200, raise_for_status=lambda: None)
+
+        with patch.object(app.requests, "post", return_value=response) as post:
+            self.assertTrue(app.create_fact("user-1", "A memory", "other", "notion"))
+
+        post.assert_called_once()
+        url = post.call_args.args[0]
+        self.assertEqual(url, "https://api.omi.me/v2/integrations/app-1/user/memories?uid=user-1")
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer test-key")
+        self.assertEqual(post.call_args.kwargs["json"], {"text": "A memory", "text_source": "other", "text_source_spec": "notion"})
+
+
+if __name__ == "__main__":
+    unittest.main()

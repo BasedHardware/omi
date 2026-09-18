@@ -58,7 +58,9 @@ def create_fact(user_id: str, text: str, source: str = "other", source_spec: Opt
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    url = f"{API_BASE_URL}/{APP_ID}/user/facts?uid={user_id}"
+    # Facts and memories share the integration API contract; the backend route
+    # is named /user/memories (the /user/facts path does not exist).
+    url = f"{API_BASE_URL}/{APP_ID}/user/memories?uid={user_id}"
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
     payload = {
