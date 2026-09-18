@@ -653,10 +653,7 @@ class AnalyticsManager {
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track(
-      'Device Connected',
-      properties: _deviceConnectionEventProperties(device),
-    );
+    track('Device Connected', properties: _deviceConnectionEventProperties(device));
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
   }
@@ -664,10 +661,7 @@ class AnalyticsManager {
   void devicePaired(String firstPairedAt) {
     final device = _preferences.btDevice;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track(
-      'Device Paired',
-      properties: _deviceConnectionEventProperties(device),
-    );
+    track('Device Paired', properties: _deviceConnectionEventProperties(device));
     _setUserPropertiesBatch({
       'has_paired_device': true,
       'first_paired_at': firstPairedAt,
@@ -912,10 +906,7 @@ class AnalyticsManager {
 
   void speechProfileUploadFailed({String? reason, int? statusCode}) => track(
         speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadFailed),
-        properties: {
-          if (reason != null) 'reason': reason,
-          if (statusCode != null) 'status_code': statusCode,
-        },
+        properties: {if (reason != null) 'reason': reason, if (statusCode != null) 'status_code': statusCode},
       );
 
   void speechProfileEmbeddingStored() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.embeddingStored));

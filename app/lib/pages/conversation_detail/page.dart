@@ -1384,9 +1384,10 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                           onEditCancelled: (_) => PlatformManager.instance.analytics.editSummaryCancelled(),
                           onSaveSummarySelection: (selection, newContent) {
                             PlatformManager.instance.analytics.editSummarySaved();
-                            context
-                                .read<ConversationDetailProvider>()
-                                .saveEditingSummarySelection(selection, newContent);
+                            context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                  selection,
+                                  newContent,
+                                );
                           },
                         ),
                   const SliverToBoxAdapter(child: GetGeolocationWidgets()),

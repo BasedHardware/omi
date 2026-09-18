@@ -8,23 +8,17 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 
 void main() {
-  final fixture = jsonDecode(
-    File('${_repoRoot().path}/contracts/parity/conversation_summary.json').readAsStringSync(),
-  ) as Map<String, dynamic>;
+  final fixture = jsonDecode(File('${_repoRoot().path}/contracts/parity/conversation_summary.json').readAsStringSync())
+      as Map<String, dynamic>;
 
   for (final raw in fixture['cases'] as List<dynamic>) {
     final testCase = raw as Map<String, dynamic>;
     test(testCase['id'] as String, () {
       final conversationJson = testCase['conversation'] as Map<String, dynamic>;
-      final structured = Structured.fromJson(
-        Map<String, dynamic>.from(conversationJson['structured'] as Map),
-      );
+      final structured = Structured.fromJson(Map<String, dynamic>.from(conversationJson['structured'] as Map));
       final appResults = ((conversationJson['apps_results'] as List<dynamic>?) ?? const []).map((rawResult) {
         final result = rawResult as Map<String, dynamic>;
-        return AppResponse(
-          result['content'] as String,
-          appId: result['app_id'] as String?,
-        );
+        return AppResponse(result['content'] as String, appId: result['app_id'] as String?);
       }).toList(growable: false);
       final conversation = ServerConversation(
         id: 'summary-contract',

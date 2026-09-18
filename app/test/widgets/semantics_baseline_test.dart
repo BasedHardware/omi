@@ -84,9 +84,7 @@ void main() {
     try {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: SearchBar(hintText: 'Search memories...'),
-          ),
+          home: Scaffold(body: SearchBar(hintText: 'Search memories...')),
         ),
       );
 
