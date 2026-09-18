@@ -528,6 +528,9 @@ class CaptureController extends ChangeNotifier
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
+  DateTime? _lastButtonActionTime; // Debounce timestamp for button operations
+  static const _buttonActionDebounce = Duration(milliseconds: 400);
+  bool _isForceProcessing = false; // Mutex guard for forceProcessingCurrentConversation
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
 
   StreamSubscription? _storageStream;
@@ -592,7 +595,17 @@ class CaptureController extends ChangeNotifier
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
-    if (device == null) _endOfflineSession();
+    if (device == null) {
+      _endOfflineSession();
+      _bleButtonStream?.cancel();
+      _bleButtonStream = null;
+      _voiceCommandTimeoutTimer?.cancel();
+      _voiceCommandTimeoutTimer = null;
+      _voiceCommandSession = null;
+      _commandBytes = [];
+      _isProcessingButtonEvent = false;
+      _lastButtonActionTime = null;
+    }
     notifyListeners();
   }
 
@@ -952,28 +965,38 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
-    if (data.isEmpty) {
-      Logger.debug("voice frames is empty");
-      return;
-    }
+  Future<void> _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
+    try {
+      if (data.isEmpty) {
+        Logger.debug("voice frames is empty");
+        return;
+      }
 
-    if (_recordingDevice == null) {
-      Logger.debug("Recording device is null, cannot process voice command");
-      return;
-    }
+      // Filter out accidental clicks / jitter (< 10 frames, ~500ms)
+      if (data.length < 10) {
+        Logger.debug("Voice command audio too short (${data.length} frames), dropping to avoid ghost query");
+        return;
+      }
 
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    await externalActions.sendVoiceMessageStreamToServer(
-      data,
-      onFirstChunkRecived: () {
-        _playSpeakerHaptic(deviceId, 2);
-      },
-      codec: codec,
-      // Device-button voice → speak the reply aloud (BG/lock-screen safe).
-      // Gated by _preferences.voiceResponseEnabled inside the service.
-      playResponseAudio: true,
-    );
+      if (_recordingDevice == null) {
+        Logger.debug("Recording device is null, cannot process voice command");
+        return;
+      }
+
+      BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+      await externalActions.sendVoiceMessageStreamToServer(
+        data,
+        onFirstChunkRecived: () {
+          _playSpeakerHaptic(deviceId, 2);
+        },
+        codec: codec,
+        // Device-button voice → speak the reply aloud (BG/lock-screen safe).
+        // Gated by _preferences.voiceResponseEnabled inside the service.
+        playResponseAudio: true,
+      );
+    } catch (e, stack) {
+      Logger.debug("Error processing voice command bytes: $e\n$stack");
+    }
   }
 
   // Start a 15s timeout timer for voice commands - auto-ends if user forgets to tap again
@@ -1004,10 +1027,8 @@ class CaptureController extends ChangeNotifier
       deviceId,
       onButtonReceived: (List<int> value) {
         final snapshot = List<int>.from(value);
-        if (snapshot.isEmpty || snapshot.length < 4) return;
-        var buttonState = ByteData.view(
-          Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-        ).getUint32(0);
+        if (snapshot.length < 4) return;
+        final buttonState = ByteData.sublistView(Uint8List.fromList(snapshot)).getUint32(0, Endian.little);
         Logger.debug("device button $buttonState");
 
         // Intercept for interactive device onboarding
@@ -1021,83 +1042,27 @@ class CaptureController extends ChangeNotifier
           }
         }
 
-        // double tap
-        if (buttonState == 2) {
-          Logger.debug("Double tap detected");
-
-          // Guard: ignore if already processing a button event
-          if (_isProcessingButtonEvent) {
-            Logger.debug("Double tap: already processing, ignoring");
-            return;
-          }
-
-          int doubleTapAction = _preferences.doubleTapAction;
-
-          if (doubleTapAction == 1) {
-            // Pause/resume recording
-            Logger.debug("Double tap: toggling pause/mute");
-            _isProcessingButtonEvent = true;
-            if (_isPaused) {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error resuming device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            } else {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error pausing device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            }
-          } else if (doubleTapAction == 2) {
-            // Star ongoing conversation (doesn't end it)
-            Logger.debug("Double tap: marking conversation for starring");
-            if (!_starOngoingConversation) {
-              markConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-              // Haptic feedback to confirm
-              HapticFeedback.mediumImpact();
-            } else {
-              // Toggle off if already marked
-              unmarkConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-              HapticFeedback.lightImpact();
-            }
-          } else {
-            // End conversation and process (default)
-            Logger.debug("Double tap: processing conversation");
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
-            forceProcessingCurrentConversation();
-          }
+        // Single tap (buttonState == 1)
+        if (buttonState == 1) {
+          Logger.debug("Single tap detected");
+          final action = _preferences.singlePressAction;
+          _executeButtonAction(action, deviceId, eventType: 'single_press');
           return;
         }
 
-        // Single tap (buttonState == 1) - toggle voice question mode
-        // Tap once to start, tap again to end
-        if (buttonState == 1) {
-          debugPrint("Single tap detected");
-          if (_voiceCommandSession == null) {
-            // Start voice question session (new toggle mode)
-            debugPrint("Starting voice question session (toggle mode)");
-            // Cut off any in-flight voice playback from a prior reply so the
-            // new recording starts clean.
-            if (OmiVoicePlaybackService.instance.isSpeaking) {
-              OmiVoicePlaybackService.instance.interrupt();
-            }
-            _voiceCommandSession = DateTime.now();
-            _commandBytes = [];
-            _startVoiceCommandTimeout(deviceId);
-            _playSpeakerHaptic(deviceId, 1);
-          } else {
-            // End on second tap
-            debugPrint("Ending voice question session (toggle mode)");
-            _endVoiceCommandSession(deviceId);
-          }
+        // Double tap (buttonState == 2)
+        if (buttonState == 2) {
+          Logger.debug("Double tap detected");
+          final action = _preferences.doublePressAction;
+          _executeButtonAction(action, deviceId, eventType: 'double_press');
+          return;
+        }
+
+        // Triple tap (buttonState == 6)
+        if (buttonState == 6) {
+          Logger.debug("Triple tap detected");
+          final action = _preferences.triplePressAction;
+          _executeButtonAction(action, deviceId, eventType: 'triple_press');
           return;
         }
 
@@ -1118,6 +1083,97 @@ class CaptureController extends ChangeNotifier
         }
       },
     );
+  }
+
+  Future<void> _executeButtonAction(int action, String deviceId, {required String eventType}) async {
+    final now = DateTime.now();
+    if (_lastButtonActionTime != null && now.difference(_lastButtonActionTime!) < _buttonActionDebounce) {
+      Logger.debug("Button action debounce active ($eventType), ignoring event");
+      return;
+    }
+    _lastButtonActionTime = now;
+
+    if (_isProcessingButtonEvent) {
+      Logger.debug("Button action: already processing another action, ignoring $eventType");
+      return;
+    }
+
+    _isProcessingButtonEvent = true;
+    Logger.debug("Executing button action $action for event: $eventType");
+
+    try {
+      switch (action) {
+        case 0:
+          // End conversation and process
+          Logger.debug("Button action: processing conversation");
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+          await forceProcessingCurrentConversation().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              Logger.debug("forceProcessingCurrentConversation timed out");
+            },
+          );
+          break;
+        case 1:
+          // Pause/resume recording (Mute/Unmute)
+          Logger.debug("Button action: toggling pause/mute");
+          if (_isPaused) {
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+            await resumeDeviceRecording().timeout(
+              const Duration(seconds: 3),
+              onTimeout: () => Logger.debug("resumeDeviceRecording timed out"),
+            );
+          } else {
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+            await pauseDeviceRecording().timeout(
+              const Duration(seconds: 3),
+              onTimeout: () => Logger.debug("pauseDeviceRecording timed out"),
+            );
+          }
+          break;
+        case 2:
+          // Star ongoing conversation (doesn't end it)
+          Logger.debug("Button action: marking conversation for starring");
+          if (!_starOngoingConversation) {
+            markConversationForStarring();
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+            HapticFeedback.mediumImpact();
+          } else {
+            unmarkConversationForStarring();
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+            HapticFeedback.lightImpact();
+          }
+          break;
+        case 3:
+          // Ask Question (Toggle voice question mode)
+          Logger.debug("Button action: toggle voice question session");
+          if (_voiceCommandSession == null) {
+            Logger.debug("Starting voice question session (toggle mode)");
+            if (OmiVoicePlaybackService.instance.isSpeaking) {
+              OmiVoicePlaybackService.instance.interrupt();
+            }
+            _voiceCommandSession = DateTime.now();
+            _commandBytes = [];
+            _startVoiceCommandTimeout(deviceId);
+            _playSpeakerHaptic(deviceId, 1);
+          } else {
+            Logger.debug("Ending voice question session (toggle mode)");
+            _endVoiceCommandSession(deviceId);
+          }
+          break;
+        case 4:
+          // None (Do nothing)
+          Logger.debug("Button action: none / disabled");
+          break;
+        default:
+          Logger.debug("Button action: unknown action $action, doing nothing");
+          break;
+      }
+    } catch (e, stack) {
+      Logger.debug("Error executing button action $action: $e\n$stack");
+    } finally {
+      _isProcessingButtonEvent = false;
+    }
   }
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
@@ -2380,23 +2436,31 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> forceProcessingCurrentConversation() async {
+    if (_isForceProcessing) {
+      Logger.debug("forceProcessingCurrentConversation: already in progress, ignoring reentrant call");
+      return;
+    }
+    _isForceProcessing = true;
+
     final sessionStart = _sessionStartSeconds;
 
-    // Force-drain tail buffer before clearing state
-    final phoneSync = _wal.getSyncs().phone;
-    await phoneSync.finalizeCurrentSession();
-    _clearSessionLocation();
+    try {
+      // Force-drain tail buffer before clearing state
+      final phoneSync = _wal.getSyncs().phone;
+      await phoneSync.finalizeCurrentSession();
+      _clearSessionLocation();
 
-    _resetStateVariables();
-    externalActions.addProcessingConversation(
-      ServerConversation(
-        id: '0',
-        createdAt: DateTime.now(),
-        structured: Structured('', ''),
-        status: ConversationStatus.processing,
-      ),
-    );
-    processInProgressConversation().then((result) async {
+      _resetStateVariables();
+      externalActions.addProcessingConversation(
+        ServerConversation(
+          id: '0',
+          createdAt: DateTime.now(),
+          structured: Structured('', ''),
+          status: ConversationStatus.processing,
+        ),
+      );
+
+      final result = await processInProgressConversation();
       if (result == null || result.conversation == null) {
         externalActions.removeProcessingConversation('0');
         return;
@@ -2410,9 +2474,12 @@ class CaptureController extends ChangeNotifier
         await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
         _autoSyncSessionWals();
       }
-    });
-
-    return;
+    } catch (e) {
+      externalActions.removeProcessingConversation('0');
+      Logger.debug("Error in forceProcessingCurrentConversation: $e");
+    } finally {
+      _isForceProcessing = false;
+    }
   }
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.

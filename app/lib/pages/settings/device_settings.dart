@@ -377,7 +377,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  String _getDoubleTapActionLabel(int action) {
+  String _getButtonActionLabel(int action) {
     switch (action) {
       case 0:
         return context.l10n.endConversation;
@@ -385,14 +385,20 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         return context.l10n.deviceOnboardingMuteUnmute;
       case 2:
         return context.l10n.starConversation;
+      case 3:
+        return context.l10n.deviceOnboardingAskQuestionTitle;
+      case 4:
+        return context.l10n.off;
       default:
         return context.l10n.endConversation;
     }
   }
 
-  void _showDoubleTapActionSheet() {
-    int currentAction = SharedPreferencesUtil().doubleTapAction;
-
+  void _showButtonActionSheet({
+    required String title,
+    required int currentAction,
+    required ValueChanged<int> onSelected,
+  }) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
@@ -401,60 +407,92 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 16),
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-                  ),
-                  Text(
-                    context.l10n.doubleTapAction,
-                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    title: Text(
-                      context.l10n.endAndProcess,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 12, bottom: 16),
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                     ),
-                    trailing: currentAction == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 0);
-                      Navigator.pop(sheetContext);
-                    },
-                  ),
-                  ListTile(
-                    title: Text(
-                      context.l10n.deviceOnboardingMuteUnmute,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                    Text(
+                      title,
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                     ),
-                    trailing: currentAction == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 1);
-                      Navigator.pop(sheetContext);
-                    },
-                  ),
-                  ListTile(
-                    title: Text(
-                      context.l10n.starOngoing,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      title: Text(
+                        context.l10n.deviceOnboardingAskQuestionTitle,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                      ),
+                      trailing: currentAction == 3 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                      onTap: () {
+                        onSelected(3);
+                        Navigator.pop(sheetContext);
+                      },
                     ),
-                    trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 2);
-                      Navigator.pop(sheetContext);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                    ListTile(
+                      title: Text(
+                        context.l10n.deviceOnboardingMuteUnmute,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                      ),
+                      trailing: currentAction == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                      onTap: () {
+                        onSelected(1);
+                        Navigator.pop(sheetContext);
+                      },
+                    ),
+                    ListTile(
+                      title: Text(
+                        context.l10n.endAndProcess,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                      ),
+                      trailing: currentAction == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                      onTap: () {
+                        onSelected(0);
+                        Navigator.pop(sheetContext);
+                      },
+                    ),
+                    ListTile(
+                      title: Text(
+                        context.l10n.starOngoing,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                      ),
+                      trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                      onTap: () {
+                        onSelected(2);
+                        Navigator.pop(sheetContext);
+                      },
+                    ),
+                    ListTile(
+                      title: Text(
+                        context.l10n.off,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                      ),
+                      trailing: currentAction == 4 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                      onTap: () {
+                        onSelected(4);
+                        Navigator.pop(sheetContext);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
             );
           },
         );
       },
+    );
+  }
+
+  void _showDoubleTapActionSheet() {
+    _showButtonActionSheet(
+      title: context.l10n.doubleTapAction,
+      currentAction: SharedPreferencesUtil().doublePressAction,
+      onSelected: (val) => setState(() => SharedPreferencesUtil().doublePressAction = val),
     );
   }
 
@@ -757,12 +795,45 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
           ],
-          // Double Tap
+          // Single Press
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.handPointer,
+            title: 'Single Press',
+            chipValue: _getButtonActionLabel(SharedPreferencesUtil().singlePressAction),
+            onTap: () => _showButtonActionSheet(
+              title: 'Single Press Action',
+              currentAction: SharedPreferencesUtil().singlePressAction,
+              onSelected: (val) => setState(() => SharedPreferencesUtil().singlePressAction = val),
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          // Double Press
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.handPointer,
             title: context.l10n.doubleTap,
-            chipValue: _getDoubleTapActionLabel(doubleTapAction),
+            chipValue: _getButtonActionLabel(doubleTapAction),
             onTap: _showDoubleTapActionSheet,
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          // Triple Press
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.handPointer,
+            title: 'Triple Press',
+            chipValue: _getButtonActionLabel(SharedPreferencesUtil().triplePressAction),
+            onTap: () => _showButtonActionSheet(
+              title: 'Triple Press Action',
+              currentAction: SharedPreferencesUtil().triplePressAction,
+              onSelected: (val) => setState(() => SharedPreferencesUtil().triplePressAction = val),
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          // Long Press (Fixed Turn On/Off in Hardware)
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.powerOff,
+            title: 'Long Press',
+            subtitle: 'Fixed in device hardware',
+            chipValue: 'Turn On / Off',
+            showChevron: false,
           ),
           // LED Brightness
           if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[

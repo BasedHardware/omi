@@ -62,7 +62,7 @@ struct gpio_dt_spec d5_pin_input = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)),
                                     .pin = 5,
                                     .dt_flags = GPIO_INT_EDGE_RISING};
 
-static bool was_pressed = false;
+static volatile bool was_pressed = false;
 
 //
 // button
@@ -70,7 +70,6 @@ static bool was_pressed = false;
 void button_pressed_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
     int temp = gpio_pin_get_raw(dev, d5_pin_input.pin);
-    LOG_PRINTK("button_pressed_callback %d\n", temp);
     if (temp) {
         was_pressed = false;
     } else {
@@ -89,6 +88,7 @@ K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 #define LONG_TAP 3
 #define BUTTON_PRESS 4
 #define BUTTON_RELEASE 5
+#define TRIPLE_TAP 6
 
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
@@ -143,6 +143,16 @@ static inline void notify_double_tap()
     }
 }
 
+static inline void notify_triple_tap()
+{
+    final_button_state[0] = TRIPLE_TAP;
+    LOG_INF("Button triple tap");
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL) {
+        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    }
+}
+
 static inline void notify_long_tap()
 {
     final_button_state[0] = LONG_TAP; // button press
@@ -156,115 +166,114 @@ static inline void notify_long_tap()
 #define BUTTON_PRESSED 1
 #define BUTTON_RELEASED 0
 
-#define TAP_THRESHOLD 300     // 300 ms for single tap
-#define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 3000  // 3000 ms for long press (power off)
+#define TAP_THRESHOLD_MS 300     // 300 ms for short tap
+#define DOUBLE_TAP_WINDOW_MS 500 // 500 ms window to detect multi-tap sequence
+#define LONG_PRESS_TIME_MS 3000  // 3000 ms for long press (power off)
 
 typedef enum {
     BUTTON_EVENT_NONE,
     BUTTON_EVENT_SINGLE_TAP,
     BUTTON_EVENT_DOUBLE_TAP,
+    BUTTON_EVENT_TRIPLE_TAP,
     BUTTON_EVENT_LONG_PRESS,
     BUTTON_EVENT_RELEASE
 } ButtonEvent;
 
-static uint32_t current_time = 0;
-static uint32_t btn_press_start_time;
-static uint32_t btn_release_time;
-static uint32_t btn_last_tap_time;
-static bool btn_is_pressed;
+static uint32_t btn_press_start_time = 0;
+static uint32_t btn_last_tap_time = 0;
+static uint8_t tap_count = 0;
+static bool btn_is_pressed = false;
 
-static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
+static uint8_t btn_last_event = BUTTON_EVENT_NONE;
 
 void check_button_level(struct k_work *work_item)
 {
-    current_time = current_time + 1;
-
-    u_int8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
-
+    uint32_t now = k_uptime_get_32();
+    uint8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
     ButtonEvent event = BUTTON_EVENT_NONE;
 
-    // Debouncing pressed state
+    // 1. 处理按下（按键按下开始）
     if (btn_state == BUTTON_PRESSED && !btn_is_pressed) {
         btn_is_pressed = true;
-        btn_press_start_time = current_time;
-    } else if (btn_state == BUTTON_RELEASED && btn_is_pressed) {
+        btn_press_start_time = now;
+    }
+    // 2. 处理松开（按键释放结束）
+    else if (btn_state == BUTTON_RELEASED && btn_is_pressed) {
         btn_is_pressed = false;
-        btn_release_time = current_time;
+        uint32_t press_duration = now - btn_press_start_time;
 
-        // Check for double tap
-        uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
-        if (press_duration < TAP_THRESHOLD) {
-            if (btn_last_tap_time > 0 &&
-                (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL < DOUBLE_TAP_WINDOW) {
-                event = BUTTON_EVENT_DOUBLE_TAP;
-                btn_last_tap_time = 0; // Reset double-tap / single-tap detection
-            } else {
-                btn_last_tap_time = current_time;
+        // 短按累加敲击次数
+        if (press_duration < TAP_THRESHOLD_MS) {
+            tap_count++;
+            btn_last_tap_time = now;
+
+            // 达到 3 次立即触发三击，无需等待超时窗口
+            if (tap_count >= 3) {
+                event = BUTTON_EVENT_TRIPLE_TAP;
+                tap_count = 0;
+                btn_last_tap_time = 0;
             }
-        }
-    }
-
-    // Check for single tap
-    if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
-        uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
-        if (press_duration < TAP_THRESHOLD && btn_last_tap_time > 0 &&
-            (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
-            event = BUTTON_EVENT_SINGLE_TAP;
+        } else {
+            // 超过短按阈值的无效释放（例如长按中途放弃），彻底清理连击状态，杜绝幽灵单击注入
+            tap_count = 0;
             btn_last_tap_time = 0;
-        } else if ((current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
-            event = BUTTON_EVENT_RELEASE;
         }
     }
 
-    // Check for long press
-    if (btn_is_pressed && (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL >= LONG_PRESS_TIME) {
+    // 3. 长按判定（按住达到 3 秒固定关机）
+    if (btn_is_pressed && (now - btn_press_start_time >= LONG_PRESS_TIME_MS)) {
         event = BUTTON_EVENT_LONG_PRESS;
+        tap_count = 0;
+        btn_last_tap_time = 0;
     }
 
-    // Single tap
+    // 4. 超时窗口判定（在按键已释放且有未判定的敲击时）
+    if (tap_count > 0 && !btn_is_pressed) {
+        uint32_t time_since_last_tap = now - btn_last_tap_time;
+
+        if (time_since_last_tap > DOUBLE_TAP_WINDOW_MS) {
+            if (tap_count == 1) {
+                event = BUTTON_EVENT_SINGLE_TAP;
+            } else if (tap_count == 2) {
+                event = BUTTON_EVENT_DOUBLE_TAP;
+            }
+            tap_count = 0;
+            btn_last_tap_time = 0;
+        }
+    }
+
+    // 5. 事件分发与通知
     if (event == BUTTON_EVENT_SINGLE_TAP) {
         LOG_PRINTK("single tap detected\n");
         btn_last_event = event;
         notify_tap();
-    }
-
-    // Double tap
-    if (event == BUTTON_EVENT_DOUBLE_TAP) {
+    } else if (event == BUTTON_EVENT_DOUBLE_TAP) {
         LOG_PRINTK("double tap detected\n");
         btn_last_event = event;
         notify_double_tap();
-    }
-
-    // Long press, one time event
-    if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
+    } else if (event == BUTTON_EVENT_TRIPLE_TAP) {
+        LOG_PRINTK("triple tap detected\n");
+        btn_last_event = event;
+        notify_triple_tap();
+    } else if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
         LOG_PRINTK("long press detected\n");
         btn_last_event = event;
 
-        // Enter the low power mode
+        // 进入低功耗关机
         is_off = true;
         bt_off();
         turnoff_all();
+        return; // 关机后不再重调度工作项
     }
 
-    // Releases, one time event
-    if (event == BUTTON_EVENT_RELEASE && btn_last_event != BUTTON_EVENT_RELEASE) {
-        LOG_PRINTK("release detected\n");
-        btn_last_event = event;
-        notify_unpress();
-
-        // Reset
-        current_time = 0;
-        btn_press_start_time = 0;
-        btn_release_time = 0;
-        btn_last_tap_time = 0;
-    }
-    if (event == BUTTON_EVENT_RELEASE) {
-        current_button_state = GRACE;
+    // 按键完全释放且无活动时复位状态
+    if (!btn_is_pressed && tap_count == 0 && event == BUTTON_EVENT_NONE) {
+        if (btn_last_event == BUTTON_EVENT_LONG_PRESS) {
+            btn_last_event = BUTTON_EVENT_NONE;
+        }
     }
 
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
-    return 0;
 }
 
 // @deprecated
@@ -528,12 +537,16 @@ void turnoff_all()
     // Disable watchdog before entering system off
     int rc = watchdog_deinit();
     if (rc < 0) {
-        LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
+        LOG_WRN("Failed to deinitialize watchdog (%d), feeding before poweroff", rc);
+        watchdog_feed();
     }
 
     // maybe save something here to indicate success. next time the button is pressed we should know about it
     NRF_USBD->INTENCLR = 0xFFFFFFFF;
     NRF_POWER->SYSTEMOFF = 1;
+    while (1) {
+        k_cpu_idle();
+    }
 }
 
 void force_button_state(FSM_STATE_T state)

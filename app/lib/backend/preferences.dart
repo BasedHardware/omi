@@ -337,15 +337,62 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
-  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
-  int get doubleTapAction => getInt('doubleTapAction');
+  // --- Hardware Button Customization Actions ---
+  // 0 = End & Process Conversation
+  // 1 = Pause/Resume Recording (Mute/Unmute)
+  // 2 = Star Ongoing Conversation
+  // 3 = Ask Question (Start/End Voice Session)
+  // 4 = None (Do nothing)
+  static const Set<int> validButtonActions = {0, 1, 2, 3, 4};
 
-  set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+  // Single press action (default: 3 = Ask Question)
+  int get singlePressAction {
+    final val = getInt('singlePressAction', defaultValue: 3);
+    return validButtonActions.contains(val) ? val : 3;
+  }
+
+  set singlePressAction(int value) {
+    final sanitized = validButtonActions.contains(value) ? value : 3;
+    saveInt('singlePressAction', sanitized);
+  }
+
+  // Double press action (default: 1 = Mute/Unmute; fallback to doubleTapAction if present)
+  int get doublePressAction {
+    int val = 1;
+    if (_preferences?.containsKey('doublePressAction') ?? false) {
+      val = getInt('doublePressAction', defaultValue: 1);
+    } else if (_preferences?.containsKey('doubleTapAction') ?? false) {
+      val = getInt('doubleTapAction', defaultValue: 1);
+    }
+    return validButtonActions.contains(val) ? val : 1;
+  }
+
+  set doublePressAction(int value) {
+    final sanitized = validButtonActions.contains(value) ? value : 1;
+    saveInt('doublePressAction', sanitized);
+    saveInt('doubleTapAction', sanitized);
+  }
+
+  // Triple press action (default: 0 = End Conversation)
+  int get triplePressAction {
+    final val = getInt('triplePressAction', defaultValue: 0);
+    return validButtonActions.contains(val) ? val : 0;
+  }
+
+  set triplePressAction(int value) {
+    final sanitized = validButtonActions.contains(value) ? value : 0;
+    saveInt('triplePressAction', sanitized);
+  }
+
+  // Double tap behavior backward compatibility
+  int get doubleTapAction => doublePressAction;
+
+  set doubleTapAction(int value) => doublePressAction = value;
 
   // Keep backward compatibility
-  bool get doubleTapPausesMuting => doubleTapAction == 1;
+  bool get doubleTapPausesMuting => doublePressAction == 1;
 
-  set doubleTapPausesMuting(bool value) => doubleTapAction = value ? 1 : 0;
+  set doubleTapPausesMuting(bool value) => doublePressAction = value ? 1 : 0;
 
   // Custom STT configuration
   CustomSttConfig get customSttConfig {
