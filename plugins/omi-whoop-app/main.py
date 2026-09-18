@@ -5,6 +5,7 @@ This app provides Whoop fitness tracker integration through OAuth2 authenticatio
 and chat tools for accessing strain, recovery, sleep, and workout data.
 """
 import os
+import html
 import sys
 import secrets
 from datetime import datetime, timedelta
@@ -1130,7 +1131,7 @@ async def whoop_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error or "", quote=True)}</p>
                     </div>
                 </div>
             </body>
