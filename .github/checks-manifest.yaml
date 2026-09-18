@@ -1002,6 +1002,12 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_desktop_backend_drift.py", ".github/scripts/test_check_desktop_backend_drift.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "drift script must treat missing health SHAs as unknown and keep --strict off the promotion path"
+
+  - id: composio-omi-memories-route-tests
+    command: ["python3", "plugins/composio/test_omi_api_route.py"]
+    triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "composio create_fact posted every synced memory to /v2/integrations/{app_id}/user/facts, which is not a backend route (404), so Notion sync never landed; regression pins the /user/memories import route"
   - id: guardrail-pulse-tests
     command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
@@ -1148,12 +1154,6 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
-
-  - id: composio-omi-memories-route-tests
-    command: ["python3", "plugins/composio/test_omi_api_route.py"]
-    triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "composio create_fact posted every synced memory to /v2/integrations/{app_id}/user/facts, which is not a backend route (404), so Notion sync never landed; regression pins the /user/memories import route"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
