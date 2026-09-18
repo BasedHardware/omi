@@ -1100,15 +1100,32 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
                     if json_match:
                         scores = json.loads(json_match.group())
                         for score in scores:
-                            name = score.get("name", "").lower()
-                            iq = score.get("iq", 100)
+                            # The model's array can carry a non-object element (a bare
+                            # number, a string, null) or an `iq` that is not number-like.
+                            # Reading those raises, and the `except` below would swallow
+                            # it -- discarding the valid scores in the same batch, so
+                            # every person in it silently falls back to a random score.
+                            # Skip only the unusable element instead.
+                            if not isinstance(score, dict):
+                                logger.warning(
+                                    f"Skipping non-object score entry: {type(score).__name__}")
+                                continue
+                            name = score.get("name", "")
+                            name = name.lower() if isinstance(name, str) else ""
+                            if not name:
+                                continue
+                            try:
+                                iq = int(score.get("iq", 100))
+                            except (TypeError, ValueError):
+                                iq = 100
                             is_name = score.get("is_name", True)
+                            is_name = is_name if isinstance(is_name, bool) else True
                             
                             # Find matching person
                             for p in batch:
                                 if p["name"].lower() == name or p["name_lower"] == name:
                                     iq_scores[p["name_lower"]] = {
-                                        "iq": max(70, min(160, int(iq))),
+                                        "iq": max(70, min(160, iq)),
                                         "is_name": is_name
                                     }
                                     break
