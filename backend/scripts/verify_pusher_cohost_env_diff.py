@@ -171,9 +171,7 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     # streaming session selects Deepgram cloud, and a spent managed key made
     # the fallback hops dial a 402 account for days (FC-deterministic-provider-
     # rejection-burns-connect-retries).
-    "prod": frozenset(
-        {"DEEPGRAM_API_KEY", "DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}
-    ),
+    "prod": frozenset({"DEEPGRAM_API_KEY", "DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
 }
 
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs
