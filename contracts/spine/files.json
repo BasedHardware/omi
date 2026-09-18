@@ -12,6 +12,8 @@
   "app/test/spine/b1_memories_surface_test.dart": "B1",
   "app/test/spine/b1_navigation_test.dart": "B1",
   "app/test/spine/b1_onboarding_surface_test.dart": "B1",
+  "app/test/spine/b1_route_dismissal.dart": "B1",
+  "app/test/spine/b1_route_dismissal_test.dart": "B1",
   "app/test/spine/b1_settings_surface_test.dart": "B1",
   "app/test/spine/b1_surface_contract.dart": "B1",
   "app/test/spine/b1_tasks_surface_test.dart": "B1",

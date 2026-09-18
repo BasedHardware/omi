@@ -84,6 +84,10 @@ exercise registered VM handlers, actual page Types, roots, controls and transiti
 on iOS/Android widget targets. Cached tabs must disappear from onstage finders,
 retain element identity offstage and on return. Release semantics handles in
 `finally`; binding invariants precede `addTearDown`. Never delay teardown to hide timers.
+Dismissal must pop the actual route, complete its reverse transition, and dispose
+the page. Pump frames until that route’s `completed`, bounded by its declared
+reverse duration plus 1s; do not wait for unrelated animations to settle. A single
+1s pump starts an idle ticker at elapsed zero; it does not finish the animation.
 
 ## semantic-controls/v2
 

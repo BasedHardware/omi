@@ -13,6 +13,7 @@ import '../support/addressability_widgets.dart';
 
 import '../../integration_test/journeys/support/hermetic_boot.dart';
 import '../support/addressability_fixture.dart';
+import 'b1_route_dismissal.dart';
 
 final _handlers = <String, developer.ServiceExtensionHandler>{};
 
@@ -230,13 +231,15 @@ Future<void> checkSurface(WidgetTester tester, String id, Type pageType) async {
         'conversation_detail' => OmiKeys.conversationDetailBack,
         _ => null,
       };
-      if (closeKey == null) {
-        await tester.binding.handlePopRoute();
-      } else {
-        accessibleTap(closeKey);
-      }
-      await tester.pump(const Duration(seconds: 1));
-      expect(find.byType(pageType), findsNothing);
+      final closingRoute = ModalRoute.of(retainedPage)!;
+      await expectRouteDismissed(tester, closingRoute, retainedPage, () async {
+        if (closeKey == null) {
+          await tester.binding.handlePopRoute();
+        } else {
+          accessibleTap(closeKey);
+        }
+      });
+      expect(find.byType(pageType, skipOffstage: false), findsNothing);
       expect(api.visibleRoute, isNot(id));
     } else if (id != 'onboarding') {
       final next = id == 'home' ? 'conversations' : 'home';
