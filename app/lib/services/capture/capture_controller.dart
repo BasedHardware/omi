@@ -223,24 +223,24 @@ class CaptureController extends ChangeNotifier
     CaptureBleListeners? bleListeners,
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
-  }) : externalActions = externalActions ?? const NoopCaptureExternalActions(),
-       _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
-       _inProgressConversationLoader = inProgressConversationLoader,
-       _audioCodecLoader = audioCodecLoader,
-       _microphonePermissionRequester = microphonePermissionRequester,
-       _phoneMicBatchRecorder = phoneMicBatchRecorder,
-       _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry(),
-       _walServiceOverride = walService,
-       _phoneMicRecorderOverride = phoneMicRecorder,
-       _phoneMicBatchSupportedOverride = phoneMicBatchSupported,
-       _connectivity = connectivity ?? CaptureConnectivityBoundary.production(),
-       _authOverride = authBoundary,
-       _nowOverride = now,
-       _schedulingOverride = scheduling,
-       _bleListeners = bleListeners,
-       _openSocketOverride = openSocket,
-       _sessionOwner = sessionOwner,
-       _preferences = preferences ?? SharedPreferencesUtil() {
+  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+        _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
+        _inProgressConversationLoader = inProgressConversationLoader,
+        _audioCodecLoader = audioCodecLoader,
+        _microphonePermissionRequester = microphonePermissionRequester,
+        _phoneMicBatchRecorder = phoneMicBatchRecorder,
+        _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry(),
+        _walServiceOverride = walService,
+        _phoneMicRecorderOverride = phoneMicRecorder,
+        _phoneMicBatchSupportedOverride = phoneMicBatchSupported,
+        _connectivity = connectivity ?? CaptureConnectivityBoundary.production(),
+        _authOverride = authBoundary,
+        _nowOverride = now,
+        _schedulingOverride = scheduling,
+        _bleListeners = bleListeners,
+        _openSocketOverride = openSocket,
+        _sessionOwner = sessionOwner,
+        _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
     // Restore a persisted device mute so it survives an app kill/restart. When
     // the device reconnects, streamDeviceRecording() reads _isPaused as
@@ -888,15 +888,15 @@ class CaptureController extends ChangeNotifier
           geolocation: geolocation ?? _sessionGeolocation,
         ) ??
         ServiceManager.instance().socket.conversation(
-          codec: codec,
-          sampleRate: sampleRate,
-          language: language,
-          force: force,
-          source: source,
-          clientConversationId: clientConversationId,
-          customSttConfig: customSttConfig,
-          geolocation: geolocation ?? _sessionGeolocation,
-        );
+              codec: codec,
+              sampleRate: sampleRate,
+              language: language,
+              force: force,
+              source: source,
+              clientConversationId: clientConversationId,
+              customSttConfig: customSttConfig,
+              geolocation: geolocation ?? _sessionGeolocation,
+            );
   }
 
   Future<void> _connectTranscriptionSocket({
@@ -1136,24 +1136,20 @@ class CaptureController extends ChangeNotifier
               _isProcessingButtonEvent = true;
               if (_isPaused) {
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-                resumeDeviceRecording()
-                    .then((_) {
-                      _isProcessingButtonEvent = false;
-                    })
-                    .catchError((e) {
-                      Logger.debug("Error resuming device recording: $e");
-                      _isProcessingButtonEvent = false;
-                    });
+                resumeDeviceRecording().then((_) {
+                  _isProcessingButtonEvent = false;
+                }).catchError((e) {
+                  Logger.debug("Error resuming device recording: $e");
+                  _isProcessingButtonEvent = false;
+                });
               } else {
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-                pauseDeviceRecording()
-                    .then((_) {
-                      _isProcessingButtonEvent = false;
-                    })
-                    .catchError((e) {
-                      Logger.debug("Error pausing device recording: $e");
-                      _isProcessingButtonEvent = false;
-                    });
+                pauseDeviceRecording().then((_) {
+                  _isProcessingButtonEvent = false;
+                }).catchError((e) {
+                  Logger.debug("Error pausing device recording: $e");
+                  _isProcessingButtonEvent = false;
+                });
               }
             } else if (doubleTapAction == 2) {
               // Star ongoing conversation (doesn't end it)
@@ -1245,8 +1241,7 @@ class CaptureController extends ChangeNotifier
 
         // Local storage syncs. In batch mode the native layer owns writing the
         // .bin files, so the Dart WAL writer must stay off to avoid double-writes.
-        var checkWalSupported =
-            !_preferences.batchModeEnabled &&
+        var checkWalSupported = !_preferences.batchModeEnabled &&
             (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || _preferences.unlimitedLocalStorageEnabled);
@@ -2118,8 +2113,7 @@ class CaptureController extends ChangeNotifier
 
   bool get _shouldReconnectTranscriptionSocket {
     final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !_isPaused;
-    final activePhoneOrSystemCapture =
-        recordingState == RecordingState.record ||
+    final activePhoneOrSystemCapture = recordingState == RecordingState.record ||
         recordingState == RecordingState.interrupted ||
         recordingState == RecordingState.systemAudioRecord;
     return activeDeviceCapture || activePhoneOrSystemCapture;
