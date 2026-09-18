@@ -32,6 +32,10 @@ class Framework:
         return lambda function: function
 
     post = get
+
+    def exception_handler(self, *args, **kwargs):
+        return lambda function: function
+
     mount = lambda *args, **kwargs: None
 
 
@@ -55,6 +59,9 @@ stubs = {
         **{
             name: Framework for name in ("FastAPI", "HTTPException", "Request", "Query")
         },
+    ),
+    "fastapi.exceptions": module(
+        "fastapi.exceptions", RequestValidationError=type("RequestValidationError", (Exception,), {})
     ),
     "fastapi.responses": module(
         "fastapi.responses",
@@ -81,7 +88,17 @@ stubs = {
             )
         },
     ),
-    "models": module("models", ChatToolResponse=Response),
+    "models": module(
+        "models",
+        ChatToolResponse=Response,
+        GetInventoryRequest=Framework,
+        GetProductsRequest=Framework,
+        CreateWroRequest=Framework,
+        GetWrosRequest=Framework,
+        CancelWroRequest=Framework,
+        GetOrdersRequest=Framework,
+        GetFulfillmentCentersRequest=Framework,
+    ),
 }
 spec = importlib.util.spec_from_file_location(
     "shipbob_under_test", Path(__file__).with_name("main.py")

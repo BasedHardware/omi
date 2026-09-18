@@ -1181,6 +1181,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
+  - id: shipbob-wro-disambiguation-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_create_wro_disambiguation.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13997: ambiguous product names must not post a WRO for the first substring match"
   - id: api-result-boundaries
     command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/api-result/boundary-baseline.json"]
     triggers: ["app/lib/**/*.dart", "app/contracts/api-result/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
