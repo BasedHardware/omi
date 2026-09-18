@@ -145,10 +145,40 @@ struct ConversationChunkSummarizer: Sendable {
     }
   }
 
-  /// UTF-8 bytes / 4, matching the usual tokenizer underestimate so a chunk
-  /// that fits this budget also fits the real window.
+  /// Tokens held back from every chunk for the model's own answer.
+  static let completionReserveTokens = 1024
+
+  /// UTF-8 bytes / 3. Deliberately pessimistic; see the caveat below.
+  ///
+  /// This was bytes / 4, on the "~4 characters per token" rule of thumb, with a
+  /// docstring asserting that under-counts so a chunk fitting the budget also
+  /// fits the real window. That assertion was never measured, and transcript
+  /// text is the wrong shape for it: every turn carries a `SPEAKER_00:` prefix,
+  /// several tokens for twelve bytes, and the bodies are dense with names,
+  /// numbers and punctuation. Dividing by 3 is the conservative direction.
+  ///
+  /// **What this does not claim.** AFM failures on long conversations are *not*
+  /// established as context overflow, and this change is a mitigation rather
+  /// than a fix. Measured 2026-09-18 on an M5 Max running macOS 27, with
+  /// `SystemLanguageModel.default.contextSize` reporting 8192:
+  ///
+  /// - a 7150-token prompt succeeded while a 4975-token one failed
+  /// - the same scenario failed end-to-end in one run and succeeded in the next
+  /// - failures took 94–163 s before returning, and per-call latency fell from
+  ///   ~160 s to ~35 s once the machine had been left idle
+  ///
+  /// That pattern reads as load or thermal, not as a size boundary. It could not
+  /// be diagnosed further because `AFMLocalInferenceAdapter.mapFrameworkError`
+  /// flattens every error to `session_failed` under `#available(macOS 27.0, *)` —
+  /// so overflow, guardrail refusal, rate limiting and decode failure are
+  /// indistinguishable on the OS users actually run.
+  ///
+  /// Smaller chunks are still the right default while that is true: the cost of
+  /// over-estimating is one extra chunk, and the cost of under-estimating is the
+  /// whole conversation falling back to the deterministic minimum after minutes
+  /// of on-device work.
   static func estimatedTokens(_ text: String) -> Int {
-    max(1, (text.utf8.count + 3) / 4)
+    max(1, (text.utf8.count + 2) / 3)
   }
 
   static func chunk(
@@ -157,7 +187,15 @@ struct ConversationChunkSummarizer: Sendable {
   ) -> [[TranscriptHash.Segment]] {
     guard !segments.isEmpty else { return [[]] }
     let wrapper = estimatedTokens(mapPrompt("", index: 1, total: 1))
-    let budget = max(windowTokens - wrapper - 8, 64)
+    // Reserve room for the answer. A context window covers prompt *and*
+    // completion, so sizing a chunk to fill the window leaves the model no
+    // tokens to reply in: generation stops at the cap mid-object, the JSON does
+    // not parse, and the conversation fail-closes to the deterministic minimum.
+    // Measured with an 8-token slack: truncations on 12 of 22 generations, and
+    // the first map chunk failing meant 19 of 20 conversations produced nothing.
+    // A full LocalSummaryDraft -- title, overview, sections, action items --
+    // runs to several hundred tokens, so the reserve has to be of that order.
+    let budget = max(windowTokens - wrapper - completionReserveTokens, 64)
     var groups: [[TranscriptHash.Segment]] = []
     var current: [TranscriptHash.Segment] = []
     var currentTokens = 0
@@ -233,13 +271,21 @@ struct ConversationChunkSummarizer: Sendable {
     }.joined(separator: "\n")
   }
 
+  /// Extract from one slice of the transcript.
+  ///
+  /// `index` and `total` are accepted for the chunker's own bookkeeping but are
+  /// deliberately kept out of the text: a small model told it is reading "chunk
+  /// 2 of 2" titles the result "Summary of Chunk 2 of 2", and that string
+  /// reaches the user as their conversation title. What this pass needs is the
+  /// facts; the title is decided once, in the reduce.
   static func mapPrompt(_ transcript: String, index: Int, total: Int) -> String {
-    """
-    Summarize chunk \(index) of \(total) of a conversation. Return title, overview, sections, and action items. Do not invent facts.
+    _ = (index, total)
+    return """
+      Extract what was decided, discussed, and committed to in this part of a conversation. Put each distinct topic in its own section, and every commitment someone made in action items. Quote specifics - names, dates, numbers - rather than describing them. Do not invent facts.
 
-    Transcript:
-    \(transcript)
-    """
+      Transcript:
+      \(transcript)
+      """
   }
 
   static func finalPrompt(_ transcript: String) -> String {
@@ -251,13 +297,31 @@ struct ConversationChunkSummarizer: Sendable {
     """
   }
 
+  /// Fold the chunk drafts into one summary.
+  ///
+  /// The per-chunk `sections` carry the detail the map pass extracted. Dropping
+  /// them here discarded that detail *before* the model saw it, so no model
+  /// could retain it however capable: measured retention was 0/20 for one model
+  /// and 2/20 for another, which read as a capability ceiling and was not one.
+  ///
+  /// Chunk indices are deliberately absent. Told it is merging "chunk 2 of 2",
+  /// a small model titles the conversation "Chapter 2 of 2"; given an
+  /// instruction sentence, it echoes that sentence as the title. Both were
+  /// observed as user-visible titles.
   static func reducePrompt(_ partials: [LocalSummaryDraft]) -> String {
-    let body = partials.enumerated().map { index, draft in
-      let actions = draft.actionItems.map(\.description).joined(separator: "; ")
-      return "Chunk \(index + 1): \(draft.title)\n\(draft.overview)\nActions: \(actions)"
-    }.joined(separator: "\n\n")
+    let body = partials.map { draft in
+      var lines: [String] = []
+      if !draft.overview.isEmpty { lines.append(draft.overview) }
+      for section in draft.sections where !section.heading.isEmpty || !section.bodyMarkdown.isEmpty {
+        lines.append("\(section.heading): \(section.bodyMarkdown)")
+      }
+      for action in draft.actionItems where !action.description.isEmpty {
+        lines.append("Action: \(action.description)")
+      }
+      return lines.joined(separator: "\n")
+    }.filter { !$0.isEmpty }.joined(separator: "\n\n")
     return """
-      Merge these chunk summaries into one conversation summary. Return title, overview, sections, and action items. Do not invent facts.
+      Write one summary of the conversation described in these notes. Title it after what the conversation was about, never after this instruction. Do not invent facts.
 
       \(body)
       """
