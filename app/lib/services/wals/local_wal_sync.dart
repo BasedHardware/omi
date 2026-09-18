@@ -136,7 +136,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Durable inventory moved off the published list on logout. Saves write
   /// both this and [_wals] so disk is not wiped; [getAllWals] returns [_wals]
   /// only. Adopting the current generation is not a fix.
-  List<Wal> _retiredWals = [];
+  final List<Wal> _retiredWals = [];
 
   bool _isCurrent(int generation) => generation == _sessionGeneration;
 
