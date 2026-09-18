@@ -330,7 +330,7 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
 
 
 def _authorize(monkeypatch, pc, decision: Decision) -> None:
@@ -565,7 +565,7 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
 # In-memory attach still happens; the field is written only by ingest mutation.
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
     pc, _dev = stack
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     resolve = MagicMock(side_effect=AssertionError('policy must not run when flag is off'))
     monkeypatch.setattr(pc, 'resolve_free_tier_processing_plan', resolve)
