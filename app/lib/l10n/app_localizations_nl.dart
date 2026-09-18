@@ -243,7 +243,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get searchConversations => 'Zoek gesprekken...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count geselecteerd';
   }
 
@@ -2051,10 +2051,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get memoryHistory => 'Geschiedenis';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Gebruik toestaan';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Niet gebruiken';
 
   @override
   String get undo => 'Ongedaan maken';
@@ -10025,4 +10025,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get home => 'Home';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Kan de baseline-status niet bijwerken.';
+
+  @override
+  String get unstarConversation => 'Ster van gesprek verwijderen';
+
+  @override
+  String get moreOptions => 'Meer opties';
+
+  @override
+  String get filterByDate => 'Filteren op datum';
+
+  @override
+  String get memoryGraph => 'Herinneringengrafiek';
 }

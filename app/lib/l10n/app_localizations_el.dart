@@ -245,7 +245,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchConversations => 'Αναζήτηση συνομιλιών...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count επιλεγμένα';
   }
 
@@ -2062,10 +2062,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryHistory => 'Ιστορικό';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Να επιτρέπεται η χρήση';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Να μην χρησιμοποιείται';
 
   @override
   String get undo => 'Αναίρεση';
@@ -10068,4 +10068,19 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get home => 'Αρχική';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Αποτυχία ενημέρωσης της βασικής κατάστασης.';
+
+  @override
+  String get unstarConversation => 'Αφαίρεση αστεριού από τη συνομιλία';
+
+  @override
+  String get moreOptions => 'Περισσότερες επιλογές';
+
+  @override
+  String get filterByDate => 'Φιλτράρισμα κατά ημερομηνία';
+
+  @override
+  String get memoryGraph => 'Γράφος αναμνήσεων';
 }

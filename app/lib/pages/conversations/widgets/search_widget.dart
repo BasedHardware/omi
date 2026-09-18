@@ -155,8 +155,9 @@ class _SearchWidgetState extends State<SearchWidget> {
           Consumer<ConversationProvider>(
             builder: (context, convoProvider, _) {
               final hasSearchQuery = searchController.text.isNotEmpty;
-              final hasActiveFilter =
-                  hasSearchQuery ? convoProvider.searchStartDate != null : convoProvider.selectedStartDate != null;
+              final hasActiveFilter = hasSearchQuery
+                  ? convoProvider.searchStartDate != null
+                  : convoProvider.selectedStartDate != null;
               return Container(
                 width: 48,
                 height: 48,
@@ -166,6 +167,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 ),
                 child: IconButton(
                   padding: EdgeInsets.zero,
+                  tooltip: context.l10n.filterByDate,
                   icon: FaIcon(
                     hasActiveFilter ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
                     size: 18,
