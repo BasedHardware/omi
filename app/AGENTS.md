@@ -15,6 +15,8 @@ Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
 
+Never edit generated `.g.dart`/`.gen.dart` files. Regenerate using the commands above after source changes; resolve build_runner conflicts with `--delete-conflicting-outputs`.
+
 ### Setup Sequence
 ```bash
 bash setup.sh ios    # or: bash setup.sh android
@@ -100,8 +102,8 @@ Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manife
 CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
 
 ### Test Patterns
-- Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
-- Test state machine logic via minimal abstractions mirroring production flow
+- Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
+- Typed analytics: [C7 registry contract](lib/utils/analytics/registry/REGISTRY.md); state machines use production seams.
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
 - Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.
@@ -132,13 +134,6 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 ### API Base URLs
 - Dev: configured in `.dev.env` → `Env.apiBaseUrl`
 - Prod: configured in `.prod.env` → `Env.apiBaseUrl`
-
-## Codegen Rules
-
-- Run `flutter pub run build_runner build` after changing: env files, model annotations, pigeon contracts, or pubspec assets
-- Run `flutter gen-l10n` after changing ARB files
-- Never edit files ending in `.g.dart` or `.gen.dart`
-- If build_runner fails with conflicts: `flutter pub run build_runner build --delete-conflicting-outputs`
 
 ## App Flows & E2E
 

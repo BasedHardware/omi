@@ -13,6 +13,8 @@ import 'device_discoverer.dart';
 /// iOS: CoreBluetooth. Android: BluetoothLeScanner + CompanionDeviceManager.
 class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   final BleHostApi _hostApi = BleHostApi();
+  Timer? _timeoutTimer;
+  Completer<void>? _scanCompleter;
 
   @override
   String get name => 'NativeBluetooth';
@@ -27,6 +29,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     }
     final List<BlePeripheral> results = [];
     final completer = Completer<void>();
+    _scanCompleter = completer;
 
     final previousCallback = BleBridge.instance.peripheralDiscoveredCallback;
 
@@ -41,8 +44,8 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     try {
       _hostApi.startScan(timeout, []);
 
-      // Wait for scan to complete
-      Timer(Duration(seconds: timeout), () {
+      _timeoutTimer?.cancel();
+      _timeoutTimer = Timer(Duration(seconds: timeout), () {
         if (!completer.isCompleted) completer.complete();
       });
       await completer.future;
@@ -54,14 +57,25 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
       return DeviceDiscoveryResult(devices: devices);
     } finally {
+      _timeoutTimer?.cancel();
+      _timeoutTimer = null;
+      if (identical(_scanCompleter, completer)) {
+        _scanCompleter = null;
+      }
       BleBridge.instance.peripheralDiscoveredCallback = previousCallback;
     }
   }
 
   @override
   Future<void> stop() async {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+    final completer = _scanCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
     try {
-      _hostApi.stopScan();
+      await _hostApi.stopScan();
     } catch (e) {
       Logger.debug('NativeBluetoothDiscoverer: stop scan error: $e');
     }

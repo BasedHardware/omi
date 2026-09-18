@@ -279,8 +279,27 @@ def _plan(pc, mode: str, reason: str) -> Any:
     return pc.FreeTierProcessingPlan(mode=mode, reason=reason, decision=None)
 
 
+def _flag_double(answer: bool):
+    """A double that mirrors the real signature, including the uid.
+
+    The previous doubles took no arguments. That is precisely why this suite
+    stayed green while the coordinator called
+    ``free_tier_local_processing_enabled()`` bare: the real function answers
+    ``False`` for a missing uid by design, so the branch was unreachable in
+    every environment, and a zero-argument double could only ever typecheck
+    against the broken call. Requiring the uid here is what makes that a test
+    failure instead of a silent dark rollout.
+    """
+
+    def _answer(uid):
+        assert uid, 'free_tier_local_processing_enabled must be given the uid; without it the cohort admits nobody'
+        return answer
+
+    return _answer
+
+
 def _enable_flag(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _flag_double(True))
 
 
 def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
@@ -324,6 +343,39 @@ def _stub_completed_for_normal_path(monkeypatch, pc, conv_id: str = 'paid-conv')
     jit_plan = SimpleNamespace(defer_derived_work=True)
     monkeypatch.setattr(pc, 'resolve_authorized_first_open_plan', lambda **kwargs: jit_plan)
     return completed
+
+
+# red-proof: revert to `free_tier_local_processing_enabled()` and this fails.
+def test_rollout_gate_is_asked_about_this_account_not_asked_bare(monkeypatch, pc) -> None:
+    """The gate must be given the uid it is deciding about.
+
+    `free_tier_local_processing_enabled` answers False for a missing uid on
+    purpose: a lit flag means "lit for the configured cohort", and a caller
+    that cannot name the account is never admitted. So calling it bare does
+    not merely lose telemetry, it makes the whole free-tier branch unreachable
+    in every environment no matter how the cohort is configured. This test
+    pins the argument, because every other test here replaces this function
+    with a double and therefore cannot see how it is called.
+    """
+    seen: list[Any] = []
+
+    def _record(uid):
+        seen.append(uid)
+        return True
+
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _record)
+    _spy_managed_effects(monkeypatch, pc)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: _plan(pc, 'deterministic_minimum', 'basic_not_entitled'),
+    )
+    monkeypatch.setattr(pc.lifecycle_service, 'create_completed_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', MagicMock())
+
+    pc.process_conversation('basic-uid', 'en', _desktop_create())
+
+    assert seen == ['basic-uid']
 
 
 # red-proof: `if False and plan.mode != 'process_normally'` (basic would call `_get_structured`)
@@ -486,7 +538,7 @@ def test_force_and_reprocess_do_not_rescue_basic_minimum(monkeypatch, pc) -> Non
 
 # red-proof: call resolve_free_tier_processing_plan when the flag helper returns False
 def test_flag_off_consults_legacy_deferral_and_skips_policy(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _flag_double(False))
     spies = _spy_managed_effects(monkeypatch, pc)
     resolve = MagicMock(side_effect=AssertionError('policy must not run when flag is off'))
     monkeypatch.setattr(pc, 'resolve_free_tier_processing_plan', resolve)
@@ -1138,7 +1190,7 @@ def _extract_memories_probe(monkeypatch, pc, *, suppression_on: bool, decision) 
     monkeypatch.setattr(pc, '_extract_memories_inner', inner)
     monkeypatch.setattr(pc, 'MemoryService', MagicMock())
     monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: None)
-    monkeypatch.setattr(pc, 'free_tier_memory_suppression_enabled', lambda: suppression_on)
+    monkeypatch.setattr(pc, 'free_tier_memory_suppression_enabled', _flag_double(suppression_on))
     # The §1.8 gate's decision_for closure lives in utils.managed_compute, so
     # its authorize seam patches there. The funding-owner resolution is not
     # controlled by any stub in this file: managed_compute binds utils.byok's
@@ -1308,7 +1360,7 @@ def _omi_create() -> CreateConversation:
 
 
 def _disable_flag(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _flag_double(False))
 
 
 # red-proof: _normal_persist_payload keeps the dumped None default → key present
@@ -1469,7 +1521,7 @@ def test_flag_on_enrichment_omits_processing_state_while_merge_clearing_the_mark
 # flag-off deferral branch and assert the bounded lifecycle events.
 @pytest.mark.parametrize('persisted, expected_event', [(True, 'stored'), (False, 'fenced')])
 def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted: bool, expected_event: str) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _flag_double(False))
     spies = _spy_managed_effects(monkeypatch, pc)
     recorded: list[str] = []
     monkeypatch.setattr(pc, 'record_lazy_desktop_deferral', lambda *, event: recorded.append(event))
@@ -1498,7 +1550,7 @@ def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted
 
 
 def _flag_off(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _flag_double(False))
     monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
 
 
@@ -1629,7 +1681,7 @@ def test_flag_off_non_desktop_basic_keeps_eager_extraction(monkeypatch, pc) -> N
 
 def test_eager_extraction_switch_off_first_open_basic_reaches_structured_without_authorize(monkeypatch, pc) -> None:
     """Unset switch: first-open basic is byte-identical to main before #14165."""
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _flag_double(False))
     monkeypatch.delenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', raising=False)
     spies = _spy_managed_effects(monkeypatch, pc)
     auth_calls: list[str] = []
