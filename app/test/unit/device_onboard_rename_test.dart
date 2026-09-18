@@ -84,7 +84,8 @@ void main() {
 
     test('performGetDeviceName decodes string from characteristic', () async {
       const savedName = "Bob's Omi";
-      transport.characteristics['${OmiDeviceConnection.settingsServiceUuid}/${OmiDeviceConnection.settingsDeviceNameCharacteristicUuid}'] =
+      transport.characteristics[
+              '${OmiDeviceConnection.settingsServiceUuid}/${OmiDeviceConnection.settingsDeviceNameCharacteristicUuid}'] =
           utf8.encode(savedName);
 
       final result = await connection.performGetDeviceName();
@@ -92,14 +93,16 @@ void main() {
     });
 
     test('performGetDeviceName returns null when characteristic is empty', () async {
-      transport.characteristics['${OmiDeviceConnection.settingsServiceUuid}/${OmiDeviceConnection.settingsDeviceNameCharacteristicUuid}'] = [];
+      transport.characteristics[
+          '${OmiDeviceConnection.settingsServiceUuid}/${OmiDeviceConnection.settingsDeviceNameCharacteristicUuid}'] = [];
 
       final result = await connection.performGetDeviceName();
       expect(result, isNull);
     });
 
     test('performGetDeviceName returns null when characteristic is only whitespace', () async {
-      transport.characteristics['${OmiDeviceConnection.settingsServiceUuid}/${OmiDeviceConnection.settingsDeviceNameCharacteristicUuid}'] =
+      transport.characteristics[
+              '${OmiDeviceConnection.settingsServiceUuid}/${OmiDeviceConnection.settingsDeviceNameCharacteristicUuid}'] =
           utf8.encode('   ');
 
       final result = await connection.performGetDeviceName();
@@ -110,7 +113,8 @@ void main() {
   group('BtDevice Onboard Name Sync', () {
     test('getDeviceInfo updates BtDevice.name when onboard name is present', () async {
       final transport = _MockTransport(testDeviceId);
-      transport.characteristics['${OmiDeviceConnection.settingsServiceUuid}/${OmiDeviceConnection.settingsDeviceNameCharacteristicUuid}'] =
+      transport.characteristics[
+              '${OmiDeviceConnection.settingsServiceUuid}/${OmiDeviceConnection.settingsDeviceNameCharacteristicUuid}'] =
           utf8.encode("Charlie's Omi");
 
       final baseDevice = BtDevice(

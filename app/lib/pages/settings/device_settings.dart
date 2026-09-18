@@ -297,6 +297,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                             return;
                           }
 
+                          final scaffoldMessenger = ScaffoldMessenger.of(context);
+                          final successMessage = '${context.l10n.deviceName}: $newName';
                           setDialogState(() => isSaving = true);
                           try {
                             final connection = await ServiceManager.instance().device.ensureConnection(device.id);
@@ -309,26 +311,22 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                               if (provider.pairedDevice != null) {
                                 SharedPreferencesUtil().btDevice = provider.pairedDevice!;
                               }
-                              await provider.getDeviceInfo(force: true);
+                              await provider.refreshDeviceInfo();
                             }
                             if (dialogContext.mounted) {
                               Navigator.of(dialogContext).pop();
                             }
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('${context.l10n.deviceName}: $newName')),
-                              );
-                            }
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(content: Text(successMessage)),
+                            );
                           } catch (e) {
                             Logger.error('Failed to rename device: $e');
                             if (dialogContext.mounted) {
                               setDialogState(() => isSaving = false);
                             }
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Failed to update device name: $e')),
-                              );
-                            }
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(content: Text('Failed to update device name: $e')),
+                            );
                           }
                         },
                   child: isSaving

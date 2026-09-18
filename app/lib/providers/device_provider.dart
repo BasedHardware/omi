@@ -291,7 +291,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return firstPairedAt;
   }
 
-  Future getDeviceInfo({bool force = false}) async {
+  Future getDeviceInfo() async {
+    await _fetchDeviceInfo(force: false);
+  }
+
+  Future refreshDeviceInfo() async {
+    await _fetchDeviceInfo(force: true);
+  }
+
+  Future _fetchDeviceInfo({bool force = false}) async {
     final generation = _sessionGeneration;
     if (connectedDevice != null) {
       if (!force && pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
