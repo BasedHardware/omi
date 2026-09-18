@@ -8,6 +8,7 @@ this run acquired.
 Sign-in is out of this package. The app is signed out; smoke asserts
 signedIn=false rather than injecting a token.
 """
+
 from __future__ import annotations
 
 import json
@@ -204,7 +205,47 @@ def uvicorn_importable(repo_root: Path) -> bool:
     return completed.returncode == 0
 
 
-def ensure_generated_env(app_dir: Path, repo_root: Path, *, runner: Callable[..., subprocess.CompletedProcess[str]]) -> None:
+# flutter run rewrites these tracked files. Smoke restores the bytes it
+# observed at start so a passing lane cannot leave lockfile dirt for pre-push.
+_FLUTTER_TREE_PATHS = (
+    "app/ios/Podfile.lock",
+    "app/android/gradle.properties",
+)
+
+
+def snapshot_flutter_tree_files(repo_root: Path) -> dict[str, bytes | None]:
+    snapshot: dict[str, bytes | None] = {}
+    for relative in _FLUTTER_TREE_PATHS:
+        path = Path(repo_root) / relative
+        try:
+            snapshot[relative] = path.read_bytes()
+        except OSError:
+            snapshot[relative] = None
+    return snapshot
+
+
+def restore_flutter_tree_files(repo_root: Path, snapshot: Mapping[str, bytes | None]) -> None:
+    for relative, before in snapshot.items():
+        path = Path(repo_root) / relative
+        try:
+            after = path.read_bytes()
+        except OSError:
+            after = None
+        if after == before:
+            continue
+        if before is None:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(before)
+
+
+def ensure_generated_env(
+    app_dir: Path, repo_root: Path, *, runner: Callable[..., subprocess.CompletedProcess[str]]
+) -> None:
     """Generate envied files without deleting tracked sources.
 
     A `build_runner --build-filter=… --delete-conflicting-outputs` run on the
@@ -374,7 +415,9 @@ def grant_android_runtime_permissions(adb: str, serial: str, app_id: str) -> Non
         )
         if completed.returncode != 0:
             raise SmokeBlocked(
-                f"pm grant {app_id} {permission} failed: {(completed.stdout or '') + (completed.stderr or '')}".strip()[:400],
+                f"pm grant {app_id} {permission} failed: {(completed.stdout or '') + (completed.stderr or '')}".strip()[
+                    :400
+                ],
                 remedy=f"{adb} -s {serial} shell pm grant {app_id} {permission}",
                 payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
             )
@@ -414,7 +457,9 @@ class SimulatorSmoke:
             lambda **kwargs: mobile_doctor.run_doctor(self.repo_root, env=self.env or None, **kwargs)
         )
         self._acquire = acquire or (lambda **kwargs: ms.acquire(self.repo_root, self.env or None, **kwargs))
-        self._start = start or (lambda session_id, **kwargs: ms.start(self.repo_root, session_id, self.env or None, **kwargs))
+        self._start = start or (
+            lambda session_id, **kwargs: ms.start(self.repo_root, session_id, self.env or None, **kwargs)
+        )
         self._seed = seed or (lambda session_id: ms.seed(self.repo_root, session_id, self.env or None))
         self._release = release or (lambda session_id: ms.release(self.repo_root, session_id, self.env or None))
         self._evidence = evidence or (
@@ -473,6 +518,7 @@ class SimulatorSmoke:
         return env
 
     def run(self, *, session_id: str | None = None, name: str = "v2smoke") -> dict[str, Any]:
+        tree_snapshot = snapshot_flutter_tree_files(self.repo_root)
         started = time.monotonic()
         try:
             return self._run(session_id=session_id, name=name)
@@ -487,6 +533,7 @@ class SimulatorSmoke:
         finally:
             self._timings["total_s"] = round(time.monotonic() - started, 1)
             self._stop_child()
+            restore_flutter_tree_files(self.repo_root, tree_snapshot)
             if self._acquired_id:
                 old_stdout = sys.stdout
                 try:
@@ -500,7 +547,9 @@ class SimulatorSmoke:
     def _run(self, *, session_id: str | None, name: str) -> dict[str, Any]:
         report = self._doctor(platforms=(self.platform,), skip_capacity=False)
         if report.overall != "ready":
-            first = next((c for c in getattr(report, "checks", ()) if getattr(c, "status", "") != mobile_doctor.READY), None)
+            first = next(
+                (c for c in getattr(report, "checks", ()) if getattr(c, "status", "") != mobile_doctor.READY), None
+            )
             raise SmokeBlocked(
                 f"{self.platform} lane not ready (doctor)",
                 remedy=(
@@ -517,7 +566,10 @@ class SimulatorSmoke:
             raise SmokeBlocked(
                 "session backend uvicorn is not importable in backend/.venv",
                 remedy=session_backend_remedy(self.repo_root),
-                payload={"classification": mobile_doctor.AGENT_REMEDIABLE, "lane_backend": lane_backend_target_present(self.repo_root)},
+                payload={
+                    "classification": mobile_doctor.AGENT_REMEDIABLE,
+                    "lane_backend": lane_backend_target_present(self.repo_root),
+                },
             )
         lease: dict[str, Any]
         if session_id:
@@ -828,14 +880,20 @@ class SimulatorSmoke:
             self._child = None
 
 
-def block_payload(repo_root: Path, platform_name: str, report: mobile_doctor.DoctorReport | None = None) -> dict[str, Any]:
+def block_payload(
+    repo_root: Path, platform_name: str, report: mobile_doctor.DoctorReport | None = None
+) -> dict[str, Any]:
     report = report or mobile_doctor.run_doctor(repo_root, platforms=(platform_name,), skip_capacity=True)
     failing = next((c for c in report.checks if c.status != mobile_doctor.READY), None)
     return {
         "outcome": "blocked",
         "lane": platform_name,
         "reason": failing.detail if failing else f"{platform_name} lane is not ready",
-        "remedy": failing.remedy if failing else f"bash scripts/dev-harness/mobile-session.sh doctor --platform {platform_name}",
+        "remedy": (
+            failing.remedy
+            if failing
+            else f"bash scripts/dev-harness/mobile-session.sh doctor --platform {platform_name}"
+        ),
         "classification": failing.status if failing else mobile_doctor.AGENT_REMEDIABLE,
         "doctor": report.as_dict(),
         "ci_policy": "this package does not add the simulator or android lane to CI",
@@ -898,7 +956,13 @@ def _run_one_platform(repo_root: Path, args: Any, platform_name: str, evidence_d
             name="v3android" if platform_name == "android" else "v2smoke",
         )
     except SmokeBlocked as exc:
-        payload = {"outcome": "blocked", "reason": str(exc), "remedy": exc.remedy, **exc.payload, "timings": engine._timings}
+        payload = {
+            "outcome": "blocked",
+            "reason": str(exc),
+            "remedy": exc.remedy,
+            **exc.payload,
+            "timings": engine._timings,
+        }
         verify._emit(payload, as_json=getattr(args, "json", False))
         print(f"blocked: {exc} — {exc.remedy}", file=sys.stderr)
         return verify.EXIT_BLOCKED
@@ -928,7 +992,10 @@ def _run_one_platform(repo_root: Path, args: Any, platform_name: str, evidence_d
         "ci_policy": "ordinary CI never runs this lane",
     }
     (evidence_dir / "verify-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
-    verify._emit({**receipt, "controls_profile": (result["controls"]["state"] or {}).get("profile")}, as_json=getattr(args, "json", False))
+    verify._emit(
+        {**receipt, "controls_profile": (result["controls"]["state"] or {}).get("profile")},
+        as_json=getattr(args, "json", False),
+    )
     return verify.EXIT_OK
 
 

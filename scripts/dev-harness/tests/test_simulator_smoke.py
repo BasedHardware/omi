@@ -1,4 +1,5 @@
 """Hermetic V2 simulator-smoke orchestration. No real flutter/Xcode."""
+
 from __future__ import annotations
 
 import argparse
@@ -53,7 +54,12 @@ def _lease(tmp_path: Path, platform: str = "ios-simulator") -> dict:
             "status": "seeded",
             "generation": 1,
             "app_id": "com.friend.ios.dev",
-            "device": {"kind": "emulator", "udid": "emulator-5554", "owner": "session", "avd": "omi-session-oms-v3android"},
+            "device": {
+                "kind": "emulator",
+                "udid": "emulator-5554",
+                "owner": "session",
+                "avd": "omi-session-oms-v3android",
+            },
             "ports": {"backend": 8100, "auth": 9199, "firestore": 8185, "redis": 6479},
             "source_at_acquire": {"git_sha": "a" * 40, "dirty_digest": "clean"},
             "default_auth_uid": "fixture-user",
@@ -184,7 +190,9 @@ def _engine(tmp_path: Path, *, mode="ok", start_raises=None, platform="ios-simul
     return engine
 
 
-def test_smoke_without_ready_infrastructure_blocks(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_smoke_without_ready_infrastructure_blocks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     class BlockedReport:
         overall = "blocked"
         checks = ()
@@ -199,7 +207,9 @@ def test_smoke_without_ready_infrastructure_blocks(tmp_path: Path, capsys: pytes
     capsys.readouterr()
 
 
-def test_android_is_blocked_with_doctor_message(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_android_is_blocked_with_doctor_message(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     sdk = md.CheckResult(
         "android-sdk",
         md.AGENT_REMEDIABLE,
@@ -322,7 +332,9 @@ def test_codegen_refuses_delete_conflicting_outputs(tmp_path: Path) -> None:
     assert "--build-filter=lib/env/*" in recorded["argv"]
 
 
-def test_cmd_smoke_uses_injected_engine_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cmd_smoke_uses_injected_engine_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     engine = _engine(tmp_path)
 
     def fake_run(repo_root, args):
@@ -402,3 +414,21 @@ def test_plain_smoke_runs_doctor_ready_platforms(
     assert smoke.run_smoke(tmp_path, args) == 0
     assert calls == ["ios-simulator", "android"]
     capsys.readouterr()
+
+
+def test_smoke_restores_flutter_lockfiles_it_dirtied(tmp_path: Path) -> None:
+    pod = tmp_path / "app" / "ios" / "Podfile.lock"
+    gradle = tmp_path / "app" / "android" / "gradle.properties"
+    pod.parent.mkdir(parents=True)
+    gradle.parent.mkdir(parents=True)
+    pod.write_text("PODS:\n", encoding="utf-8")
+    gradle.write_text("android.useAndroidX=true\n", encoding="utf-8")
+    snapshot = smoke.snapshot_flutter_tree_files(tmp_path)
+    pod.write_text("PODS:\n  - Dirt\n", encoding="utf-8")
+    gradle.write_text(
+        "android.useAndroidX=true\n# This builtInKotlin flag was added automatically by Flutter migrator\n",
+        encoding="utf-8",
+    )
+    smoke.restore_flutter_tree_files(tmp_path, snapshot)
+    assert pod.read_text(encoding="utf-8") == "PODS:\n"
+    assert gradle.read_text(encoding="utf-8") == "android.useAndroidX=true\n"
