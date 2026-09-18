@@ -13,6 +13,20 @@ class CaptureSessionToken {
   final String identity;
 }
 
+class _InFlightConnect {
+  _InFlightConnect({required this.generation, required this.configuration, required this.epoch, required this.future});
+  final int generation;
+  final String configuration;
+  final int epoch;
+  final Future<dynamic> future;
+}
+
+class _PublishedConnect {
+  _PublishedConnect(this.value, this.close);
+  final dynamic value;
+  final Future<void> Function(dynamic value) close;
+}
+
 /// Extracted ownership boundary; implementation belongs to App core/C1.
 /// No constructor below resolves a singleton or starts work.
 class CaptureSessionOwner implements CaptureRecoveryRequests {
@@ -20,16 +34,47 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
     required RecordingTransferCoordinator coordinator,
     required Future<void> Function() startForeground,
     required Future<void> Function() stopForeground,
-  });
+  }) : _coordinator = coordinator,
+       _startForeground = startForeground,
+       _stopForeground = stopForeground;
 
-  CaptureSessionToken get token => throw UnimplementedError('C1 session generation');
-  bool isCurrent(CaptureSessionToken token) => throw UnimplementedError('C1 generation check');
-  void replaceSession(String identity) => throw UnimplementedError('C1 invalidate before awaits');
+  // FGS stays on a later cut; the constructor contract is stored so that cut
+  // does not change the explicit composition shape.
+  final RecordingTransferCoordinator _coordinator;
+  // ignore: unused_field
+  final Future<void> Function() _startForeground;
+  // ignore: unused_field
+  final Future<void> Function() _stopForeground;
+
+  int _generation = 0;
+  String _identity = '';
+  int _connectEpoch = 0;
+  bool _closed = false;
+  _InFlightConnect? _inFlight;
+  _PublishedConnect? _published;
+  Future<void>? _closeFinished;
+
+  CaptureSessionToken get token => CaptureSessionToken(_generation, _identity);
+
+  bool isCurrent(CaptureSessionToken token) =>
+      !_closed && token.generation == _generation && token.identity == _identity;
+
+  bool _connectIsCurrent(int generation, int epoch) => !_closed && generation == _generation && epoch == _connectEpoch;
+
+  void replaceSession(String identity) {
+    _identity = identity;
+    _generation++;
+    _connectEpoch++;
+  }
 
   /// A generation is captured BEFORE prepare; only a current completion commits.
   /// commit is synchronous: async effects need their own check at each await.
-  Future<void> prepareCurrent<T>(Future<T> Function() prepare, void Function(T) commit) =>
-      throw UnimplementedError('C1 generation-guarded completion');
+  Future<void> prepareCurrent<T>(Future<T> Function() prepare, void Function(T) commit) async {
+    final captured = token;
+    final value = await prepare();
+    if (!isCurrent(captured)) return;
+    commit(value);
+  }
 
   /// Same generation/configuration joins one attempt. A superseded result is
   /// disposed before completion and is never published to the active session.
@@ -37,8 +82,58 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
     required String configuration,
     required Future<T> Function() open,
     required Future<void> Function(T) close,
-  }) =>
-      throw UnimplementedError('C1 single socket attempt');
+  }) {
+    if (_closed) return Future<T?>.value(null);
+    final inFlight = _inFlight;
+    if (inFlight != null && inFlight.generation == _generation && inFlight.configuration == configuration) {
+      return inFlight.future as Future<T?>;
+    }
+
+    final generation = _generation;
+    final epoch = ++_connectEpoch;
+    final completer = Completer<T?>();
+    _inFlight = _InFlightConnect(
+      generation: generation,
+      configuration: configuration,
+      epoch: epoch,
+      future: completer.future,
+    );
+
+    () async {
+      try {
+        final result = await open();
+        if (!_connectIsCurrent(generation, epoch)) {
+          await close(result);
+          if (!completer.isCompleted) completer.complete(null);
+          return;
+        }
+        final previous = _published;
+        _published = null;
+        if (previous != null) {
+          try {
+            await previous.close(previous.value);
+          } catch (error, stack) {
+            await close(result);
+            if (!completer.isCompleted) completer.completeError(error, stack);
+            return;
+          }
+        }
+        if (!_connectIsCurrent(generation, epoch)) {
+          await close(result);
+          if (!completer.isCompleted) completer.complete(null);
+          return;
+        }
+        _published = _PublishedConnect(result, (dynamic value) => close(value as T));
+        if (!completer.isCompleted) completer.complete(result);
+      } catch (error, stack) {
+        if (!completer.isCompleted) completer.completeError(error, stack);
+      } finally {
+        if (_inFlight?.epoch == epoch) _inFlight = null;
+      }
+    }();
+
+    return completer.future;
+  }
 
   Future<void> setForegroundRequired(bool required) => throw UnimplementedError('C1 ordered FGS intent');
   bool get foregroundRunning => throw UnimplementedError('C1 settled FGS state');
@@ -47,6 +142,35 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
   Future<void> requestRecovery(WakeTrigger trigger, {int? inventoryRevision}) =>
       throw UnimplementedError('C1 coalesced recovery request');
 
+  /// Generation-guarded coordinator wake. Distinct from [requestRecovery]
+  /// coalescing, which is a later C1 cut.
+  Future<void> wakeIfCurrent(CaptureSessionToken token, WakeTrigger trigger) async {
+    if (!isCurrent(token)) return;
+    await _coordinator.wake(trigger);
+  }
+
   /// Invalidates synchronously, then drains owned teardown. Idempotent.
-  Future<void> close() => throw UnimplementedError('C1 owner teardown');
+  Future<void> close() {
+    if (_closed) return _closeFinished ?? Future<void>.value();
+    _closed = true;
+    _generation++;
+    _connectEpoch++;
+    return _closeFinished ??= _drainClose();
+  }
+
+  Future<void> _drainClose() async {
+    final inFlight = _inFlight?.future;
+    if (inFlight != null) {
+      try {
+        await inFlight;
+      } catch (_) {
+        // The connect caller already received the error.
+      }
+    }
+    final published = _published;
+    _published = null;
+    if (published != null) {
+      await published.close(published.value);
+    }
+  }
 }

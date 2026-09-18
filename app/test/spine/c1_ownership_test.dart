@@ -89,7 +89,6 @@ void main() {
   });
 
   contractTest('C1 keepalive joins pending connect and stale socket is closed', () async {
-    pendingContract('C1');
     final e = Effects();
     e.owner.replaceSession('user-a/device-a');
     final gate = Completer<String>();
@@ -120,7 +119,6 @@ void main() {
   });
 
   contractTest('C1 changed configuration supersedes but cannot publish an older completion', () async {
-    pendingContract('C1');
     final e = Effects();
     e.owner.replaceSession('a');
     final old = Completer<String>();
@@ -138,7 +136,6 @@ void main() {
   {
     const stage = 'generation primitive';
     contractTest('C1 $stage cannot commit an obsolete generation or disposed completion', () async {
-      pendingContract('C1');
       final e = Effects();
       e.owner.replaceSession('same-user/same-device');
       final before = e.owner.token;

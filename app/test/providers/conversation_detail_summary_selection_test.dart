@@ -83,10 +83,12 @@ void main() {
   });
 
   test('the first app result that carries content is the summary', () {
-    final conversation = _conversation(appResults: [
-      AppResponse('', appId: 'empty-app'),
-      AppResponse('App summary', appId: 'app-2'),
-    ]);
+    final conversation = _conversation(
+      appResults: [
+        AppResponse('', appId: 'empty-app'),
+        AppResponse('App summary', appId: 'app-2'),
+      ],
+    );
 
     final summary = _providerFor(conversation).getSummarySelection();
 
@@ -105,10 +107,12 @@ void main() {
   });
 
   test('duplicate app ids are read-only instead of editing the first match', () async {
-    final conversation = _conversation(appResults: [
-      AppResponse('First app summary', appId: 'duplicate'),
-      AppResponse('Second app summary', appId: 'duplicate'),
-    ]);
+    final conversation = _conversation(
+      appResults: [
+        AppResponse('First app summary', appId: 'duplicate'),
+        AppResponse('Second app summary', appId: 'duplicate'),
+      ],
+    );
     final provider = _providerFor(conversation);
     final selection = provider.getSummarySelection();
 

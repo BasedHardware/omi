@@ -41,6 +41,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/dev_controls/journey_faults.dart';
 import 'package:omi/utils/enums.dart';
 
+export 'addressability.dart';
+
 /// Version of the semantic-controls contract. Bump on any breaking change;
 /// additive capabilities append without a bump.
 const String semanticControlsVersion = 'semantic-controls/v1';
@@ -87,11 +89,11 @@ class SemanticPrincipal {
   /// Privacy-safe projection: uid/email identity and auth flags only. Never a
   /// token, never preferences beyond identity.
   Map<String, Object?> toJson() => {
-        'uid': uid,
-        'email': email,
-        'signed_in': signedIn,
-        'requires_reauthentication': requiresReauthentication,
-      };
+    'uid': uid,
+    'email': email,
+    'signed_in': signedIn,
+    'requires_reauthentication': requiresReauthentication,
+  };
 }
 
 class SemanticCaptureState {
@@ -116,11 +118,11 @@ class SemanticCaptureState {
   final String backlogObservability;
 
   Map<String, Object?> toJson() => {
-        'active_recording_id': activeRecordingId,
-        'active_capture_session_id': activeCaptureSessionId,
-        'recording_state': recordingState,
-        'upload_backlog': backlogObservability,
-      };
+    'active_recording_id': activeRecordingId,
+    'active_capture_session_id': activeCaptureSessionId,
+    'recording_state': recordingState,
+    'upload_backlog': backlogObservability,
+  };
 }
 
 class SemanticState {
@@ -143,14 +145,14 @@ class SemanticState {
   final List<String> faultsArmed;
 
   Map<String, Object?> toJson() => {
-        'contract_version': contractVersion,
-        'profile': profile,
-        'route': route,
-        'principal': principal.toJson(),
-        'capture': capture.toJson(),
-        'readiness': readiness,
-        'faults_armed': faultsArmed,
-      };
+    'contract_version': contractVersion,
+    'profile': profile,
+    'route': route,
+    'principal': principal.toJson(),
+    'capture': capture.toJson(),
+    'readiness': readiness,
+    'faults_armed': faultsArmed,
+  };
 }
 
 /// Thrown by [SemanticControls.waitReady] when the deadline passes. Carries
@@ -190,34 +192,33 @@ class SemanticControls {
   /// Installs the VM service extensions when (and only when) the current
   /// build is [semanticControlsEligible]. Called from the debug branch of
   /// `main()` next to `MarionetteBinding.ensureInitialized()`; inert elsewhere.
-  void installIfEligible() {
+  void installIfEligible({void Function(String, developer.ServiceExtensionHandler)? register}) {
     if (!semanticControlsEligible || _installed) return;
     _installed = true;
-    _registerExtensions();
+    _registerExtensions(register ?? developer.registerExtension);
   }
 
   bool get installed => _installed;
 
   static const JsonEncoder _json = JsonEncoder();
 
-  void _registerExtensions() {
-    developer.registerExtension('omi.controls.capabilities', (method, params) async {
-      return developer.ServiceExtensionResponse.result(_json.convert({
-        'contract_version': semanticControlsVersion,
-        'capabilities': capabilities,
-        'faults': [for (final f in JourneyFault.values) f.name],
-      }));
+  void _registerExtensions(void Function(String, developer.ServiceExtensionHandler) register) {
+    register('omi.controls.capabilities', (method, params) async {
+      return developer.ServiceExtensionResponse.result(
+        _json.convert({
+          'contract_version': semanticControlsVersion,
+          'capabilities': capabilities,
+          'faults': [for (final f in JourneyFault.values) f.name],
+        }),
+      );
     });
-    developer.registerExtension('omi.controls.state', (method, params) async {
+    register('omi.controls.state', (method, params) async {
       return developer.ServiceExtensionResponse.result(_json.convert(state().toJson()));
     });
-    developer.registerExtension('omi.controls.wait_ready', (method, params) async {
+    register('omi.controls.wait_ready', (method, params) async {
       final condition = params['condition'];
       if (condition == null) {
-        return developer.ServiceExtensionResponse.error(
-          -32602,
-          'missing "condition"',
-        );
+        return developer.ServiceExtensionResponse.error(-32602, 'missing "condition"');
       }
       final deadlineMs = int.tryParse(params['deadline_ms'] ?? '') ?? 30000;
       try {
@@ -227,27 +228,21 @@ class SemanticControls {
         return developer.ServiceExtensionResponse.error(-32000, e.toString());
       }
     });
-    developer.registerExtension('omi.controls.navigate', (method, params) async {
+    register('omi.controls.navigate', (method, params) async {
       final destination = params['destination'];
       if (destination == null) {
-        return developer.ServiceExtensionResponse.error(
-          -32602,
-          'missing "destination"',
-        );
+        return developer.ServiceExtensionResponse.error(-32602, 'missing "destination"');
       }
       final ok = navigate(destination);
       return ok
           ? developer.ServiceExtensionResponse.result(_json.convert({'ok': true}))
           : developer.ServiceExtensionResponse.error(-32001, 'unknown destination "$destination"');
     });
-    developer.registerExtension('omi.controls.fault', (method, params) async {
+    register('omi.controls.fault', (method, params) async {
       final fault = params['fault'];
       final clear = params['clear'] == 'true';
       if (fault == null) {
-        return developer.ServiceExtensionResponse.error(
-          -32602,
-          'missing "fault"',
-        );
+        return developer.ServiceExtensionResponse.error(-32602, 'missing "fault"');
       }
       try {
         final parsed = JourneyFault.values.firstWhere((f) => f.name == fault);
@@ -257,10 +252,7 @@ class SemanticControls {
           armFault(parsed);
         }
       } on StateError {
-        return developer.ServiceExtensionResponse.error(
-          -32602,
-          'unknown fault "$fault"',
-        );
+        return developer.ServiceExtensionResponse.error(-32602, 'unknown fault "$fault"');
       }
       return developer.ServiceExtensionResponse.result(
         _json.convert({'ok': true, 'armed': armedFaults.map((f) => f.name).toList()}),
@@ -286,9 +278,7 @@ class SemanticControls {
       route: route,
       principal: principal,
       capture: capture,
-      readiness: {
-        for (final c in SemanticReadiness.values) c.name: isReady(c),
-      },
+      readiness: {for (final c in SemanticReadiness.values) c.name: isReady(c)},
       faultsArmed: [for (final f in armedFaults) f.name],
     );
   }
@@ -381,8 +371,10 @@ class SemanticControls {
     try {
       parsed = SemanticReadiness.values.firstWhere((c) => c.name == condition);
     } on StateError {
-      throw ArgumentError('unknown readiness condition "$condition"; '
-          'known: ${SemanticReadiness.values.map((c) => c.name).toList()}');
+      throw ArgumentError(
+        'unknown readiness condition "$condition"; '
+        'known: ${SemanticReadiness.values.map((c) => c.name).toList()}',
+      );
     }
     final sw = Stopwatch()..start();
     return () async {

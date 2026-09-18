@@ -41,7 +41,6 @@ class HeldLocation extends ConversationLocationCapture {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 location fix from obsolete session must not start compatibility upload', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-location-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -65,7 +64,6 @@ void main() {
   });
 
   contractTest('C1 pending auth refresh cannot reconnect after capture generation changes', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-auth-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -74,25 +72,29 @@ void main() {
       var refreshes = 0;
       var opens = 0;
       final d = dependencies(
-          world: w,
-          preferences: SharedPreferencesUtil(),
-          auth: CaptureAuthBoundary(
-              isSignedIn: () => true,
-              refreshIdToken: () {
-                refreshes++;
-                return refresh.future;
-              }),
-          open: (
-              {required codec,
+        world: w,
+        preferences: SharedPreferencesUtil(),
+        auth: CaptureAuthBoundary(
+          isSignedIn: () => true,
+          refreshIdToken: () {
+            refreshes++;
+            return refresh.future;
+          },
+        ),
+        open:
+            ({
+              required codec,
               required sampleRate,
               required language,
               required force,
               source,
               clientConversationId,
-              customSttConfig}) async {
-            opens++;
-            return null;
-          });
+              customSttConfig,
+            }) async {
+              opens++;
+              return null;
+            },
+      );
       final p = composeCaptureProvider(d);
       p.updateRecordingState(RecordingState.systemAudioRecord);
       p.onClosed(4001);

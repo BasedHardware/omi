@@ -116,6 +116,7 @@ class _HomePageProductState extends State<_HomePageProduct> {
       // Check actual system permission state — the SharedPreferences flag may
       // be stale (e.g. user granted via Settings > Permissions, or reinstall).
       final notifGranted = await Permission.notification.isGranted;
+      if (!mounted) return;
       if (notifGranted) {
         SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();
@@ -334,14 +335,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       try {
         final diagnostics = await BleHostApi().getDeviceDiagnostics(diagnosticsDeviceId);
         final startMs = backgroundStartedAt.millisecondsSinceEpoch;
-        final recentEvents =
-            diagnostics.disconnectHistory.where((event) => event.timestamp >= startMs && !event.isManual).toList();
-        final backgroundEvents =
-            recentEvents.where((event) => event.appState == 'background' || event.appState == 'inactive').toList();
+        final recentEvents = diagnostics.disconnectHistory
+            .where((event) => event.timestamp >= startMs && !event.isManual)
+            .toList();
+        final backgroundEvents = recentEvents
+            .where((event) => event.appState == 'background' || event.appState == 'inactive')
+            .toList();
         backgroundDisconnectCount = backgroundEvents.where((event) => event.eventType == 'disconnect').length;
         failToConnectCount = backgroundEvents.where((event) => event.eventType == 'fail_to_connect').length;
-        connectionTimeoutCount =
-            backgroundEvents.where((event) => event.reason.toLowerCase().contains('timeout')).length;
+        connectionTimeoutCount = backgroundEvents
+            .where((event) => event.reason.toLowerCase().contains('timeout'))
+            .length;
         final reconnectedEvents = backgroundEvents.where((event) => event.timeToReconnectMs > 0).toList();
         reconnectCount = reconnectedEvents.length;
         for (final event in reconnectedEvents) {
@@ -351,7 +355,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         reconnectionCountTotal = diagnostics.reconnectionCount;
         failToConnectCountTotal = diagnostics.failToConnectCount;
-        bleHistorySaturated = diagnostics.disconnectHistory.length >= 20 &&
+        bleHistorySaturated =
+            diagnostics.disconnectHistory.length >= 20 &&
             diagnostics.disconnectHistory.every((event) => event.timestamp >= startMs);
         nativeBackgroundBytesConsumed = diagnostics.nativeBackgroundBytesConsumed;
         nativeBackgroundPacketsConsumed = diagnostics.nativeBackgroundPacketsConsumed;
@@ -1020,16 +1025,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       color: isSyncing
                           ? Colors.deepPurple.withValues(alpha: 0.2)
                           : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                          ? Colors.orange.withValues(alpha: 0.15)
+                          : const Color(0xFF1F1F25),
                       icon: Icon(
                         Icons.cloud_rounded,
                         size: 18,
                         color: isSyncing
                             ? Colors.deepPurpleAccent
                             : hasPendingOnDevice
-                                ? Colors.orangeAccent
-                                : Colors.white70,
+                            ? Colors.orangeAccent
+                            : Colors.white70,
                       ),
                     );
                   }

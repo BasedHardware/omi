@@ -91,6 +91,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _discoveryTimer;
+  Timer? _disconnectRescanTimer;
+  Timer? _firmwarePromptTimer;
+  bool _isDisposed = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
@@ -98,8 +101,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
   DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader, FindDeviceRunner? findDeviceRunner})
-      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
-        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
+    : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+      _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
   }
@@ -274,13 +277,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   static Future<bool> _defaultFindDeviceRunner(BtDevice device) async {
-    final connection = await ServiceManager.instance().device.ensureConnection(device.id).timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        Logger.debug('DeviceProvider: Timed out finding the active device connection');
-        return null;
-      },
-    );
+    final connection = await ServiceManager.instance().device
+        .ensureConnection(device.id)
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('DeviceProvider: Timed out finding the active device connection');
+            return null;
+          },
+        );
     return await connection?.playFindDevicePattern() ?? false;
   }
 
@@ -416,8 +421,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -440,6 +446,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   /// Kicks off a single connection attempt. Native handles auto-reconnect after this.
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
+    if (_isDisposed) return;
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
 
     if (ServiceManager.instance().device.staleBondRecoveryRequired) {
@@ -471,10 +478,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _startDiscoveryScanning() {
+    if (_isDisposed) return;
     _discoveryTimer?.cancel();
     _runDiscoveryScan();
     _discoveryTimer = Timer.periodic(const Duration(seconds: 10), (_) => _runDiscoveryScan());
   }
+
+  void stopDiscoveryScanning() {
+    _discoveryTimer?.cancel();
+    _discoveryTimer = null;
+  }
+
+  @visibleForTesting
+  void startDiscoveryScanningForTesting() => _startDiscoveryScanning();
+
+  @visibleForTesting
+  bool get hasActiveDiscoveryTimer => _discoveryTimer?.isActive ?? false;
 
   Future<void> _runDiscoveryScan() async {
     if (SharedPreferencesUtil().btDevice.id.isNotEmpty || isConnected) {
@@ -537,6 +556,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    _isDisposed = true;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     if (BleBridge.instance.pairingLostCallback == _handlePairingLost) {
       BleBridge.instance.pairingLostCallback = null;
@@ -544,6 +564,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
     _discoveryTimer?.cancel();
+    _disconnectRescanTimer?.cancel();
+    _firmwarePromptTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
@@ -566,7 +588,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Batch mode: the native writer finalizes the in-progress recording on
     // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
     // so the new recording shows up in the conversations list.
-    Future.delayed(const Duration(seconds: 1), () {
+    _disconnectRescanTimer?.cancel();
+    _disconnectRescanTimer = Timer(const Duration(seconds: 1), () {
+      if (_isDisposed) return;
       localRecordingsProvider?.refresh();
     });
 
@@ -827,7 +851,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // Show firmware update dialog if needed
       if (hasUpdate && _havingNewFirmware) {
         // Use a small delay to ensure the UI is ready
-        Future.delayed(const Duration(milliseconds: 500), () {
+        _firmwarePromptTimer?.cancel();
+        _firmwarePromptTimer = Timer(const Duration(milliseconds: 500), () {
+          if (_isDisposed) return;
           if (!_isCurrentFirmwareCheckSession(checkSession)) return;
           final context = globalNavigatorKey.currentContext;
           if (context != null && context.mounted) {
@@ -954,7 +980,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         }
 
         await Future.delayed(retryDelay);
-        if (!_isCurrentFirmwareCheckSession(checkSession)) {
+        if (_isDisposed || !_isCurrentFirmwareCheckSession(checkSession)) {
           return false;
         }
       }

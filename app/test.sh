@@ -63,4 +63,7 @@ fi
 
 bash "$ROOT_DIR/scripts/check_hermetic_test_env.sh" --app-dir "$ROOT_DIR"
 
+# Execute registration with the real compile-time opt-in in a separate isolate.
+# Keep the ordinary suite (including the pinned fail-closed guard) unopted-in.
+flutter test --dart-define=OMI_DEV_CONTROLS=1 test/spine
 flutter test "$@"

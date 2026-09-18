@@ -109,6 +109,7 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     String? source,
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     final gate = Completer<void>();
     gates.add(gate);
@@ -138,8 +139,8 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     String? source,
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
-  }) async =>
-      null;
+    Geolocation? geolocation,
+  }) async => null;
 }
 
 class _CountingSocketCaptureProvider extends CaptureProvider {
@@ -156,6 +157,7 @@ class _CountingSocketCaptureProvider extends CaptureProvider {
     String? source,
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     openCalls++;
     return null;
@@ -232,7 +234,7 @@ class _FakeBatchMicRecorder implements IMicRecorderService {
 
 class _IdentifiedSocketService extends TranscriptSegmentSocketService {
   _IdentifiedSocketService(this.id, this.onSubscribed)
-      : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
+    : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
 
   final int id;
   final void Function(int id) onSubscribed;
@@ -371,9 +373,9 @@ void main() {
     final provider = CaptureProvider(conversationLocationCapture: locationCapture);
 
     await provider.streamDeviceRecording().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
-        );
+      const Duration(seconds: 2),
+      onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+    );
     expect(locationCapture.calls, 1);
     locationCapture.complete();
     provider.dispose();
@@ -390,9 +392,9 @@ void main() {
     );
 
     await provider.startPhoneMicBatchForTesting().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => fail('phone batch start blocked on location capture'),
-        );
+      const Duration(seconds: 2),
+      onTimeout: () => fail('phone batch start blocked on location capture'),
+    );
 
     expect(micRecorder.startBatchCalls, 1);
     expect(provider.recordingState, RecordingState.record);
@@ -1579,12 +1581,11 @@ void main() {
       _GatedSocketCaptureProvider provider, {
       BleAudioCodec codec = BleAudioCodec.pcm16,
       int sampleRate = 16000,
-    }) =>
-        provider.changeAudioRecordProfile(
-          audioCodec: codec,
-          sampleRate: sampleRate,
-          source: ConversationSource.phone.name,
-        );
+    }) => provider.changeAudioRecordProfile(
+      audioCodec: codec,
+      sampleRate: sampleRate,
+      source: ConversationSource.phone.name,
+    );
 
     test('drops a reconnect attempt while one is still in flight', () async {
       final provider = _GatedSocketCaptureProvider();

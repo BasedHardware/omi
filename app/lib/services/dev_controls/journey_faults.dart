@@ -24,7 +24,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 /// The named faults. `name` is the stable wire identifier used by the
-/// `omi.controls.fault` VM-service extension and journey receipts.
+/// `ext.omi.controls.fault` VM-service extension and journey receipts.
 enum JourneyFault {
   /// The chat send request never leaves the app (dropped at the HTTP
   /// chokepoint). Journey must fail: no server-visible user message, no
@@ -55,12 +55,12 @@ enum JourneyFault {
   /// The invariant whose absence the armed fault must expose. Journey
   /// failures are expected to name this string.
   String get invariant => switch (this) {
-        suppressSend => 'a sent user message reaches the server and is echoed into the conversation',
-        suppressAssistantReply => 'a distinct assistant-role reply arrives through the real API path',
-        dropMemorySave => 'a created memory persists across reload',
-        wrongOwnerSession => 'records are only accessible under their owning session principal',
-        failCaptureRecovery => 'persisted audio remains recoverable after reconnect',
-      };
+    suppressSend => 'a sent user message reaches the server and is echoed into the conversation',
+    suppressAssistantReply => 'a distinct assistant-role reply arrives through the real API path',
+    dropMemorySave => 'a created memory persists across reload',
+    wrongOwnerSession => 'records are only accessible under their owning session principal',
+    failCaptureRecovery => 'persisted audio remains recoverable after reconnect',
+  };
 }
 
 /// Client-side fault decisions for the HTTP egress chokepoint.

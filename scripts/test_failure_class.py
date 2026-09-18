@@ -313,6 +313,18 @@ class FailureClassCliTests(unittest.TestCase):
         )
 
     def test_prepare_narrows_candidates_to_matching_scope_hints(self) -> None:
+        """Narrowing must list exactly the classes whose hints match the
+        change. Seeded definitions keep whatever scope_hints the real
+        registry carries, so a live hint on a sibling (for example a
+        registry glob matching the definition JSON this test commits)
+        would otherwise appear as a candidate. Pin siblings to an
+        unrelated tracked glob first.
+        """
+        self.write("unrelated-tracked/keep.txt", "keep\n")
+        self.commit("chore: live hint target")
+        self.base = self.git("rev-parse", "HEAD")
+        for class_id in SEED_IDS:
+            self.set_definition_field(class_id, "scope_hints", ["unrelated-tracked/**"])
         self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["src/**"])
         self.write("src/example.txt", "touched\n")
         self.commit("fix(backend): protect read boundary")
@@ -377,6 +389,29 @@ class FailureClassCliTests(unittest.TestCase):
         validate = self.validate(self.body("Failure-Class: FC-malformed-doc-read\n"))
         self.assertEqual(validate.returncode, 1, validate.stdout)
         self.assertIn("scope_hint_matches_nothing", [item["code"] for item in self.payload(validate)["errors"]])
+
+    def test_existing_dead_scope_hint_on_edited_definition_is_error(self) -> None:
+        """current-minus-previous misses this: editing a definition without
+        changing the hint string left an already-dead matcher fail-open.
+        Every current hint on a changed definition must be live.
+        """
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["does-not-exist/**"])
+        self.commit("chore: plant a dead hint")
+        self.base = self.git("rev-parse", "HEAD")
+        self.set_definition_field(
+            "FC-malformed-doc-read",
+            "canonical_prevention",
+            "An already-dead hint must still fail when this file is edited.",
+        )
+        self.commit("fix(ci): touch definition without changing hints")
+        result = self.validate(self.body("Failure-Class: FC-malformed-doc-read\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("scope_hint_matches_nothing", [item["code"] for item in payload["errors"]])
+        self.assertEqual(
+            [item.get("hint") for item in payload["errors"] if item["code"] == "scope_hint_matches_nothing"],
+            ["does-not-exist/**"],
+        )
 
     def test_prepare_all_candidates_flag_disables_narrowing(self) -> None:
         self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["src/**"])

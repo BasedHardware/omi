@@ -32,16 +32,16 @@ class HeldStore implements LocalSegmentStore {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  contractTest('C1 generation roll drops queued segment writes but preserves already-issued old-session write',
-      () async {
-    pendingContract('C1');
-    final dir = await Directory.systemTemp.createTemp('c1-store-');
-    final world = await CaptureReplayWorld.boot(tempDir: dir);
-    try {
-      world.disposeController();
-      final d = dependencies(world: world, preferences: SharedPreferencesUtil());
-      final store = HeldStore();
-      final deps = CaptureDependencies(
+  contractTest(
+    'C1 generation roll drops queued segment writes but preserves already-issued old-session write',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('c1-store-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      try {
+        world.disposeController();
+        final d = dependencies(world: world, preferences: SharedPreferencesUtil());
+        final store = HeldStore();
+        final deps = CaptureDependencies(
           ensureDeviceConnection: d.ensureDeviceConnection,
           wal: d.wal,
           phoneMic: d.phoneMic,
@@ -59,12 +59,13 @@ void main() {
           codec: d.codec,
           microphonePermission: d.microphonePermission,
           refreshConversation: d.refreshConversation,
-          telemetry: d.telemetry);
-      final p = composeCaptureProvider(deps);
-      d.telemetry.prepare(source: 'phone_live');
-      void publish(String text) {
-        p.segments = [
-          TranscriptSegment(
+          telemetry: d.telemetry,
+        );
+        final p = composeCaptureProvider(deps);
+        d.telemetry.prepare(source: 'phone_live');
+        void publish(String text) {
+          p.segments = [
+            TranscriptSegment(
               id: 's',
               text: text,
               speaker: 'SPEAKER_00',
@@ -72,28 +73,30 @@ void main() {
               personId: null,
               start: 0,
               end: 1,
-              translations: [])
-        ];
-        p.updateRecordingState(RecordingState.record);
-      }
+              translations: [],
+            ),
+          ];
+          p.updateRecordingState(RecordingState.record);
+        }
 
-      publish('issued');
-      await pumpEventQueue();
-      expect(store.calls, ['issued']);
-      publish('queued-old');
-      d.owner.replaceSession('new-user/new-session');
-      store.gate.complete();
-      await p.pendingLiveSegmentWrite;
-      expect(store.calls, ['issued']);
-      expect(store.writes, ['synthetic:issued']);
-      // A disabled persistence implementation cannot satisfy this contract.
-      publish('current');
-      await p.pendingLiveSegmentWrite;
-      expect(store.calls, ['issued', 'current']);
-      p.dispose();
-    } finally {
-      await world.dispose();
-      await dir.delete(recursive: true);
-    }
-  });
+        publish('issued');
+        await pumpEventQueue();
+        expect(store.calls, ['issued']);
+        publish('queued-old');
+        d.owner.replaceSession('new-user/new-session');
+        store.gate.complete();
+        await p.pendingLiveSegmentWrite;
+        expect(store.calls, ['issued']);
+        expect(store.writes, ['synthetic:issued']);
+        // A disabled persistence implementation cannot satisfy this contract.
+        publish('current');
+        await p.pendingLiveSegmentWrite;
+        expect(store.calls, ['issued', 'current']);
+        p.dispose();
+      } finally {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      }
+    },
+  );
 }

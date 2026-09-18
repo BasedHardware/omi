@@ -50,23 +50,24 @@ class TrackedBle implements CaptureBleListeners {
 }
 
 RecordingTransferCoordinator coordinator() => RecordingTransferCoordinator(
-      reconcile: () async {},
-      discover: () async {},
-      refreshPending: () async {},
-      drain: () async => const RecordingTransferDrainResult.skipped(),
-      autoUploadEnabled: () => false,
-    );
+  reconcile: () async {},
+  discover: () async {},
+  refreshPending: () async {},
+  drain: () async => const RecordingTransferDrainResult.skipped(),
+  autoUploadEnabled: () => false,
+);
 
-CaptureDependencies dependencies(
-    {CaptureReplayWorld? world,
-    CaptureSocketOpen? open,
-    Future<BleAudioCodec> Function(String)? codec,
-    SharedPreferencesUtil? preferences,
-    TrackedBle? ble,
-    StreamController<bool>? changes,
-    ConversationLocationCapture? location,
-    CaptureAuthBoundary? auth,
-    CaptureSessionOwner? owner}) {
+CaptureDependencies dependencies({
+  CaptureReplayWorld? world,
+  CaptureSocketOpen? open,
+  Future<BleAudioCodec> Function(String)? codec,
+  SharedPreferencesUtil? preferences,
+  TrackedBle? ble,
+  StreamController<bool>? changes,
+  ConversationLocationCapture? location,
+  CaptureAuthBoundary? auth,
+  CaptureSessionOwner? owner,
+}) {
   final clock = world?.clock ?? VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
     ensureDeviceConnection: (_) async => null,
@@ -75,33 +76,41 @@ CaptureDependencies dependencies(
     batchSupported: false,
     auth: auth ?? CaptureAuthBoundary(isSignedIn: () => true, refreshIdToken: () async => null),
     connectivity: CaptureConnectivityBoundary(
-        initiallyConnected: true, changes: changes?.stream ?? const Stream.empty(), isConnected: () => true),
+      initiallyConnected: true,
+      changes: changes?.stream ?? const Stream.empty(),
+      isConnected: () => true,
+    ),
     now: clock.now,
     scheduling: world?.scheduler ?? ManualScheduler(clock: clock),
     preferences: preferences ?? MemoryPrefs(),
     ble: ble ?? TrackedBle(),
-    openSocket: open ??
-        (
-                {required codec,
-                required sampleRate,
-                required language,
-                required force,
-                source,
-                clientConversationId,
-                customSttConfig}) async =>
-            null,
-    owner: owner ??
+    openSocket:
+        open ??
+        ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+        }) async => null,
+    owner:
+        owner ??
         CaptureSessionOwner(
-            coordinator: world?.coordinator ?? coordinator(),
-            startForeground: () async {},
-            stopForeground: () async {}),
-    location: location ??
+          coordinator: world?.coordinator ?? coordinator(),
+          startForeground: () async {},
+          stopForeground: () async {},
+        ),
+    location:
+        location ??
         ConversationLocationCapture(
-            isLocationServiceEnabled: () async => false,
-            checkPermission: () async => LocationPermission.denied,
-            requestPermission: () async => LocationPermission.denied,
-            upload: (_) async => false,
-            now: clock.now),
+          isLocationServiceEnabled: () async => false,
+          checkPermission: () async => LocationPermission.denied,
+          requestPermission: () async => LocationPermission.denied,
+          upload: (_) async => false,
+          now: clock.now,
+        ),
     localSegments: LocalSegmentStore.disabled(),
     codec: codec ?? (_) async => BleAudioCodec.pcm16,
     microphonePermission: () async => true,
@@ -113,7 +122,6 @@ CaptureDependencies dependencies(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 production composition refuses flutter test before resolving defaults', () {
-    pendingContract('C1');
     Object? refusal;
     try {
       composeProductionCaptureProvider();
@@ -125,7 +133,6 @@ void main() {
   });
 
   contractTest('C1 production provider constructs with every seam and no initialized globals', () async {
-    pendingContract('C1');
     // Deliberately no preferences init, ServiceManager, Firebase or plugin registration.
     final ble = TrackedBle();
     final changes = StreamController<bool>.broadcast(sync: true);
@@ -147,7 +154,6 @@ void main() {
   });
 
   contractTest('C1 production provider drops ABA device codec completion before opening socket', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-replay-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -155,20 +161,23 @@ void main() {
       final gate = Completer<BleAudioCodec>();
       var opens = 0;
       final deps = dependencies(
-          world: world,
-          preferences: SharedPreferencesUtil(),
-          codec: (_) => gate.future,
-          open: (
-              {required codec,
+        world: world,
+        preferences: SharedPreferencesUtil(),
+        codec: (_) => gate.future,
+        open:
+            ({
+              required codec,
               required sampleRate,
               required language,
               required force,
               source,
               clientConversationId,
-              customSttConfig}) async {
-            opens++;
-            return null;
-          });
+              customSttConfig,
+            }) async {
+              opens++;
+              return null;
+            },
+      );
       final p = composeCaptureProvider(deps);
       final device = BtDevice(id: 'synthetic-device', name: 'fixture', type: DeviceType.omi, rssi: -50);
       p.updateRecordingDevice(device);
@@ -202,24 +211,27 @@ void main() {
       var opens = 0;
       final transports = <ScriptedPureSocket>[];
       final deps = dependencies(
-          world: world,
-          preferences: SharedPreferencesUtil(),
-          open: (
-              {required codec,
+        world: world,
+        preferences: SharedPreferencesUtil(),
+        open:
+            ({
+              required codec,
               required sampleRate,
               required language,
               required force,
               source,
               clientConversationId,
-              customSttConfig}) async {
-            opens++;
-            await gate.future;
-            final transport = ScriptedPureSocket();
-            transports.add(transport);
-            final socket = TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport);
-            await socket.start();
-            return socket;
-          });
+              customSttConfig,
+            }) async {
+              opens++;
+              await gate.future;
+              final transport = ScriptedPureSocket();
+              transports.add(transport);
+              final socket = TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport);
+              await socket.start();
+              return socket;
+            },
+      );
       final p = composeCaptureProvider(deps);
       p.updateRecordingState(RecordingState.systemAudioRecord);
       p.onClosed();

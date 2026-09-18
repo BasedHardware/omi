@@ -68,10 +68,14 @@ void main() {
     expect(connectedProperties['device_vendor'], 'fieldlabs');
     expect(connectedProperties['hardware_family'], 'fieldy');
     expect(
-        connectedProperties['transport_device_id'], sha256.convert(utf8.encode(device.id)).toString().substring(0, 16));
+      connectedProperties['transport_device_id'],
+      sha256.convert(utf8.encode(device.id)).toString().substring(0, 16),
+    );
     expect(connectedProperties['transport_id_stability'], 'platform_dependent');
     expect(
-        connectedProperties['hardware_id'], sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16));
+      connectedProperties['hardware_id'],
+      sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16),
+    );
     expect(connectedProperties['hardware_id_kind'], 'manufacturer_serial');
     expect(connectedProperties['hardware_id_stable'], isTrue);
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
@@ -392,15 +396,12 @@ void main() {
     test('alert fires again after recovery — the core bug scenario', () {
       // 50% → 15% (alert) → 25% (recover) → 10% (should alert AGAIN)
       final alerts = runSequence([50, 15, 25, 10]);
-      expect(
-          alerts,
-          [
-            false,
-            true,
-            false,
-            true,
-          ],
-          reason: 'Before fix: [false, true, false, false] — second alert never fires');
+      expect(alerts, [
+        false,
+        true,
+        false,
+        true,
+      ], reason: 'Before fix: [false, true, false, false] — second alert never fires');
     });
 
     test('full lifecycle: multiple charge cycles', () {

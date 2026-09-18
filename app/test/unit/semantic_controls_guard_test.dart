@@ -30,7 +30,8 @@ void main() {
       expect(
         semanticControlsEligible,
         isFalse,
-        reason: 'a production-flavor debug build must never expose privileged '
+        reason:
+            'a production-flavor debug build must never expose privileged '
             'controls, even though kDebugMode is true',
       );
     });
@@ -69,11 +70,7 @@ void main() {
       final gate = JourneyFaultGate.instance;
       expect(gate.armed, isEmpty);
 
-      final decision = gate.beforeSend(
-        'POST',
-        Uri.parse('http://127.0.0.1:8000/v2/messages'),
-        'Bearer real-token',
-      );
+      final decision = gate.beforeSend('POST', Uri.parse('http://127.0.0.1:8000/v2/messages'), 'Bearer real-token');
       expect(decision.drop, isFalse);
       expect(decision.swappedBearer, isNull);
     });
@@ -86,12 +83,21 @@ void main() {
       // test runtime the assert passes for the local harness lane.
       gate.arm(JourneyFault.suppressSend);
 
-      expect(gate.beforeSend('POST', Uri.parse('http://127.0.0.1:8000/v2/messages'), null).drop, isTrue,
-          reason: 'the chat send endpoint is the fault target');
-      expect(gate.beforeSend('POST', Uri.parse('http://127.0.0.1:8000/v3/memories'), null).drop, isFalse,
-          reason: 'the fault must not eat unrelated traffic');
-      expect(gate.beforeSend('GET', Uri.parse('http://127.0.0.1:8000/v2/messages'), null).drop, isFalse,
-          reason: 'GETs on the same path are not sends');
+      expect(
+        gate.beforeSend('POST', Uri.parse('http://127.0.0.1:8000/v2/messages'), null).drop,
+        isTrue,
+        reason: 'the chat send endpoint is the fault target',
+      );
+      expect(
+        gate.beforeSend('POST', Uri.parse('http://127.0.0.1:8000/v3/memories'), null).drop,
+        isFalse,
+        reason: 'the fault must not eat unrelated traffic',
+      );
+      expect(
+        gate.beforeSend('GET', Uri.parse('http://127.0.0.1:8000/v2/messages'), null).drop,
+        isFalse,
+        reason: 'GETs on the same path are not sends',
+      );
     });
 
     test('clearing faults restores a pure pass-through', () {
@@ -120,18 +126,18 @@ void main() {
       // extension could have been registered.
       expect(semanticControlsEligible, isFalse, reason: 'test compilation omits the opt-in define');
       expect(SemanticControls.instance.installed, isFalse);
-      SemanticControls.instance.installIfEligible();
-      expect(SemanticControls.instance.installed, isFalse,
-          reason: 'install must be a no-op when the build is not eligible');
+      SemanticControls.instance.installIfEligible(register: (_, __) => fail('ineligible registrar invoked'));
+      expect(
+        SemanticControls.instance.installed,
+        isFalse,
+        reason: 'install must be a no-op when the build is not eligible',
+      );
     });
   });
 
   group('waitReady rejects unknown conditions loudly', () {
     test('unknown condition name is an ArgumentError, not a hang', () {
-      expect(
-        () => SemanticControls.instance.waitReady('not-a-condition'),
-        throwsArgumentError,
-      );
+      expect(() => SemanticControls.instance.waitReady('not-a-condition'), throwsArgumentError);
     });
   });
 
