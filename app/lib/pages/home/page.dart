@@ -167,6 +167,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   CaptureProvider? _captureProvider;
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
+  Timer? _announcementTimer;
+  final List<Timer> _prewarmTimers = [];
 
   void _ensurePageInitialized(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
@@ -202,14 +204,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _prewarmRemainingTabs(int selectedIndex) {
+    for (final timer in _prewarmTimers) {
+      timer.cancel();
+    }
+    _prewarmTimers.clear();
     var delay = const Duration(milliseconds: 350);
     for (var index = 0; index < _pages.length; index++) {
       if (index == selectedIndex) continue;
       final pageIndex = index;
-      Timer(delay, () {
-        if (!mounted) return;
-        _schedulePageInitialization(pageIndex);
-      });
+      _prewarmTimers.add(
+        Timer(delay, () {
+          if (!mounted) return;
+          _schedulePageInitialization(pageIndex);
+        }),
+      );
       delay += const Duration(milliseconds: 180);
     }
   }
@@ -629,31 +637,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _checkForAnnouncements() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _announcementTimer?.cancel();
+      _announcementTimer = Timer(const Duration(seconds: 2), () async {
+        if (!mounted) return;
 
-      await Future.delayed(const Duration(seconds: 2));
+        final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
+        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+        await AnnouncementService().checkAndShowAnnouncements(
+          context,
+          announcementProvider,
+          connectedDevice: deviceProvider.connectedDevice,
+        );
+        if (!mounted) return;
 
-      if (!mounted) return;
+        // Register callback for device connection to check firmware announcements and device onboarding
+        deviceProvider.onDeviceConnected = (BtDevice device) {
+          _onDeviceConnectedForAnnouncements(device);
+          _checkDeviceOnboarding(device);
+        };
 
-      final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
-      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-      await AnnouncementService().checkAndShowAnnouncements(
-        context,
-        announcementProvider,
-        connectedDevice: deviceProvider.connectedDevice,
-      );
-
-      // Register callback for device connection to check firmware announcements and device onboarding
-      deviceProvider.onDeviceConnected = (BtDevice device) {
-        _onDeviceConnectedForAnnouncements(device);
-        _checkDeviceOnboarding(device);
-      };
-
-      // Also check if already connected right now
-      if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
-        _checkDeviceOnboarding(deviceProvider.connectedDevice!);
-      }
+        // Also check if already connected right now
+        if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
+          _checkDeviceOnboarding(deviceProvider.connectedDevice!);
+        }
+      });
     });
   }
 
@@ -910,8 +919,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       onTap: () {
         HapticFeedback.lightImpact();
         PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
-        Navigator.push(context,
-            MaterialPageRoute(fullscreenDialog: true, builder: (context) => const ChatPage(isPivotBottom: false)));
+        Navigator.push(
+          context,
+          MaterialPageRoute(fullscreenDialog: true, builder: (context) => const ChatPage(isPivotBottom: false)),
+        );
       },
       child: Container(
         height: kHomeChatBarHeight,
@@ -941,8 +952,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                      fullscreenDialog: true,
-                      builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
+                    fullscreenDialog: true,
+                    builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true),
+                  ),
                 );
               },
               child: Semantics(
@@ -1170,6 +1182,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    _announcementTimer?.cancel();
+    _announcementTimer = null;
+    for (final timer in _prewarmTimers) {
+      timer.cancel();
+    }
+    _prewarmTimers.clear();
     WidgetsBinding.instance.removeObserver(this);
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();

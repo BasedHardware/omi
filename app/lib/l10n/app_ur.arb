@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "کچھ اور نام سے جانا چاہتے ہیں؟",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "آپ کا نام کیا ہے؟",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -10829,5 +10825,12 @@
     "tapPlusToStartRecording": "ریکارڈنگ شروع کرنے کے لیے + پر ٹیپ کریں",
     "processingTakingLonger": "ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔",
     "speechProfileEnrollmentPrompt": "تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔",
-    "home": "ہوم"
+    "home": "ہوم",
+    "failedToUpdateBaselineStatus": "بیس لائن کی حالت اپ ڈیٹ نہیں ہو سکی۔",
+    "memoryAllowUse": "استعمال کی اجازت دیں",
+    "memoryDontUse": "استعمال نہ کریں",
+    "unstarConversation": "گفتگو سے ستارہ ہٹائیں",
+    "moreOptions": "مزید اختیارات",
+    "filterByDate": "تاریخ کے مطابق فلٹر کریں",
+    "memoryGraph": "یادداشت کا گراف"
 }
