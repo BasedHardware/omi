@@ -66,6 +66,8 @@ def _headers() -> Dict[str, str]:
 
 
 def _safe_int(value: Any, default: int, minimum: int = 1, maximum: int = 10) -> int:
+    if isinstance(value, bool):
+        return default
     try:
         number = int(value)
     except (TypeError, ValueError):
@@ -445,8 +447,8 @@ async def tool_check_allergens(request: Request):
         product = products[0]
 
     avoid_terms = {str(item).lower().strip() for item in avoid if str(item).strip()}
-    known_allergens = {item.lower() for item in product.get("allergens", [])}
-    traces = {item.lower() for item in product.get("traces", [])}
+    known_allergens = {item.lower() for item in (product.get("allergens") or []) if isinstance(item, str)}
+    traces = {item.lower() for item in (product.get("traces") or []) if isinstance(item, str)}
     ingredients = (product.get("ingredients") or "").lower()
 
     matches = sorted(

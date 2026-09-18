@@ -1321,6 +1321,11 @@ checks:
     triggers: ["plugins/chatgpt/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "ChatGPT plugin must return timezone-aware UTC ISO timestamps in /stats and properly validate and redirect user IDs"
+  - id: openfoodfacts-app-tests
+    command: ["python3", "plugins/omi-openfoodfacts-app/test_main.py"]
+    triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Open Food Facts app must guard _safe_int against booleans, protect null allergen sets, and handle product summaries hermetically"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
