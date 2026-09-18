@@ -64,6 +64,15 @@ int ctx_should_open_new_session(int has_last_segment,
 double ctx_pcm_rms_int16le(const uint8_t *bytes, size_t byte_count);
 
 /**
+ * Returns the largest absolute signed 16-bit sample in little-endian PCM.
+ *
+ * The result is an unsigned magnitude so the valid range includes 32768 for -32768. A null
+ * buffer and a buffer shorter than one sample return zero. An odd final byte is ignored, as in
+ * `ctx_pcm_rms_int16le`.
+ */
+uint16_t ctx_pcm_peak_int16le(const uint8_t *bytes, size_t byte_count);
+
+/**
  * Encodes normalised float samples into the 16-bit little-endian wire format.
  *
  * Values outside -1…1 are clamped rather than allowed to wrap, because a wrapped sample is a
