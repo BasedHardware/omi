@@ -37,4 +37,3 @@ Enabling qemu audio did not double the lane. The 4.9 s clip is not the cost. Col
 is not AudioRecord and is not a `platform_mic` receipt. The Omi app's
 AudioRecord path still needs a started capture (architect seam or a production
 record-control tap).
-
