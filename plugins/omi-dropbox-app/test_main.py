@@ -27,11 +27,28 @@ if "requests" not in sys.modules:
         import requests
     except ImportError:
         requests = types.ModuleType("requests")
+        requests_exceptions = types.ModuleType("requests.exceptions")
+
+        class RequestException(Exception):
+            pass
+
+        class Timeout(RequestException):
+            pass
+
+        class ConnectionError(RequestException):
+            pass
+
+        requests_exceptions.RequestException = RequestException
+        requests_exceptions.Timeout = Timeout
+        requests_exceptions.ConnectionError = ConnectionError
+
+        requests.exceptions = requests_exceptions
         requests.get = lambda *a, **k: None
         requests.post = lambda *a, **k: None
         requests.put = lambda *a, **k: None
         requests.delete = lambda *a, **k: None
         sys.modules["requests"] = requests
+        sys.modules["requests.exceptions"] = requests_exceptions
 
 if "tenacity" not in sys.modules:
     try:
