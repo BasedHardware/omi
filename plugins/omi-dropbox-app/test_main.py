@@ -43,6 +43,21 @@ if "requests" not in sys.modules:
         requests_exceptions.ConnectionError = ConnectionError
 
         requests.exceptions = requests_exceptions
+
+        class Response:
+            def __init__(self, status_code=200, content=b"", text=""):
+                self.status_code = status_code
+                self.content = content
+                self.text = text
+
+            def json(self):
+                return {}
+
+        class Session:
+            pass
+
+        requests.Response = Response
+        requests.Session = Session
         requests.get = lambda *a, **k: None
         requests.post = lambda *a, **k: None
         requests.put = lambda *a, **k: None
