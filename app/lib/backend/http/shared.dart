@@ -348,7 +348,9 @@ Future<T> refreshAndReplayAfter401<T>({
 /// Uncaught send used by both [makeApiCall] and [executeApi]. Throws on
 /// transport/auth failure so the typed path can keep the cause; the legacy
 /// wrapper below is the only place those become null.
-@visibleForTesting
+///
+/// Production API, not test-only: [executeApi] (the typed ApiResult entry)
+/// calls it directly, and the typed path must preserve the thrown cause.
 Future<http.Response> sendUncaughtApiCall({
   required String url,
   required Map<String, String> headers,

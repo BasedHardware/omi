@@ -112,7 +112,7 @@ ApiResult<T> _decodeSuccess<T>(String body, T Function(String) decode) {
   try {
     return ApiSuccess(decode(body));
   } on FormatException {
-    return ApiFailure(const ApiProblem(ApiProblemKind.decode));
+    return const ApiFailure(ApiProblem(ApiProblemKind.decode));
   }
 }
 
@@ -154,7 +154,7 @@ Future<ApiResult<T>> executeApi<T>({
       onAuthRefresh: (result) => observedRefresh = result,
     );
     if (response.statusCode == 401 && observedRefresh is AuthTokenTransientFailure) {
-      return ApiFailure(ApiProblem(ApiProblemKind.authTransient, statusCode: 401));
+      return const ApiFailure(ApiProblem(ApiProblemKind.authTransient, statusCode: 401));
     }
     return _classifyResponse(response, decode, clock);
   } on AuthTokenUnavailableException catch (e) {
