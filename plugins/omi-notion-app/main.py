@@ -4,7 +4,9 @@ Notion Integration App for Omi
 This app provides Notion integration through OAuth2 authentication
 and chat tools for managing pages, databases, and content.
 """
+import html
 import os
+import re
 import sys
 import secrets
 from datetime import datetime, timedelta
