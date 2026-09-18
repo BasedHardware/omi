@@ -78,6 +78,19 @@ class OmiApiRouteTests(unittest.TestCase):
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer test-key")
         self.assertEqual(post.call_args.kwargs["json"], {"text": "A memory", "text_source": "other", "text_source_spec": "notion"})
 
+    def test_create_fact_never_uses_retired_facts_route(self):
+        """The integration contract exposes /user/memories, never /user/facts."""
+        app.APP_ID = "app-1"
+        app.API_KEY = "test-key"
+        response = SimpleNamespace(status_code=200, raise_for_status=lambda: None)
+
+        with patch.object(app.requests, "post", return_value=response) as post:
+            self.assertTrue(app.create_fact("user-1", "A memory"))
+
+        url = post.call_args.args[0]
+        self.assertIn("/user/memories?", url)
+        self.assertNotIn("/user/facts", url)
+
     def test_create_fact_clamps_custom_source_and_preserves_provenance(self):
         app.APP_ID = "app-1"
         app.API_KEY = "test-key"
