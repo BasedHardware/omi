@@ -50,22 +50,27 @@ class TweetDetector:
         """Extract tweet content after trigger phrase."""
         normalized = cls.normalize_text(text)
         
-        # Find the trigger phrase
-        trigger_index = -1
+        # Short-circuit when no trigger is present at all.
         matched_trigger = None
         for trigger in cls.TRIGGER_PHRASES:
-            idx = normalized.find(trigger)
-            if idx != -1:
-                trigger_index = idx
+            if trigger in normalized:
                 matched_trigger = trigger
                 break
         
-        if trigger_index == -1:
+        if matched_trigger is None:
+            return None
+        
+        # Match the trigger case-insensitively against the ORIGINAL text, so the
+        # offsets and the slice index the same string. Locating it in the
+        # normalized (lowered + stripped) copy and slicing the original instead
+        # shifted the cut left by one character per leading whitespace character,
+        # which prepended the tail of the trigger phrase to the tweet.
+        match = re.search(re.escape(matched_trigger), text, re.IGNORECASE)
+        if match is None:
             return None
         
         # Extract content after trigger
-        start_index = trigger_index + len(matched_trigger)
-        content = text[start_index:].strip()
+        content = text[match.end():].strip()
         
         # Remove explicit end phrases if present
         for end_phrase in cls.END_PHRASES:
