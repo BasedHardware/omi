@@ -136,6 +136,25 @@ if "fastapi" not in sys.modules:
         sys.modules["fastapi"] = fastapi
         sys.modules["fastapi.responses"] = responses
 
+if "pydantic" not in sys.modules:
+    try:
+        import pydantic  # type: ignore
+    except ImportError:
+        pydantic = types.ModuleType("pydantic")
+
+        class BaseModel:
+            def __init__(self, **kwargs):
+                for cls in reversed(self.__class__.__mro__):
+                    for k, v in getattr(cls, "__dict__", {}).items():
+                        if not k.startswith("_") and not callable(v):
+                            setattr(self, k, None if v is ... else v)
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+
+        pydantic.BaseModel = BaseModel
+        pydantic.Field = lambda *a, **k: (k["default_factory"]() if "default_factory" in k else k.get("default"))
+        sys.modules["pydantic"] = pydantic
+
 # Now import application modules
 import main
 import models
