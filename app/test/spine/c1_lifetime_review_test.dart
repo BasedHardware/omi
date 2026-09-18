@@ -8,7 +8,6 @@ CaptureLifetime lifetime() => CaptureLifetime(ManualScheduler(clock: VirtualCloc
 
 void main() {
   contractTest('concurrent close joins outstanding cancellation', () async {
-    pendingContract('C1');
     final bag = lifetime();
     final gate = Completer<void>();
     bag.own(() => gate.future);
@@ -22,7 +21,6 @@ void main() {
     expect(finishedBeforeRelease, isFalse);
   });
   contractTest('asFuture preserves completion untracking', () async {
-    pendingContract('C1');
     final bag = lifetime();
     final controller = StreamController<int>();
     final sub = bag.listen(controller.stream, (_) {});
@@ -35,7 +33,6 @@ void main() {
     expect(retained, 0);
   });
   contractTest('replaced callbacks and errors stay closed while cancellation drains', () async {
-    pendingContract('C1');
     final bag = lifetime();
     final gate = Completer<void>();
     bag.own(() => gate.future);
