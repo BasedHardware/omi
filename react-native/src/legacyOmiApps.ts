@@ -100,18 +100,9 @@ function presentReviews(value: unknown): void {
     return;
   }
   for (const raw of value) {
+    object(raw);
     presentReview(raw);
   }
-}
-
-function presentObject(
-  value: unknown,
-  present: (row: Record<string, unknown>) => void,
-): void {
-  if (value === undefined || value === null) {
-    return;
-  }
-  present(object(value));
 }
 
 function presentObjectList(
@@ -125,7 +116,7 @@ function presentObjectList(
     return;
   }
   for (const raw of value) {
-    presentObject(raw, present);
+    present(object(raw));
   }
 }
 
