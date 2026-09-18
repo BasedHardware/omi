@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 import types
 import unittest
+import unittest.mock
 
 
 class _FakeHTTPException(Exception):
