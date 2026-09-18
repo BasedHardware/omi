@@ -22,6 +22,17 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 # Lightweight runtime stubs for environments lacking third-party libraries
+if "requests" not in sys.modules:
+    try:
+        import requests
+    except ImportError:
+        requests = types.ModuleType("requests")
+        requests.get = lambda *a, **k: None
+        requests.post = lambda *a, **k: None
+        requests.put = lambda *a, **k: None
+        requests.delete = lambda *a, **k: None
+        sys.modules["requests"] = requests
+
 if "tenacity" not in sys.modules:
     try:
         import tenacity
