@@ -451,6 +451,7 @@ function validateGeneratedMemory(row: Record<string, unknown>): void {
   presentNullableString(row.subject_entity_id);
   presentNullableString(row.subject_scope);
   presentNullableStringList(row.tags);
+  presentNullableString(row.tier);
   presentNullableMap(row.trigger_condition);
   presentNullableStringList(row.uncertainty_reasons);
   presentNullableDate(row.valid_at);

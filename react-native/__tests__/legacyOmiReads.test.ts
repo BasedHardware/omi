@@ -4167,6 +4167,39 @@ test('old memories name Flutter MemoriesPage fromJson type-wrong GET capture_con
   }
 });
 
+test('old memories name Flutter Memory.fromGeneratedWireJson type-wrong GET tier instead of remapping to a memory chip', async () => {
+  const neighbor = omiMemory({
+    id: 'named',
+    content: 'Likes walking.',
+    conversation_id: null,
+  });
+  const row = omiMemory({
+    id: 'fact',
+    content: 'Prefers concise recaps.',
+    conversation_id: null,
+  });
+  const ids = async (rows: unknown[]) =>
+    (await loadMemories(backend(rows).api)).items.map(item => item.id);
+  expect(await ids([{...row, tier: 'long_term'}, neighbor])).toEqual([
+    'fact',
+    'named',
+  ]);
+  expect(await ids([row, neighbor])).toEqual(['fact', 'named']);
+  expect(await ids([{...row, tier: null}, neighbor])).toEqual([
+    'fact',
+    'named',
+  ]);
+  expect(await ids([{...row, tier: ''}, neighbor])).toEqual(['fact', 'named']);
+  expect(
+    await ids([{...row, tier: '  long_term  '}, neighbor]),
+  ).toEqual(['fact', 'named']);
+  for (const extra of [1, true, [], {}]) {
+    await expect(ids([{...row, tier: extra}, neighbor])).rejects.toThrow(
+      'Omi text is malformed',
+    );
+  }
+});
+
 test('names Flutter ActionItemsPage empty GET ids instead of omitting neighboring tasks', async () => {
   const {api} = backend({
     action_items: [
