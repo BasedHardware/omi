@@ -1,6 +1,7 @@
 """Hermetic regression test for the Composio memory integration route."""
 
 import importlib.util
+import asyncio
 from pathlib import Path
 import sys
 from types import ModuleType, SimpleNamespace
@@ -76,6 +77,78 @@ class OmiApiRouteTests(unittest.TestCase):
         self.assertEqual(url, "https://api.omi.me/v2/integrations/app-1/user/memories?uid=user-1")
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer test-key")
         self.assertEqual(post.call_args.kwargs["json"], {"text": "A memory", "text_source": "other", "text_source_spec": "notion"})
+
+    def test_create_fact_clamps_custom_source_and_preserves_provenance(self):
+        app.APP_ID = "app-1"
+        app.API_KEY = "test-key"
+        response = SimpleNamespace(status_code=200, raise_for_status=lambda: None)
+
+        with patch.object(app.requests, "post", return_value=response) as post:
+            self.assertTrue(app.create_fact("user-1", "A memory", "notion_page"))
+
+        self.assertEqual(post.call_args.kwargs["json"], {
+            "text": "A memory",
+            "text_source": "other",
+            "text_source_spec": "notion_page",
+        })
+
+    def test_create_fact_keeps_existing_provenance_without_duplication(self):
+        app.APP_ID = "app-1"
+        app.API_KEY = "test-key"
+        response = SimpleNamespace(status_code=200, raise_for_status=lambda: None)
+
+        with patch.object(app.requests, "post", return_value=response) as post:
+            self.assertTrue(app.create_fact("user-1", "A memory", "notion_page", "notion:notion_page"))
+
+        self.assertEqual(post.call_args.kwargs["json"]["text_source"], "other")
+        self.assertEqual(post.call_args.kwargs["json"]["text_source_spec"], "notion:notion_page")
+
+    def test_create_fact_rejects_missing_credentials_before_network(self):
+        app.APP_ID = None
+        app.API_KEY = None
+
+        with patch.object(app.requests, "post") as post:
+            with self.assertRaises(ValueError):
+                app.create_fact("user-1", "A memory")
+
+        post.assert_not_called()
+
+    def test_process_pending_memories_clamps_custom_source(self):
+        app.APP_ID = "app-1"
+        app.API_KEY = "test-key"
+        response = SimpleNamespace(status_code=200, raise_for_status=lambda: None)
+        pending = [{"id": 7, "memory_text": "A Notion memory", "source": "notion_page"}]
+
+        with patch.object(app, "get_pending_memories", return_value=pending), \
+             patch.object(app, "update_memory_status") as update_status, \
+             patch.object(app.requests, "post", return_value=response) as post:
+            result = asyncio.run(app.process_pending_memories("user-1"))
+
+        self.assertEqual(result, {"processed": 1, "results": [{"id": 7, "success": True}]})
+        self.assertEqual(post.call_args.kwargs["json"], {
+            "text": "A Notion memory",
+            "text_source": "other",
+            "text_source_spec": "notion:notion_page",
+        })
+        update_status.assert_called_once_with(7, "completed")
+
+    def test_process_pending_memories_marks_failed_on_request_error(self):
+        app.APP_ID = "app-1"
+        app.API_KEY = "test-key"
+
+        def raise_request_error():
+            raise RuntimeError("422")
+
+        response = SimpleNamespace(status_code=422, raise_for_status=raise_request_error)
+        pending = [{"id": 8, "memory_text": "A failed memory", "source": "notion_page"}]
+
+        with patch.object(app, "get_pending_memories", return_value=pending), \
+             patch.object(app, "update_memory_status") as update_status, \
+             patch.object(app.requests, "post", return_value=response):
+            result = asyncio.run(app.process_pending_memories("user-1"))
+
+        self.assertEqual(result, {"processed": 1, "results": [{"id": 8, "success": False}]})
+        update_status.assert_called_once_with(8, "failed")
 
 
 if __name__ == "__main__":

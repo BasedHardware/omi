@@ -17,6 +17,7 @@ load_dotenv()
 APP_ID = os.getenv("OMI_APP_ID")
 API_KEY = os.getenv("OMI_API_KEY")
 API_BASE_URL = "https://api.omi.me/v2/integrations"
+ALLOWED_TEXT_SOURCES = frozenset({"email", "social_post", "other"})
 
 if not APP_ID or not API_KEY:
     logger.error("OMI credentials not found in environment variables")
@@ -37,6 +38,24 @@ class MemoryCreate(BaseModel):
 class MemoryBatch(BaseModel):
     uid: str
     memories: List[str]
+
+
+def _normalize_text_source(source: Optional[str], source_spec: Optional[str]):
+    """Keep integration payloads within the backend enum without losing provenance."""
+    if isinstance(source, str) and source in ALLOWED_TEXT_SOURCES:
+        return source, source_spec
+
+    if source is None or source == "":
+        return "other", source_spec
+
+    original_source = str(source)
+    if source_spec:
+        spec_parts = source_spec.split(":")
+        if original_source not in spec_parts:
+            source_spec = f"{source_spec}:{original_source}"
+    else:
+        source_spec = original_source
+    return "other", source_spec
 
 
 # Helper function to create a fact in OMI
@@ -63,13 +82,14 @@ def create_fact(user_id: str, text: str, source: str = "other", source_spec: Opt
     url = f"{API_BASE_URL}/{APP_ID}/user/memories?uid={user_id}"
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
+    normalized_source, normalized_source_spec = _normalize_text_source(source, source_spec)
     payload = {
         "text": text,
-        "text_source": source,
+        "text_source": normalized_source,
     }
 
-    if source_spec:
-        payload["text_source_spec"] = source_spec
+    if normalized_source_spec:
+        payload["text_source_spec"] = normalized_source_spec
 
     try:
         logger.info(f"Sending fact to OMI API - URL: {url}")
