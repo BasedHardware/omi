@@ -411,6 +411,11 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
         # soniox, and backend startup then fails closed on an empty SONIOX_API_KEY.
         # Pin a keyless chain so isolated sessions can boot without paid STT.
         env["STT_SERVICE_MODELS"] = "parakeet"
+        # Pre-recorded STT has no keyless chain: without the deterministic stub,
+        # uploaded captures dead-end at PrerecordedSTTConfigurationError and
+        # conversations never finalize. Stub output is self-declaring synthetic
+        # text and is double-gated to offline stages (utils.stt.prerecorded_stub).
+        env["OMI_STT_STUB"] = "1"
     return env
 
 
