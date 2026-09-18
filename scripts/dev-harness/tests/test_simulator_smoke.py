@@ -4,15 +4,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from dev_harness import mobile_doctor as md, mobile_verify as mv, session_evidence as se, simulator_smoke as smoke
+from dev_harness import (
+    mobile_doctor as md,
+    mobile_session as ms,
+    mobile_verify as mv,
+    session_evidence as se,
+    simulator_smoke as smoke,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FAKE = Path(__file__).with_name("fake_sim_flutter.py")
@@ -217,6 +225,75 @@ def test_uvicorn_block_releases_nothing_before_acquire(tmp_path: Path) -> None:
     with pytest.raises(smoke.SmokeBlocked):
         engine.run()
     assert engine._released == []
+
+
+def test_live_held_lease_fails_fast_without_polling_controls(tmp_path: Path) -> None:
+    """A live foreign session owner is a named failure, not a 900s controls poll."""
+
+    env = {"OMI_LOCAL_STATE_ROOT": str(tmp_path / "state")}
+    holder = subprocess.Popen(["sleep", "30"])
+    time.sleep(0.05)
+    factory_calls: list[object] = []
+
+    def acquire(**kwargs):
+        raise ms.SessionError(
+            ms.held_session_message(
+                "oms-v2smoke",
+                {"owner": {"pid": holder.pid, "user": "dazheng", "host": "host"}},
+            )
+        )
+
+    def factory(spec):
+        factory_calls.append(spec)
+        raise AssertionError("flutter must not start when the session lease is held")
+
+    engine = _engine(tmp_path, acquire=acquire, factory=factory, env=env)
+    started = time.monotonic()
+    try:
+        with pytest.raises(smoke.SmokeBlocked) as err:
+            engine.run()
+        elapsed = time.monotonic() - started
+        text = str(err.value)
+        assert elapsed < 2.0
+        assert factory_calls == []
+        assert engine._spec_holder.get("spec") is None
+        assert f"session oms-v2smoke held by live pid {holder.pid}" in text
+        assert "do not release a live foreign lease" in err.value.remedy
+        assert "method not available" not in text
+        assert engine._released == []
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_session_id_live_foreign_owner_fails_fast_without_flutter(tmp_path: Path) -> None:
+    env = {"OMI_LOCAL_STATE_ROOT": str(tmp_path / "state")}
+    lease = ms.acquire(REPO_ROOT, env, name="v2smoke", platform_name="ios-simulator", listeners=lambda port: ())
+    holder = subprocess.Popen(["sleep", "30"])
+    time.sleep(0.05)
+    path = ms.session_dir(REPO_ROOT, lease["session_id"], env) / ms.LEASE_FILENAME
+    data = json.loads(path.read_text("utf-8"))
+    data["owner"]["pid"] = holder.pid
+    path.write_text(json.dumps(data), "utf-8")
+    factory_calls: list[object] = []
+
+    def factory(spec):
+        factory_calls.append(spec)
+        raise AssertionError("flutter must not start when attaching to a live foreign lease")
+
+    engine = _engine(tmp_path, factory=factory, env=env)
+    started = time.monotonic()
+    try:
+        with pytest.raises(smoke.SmokeBlocked) as err:
+            engine.run(session_id=lease["session_id"])
+        elapsed = time.monotonic() - started
+        assert elapsed < 2.0
+        assert factory_calls == []
+        assert f"held by live pid {holder.pid}" in str(err.value)
+        assert "method not available" not in str(err.value)
+    finally:
+        holder.kill()
+        holder.wait()
 
 
 def test_fake_flutter_signed_out_ready_and_screenshot(tmp_path: Path) -> None:

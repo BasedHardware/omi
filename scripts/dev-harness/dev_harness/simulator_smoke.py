@@ -505,8 +505,23 @@ class SimulatorSmoke:
         lease: dict[str, Any]
         if session_id:
             lease = ms._load_lease(ms.session_dir(self.repo_root, session_id, self.env or None) / ms.LEASE_FILENAME)
+            try:
+                ms.refuse_live_foreign_session(str(session_id), lease)
+            except SessionError as exc:
+                raise SmokeBlocked(
+                    str(exc),
+                    remedy=str(exc),
+                    payload={"classification": mobile_doctor.AGENT_REMEDIABLE, "session_id": str(session_id)},
+                ) from exc
         else:
-            lease = dict(self._acquire(name=name, platform_name="ios-simulator"))
+            try:
+                lease = dict(self._acquire(name=name, platform_name="ios-simulator"))
+            except SessionError as exc:
+                raise SmokeBlocked(
+                    str(exc),
+                    remedy=str(exc),
+                    payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
+                ) from exc
             self._acquired_id = str(lease["session_id"])
             session_id = self._acquired_id
             started = self._start(session_id, json_stdout=True)
