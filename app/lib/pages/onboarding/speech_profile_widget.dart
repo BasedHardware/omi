@@ -567,6 +567,28 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
 
                                       const SizedBox(height: 12),
 
+                                      // Names what the post-recording wait is
+                                      // doing instead of reading as stuck
+                                      // (#14472): the provider already walks
+                                      // memorizing → personalizing → allSet,
+                                      // these strings just never rendered it.
+                                      if (provider.uploadingProfile && !provider.profileCompleted)
+                                        Text(
+                                          switch (provider.loadingState) {
+                                            SpeechProfileLoadingState.memorizing => context.l10n.memorizingYourVoice,
+                                            SpeechProfileLoadingState.personalizing =>
+                                              context.l10n.personalizingExperience,
+                                            _ => context.l10n.uploadingVoiceProfile,
+                                          },
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.7),
+                                            fontSize: 15,
+                                            height: 1.5,
+                                            fontFamily: 'Manrope',
+                                          ),
+                                        ),
+
                                       if (!provider.uploadingProfile && !provider.profileCompleted)
                                         TextButton(
                                           key: const Key('speech_profile_skip_recording'),

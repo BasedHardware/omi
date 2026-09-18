@@ -2674,10 +2674,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reviewAndManageConversations => 'Tekintse át és kezelje rögzített beszélgetéseit';
 
   @override
-  String get startCapturingConversations =>
-      'Kezdje el rögzíteni a beszélgetéseket Omi eszközével, hogy itt láthassa őket.';
-
-  @override
   String get useMobileAppToCapture => 'Használja mobilalkalmazását hang rögzítéséhez';
 
   @override
@@ -3177,9 +3173,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcribing => 'Átírás...';
-
-  @override
-  String get transcriptionFailed => 'Átírás sikertelen';
 
   @override
   String get discardedConversation => 'Elvetett beszélgetés';
@@ -3704,10 +3697,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Rendszer hangfelvétel előkészítése';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'Kattintson a gombra hangfelvétel készítéséhez élő átiratok, AI betekintések és automatikus mentés céljából.';
-
-  @override
   String get reconnecting => 'Újracsatlakozás...';
 
   @override
@@ -3753,9 +3742,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'Indítsa el a felvételt az élő átirat megtekintéséhez';
-
-  @override
   String get paused => 'Szüneteltetve';
 
   @override
@@ -3774,9 +3760,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'Rendszer hangfelvétel beállítása';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'Hangfelvétel és átirat generálása';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'Kattintson a rendszer hangfelvétel indításához';
@@ -8807,6 +8790,43 @@ class AppLocalizationsHu extends AppLocalizations {
   String audioSavedLocally(String duration) {
     return '$duration hang helyben mentve';
   }
+
+  @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
 
   @override
   String get willSyncAutomatically => 'automatikusan szinkronizálódik';
