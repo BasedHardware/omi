@@ -225,11 +225,20 @@ def merge_base(root: Path, base: str, head: str) -> str:
 
 
 def changed_files(root: Path, base: str, head: str, include_worktree: bool = False) -> list[str]:
-    resolved_base = merge_base(root, base, head)
-    files = set(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", f"{resolved_base}...{head}").splitlines())
+    """PR file list: three-dot *base*...*head*. Never first-parent or HEAD~."""
+    files = set(
+        run_git(
+            root,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            "--diff-filter=ACMRTD",
+            f"{base}...{head}",
+        ).splitlines()
+    )
     if include_worktree and head == "HEAD":
-        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "HEAD").splitlines())
-        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "--cached").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "HEAD").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines())
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
