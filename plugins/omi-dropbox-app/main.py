@@ -4,6 +4,7 @@ Dropbox Integration App for Omi.
 Automatically saves conversation summaries, transcripts, and audio to Dropbox.
 """
 
+import html
 import io
 import os
 import secrets
@@ -241,10 +242,16 @@ def get_home_page_html(
     if settings is None:
         settings = get_user_settings(uid)
 
-    # uid is reflected into form actions and hrefs below — percent-encode
-    # it so quotes cannot break the attribute and &, #, or .. cannot
-    # corrupt the query (same hardening as the other plugin apps).
+    # uid arrives straight off the query string on an unauthenticated route and
+    # is reflected into href/action attributes below; percent-encode it once so
+    # a quote cannot break out of the attribute and &/# cannot corrupt the
+    # query. display_name/email come from Dropbox and folder_name is set by the
+    # user via POST /settings, so they are HTML-escaped for their text and
+    # attribute contexts.
     uid_q = quote(uid or "", safe="")
+    display_name_h = html.escape(display_name or "")
+    email_h = html.escape(email or "")
+    folder_name_h = html.escape(str(settings.get("folder_name", "Omi Conversations")))
 
     if connected:
         return f"""
@@ -277,14 +284,14 @@ def get_home_page_html(
         <h1>Dropbox Connected</h1>
         <p class="status">Your Dropbox account is connected</p>
         <div class="user-info">
-            <strong>{display_name}</strong><br>
-            <span style="color: #666;">{email}</span>
+            <strong>{display_name_h}</strong><br>
+            <span style="color: #666;">{email_h}</span>
         </div>
 
         <form class="settings-form" method="POST" action="/settings?uid={uid_q}">
             <div class="form-group">
                 <label for="folder_name">Folder Name</label>
-                <input type="text" id="folder_name" name="folder_name" value="{settings.get('folder_name', 'Omi Conversations')}" placeholder="Omi Conversations">
+                <input type="text" id="folder_name" name="folder_name" value="{folder_name_h}" placeholder="Omi Conversations">
             </div>
 
             <div class="form-group">
@@ -499,12 +506,15 @@ async def auth_callback(
             email=email,
         )
 
-        # Redirect to home page (uid is server-verified here, but keep it
-        # percent-encoded so a hostile stored uid cannot corrupt the query)
+        # Redirect to home page
         return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
-        return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
+        # The exception text can carry upstream-controlled content; escape it
+        # rather than interpolating it raw into the error page.
+        return HTMLResponse(
+            f"Error during authorization: {html.escape(str(e))}", status_code=500
+        )
 
 
 @app.get("/disconnect")
