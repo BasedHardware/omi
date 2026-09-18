@@ -454,6 +454,87 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertTrue(by_id["FC-trapping-dict-merge"]["reopen_required"])
         self.assertFalse(by_id["FC-trapping-dict-merge"]["closure_eligible"])
 
+    def protocol_codes(self, base: str, head: str, body: str) -> tuple[int, list[str], list[str]]:
+        self.git("switch", "-q", "--detach", head)
+        result = self.cli(
+            "validate", "--base", base, "--head", "HEAD", "--pr-body-file", str(self.body(body))
+        )
+        payload = self.payload(result)
+        codes = [item["code"] for item in payload.get("errors", [])]
+        subjects = payload.get("validation", {}).get("commit_subjects", [])
+        return result.returncode, codes, subjects
+
+    def merge_topologies(self, base: str, head: str) -> list[tuple[str, str]]:
+        """Branch head plus both merge parent orders (--no-ff)."""
+        snapshots = [("branch-head", head)]
+        self.git("switch", "-q", "--detach", head)
+        merged = run(["git", "merge", "--no-ff", "-q", "--no-edit", base], self.root)
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        snapshots.append(("branch-first", self.git("rev-parse", "HEAD")))
+        self.git("switch", "-q", "--detach", base)
+        merged = run(["git", "merge", "--no-ff", "-q", "--no-edit", head], self.root)
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        snapshots.append(("base-first", self.git("rev-parse", "HEAD")))
+        return snapshots
+
+    def test_validate_agrees_on_branch_head_and_both_merge_parent_orders(self) -> None:
+        self.add_fix_commit()
+        head = self.git("rev-parse", "HEAD")
+        body = "Failure-Class: FC-malformed-doc-read\n"
+        answers = []
+        for label, sha in self.merge_topologies(self.base, head):
+            code, errors, subjects = self.protocol_codes(self.base, sha, body)
+            answers.append((label, code, errors, subjects))
+        reference = answers[0][1:]
+        for label, code, errors, subjects in answers:
+            self.assertEqual((code, errors, subjects), reference, label)
+        self.assertEqual(reference[0], 0)
+        self.assertEqual(reference[2], ["fix(backend): protect read boundary"])
+
+    def test_stacked_child_sees_parent_registry_only_against_main_not_parent_base(self) -> None:
+        """A child of a PR that adds a registry file must not be refused when
+        the gate diffs against the child's actual base (the parent tip). Diffing
+        against main includes the parent's new definition and raises
+        instance_fix_mutates_registry — that is the stacked-push defect."""
+        new_id = "FC-stacked-parent-registry"
+        self.write(
+            f".github/failure-classes/{new_id}.json",
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "id": new_id,
+                    "violated_contract": "parent contract",
+                    "canonical_prevention": "parent prevention",
+                    "evidence_prs": [],
+                    "status": "open",
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        self.commit("fix: add a new failure class on the parent")
+        parent = self.git("rev-parse", "HEAD")
+        self.add_fix_commit()
+        child = self.git("rev-parse", "HEAD")
+        body = "Failure-Class: FC-malformed-doc-read\n"
+
+        against_parent = [
+            self.protocol_codes(parent, sha, body) for _, sha in self.merge_topologies(parent, child)
+        ]
+        against_main = [
+            self.protocol_codes(self.base, sha, body) for _, sha in self.merge_topologies(self.base, child)
+        ]
+        parent_reference = against_parent[0]
+        main_reference = against_main[0]
+        for answer in against_parent:
+            self.assertEqual(answer, parent_reference)
+        for answer in against_main:
+            self.assertEqual(answer, main_reference)
+        self.assertEqual(parent_reference[0], 0, parent_reference)
+        self.assertNotIn("instance_fix_mutates_registry", parent_reference[1])
+        self.assertEqual(main_reference[0], 1, main_reference)
+        self.assertIn("instance_fix_mutates_registry", main_reference[1])
+
 
 if __name__ == "__main__":
     unittest.main()
