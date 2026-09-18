@@ -101,8 +101,9 @@ composeProductionCaptureProvider, which injects CaptureSessionOwner wrapping
 RecordingTransferCoordinator.instance and Android-only FGS start / both-platform
 stop. Do not default sessionOwner on CaptureProvider() — that constructor remains
 a test/fixture seam until final adoption refuses it; putting the owner there
-would pull ForegroundUtil and the coordinator singleton into ~122 tests and
-violate the exemplar walk. Implicit-constructor default-removal is still later;
+would pull ForegroundUtil and the coordinator singleton into the remaining
+test CaptureProvider() sites and violate the exemplar walk. Implicit-constructor
+default-removal is still later;
 (5+) socket then persistence fences, each with its production tests;
 (6) capture recovery request and FGS intent extraction — landed on
 CaptureSessionOwner: concurrent wakes join one drain, FGS latest-hold wins,
