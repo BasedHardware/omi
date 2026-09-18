@@ -32,7 +32,7 @@ void main() {
       'omi.chat.send.a.b',
       ' omi.chat.send',
       'omi.chat.send\n',
-      'omi.chat.send.email@local.test',
+      'omi.chat.send.email@local.test'
     ]) {
       expect(AddressKey.valid(key), isFalse, reason: key);
     }

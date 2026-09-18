@@ -35,12 +35,7 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-      appName: 'Omi Test',
-      packageName: 'com.omi.test',
-      version: '1.0.543',
-      buildNumber: '992',
-      buildSignature: '',
-    );
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
     await SharedPreferencesUtil.init();
   });
   tearDown(AnalyticsManager.resetForTesting);
@@ -62,7 +57,7 @@ void main() {
       'Phone Mic Recording Started',
       'Phone Mic Recording Stopped',
       'Transcribe Later Toggled',
-      'Transcribe Later Toggled',
+      'Transcribe Later Toggled'
     ]);
     expect(expected[3].$2['enabled'], false);
     expect(expected[4].$2['enabled'], true);
@@ -73,7 +68,7 @@ void main() {
       const PhoneMicRecordingStarted(),
       const PhoneMicRecordingStopped(),
       const TranscribeLaterToggled(enabled: false),
-      const TranscribeLaterToggled(enabled: true),
+      const TranscribeLaterToggled(enabled: true)
     ]) {
       typed.emit(event);
     }

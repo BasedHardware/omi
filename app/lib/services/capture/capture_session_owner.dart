@@ -34,9 +34,9 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
     required RecordingTransferCoordinator coordinator,
     required Future<void> Function() startForeground,
     required Future<void> Function() stopForeground,
-  }) : _coordinator = coordinator,
-       _startForeground = startForeground,
-       _stopForeground = stopForeground;
+  })  : _coordinator = coordinator,
+        _startForeground = startForeground,
+        _stopForeground = stopForeground;
 
   // FGS stays on a later cut; the constructor contract is stored so that cut
   // does not change the explicit composition shape.

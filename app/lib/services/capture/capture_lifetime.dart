@@ -223,14 +223,12 @@ class _LifetimeSubscription<T> implements StreamSubscription<T> {
 
   @override
   void onData(void Function(T)? handleData) {
-    _inner.onData(
-      handleData == null
-          ? null
-          : (value) {
-              if (_isClosed()) return;
-              handleData(value);
-            },
-    );
+    _inner.onData(handleData == null
+        ? null
+        : (value) {
+            if (_isClosed()) return;
+            handleData(value);
+          });
   }
 
   @override
@@ -244,10 +242,10 @@ class _LifetimeSubscription<T> implements StreamSubscription<T> {
 
   @override
   void onDone(void Function()? handleDone) => _inner.onDone(() {
-    _drop();
-    if (_isClosed()) return;
-    handleDone?.call();
-  });
+        _drop();
+        if (_isClosed()) return;
+        handleDone?.call();
+      });
   @override
   void pause([Future<void>? resumeSignal]) => _inner.pause(resumeSignal);
   @override

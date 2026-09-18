@@ -22,39 +22,37 @@ void main() {
       final d = dependencies(world: world, preferences: SharedPreferencesUtil());
       final store = HeldStore();
       final deps = CaptureDependencies(
-        ensureDeviceConnection: d.ensureDeviceConnection,
-        wal: d.wal,
-        phoneMic: d.phoneMic,
-        batchSupported: d.batchSupported,
-        auth: d.auth,
-        connectivity: d.connectivity,
-        now: d.now,
-        scheduling: d.scheduling,
-        preferences: d.preferences,
-        ble: d.ble,
-        openSocket: d.openSocket,
-        owner: d.owner,
-        location: d.location,
-        localSegments: store,
-        codec: d.codec,
-        microphonePermission: d.microphonePermission,
-        refreshConversation: d.refreshConversation,
-        telemetry: d.telemetry,
-      );
+          ensureDeviceConnection: d.ensureDeviceConnection,
+          wal: d.wal,
+          phoneMic: d.phoneMic,
+          batchSupported: d.batchSupported,
+          auth: d.auth,
+          connectivity: d.connectivity,
+          now: d.now,
+          scheduling: d.scheduling,
+          preferences: d.preferences,
+          ble: d.ble,
+          openSocket: d.openSocket,
+          owner: d.owner,
+          location: d.location,
+          localSegments: store,
+          codec: d.codec,
+          microphonePermission: d.microphonePermission,
+          refreshConversation: d.refreshConversation,
+          telemetry: d.telemetry);
       final p = composeCaptureProvider(deps);
       d.telemetry.prepare(source: 'phone_live');
       void publish(String text) {
         p.segments = [
           TranscriptSegment(
-            id: 's',
-            text: text,
-            speaker: 'SPEAKER_00',
-            isUser: false,
-            personId: null,
-            start: 0,
-            end: 1,
-            translations: [],
-          ),
+              id: 's',
+              text: text,
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              personId: null,
+              start: 0,
+              end: 1,
+              translations: [])
         ];
         p.updateRecordingState(RecordingState.record);
       }

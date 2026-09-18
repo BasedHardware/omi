@@ -96,7 +96,11 @@ void main() {
     // the day-key comparison holds in every timezone and at any wall-clock
     // time instead of only when the runner's calendar day matches UTC.
     final conversationDate = DateTime.now().subtract(const Duration(hours: 2));
-    final conversation = ServerConversation(id: 'conv-timer', createdAt: conversationDate, structured: structured);
+    final conversation = ServerConversation(
+      id: 'conv-timer',
+      createdAt: conversationDate,
+      structured: structured,
+    );
     final conversations = _ImmediateConversationProvider();
     conversations.conversations = [conversation];
     final detail = ConversationDetailProvider();

@@ -19,7 +19,7 @@ enum IntroductionStage {
   savingVoice,
   voiceError,
   savingMemories,
-  done,
+  done
 }
 
 /// The boundary is deliberately transcription-only. Drafts must not enter the
@@ -141,16 +141,16 @@ class GuidedVoiceController extends ChangeNotifier {
       voiceResult: voiceSaved
           ? 'success'
           : completionMode == 'saved'
-          ? 'failed'
-          : 'skipped',
+              ? 'failed'
+              : 'skipped',
       memorySaved: savedMemoryCount,
       goalResult: goal == null
           ? 'not_present'
           : goal.saved
-          ? 'saved'
-          : goal.keep
-          ? 'failed'
-          : 'skipped',
+              ? 'saved'
+              : goal.keep
+                  ? 'failed'
+                  : 'skipped',
       elapsedMs: _startedAt == null ? 0 : DateTime.now().difference(_startedAt!).inMilliseconds,
     );
   }
@@ -166,7 +166,7 @@ class GuidedVoiceController extends ChangeNotifier {
         IntroductionStage.starting,
         IntroductionStage.transcribing,
         IntroductionStage.savingVoice,
-        IntroductionStage.savingMemories,
+        IntroductionStage.savingMemories
       ].contains(stage);
   bool get active => stage == IntroductionStage.recording;
   bool get canFinish => _frames.length >= 16000; // Half a second, never a voice-quality claim.
@@ -193,25 +193,22 @@ class GuidedVoiceController extends ChangeNotifier {
         _prepared = true;
       }
       if (!_current(generation)) return;
-      await io.start(
-        (bytes) {
-          if (!_current(generation)) return;
-          _frames.add(bytes);
-          seconds = _frames.length / 32000;
-          final data = ByteData.sublistView(bytes);
-          double sum = 0;
-          for (var i = 0; i + 1 < bytes.length; i += 2) {
-            final sample = data.getInt16(i, Endian.little);
-            sum += sample * sample;
-          }
-          level = bytes.length < 2 ? 0 : (sqrt(sum / (bytes.length ~/ 2)) / 1800).clamp(0, 1);
-          _emit();
-          if (seconds >= 45 && active) unawaited(pause());
-        },
-        () {
-          if (_current(generation) && active) unawaited(pause());
-        },
-      );
+      await io.start((bytes) {
+        if (!_current(generation)) return;
+        _frames.add(bytes);
+        seconds = _frames.length / 32000;
+        final data = ByteData.sublistView(bytes);
+        double sum = 0;
+        for (var i = 0; i + 1 < bytes.length; i += 2) {
+          final sample = data.getInt16(i, Endian.little);
+          sum += sample * sample;
+        }
+        level = bytes.length < 2 ? 0 : (sqrt(sum / (bytes.length ~/ 2)) / 1800).clamp(0, 1);
+        _emit();
+        if (seconds >= 45 && active) unawaited(pause());
+      }, () {
+        if (_current(generation) && active) unawaited(pause());
+      });
       if (!_current(generation)) {
         await io.stop();
         return;
@@ -287,12 +284,8 @@ class GuidedVoiceController extends ChangeNotifier {
       if (!_current(generation)) return;
       if (text.isEmpty) throw StateError('No speech');
       final answer = IntroductionAnswer(
-        isGoalPrompt ? cleanIntroductionGoal(text) : text,
-        audio,
-        'intro-$_sessionId-${answers.length}',
-        isGoal: isGoalPrompt,
-        originalText: isGoalPrompt ? text : null,
-      );
+          isGoalPrompt ? cleanIntroductionGoal(text) : text, audio, 'intro-$_sessionId-${answers.length}',
+          isGoal: isGoalPrompt, originalText: isGoalPrompt ? text : null);
       answer.keep = answer.text.isNotEmpty;
       answers.add(answer);
       _recordCompletedPrompt(result: 'answered', transcriptPresent: true);
@@ -536,9 +529,8 @@ class GuidedVoiceController extends ChangeNotifier {
           memoryAttempted++;
         }
         if (answer.isGoal) answer.submittedGoal ??= answer.text.trim();
-        final saved = answer.isGoal
-            ? await io.saveGoal(answer.submittedGoal!, answer.id)
-            : await io.remember(answer.text.trim());
+        final saved =
+            answer.isGoal ? await io.saveGoal(answer.submittedGoal!, answer.id) : await io.remember(answer.text.trim());
         if (!_current(generation)) return;
         answer.saved = saved;
         if (answer.isGoal) {

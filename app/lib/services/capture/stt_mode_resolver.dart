@@ -65,10 +65,10 @@ class SttModeResolver {
     TranscriptionAllowanceSnapshot? Function()? allowanceReader,
     Future<FreemiumReadiness> Function()? readinessReader,
     CustomSttConfig? Function()? onDeviceConfigBuilder,
-  }) : flagReader = flagReader ?? _defaultFlag,
-       allowanceReader = allowanceReader ?? _defaultAllowance,
-       readinessReader = readinessReader ?? _defaultReadiness,
-       onDeviceConfigBuilder = onDeviceConfigBuilder ?? _defaultOnDeviceConfig;
+  })  : flagReader = flagReader ?? _defaultFlag,
+        allowanceReader = allowanceReader ?? _defaultAllowance,
+        readinessReader = readinessReader ?? _defaultReadiness,
+        onDeviceConfigBuilder = onDeviceConfigBuilder ?? _defaultOnDeviceConfig;
 
   @visibleForTesting
   static void debugResetInstance() {
@@ -87,7 +87,10 @@ class SttModeResolver {
     return config.copyWith(identity: freemiumOnDeviceId, sendRawAudioToOmi: false);
   }
 
-  Future<SttModeDecision> decide({required CustomSttConfig persistedCustomStt, required BleAudioCodec codec}) async {
+  Future<SttModeDecision> decide({
+    required CustomSttConfig persistedCustomStt,
+    required BleAudioCodec codec,
+  }) async {
     FreemiumReadiness readiness = FreemiumReadiness.ready;
     final flag = flagReader();
     final allowance = allowanceReader();
@@ -127,8 +130,7 @@ class SttModeResolver {
       return const SttModeDecision(path: SttResolvedPath.managed, reason: 'flag_off');
     }
 
-    final effective =
-        allowance ??
+    final effective = allowance ??
         const TranscriptionAllowanceSnapshot(
           mode: TranscriptionAllowanceSnapshot.modeOnDevice,
           reason: 'allowance_unavailable',
@@ -152,7 +154,11 @@ class SttModeResolver {
       );
     }
 
-    if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(codec, null, allowanceOnDevice: true)) {
+    if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(
+      codec,
+      null,
+      allowanceOnDevice: true,
+    )) {
       return const SttModeDecision(
         path: SttResolvedPath.blocked,
         reason: 'unsupported_codec_on_device',

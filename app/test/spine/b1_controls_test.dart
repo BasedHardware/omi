@@ -55,10 +55,10 @@ void main() {
         'messages': 'ready',
         'conversations': 'unavailable',
         'memories': 'unavailable',
-        'tasks': 'unavailable',
+        'tasks': 'unavailable'
       },
       'flags': [
-        {'id': 'voice', 'effective': false, 'override': false},
+        {'id': 'voice', 'effective': false, 'override': false}
       ],
       'flags_hydrated': true,
       'readiness': {'signedIn': true, 'routed': true, 'captureIdle': true, 'appReady': true},
@@ -73,7 +73,7 @@ void main() {
     expect(after['wal_pending'], 1000);
     expect(after['route'], isNull);
     expect(after['flags'], [
-      {'id': 'voice', 'effective': true, 'override': null},
+      {'id': 'voice', 'effective': true, 'override': null}
     ]);
     expect(jsonEncode(after), isNot(before));
     source.wal = WalPhase.unavailable;
@@ -109,10 +109,8 @@ void main() {
       }
       expect((controls.snapshot()['readiness'] as Map)['appReady'], isFalse);
       if (failure == 'route') expect(controls.snapshot()['route'], isNull);
-      await expectLater(
-        controls.waitReady('appReady', timeout: const Duration(milliseconds: 1)),
-        throwsA(isA<ControlReadinessTimeout>()),
-      );
+      await expectLater(controls.waitReady('appReady', timeout: const Duration(milliseconds: 1)),
+          throwsA(isA<ControlReadinessTimeout>()));
       source.auth = AuthPhase.signedIn;
       source.capture = CapturePhase.idle;
       source.ble = BlePhase.disconnected;

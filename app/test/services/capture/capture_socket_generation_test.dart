@@ -53,22 +53,20 @@ CaptureDependencies _deps({
     scheduling: world?.scheduler ?? ManualScheduler(clock: clock),
     preferences: SharedPreferencesUtil(),
     ble: _NoopBle(),
-    openSocket:
-        ({
-          required codec,
-          required sampleRate,
-          required language,
-          required force,
-          source,
-          clientConversationId,
-          customSttConfig,
-        }) async => null,
+    openSocket: ({
+      required codec,
+      required sampleRate,
+      required language,
+      required force,
+      source,
+      clientConversationId,
+      customSttConfig,
+    }) async =>
+        null,
     openConversationSocket: open,
-    owner:
-        owner ??
+    owner: owner ??
         CaptureSessionOwner(
-          coordinator:
-              coordinator ??
+          coordinator: coordinator ??
               RecordingTransferCoordinator(
                 reconcile: () async {},
                 discover: () async {},
@@ -79,8 +77,7 @@ CaptureDependencies _deps({
           startForeground: () async {},
           stopForeground: () async {},
         ),
-    location:
-        location ??
+    location: location ??
         ConversationLocationCapture(
           isLocationServiceEnabled: () async => false,
           checkPermission: () async => LocationPermission.denied,
@@ -115,12 +112,12 @@ class _NoopBle implements CaptureBleListeners {
 
 class _ImmediateLocation extends ConversationLocationCapture {
   _ImmediateLocation(this.fix)
-    : super(
-        isLocationServiceEnabled: () async => true,
-        checkPermission: () async => LocationPermission.always,
-        requestPermission: () async => LocationPermission.always,
-        upload: (_) async => true,
-      );
+      : super(
+          isLocationServiceEnabled: () async => true,
+          checkPermission: () async => LocationPermission.always,
+          requestPermission: () async => LocationPermission.always,
+          upload: (_) async => true,
+        );
   final Geolocation fix;
   @override
   Future<Geolocation?> capture({bool promptIfDenied = true}) async => fix;
@@ -156,21 +153,20 @@ void main() {
       var opens = 0;
       final deps = _deps(
         world: world,
-        open:
-            ({
-              required codec,
-              required sampleRate,
-              required language,
-              required force,
-              source,
-              clientConversationId,
-              customSttConfig,
-              geolocation,
-            }) async {
-              opens++;
-              await gate.future;
-              return null;
-            },
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          opens++;
+          await gate.future;
+          return null;
+        },
       );
       final p = composeCaptureProvider(deps);
       p.updateRecordingState(RecordingState.systemAudioRecord);
@@ -198,25 +194,24 @@ void main() {
       final transports = <ScriptedPureSocket>[];
       final deps = _deps(
         world: world,
-        open:
-            ({
-              required codec,
-              required sampleRate,
-              required language,
-              required force,
-              source,
-              clientConversationId,
-              customSttConfig,
-              geolocation,
-            }) async {
-              opens++;
-              await gate.future;
-              final transport = ScriptedPureSocket();
-              transports.add(transport);
-              final socket = TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport);
-              await socket.start();
-              return socket;
-            },
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          opens++;
+          await gate.future;
+          final transport = ScriptedPureSocket();
+          transports.add(transport);
+          final socket = TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport);
+          await socket.start();
+          return socket;
+        },
       );
       final p = composeCaptureProvider(deps);
       p.updateRecordingState(RecordingState.systemAudioRecord);
@@ -254,20 +249,19 @@ void main() {
       final deps = _deps(
         world: world,
         codec: (_) => gate.future,
-        open:
-            ({
-              required codec,
-              required sampleRate,
-              required language,
-              required force,
-              source,
-              clientConversationId,
-              customSttConfig,
-              geolocation,
-            }) async {
-              opens++;
-              return null;
-            },
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          opens++;
+          return null;
+        },
       );
       final p = composeCaptureProvider(deps);
       final device = BtDevice(id: 'synthetic-device', name: 'fixture', type: DeviceType.omi, rssi: -50);
@@ -427,20 +421,19 @@ void main() {
             return refresh.future;
           },
         ),
-        open:
-            ({
-              required codec,
-              required sampleRate,
-              required language,
-              required force,
-              source,
-              clientConversationId,
-              customSttConfig,
-              geolocation,
-            }) async {
-              opens++;
-              return null;
-            },
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          opens++;
+          return null;
+        },
       );
       final p = composeCaptureProvider(deps);
       p.updateRecordingState(RecordingState.systemAudioRecord);
@@ -485,26 +478,25 @@ void main() {
       final d = _deps(
         world: world,
         owner: owner,
-        open:
-            ({
-              required codec,
-              required sampleRate,
-              required language,
-              required force,
-              source,
-              clientConversationId,
-              customSttConfig,
-              geolocation,
-            }) async {
-              final socket = TranscriptSegmentSocketService.withSocket(
-                sampleRate,
-                codec,
-                language,
-                ScriptedPureSocket(),
-              );
-              await socket.start();
-              return socket;
-            },
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          final socket = TranscriptSegmentSocketService.withSocket(
+            sampleRate,
+            codec,
+            language,
+            ScriptedPureSocket(),
+          );
+          await socket.start();
+          return socket;
+        },
       );
       final deps = CaptureDependencies(
         wal: WalSpy(phone),
@@ -568,20 +560,19 @@ void main() {
       final deps = _deps(
         world: world,
         location: _ImmediateLocation(geo),
-        open:
-            ({
-              required codec,
-              required sampleRate,
-              required language,
-              required force,
-              source,
-              clientConversationId,
-              customSttConfig,
-              geolocation,
-            }) async {
-              received.add(geolocation);
-              return null;
-            },
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          received.add(geolocation);
+          return null;
+        },
       );
       final p = composeCaptureProvider(deps);
       await p.streamRecording();
