@@ -1,4 +1,4 @@
-"""Hermetic tests for the twitter chat-tools auth guard (#14448).
+"""Hermetic tests for the twitter chat-tools auth guard (#14451).
 
 Before this fix, all /tools/* routes trusted the uid in the JSON body —
 anyone could post, like, retweet, or delete tweets as any uid whose
