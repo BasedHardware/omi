@@ -102,7 +102,7 @@ Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manife
 CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
 
 ### Test Patterns
-- Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
+- Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
 - Typed analytics: [C7 registry contract](lib/utils/analytics/registry/REGISTRY.md); state machines use production seams.
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
