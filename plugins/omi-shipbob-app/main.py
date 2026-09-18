@@ -574,7 +574,7 @@ async def disconnect_shipbob(uid: str):
 
 
 @app.post("/select-channel")
-async def select_channel(request: Request):
+async def select_channel(request: Request, _auth: None = Depends(require_shipbob_tools_auth)):
     """Select a channel for the user."""
     body = await _safe_body(request)
     uid = _clean_str(body.get("uid"))
