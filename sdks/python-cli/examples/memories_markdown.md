@@ -25,27 +25,31 @@ omi memory list
 
 ### 1. Direct Pipeline Export (Stdout)
 
-Generate Markdown directly from the CLI output stream:
+Generate Markdown directly from the CLI output stream (using `--limit 200` to capture up to the max single-page limit):
 
 ```sh
-omi --json memory list | python memories_to_markdown.py -
+omi --json memory list --limit 200 | python memories_to_markdown.py -
 ```
 
 ### 2. Export to a Dedicated Vault Note
 
-Export all memories into a single structured Markdown note (e.g., for an Obsidian vault or Notion import):
+Export recent memories into a single structured Markdown note (e.g., for an Obsidian vault or Notion import):
 
 ```sh
-omi --json memory list | python memories_to_markdown.py - --output ~/vault/Memories.md
+omi --json memory list --limit 200 | python memories_to_markdown.py - --output ~/vault/Memories.md
 ```
+
+> **Note on Pagination:** `omi memory list` defaults to `--limit 25` and accepts up to `--limit 200`. For vaults with more than 200 memories, paginate with `--offset` batches (e.g., `--limit 200 --offset 200`) and pipe or combine the outputs.
 
 ### 3. Filter by Category (Work & Learnings Only)
 
-Export only specific categories of memories:
+Export only specific categories of memories using the CLI's server-side filter:
 
 ```sh
-omi --json memory list --categories work,learnings | python memories_to_markdown.py - --category work,learnings --output ~/vault/WorkMemories.md
+omi --json memory list --limit 200 --categories work,learnings | python memories_to_markdown.py - --output ~/vault/WorkMemories.md
 ```
+
+*(Note: The script also provides a client-side `--category` flag for filtering pre-exported JSON files, e.g. `python memories_to_markdown.py memories.json --category work,learnings`)*
 
 ### 4. Group by Category into Separate Notes
 
@@ -133,7 +137,7 @@ tags:
 Add this one-liner to your daily shell startup or automation script to sync your latest Omi memories directly into your Obsidian second brain:
 
 ```sh
-omi --json memory list | python memories_to_markdown.py - --output ~/Documents/Obsidian/Vault/OmiMemories.md
+omi --json memory list --limit 200 | python memories_to_markdown.py - --output ~/Documents/Obsidian/Vault/OmiMemories.md
 ```
 
 Obsidian will automatically index the categories, frontmatter tags, and metadata for use with **Obsidian Dataview** queries:
@@ -148,7 +152,7 @@ WHERE contains(categories, "work")
 
 1. Export your memories:
    ```sh
-   omi --json memory list | python memories_to_markdown.py - --output omi_memories.md
+   omi --json memory list --limit 200 | python memories_to_markdown.py - --output omi_memories.md
    ```
 2. In Notion, open any workspace page, click **Import** in the sidebar, select **Markdown & CSV**, and choose `omi_memories.md`. Notion will parse headers, tags, and category blocks into interactive database sections.
 
