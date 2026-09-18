@@ -617,3 +617,60 @@ jobs:
         # Flavor scheme is `dev` (Debug-dev). omiWatchApp.xcscheme lacks
         # customLLDBInitFile; Flutter warns, the compile still proceeds.
         run: flutter build ios --simulator --debug --flavor dev --no-codesign -d "$IOS_SIMULATOR_UDID"
+
+  dart-tests-kiritimati:
+    # Parallel second pass of the hermetic Dart suite under the far timezones
+    # the harness Z1 contract names. Not on the critical path (needs: changes
+    # only). Expected red until harness Z1 (PR #14313) merges.
+    name: Dart Tests (Pacific/Kiritimati)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_app_dart == 'true'
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.5
+          cache: true
+
+      - name: Cache build_runner state
+        uses: actions/cache@v6
+        with:
+          path: app/.dart_tool/build
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-
+
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Prepare Flutter dev compile inputs
+        working-directory: app
+        run: |
+          cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+          cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+          {
+            echo "API_BASE_URL="
+            echo "USE_WEB_AUTH=true"
+            echo "USE_AUTH_CUSTOM_TOKEN=true"
+            echo "STAGING_API_URL="
+          } > .dev.env
+          : > .env
+
+      - name: Generate Flutter code
+        working-directory: app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Run Flutter tests under Pacific/Kiritimati
+        run: TZ=Pacific/Kiritimati bash app/test.sh
+
+      - name: Run Flutter tests under Pacific/Pago_Pago
+        if: always()
+        run: TZ=Pacific/Pago_Pago bash app/test.sh

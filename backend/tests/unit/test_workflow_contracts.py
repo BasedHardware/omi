@@ -472,7 +472,8 @@ def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
     # installs Flutter without this pin (or a mismatched version) fails
     # because the two counts diverge. The floor is the historical four
     # (generated-files, analyze-and-test, journeys-hermetic,
-    # android-compile-smoke); android-unit-tests and ios-compile-check add two.
+    # android-compile-smoke); android-unit-tests, dart-tests-kiritimati, and
+    # ios-compile-check add three more.
     action_count = mobile_checks.count("uses: subosito/flutter-action")
     assert action_count == mobile_checks.count(pinned)
     assert action_count >= 6
@@ -541,9 +542,32 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     # Fork PRs must keep working: debug keystore is the in-repo prebuilt file.
     assert "app/setup/prebuilt/debug.keystore" in android
     assert "app/setup/prebuilt/debug.keystore" in unit_tests
-    assert "dart-tests-kiritimati" not in jobs
-    assert "Pacific/Kiritimati" not in mobile_checks
-    assert "Pacific/Pago_Pago" not in mobile_checks
+
+
+def test_mobile_kiritimati_dart_suite_is_a_parallel_second_pass():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    jobs = _github_jobs(mobile_checks)
+
+    tz_job = jobs["dart-tests-kiritimati"]
+    journeys = jobs["journeys-hermetic"]
+    analyze = jobs["analyze-and-test"]
+
+    assert "name: Dart Tests (Pacific/Kiritimati)" in mobile_checks
+    assert "needs: changes" in tz_job
+    assert "needs: analyze-and-test" not in tz_job
+    assert "needs: android-compile-smoke" not in tz_job
+    assert "needs: journeys-hermetic" not in tz_job
+    assert "has_app_dart" in tz_job
+    assert "TZ=Pacific/Kiritimati bash app/test.sh" in tz_job
+    assert "TZ=Pacific/Pago_Pago bash app/test.sh" in tz_job
+    assert "${{ secrets." not in tz_job
+    # The UTC Dart job and the journeys lane must not grow this TZ serial
+    # dependency — a needs: edge here would lengthen the critical path.
+    assert "dart-tests-kiritimati" not in analyze
+    assert "TZ=" not in journeys
+    assert "Pacific/Kiritimati" not in journeys
+    assert "Pacific/Pago_Pago" not in journeys
 
 
 def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_free():
