@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: omi-duckduckgo-tests
+    command: ["python3", "plugins/omi-duckduckgo-app/test_main.py"]
+    triggers: ["plugins/omi-duckduckgo-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "DuckDuckGo instant answers, entity definitions, and related topic lookups must safely handle unmanaged HTTP clients, timeouts, HTML unescaping, and non-dict responses without 500s or unhandled exceptions"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
