@@ -1042,27 +1042,16 @@ class CaptureController extends ChangeNotifier
           }
         }
 
-        // Single tap (buttonState == 1)
-        if (buttonState == 1) {
-          Logger.debug("Single tap detected");
-          final action = _preferences.singlePressAction;
-          _executeButtonAction(action, deviceId, eventType: 'single_press');
-          return;
-        }
-
-        // Double tap (buttonState == 2)
-        if (buttonState == 2) {
-          Logger.debug("Double tap detected");
-          final action = _preferences.doublePressAction;
-          _executeButtonAction(action, deviceId, eventType: 'double_press');
-          return;
-        }
-
-        // Triple tap (buttonState == 6)
-        if (buttonState == 6) {
-          Logger.debug("Triple tap detected");
-          final action = _preferences.triplePressAction;
-          _executeButtonAction(action, deviceId, eventType: 'triple_press');
+        // Handle configurable taps: 1 = single, 2 = double, 6 = triple
+        final tapConfig = switch (buttonState) {
+          1 => (_preferences.singlePressAction, 'single_press'),
+          2 => (_preferences.doublePressAction, 'double_press'),
+          6 => (_preferences.triplePressAction, 'triple_press'),
+          _ => null,
+        };
+        if (tapConfig != null) {
+          Logger.debug("${tapConfig.$2} detected");
+          _executeButtonAction(tapConfig.$1, deviceId, eventType: tapConfig.$2);
           return;
         }
 
@@ -1109,27 +1098,19 @@ class CaptureController extends ChangeNotifier
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
           await forceProcessingCurrentConversation().timeout(
             const Duration(seconds: 5),
-            onTimeout: () {
-              Logger.debug("forceProcessingCurrentConversation timed out");
-            },
+            onTimeout: () => Logger.debug("forceProcessingCurrentConversation timed out"),
           );
           break;
         case 1:
           // Pause/resume recording (Mute/Unmute)
           Logger.debug("Button action: toggling pause/mute");
-          if (_isPaused) {
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-            await resumeDeviceRecording().timeout(
-              const Duration(seconds: 3),
-              onTimeout: () => Logger.debug("resumeDeviceRecording timed out"),
-            );
-          } else {
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-            await pauseDeviceRecording().timeout(
-              const Duration(seconds: 3),
-              onTimeout: () => Logger.debug("pauseDeviceRecording timed out"),
-            );
-          }
+          final isMuting = !_isPaused;
+          PlatformManager.instance.analytics.omiDoubleTap(feature: isMuting ? 'mute' : 'unmute');
+          final toggleFuture = isMuting ? pauseDeviceRecording() : resumeDeviceRecording();
+          await toggleFuture.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => Logger.debug("recording toggle timed out"),
+          );
           break;
         case 2:
           // Star ongoing conversation (doesn't end it)

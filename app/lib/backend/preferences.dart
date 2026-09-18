@@ -345,53 +345,43 @@ class SharedPreferencesUtil {
   // 4 = None (Do nothing)
   static const Set<int> validButtonActions = {0, 1, 2, 3, 4};
 
-  // Single press action (default: 3 = Ask Question)
-  int get singlePressAction {
-    final val = getInt('singlePressAction', defaultValue: 3);
-    return validButtonActions.contains(val) ? val : 3;
+  int _getSanitizedButtonAction(String key, int defaultVal) {
+    final val = getInt(key, defaultValue: defaultVal);
+    return validButtonActions.contains(val) ? val : defaultVal;
   }
 
-  set singlePressAction(int value) {
-    final sanitized = validButtonActions.contains(value) ? value : 3;
-    saveInt('singlePressAction', sanitized);
+  void _saveSanitizedButtonAction(String key, int val, int defaultVal) {
+    saveInt(key, validButtonActions.contains(val) ? val : defaultVal);
   }
+
+  // Single press action (default: 3 = Ask Question)
+  int get singlePressAction => _getSanitizedButtonAction('singlePressAction', 3);
+  set singlePressAction(int value) => _saveSanitizedButtonAction('singlePressAction', value, 3);
 
   // Double press action (default: 1 = Mute/Unmute; fallback to doubleTapAction if present)
   int get doublePressAction {
-    int val = 1;
     if (_preferences?.containsKey('doublePressAction') ?? false) {
-      val = getInt('doublePressAction', defaultValue: 1);
-    } else if (_preferences?.containsKey('doubleTapAction') ?? false) {
-      val = getInt('doubleTapAction', defaultValue: 1);
+      return _getSanitizedButtonAction('doublePressAction', 1);
     }
-    return validButtonActions.contains(val) ? val : 1;
+    if (_preferences?.containsKey('doubleTapAction') ?? false) {
+      return _getSanitizedButtonAction('doubleTapAction', 1);
+    }
+    return 1;
   }
 
   set doublePressAction(int value) {
-    final sanitized = validButtonActions.contains(value) ? value : 1;
-    saveInt('doublePressAction', sanitized);
-    saveInt('doubleTapAction', sanitized);
+    _saveSanitizedButtonAction('doublePressAction', value, 1);
+    _saveSanitizedButtonAction('doubleTapAction', value, 1);
   }
 
   // Triple press action (default: 0 = End Conversation)
-  int get triplePressAction {
-    final val = getInt('triplePressAction', defaultValue: 0);
-    return validButtonActions.contains(val) ? val : 0;
-  }
+  int get triplePressAction => _getSanitizedButtonAction('triplePressAction', 0);
+  set triplePressAction(int value) => _saveSanitizedButtonAction('triplePressAction', value, 0);
 
-  set triplePressAction(int value) {
-    final sanitized = validButtonActions.contains(value) ? value : 0;
-    saveInt('triplePressAction', sanitized);
-  }
-
-  // Double tap behavior backward compatibility
+  // Double tap backward compatibility
   int get doubleTapAction => doublePressAction;
-
   set doubleTapAction(int value) => doublePressAction = value;
-
-  // Keep backward compatibility
   bool get doubleTapPausesMuting => doublePressAction == 1;
-
   set doubleTapPausesMuting(bool value) => doublePressAction = value ? 1 : 0;
 
   // Custom STT configuration

@@ -422,61 +422,23 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 16),
-                    ListTile(
-                      title: Text(
-                        context.l10n.deviceOnboardingAskQuestionTitle,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                      ),
-                      trailing: currentAction == 3 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                      onTap: () {
-                        onSelected(3);
-                        Navigator.pop(sheetContext);
-                      },
-                    ),
-                    ListTile(
-                      title: Text(
-                        context.l10n.deviceOnboardingMuteUnmute,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                      ),
-                      trailing: currentAction == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                      onTap: () {
-                        onSelected(1);
-                        Navigator.pop(sheetContext);
-                      },
-                    ),
-                    ListTile(
-                      title: Text(
-                        context.l10n.endAndProcess,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                      ),
-                      trailing: currentAction == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                      onTap: () {
-                        onSelected(0);
-                        Navigator.pop(sheetContext);
-                      },
-                    ),
-                    ListTile(
-                      title: Text(
-                        context.l10n.starOngoing,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                      ),
-                      trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                      onTap: () {
-                        onSelected(2);
-                        Navigator.pop(sheetContext);
-                      },
-                    ),
-                    ListTile(
-                      title: Text(
-                        context.l10n.off,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                      ),
-                      trailing: currentAction == 4 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                      onTap: () {
-                        onSelected(4);
-                        Navigator.pop(sheetContext);
-                      },
-                    ),
+                    ...[
+                      (3, context.l10n.deviceOnboardingAskQuestionTitle),
+                      (1, context.l10n.deviceOnboardingMuteUnmute),
+                      (0, context.l10n.endAndProcess),
+                      (2, context.l10n.starOngoing),
+                      (4, context.l10n.off),
+                    ].map((opt) => ListTile(
+                          title: Text(
+                            opt.$2,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                          ),
+                          trailing: currentAction == opt.$1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                          onTap: () {
+                            onSelected(opt.$1);
+                            Navigator.pop(sheetContext);
+                          },
+                        )),
                     const SizedBox(height: 16),
                   ],
                 ),

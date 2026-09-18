@@ -116,45 +116,20 @@ static inline void notify_unpress()
     }
 }
 
-static inline void notify_tap()
+static inline void notify_button_state(uint8_t state, const char *label)
 {
-    final_button_state[0] = SINGLE_TAP;
-    LOG_INF("Button single tap");
+    final_button_state[0] = state;
+    LOG_INF("Button %s", label);
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_double_tap()
-{
-    final_button_state[0] = DOUBLE_TAP; // button press
-    LOG_INF("Button double tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
-}
-
-static inline void notify_triple_tap()
-{
-    final_button_state[0] = TRIPLE_TAP;
-    LOG_INF("Button triple tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
-}
-
-static inline void notify_long_tap()
-{
-    final_button_state[0] = LONG_TAP; // button press
-    LOG_INF("Button long tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
-}
+static inline void notify_tap(void) { notify_button_state(SINGLE_TAP, "single tap"); }
+static inline void notify_double_tap(void) { notify_button_state(DOUBLE_TAP, "double tap"); }
+static inline void notify_triple_tap(void) { notify_button_state(TRIPLE_TAP, "triple tap"); }
+static inline void notify_long_tap(void) { notify_button_state(LONG_TAP, "long tap"); }
 
 #define BUTTON_PRESSED 1
 #define BUTTON_RELEASED 0
@@ -236,24 +211,33 @@ void check_button_level(struct k_work *work_item)
     }
 
     // 5. 事件分发与通知
-    if (event == BUTTON_EVENT_SINGLE_TAP) {
+    switch (event) {
+    case BUTTON_EVENT_SINGLE_TAP:
         LOG_INF("single tap detected");
         btn_last_event = event;
         notify_tap();
-    } else if (event == BUTTON_EVENT_DOUBLE_TAP) {
+        break;
+    case BUTTON_EVENT_DOUBLE_TAP:
         LOG_INF("double tap detected");
         btn_last_event = event;
         notify_double_tap();
-    } else if (event == BUTTON_EVENT_TRIPLE_TAP) {
+        break;
+    case BUTTON_EVENT_TRIPLE_TAP:
         LOG_INF("triple tap detected");
         btn_last_event = event;
         notify_triple_tap();
-    } else if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
-        LOG_INF("long press detected - turning off");
-        btn_last_event = event;
-        notify_long_tap();
-        turnoff_all();
-        return; // 关机后不再重调度工作项
+        break;
+    case BUTTON_EVENT_LONG_PRESS:
+        if (btn_last_event != BUTTON_EVENT_LONG_PRESS) {
+            LOG_INF("long press detected - turning off");
+            btn_last_event = event;
+            notify_long_tap();
+            turnoff_all();
+            return; // 关机后不再重调度工作项
+        }
+        break;
+    default:
+        break;
     }
 
     // 按键完全释放且无活动时复位状态
