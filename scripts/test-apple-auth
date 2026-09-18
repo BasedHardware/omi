@@ -7,6 +7,10 @@ xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/macos/Tests/OmiAuthMobileCallbackTest.mm" \
   -o "$build_dir/test"
 "$build_dir/test"
+xcrun clang++ -fobjc-arc -std=c++17 -framework AppKit -framework QuartzCore \
+  -I"$repo_root/react-native/apple/tests" \
+  "$repo_root/react-native/macos/Tests/OmiGlassPanelViewTest.mm" -o "$build_dir/window-glass"
+"$build_dir/window-glass"
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/apple/OmiDeviceInformationTest.mm" -o "$build_dir/device-information"
 "$build_dir/device-information"
