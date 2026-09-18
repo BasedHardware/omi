@@ -438,7 +438,10 @@ def dead_scope_hint_errors(root: Path, common: str, head: str) -> list[dict[str,
 
     A hint that matches nothing is silently skipped during candidate narrowing,
     which is fail-open: the class disappears from the list and the author
-    invents a new one. That is worse than no gate.
+    invents a new one. Checking every current hint on a changed definition,
+    not only newly added strings, is required because an already-dead hint
+    never appears in current-minus-previous and would stay fail-open even
+    when its own JSON is edited.
     """
     try:
         tracked = tracked_paths(root)
@@ -455,10 +458,10 @@ def dead_scope_hint_errors(root: Path, common: str, head: str) -> list[dict[str,
                 continue
         if not isinstance(data, dict):
             continue
-        base_data = definition_json_at_ref(root, common, relative) or {}
-        previous = set(base_data.get("scope_hints") or []) if isinstance(base_data, dict) else set()
-        current = set(data.get("scope_hints") or [])
-        for hint in sorted(current - previous):
+        current = data.get("scope_hints") or []
+        if not isinstance(current, list):
+            continue
+        for hint in current:
             if not isinstance(hint, str) or not hint.strip():
                 continue
             pattern = scope_hint_pattern(hint)

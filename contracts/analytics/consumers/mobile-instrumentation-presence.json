@@ -1,0 +1,19 @@
+{
+  "id": "mobile-instrumentation-presence",
+  "kind": "question",
+  "owner": "Product infra",
+  "question": "Which registered mobile signals disappear in a candidate namespace/build compared with the outgoing build? Counts measure instrumentation presence, not completion or feedback.",
+  "query": "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+  "events": [
+    "onboardingCompleted",
+    "phoneMicRecordingStarted",
+    "phoneMicRecordingStopped",
+    "transcribeLaterToggled"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Missing signals require investigation; a zero is not proof that no user attempted an action."
+}

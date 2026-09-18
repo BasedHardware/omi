@@ -61,10 +61,9 @@ class CaptureDependencies {
 }
 
 /// Production must use this exact constructor path too. No test-only subclass.
-/// Device-lookup stays on [CaptureDependencies] for a later cut; this step
-/// forwards every seam CaptureController already accepts, including the
-/// session owner. The app tree constructs capture only through
-/// [composeProductionCaptureProvider].
+/// Owner/device-lookup stay on [CaptureDependencies] for later cuts; this step
+/// forwards every seam CaptureController already accepts. The app tree
+/// constructs capture only through [composeProductionCaptureProvider].
 CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => CaptureProvider(
       walService: dependencies.wal,
       phoneMicRecorder: dependencies.phoneMic,
