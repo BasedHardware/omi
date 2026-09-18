@@ -1164,6 +1164,11 @@ checks:
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
 
+  - id: coingecko-crypto-tests
+    command: ["python3", "plugins/omi-coingecko-crypto-app/test_main.py"]
+    triggers: ["plugins/omi-coingecko-crypto-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13935: CoinGecko /coins/markets returns a dict on error payloads (429/error bodies) whose string keys crashed .get() iteration; the app must also survive missing lifespan client state and string-typed numeric fields"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]

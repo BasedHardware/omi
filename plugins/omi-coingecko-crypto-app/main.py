@@ -25,12 +25,12 @@ DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (Omi-Crypto-Integration/1.0)"
 )
+REQUEST_HEADERS = {"User-Agent": DEFAULT_USER_AGENT, "Accept": "application/json"}
 
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    headers = {"User-Agent": DEFAULT_USER_AGENT, "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=REQUEST_HEADERS) as client:
         app_instance.state.http_client = client
         yield
 
@@ -60,8 +60,19 @@ def _get_currency_symbol(currency_code: str) -> str:
     return symbols.get(code, f"{code.upper()} ")
 
 
+def _coerce_float(value: Any) -> Optional[float]:
+    """Best-effort float coercion; returns None for non-numeric input."""
+    if isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _format_currency(amount: Optional[float], currency_symbol: str = "$", decimals: int = 2) -> str:
     """Format numerical prices cleanly with precision preservation for micro-values."""
+    amount = _coerce_float(amount)
     if amount is None:
         return "N/A"
     if amount == 0:
@@ -77,6 +88,7 @@ def _format_currency(amount: Optional[float], currency_symbol: str = "$", decima
 
 def _format_compact(value: Optional[float], currency_symbol: str = "$") -> str:
     """Format large numbers into human-readable compact units (e.g. $1.25B, EUR 500M)."""
+    value = _coerce_float(value)
     if value is None or value == 0:
         return "N/A"
     abs_v = abs(value)
@@ -93,6 +105,7 @@ def _format_compact(value: Optional[float], currency_symbol: str = "$") -> str:
 
 def _format_percentage(change: Optional[float]) -> str:
     """Format percentage with +/- sign."""
+    change = _coerce_float(change)
     if change is None:
         return "N/A"
     return f"{change:+.2f}%"
@@ -100,7 +113,16 @@ def _format_percentage(change: Optional[float]) -> str:
 
 async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Any:
     """Execute asynchronous GET request against CoinGecko with error handling."""
-    client: httpx.AsyncClient = app.state.http_client
+    client = getattr(app.state, "http_client", None)
+    if client is not None:
+        return await _get_json(client, endpoint, params)
+    # Lifespan did not initialize a shared client (e.g. tests or direct ASGI
+    # embedding); fall back to a scoped transient client.
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=REQUEST_HEADERS) as scoped:
+        return await _get_json(scoped, endpoint, params)
+
+
+async def _get_json(client: httpx.AsyncClient, endpoint: str, params: Optional[Dict[str, Any]]) -> Any:
     url = f"{COINGECKO_BASE_URL}{endpoint}"
     try:
         response = await client.get(url, params=params)
@@ -109,7 +131,10 @@ async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = Non
         if response.status_code == 404:
             raise ValueError(f"Resource not found at {endpoint}.")
         response.raise_for_status()
-        return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            raise ValueError("CoinGecko returned an unreadable response.")
     except httpx.TimeoutException:
         raise ValueError("Request to CoinGecko timed out. Please try again.")
     except httpx.HTTPError as exc:
@@ -276,7 +301,7 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
         }
         data = await _fetch_coingecko("/simple/price", params=params)
 
-        if not data:
+        if not isinstance(data, dict) or not data:
             return ChatToolResponse(
                 error=f"No pricing data found for '{coin_ids_str}'. Please verify the coin IDs using the search tool."
             )
@@ -286,7 +311,7 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
 
         for coin_id in req.coin_ids:
             coin_data = data.get(coin_id)
-            if not coin_data:
+            if not isinstance(coin_data, dict) or not coin_data:
                 lines.append(f"- {coin_id}: Not found (try searching with search_crypto_coins)")
                 continue
 
@@ -317,12 +342,16 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
 async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse:
     try:
         data = await _fetch_coingecko("/search", params={"query": req.query})
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="CoinGecko returned an unexpected search response.")
         coins = data.get("coins", [])
 
-        if not coins:
+        if not isinstance(coins, list) or not coins:
             return ChatToolResponse(result=f"No cryptocurrency coins matched query '{req.query}'.")
 
-        selected = coins[: req.max_results]
+        selected = [coin for coin in coins[: req.max_results] if isinstance(coin, dict)]
+        if not selected:
+            return ChatToolResponse(result=f"No cryptocurrency coins matched query '{req.query}'.")
         lines = [f"Cryptocurrency search results for '{req.query}':"]
 
         for idx, coin in enumerate(selected, 1):
@@ -345,24 +374,30 @@ async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse
 async def get_trending_crypto(req: GetTrendingCryptoRequest) -> ChatToolResponse:
     try:
         data = await _fetch_coingecko("/search/trending")
+        if not isinstance(data, dict):
+            return ChatToolResponse(error="CoinGecko returned an unexpected trending response.")
         trending_items = data.get("coins", [])
 
-        if not trending_items:
+        if not isinstance(trending_items, list) or not trending_items:
             return ChatToolResponse(result="No trending coins available right now.")
 
         selected = trending_items[: req.limit]
         lines = ["Top Trending Cryptocurrencies on CoinGecko:"]
 
         for idx, item_wrapper in enumerate(selected, 1):
+            if not isinstance(item_wrapper, dict):
+                continue
             item = item_wrapper.get("item", {})
+            if not isinstance(item, dict):
+                continue
             name = item.get("name", "Unknown")
-            symbol = item.get("symbol", "").upper()
+            symbol = str(item.get("symbol", "")).upper()
             coin_id = item.get("id", "")
             rank = item.get("market_cap_rank")
             rank_str = f"Rank #{rank}" if rank else "Unranked"
 
-            # Check price in BTC if available
-            price_btc = item.get("price_btc")
+            # Check price in BTC if available; upstream may return a string or float.
+            price_btc = _coerce_float(item.get("price_btc"))
             btc_str = f" | {price_btc:.8f} BTC" if price_btc else ""
 
             lines.append(f"{idx}. {name} ({symbol}) - {rank_str}{btc_str} | ID: {coin_id}")
@@ -388,6 +423,12 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
         }
         markets = await _fetch_coingecko("/coins/markets", params=params)
 
+        # CoinGecko returns a JSON object (not a list) on error payloads such as
+        # HTTP 429 ({"status": {"error_code": 429, ...}}) or {"error": "..."};
+        # iterating it would yield string keys and crash on .get().
+        if not isinstance(markets, list):
+            return ChatToolResponse(error="Failed to retrieve cryptocurrency market rankings.")
+        markets = [coin for coin in markets if isinstance(coin, dict)]
         if not markets:
             return ChatToolResponse(error="Failed to retrieve cryptocurrency market rankings.")
 
