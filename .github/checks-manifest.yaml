@@ -208,7 +208,7 @@ checks:
     reason: "the one-action production backend release contract must reject legacy release planes"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
-    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", "app/lib/**/*.dart", ".github/scripts/check_product_file_line_count_ratchet.py"]
     lanes: ["local", "ci"]
     requires_pr_body: true
     reason: "#9838 freezes oversized product files against the target branch without a shared metadata ledger; exact PR-body exceptions preserve reviewability without unrelated merge conflicts"
@@ -252,7 +252,6 @@ checks:
     triggers: [".github/scripts/check-desktop-beta-freshness.py", ".github/scripts/test_check_desktop_beta_freshness.py", ".github/scripts/plan-desktop-release.py", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_release_doctor.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "issue #11936: hourly freshness must age the oldest unshipped macOS update so continuous merges cannot reset and auto-close the alarm"
-
   - id: desktop-beta-admission-firestore-contention
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
     triggers: ["backend/database/desktop_update_channels.py", "backend/testing/desktop_beta_admission/**", "package.json", "package-lock.json", ".github/checks-manifest.yaml"]
@@ -321,7 +320,7 @@ checks:
     lanes: ["local", "ci"]
     reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
-    command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
+    command: ["python3", ".github/scripts/check_product_invariants.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     requires_pr_body: true
@@ -1047,43 +1046,36 @@ checks:
     triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
-
   - id: slack-explicit-channel-search-tests
     command: ["python3", "plugins/omi-slack-app/test_slack_search.py"]
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13156 executes the Slack client and chat handler to prevent unresolved explicit channels from widening search scope"
-
   - id: slack-segments-tests
     command: ["python3", "plugins/omi-slack-app/test_segments.py"]
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "process_segments called seg.get(\"text\") on every transcript segment, so a non-dict segment crashed the realtime webhook with AttributeError; list_channels also re-requested forever when Slack returned a repeated next_cursor"
-
   - id: slack-channel-resolution-tests
     command: ["python3", "plugins/omi-slack-app/test_channel_resolution.py"]
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the fuzzy channel match posted to the first workspace channel containing the spoken name (\"dev\" hit whichever of #dev-ops and #frontend-dev was listed first), and a named channel that did not resolve fell through to the user's default channel; resolve_channel accepts one exact or one fuzzy candidate only and process_segments refuses a named channel it could not resolve"
-
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
-
   - id: notion-pagination-tests
     command: ["python3", "plugins/omi-notion-app/test_pagination.py"]
     triggers: ["plugins/omi-notion-app/**"]
     lanes: ["local", "ci"]
     reason: "#13915 get_page read only the first 50 block children and never followed has_more/next_cursor, silently dropping page content; later-page failures must stay errors"
-
   - id: hey-omi-question-extraction-tests
     command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
-
   - id: plugin-mentor-session-auth-tests
     command: ["bash", "scripts/run-plugin-mentor-session-auth-tests.sh"]
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
@@ -1114,61 +1106,71 @@ checks:
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13941: get_conversations silently dropped an unparseable start_date/end_date and returned the unfiltered list while search_conversations surfaced the backend 400 opaquely; malformed dates must raise a field-naming ValueError before any request"
-
   - id: plugin-oauth-client-log-safety-tests
     command: ["python3", "plugins/oauth/test_client_log_safety.py"]
     triggers: ["plugins/**/*.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
-
   - id: plugin-oauth-hardening-tests
     command: ["python3", "plugins/oauth/test_oauth_hardening.py"]
     triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "regression suite for oauth plugin timeouts, exception envelopes, non-JSON error pages, and null-guarded payload building"
-
   - id: hive-update-task-status-tests
     command: ["python3", "plugins/omi-hive-app/test_update_task_status.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13976: update_task_status disambiguates matching task candidates instead of mutating the first search hit, and exposes task IDs across get_tasks and search"
-
   - id: hive-create-task-ambiguous-target-tests
     command: ["python3", "plugins/omi-hive-app/test_create_task_ambiguous_target.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hive_create_task resolved project_name and parent_task_name by returning the first candidate that matched a name, so an ambiguous project name created the task under whichever project get_user_projects listed first, and a parent task name matching a task in a different project was used as a fallback instead of refused; both now require a single unambiguous candidate"
-
   - id: gcal-event-id-round-trip-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_event_ids.py"]
     triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "list_events printed event ids cut to 20 characters and create_event printed none, so the ids the tools handed back could not be passed to get_event, update_event or delete_event; the suite round-trips every emitted id through those handlers"
-
   - id: twitter-chat-tools-max-results-tests
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "get_timeline, get_my_tweets, get_mentions and search_tweets clamped max_results only at 100, so a request for fewer posts than the X endpoint floor (10 for search, 5 for user posts and mentions) was sent as is and rejected with HTTP 400; the suite drives the real handlers against a seam that enforces the documented ranges"
-
   - id: ms365-tool-dispatch-tests
     command: ["python3", "plugins/omi-ms365-app/test_tool_dispatch.py"]
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
-
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13946: ensure omitted or malformed limit inputs are coerced safely without TypeError"
-
   - id: hive-app-tests
     command: ["python3", "plugins/omi-hive-app/test_main.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
-
+  - id: capture-ownership-boundaries
+    command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/capture/boundary-baseline.json"]
+    triggers: ["app/lib/**/*.dart", "app/contracts/capture/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WAL wake races edc8683e80/97ec3d9cea and late timer 05c43c014d: prevent regression in adopted capture files and debt in new files"
+  - id: mobile-boundary-check-tests
+    command: ["python3", "scripts/test_check_mobile_boundaries.py"]
+    triggers: ["scripts/*mobile_boundaries.py", "app/contracts/capture/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Lexical boundary scan must ignore prose, accept existing debt, and reject reintroduced debt"
+  - id: registry-conflict-resolver-tests
+    command: ["python3", "scripts/test_resolve_registry_conflict.py"]
+    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
+  - id: mobile-event-registry
+    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
