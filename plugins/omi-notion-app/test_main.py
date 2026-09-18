@@ -1,7 +1,9 @@
 """Hermetic production-handler tests; HTTP, framework and token storage are doubles."""
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
+import re
 import sys
 import types
 import unittest
@@ -26,7 +28,7 @@ def module(name, **attributes):
     return value
 
 stubs = {
-    "requests": module("requests", get=Mock()),
+    "requests": module("requests", get=Mock(), post=Mock(), patch=Mock()),
     "dotenv": module("dotenv", load_dotenv=lambda: None),
     "fastapi": module("fastapi", FastAPI=Framework, Request=Framework, Query=Framework, HTTPException=Exception),
     "fastapi.responses": module("fastapi.responses", HTMLResponse=Framework, RedirectResponse=Framework, JSONResponse=Framework),
@@ -105,6 +107,382 @@ class PageReadTests(unittest.TestCase):
                 self.assertEqual("**Content:**" in result.result, bool(text))
                 if text:
                     self.assertIn(text, result.result)
+
+class PageWriteTests(unittest.TestCase):
+    def write(self, content, create=False, fail_at=None, failure=None, **metadata):
+        calls = []
+
+        def send(method, url, **kwargs):
+            # Accept the original json= seam as well as explicitly encoded data.
+            wire = kwargs.get("data")
+            if wire is None:
+                wire = json.dumps(kwargs["json"], allow_nan=False).encode("utf-8")
+            calls.append((method, url, wire, json.loads(wire)))
+            if len(calls) == fail_at:
+                if isinstance(failure, Exception):
+                    raise failure
+                return failure
+            response = Mock(status_code=200)
+            # The append endpoint returns newly created first-level blocks,
+            # including object/id even without read-content capabilities.
+            response.json.return_value = {"id": "created-page", "url": "https://www.notion.so/created-page"} if method == "POST" else {
+                "object": "list", "type": "block", "block": {},
+                "has_more": False, "next_cursor": None,
+                "results": [{"object": "block", "id": f"00000000-0000-4000-8000-{len(calls) * 100 + index:012d}"}
+                            for index in range(len(calls[-1][3]["children"]))],
+            }
+            return response
+
+        body = {"uid": "test-user", "content": content}
+        body.update({"title": "Test title", "parent_page_id": "parent-page"} if create else {"page_id": "existing-page"})
+        body.update(metadata)
+        request = Mock(json=AsyncMock(return_value=body))
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log") as log, patch.object(notion.requests, "post", side_effect=lambda *args, **kwargs: send("POST", *args, **kwargs)), patch.object(notion.requests, "patch", side_effect=lambda *args, **kwargs: send("PATCH", *args, **kwargs)):
+            result = asyncio.run((notion.tool_create_page if create else notion.tool_append_content)(request))
+        self.write_logs = log.call_args_list
+        return result, calls
+
+    def assert_valid_requests(self, calls):
+        def check(value):
+            if isinstance(value, list):
+                self.assertLessEqual(len(value), 100)
+                for item in value:
+                    check(item)
+            elif isinstance(value, dict):
+                if "text" in value:
+                    text = value["text"]["content"]
+                    self.assertLessEqual(len(text), 2000)
+                    self.assertLessEqual(len(text.encode("utf-16-le")) // 2, 2000)
+                for item in value.values():
+                    check(item)
+
+        for method, url, wire, payload in calls:
+            self.assertLessEqual(len(wire), 500000)
+            self.assertEqual(json.loads(wire), payload)
+            check(payload)
+
+    def saved_paragraphs(self, calls):
+        return ["".join(item["text"]["content"] for item in block["paragraph"]["rich_text"])
+                for _, _, _, payload in calls for block in payload.get("children", [])]
+
+    def test_small_inputs_keep_paragraphs_spacing_and_response(self):
+        for create in (False, True):
+            with self.subTest(create=create):
+                result, calls = self.write(" first \n\n \t \nsecond", create=create)
+                self.assertIsNone(result.error)
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(self.saved_paragraphs(calls), [" first ", "second"])
+                self.assert_valid_requests(calls)
+                self.assertIn("**Page Created!**" if create else "Added 2 paragraph(s)", result.result)
+
+    def test_text_item_boundaries_keep_one_paragraph(self):
+        for create in (False, True):
+            for length in (1999, 2000, 2001):
+                with self.subTest(create=create, length=length):
+                    content = "x" * length
+                    result, calls = self.write(content, create=create)
+                    self.assertIsNone(result.error)
+                    self.assert_valid_requests(calls)
+                    self.assertEqual(self.saved_paragraphs(calls), [content])
+
+    def test_unicode_chunk_boundaries_preserve_whole_characters(self):
+        for create in (False, True):
+            for content in ("a" * 1999 + "😀" + "tail", "😀" * 2000):
+                with self.subTest(create=create, length=len(content)):
+                    result, calls = self.write(content, create=create)
+                    self.assertIsNone(result.error)
+                    self.assert_valid_requests(calls)
+                    self.assertEqual(self.saved_paragraphs(calls), [content])
+
+    def test_child_boundaries_and_batches_are_ordered(self):
+        for create in (False, True):
+            for count in (99, 100, 101, 201):
+                with self.subTest(create=create, count=count):
+                    paragraphs = [f"Paragraph {index}" for index in range(count)]
+                    result, calls = self.write("\n".join(paragraphs), create=create)
+                    self.assertIsNone(result.error)
+                    self.assertEqual(len(calls), (count + 99) // 100)
+                    self.assertEqual(self.saved_paragraphs(calls), paragraphs)
+                    self.assert_valid_requests(calls)
+                    expected_page = "created-page" if create else "existing-page"
+                    for method, url, _, _ in calls[1:] if create else calls:
+                        self.assertEqual(method, "PATCH")
+                        self.assertTrue(url.endswith(f"/blocks/{expected_page}/children"))
+
+    def test_oversized_single_paragraph_preserves_all_characters(self):
+        # Exceed both 100 rich-text elements and one serialized request budget.
+        for create in (False, True):
+            for character in ("a", "😀"):
+                with self.subTest(create=create, character=character):
+                    content = character * 200001
+                    result, calls = self.write(content, create=create)
+                    self.assertIsNone(result.error)
+                    self.assert_valid_requests(calls)
+                    self.assertEqual("".join(self.saved_paragraphs(calls)), content)
+                    self.assertGreater(len(self.saved_paragraphs(calls)), 1)
+
+    def test_serialized_byte_budget_includes_escaping_and_create_metadata(self):
+        for create in (False, True):
+            for character in ("界", "😀", '"', "\\"):
+                with self.subTest(create=create, character=character):
+                    paragraphs = [character * 2000 + str(index) for index in range(100)]
+                    # A substantial title exercises the full first-request budget.
+                    metadata = {"title": "😀" * 2000, "database_id": "test-database"} if create else {}
+                    result, calls = self.write("\n".join(paragraphs), create=create, **metadata)
+                    self.assertIsNone(result.error)
+                    self.assert_valid_requests(calls)
+                    self.assertEqual(self.saved_paragraphs(calls), paragraphs)
+                    if character in ("界", "😀"):
+                        self.assertGreater(len(calls), 1)
+
+    def test_create_metadata_can_require_an_empty_first_batch(self):
+        content = "😀" * 40000
+        result, calls = self.write(content, create=True, title="😀" * 2000)
+        self.assertIsNone(result.error)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][3]["children"], [])
+        self.assertEqual(self.saved_paragraphs(calls), [content])
+        self.assert_valid_requests(calls)
+
+    def test_empty_content_and_whitespace_only_input_keep_existing_behavior(self):
+        for content in (None, "", " \n\t"):
+            result, calls = self.write(content, create=True)
+            self.assertIsNone(result.error)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual("children" in calls[0][3], bool(content))
+            self.assertEqual(self.saved_paragraphs(calls), [])
+        result, calls = self.write(" \n\t")
+        self.assertIsNone(result.error)
+        self.assertEqual(calls[0][3], {"children": []})
+        self.assertIn("Added 0 paragraph(s)", result.result)
+
+    def test_later_batch_failure_reports_confirmed_progress_and_stops(self):
+        failures = [Mock(status_code=429, text="private upstream response"), RuntimeError("private transport detail")]
+        for payload in (None, {}, {"error": ""}):
+            response = Mock(status_code=200)
+            response.json.return_value = payload
+            failures.append(response)
+        for create in (False, True):
+            for failure in failures:
+                with self.subTest(create=create, failure=type(failure).__name__):
+                    result, calls = self.write("\n".join(f"p{index}" for index in range(301)), create=create, fail_at=3, failure=failure)
+                    self.assertEqual(len(calls), 3)
+                    self.assertIsNone(result.result)
+                    self.assertIn("200 of 301", result.error)
+                    self.assertIn("created-page" if create else "existing-page", result.error)
+                    self.assertIn("not confirmed", result.error)
+                    self.assertIn("duplicate", result.error)
+                    self.assertNotIn("private", result.error)
+                    self.assert_valid_requests(calls)
+
+    def test_failed_create_is_not_replayed(self):
+        for failure in (Mock(status_code=400, text="private upstream response"), RuntimeError("private transport detail")):
+            with self.subTest(failure=type(failure).__name__):
+                result, calls = self.write("\n".join("x" for _ in range(101)), create=True, fail_at=1, failure=failure)
+                self.assertEqual(len(calls), 1)
+                self.assertIsNone(result.result)
+                self.assertIn("not confirmed", result.error)
+                self.assertIn("before retrying", result.error)
+                self.assertNotIn("private", result.error)
+
+    def test_malformed_append_success_does_not_confirm_the_batch(self):
+        blocks = [{"object": "block", "id": f"00000000-0000-4000-8000-{index:012d}"} for index in range(100)]
+        invalid_results = [
+            {"foo": "bar"},
+            {"object": "page", "id": "unrelated-page"},
+            {"object": "page", "results": blocks},
+            {"results": blocks},
+            {"object": "list"},
+        ]
+        for results in (None, "private malformed results", {},
+                        [None] * 100, ["block"] * 100, [{}] * 100,
+                        [{"object": "page", "id": block["id"]} for block in blocks],
+                        [{"object": "block", "id": None}] * 100,
+                        [{"object": "block", "id": " "}] * 100,
+                        [{"object": "block", "id": 123}] * 100):
+            invalid_results.append({"object": "list", "results": results})
+
+        for create, fail_at in ((False, 1), (False, 2), (True, 2)):
+            for payload in invalid_results:
+                with self.subTest(create=create, fail_at=fail_at, payload=payload):
+                    response = Mock(status_code=200)
+                    response.json.return_value = payload
+                    result, calls = self.write("\n".join(f"p{index}" for index in range(301)), create=create, fail_at=fail_at, failure=response)
+                    self.assertEqual(len(calls), fail_at)
+                    self.assertIsNone(result.result)
+                    self.assertIn(f"{(fail_at - 1) * 100} of 301", result.error)
+                    self.assertIn("created-page" if create else "existing-page", result.error)
+                    self.assertIn("not confirmed", result.error)
+                    self.assertIn("may have been applied", result.error)
+                    self.assertIn("duplicate", result.error)
+                    self.assertNotIn("private", result.error)
+
+    def test_paginated_append_response_acknowledges_the_submitted_batch(self):
+        # The version-matched SDK permits a paginated list of partial blocks:
+        # https://github.com/makenotion/notion-sdk-js/blob/v2.2.15/src/api-endpoints.ts
+        for create in (False, True):
+            with self.subTest(create=create):
+                response = Mock(status_code=200)
+                response.json.return_value = {
+                    "object": "list", "type": "block", "block": {},
+                    "has_more": True, "next_cursor": "opaque-cursor",
+                    "results": [{"object": "block", "id": "00000000-0000-4000-8000-000000000001"}],
+                }
+                result, calls = self.write("\n".join(f"p{index}" for index in range(301)), create=create, fail_at=2, failure=response)
+                self.assertIsNone(result.error)
+                self.assertEqual(len(calls), 4)
+                self.assertEqual([len(call[3]["children"]) for call in calls], [100, 100, 100, 1])
+                self.assertEqual(self.saved_paragraphs(calls), [f"p{index}" for index in range(301)])
+                self.assertIn("**Page Created!**" if create else "Added 301 paragraph(s)", result.result)
+
+    def test_write_logs_omit_content_and_upstream_error_details(self):
+        content = "private synthetic note contents"
+        for failure in (Mock(status_code=400, text=content), RuntimeError(content)):
+            with self.subTest(failure=type(failure).__name__):
+                self.write(content, create=True, fail_at=1, failure=failure)
+                self.assertNotIn(content, str(self.write_logs))
+
+    def test_unusable_create_result_does_not_append_or_claim_success(self):
+        for payload in (None, {}, {"error": ""}, {"url": "https://www.notion.so/unknown"}, {"id": ""}):
+            with self.subTest(payload=payload):
+                response = Mock(status_code=200)
+                response.json.return_value = payload
+                result, calls = self.write("\n".join("x" for _ in range(101)), create=True, fail_at=1, failure=response)
+                self.assertEqual(len(calls), 1)
+                self.assertIsNone(result.result)
+                self.assertIn("not confirmed", result.error)
+
+    def test_title_limits_are_validated_before_writing(self):
+        result, calls = self.write("content", create=True, title="a" * 2001)
+        self.assertIsNone(result.error)
+        self.assert_valid_requests(calls)
+        self.assertEqual("".join(item["text"]["content"] for item in calls[0][3]["properties"]["title"]["title"]), "a" * 2001)
+        for title in ("a" * 200001, "😀" * 100000):
+            result, calls = self.write("content", create=True, title=title)
+            self.assertEqual(calls, [])
+            self.assertIsNone(result.result)
+            self.assertTrue(result.error)
+
+class ListedPageIdTests(unittest.TestCase):
+    """Ids printed by the listing tools must be accepted by the tools that take an id.
+
+    Notion page and database ids are 36 character dashed UUIDs; the listing tools
+    used to print id[:20] + "...", so nothing they returned could be passed back.
+    """
+
+    PAGE_ID = "59833787-2cf9-4fdf-8782-e53db20768a5"
+
+    def page(self):
+        return {
+            "object": "page", "id": self.PAGE_ID,
+            "properties": {"title": {"type": "title", "title": [{"plain_text": "Known title"}]}},
+            "url": f"https://www.notion.so/{self.PAGE_ID.replace('-', '')}",
+            "created_time": "2026-09-01T00:00:00.000Z",
+            "last_edited_time": "2026-09-08T00:00:00.000Z",
+        }
+
+    def listed_ids(self, handler, body):
+        listing = Mock(status_code=200)
+        listing.json.return_value = {"object": "list", "results": [self.page()], "has_more": False}
+        request = Mock(json=AsyncMock(return_value=body))
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion.requests, "post", return_value=listing):
+            result = asyncio.run(handler(request))
+        self.assertIsNone(result.error, result.error)
+        ids = re.findall(r"ID: `([^`]*)`", result.result)
+        self.assertEqual(ids, [self.PAGE_ID], result.result)
+        return ids
+
+    def exact_id_api(self, *methods):
+        """A requests double that only resolves the complete page id, like the Notion API."""
+        calls = []
+
+        def send(method):
+            def call(url, **kwargs):
+                calls.append((method, url))
+                response = Mock(status_code=200)
+                if url.endswith(f"/blocks/{self.PAGE_ID}/children"):
+                    children = json.loads(kwargs["data"])["children"] if "data" in kwargs else kwargs.get("json", {}).get("children", [])
+                    response.json.return_value = {
+                        "object": "list", "has_more": False,
+                        "results": [{"object": "block", "id": f"00000000-0000-4000-8000-{index:012d}"} for index, _ in enumerate(children)],
+                    }
+                elif url.rstrip("/").endswith(self.PAGE_ID):
+                    response.json.return_value = self.page()
+                else:
+                    response.status_code = 404
+                    response.text = "object_not_found"
+                return response
+            return call
+
+        return calls, {method: send(method.upper()) for method in methods}
+
+    def test_search_and_list_pages_print_complete_ids(self):
+        self.listed_ids(notion.tool_search, {"uid": "test-user", "query": "Known"})
+        self.listed_ids(notion.tool_list_pages, {"uid": "test-user"})
+
+    def test_listed_id_round_trips_through_get_update_and_append(self):
+        page_id, = self.listed_ids(notion.tool_list_pages, {"uid": "test-user"})
+        cases = (
+            (notion.tool_get_page, {"page_id": page_id}, "GET", f"/pages/{page_id}"),
+            (notion.tool_update_page, {"page_id": page_id, "archived": True}, "PATCH", f"/pages/{page_id}"),
+            (notion.tool_append_content, {"page_id": page_id, "content": "note"}, "PATCH", f"/blocks/{page_id}/children"),
+        )
+        for handler, body, method, suffix in cases:
+            with self.subTest(handler=handler.__name__):
+                calls, doubles = self.exact_id_api("get", "patch")
+                request = Mock(json=AsyncMock(return_value=dict(body, uid="test-user")))
+                with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.multiple(notion.requests, **doubles):
+                    result = asyncio.run(handler(request))
+                self.assertIsNone(result.error, result.error)
+                self.assertTrue(any(m == method and u.endswith(suffix) for m, u in calls), calls)
+
+    DATABASE_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+
+    def database(self):
+        return {
+            "object": "database", "id": self.DATABASE_ID,
+            "title": [{"plain_text": "Tasks"}], "properties": {"Name": {"type": "title"}},
+            "url": f"https://www.notion.so/{self.DATABASE_ID.replace('-', '')}",
+        }
+
+    def test_list_databases_id_round_trips_through_query_database_and_create_page(self):
+        listing = Mock(status_code=200)
+        listing.json.return_value = {"object": "list", "results": [self.database()], "has_more": False}
+        request = Mock(json=AsyncMock(return_value={"uid": "test-user"}))
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion.requests, "post", return_value=listing):
+            listed = asyncio.run(notion.tool_list_databases(request))
+        self.assertIsNone(listed.error, listed.error)
+        self.assertEqual(re.findall(r"ID: `([^`]*)`", listed.result), [self.DATABASE_ID], listed.result)
+
+        calls = []
+
+        def post(url, **kwargs):
+            calls.append(url)
+            response = Mock(status_code=200)
+            if url.endswith(f"/databases/{self.DATABASE_ID}/query"):
+                response.json.return_value = {"object": "list", "results": [self.page()], "has_more": False}
+            elif url.endswith("/pages") and json.loads(kwargs["data"]).get("parent") == {"database_id": self.DATABASE_ID}:
+                response.json.return_value = self.page()
+            else:
+                response.status_code = 404
+                response.text = "object_not_found"
+            return response
+
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion.requests, "post", side_effect=post), patch.object(notion.requests, "patch", side_effect=post):
+            queried = asyncio.run(notion.tool_query_database(Mock(json=AsyncMock(return_value={"uid": "test-user", "database_id": self.DATABASE_ID}))))
+            self.assertIsNone(queried.error, queried.error)
+            # Entries are pages: their ids must be complete so get_page and update_page accept them.
+            self.assertEqual(re.findall(r"ID: `([^`]*)`", queried.result), [self.PAGE_ID], queried.result)
+
+            created = asyncio.run(notion.tool_create_page(Mock(json=AsyncMock(return_value={"uid": "test-user", "title": "Row", "database_id": self.DATABASE_ID}))))
+            self.assertIsNone(created.error, created.error)
+
+    def test_truncated_id_is_not_a_page(self):
+        calls, doubles = self.exact_id_api("get")
+        request = Mock(json=AsyncMock(return_value={"uid": "test-user", "page_id": self.PAGE_ID[:20]}))
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.multiple(notion.requests, **doubles):
+            result = asyncio.run(notion.tool_get_page(request))
+        self.assertIsNotNone(result.error)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

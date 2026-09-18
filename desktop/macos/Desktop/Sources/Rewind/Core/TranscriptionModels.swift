@@ -80,6 +80,10 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var finalizationReason: TranscriptionFinalizationReason?
   var finalizationStartedAt: Date?
   var finalizationCompletedAt: Date?
+  /// Opaque id of the armed capture attempt this session belongs to (see
+  /// `CaptureAttemptOutcomeState`). Nullable: pre-instrumentation rows and the
+  /// hermetic automation session have no attempt identity.
+  var captureAttemptId: String?
 
   // MARK: - Structured Data (from ServerConversation.Structured)
   var title: String?
@@ -88,6 +92,8 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var category: String?
   var actionItemsJson: String?  // JSON-encoded [ActionItem]
   var eventsJson: String?  // JSON-encoded [Event]
+  var sectionsJson: String?  // JSON-encoded [SummarySection]
+  var localSummaryJson: String?  // Selected display attribution; never the upload/retry blob
 
   // MARK: - Additional Conversation Data
   var geolocationJson: String?  // JSON-encoded Geolocation
@@ -131,6 +137,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     finalizationReason: TranscriptionFinalizationReason? = nil,
     finalizationStartedAt: Date? = nil,
     finalizationCompletedAt: Date? = nil,
+    captureAttemptId: String? = nil,
     // Structured data
     title: String? = nil,
     overview: String? = nil,
@@ -138,6 +145,8 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     category: String? = nil,
     actionItemsJson: String? = nil,
     eventsJson: String? = nil,
+    sectionsJson: String? = nil,
+    localSummaryJson: String? = nil,
     // Additional data
     geolocationJson: String? = nil,
     photosJson: String? = nil,
@@ -173,6 +182,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.finalizationReason = finalizationReason
     self.finalizationStartedAt = finalizationStartedAt
     self.finalizationCompletedAt = finalizationCompletedAt
+    self.captureAttemptId = captureAttemptId
     // Structured data
     self.title = title
     self.overview = overview
@@ -180,6 +190,8 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.category = category
     self.actionItemsJson = actionItemsJson
     self.eventsJson = eventsJson
+    self.sectionsJson = sectionsJson
+    self.localSummaryJson = localSummaryJson
     // Additional data
     self.geolocationJson = geolocationJson
     self.photosJson = photosJson
@@ -380,6 +392,7 @@ extension TranscriptionSessionRecord {
     // Encode structured data as JSON
     let actionItemsJson = try? String(data: encoder.encode(conversation.structured.actionItems), encoding: .utf8)
     let eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+    let sectionsJson = try? String(data: encoder.encode(conversation.structured.sections), encoding: .utf8)
     let geolocationJson = try? String(data: encoder.encode(conversation.geolocation), encoding: .utf8)
     let photosJson = try? String(data: encoder.encode(conversation.photos), encoding: .utf8)
     let appsResultsJson = try? String(data: encoder.encode(conversation.appsResults), encoding: .utf8)
@@ -421,6 +434,8 @@ extension TranscriptionSessionRecord {
       category: conversation.structured.category,
       actionItemsJson: actionItemsJson,
       eventsJson: eventsJson,
+      sectionsJson: sectionsJson,
+      localSummaryJson: conversation.localSummary.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) },
       geolocationJson: geolocationJson,
       photosJson: photosJson,
       appsResultsJson: appsResultsJson,
@@ -452,13 +467,7 @@ extension TranscriptionSessionRecord {
     self.language = conversation.language ?? self.language
     self.inputDeviceName = conversation.inputDeviceName
 
-    // Update structured data
-    self.title = conversation.structured.title
-    self.overview = conversation.structured.overview
-    self.emoji = conversation.structured.emoji
-    self.category = conversation.structured.category
-    self.actionItemsJson = try? String(data: encoder.encode(conversation.structured.actionItems), encoding: .utf8)
-    self.eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+    updateSummary(from: conversation)
 
     // Update additional data
     self.geolocationJson = try? String(data: encoder.encode(conversation.geolocation), encoding: .utf8)
@@ -485,30 +494,53 @@ extension TranscriptionSessionRecord {
 
   }
 
+  private mutating func updateSummary(from conversation: ServerConversation) {
+    let encoder = JSONEncoder()
+    self.title = conversation.structured.title
+    self.overview = conversation.structured.overview
+    self.emoji = conversation.structured.emoji
+    self.category = conversation.structured.category
+    self.actionItemsJson = try? String(data: encoder.encode(conversation.structured.actionItems), encoding: .utf8)
+    self.eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+    self.sectionsJson = try? String(data: encoder.encode(conversation.structured.sections), encoding: .utf8)
+
+    self.localSummaryJson = conversation.localSummary.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) }
+
+  }
+
   /// Enrich an unversioned or older projection without allowing it to
   /// overwrite fields from a newer canonical snapshot.
   mutating func hydrateMissingFields(from conversation: ServerConversation) {
     let encoder = JSONEncoder()
-    if Self.isEmpty(title), !conversation.structured.title.isEmpty {
-      title = conversation.structured.title
-    }
-    if Self.isEmpty(overview), !conversation.structured.overview.isEmpty {
-      overview = conversation.structured.overview
-    }
-    if Self.isEmpty(emoji), !conversation.structured.emoji.isEmpty {
-      emoji = conversation.structured.emoji
-    }
-    if Self.isDefaultCategory(category), !Self.isDefaultCategory(conversation.structured.category) {
-      category = conversation.structured.category
-    }
-    if Self.isEmptyJsonCollection(actionItemsJson), !conversation.structured.actionItems.isEmpty {
-      actionItemsJson = try? String(
-        data: encoder.encode(conversation.structured.actionItems),
-        encoding: .utf8
-      )
-    }
-    if Self.isEmptyJsonCollection(eventsJson), !conversation.structured.events.isEmpty {
-      eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+    if canHydrateSummary(from: conversation), conversation.localSummary != nil {
+      updateSummary(from: conversation)
+    } else if canHydrateSummary(from: conversation) {
+      if Self.isEmpty(title), !conversation.structured.title.isEmpty {
+        title = conversation.structured.title
+      }
+      if Self.isEmpty(overview), !conversation.structured.overview.isEmpty {
+        overview = conversation.structured.overview
+      }
+      if Self.isEmpty(emoji), !conversation.structured.emoji.isEmpty {
+        emoji = conversation.structured.emoji
+      }
+      if Self.isDefaultCategory(category), !Self.isDefaultCategory(conversation.structured.category) {
+        category = conversation.structured.category
+      }
+      if Self.isEmptyJsonCollection(actionItemsJson), !conversation.structured.actionItems.isEmpty {
+        actionItemsJson = try? String(
+          data: encoder.encode(conversation.structured.actionItems),
+          encoding: .utf8
+        )
+      }
+      if Self.isEmptyJsonCollection(eventsJson), !conversation.structured.events.isEmpty {
+        eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+      }
+      // Nil identifies a pre-migration cache entry. An encoded empty array is an
+      // authoritative absence and must not be refilled by an older response.
+      if sectionsJson == nil, !conversation.structured.sections.isEmpty {
+        sectionsJson = try? String(data: encoder.encode(conversation.structured.sections), encoding: .utf8)
+      }
     }
     if Self.isEmptyJsonCollection(photosJson), !conversation.photos.isEmpty {
       photosJson = try? String(data: encoder.encode(conversation.photos), encoding: .utf8)
@@ -527,14 +559,25 @@ extension TranscriptionSessionRecord {
   /// True when the server response can fill at least one empty local server-owned field.
   func hasHydratableServerFields(from conversation: ServerConversation) -> Bool {
     guard backendSynced, backendId == conversation.id else { return false }
-    return Self.isEmpty(title) && !conversation.structured.title.isEmpty
-      || Self.isEmpty(overview) && !conversation.structured.overview.isEmpty
-      || Self.isEmpty(emoji) && !conversation.structured.emoji.isEmpty
-      || Self.isDefaultCategory(category) && !Self.isDefaultCategory(conversation.structured.category)
-      || Self.isEmptyJsonCollection(actionItemsJson) && !conversation.structured.actionItems.isEmpty
-      || Self.isEmptyJsonCollection(eventsJson) && !conversation.structured.events.isEmpty
+    return canHydrateSummary(from: conversation)
+      && (Self.isEmpty(title) && !conversation.structured.title.isEmpty
+        || Self.isEmpty(overview) && !conversation.structured.overview.isEmpty
+        || Self.isEmpty(emoji) && !conversation.structured.emoji.isEmpty
+        || Self.isDefaultCategory(category) && !Self.isDefaultCategory(conversation.structured.category)
+        || Self.isEmptyJsonCollection(actionItemsJson) && !conversation.structured.actionItems.isEmpty
+        || Self.isEmptyJsonCollection(eventsJson) && !conversation.structured.events.isEmpty
+        || sectionsJson == nil && !conversation.structured.sections.isEmpty)
       || Self.isEmptyJsonCollection(photosJson) && !conversation.photos.isEmpty
       || Self.isEmptyJsonCollection(appsResultsJson) && !conversation.appsResults.isEmpty
+  }
+
+  /// Older/unversioned snapshots cannot mix projected and canonical summaries. A genuinely
+  /// empty, unversioned shell can still hydrate; a revision-bearing summary is authoritative.
+  private func canHydrateSummary(from conversation: ServerConversation) -> Bool {
+    guard localSummaryJson != nil || conversation.localSummary != nil else { return true }
+    return serverUpdatedAt == nil && Self.isEmpty(title) && Self.isEmpty(overview) && Self.isDefaultCategory(category)
+      && Self.isEmptyJsonCollection(sectionsJson) && Self.isEmptyJsonCollection(actionItemsJson)
+      && Self.isEmptyJsonCollection(eventsJson)
   }
 
   private static func isEmpty(_ value: String?) -> Bool {
@@ -627,6 +670,9 @@ extension TranscriptionSessionRecord {
     let events: [Event] =
       (eventsJson?.data(using: .utf8))
       .flatMap { try? decoder.decode([Event].self, from: $0) } ?? []
+    let sections: [SummarySection] =
+      (sectionsJson?.data(using: .utf8))
+      .flatMap { try? decoder.decode([SummarySection].self, from: $0) } ?? []
     let geolocation: Geolocation? = (geolocationJson?.data(using: .utf8))
       .flatMap { try? decoder.decode(Geolocation.self, from: $0) }
     let photos: [ConversationPhoto] =
@@ -646,8 +692,18 @@ extension TranscriptionSessionRecord {
     case .failed: status = .failed
     }
 
-    // Convert segments
-    let transcriptSegments = segments.map { $0.toTranscriptSegment() }
+    var localSummary = localSummaryJson?.data(using: .utf8).flatMap {
+      try? decoder.decode(ConversationLocalSummary.self, from: $0)
+    }
+    // A newer list projection can arrive before its detail transcript. Cached segments from
+    // the preceding revision must not appear underneath it; fetch detail to reunite the pair.
+    let transcriptMatches =
+      localSummary.map {
+        TranscriptHash.sha256(segments: segments.map(\.hashSegment)) == $0.transcriptSha256
+      } ?? true
+    let transcriptSegments = transcriptMatches ? segments.map { $0.toTranscriptSegment() } : []
+    let hasTranscript = transcriptIncluded ?? (cacheCompleteness == .detail || !segments.isEmpty)
+    localSummary?.transcriptVerified = transcriptMatches && hasTranscript
 
     return ServerConversation(
       id: backendId,
@@ -661,10 +717,11 @@ extension TranscriptionSessionRecord {
         emoji: emoji ?? "",
         category: category ?? "other",
         actionItems: actionItems,
-        events: events
+        events: events,
+        sections: sections
       ),
       transcriptSegments: transcriptSegments,
-      transcriptSegmentsIncluded: transcriptIncluded ?? (cacheCompleteness == .detail || !segments.isEmpty),
+      transcriptSegmentsIncluded: transcriptMatches && hasTranscript,
       geolocation: geolocation,
       photos: photos,
       appsResults: appsResults,
@@ -676,7 +733,8 @@ extension TranscriptionSessionRecord {
       isLocked: isLocked,
       starred: starred,
       folderId: folderId,
-      inputDeviceName: inputDeviceName
+      inputDeviceName: inputDeviceName,
+      localSummary: localSummary
     )
   }
 }

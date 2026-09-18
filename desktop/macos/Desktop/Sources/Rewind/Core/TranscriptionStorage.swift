@@ -66,7 +66,8 @@ actor TranscriptionStorage {
     inputDeviceName: String? = nil,
     clientConversationId: String? = nil,
     conversationRole: TranscriptionConversationRole = .ambient,
-    finalizationStrategy: TranscriptionFinalizationStrategy = .cloudReconcile
+    finalizationStrategy: TranscriptionFinalizationStrategy = .cloudReconcile,
+    captureAttemptId: String? = nil
   ) async throws -> Int64 {
     let db = try await ensureInitialized()
 
@@ -79,7 +80,8 @@ actor TranscriptionStorage {
       status: .recording,
       clientConversationId: clientConversationId,
       conversationRole: conversationRole,
-      finalizationStrategy: finalizationStrategy
+      finalizationStrategy: finalizationStrategy,
+      captureAttemptId: captureAttemptId
     )
 
     let record = try await db.write { database in
@@ -251,7 +253,8 @@ actor TranscriptionStorage {
       await AnalyticsManager.shared.conversationCreated(
         conversationId: telemetry.conversationId,
         source: telemetry.source,
-        durationSeconds: telemetry.durationSeconds
+        durationSeconds: telemetry.durationSeconds,
+        attemptId: telemetry.attemptId
       )
     }
     return result.accepted

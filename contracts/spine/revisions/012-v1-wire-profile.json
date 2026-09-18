@@ -1,0 +1,7 @@
+{
+  "path": "scripts/dev-harness/tests/spine/fake_flutter.py",
+  "owner": "V1",
+  "before": "7cfb42ec3a50c406644cada878d979b96d453b379269a7a4d63be7fcbb3829dd",
+  "after": "4646f7cddcf37505653a0ae1c5a448812d42628500aa4b3b65b8d8e9cbfff1b6",
+  "reason": "Coordinator turn7 and real Flutter3.44.5 RPC evidence in v2-spike section11: wire profile is local_dev, not the Dart enum name localDev. Retain negative production-family case and all pending markers."
+}

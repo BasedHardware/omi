@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/devices/connectors/limitless_clock_drift.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -42,6 +43,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   IWalSyncListener listener;
 
   FlashPageWalSyncImpl(this.listener);
+
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
+
+  @visibleForTesting
+  set testDevice(BtDevice? device) => _device = device;
 
   @override
   void setLocalSync(LocalWalSync localSync) {
@@ -123,9 +130,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   @override
   Future deleteWal(Wal wal) async {
+    if (wal.storage != WalStorage.flashPage || !_wals.any((w) => w.id == wal.id)) return;
     _wals.removeWhere((w) => w.id == wal.id);
 
-    if (_device != null && wal.status == WalStatus.synced) {
+    if (_device != null && wal.device == _device!.id && wal.status == WalStatus.synced) {
       await _acknowledgeProcessedData(_device!.id, wal.storageTotalBytes);
     }
 
@@ -375,7 +383,15 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           emptyExtractions = 0;
 
           final opusFrames = pageData['opus_frames'] as List<List<int>>? ?? [];
-          final timestampMs = pageData['timestamp_ms'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+          // Pendant flash pages keep the RTC they were written under. Subtract the
+          // connect-time drift so filenames/session gaps match real-time conversations (#5734).
+          // Only correct when a real page timestamp was parsed — DateTime.now() fallback
+          // is already phone time and must not be double-corrected.
+          final timestampMs = LimitlessClockDrift.correctedFlashPageTimestampMs(
+            pageTimestampMs: pageData['timestamp_ms'] as int?,
+            clockDriftOffsetMs: limitlessConnection.clockDriftOffsetMs,
+            phoneNowMs: DateTime.now().millisecondsSinceEpoch,
+          );
           final maxIndex = pageData['max_index'] as int?;
 
           if (maxIndex != null && (lastProcessedIndex == null || maxIndex > lastProcessedIndex)) {

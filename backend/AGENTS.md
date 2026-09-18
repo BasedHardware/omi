@@ -4,7 +4,7 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.11 required (Dockerfile pin, not 3.12+). `.python-version` + `uv` lock. Also FFmpeg, Opus (`opuslib`), Redis (optional). Harness typecheck: `make lane-backend` (wheels; not lock-hash identical). Locked env: `make setup-backend`.
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
@@ -208,7 +208,7 @@ npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention 
 
 **OpenAPI contract runner** — OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
 
-**Released app-client compatibility** — `docs/api-reference/app-client-openapi.json` is a compatibility boundary, not only a generated snapshot. PR CI compares it directionally with the merge-base via `scripts/check_app_client_openapi_compatibility.py`: requests accepted by the released contract must remain accepted, and new responses must remain decodable by released clients. Additive optional request fields and response fields are allowed. Do not allowlist breaking changes; retain a deprecated boundary field/parameter or version the endpoint.
+**Released app-client compatibility** — `scripts/check_app_client_openapi_compatibility.py` compares the exported app-client schema directionally: old requests stay accepted, new responses stay decodable. Optional request fields and additive response fields are allowed. Retain deprecated boundaries or version endpoints; never allowlist breaks. [C10](../scripts/dev-harness/CLIENT_COMPAT.md) defines actual released-consumer fixtures; capture/replay remains pending.
 
 **Test isolation / import purity** — never mutate `sys.modules` at module scope in tests; production modules must not construct clients or do IO at import time. Sanctioned seams: `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides`. Enforced by `python scripts/check_module_stub_pollution.py` and `python scripts/scan_import_time_side_effects.py`. Full prescription: `backend/docs/test_isolation.md`.
 

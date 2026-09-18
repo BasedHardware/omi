@@ -19,6 +19,7 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcript_and_speaker_map,
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
+    memory_transcript_from_segments,
 )
 from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
@@ -39,7 +40,7 @@ from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
-from models.memories import MemoryDB, Memory, MemoryCategory, SubjectAttribution
+from models.memories import MemoryCaptureContext, MemoryDB, Memory, MemoryCategory, SubjectAttribution
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.memory_contracts import L1MemoryArchiveClass, deterministic_contract_id
 from models.workstream_association import AssociationEvidence
@@ -64,6 +65,14 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.duplicate_capture import (
+    CANDIDATE_PAGE_LIMIT,
+    DuplicateCaptureMatch,
+    MIN_CANDIDATE_WORDS,
+    capture_record,
+    find_duplicate_capture,
+    mark_duplicate_capture,
+)
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
@@ -74,10 +83,10 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
-    count_speaker_ids,
     emit_memory_capture_decision,
     model_about_disagrees_with_attribution,
 )
@@ -90,6 +99,7 @@ from utils.observability.finalization import FinalizationFailureReason, record_f
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.free_tier_basic_gates import basic_plan_gate_eager_extraction_enabled
 from utils.free_tier_memory_policy import (
     free_tier_memory_suppression_enabled,
     memory_formation_verdict,
@@ -125,6 +135,7 @@ from utils.llm.conversation_processing import (
     get_reprocess_transcript_structure,
     extract_action_items,
     get_conversation_notes,
+    validate_structured_source_segment_ids,
 )
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
@@ -372,6 +383,48 @@ def _proposes_task_candidates(conversation: Any) -> bool:
     return getattr(conversation, 'source', None) == ConversationSource.desktop
 
 
+def _detect_duplicate_capture(
+    uid: str, conversation: Union[Conversation, CreateConversation]
+) -> Optional[DuplicateCaptureMatch]:
+    """Another capture client's conversation that already carries this one (#3244).
+
+    Fails open: a candidate-read failure keeps this conversation on the ordinary
+    path, the pre-fix outcome of two visible conversations, never a lost one.
+    """
+    candidate = capture_record(conversation)
+    if candidate is None or len(candidate.words) < MIN_CANDIDATE_WORDS:
+        return None
+    try:
+        rows = [
+            row
+            for status in (ConversationStatus.completed.value, ConversationStatus.processing.value)
+            for row in conversations_db.get_conversations_finished_after(
+                uid, status=status, finished_after=candidate.started_at, limit=CANDIDATE_PAGE_LIMIT
+            )
+        ]
+    except Exception:
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='duplicate_capture_check',
+            to_mode='keep_both_captures',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
+    match = find_duplicate_capture(candidate, [record for record in map(capture_record, rows) if record is not None])
+    if match is not None:
+        logger.info(
+            'duplicate capture folded uid=%s conversation=%s primary=%s coverage=%.2f containment=%.2f',
+            uid,
+            getattr(conversation, 'id', None),
+            match.primary_conversation_id,
+            match.window_coverage,
+            match.transcript_containment,
+        )
+    return match
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -436,6 +489,7 @@ def _get_structured(
                             task_intelligence_capture=task_intelligence_capture,
                             existing_action_items=_fetch_dedup_candidates_for_query(uid, ext_conv.text, conversation),
                         )
+                    validate_structured_source_segment_ids(structured, ())
                     return structured, False
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_transcript_structure(
@@ -446,6 +500,7 @@ def _get_structured(
                         uid,
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
+                        transcript_segment_ids=(),
                     )
                 with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                     structured.action_items = extract_action_items(
@@ -459,6 +514,7 @@ def _get_structured(
                         task_intelligence_capture=task_intelligence_capture,
                         primary_user_name=_primary_user_name(uid),
                     )
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             if ext_conv.text_source == ExternalIntegrationConversationSource.message:
@@ -471,17 +527,24 @@ def _get_structured(
                         ext_conv.text_source_spec,
                         output_language_code=user_language,
                     )
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             if ext_conv.text_source == ExternalIntegrationConversationSource.other:
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = summarize_experience_text(ext_conv.text, ext_conv.text_source_spec, tz=tz)
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
+        transcript_segment_ids = [
+            segment_id
+            for segment_id in (getattr(segment, 'id', None) for segment in (main_conv.transcript_segments or []))
+            if isinstance(segment_id, str) and segment_id
+        ]
         transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
@@ -498,6 +561,7 @@ def _get_structured(
                     calendar_context=calendar_context,
                     photos=main_conv.photos,
                     speaker_map=speaker_map,
+                    transcript_segment_ids=transcript_segment_ids,
                 )
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_conversation_notes(
@@ -510,6 +574,7 @@ def _get_structured(
                         existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                         trusted_wake_word_markers=has_wake_word_marker,
                     )
+                validate_structured_source_segment_ids(structured, transcript_segment_ids)
                 return structured, False
             # reprocess endpoint
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
@@ -520,6 +585,7 @@ def _get_structured(
                     tz_str,
                     photos=main_conv.photos,
                     output_language_code=user_language,
+                    transcript_segment_ids=transcript_segment_ids,
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
@@ -534,7 +600,19 @@ def _get_structured(
                     trusted_wake_word_markers=has_wake_word_marker,
                     primary_user_name=_primary_user_name(uid),
                 )
+            validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
+
+        # A second capture client already carrying this speech (#3244: Omi device
+        # on the phone + macOS microphone in the same room) is folded away here,
+        # before any LLM spend. It takes the same discard exit as a scrap, so the
+        # transcript and audio stay on the row and the primary is recorded in
+        # external_data. Deliberately ahead of the calendar override: the primary
+        # already holds that meeting.
+        duplicate_capture = _detect_duplicate_capture(uid, main_conv)
+        if duplicate_capture is not None:
+            mark_duplicate_capture(main_conv, duplicate_capture)
+            return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # Transcript span, not the wall window: `started_at` is the streaming-session
         # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
@@ -577,6 +655,7 @@ def _get_structured(
                 calendar_context=calendar_context,
                 photos=main_conv.photos,
                 speaker_map=speaker_map,
+                transcript_segment_ids=transcript_segment_ids,
             )
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_conversation_notes(
@@ -589,6 +668,7 @@ def _get_structured(
                     existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                     trusted_wake_word_markers=has_wake_word_marker,
                 )
+            validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = get_transcript_structure(
@@ -600,6 +680,7 @@ def _get_structured(
                 photos=main_conv.photos,
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
+                transcript_segment_ids=transcript_segment_ids,
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
@@ -615,6 +696,7 @@ def _get_structured(
                 trusted_wake_word_markers=has_wake_word_marker,
                 primary_user_name=_primary_user_name(uid),
             )
+        validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
     except Exception as e:
         raise conversation_processing_http_exception(e) from e
@@ -816,6 +898,9 @@ def trigger_conversation_apps(
                     calendar_context=_stored_meeting_context(conversation),
                     photos=conversation.photos,
                     speaker_map=app_speaker_map,
+                    transcript_segment_ids=[
+                        getattr(segment, 'id', None) for segment in conversation.transcript_segments
+                    ],
                 )
             result = get_app_result(
                 transcript,
@@ -992,7 +1077,11 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # §1.8: plan denial is a second early return in this same boundary, not a
     # parallel branch. Everything below spends `get_llm('memories')`, so the
     # gate has to sit above it rather than inside the extractor.
-    if free_tier_memory_suppression_enabled():
+    # Same contract as the S6 gate below: the cohort admits nobody when it is
+    # not told which account it is deciding about, so a bare call leaves this
+    # branch unreachable however the cohort is configured. The sweep and the
+    # connectors already pass `uid`; this site was the exception.
+    if free_tier_memory_suppression_enabled(uid):
         verdict = memory_formation_verdict(decision_for=_managed_compute_decision_for(uid))
         if verdict.suppressed:
             logger.info(
@@ -1064,16 +1153,19 @@ def _l1_subject_from_matched_segments(
     *,
     source_id: str,
     matched_segments: List[Any],
+    owner_evidence: OwnerAttributionEvidence,
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     resolved_subjects: Set[Tuple[str, SubjectAttribution, str]] = set()
     for segment in matched_segments:
-        if bool(getattr(segment, "is_user", False)):
+        if may_attribute_to_owner(owner_evidence, segment=segment):
             resolved_subjects.add(("user", SubjectAttribution.user, "user"))
             continue
         person_id = getattr(segment, "person_id", None)
         if person_id:
             resolved_subjects.add((f"person:{person_id}", SubjectAttribution.third_party, "person"))
             continue
+        if getattr(segment, "is_user", False):
+            return None, SubjectAttribution.unknown, "unknown"
         raw_speaker = str(getattr(segment, "speaker", "") or "").strip()
         speaker_id = getattr(segment, "speaker_id", None)
         speaker_label = raw_speaker or (f"speaker_{speaker_id}" if speaker_id is not None else "")
@@ -1118,6 +1210,7 @@ def _l1_candidate_subject(
     segments: List[Any],
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     """Resolve one L1 candidate without assigning the whole conversation's subject."""
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
     about_norm = _normalized_l1_subject_label(about)
     speaker_norm = _normalized_l1_subject_label(speaker_label)
     user_aliases = {"user", "the user", "primary user"}
@@ -1145,6 +1238,14 @@ def _l1_candidate_subject(
             matched_segments.append(segment)
 
     if about_norm in user_aliases:
+        if not may_attribute_to_owner(owner_evidence):
+            if quote_matched_segments and all(
+                getattr(segment, "person_id", None) for segment in quote_matched_segments
+            ):
+                return _l1_subject_from_matched_segments(
+                    source_id=source_id, matched_segments=quote_matched_segments, owner_evidence=owner_evidence
+                )
+            return None, SubjectAttribution.unknown, "unknown"
         if quote_matched_segments:
             # Quote-bearing source segments outrank both model-authored
             # ``about`` and ``speaker_label`` fields. This applies even when
@@ -1152,6 +1253,7 @@ def _l1_candidate_subject(
             # different segment elsewhere in the conversation.
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=quote_matched_segments,
             )
         if speaker_norm and matched_segments:
@@ -1159,9 +1261,12 @@ def _l1_candidate_subject(
             # model-authored about=user label.
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=matched_segments,
             )
-        return "user", SubjectAttribution.user, "user"
+        if may_attribute_to_owner(owner_evidence):
+            return "user", SubjectAttribution.user, "user"
+        return None, SubjectAttribution.unknown, "unknown"
 
     about_names_model_speaker = bool(
         about_norm and speaker_norm and (about_norm == speaker_norm or f" {speaker_norm} " in f" {about_norm} ")
@@ -1174,6 +1279,7 @@ def _l1_candidate_subject(
         # source-scoped entity.
         return _l1_subject_from_matched_segments(
             source_id=source_id,
+            owner_evidence=owner_evidence,
             matched_segments=quote_matched_segments,
         )
 
@@ -1190,11 +1296,13 @@ def _l1_candidate_subject(
         if quote_matched_segments:
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=quote_matched_segments,
             )
         if matched_segments:
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=matched_segments,
             )
         return None, SubjectAttribution.unknown, "unknown"
@@ -1251,6 +1359,32 @@ def _grounded_l1_evidence_quotes(evidence_quotes: List[str], segments: List[Any]
         seen.add(normalized_quote)
         grounded.append(quote)
     return grounded
+
+
+def _l1_owner_spoken_for_grounded_quotes(evidence_quotes: List[str], segments: List[Any]) -> bool:
+    """Return true only when every grounded quote is spoken by the owner.
+
+    Subject resolution may conservatively fall back to ``about=user`` when a
+    transcript has a uniquely identified owner but no quote-bound speaker. That
+    is enough to scope a claim, but it is not evidence that the owner uttered
+    the source text. Source attribution therefore requires quote-level binding
+    to the owner's cluster.
+    """
+
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
+    if not evidence_quotes or not may_attribute_to_owner(owner_evidence):
+        return False
+    for raw_quote in evidence_quotes:
+        normalized_quote = _normalized_l1_evidence_quote(raw_quote)
+        matched_segments = [
+            segment
+            for segment in segments
+            if normalized_quote
+            and f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
+        ]
+        if len(matched_segments) != 1 or not may_attribute_to_owner(owner_evidence, segment=matched_segments[0]):
+            return False
+    return True
 
 
 def _canonical_quote_ref(
@@ -1367,6 +1501,7 @@ def _extract_memories_canonical(
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
+    source_captured_at = getattr(conversation, "started_at", None) or getattr(conversation, "created_at", None)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
     capture_decisions_by_memory_object: Dict[int, Tuple[str, bool]] = {}
 
@@ -1409,6 +1544,11 @@ def _extract_memories_canonical(
             prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
                 uid, conversation, prompt_people
             )
+            if not may_attribute_to_owner(OwnerAttributionEvidence.from_segments(conversation.transcript_segments)):
+                prompt_transcript = memory_transcript_from_segments(
+                    conversation.transcript_segments, user_name=user_name, people=prompt_people
+                )
+                prompt_speaker_map = {}
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
                 transcript=prompt_transcript,
@@ -1418,6 +1558,7 @@ def _extract_memories_canonical(
                 calendar_context=calendar_context,
                 photos=conversation.photos,
                 speaker_map=prompt_speaker_map,
+                transcript_segment_ids=[getattr(segment, 'id', None) for segment in conversation.transcript_segments],
             )
         try:
             extracted_candidates = extract_canonical_l1_memory_candidates(
@@ -1465,6 +1606,32 @@ def _extract_memories_canonical(
                 visibility="private",
                 subject_entity_id=subject_entity_id,
                 subject_attribution=subject_attribution,
+            )
+            # Carry the candidate's proposition shape onto the persisted
+            # memory: object qualifiers and decision states must not be
+            # silently dropped by canonical conversation capture. Arguments
+            # are already scoped/bounded by the extractor.
+            memory.predicate = getattr(candidate, "predicate", None)
+            memory.arguments = dict(getattr(candidate, "arguments", None) or {})
+            # The transcript is the original evidence family for this
+            # candidate. Build capture context from the server-owned
+            # conversation and the resolved speaker attribution; never trust
+            # source identifiers emitted by the model. The canonical adapter
+            # preserves this context on MemoryEvidence.
+            source_attribution = (
+                "user_spoken"
+                if _l1_owner_spoken_for_grounded_quotes(evidence_quotes, conversation.transcript_segments)
+                else "third_party" if subject_attribution == SubjectAttribution.third_party else "unknown"
+            )
+            memory.capture_context = MemoryCaptureContext(
+                source_type="conversation",
+                captured_at=source_captured_at,
+                source_id=conversation.id,
+                source_version="v1",
+                source_signal="transcription",
+                independence_group=conversation.id,
+                lineage_id=conversation.id,
+                attribution=source_attribution,
             )
             if belief_model_enabled():
                 resolved_scope = subject_scope_from_extraction(
@@ -1576,6 +1743,7 @@ def _extract_memories_canonical(
             artifact_ref=_transcript_artifact_ref(conversation),
             extractor_id="canonical_l1_memory_extractor" if has_candidate_subject else "new_memories_extractor",
             extractor_version="v1",
+            source_captured_at=source_captured_at,
             subject_entity_id=candidate_subject_entity_id,
             subject_attribution=memory.subject_attribution if has_candidate_subject else subject_attribution,
             client_device_id=getattr(conversation, "client_device_id", None),
@@ -1617,7 +1785,7 @@ def _extract_memories_canonical(
         replacement_payloads,
     )
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
-    distinct_speaker_ids, owner_speaker_ids = count_speaker_ids(conversation.transcript_segments)
+    owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
         if not memory_db_obj.id:
             continue
@@ -1634,8 +1802,9 @@ def _extract_memories_canonical(
             subject_attribution=memory_db_obj.subject_attribution,
             model_about=model_about,
             attribution_disagreed=attribution_disagreed,
-            distinct_speaker_ids=distinct_speaker_ids,
-            owner_speaker_ids=owner_speaker_ids,
+            distinct_speaker_ids=owner_evidence.distinct_speaker_ids,
+            owner_speaker_ids=owner_evidence.owner_speaker_ids,
+            owner_trust=owner_evidence.trust,
         )
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
@@ -2172,6 +2341,47 @@ def _store_projected_conversation(
     return _store_deterministic_minimum(uid, conversation, plan, client_projection=client_projection)
 
 
+def _flag_off_identified_basic_deny(
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    *,
+    client_projection: Optional[ClientProcessing],
+) -> Optional[FreeTierProcessingPlan]:
+    """Identified-basic deny for flag-off eager desktop enrichment.
+
+    Capture-side deferral (the legacy branch above) already keeps free-tier
+    desktop off managed providers at ingest; first-open (force_process) and
+    manual reprocess are the remaining eager spend. This reuses the S6 policy
+    — the same resolve_free_tier_processing_plan + managed-compute decision
+    the flag-on branch consults — so there is no second pipeline. Only an
+    *identified* basic deny is returned; identification failure and
+    authorization outages fail open to normal processing, matching
+    should_defer_desktop_processing's documented fail-open contract (a
+    Firestore blip must not strip a paid user's enrichment). A request that
+    carries a validated BYOK key for conv_structure's provider is allowed by
+    the same decision_for closure the flag-on path uses.
+    """
+    source = getattr(conversation, 'source', None)
+    source_value = getattr(source, 'value', source)
+    effective_projection = (
+        client_projection if client_projection is not None else getattr(conversation, 'client_processing', None)
+    )
+    plan = resolve_free_tier_processing_plan(
+        uid=uid,
+        source=str(source_value),
+        force_process=True,
+        is_reprocess=True,
+        has_projection=effective_projection is not None,
+        decision_for=_managed_compute_decision_for(uid),
+    )
+    decision = plan.decision
+    if plan.managed_calls_allowed or decision is None:
+        return None
+    if not decision.plan_resolved or decision.plan != 'basic':
+        return None
+    return plan
+
+
 def _stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
     direct = getattr(conversation, 'calendar_meeting_context', None)
     if isinstance(direct, CalendarMeetingContext):
@@ -2411,7 +2621,12 @@ def process_conversation(
     # consulted the policy and continued to process_normally (paid upgrade).
     clear_stale_terminal_marker = False
     if (
-        free_tier_local_processing_enabled()
+        # `uid` is required, not optional: the flag is necessary but never
+        # sufficient, and `free_tier_local_processing_enabled(None)` is answered
+        # False while the flag is on, by design, so a boolean alone lights
+        # nobody. Calling it bare made this whole branch unreachable in every
+        # environment regardless of the configured cohort.
+        free_tier_local_processing_enabled(uid)
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
     ):
@@ -2485,6 +2700,34 @@ def process_conversation(
         # Do not change this onto the flag-off path — it must stay byte-identical.
         report_persistence(False)
         return deferred
+    # Eager-extraction gate (S14 proactivity half, flag-off): first-open
+    # (force_process) and manual reprocess are the remaining eager managed
+    # spend for desktop conversations. Default off
+    # (``BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED``): no authorize call and
+    # no new terminal marker. When on, an identified-basic deny lands at the
+    # same deterministic minimum the flag-on branch uses — no second pipeline;
+    # identification failure fails open above it. Non-desktop sources never
+    # reach this branch (the summary flip is a separate, held decision).
+    elif (
+        (force_process or is_reprocess)
+        and hasattr(conversation, 'source')
+        and conversation.source == ConversationSource.desktop
+        and basic_plan_gate_eager_extraction_enabled()
+    ):
+        eager_basic_deny = _flag_off_identified_basic_deny(uid, conversation, client_projection=client_projection)
+        if eager_basic_deny is not None:
+            stored, persisted = _store_deterministic_minimum(
+                uid, conversation, eager_basic_deny, client_projection=client_projection
+            )
+            report_persistence(
+                persisted,
+                derived_effects=(
+                    DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+                    if persisted
+                    else DerivedEffectsDisposition.RUN
+                ),
+            )
+            return stored
 
     _enrich_meeting_context(uid, conversation)
 

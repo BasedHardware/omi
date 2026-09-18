@@ -292,9 +292,14 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
             
             if response.status_code == 200:
                 result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                choices = result.get("choices") if isinstance(result, dict) else None
+                if choices and isinstance(choices, list) and isinstance(choices[0], dict):
+                    message = choices[0].get("message")
+                    answer = message.get("content", "").strip() if isinstance(message, dict) else ""
+                else:
+                    answer = ""
                 
-                if answer.upper() != "NONE":
+                if answer and answer.upper() != "NONE":
                     batch_valid = [n.strip() for n in answer.split(",") if n.strip()]
                     valid_names.extend(batch_valid)
             else:
@@ -1014,7 +1019,9 @@ def calculate_iq_with_ai(people_dict: dict) -> dict:
     # Prepare batch for AI analysis
     people_to_analyze = []
     for name_lower, data in people_dict.items():
-        context = " | ".join(data.get("context_snippets", [])[:10])  # More snippets
+        raw_snippets = data.get("context_snippets", []) if isinstance(data, dict) else []
+        snippets_list = list(raw_snippets) if isinstance(raw_snippets, (list, tuple)) else []
+        context = " | ".join([str(s) for s in snippets_list[:10] if s is not None])  # More snippets
         if context:
             people_to_analyze.append({
                 "name": data["name"],
@@ -1078,7 +1085,12 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
             
             if response.status_code == 200:
                 result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                choices = result.get("choices") if isinstance(result, dict) else None
+                if choices and isinstance(choices, list) and isinstance(choices[0], dict):
+                    message = choices[0].get("message")
+                    answer = message.get("content", "").strip() if isinstance(message, dict) else ""
+                else:
+                    answer = ""
                 
                 # Parse JSON from response
                 try:

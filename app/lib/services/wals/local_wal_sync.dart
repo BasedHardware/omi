@@ -44,6 +44,24 @@ SyncJobTerminalPolicy syncJobTerminalPolicy({required String status, required bo
   return status == 'completed' ? SyncJobTerminalPolicy.acknowledge : SyncJobTerminalPolicy.retry;
 }
 
+/// Terminal `reason_code`s the backend only reaches because of the uploaded
+/// audio itself. `sync_invalid_audio` is raised by `decode_files_to_wav` once
+/// *nothing* in the batch decoded, and `stt_invalid_input` is the provider
+/// refusing the decoded audio as invalid — re-sending identical bytes produces
+/// the identical verdict. Keep in sync with `_SYNC_FAILURE_REASON_CODES` in
+/// backend/utils/sync/pipeline.py.
+const _kPermanentInputFailureReasonCodes = {'sync_invalid_audio', 'stt_invalid_input'};
+
+/// Whether a terminal job failed for a reason no re-upload can change.
+///
+/// Only a whole-job `failed` qualifies: `partial_failure` proves some segments
+/// landed, so the batch is not shown to be bad. A permanent verdict therefore
+/// never strands a good sibling — the decoder drops unreadable files
+/// individually and only fails the job when the batch has nothing left.
+@visibleForTesting
+bool syncJobFailureIsPermanent(SyncJobStatusResponse status) =>
+    status.status == 'failed' && _kPermanentInputFailureReasonCodes.contains(status.reasonCode);
+
 @visibleForTesting
 bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
   if ((status.error ?? '').contains(_kBackendBusyErrorHint)) return true;
@@ -67,6 +85,18 @@ String? _walLocationBatchKey(Wal wal) {
   if (geolocation == null) return null;
   return '${geolocation.time?.toUtc().toIso8601String()}|${geolocation.latitude}|${geolocation.longitude}';
 }
+
+/// A recording the automatic drain may still upload.
+///
+/// Spending [walMaxAutoRetries] takes it out of every auto loop for good: the
+/// reconciler spends the whole budget at once for a failure the server can only
+/// reach again, and an unclassified failure still stops after the budget rather
+/// than re-uploading the same bytes forever. The per-recording manual Retry
+/// ([LocalWalSyncImpl.syncWal]) deliberately ignores this budget, so the user
+/// keeps exactly one deliberate attempt per tap.
+@visibleForTesting
+bool isAutoUploadEligible(Wal wal) =>
+    wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
 
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
@@ -113,7 +143,28 @@ class LocalWalSyncImpl implements LocalWalSync {
   final SyncUploadGate? _uploadGateOverride;
   SyncUploadGate get _uploadGate => _uploadGateOverride ?? SyncUploadGate.instance;
 
-  LocalWalSyncImpl(this.listener, {SyncUploadGate? uploadGate}) : _uploadGateOverride = uploadGate;
+  // Deterministic-replay seams: null means production wall clock, dart:async
+  // periodic timers, and the shared HTTP job-status endpoint.
+  final DateTime Function()? _nowOverride;
+  final Timer Function(Duration, void Function(Timer))? _periodicOverride;
+  final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
+
+  DateTime _now() => _nowOverride?.call() ?? DateTime.now();
+
+  Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
+
+  Future<SyncJobFetch> Function(String jobId) get _jobStatusFetcher => _jobStatusFetcherOverride ?? fetchSyncJobStatus;
+
+  LocalWalSyncImpl(
+    this.listener, {
+    SyncUploadGate? uploadGate,
+    DateTime Function()? now,
+    Timer Function(Duration, void Function(Timer))? periodic,
+    Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
+  })  : _uploadGateOverride = uploadGate,
+        _nowOverride = now,
+        _periodicOverride = periodic,
+        _jobStatusFetcherOverride = jobStatusFetcher;
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -157,10 +208,10 @@ class LocalWalSyncImpl implements LocalWalSync {
   @override
   void start() {
     _initializeWals();
-    _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
+    _chunkingTimer = _periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
       await _chunk();
     });
-    _flushingTimer = Timer.periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
+    _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
       t,
     ) async {
       await _flush();
@@ -230,7 +281,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   @override
   void setSessionGeolocation(Geolocation? geolocation) {
     _sessionGeolocation = _copyGeolocation(geolocation);
-    _sessionGeolocationSetAt = geolocation == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    _sessionGeolocationSetAt = geolocation == null ? null : _now().millisecondsSinceEpoch ~/ 1000;
   }
 
   Geolocation? _copyGeolocation(Geolocation? geolocation) =>
@@ -243,7 +294,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
 
     var lossesThreshold = 10 * _framesPerSecond;
-    var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
+    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * _framesPerSecond;
     if (pivot <= 0) {
       return;
@@ -409,7 +460,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Returns unsynced WALs whose timerStart falls within [sessionStartSeconds, now].
   /// Used by the live capture screen to show inline audio safety indicators.
   List<Wal> getSessionUnsyncedWals(int sessionStartSeconds) {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
     return _wals
         .where(
           (w) =>
@@ -438,7 +489,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (high <= 0) return;
 
     var lossesThreshold = 10 * _framesPerSecond;
-    var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
@@ -503,7 +554,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Stamp all session WALs with the given conversationId and persist to disk.
   /// This makes WAL→conversation linkage survive app kill.
   Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
     int stamped = 0;
     for (final wal in _wals) {
       if (wal.status == WalStatus.miss &&
@@ -523,15 +574,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Returns WALs that have a conversationId but haven't been synced yet.
   /// Used for startup recovery after app kill.
   List<Wal> getOrphanedWals() {
-    return _wals
-        .where(
-          (w) =>
-              w.status == WalStatus.miss &&
-              w.storage == WalStorage.disk &&
-              w.conversationId != null &&
-              w.retryCount < 3,
-        )
-        .toList();
+    return _wals.where((w) => isAutoUploadEligible(w) && w.conversationId != null).toList();
   }
 
   /// Persist retry metadata (retryCount, lastRetryAt) for a WAL after failed sync attempts.
@@ -618,14 +661,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     _isCancelled = false;
     _accumulatedResponse = null;
 
-    final initialNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     var wals = _wals
-        .where(
-          (wal) =>
-              wal.status == WalStatus.miss &&
-              wal.storage == WalStorage.disk &&
-              (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)),
-        )
+        .where((wal) => isAutoUploadEligible(wal) && (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
         .toList();
     if (wals.isEmpty) {
       Logger.debug("All synced!");
@@ -647,7 +685,6 @@ class LocalWalSyncImpl implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
-    int filesUploaded = 0;
     final totalFilesToUpload = wals.length;
 
     final attemptedWalIds = <String>{};
@@ -658,13 +695,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     while (true) {
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
-      final batchNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final candidates = _wals
-          .where(
-            (wal) =>
-                wal.status == WalStatus.miss && wal.storage == WalStorage.disk && !attemptedWalIds.contains(wal.id),
-          )
-          .toList();
+      final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
+      final candidates = _wals.where((wal) => isAutoUploadEligible(wal) && !attemptedWalIds.contains(wal.id)).toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
       final batch = nextSyncUploadBatch(pending, batchNowSeconds);
@@ -753,13 +785,17 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      // Report file-count progress
-      progress?.onWalSyncedProgress(
-        filesUploaded / totalFilesToUpload,
-        phase: SyncPhase.uploadingToCloud,
-        currentFile: filesUploaded,
-        totalFiles: totalFilesToUpload,
-      );
+      void reportUploadProgress() {
+        final done = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
+        progress?.onWalSyncedProgress(
+          totalFilesToUpload > 0 ? done / totalFilesToUpload : 0.0,
+          phase: SyncPhase.uploadingToCloud,
+          currentFile: done,
+          totalFiles: totalFilesToUpload,
+        );
+      }
+
+      reportUploadProgress();
 
       listener.onWalUpdated();
       try {
@@ -795,7 +831,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           // shared job_id and mark uploaded. The reconciler resolves this to
           // synced / miss(retry) / corrupted out of the critical path. The
           // local file is retained until confirmed synced.
-          final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          final now = _now().millisecondsSinceEpoch ~/ 1000;
           for (final wal in batchWals) {
             wal.status = WalStatus.uploaded;
             wal.jobId = result.jobId;
@@ -808,8 +844,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
 
         batchesCompleted++;
-        // Count WALs no longer needing upload (uploaded or already synced).
-        filesUploaded = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
+        reportUploadProgress();
       } on SyncRateLimitedException {
         // The cooldown is account-global, so every remaining batch would hit it too.
         DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
@@ -900,6 +935,11 @@ class LocalWalSyncImpl implements LocalWalSync {
       return null;
     }
     final walToSync = matches.first;
+    // A deliberate single-recording retry is a fresh start, so it restores the
+    // auto-upload budget a previous failure spent. It costs at most one extra
+    // upload for a permanently refused recording: the reconciler spends the
+    // whole budget again on the same verdict.
+    walToSync.retryCount = 0;
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -959,7 +999,7 @@ class LocalWalSyncImpl implements LocalWalSync {
               (candidate) => candidate.status == WalStatus.miss && candidate.conversationId == walToSync.conversationId,
             )
             .toList(),
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        _now().millisecondsSinceEpoch ~/ 1000,
       );
       final result = await _uploadGate.upload(
         [walFile],
@@ -983,7 +1023,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         DebugLogManager.logInfo('Single WAL upload succeeded (fast-path)', {'walId': wal.id});
         listener.onWalSynced(wal);
       } else {
-        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final now = _now().millisecondsSinceEpoch ~/ 1000;
         walToSync.status = WalStatus.uploaded;
         walToSync.jobId = result.jobId;
         walToSync.uploadedAt = now;
@@ -1092,13 +1132,13 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (byJob.isEmpty) return resp;
 
     bool changed = false;
-    final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     const maxConcurrent = 3;
     final entries = byJob.entries.toList();
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
-      final fetched = await Future.wait(slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))));
+      final fetched = await Future.wait(slice.map((e) async => (e.value, await _jobStatusFetcher(e.key))));
 
       for (final (members, fetch) in fetched) {
         final jobId = members.first.jobId;
@@ -1187,12 +1227,20 @@ class LocalWalSyncImpl implements LocalWalSync {
                   reason: RateLimitReason.backendBusy,
                 );
               }
+              // A verdict the audio itself caused cannot change on the next
+              // pass, so spend the whole auto budget now instead of one attempt
+              // per reconcile. The recording stays `miss` and on disk: the row
+              // presents as failed and keeps its manual Retry and Delete.
+              final permanentInput = !capacityLimited && syncJobFailureIsPermanent(s);
               for (final w in members) {
                 changed = true;
                 final hadJob = w.jobId;
                 w.status = WalStatus.miss;
                 w.jobId = null;
-                if (!capacityLimited) {
+                if (permanentInput) {
+                  w.retryCount = max(w.retryCount, walMaxAutoRetries);
+                  w.lastRetryAt = nowSecs;
+                } else if (!capacityLimited) {
                   w.retryCount += 1;
                   w.lastRetryAt = nowSecs;
                 }
@@ -1201,10 +1249,12 @@ class LocalWalSyncImpl implements LocalWalSync {
                   'jobId': hadJob,
                   'outcome': s.status,
                   'serverError': s.error,
+                  'reasonCode': s.reasonCode,
                   'failedSegments': s.failedSegments,
                   'totalSegments': s.totalSegments,
                   'retryCount': w.retryCount,
                   'capacityLimited': capacityLimited,
+                  'permanentInput': permanentInput,
                   'retryCountBumped': !capacityLimited,
                 });
               }

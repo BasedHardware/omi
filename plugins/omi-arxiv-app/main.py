@@ -11,18 +11,23 @@ from html import unescape
 import asyncio
 import re
 import time
-from typing import Any, Optional
-from urllib.parse import quote_plus
+from typing import Any, Optional, Union
 import xml.etree.ElementTree as ET
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 
+from models import (
+    ChatToolResponse,
+    GetPaperDetailsRequest,
+    SearchAuthorRequest,
+    SearchPapersRequest,
+)
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
-REQUEST_TIMEOUT_SECONDS = 12
+REQUEST_TIMEOUT_SECONDS = 12.0
 MAX_LIMIT = 10
 # arXiv API Terms of Use require clients to wait at least three seconds between requests.
 MIN_REQUEST_INTERVAL_SECONDS = 3.0
@@ -32,13 +37,6 @@ ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/sch
 _arxiv_client: Optional[httpx.AsyncClient] = None
 _arxiv_request_lock = asyncio.Lock()
 _last_arxiv_request_at = 0.0
-
-
-class ChatToolResponse(BaseModel):
-    """Response model for Omi chat tool endpoints."""
-
-    result: Optional[str] = None
-    error: Optional[str] = None
 
 
 def _new_arxiv_client() -> httpx.AsyncClient:
@@ -62,7 +60,7 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
-        if _arxiv_client is not None:
+        if _arxiv_client is not None and not _arxiv_client.is_closed:
             await _arxiv_client.aclose()
 
 
@@ -72,6 +70,17 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    """Ensure malformed JSON or invalid types return a standard 200 ChatToolResponse."""
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request payload")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
 
 
 def _clean_text(value: Any) -> str:
@@ -86,10 +95,10 @@ def _safe_limit(limit: Any, default: int = 5) -> int:
     if limit is None or limit == "":
         return default
     try:
-        limit = int(limit)
+        val = int(limit)
     except (TypeError, ValueError):
         return default
-    return max(1, min(limit, MAX_LIMIT))
+    return max(1, min(val, MAX_LIMIT))
 
 
 def _safe_category(category: Any) -> str:
@@ -127,20 +136,20 @@ def _date_only(value: str) -> str:
         return "unknown date"
     try:
         return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
-    except ValueError:
-        return text[:10]
+    except (ValueError, TypeError):
+        return text[:10] if len(text) >= 10 else text
 
 
 def _entry_text(entry: ET.Element, path: str) -> str:
     node = entry.find(path, ATOM_NS)
-    return _clean_text(node.text if node is not None else "")
+    return _clean_text(node.text if node is not None and node.text else "")
 
 
 def _entry_authors(entry: ET.Element) -> list[str]:
     authors = []
     for author in entry.findall("atom:author", ATOM_NS):
         name = author.find("atom:name", ATOM_NS)
-        text = _clean_text(name.text if name is not None else "")
+        text = _clean_text(name.text if name is not None and name.text else "")
         if text:
             authors.append(text)
     return authors
@@ -157,7 +166,8 @@ def _entry_categories(entry: ET.Element) -> list[str]:
 
 def _entry_arxiv_id(entry: ET.Element) -> str:
     link = _entry_text(entry, "atom:id")
-    return link.removeprefix("https://arxiv.org/abs/").removeprefix("http://arxiv.org/abs/")
+    raw_id = link.removeprefix("https://arxiv.org/abs/").removeprefix("http://arxiv.org/abs/")
+    return raw_id or "unknown"
 
 
 def _format_entry(entry: ET.Element, index: int) -> str:
@@ -188,6 +198,8 @@ def _format_entry(entry: ET.Element, index: int) -> str:
 
 
 def _parse_entries(feed_xml: str) -> list[ET.Element]:
+    if not feed_xml or not feed_xml.strip():
+        return []
     root = ET.fromstring(feed_xml)
     return root.findall("atom:entry", ATOM_NS)
 
@@ -207,31 +219,46 @@ async def _request_arxiv(params: dict[str, Any]) -> str:
         elapsed = time.monotonic() - _last_arxiv_request_at
         if elapsed < MIN_REQUEST_INTERVAL_SECONDS:
             await asyncio.sleep(MIN_REQUEST_INTERVAL_SECONDS - elapsed)
-        response = await client.get(ARXIV_API_URL, params=params)
-        _last_arxiv_request_at = time.monotonic()
+        try:
+            response = await client.get(ARXIV_API_URL, params=params)
+        finally:
+            _last_arxiv_request_at = time.monotonic()
     response.raise_for_status()
     return response.text
 
 
-def _build_search_query(payload: dict[str, Any]) -> Optional[str]:
-    query = _clean_text(payload.get("query"))
-    title = _clean_text(payload.get("title"))
-    author = _clean_text(payload.get("author"))
-    category = _safe_category(payload.get("category"))
+def _build_search_query(payload: Union[SearchPapersRequest, dict[str, Any], None]) -> Optional[str]:
+    # httpx form-encodes request params itself, so this must return an
+    # unencoded string. Pre-encoding here (e.g. with quote_plus) makes httpx
+    # encode it a second time, turning "+" separators into a literal "%2B"
+    # that arXiv does not treat as AND/space.
+    if payload is None:
+        data = {}
+    elif isinstance(payload, SearchPapersRequest):
+        data = payload.model_dump()
+    elif isinstance(payload, dict):
+        data = payload
+    else:
+        data = {}
+
+    query = _clean_text(data.get("query"))
+    title = _clean_text(data.get("title"))
+    author = _clean_text(data.get("author"))
+    category = _safe_category(data.get("category"))
     parts = []
     if query:
-        parts.append(f"all:{quote_plus(query)}")
+        parts.append(f"all:{query}")
     if title:
-        parts.append(f"ti:{quote_plus(title)}")
+        parts.append(f"ti:{title}")
     if author:
-        parts.append(f"au:{quote_plus(author)}")
+        parts.append(f"au:{author}")
     if category:
         parts.append(f"cat:{category}")
-    return "+AND+".join(parts) if parts else None
+    return " AND ".join(parts) if parts else None
 
 
 @app.get("/")
-async def root():
+async def root() -> HTMLResponse:
     return HTMLResponse(
         """
         <html>
@@ -247,12 +274,12 @@ async def root():
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/.well-known/omi-tools.json")
-async def get_omi_tools_manifest():
+async def get_omi_tools_manifest() -> dict[str, Any]:
     return {
         "tools": [
             {
@@ -343,22 +370,30 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/search_papers", response_model=ChatToolResponse)
-async def search_papers(payload: dict[str, Any]):
-    search_query = _build_search_query(payload)
-    if not search_query:
-        return ChatToolResponse(error="Provide query, title, author, or category.")
-
-    limit = _safe_limit(payload.get("limit"))
-    sort_by = _safe_sort(payload.get("sort_by"))
-    params = {
-        "search_query": search_query,
-        "start": 0,
-        "max_results": limit,
-        "sortBy": sort_by,
-        "sortOrder": "descending",
-    }
+async def search_papers(payload: Union[SearchPapersRequest, dict[str, Any], None] = None) -> ChatToolResponse:
+    if payload is None or isinstance(payload, dict):
+        try:
+            req = SearchPapersRequest(**(payload or {}))
+        except Exception:
+            req = None
+    else:
+        req = payload
 
     try:
+        search_query = _build_search_query(req if req is not None else payload)
+        if not search_query:
+            return ChatToolResponse(error="Provide query, title, author, or category.")
+
+        limit = _safe_limit(req.limit if req is not None else (payload.get("limit") if isinstance(payload, dict) else 5))
+        sort_by = _safe_sort(req.sort_by if req is not None else (payload.get("sort_by") if isinstance(payload, dict) else "relevance"))
+        params = {
+            "search_query": search_query,
+            "start": 0,
+            "max_results": limit,
+            "sortBy": sort_by,
+            "sortOrder": "descending",
+        }
+
         entries = _parse_entries(await _request_arxiv(params))
         if not entries:
             return ChatToolResponse(result="No arXiv papers found.")
@@ -375,8 +410,17 @@ async def search_papers(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_paper_details", response_model=ChatToolResponse)
-async def get_paper_details(payload: dict[str, Any]):
-    paper_id = _safe_paper_id(payload.get("paper_id"))
+async def get_paper_details(payload: Union[GetPaperDetailsRequest, dict[str, Any], None] = None) -> ChatToolResponse:
+    if payload is None:
+        raw_paper_id = None
+    elif isinstance(payload, GetPaperDetailsRequest):
+        raw_paper_id = payload.paper_id
+    elif isinstance(payload, dict):
+        raw_paper_id = payload.get("paper_id")
+    else:
+        raw_paper_id = getattr(payload, "paper_id", None)
+
+    paper_id = _safe_paper_id(raw_paper_id)
     if not paper_id:
         return ChatToolResponse(error="Provide a valid arXiv paper ID, such as 2401.01234.")
 
@@ -394,17 +438,30 @@ async def get_paper_details(payload: dict[str, Any]):
 
 
 @app.post("/tools/search_author", response_model=ChatToolResponse)
-async def search_author(payload: dict[str, Any]):
-    author = _clean_text(payload.get("author"))
+async def search_author(payload: Union[SearchAuthorRequest, dict[str, Any], None] = None) -> ChatToolResponse:
+    if payload is None:
+        raw_author = None
+        raw_limit = 5
+    elif isinstance(payload, SearchAuthorRequest):
+        raw_author = payload.author
+        raw_limit = payload.limit
+    elif isinstance(payload, dict):
+        raw_author = payload.get("author")
+        raw_limit = payload.get("limit")
+    else:
+        raw_author = getattr(payload, "author", None)
+        raw_limit = getattr(payload, "limit", 5)
+
+    author = _clean_text(raw_author)
     if not author:
         return ChatToolResponse(error="Missing required field: author")
 
-    limit = _safe_limit(payload.get("limit"))
+    limit = _safe_limit(raw_limit)
     try:
         entries = _parse_entries(
             await _request_arxiv(
                 {
-                    "search_query": f"au:{quote_plus(author)}",
+                    "search_query": f"au:{author}",
                     "start": 0,
                     "max_results": limit,
                     "sortBy": "submittedDate",

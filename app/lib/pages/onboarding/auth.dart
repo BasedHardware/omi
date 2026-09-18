@@ -34,7 +34,9 @@ class _AuthComponentState extends State<AuthComponent> {
             // Bottom drawer card - wraps content
             Container(
               width: double.infinity,
-              padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
+              // The SafeArea below adds the system inset; adding it here as well left
+              // twice the inset of dead space under the content on inset devices.
+              padding: const EdgeInsets.fromLTRB(32, 26, 32, 8),
               decoration: const BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
@@ -131,6 +133,34 @@ class _AuthComponentState extends State<AuthComponent> {
                         ),
                       ),
                     ),
+
+                    // Local development sign-in. Only rendered for a local_dev
+                    // build: community builds cannot complete a real OAuth flow,
+                    // because provider OAuth clients are bound to the official
+                    // bundle id and a community build is signed with a suffixed
+                    // one. Never shown in a production-family build.
+                    if (provider.isLocalDevProfile) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            provider.onLocalDevSignIn(widget.onSignIn);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          child: const Text(
+                            'Sign in (local dev)',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                          ),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 24),
 

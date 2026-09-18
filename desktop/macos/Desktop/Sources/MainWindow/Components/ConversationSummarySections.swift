@@ -1,17 +1,8 @@
 //
-//  ConversationSummarySections.swift — the headed blocks a summary is actually made of.
+//  ConversationSummarySections.swift — the headed blocks selected as a summary body.
 //
-//  The backend stopped putting the substance of a summary in `overview`. `overview` is now a short
-//  compatibility paragraph and the real writing — what was discussed, the friction, the follow-ups —
-//  arrives as `structured.sections`: a list of headings, each with a markdown body. The desktop's
-//  domain model dropped the field entirely, so both detail surfaces were rendering the compatibility
-//  paragraph and presenting it as the whole summary. That is the "the summary used to be better"
-//  regression: the writing did not get worse, the client stopped reading most of it.
-//
-//  This is one view rather than two because the two surfaces that show a summary — the legacy
-//  conversation entry point and `ConversationDetailView` — already drifted once (one
-//  renders markdown, the other rendered plain `Text`). A shared renderer is what keeps the next
-//  section the backend adds from appearing on only one of them.
+//  `ConversationSummarySelection` decides whether these blocks are the canonical body. This view
+//  must stay a single projection: callers never mount it alongside the compatibility overview.
 //
 //  Brand: `Ink` semantics only (INV-UI-1).
 //
@@ -19,30 +10,100 @@
 import OmiTheme
 import SwiftUI
 
-/// The conversation's headed summary blocks, in backend order.
+/// The one summary body mounted by conversation detail.
 ///
-/// Renders nothing when a capture predates the notes pipeline — those carry an empty `sections`
-/// and their whole summary really is `overview`, which the caller renders above this.
-struct ConversationSummarySections: View {
-  let sections: [SummarySection]
+/// Keeping the selection branch here makes the no-duplicate invariant testable against the actual
+/// production composition. The parent detail view owns the surrounding header/actions and only
+/// supplies the transcript navigation callback.
+struct ConversationSummaryBody: View {
+  let conversation: ServerConversation
+  let onOpenSources: (([String]) -> Void)?
+
+  private var selection: ConversationSummarySelection.Primary {
+    ConversationSummarySelection.primarySummary(for: conversation)
+  }
 
   var body: some View {
-    if !sections.isEmpty {
+    if selection.kind == .sections {
+      ConversationSummarySections(
+        sections: conversation.structured.sections,
+        transcriptSegments: conversation.transcriptSegments,
+        onOpenSources: onOpenSources
+      )
+      .padding(.horizontal, OmiSpacing.lg)
+    } else {
+      OmiMarkdown(
+        text: selection.content,
+        sender: .ai,
+        appKitProseSelection: true,
+        documentProse: true
+      )
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+}
+
+/// The conversation's headed summary blocks, in backend order.
+///
+/// This is used only when `ConversationSummarySelection` has selected the sections projection, so
+/// it must never be mounted in addition to the selected overview/app body. Source ids are filtered
+/// against the loaded transcript before an affordance is shown; stale or unknown ids remain hidden.
+struct ConversationSummarySections: View {
+  let sections: [SummarySection]
+  let transcriptSegments: [TranscriptSegment]
+  let onOpenSources: (([String]) -> Void)?
+
+  init(
+    sections: [SummarySection],
+    transcriptSegments: [TranscriptSegment] = [],
+    onOpenSources: (([String]) -> Void)? = nil
+  ) {
+    self.sections = sections
+    self.transcriptSegments = transcriptSegments
+    self.onOpenSources = onOpenSources
+  }
+
+  private var visibleSections: [SummarySection] {
+    sections.filter { !$0.bodyMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+  }
+
+  var body: some View {
+    if !visibleSections.isEmpty {
       VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         // Keyed by position, not by heading. These blocks are model-written, so two can share a
         // heading — or have none at all, which this view explicitly allows below — and identical
         // `ForEach` ids make SwiftUI drop or duplicate rows rather than render both.
-        ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+        ForEach(Array(visibleSections.enumerated()), id: \.offset) { _, section in
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-            if !section.heading.isEmpty {
-              Text(section.heading)
-                .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(Ink.primary)
-                .textSelection(.enabled)
-            }
             // Markdown, not `Text`: these bodies carry lists and emphasis, and a plain `Text`
-            // renders their syntax as literal characters.
-            OmiMarkdown(text: section.bodyMarkdown, style: .assistant)
+            // renders their syntax as literal characters. Selection is AppKit prose — the same
+            // contract as chat — because a SwiftUI native-selection modifier on an ancestor of
+            // `OmiMarkdown` installs SelectionOverlay around a tall attributed block and
+            // re-lays it out while the reader scrolls (FC-selection-overlay-layout-loop).
+            OmiMarkdown(
+              text: ConversationSummarySelection.renderSections([section]),
+              style: .assistant,
+              appKitProseSelection: true,
+              documentProse: true
+            )
+
+            let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
+              section.sourceSegmentIDs, segments: transcriptSegments)
+            if !sourceIDs.isEmpty, let onOpenSources {
+              Button {
+                onOpenSources(sourceIDs)
+              } label: {
+                Label(
+                  sourceIDs.count == 1 ? "Source" : "Sources (\(sourceIDs.count))",
+                  systemImage: "text.quote"
+                )
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+              }
+              .buttonStyle(.plain)
+              .accessibilityIdentifier("conversation-summary-section-sources")
+              .help("Open the supporting transcript")
+            }
           }
           .frame(maxWidth: .infinity, alignment: .leading)
         }

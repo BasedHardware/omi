@@ -17,6 +17,7 @@ dependencies:
   provider: ^6.1.2
   connectivity_plus: ^6.0.3
   flutter_provider_utilities: ^1.0.6
+  clock: ^1.1.1
 
   # Localizations
   flutter_localizations:
@@ -162,6 +163,16 @@ dev_dependencies:
   # consumes but does not re-export.
   async: ^2.11.0
   stream_channel: ^2.1.4
+  # Direct dev dep for the HomePage timer widget test's Firebase mock:
+  # setupFirebaseCoreMocks lives in firebase_core_platform_interface/test.dart,
+  # which firebase_core depends on but does not re-export.
+  firebase_core_platform_interface: ^5.4.2
+  # Direct dev dep for the j5 capture journey's scratch PathProviderPlatform:
+  # the fake needs the platform-interface types path_provider does not re-export.
+  path_provider_platform_interface: ^2.0.0
+  # hermetic_boot composes providers via SingleChildWidget, which provider
+  # consumes but does not re-export.
+  nested: ^1.0.0
   envied_generator: 1.3.8
   build_runner: ^2.15.1
   flutter_flavorizr: ^2.2.3

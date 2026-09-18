@@ -14,7 +14,7 @@ What it does, in order:
   5. optionally loads BigQuery `based-hardware.omi_finops`, idempotently per date
 
 Identities: every READ runs as read-only-bot-account@based-hardware; only the BigQuery load
-runs as the interactive owner, and it refuses to run under any other account.
+runs as finops-writer@based-hardware, and it refuses to run under any other account.
 
 Settlement: the GCP billing export lands a usage day over the following ~48 h, so a date is
 only treated as settled at D-2. `--date` defaults to today-2. Unsettled dates can still be
@@ -159,7 +159,7 @@ def main() -> None:
         help="last usage day, inclusive. Default: today-%d (the settlement frontier)." % SETTLEMENT_LAG_DAYS,
     )
     ap.add_argument("--backfill-from", default=None, help="first usage day, inclusive. Default: --date.")
-    ap.add_argument("--load", action="store_true", help="load BigQuery omi_finops (owner identity)")
+    ap.add_argument("--load", action="store_true", help="load BigQuery omi_finops (finops-writer SA)")
     ap.add_argument("--run-dir", default=None)
     ap.add_argument(
         "--cohort-window-start",

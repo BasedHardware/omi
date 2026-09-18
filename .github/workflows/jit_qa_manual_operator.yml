@@ -16,6 +16,7 @@ on:
           - inspect
           - drain-verify
           - sweep-verify
+          - sweep-repair
           - rollback
           - rollforward
       source_sha:
@@ -27,8 +28,23 @@ on:
         required: false
         type: string
       confirmation:
-        description: Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, SWEEP_VERIFY_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
+        description: Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, SWEEP_VERIFY_QA, SWEEP_REPAIR_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations
         required: false
+        type: string
+      invocation_id:
+        description: Tombstoned daily-sweep model invocation id to repair (sweep-repair only)
+        required: false
+        default: ''
+        type: string
+      repair_attestation_confirmation:
+        description: Optional human assertion ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED; never infer from absent accounting
+        required: false
+        default: ''
+        type: string
+      repair_attestation_reference:
+        description: Content-free reference to independently reviewed claim evidence (required with repair attestation)
+        required: false
+        default: ''
         type: string
       resume_execution:
         description: Existing first drain execution to resume after a bounded launcher timeout
@@ -76,6 +92,9 @@ jobs:
           RUN_ID: ${{ inputs.run_id }}
           OPERATION: ${{ inputs.operation }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          INVOCATION_ID: ${{ inputs.invocation_id }}
+          REPAIR_ATTESTATION_CONFIRMATION: ${{ inputs.repair_attestation_confirmation }}
+          REPAIR_ATTESTATION_REFERENCE: ${{ inputs.repair_attestation_reference }}
           RESUME_EXECUTION: ${{ inputs.resume_execution }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -92,13 +111,28 @@ jobs:
             echo "ERROR: source_sha must not be the all-zero SHA." >&2
             exit 1
           fi
-          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && "$OPERATION" != indexes-plan && "$OPERATION" != indexes-apply && "$OPERATION" != sweep-verify && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
+          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && "$OPERATION" != indexes-plan && "$OPERATION" != indexes-apply && "$OPERATION" != sweep-verify && "$OPERATION" != sweep-repair && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
             echo "ERROR: run_id is required and must match [a-z0-9][a-z0-9_-]{0,47}." >&2
             exit 1
           fi
           if [[ ("$OPERATION" == bootstrap || "$OPERATION" == sweep-verify) && -n "$RUN_ID" && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
             echo "ERROR: an optional bootstrap/sweep run_id must match [a-z0-9][a-z0-9_-]{0,47}." >&2
             exit 1
+          fi
+          if [[ "$OPERATION" == sweep-repair ]]; then
+            [[ "$INVOCATION_ID" =~ ^[a-z0-9][a-z0-9_-]{0,127}$ ]] || {
+              echo "ERROR: sweep-repair requires invocation_id matching [a-z0-9][a-z0-9_-]{0,127}." >&2
+              exit 1
+            }
+          elif [[ -n "$INVOCATION_ID" ]]; then
+            echo "ERROR: invocation_id is only valid for sweep-repair." >&2
+            exit 1
+          fi
+          if [[ -n "$REPAIR_ATTESTATION_CONFIRMATION" || -n "$REPAIR_ATTESTATION_REFERENCE" ]]; then
+            if [[ "$OPERATION" != sweep-repair || "$REPAIR_ATTESTATION_CONFIRMATION" != ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED || ! "$REPAIR_ATTESTATION_REFERENCE" =~ ^[A-Za-z0-9][A-Za-z0-9._:/#@-]{0,255}$ ]]; then
+              echo "ERROR: repair attestation requires sweep-repair, exact assertion, and a content-free evidence reference." >&2
+              exit 1
+            fi
           fi
           if [[ -n "$RESUME_EXECUTION" && "$OPERATION" != drain-verify ]]; then
             echo "ERROR: resume_execution is only valid for drain-verify." >&2
@@ -109,7 +143,7 @@ jobs:
             exit 1
           fi
           case "$OPERATION:$CONFIRMATION" in
-            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|indexes-plan:|indexes-apply:APPLY_JIT_QA_INDEXES|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|sweep-verify:SWEEP_VERIFY_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
+            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|indexes-plan:|indexes-apply:APPLY_JIT_QA_INDEXES|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|sweep-verify:SWEEP_VERIFY_QA|sweep-repair:SWEEP_REPAIR_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
             *)
               echo "ERROR: confirmation does not match the selected QA operation." >&2
               exit 1
@@ -187,6 +221,7 @@ jobs:
           .venv/bin/python scripts/jit_qa_manual_operator.py --help >/dev/null
           PYTHONPATH=. .venv/bin/python scripts/jit_qa_firestore_index_operator.py --help >/dev/null
           PYTHONPATH=. .venv/bin/python scripts/jit_qa_sweep_operator.py --help >/dev/null
+          PYTHONPATH=. .venv/bin/python scripts/jit_qa_sweep_repair.py --help >/dev/null
 
       - name: Authenticate to the development project
         id: auth
@@ -459,7 +494,7 @@ jobs:
           MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH: "false"
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED: "true"
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME: gpt-5.6-luna
-          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES: "1"
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES: "3"
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD: "0.05"
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED: "true"
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG: jit-qa-sweep-v1
@@ -509,7 +544,7 @@ jobs:
             --project "$QA_PROJECT" \
             --region "$QA_REGION" \
             --async \
-            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=1,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
+            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=3,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
             --format=json > "$operator_dir/sweep.launch.json"
           execution="$("$QA_PYTHON" - "$operator_dir/sweep.launch.json" <<'PY'
           import json
@@ -585,6 +620,62 @@ jobs:
           PY
           rm -f "$operator_dir"/*.json "$operator_dir"/sweep.execution
 
+      - name: Repair one tombstoned QA sweep model invocation
+        if: ${{ inputs.operation == 'sweep-repair' }}
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          INVOCATION_ID: ${{ inputs.invocation_id }}
+          REPAIR_ATTESTATION_CONFIRMATION: ${{ inputs.repair_attestation_confirmation }}
+          REPAIR_ATTESTATION_REFERENCE: ${{ inputs.repair_attestation_reference }}
+          GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
+          OMI_ENV_STAGE: dev
+          OMI_FIRESTORE_DATA_PLANE_PROJECT: ${{ env.QA_PROJECT }}
+          FIRESTORE_DATABASE_ID: ${{ env.QA_DATABASE }}
+          FIREBASE_AUTH_PROJECT_ID: based-hardware
+          MEMORY_ENABLED: "on"
+          OMI_JIT_QA_AUTH_ONLY: "true"
+          OMI_JIT_QA_UID_ALLOWLIST: ${{ env.QA_UID }}
+        run: |
+          set -euo pipefail
+          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
+          operator_dir="$RUNNER_TEMP/jit-qa-operator"
+          mkdir -p "$operator_dir/artifacts"
+          PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_repair.py list \
+            > "$operator_dir/artifacts/sweep-repair-tombstones.json"
+          attestation_args=()
+          if [[ -n "$REPAIR_ATTESTATION_CONFIRMATION" || -n "$REPAIR_ATTESTATION_REFERENCE" ]]; then
+            attestation_args=(--attestation-confirmation "$REPAIR_ATTESTATION_CONFIRMATION" --attestation-reference "$REPAIR_ATTESTATION_REFERENCE")
+          fi
+          PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_repair.py repair \
+            --invocation-id "$INVOCATION_ID" \
+            --authority "operator:${GITHUB_ACTOR}:gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}:source-${SOURCE_SHA:0:12}" \
+            "${attestation_args[@]}" \
+            | tee "$operator_dir/artifacts/sweep-repair-receipt.json"
+          PYTHONPATH=backend "$QA_PYTHON" - "$INVOCATION_ID" "$SOURCE_SHA" "$operator_dir/artifacts/sweep-repair-receipt.json" <<'PY' > "$operator_dir/artifacts/operator-receipt.json"
+          import json
+          import sys
+
+          from scripts.jit_qa_sweep_operator import validate_sweep_repair_receipt
+
+          with open(sys.argv[3]) as source:
+              repair = json.load(source)
+          provider_outcome = validate_sweep_repair_receipt(repair, invocation_id=sys.argv[1])
+
+          print(json.dumps({
+              "schema_version": "omi.jit.qa.manual.operator.v1",
+              "status": "PASS",
+              "operation": "sweep-repair",
+              "provider_outcome": provider_outcome,
+              "source_sha": sys.argv[2],
+              "invocation_id": sys.argv[1],
+              "project": "based-hardware-dev",
+              "database": "jit-qa",
+              "uid": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+              "model_calls": False,
+              "scheduler_mutation": False,
+          }, sort_keys=True))
+          PY
       - name: Execute three bounded drain pages and verify durable proof
         if: ${{ inputs.operation == 'drain-verify' || inputs.operation == 'rollforward' }}
         env:

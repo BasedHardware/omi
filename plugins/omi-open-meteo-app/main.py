@@ -5,7 +5,6 @@ Provides chat tools for current weather, short forecasts, and basic air-quality
 lookups using public Open-Meteo APIs.
 """
 
-from datetime import datetime
 from typing import Any, Literal, Optional
 
 import httpx
@@ -55,14 +54,29 @@ def _clean_location(value: str) -> str:
 
 
 def _format_number(value: Any, suffix: str = "") -> str:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return "n/a"
+    clean_suffix = str(suffix) if suffix is not None else ""
     if isinstance(value, float):
         rounded = round(value, 1)
         if rounded.is_integer():
-            return f"{int(rounded)}{suffix}"
-        return f"{rounded}{suffix}"
-    return f"{value}{suffix}"
+            return f"{int(rounded)}{clean_suffix}"
+        return f"{rounded}{clean_suffix}"
+    return f"{value}{clean_suffix}"
+
+
+def _safe_item(items: Any, index: int, default: Any = None) -> Any:
+    """Safely index a sequence without raising IndexError or TypeError."""
+    if isinstance(items, (list, tuple)) and 0 <= index < len(items):
+        return items[index]
+    return default
+
+
+def _format_unit_suffix(unit_val: Any, prefix: str = "") -> str:
+    """Safely format a unit suffix, avoiding TypeError if unit_val is None or non-string."""
+    if not unit_val or not isinstance(unit_val, str):
+        return ""
+    return f"{prefix}{unit_val}"
 
 
 def _format_weather_code(code: Optional[int]) -> str:
@@ -100,6 +114,36 @@ def _format_weather_code(code: Optional[int]) -> str:
         99: "thunderstorm with heavy hail",
     }
     return descriptions.get(code, f"weather code {code}")
+
+
+def _format_observed_at(current: dict[str, Any], payload: dict[str, Any]) -> str:
+    """Render the observation time with the response timezone/offset when present."""
+    observed = current.get("time") or "unknown time"
+    # Keep prior minute-precision normalization for display consistency.
+    if observed != "unknown time":
+        try:
+            from datetime import datetime
+
+            observed = datetime.fromisoformat(str(observed)).isoformat(timespec="minutes")
+        except ValueError:
+            pass
+    tz = payload.get("timezone") or ""
+    offset = payload.get("utc_offset_seconds")
+    suffix_parts = []
+    if tz:
+        suffix_parts.append(tz)
+    if offset is not None:
+        try:
+            total_minutes = int(round(int(offset) / 60))
+            sign = "+" if total_minutes >= 0 else "-"
+            total_minutes = abs(total_minutes)
+            whole, minutes = divmod(total_minutes, 60)
+            suffix_parts.append(f"UTC{sign}{whole:02d}:{minutes:02d}")
+        except (TypeError, ValueError):
+            pass
+    if suffix_parts:
+        return f"{observed} ({', '.join(suffix_parts)})"
+    return observed
 
 
 def _format_place(place: dict[str, Any]) -> str:
@@ -251,17 +295,23 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
         units = payload.get("current_units") or {}
         place_name = _format_place(place)
         condition = _format_weather_code(current.get("weather_code"))
-        observed_at = current.get("time") or "unknown time"
+        observed_at = _format_observed_at(current, payload)
+
+        wind_suffix = _format_unit_suffix(units.get("wind_speed_10m"), " ")
+        temp_suffix = str(units.get("temperature_2m") or "")
+        apparent_temp_suffix = str(units.get("apparent_temperature") or "")
+        humidity_suffix = str(units.get("relative_humidity_2m") or "")
+        precip_suffix = str(units.get("precipitation") or "")
 
         lines = [
             f"Current weather for {place_name}",
             f"Observed: {observed_at}",
             f"Condition: {condition}",
-            f"Temperature: {_format_number(current.get('temperature_2m'), units.get('temperature_2m', ''))}",
-            f"Feels like: {_format_number(current.get('apparent_temperature'), units.get('apparent_temperature', ''))}",
-            f"Humidity: {_format_number(current.get('relative_humidity_2m'), units.get('relative_humidity_2m', ''))}",
-            f"Precipitation: {_format_number(current.get('precipitation'), units.get('precipitation', ''))}",
-            f"Wind: {_format_number(current.get('wind_speed_10m'), ' ' + units.get('wind_speed_10m', ''))}",
+            f"Temperature: {_format_number(current.get('temperature_2m'), temp_suffix)}",
+            f"Feels like: {_format_number(current.get('apparent_temperature'), apparent_temp_suffix)}",
+            f"Humidity: {_format_number(current.get('relative_humidity_2m'), humidity_suffix)}",
+            f"Precipitation: {_format_number(current.get('precipitation'), precip_suffix)}",
+            f"Wind: {_format_number(current.get('wind_speed_10m'), wind_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
@@ -302,14 +352,23 @@ async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
         daily = payload.get("daily") or {}
         units = payload.get("daily_units") or {}
         place_name = _format_place(place)
-        lines = [f"{days}-day forecast for {place_name}"]
 
-        for index, day in enumerate(daily.get("time", [])[:days]):
-            condition = _format_weather_code((daily.get("weather_code") or [None])[index])
-            high = _format_number((daily.get("temperature_2m_max") or [None])[index], units.get("temperature_2m_max", ""))
-            low = _format_number((daily.get("temperature_2m_min") or [None])[index], units.get("temperature_2m_min", ""))
-            rain = _format_number((daily.get("precipitation_probability_max") or [None])[index], units.get("precipitation_probability_max", "%"))
-            wind = _format_number((daily.get("wind_speed_10m_max") or [None])[index], " " + units.get("wind_speed_10m_max", ""))
+        time_list = daily.get("time") or []
+        if not time_list:
+            return ChatToolResponse(result=f"No forecast data available for {place_name}.")
+
+        lines = [f"{days}-day forecast for {place_name}"]
+        temp_max_suffix = str(units.get("temperature_2m_max") or "")
+        temp_min_suffix = str(units.get("temperature_2m_min") or "")
+        precip_suffix = str(units.get("precipitation_probability_max") or "%")
+        wind_suffix = _format_unit_suffix(units.get("wind_speed_10m_max"), " ")
+
+        for index, day in enumerate(time_list[:days]):
+            condition = _format_weather_code(_safe_item(daily.get("weather_code"), index))
+            high = _format_number(_safe_item(daily.get("temperature_2m_max"), index), temp_max_suffix)
+            low = _format_number(_safe_item(daily.get("temperature_2m_min"), index), temp_min_suffix)
+            rain = _format_number(_safe_item(daily.get("precipitation_probability_max"), index), precip_suffix)
+            wind = _format_number(_safe_item(daily.get("wind_speed_10m_max"), index), wind_suffix)
             lines.append(f"- {day}: {condition}; high {high}, low {low}; rain {rain}; wind up to {wind}")
 
         return ChatToolResponse(result="\n".join(lines))
@@ -339,21 +398,21 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
         current = payload.get("current") or {}
         units = payload.get("current_units") or {}
         place_name = _format_place(place)
-        observed_at = current.get("time")
-        if observed_at:
-            try:
-                observed_at = datetime.fromisoformat(observed_at).isoformat(timespec="minutes")
-            except ValueError:
-                pass
+        observed_at = _format_observed_at(current, payload)
+
+        pm25_suffix = _format_unit_suffix(units.get("pm2_5"), " ")
+        pm10_suffix = _format_unit_suffix(units.get("pm10"), " ")
+        ozone_suffix = _format_unit_suffix(units.get("ozone"), " ")
+        no2_suffix = _format_unit_suffix(units.get("nitrogen_dioxide"), " ")
 
         lines = [
             f"Air quality for {place_name}",
-            f"Observed: {observed_at or 'unknown time'}",
+            f"Observed: {observed_at}",
             f"US AQI: {_format_number(current.get('us_aqi'))}",
-            f"PM2.5: {_format_number(current.get('pm2_5'), ' ' + units.get('pm2_5', ''))}",
-            f"PM10: {_format_number(current.get('pm10'), ' ' + units.get('pm10', ''))}",
-            f"Ozone: {_format_number(current.get('ozone'), ' ' + units.get('ozone', ''))}",
-            f"Nitrogen dioxide: {_format_number(current.get('nitrogen_dioxide'), ' ' + units.get('nitrogen_dioxide', ''))}",
+            f"PM2.5: {_format_number(current.get('pm2_5'), pm25_suffix)}",
+            f"PM10: {_format_number(current.get('pm10'), pm10_suffix)}",
+            f"Ozone: {_format_number(current.get('ozone'), ozone_suffix)}",
+            f"Nitrogen dioxide: {_format_number(current.get('nitrogen_dioxide'), no2_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:

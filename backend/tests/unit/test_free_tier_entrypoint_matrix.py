@@ -164,6 +164,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
+    conv_proc.validate_structured_source_segment_ids = lambda structured, _ids: structured
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
@@ -566,8 +567,34 @@ def _flag_on_denies(entry: dict[str, Any], cell: str) -> bool:
     return _is_desktop(entry['source']) and cell in _BASIC_CELLS
 
 
+def _flag_off_eager_denies(entry: dict[str, Any], cell: str, kwargs: dict[str, Any]) -> bool:
+    """S14 proactivity half, flag-off: first-open/reprocess eager desktop spend is denied."""
+    return (
+        _is_desktop(entry['source'])
+        and cell in _BASIC_CELLS
+        and (bool(kwargs.get('force_process')) or bool(kwargs.get('is_reprocess')))
+    )
+
+
+def _outcome(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: dict[str, Any]) -> str:
+    """The coordinator's actual branch: 'process' | 'legacy_defer' | 'terminal'.
+
+    Flag-on desktop basic always lands at the policy minimum (the legacy
+    deferral is unreachable when the flag is on), so `_legacy_defers` is only
+    consulted flag-off — the flag-on/legacy overlap was the conflation that
+    made flag-on listen/sync rows expect the deferral observer.
+    """
+    if flag_on:
+        return 'terminal' if _flag_on_denies(entry, cell) else 'process'
+    if _legacy_defers(entry, cell, kwargs):
+        return 'legacy_defer'
+    if _flag_off_eager_denies(entry, cell, kwargs):
+        return 'terminal'
+    return 'process'
+
+
 def _process_normally(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: dict[str, Any]) -> bool:
-    return not (_flag_on_denies(entry, cell) if flag_on else _legacy_defers(entry, cell, kwargs))
+    return _outcome(entry, cell, flag_on, kwargs) == 'process'
 
 
 def _expected_calls(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: dict[str, Any]) -> dict[str, bool]:
@@ -593,15 +620,17 @@ def _expected_calls(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: dic
 def _expected_observer(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: dict[str, Any]) -> tuple[bool, str]:
     """Finalizer contract: (owned, DerivedEffectsDisposition value).
 
-    Flag-on minimum reports actual persistence with TERMINAL_NO_DERIVED_EFFECTS.
-    Legacy deferral still reports owned False (fenced) with the default RUN.
-    Process-normally reports persist True with RUN.
+    Flag-on minimum and the flag-off eager deny both report actual persistence
+    with TERMINAL_NO_DERIVED_EFFECTS. Legacy capture deferral still reports
+    owned False (fenced) with the default RUN. Process-normally reports persist
+    True with RUN.
     """
-    if _process_normally(entry, cell, flag_on, kwargs):
+    outcome = _outcome(entry, cell, flag_on, kwargs)
+    if outcome == 'process':
         return True, 'run'
-    if flag_on:
-        return True, 'terminal_no_derived_effects'
-    return False, 'run'
+    if outcome == 'legacy_defer':
+        return False, 'run'
+    return True, 'terminal_no_derived_effects'
 
 
 def _seed_pending_jit(conversation: Any) -> None:
@@ -736,6 +765,8 @@ def _assert_persist_marker_contract(
     must not stamp ``terminal_no_derived_effects: null`` onto documents the
     parent never wrote. The merge-clear (key present, value None) is only for
     flag-on desktop process_normally — a paid reprocess of a prior minimum.
+    The flag-off eager deny writes the same terminal marker as the flag-on
+    minimum; only the capture deferral (deferred store) omits the key.
     """
     field = pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD
     payloads = [p for p in spies['persist_payloads'] if isinstance(p, dict)]
@@ -746,7 +777,7 @@ def _assert_persist_marker_contract(
         assert field in last, 'flag-on desktop process_normally must merge-clear the stale marker'
         assert last[field] is None
         return
-    if flag_on and _is_desktop(entry['source']):
+    if _outcome(entry, cell, flag_on, kwargs) == 'terminal':
         assert last.get(field) is True
         return
     assert field not in last, f'flag-off/non-desktop persist must omit {field!r} entirely; got {last.get(field)!r}'
@@ -772,12 +803,12 @@ def _assert_persist_processing_state_contract(
     payloads = [p for p in spies['persist_payloads'] if isinstance(p, dict)]
     assert payloads, 'coordinator must persist a payload'
     last = payloads[-1]
-    if flag_on and _flag_on_denies(entry, cell):
-        # Every flag-on basic desktop deny lands at the minimum store, whose
-        # own has_projection is False in these rows (the basic_with_projection
-        # overlay forces the plan's flag, not a delivered projection), so the
-        # store writes the real local_pending state. A real value is never a
-        # darkness violation — only the null default is.
+    if _outcome(entry, cell, flag_on, kwargs) == 'terminal':
+        # Every non-deferral basic desktop deny lands at the minimum store,
+        # whose own has_projection is False in these rows (the
+        # basic_with_projection overlay forces the plan's flag, not a delivered
+        # projection), so the store writes the real local_pending state. A real
+        # value is never a darkness violation — only the null default is.
         assert last.get('processing_state') == 'local_pending', 'the minimum is the one writer of a real state'
         return
     assert (
@@ -846,11 +877,12 @@ def test_entrypoint_matrix(
     monkeypatch: Any, pc: Any, row_id: str, entry: dict[str, Any], cell: str, flag_on: bool
 ) -> None:
     del row_id
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: flag_on)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: flag_on)
+    monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
     spies = _spy_managed_effects(monkeypatch, pc)
     kwargs = _effective_kwargs(entry, cell)
     extra_kwargs = dict(_REPROCESS_FORCE_KWARGS) if cell == 'reprocess_force' else None
-    seed_jit = flag_on and _flag_on_denies(entry, cell) and entry['kind'] == 'existing'
+    seed_jit = _outcome(entry, cell, flag_on, kwargs) == 'terminal' and entry['kind'] == 'existing'
 
     def fake_authorize(uid: str, feature: str, funding_owner: str, **_kwargs: Any) -> Decision:
         return _decision_for_cell(cell, funding_owner)
@@ -900,7 +932,11 @@ def test_entrypoint_matrix(
 
     if not expected['get_structured']:
         spies['extract_memories'].assert_not_called()
-        if flag_on:
+        if _outcome(entry, cell, flag_on, kwargs) == 'legacy_defer':
+            assert result.deferred is True
+            spies['should_defer'].assert_called()
+        else:
+            # Flag-on minimum and the flag-off eager deny: terminal store.
             assert getattr(result, 'deferred', False) is False
             if seed_jit:
                 raw_payloads: list[Any] = spies['persist_payloads']
@@ -911,16 +947,13 @@ def test_entrypoint_matrix(
                     'terminal write must clear jit_first_open; merge=True persist '
                     f'would keep a pending obligation: {last_payload.get("jit_first_open")!r}'
                 )
-        else:
-            assert result.deferred is True
-            spies['should_defer'].assert_called()
     else:
         spies['get_structured'].assert_called_once()
 
 
 # red-proof (1): apply `plan.mode = process_normally` after resolve → basic desktop calls _get_structured
 def test_red_proof_flag_on_ignoring_plan_makes_basic_desktop_call_structured(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
         managed_compute,
@@ -941,7 +974,7 @@ def test_red_proof_flag_on_ignoring_plan_makes_basic_desktop_call_structured(mon
 
 # red-proof (2): flag OFF, legacy elif gone (should_defer always False) → basic desktop no-force calls _get_structured
 def test_red_proof_flag_off_legacy_removed_makes_basic_desktop_call_structured(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = False
     entry = next(e for e in _ENTRIES if e['id'] == 'listen_157_via_finalizer_137')
@@ -951,7 +984,7 @@ def test_red_proof_flag_off_legacy_removed_makes_basic_desktop_call_structured(m
 
 # red-proof (3): coordinator reporting persistence False on the minimum → basic rows fail
 def test_red_proof_minimum_must_report_actual_persistence(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
     _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
         managed_compute,
@@ -965,19 +998,31 @@ def test_red_proof_minimum_must_report_actual_persistence(monkeypatch: Any, pc: 
     assert observer.dispositions == [pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
 
 
-# red-proof (4): reprocess_force cell not passing force → flag-OFF listen defers, _get_structured not called
-def test_red_proof_reprocess_force_overlay_bypasses_legacy_deferral(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+# red-proof (4): reprocess_force cell not passing force → flag-OFF listen defers,
+# _get_structured not called. With the overlay the coordinator consults the
+# S6 policy, whose identified-basic answer is now the eager deny: no managed
+# call, terminal minimum (the S14 proactivity half).
+def test_red_proof_reprocess_force_overlay_hits_the_eager_deny(monkeypatch: Any, pc: Any) -> None:
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
+    monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = True
+    monkeypatch.setattr(
+        managed_compute,
+        'authorize_managed_compute',
+        lambda *args, **kwargs: _decision_for_cell('basic_no_projection', 'omi'),
+    )
     entry = next(e for e in _ENTRIES if e['id'] == 'listen_157_via_finalizer_137')
-    _call_coordinator(pc, entry, extra_kwargs=dict(_REPROCESS_FORCE_KWARGS))
-    spies['get_structured'].assert_called()
+    observer = _ObserverCapture()
+    _call_coordinator(pc, entry, extra_kwargs=dict(_REPROCESS_FORCE_KWARGS), observer=observer)
+    spies['get_structured'].assert_not_called()
+    assert observer.owned == [True]
+    assert observer.dispositions == [pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
 
 
 # red-proof (5): desktop-sourced merge left on the legacy path → force bypasses deferral, _get_structured called
 def test_red_proof_desktop_merge_flag_on_basic_is_minimum_not_legacy(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
         managed_compute,
@@ -998,9 +1043,18 @@ def test_red_proof_desktop_merge_flag_on_basic_is_minimum_not_legacy(monkeypatch
 # builder regresses to a bare `conversation.dict()`, the key is present and
 # this goes red.
 def test_red_proof_null_processing_state_default_stamped_on_persist(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = False
+    # create_351 passes force_process=True on a desktop conversation, so the
+    # flag-off eager gate consults the policy before the normal persist this
+    # red-proof exercises. Patch the authorize seam (paid/allow) or the test
+    # waits out a real Firestore fail-open on every run.
+    monkeypatch.setattr(
+        managed_compute,
+        'authorize_managed_compute',
+        lambda *args, **kwargs: _decision_for_cell('paid', 'omi'),
+    )
     entry = next(e for e in _ENTRIES if e['id'] == 'conversations_create_351')
     _call_coordinator(pc, entry)
     payloads = [p for p in spies['persist_payloads'] if isinstance(p, dict)]
