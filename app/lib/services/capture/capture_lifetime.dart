@@ -92,7 +92,7 @@ class CaptureLifetime implements CaptureScheduling {
       _untrack(release);
     }
 
-    bool closed() => _closed;
+    bool isClosed() => _closed;
     final inner = stream.listen(
       (value) {
         if (_closed) return;
@@ -117,7 +117,7 @@ class CaptureLifetime implements CaptureScheduling {
       return _watchCancel(inner.cancel());
     };
     _track(release);
-    return _LifetimeSubscription<T>(inner, drop, closed, () => Future.sync(release), cancelOnError: cancelOnError);
+    return _LifetimeSubscription<T>(inner, drop, isClosed, () => Future.sync(release), cancelOnError: cancelOnError);
   }
 
   CaptureOwned own(FutureOr<void> Function() cancel) {
@@ -157,33 +157,20 @@ class CaptureLifetime implements CaptureScheduling {
     _releases.clear();
     Object? error;
     StackTrace? stack;
-    final pending = <Future<void>>[];
     try {
-      // Invoke every release synchronously so timers are cancelled before the
-      // caller awaits close(), then join the resulting futures and any cancel
-      // that already left the bag.
       for (final release in releases) {
         try {
-          final result = release();
-          if (result is Future) {
-            pending.add(Future<void>.value(result));
-          }
+          await Future.sync(release);
         } catch (caught, caughtStack) {
           error ??= caught;
           stack ??= caughtStack;
         }
       }
-      for (final future in pending) {
+      // An unregistered callback is not unfinished teardown: join explicit
+      // cancel/release futures that already left the bag.
+      for (final pending in List<Future<void>>.of(_inflightCancels)) {
         try {
-          await future;
-        } catch (caught, caughtStack) {
-          error ??= caught;
-          stack ??= caughtStack;
-        }
-      }
-      for (final inflight in List<Future<void>>.of(_inflightCancels)) {
-        try {
-          await inflight;
+          await pending;
         } catch (caught, caughtStack) {
           error ??= caught;
           stack ??= caughtStack;

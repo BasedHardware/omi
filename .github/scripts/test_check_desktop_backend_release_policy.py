@@ -154,7 +154,17 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
     def test_rejects_missing_or_bypassed_development_probe_signer(self) -> None:
         missing_signer = self.dev.replace(
-            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \\\n',
+            '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \\\n',
+            "",
+            1,
+        )
+        missing_mapping = self.dev.replace(
+            "          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}\n",
+            "",
+            1,
+        )
+        missing_empty_check = self.dev.replace(
+            '          if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then\n',
             "",
             1,
         )
@@ -163,10 +173,53 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         )
 
         signer_errors = POLICY.validate_deploy_workflow(missing_signer, production=False)
+        mapping_errors = POLICY.validate_deploy_workflow(missing_mapping, production=False)
+        empty_check_errors = POLICY.validate_deploy_workflow(missing_empty_check, production=False)
         gate_errors = POLICY.validate_deploy_workflow(missing_gate, production=False)
 
-        self.assertTrue(any("DESKTOP_BACKEND_PROBE_SIGNER_FILE" in error for error in signer_errors), signer_errors)
+        self.assertTrue(
+            any(
+                '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"' in error
+                for error in signer_errors
+            ),
+            signer_errors,
+        )
+        self.assertTrue(
+            any("FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" in error for error in mapping_errors), mapping_errors
+        )
+        self.assertTrue(
+            any(
+                'if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then' in error
+                for error in empty_check_errors
+            ),
+            empty_check_errors,
+        )
         self.assertTrue(any("Mint candidate probe identity" in error for error in gate_errors), gate_errors)
+
+    def test_development_probe_signer_is_json_free(self) -> None:
+        """Phase C credential rotation: no service-account key reaches the runner.
+
+        Mirrors the minter guard test
+        (backend/tests/unit/test_firebase_release_probe_token.py), which accepts
+        only vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT as the
+        --signer-service-account source: pin the dev desktop workflow to that
+        shape and re-reject the retired key-staging path.
+        """
+        self.assertNotIn("secrets.GCP_SERVICE_ACCOUNT", self.dev)
+        self.assertNotIn("FIREBASE_PROBE_SIGNER_B64", self.dev)
+        self.assertNotIn("DESKTOP_BACKEND_PROBE_SIGNER_FILE", self.dev)
+        self.assertIn("FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}", self.dev)
+        self.assertIn('--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"', self.dev)
+
+        restaged_key = self.dev.replace(
+            "      - name: Mint candidate probe identity\n",
+            "      - name: Mint candidate probe identity\n"
+            "        env:\n"
+            "          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}\n",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(restaged_key, production=False)
+        self.assertTrue(any("GCP_SERVICE_ACCOUNT key secret" in error for error in errors), errors)
 
     def test_rejects_missing_or_conflicting_development_firestore_credentials(self) -> None:
         missing_mount = self.dev.replace(

@@ -43,13 +43,17 @@ CaptureProvider _provider({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('dispose cancels voice-command timeout that dispose used to leak', () {
+  test('dispose cancels voice-command timeout that dispose used to leak', () async {
     final clock = VirtualClock(DateTime.utc(2026));
     final scheduler = ManualScheduler(clock: clock);
     final provider = _provider(scheduler: scheduler, now: clock.now);
     provider.debugArmVoiceCommandTimeout('synthetic-device');
     expect(scheduler.pendingTimers, isNotEmpty);
     provider.dispose();
+    // dispose() kicks off lifetime.close() without awaiting it; joining the
+    // same idempotent close future lets the drain run the timer-cancel
+    // release before we assert the timer is gone.
+    await provider.lifetime.close();
     expect(scheduler.pendingTimers, isEmpty);
     scheduler.elapse(const Duration(seconds: 15));
     expect(scheduler.pendingTimers, isEmpty);
