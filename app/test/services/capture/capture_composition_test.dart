@@ -167,5 +167,21 @@ void main() {
     expect(body, isNot(contains('ConnectivityService')));
     expect(body, isNot(contains('CaptureConnectivityBoundary.production')));
     expect(body, isNot(contains('https://api.omi.me/v1/health')));
+    final refuse = body.indexOf("throw UnsupportedError('composeProductionCaptureProvider refuses FLUTTER_TEST')");
+    expect(refuse, greaterThan(0));
+    final after = body.substring(refuse);
+    expect(after, contains('sessionOwner:'));
+    expect(after, contains('CaptureSessionOwner('));
+    expect(after, contains('RecordingTransferCoordinator.instance'));
+    expect(after, contains('ForegroundUtil.initializeForegroundService'));
+    expect(after, contains('ForegroundUtil.startForegroundTask'));
+    expect(after, contains('ForegroundUtil.stopForegroundTask'));
+    expect(after, contains('Platform.isAndroid'));
+  });
+
+  test('main.dart default capture construction is composeProductionCaptureProvider', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(RegExp(r'(?<![A-Za-z])CaptureProvider\s*\(').allMatches(main), isEmpty);
+    expect(RegExp(r'composeProductionCaptureProvider\s*\(').allMatches(main).length, 2);
   });
 }
