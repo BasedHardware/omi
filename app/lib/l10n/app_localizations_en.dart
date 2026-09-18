@@ -570,11 +570,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 undetected';
+  String get v2Undetected => 'Offline Sync unavailable';
 
   @override
   String get v2UndetectedMessage =>
-      'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.';
+      'Offline Sync needs a connected Omi device with SD-card storage. Your current device doesn\'t support it.';
 
   @override
   String get endConversation => 'End Conversation';
@@ -2662,9 +2662,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewAndManageConversations => 'Review and manage your captured conversations';
 
   @override
-  String get startCapturingConversations => 'Start capturing conversations with your Omi device to see them here.';
-
-  @override
   String get useMobileAppToCapture => 'Use your mobile app to capture audio';
 
   @override
@@ -3161,9 +3158,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transcribing => 'Transcribing...';
-
-  @override
-  String get transcriptionFailed => 'Transcription failed';
 
   @override
   String get discardedConversation => 'Discarded Conversation';
@@ -3686,10 +3680,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Preparing system audio capture';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'Click the button to capture audio for live transcripts, AI insights, and automatic saving.';
-
-  @override
   String get reconnecting => 'Reconnecting...';
 
   @override
@@ -3735,9 +3725,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'Start recording to see live transcript';
-
-  @override
   String get paused => 'Paused';
 
   @override
@@ -3756,9 +3743,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'Setting up system audio capture';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'Capturing audio and generating transcript';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'Click to begin recording system audio';
@@ -5612,7 +5596,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'Something went wrong! Please try again later.';
 
   @override
-  String get uploadingVoiceProfile => 'Uploading your voice profile....';
+  String get uploadingVoiceProfile => 'Uploading your voice profile...';
 
   @override
   String get memorizingYourVoice => 'Memorizing your voice...';
@@ -8768,6 +8752,43 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
+
+  @override
   String get willSyncAutomatically => 'will sync automatically';
 
   @override
@@ -9342,7 +9363,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.';
+      'Works with the phone microphone and Omi or Limitless wearables. Audio stays on your phone until you choose to upload it.';
 
   @override
   String get transcribeLaterStorageFull =>

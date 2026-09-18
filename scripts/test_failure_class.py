@@ -331,8 +331,11 @@ class FailureClassCliTests(unittest.TestCase):
         ``app/lib/pages/home/`` never matches ``app/lib/pages/home/page.dart``
         unless prepare expands it to a directory glob.
         """
+        self.write("unrelated-tracked/keep.txt", "keep\n")
+        self.commit("chore: live hint target")
+        self.base = self.git("rev-parse", "HEAD")
         for class_id in SEED_IDS:
-            self.set_definition_field(class_id, "scope_hints", ["nowhere/**"])
+            self.set_definition_field(class_id, "scope_hints", ["unrelated-tracked/**"])
         self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["app/lib/pages/home/"])
         self.write("app/lib/pages/home/page.dart", "class Home {}\n")
         self.commit("fix(app): touch home page")
@@ -346,13 +349,34 @@ class FailureClassCliTests(unittest.TestCase):
     def test_prepare_lists_every_candidate_when_nothing_matches_scope(self) -> None:
         """Narrowing to nothing would read as 'no class can apply' — a classification
         this CLI does not make."""
+        self.write("unrelated-tracked/keep.txt", "keep\n")
+        self.commit("chore: live hint target")
+        self.base = self.git("rev-parse", "HEAD")
         for class_id in SEED_IDS:
-            self.set_definition_field(class_id, "scope_hints", ["nowhere/**"])
+            self.set_definition_field(class_id, "scope_hints", ["unrelated-tracked/**"])
         self.add_fix_commit()
         result = self.cli(
             "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
         )
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.payload(result)["candidates_shown"], len(SEED_IDS))
+
+    def test_scope_hint_matching_zero_paths_is_error(self) -> None:
+        """A hint that matches nothing is fail-open: the class vanishes from
+        prepare's list and the author invents a new one. That must be an
+        error, not a pass.
+        """
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["does-not-exist/**"])
+        self.add_fix_commit()
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
+        )
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("scope_hint_matches_nothing", [item["code"] for item in payload["errors"]])
+        validate = self.validate(self.body("Failure-Class: FC-malformed-doc-read\n"))
+        self.assertEqual(validate.returncode, 1, validate.stdout)
+        self.assertIn("scope_hint_matches_nothing", [item["code"] for item in self.payload(validate)["errors"]])
 
     def test_prepare_all_candidates_flag_disables_narrowing(self) -> None:
         self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["src/**"])

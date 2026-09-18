@@ -28,11 +28,11 @@ protocol AFMContextWindowProviding: Sendable {
 
 /// Apple Foundation Models adapter for the local-inference port.
 ///
-/// Dark: `LocalInferenceRuntime.makeDefault` registers this engine but still
-/// defaults to `.localServer`. Select it with `OMI_FORCE_LOCAL_INFERENCE_ENGINE=afm`
-/// (or the `forceLocalInferenceEngine` default). AFM is a selection, not a
-/// fallback — a failure here becomes the deterministic minimum, never another
-/// engine and never cloud.
+/// `LocalInferenceRuntime.makeDefault` selects this engine when
+/// `AFMAvailabilityChecking` reports `.available`. Pin the other engine with
+/// `OMI_FORCE_LOCAL_INFERENCE_ENGINE` / `forceLocalInferenceEngine`. AFM is a
+/// selection, not a fallback — a failure here becomes the deterministic
+/// minimum, never another engine and never cloud.
 struct AFMLocalInferenceAdapter: LocalInferenceService {
   /// Fallback only: used when the OS is older than macOS 26 or the on-device
   /// model cannot be queried. This is **not** the AFM window. The chunker still
