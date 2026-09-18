@@ -1,29 +1,62 @@
 import html
 import xml.etree.ElementTree as ET
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 
-from models import ChatToolResponse
-
-app = FastAPI(
-    title="Omi PubMed App",
-    description="PubMed chat tools for Omi",
-    version="1.0.2",
+from models import (
+    ChatToolResponse,
+    GetPubmedArticleRequest,
+    GetRelatedPubmedRequest,
+    SearchPubmedRequest,
 )
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 TIMEOUT = 20.0
 
 
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        app_instance.state.http_client = client
+        yield
+
+
+app = FastAPI(
+    title="Omi PubMed App",
+    description="PubMed chat tools for Omi",
+    version="1.0.2",
+    lifespan=lifespan,
+)
+
+
+@asynccontextmanager
+async def _acquire_client():
+    """Yield the lifespan-managed HTTP client, or a transient one if unset."""
+    client = getattr(app.state, "http_client", None)
+    if client is not None:
+        yield client
+        return
+    async with httpx.AsyncClient(timeout=TIMEOUT) as transient:
+        yield transient
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
+
+
 def _safe(value: Any) -> str:
     return html.unescape(str(value)) if value is not None else ""
-
-
-def _is_valid_pmid(pmid: str) -> bool:
-    return pmid.isdigit() and len(pmid) <= 12
 
 
 def _clamp_max_results(value: Any, default: int = 5) -> int:
@@ -63,16 +96,25 @@ async def _fetch_abstract(client: httpx.AsyncClient, pmid: str) -> str:
     return _extract_abstract_from_efetch_xml(resp.text)
 
 
-def _extract_article_fields(record: dict) -> dict:
+def _extract_article_fields(record: Any) -> dict:
+    if not isinstance(record, dict):
+        record = {}
     title = _safe(record.get("title", "Untitled"))
     pubdate = _safe(record.get("pubdate", ""))
     source = _safe(record.get("source", ""))
     doi = _safe(record.get("elocationid", ""))
     authors = []
-    for author in record.get("authors", [])[:8]:
-        name = _safe(author.get("name"))
-        if name:
-            authors.append(name)
+    raw_authors = record.get("authors")
+    if isinstance(raw_authors, list):
+        for author in raw_authors[:8]:
+            if isinstance(author, dict):
+                name = _safe(author.get("name"))
+            elif isinstance(author, str):
+                name = _safe(author)
+            else:
+                continue
+            if name:
+                authors.append(name)
 
     abstract = ""
     if isinstance(record.get("abstract"), list):
@@ -108,6 +150,15 @@ async def _search_ids(client: httpx.AsyncClient, query: str, retmax: int = 5) ->
             "sort": "relevance",
         },
     )
+    if not isinstance(data, dict):
+        return []
+    esearch_result = data.get("esearchresult")
+    if not isinstance(esearch_result, dict):
+        return []
+    idlist = esearch_result.get("idlist")
+    if not isinstance(idlist, list):
+        return []
+    esearch_result["idlist"] = [str(item) for item in idlist]
     return data.get("esearchresult", {}).get("idlist", [])
 
 
@@ -126,7 +177,10 @@ async def _fetch_summaries(client: httpx.AsyncClient, ids: list[str]) -> dict:
         "esummary.fcgi",
         {"db": "pubmed", "id": ",".join(ids), "retmode": "json"},
     )
-    return data.get("result", {})
+    if not isinstance(data, dict):
+        return {}
+    result = data.get("result")
+    return result if isinstance(result, dict) else {}
 
 
 @app.get("/health")
@@ -205,23 +259,20 @@ async def manifest_alias():
 
 
 @app.post("/tools/search_pubmed", response_model=ChatToolResponse, tags=["chat_tools"])
-async def search_pubmed(request: Request):
+async def search_pubmed(req: SearchPubmedRequest):
     try:
-        body = await request.json()
-        query = (body.get("query") or "").strip()
-        max_results = _clamp_max_results(body.get("max_results", 5))
-        if not query:
-            return ChatToolResponse(error="query is required")
-
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            ids = await _search_ids(client, query, max_results)
+        query = req.query
+        async with _acquire_client() as client:
+            ids = await _search_ids(client, query, req.max_results)
             if not ids:
                 return ChatToolResponse(result=f"No PubMed results found for: {query}")
             summaries = await _fetch_summaries(client, ids)
 
         lines = [f"Top PubMed results for: {query}"]
         for idx, result_pmid in enumerate(ids, start=1):
-            row = summaries.get(result_pmid, {})
+            row = summaries.get(result_pmid)
+            if not isinstance(row, dict):
+                row = {}
             title = _safe(row.get("title", "Untitled"))
             journal = _safe(row.get("fulljournalname", row.get("source", "")))
             date = _safe(row.get("pubdate", ""))
@@ -232,18 +283,13 @@ async def search_pubmed(request: Request):
 
 
 @app.post("/tools/get_pubmed_article", response_model=ChatToolResponse, tags=["chat_tools"])
-async def get_pubmed_article(request: Request):
+async def get_pubmed_article(req: GetPubmedArticleRequest):
     try:
-        body = await request.json()
-        pmid = (body.get("pmid") or "").strip()
-        if not pmid:
-            return ChatToolResponse(error="pmid is required")
-        if not _is_valid_pmid(pmid):
-            return ChatToolResponse(error="pmid must be a numeric PubMed ID")
-
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        pmid = req.pmid
+        async with _acquire_client() as client:
             summaries = await _fetch_summaries(client, [pmid])
-            if pmid in summaries:
+            record = summaries.get(pmid)
+            if isinstance(record, dict):
                 # Prefer a real efetch abstract; ESummary never includes one.
                 # Abstract enrichment is optional so ESummary still works if efetch fails.
                 try:
@@ -251,38 +297,32 @@ async def get_pubmed_article(request: Request):
                 except Exception:
                     abstract = ""
                 if abstract:
-                    summaries[pmid]["abstract"] = abstract
+                    record["abstract"] = abstract
 
-        if pmid not in summaries:
+        if not isinstance(record, dict):
             return ChatToolResponse(error=f"No PubMed record found for PMID {pmid}")
 
-        record = _extract_article_fields(summaries[pmid])
+        fields = _extract_article_fields(record)
         lines = [
             f"PMID {pmid}",
-            f"Title: {record['title']}",
-            f"Authors: {', '.join(record['authors']) if record['authors'] else 'N/A'}",
-            f"Journal/Date: {record['source']} ({record['pubdate']})",
-            f"DOI/Location: {record['doi'] or 'N/A'}",
+            f"Title: {fields['title']}",
+            f"Authors: {', '.join(fields['authors']) if fields['authors'] else 'N/A'}",
+            f"Journal/Date: {fields['source']} ({fields['pubdate']})",
+            f"DOI/Location: {fields['doi'] or 'N/A'}",
         ]
-        if record["abstract"]:
-            lines.append(f"Abstract: {record['abstract'][:1800]}")
+        if fields["abstract"]:
+            lines.append(f"Abstract: {fields['abstract'][:1800]}")
         return ChatToolResponse(result="\n".join(lines))
     except Exception as e:
         return ChatToolResponse(error=f"Failed to fetch PubMed article: {e}")
 
 
 @app.post("/tools/get_related_pubmed", response_model=ChatToolResponse, tags=["chat_tools"])
-async def get_related_pubmed(request: Request):
+async def get_related_pubmed(req: GetRelatedPubmedRequest):
     try:
-        body = await request.json()
-        pmid = (body.get("pmid") or "").strip()
-        max_results = _clamp_max_results(body.get("max_results", 5))
-        if not pmid:
-            return ChatToolResponse(error="pmid is required")
-        if not _is_valid_pmid(pmid):
-            return ChatToolResponse(error="pmid must be a numeric PubMed ID")
-
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        pmid = req.pmid
+        max_results = req.max_results
+        async with _acquire_client() as client:
             data = await _fetch_json(
                 client,
                 "elink.fcgi",
@@ -294,6 +334,24 @@ async def get_related_pubmed(request: Request):
                     "retmode": "json",
                 },
             )
+
+            # Guard every nested level NCBI can corrupt before the traversal
+            # below: linksets must be a list of dicts, linksetdbs a list of
+            # dicts, and links a list.
+            if not isinstance(data, dict):
+                data = {}
+            _linksets = data.get("linksets")
+            if not isinstance(_linksets, list) or not _linksets or not isinstance(_linksets[0], dict):
+                data["linksets"] = []
+            else:
+                _dbs = _linksets[0].get("linksetdbs")
+                if not isinstance(_dbs, list):
+                    _linksets[0]["linksetdbs"] = []
+                elif _dbs:
+                    if not isinstance(_dbs[0], dict):
+                        _dbs[0] = {}
+                    if not isinstance(_dbs[0].get("links"), list):
+                        _dbs[0]["links"] = []
 
             linksets = data.get("linksets", [])
             related = []
@@ -309,7 +367,9 @@ async def get_related_pubmed(request: Request):
 
         lines = [f"Related PubMed articles for PMID {pmid}:"]
         for idx, related_pmid in enumerate(related, start=1):
-            row = summaries.get(related_pmid, {})
+            row = summaries.get(related_pmid)
+            if not isinstance(row, dict):
+                row = {}
             title = _safe(row.get("title", "Untitled"))
             journal = _safe(row.get("fulljournalname", row.get("source", "")))
             date = _safe(row.get("pubdate", ""))
