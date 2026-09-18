@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 if TestClient is not None:
     from main import app
+    from whoop_tools_auth import require_whoop_tools_auth
 
 
 def _page(records, next_token=None):
@@ -34,10 +35,14 @@ def _record(value_path, value):
 @unittest.skipIf(TestClient is None, "fastapi/httpx test dependencies are not installed")
 class WeeklySummaryPaginationTests(unittest.TestCase):
     def setUp(self):
+        app.dependency_overrides[require_whoop_tools_auth] = lambda: None
         self.client = TestClient(app)
         patcher = patch("main.get_valid_access_token", return_value="test-token")
         self.addCleanup(patcher.stop)
         patcher.start()
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
 
     def _mock_responses(self, by_endpoint):
         """by_endpoint: endpoint -> list of pages (each a dict body) to return in order."""
