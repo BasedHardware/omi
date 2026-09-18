@@ -32,8 +32,8 @@ run_with_uv() {
 
 run_with_venv() {
   local python_bin="$1"
-  if ! "$python_bin" -c "from fastapi.testclient import TestClient" 2>/dev/null; then
-    echo "FAIL: $python_bin lacks fastapi/httpx; install deps or use uv for coingecko-null-optionals-tests." >&2
+  if ! "$python_bin" -c "import fastapi, httpx, pytest" 2>/dev/null; then
+    echo "FAIL: $python_bin lacks fastapi/httpx/pytest; install deps or use uv for coingecko-null-optionals-tests." >&2
     exit 1
   fi
   "$python_bin" -m pytest "${test_files[@]}" -q
