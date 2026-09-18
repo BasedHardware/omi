@@ -96,5 +96,26 @@ class TestRequireSlackWebhookAuth(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 422)
 
 
+class TestRequireSlackToolAuth(unittest.TestCase):
+    def setUp(self):
+        self._old = os.environ.get('SLACK_WEBHOOK_SECRET')
+        os.environ['SLACK_WEBHOOK_SECRET'] = SECRET
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop('SLACK_WEBHOOK_SECRET', None)
+        else:
+            os.environ['SLACK_WEBHOOK_SECRET'] = self._old
+
+    def test_tool_call_without_token_rejected(self):
+        with self.assertRaises(auth.HTTPException) as ctx:
+            auth.require_slack_tool_auth(_FakeRequest())
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_tool_call_with_token_accepted(self):
+        req = _FakeRequest(headers={'Authorization': f'Bearer {SECRET}'})
+        self.assertIsNone(auth.require_slack_tool_auth(req))
+
+
 if __name__ == '__main__':
     unittest.main()

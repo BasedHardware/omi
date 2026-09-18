@@ -32,6 +32,21 @@ def require_slack_webhook_auth(
     uid: str = Query(..., min_length=1),
 ) -> str:
     """Bind slack transcript webhooks to an authenticated caller and explicit uid."""
+    require_slack_tool_auth(request)
+
+    trimmed_uid = uid.strip()
+    if not trimmed_uid:
+        raise HTTPException(status_code=422, detail='uid must not be empty')
+
+    return trimmed_uid
+
+
+def require_slack_tool_auth(request: Request) -> None:
+    """Authenticate backend-invoked tool/api routes by shared secret.
+
+    These routes carry uid inside the JSON body, so the guard only
+    authenticates the caller; the body's uid stays the data-plane key.
+    """
     secret = _configured_secret()
     if secret is None:
         raise HTTPException(status_code=503, detail='slack webhook auth is not configured')
@@ -39,9 +54,3 @@ def require_slack_webhook_auth(
     token = _presented_token(request)
     if not token or not hmac.compare_digest(token, secret):
         raise HTTPException(status_code=401, detail='unauthorized')
-
-    trimmed_uid = uid.strip()
-    if not trimmed_uid:
-        raise HTTPException(status_code=422, detail='uid must not be empty')
-
-    return trimmed_uid
