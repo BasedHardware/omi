@@ -141,6 +141,7 @@ export type NativeSnapshot = {
 };
 
 export type OmiNativeEvent =
+  | {type: 'recordingsAvailable'}
   | {
       type: 'button';
       deviceId: string;

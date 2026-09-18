@@ -26,6 +26,13 @@ int main() {
     require([merged[@"rememberedDevice"] isEqual:replacement[@"rememberedDevice"]]);
     require([merged[@"idToken"] isEqual:@"new-token"]);
     require([OmiRememberedRefreshSession(beforeForget, beforeForget)[@"rememberedDevice"] isEqual:beforeForget[@"rememberedDevice"]]);
+    for (NSString *key in @[@"bleRecording", @"recordingOwner"]) {
+      NSDictionary *stale = @{key:@{@"deviceId":@"old"}, @"idToken":@"refreshed"};
+      NSDictionary *current = @{key:@{@"deviceId":@"new"}};
+      require(OmiRememberedRefreshSession(stale, @{})[key] == nil);
+      require([OmiRememberedRefreshSession(stale, current)[key] isEqual:current[key]]);
+      require([OmiRememberedRefreshSession(@{@"idToken":@"refreshed"}, current)[key] isEqual:current[key]]);
+    }
     require(OmiRememberedIdentity(@"device", @"Omi"));
     require(!OmiRememberedIdentity(nil, @"Omi"));
     require(!OmiRememberedIdentity(@1, @"Omi"));

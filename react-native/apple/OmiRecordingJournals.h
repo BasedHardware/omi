@@ -1,6 +1,7 @@
 #import "OmiRecordingLog.h"
 #import "OmiRecordingPolicy.h"
 #import <CommonCrypto/CommonDigest.h>
+#import <TargetConditionals.h>
 #include "omi_backend_http.h"
 
 static NSString *OmiRecordingDigest(NSString *value) {
@@ -89,6 +90,12 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   NSString *path = [_root stringByAppendingPathComponent:@(rel)];
   NSString *directory = path.stringByDeletingLastPathComponent;
   if (![NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700} error:error]) return nil;
+#if TARGET_OS_IOS
+  // CoreBluetooth can deliver while the phone is locked after its first unlock.
+  // Keep the encrypted journal writable then, matching its Keychain key class.
+  if (![NSFileManager.defaultManager setAttributes:@{NSFileProtectionKey:NSFileProtectionCompleteUntilFirstUserAuthentication}
+      ofItemAtPath:directory error:error]) return nil;
+#endif
   [[NSURL fileURLWithPath:_root] setResourceValue:@YES forKey:NSURLIsExcludedFromBackupKey error:nil];
   for (NSString *parent in @[_root.stringByDeletingLastPathComponent, _root]) {
     int descriptor = open(parent.fileSystemRepresentation, O_RDONLY | O_CLOEXEC);
@@ -106,6 +113,10 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   if (key == NULL) return nil;
   OmiRecordingLog *log = [[OmiRecordingLog alloc] initWithPath:path key:key binding:bytes error:error];
   CFRelease(key);
+#if TARGET_OS_IOS
+  if (log != nil && ![NSFileManager.defaultManager setAttributes:@{NSFileProtectionKey:NSFileProtectionCompleteUntilFirstUserAuthentication}
+      ofItemAtPath:path error:error]) { [log close]; return nil; }
+#endif
   return log;
 }
 - (NSDictionary *)state:(NSMutableDictionary *)entry includeEntries:(BOOL)includeEntries error:(NSError **)error {

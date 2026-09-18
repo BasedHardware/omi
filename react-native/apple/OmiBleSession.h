@@ -8,6 +8,10 @@ static BOOL OmiBleSetupExpired(NSUInteger currentGeneration, NSUInteger expected
   return pending && currentGeneration == expectedGeneration;
 }
 
+static BOOL OmiBleCodecSupported(NSUInteger codec) {
+  return codec == 1 || codec == 20 || codec == 21;
+}
+
 static BOOL OmiBleRecordingReady(BOOL connected, BOOL notifying, BOOL hasCodec) {
   return connected && notifying && hasCodec;
 }

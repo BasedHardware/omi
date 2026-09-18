@@ -31,6 +31,9 @@ int main() {
     assert(!OmiBleRecordingReady(YES, NO, YES));
     assert(!OmiBleRecordingReady(YES, YES, NO));
     assert(!OmiBleRecordingReady(NO, YES, YES));
+    for (NSUInteger codec = 0; codec <= 255; codec++) {
+      assert(OmiBleCodecSupported(codec) == (codec == 1 || codec == 20 || codec == 21));
+    }
     OmiBleReconnectState reconnect = {};
     assert(OmiBleReconnectDelay(&reconnect) == -1);
     OmiBleReconnectReady(&reconnect);

@@ -1,5 +1,6 @@
 import {decodeBase64} from '../base64';
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {AppState} from 'react-native';
 import {
   appendDeviceSessionAudio,
   completeDeviceSession,
@@ -848,18 +849,35 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             );
         });
     }
-    if (omiBackend != null && hasRecordingJournal(omiBackend)) {
+    let recoveryRunning = false;
+    let recoveryRequested = false;
+    const recoveredHandles = new Set<string>();
+    const recoverSavedRecordings = () => {
+      if (!active || omiBackend == null || !hasRecordingJournal(omiBackend))
+        return;
+      if (recoveryRunning) {
+        recoveryRequested = true;
+        return;
+      }
+      recoveryRunning = true;
       const backend = omiBackend;
       const epoch = epochRef.current;
       const ready = backend.listRecordingJournals!().then(descriptors => {
         if (!active) {
           return;
         }
-        void (async () => {
+        const recovery = (async () => {
           for (const descriptor of descriptors) {
             if (!active) {
               return;
             }
+            if (
+              recoveredHandles.has(descriptor.handle) ||
+              [...capturesRef.current].some(
+                capture => capture.journal?.handle === descriptor.handle,
+              )
+            )
+              continue;
             const restored = restoreRecording(
               await backend.readRecordingJournal!(descriptor.handle),
             );
@@ -906,27 +924,42 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             ) {
               throw new Error('Recording recovery memory is full');
             }
+            recoveredHandles.add(descriptor.handle);
             pendingBytesRef.current += capture.bufferedBytes;
             capturesRef.current.add(capture);
             await processCapture(capture, epoch);
           }
-        })().catch(() => {
-          if (active) {
-            setDeviceScanMessage(
-              'Saved recordings could not be recovered. Audio remains on this device.',
-            );
-          }
-        });
+        })();
+        void recovery
+          .catch(() => {
+            if (active) {
+              setDeviceScanMessage(
+                'Saved recordings could not be recovered. Audio remains on this device.',
+              );
+            }
+          })
+          .finally(() => {
+            recoveryRunning = false;
+            if (recoveryRequested) {
+              recoveryRequested = false;
+              recoverSavedRecordings();
+            }
+          });
       });
       journalReadyRef.current = ready;
       void ready.catch(() => {
+        recoveryRunning = false;
         if (active) {
           setDeviceScanMessage(
             'Recording ownership could not be verified. Connecting is unavailable until you reopen the app.',
           );
         }
       });
-    }
+    };
+    recoverSavedRecordings();
+    const foreground = AppState.addEventListener('change', state => {
+      if (state === 'active') recoverSavedRecordings();
+    });
     omiNative
       .getSnapshot()
       .then(snapshot => {
@@ -937,6 +970,10 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       .catch(() => undefined);
     const unsubscribe = subscribeOmiNativeEvents(event => {
       if (!active) {
+        return;
+      }
+      if (event.type === 'recordingsAvailable') {
+        recoverSavedRecordings();
         return;
       }
       if (event.type === 'snapshot') {
@@ -1002,6 +1039,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     });
     return () => {
       retireSession();
+      foreground.remove();
       unsubscribe();
     };
   }, [applySnapshot, enabled, persistAudio, processCapture]);

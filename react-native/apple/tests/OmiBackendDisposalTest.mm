@@ -6,13 +6,14 @@
 - (void)sendEventWithName:(NSString *)name body:(id)body { abort(); }
 @end
 static BOOL ignoreTestEnvironment = YES;
+static NSString *testKeychainService;
 BOOL OmiAuthEnvironmentCloudTokensIgnored(void) { return ignoreTestEnvironment; }
 void OmiAuthSetEnvironmentCloudTokensIgnored(BOOL value) {}
 BOOL OmiAuthShippingSessionIgnored(void) { return YES; }
 void OmiAuthSetShippingSessionIgnored(BOOL value) {}
 BOOL OmiAuthImportShippingSessionIfNeeded(void) { return NO; }
 id OmiAuthKeychainLock(void) { return @"disposal-test-lock"; }
-NSString *OmiAuthKeychainService(void) { return @"omi-disposal-test-unconfigured"; }
+NSString *OmiAuthKeychainService(void) { return testKeychainService; }
 BOOL OmiAuthUsesDataProtectionKeychain(void) { return NO; }
 NSString *OmiAuthResolvedFirebaseApiKey(void) { return @""; }
 
@@ -72,6 +73,66 @@ static void testSelectedContract(void) {
     assert(old != nil && old.kind == OmiBackendCredentialKindCloud && !old.captureOriginRequired);
   } @finally {
     ignoreTestEnvironment = YES;
+    [defaults setVolatileDomain:previous forName:NSArgumentDomain];
+  }
+}
+
+static void testBleRestorationOwnership(void) {
+  NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+  NSDictionary *previous = [defaults volatileDomainForName:NSArgumentDomain];
+  DisposalBackend *module = [DisposalBackend new];
+  module.journalQueue = dispatch_queue_create("ble-grant-test", DISPATCH_QUEUE_SERIAL);
+  @try {
+    [defaults setVolatileDomain:@{OmiSoftwarePlaneDefaultsKey:@"old"} forName:NSArgumentDomain];
+    NSMutableDictionary *session = [@{@"journalLogin":@"login-one", @"idToken":@"synthetic-test", @"refreshToken":@"synthetic-refresh", @"expiryTime":@0} mutableCopy];
+    assert(OmiStoreOwnKeychainCloudSession(session));
+    assert(OmiResolvedBackendPolicy(@{}) == nil); // Expired token never authorizes HTTP.
+    NSString *origin = OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString;
+    assert(origin != nil);
+    NSDictionary *owner = @{@"login":@"login-one", @"origin":origin,
+      @"ownerKey":[@"capture-owner-v1:" stringByAppendingString:[@"a" stringByPaddingToLength:64 withString:@"a" startingAtIndex:0]],
+      @"receipt":[NSString stringWithFormat:@"capture1.%@.%@", [@"a" stringByPaddingToLength:64 withString:@"a" startingAtIndex:0], [@"b" stringByPaddingToLength:64 withString:@"b" startingAtIndex:0]]};
+    session[@"recordingOwner"] = owner;
+    assert(OmiStoreOwnKeychainCloudSession(session));
+    // Existing sessions have a receipt but no explicit background capture grant.
+    assert([module restorableBleDeviceId] == nil);
+    NSDictionary *device = @{@"deviceId":@"device-one", @"deviceName":@"Omi"};
+    NSDictionary *binding = @{@"deviceId":@"device-one", @"login":@"login-one", @"origin":origin, @"ownerKey":owner[@"ownerKey"]};
+    for (NSString *scenario in @[@"legacy", @"authorized", @"other-device", @"other-login", @"retired", @"changed-while-pending"]) {
+      [module stopBleRecording:NO];
+      session[@"journalLogin"] = @"login-one";
+      session[@"bleRecording"] = binding;
+      if ([scenario isEqual:@"legacy"]) [session removeObjectForKey:@"bleRecording"];
+      if ([scenario isEqual:@"other-login"]) session[@"journalLogin"] = @"login-two";
+      assert(OmiStoreOwnKeychainCloudSession(session));
+      if ([scenario isEqual:@"other-login"]) assert([module restorableBleDeviceId] == nil);
+      __block BOOL settled = NO, accepted = NO;
+      [module prepareBleRecording:[scenario isEqual:@"other-device"] ? @{@"deviceId":@"device-two", @"deviceName":@"Omi"} : device
+        restoring:YES current:^BOOL { return ![scenario isEqual:@"retired"]; }
+        resolver:^(id value) { accepted = YES; settled = YES; }
+        rejecter:^(NSString *code, NSString *message, NSError *error) { settled = YES; }];
+      if ([scenario isEqual:@"changed-while-pending"]) {
+        session[@"journalLogin"] = @"login-two";
+        assert(OmiStoreOwnKeychainCloudSession(session));
+      }
+      NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
+      while (!settled && deadline.timeIntervalSinceNow > 0) [NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:deadline];
+      assert(settled && accepted == [scenario isEqual:@"authorized"]);
+      assert((module.bleRecording != nil) == accepted);
+      assert(module.pendingOwner == nil); // Restoration never makes an ownership HTTP request.
+    }
+    session[@"journalLogin"] = @"login-one";
+    session[@"bleRecording"] = binding;
+    assert(OmiStoreOwnKeychainCloudSession(session));
+    assert([[module restorableBleDeviceId] isEqual:@"device-one"]);
+    [module stopBleRecording:YES];
+    assert([module restorableBleDeviceId] == nil);
+  } @finally {
+    [module invalidate];
+    assert(OmiClearOwnKeychainCloudSession());
+    // Sign-out can clear credentials before Bluetooth disconnect cleanup.
+    [module stopBleRecording:YES];
+    assert(OmiOwnKeychainCloudSession() == nil);
     [defaults setVolatileDomain:previous forName:NSArgumentDomain];
   }
 }
@@ -163,10 +224,12 @@ static void testCaptureQueryRoutes(void) {
 
 int main() {
   @autoreleasepool {
+    testKeychainService = [@"omi-disposal-test-" stringByAppendingString:NSUUID.UUID.UUIDString];
     testSelectedContract();
     testCaptureQueryRoutes();
     testOmiFrames();
     testPendingOmiCancellation();
+    testBleRestorationOwnership();
     NSString *identifier = NSUUID.UUID.UUIDString;
     NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:identifier];
     NSString *tag = [@"omi-disposal-test-" stringByAppendingString:identifier];

@@ -1,4 +1,4 @@
-#import "../../apple/OmiRecordingJournals.h"
+#import "../../apple/OmiBleRecording.h"
 #import "../../apple/OmiRecordingPolicy.h"
 #import "OmiBackendModule.h"
 #import "OmiAuthModule.h"
@@ -382,7 +382,7 @@ static void OmiRefreshOwnKeychainCloudSession(
   }
 }
 
-static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSString *> *environment) {
+static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSString *> *environment, BOOL allowExpiredToken = NO) {
   NSString *developmentBackend = environment[@"OMI_DEV_BACKEND"];
   NSString *localURL = environment[@"OMI_LOCAL_BACKEND_URL"];
   NSString *localToken = environment[@"OMI_LOCAL_API_TOKEN"];
@@ -406,6 +406,9 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   OmiAuthImportShippingSessionIfNeeded();
   NSDictionary *session = OmiOwnKeychainCloudSession();
   NSString *ownKeychainToken = OmiOwnKeychainCloudToken(session);
+  // Native-only local capture needs the configured origin even while offline
+  // with an expired token. HTTP callers must keep the default and refresh.
+  if (allowExpiredToken && ownKeychainToken.length == 0 && [session[@"idToken"] isKindOfClass:NSString.class]) ownKeychainToken = session[@"idToken"];
   NSString *cloud = ownKeychainToken;
   if (cloud.length == 0 && !OmiAuthEnvironmentCloudTokensIgnored()) {
     cloud = environment[@"OMI_CLOUD_API_TOKEN"] ?: environment[@"OMI_API_TOKEN"];
@@ -667,6 +670,9 @@ didCompleteWithError:(NSError *)error {
 @property(nonatomic) NSUInteger rememberedGeneration;
 @property(nonatomic, strong) OmiRecordingJournals *recordingJournals;
 @property(nonatomic, strong) dispatch_queue_t journalQueue;
+@property(nonatomic, strong) OmiBleRecording *bleRecording;
+@property(nonatomic, copy) NSString *bleOrigin;
+@property(nonatomic, copy) NSString *bleLogin;
 @property(nonatomic, strong) NSURLSession *session;
 @property(nonatomic, strong) OmiBackendPolicy *policy;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, OmiGenerationDelegate *> *generations;
@@ -843,6 +849,94 @@ RCT_REMAP_METHOD(createWriteId,
   }
 }
 
+- (void)prepareBleRecording:(NSDictionary *)device restoring:(BOOL)restoring current:(BOOL (^)(void))current resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+  [self ensureRecordingJournals];
+  NSString *login = OmiRecordingLogin();
+  NSString *origin = OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString;
+  void (^accept)(NSDictionary *) = ^(NSDictionary *owner) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (self.disposed || !current()) { reject(@"OMI_RECORDING_OWNERSHIP", @"Bluetooth recording was retired", nil); return; }
+      if (!OmiRecordingMatches(owner[@"ownerKey"], @"^capture-owner-v1:[0-9a-f]{64}$") ||
+          !OmiRecordingMatches(owner[@"receipt"], @"^capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}$") ||
+          !OmiRememberedIdentity(device[@"deviceId"], device[@"deviceName"])) {
+        reject(@"OMI_RECORDING_OWNERSHIP", @"Recording owner or device is invalid", nil); return;
+      }
+      __block BOOL accepted = NO;
+      dispatch_sync(self.journalQueue, ^{
+        @synchronized(OmiAuthKeychainLock()) {
+          NSMutableDictionary *session = [OmiOwnKeychainCloudSession() mutableCopy];
+          if (!OmiRecordingSameContext(login, session[@"journalLogin"], origin,
+              OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString)
+              || ![owner[@"login"] isEqual:login] || ![owner[@"origin"] isEqual:origin] || self.disposed) return;
+          NSDictionary *binding = @{@"deviceId":device[@"deviceId"], @"login":login, @"origin":origin, @"ownerKey":owner[@"ownerKey"]};
+          // Restoration is not a new recording grant. Legacy sessions without a
+          // binding, a different device, or a new account must reconnect explicitly.
+          if (restoring && ![session[@"bleRecording"] isEqual:binding]) return;
+          session[@"bleRecording"] = binding;
+          if (!OmiStoreOwnKeychainCloudSession(session)) return;
+          self.bleRecording = [[OmiBleRecording alloc] initWithJournals:self.recordingJournals owner:owner device:device];
+          self.bleOrigin = origin;
+          self.bleLogin = login;
+          accepted = YES;
+        }
+      });
+      if (accepted) resolve(nil); else reject(@"OMI_RECORDING_OWNERSHIP", @"Recording account or device changed", nil);
+    });
+  };
+  if (restoring) {
+    // A background relaunch cannot depend on a network round trip. Reuse only
+    // the receipt and explicit device grant already stored in this native login.
+    NSDictionary *owner = OmiOwnKeychainCloudSession()[@"recordingOwner"];
+    if (![owner isKindOfClass:NSDictionary.class]) { reject(@"OMI_RECORDING_OWNERSHIP", @"No restorable recording owner", nil); return; }
+    accept(owner);
+  } else [self recordingOwner:accept allowCached:YES rejecter:reject];
+}
+
+- (BOOL)appendBlePacket:(NSData *)packet codec:(NSNumber *)codec at:(NSNumber *)at sealed:(NSDictionary **)sealed {
+  if (sealed != NULL) *sealed = nil;
+  [self ensureRecordingJournals];
+  __block BOOL saved = NO;
+  __block NSDictionary *completed = nil;
+  dispatch_sync(self.journalQueue, ^{
+    if (self.disposed || self.bleRecording == nil || !OmiRecordingSameContext(self.bleLogin, OmiRecordingLogin(), self.bleOrigin,
+        OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString)) return;
+    saved = [self.bleRecording receive:packet codec:codec at:at sealed:&completed error:nil];
+  });
+  if (sealed != NULL) *sealed = completed;
+  return saved;
+}
+
+- (NSDictionary *)stopBleRecording:(BOOL)forget {
+  [self ensureRecordingJournals];
+  __block NSDictionary *sealed = nil;
+  dispatch_sync(self.journalQueue, ^{
+    sealed = [self.bleRecording seal:nil];
+    self.bleRecording = nil;
+    if (forget) @synchronized(OmiAuthKeychainLock()) {
+      NSMutableDictionary *session = [OmiOwnKeychainCloudSession() mutableCopy];
+      [session removeObjectForKey:@"bleRecording"];
+      if (session != nil) OmiStoreOwnKeychainCloudSession(session);
+    }
+  });
+  return sealed;
+}
+
+- (void)rotateBleRecording {
+  [self ensureRecordingJournals];
+  dispatch_sync(self.journalQueue, ^{ [self.bleRecording requestRotation]; });
+}
+
+- (NSString *)restorableBleDeviceId {
+  NSDictionary *session = OmiOwnKeychainCloudSession();
+  NSDictionary *binding = session[@"bleRecording"];
+  NSDictionary *owner = session[@"recordingOwner"];
+  NSString *origin = OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString;
+  if (self.disposed || ![binding isKindOfClass:NSDictionary.class] || ![owner isKindOfClass:NSDictionary.class] ||
+      !OmiRecordingSameContext(binding[@"login"], session[@"journalLogin"], binding[@"origin"], origin) ||
+      ![binding[@"ownerKey"] isEqual:owner[@"ownerKey"]] || ![binding[@"deviceId"] isKindOfClass:NSString.class]) return nil;
+  return binding[@"deviceId"];
+}
+
 - (void)recordingOwner:(void (^)(NSDictionary *))completion allowCached:(BOOL)allowCached rejecter:(RCTPromiseRejectBlock)reject {
   if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
   NSString *login = OmiRecordingLogin();
@@ -905,7 +999,11 @@ RCT_REMAP_METHOD(listRecordingJournals, listRecordingJournalsWithResolver:(RCTPr
       dispatch_async(self.journalQueue, ^{
         NSError *error = nil;
         NSArray *entries = [self.recordingJournals list:owner error:&error];
-        if (entries != nil) resolve(entries); else reject(@"OMI_RECORDING_JOURNAL", @"Saved recordings could not be recovered", nil);
+        if (entries != nil) {
+          NSMutableArray *sealed = [NSMutableArray array];
+          for (NSDictionary *entry in entries) if (![entry[@"handle"] isEqual:self.bleRecording.activeHandle]) [sealed addObject:entry];
+          resolve(sealed);
+        } else reject(@"OMI_RECORDING_JOURNAL", @"Saved recordings could not be recovered", nil);
       });
     } allowCached:YES rejecter:reject];
   });

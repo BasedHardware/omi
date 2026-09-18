@@ -1,4 +1,5 @@
 import React from 'react';
+import {AppState} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import type {
   NativeHttpRequest,
@@ -160,6 +161,77 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockSaved = null;
 });
+
+test.each(['native event', 'foreground', 'retired'] as const)(
+  '%s recovery serializes duplicate notifications and fences a pending read',
+  async trigger => {
+    const appState = jest.mocked(AppState.addEventListener);
+    const view = await render();
+    const foreground = appState.mock.calls.find(
+      call => call[0] === 'change',
+    )![1];
+    mockSaved = {
+      handle: mockCapture,
+      captureId: mockCapture,
+      sessionId: null,
+      deviceId: 'omi-1',
+      deviceName: null,
+      codec: 21,
+      capturedAtMs: 1234,
+      entries: [JSON.stringify(['p', 'AAAB']), JSON.stringify(['s'])],
+    };
+    const read = mockBackend.readRecordingJournal.getMockImplementation()!;
+    let release!: () => void;
+    mockBackend.readRecordingJournal.mockImplementationOnce(async () => {
+      const journal = await read();
+      await new Promise<void>(resolve => {
+        release = resolve;
+      });
+      return journal;
+    });
+    try {
+      if (trigger === 'foreground') {
+        await ReactTestRenderer.act(async () => foreground('background'));
+        expect(mockBackend.readRecordingJournal).not.toHaveBeenCalled();
+        await ReactTestRenderer.act(async () => foreground('active'));
+      } else await emit({type: 'recordingsAvailable'});
+      await emit({type: 'recordingsAvailable'});
+      await emit({type: 'recordingsAvailable'});
+      expect(mockBackend.readRecordingJournal).toHaveBeenCalledTimes(1);
+      expect(mockBackend.listRecordingJournals).toHaveBeenCalledTimes(2);
+      expect(mockBackend.requestRecordingJournal).not.toHaveBeenCalled();
+      if (trigger === 'retired')
+        await ReactTestRenderer.act(async () => view.unmount());
+      await ReactTestRenderer.act(async () => {
+        release();
+        for (let index = 0; index < 100; index++) await Promise.resolve();
+      });
+      if (trigger === 'retired') {
+        expect(mockBackend.requestRecordingJournal).not.toHaveBeenCalled();
+        expect(mockBackend.removeRecordingJournal).not.toHaveBeenCalled();
+        expect(mockSaved).not.toBeNull();
+      } else {
+        expect(
+          mockBackend.requestRecordingJournal.mock.calls.map(
+            ([, request]) => request.path,
+          ),
+        ).toEqual([
+          '/v1/device-sessions',
+          `/v1/device-sessions/${mockSession}/audio`,
+          `/v1/device-sessions/${mockSession}/complete`,
+          `/v1/device-sessions/${mockSession}/transcribe`,
+        ]);
+        expect(mockBackend.removeRecordingJournal).toHaveBeenCalledTimes(1);
+        expect(mockBackend.listRecordingJournals).toHaveBeenCalledTimes(3);
+        expect(mockSaved).toBeNull();
+      }
+      expect(mockBackend.createRecordingJournal).not.toHaveBeenCalled();
+    } finally {
+      release?.();
+      await ReactTestRenderer.act(async () => view.unmount());
+    }
+  },
+);
 
 test('does not connect until trusted ownership preflight settles', async () => {
   let release!: (value: RecordingJournal[]) => void;
