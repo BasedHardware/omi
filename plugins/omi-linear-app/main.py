@@ -1049,7 +1049,7 @@ async def tool_get_issue(request: Request, _auth: None = Depends(require_linear_
 
 
 @app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_add_comment(request: Request):
+async def tool_add_comment(request: Request, _auth: None = Depends(require_linear_tools_auth)):
     """
     Add a comment to an issue.
     Chat tool for Omi - adds comments to existing issues.
