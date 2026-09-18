@@ -56,12 +56,18 @@ ledger lives in
 
 ## Mobile own-voice enrollment direction
 
-Keep speech-profile enrollment in first-run onboarding. Explain why Omi needs
-its user's voice, ask for a brief sample about any topic, and retain Skip as an
-escape. Personal-life questions are not enrollment requirements. A successful
-upload, not navigation through All Done, is the enrollment outcome. The
-[approach and measurement plan](.github/agent-docs/mobile-voice-enrollment.md)
-describes the current duration estimate and longer-term quality work.
+Keep speech-profile enrollment in first-run onboarding. Offer four optional
+sentence starters to reduce the effort of speaking, plus alternatives and Skip.
+Personal-life answers are never enrollment requirements. Prompt completion,
+audio activity, voice enrollment, and confirmed answer saving have separate
+visible states. Users review and choose which transcribed statements to keep.
+Next starts the following prompt automatically. The fourth answer is a qualitative
+goal and is saved through the goal system, separately from personal memories.
+Review uses one Save and finish action with automatic completion. Goal wording
+is conservatively cleaned before review and can be edited or restored.
+A successful upload, not navigation through All Done, is the enrollment outcome.
+The [approach and verification plan](.github/agent-docs/mobile-voice-enrollment.md)
+describes the capture, memory consent, and quality boundaries.
 
 ## Before you build
 
