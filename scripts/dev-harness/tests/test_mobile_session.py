@@ -223,7 +223,8 @@ class TestSeedResetStop:
 
         class FakeDevices:
             def detach(self, platform_name: str, device_id: str, device=None) -> None:
-                calls.append((platform_name, device_id, None if device is None else device.get("kind")))
+                payload = device if device is not None else getattr(self, "_detach_record", None)
+                calls.append((platform_name, device_id, None if payload is None else payload.get("kind")))
 
         directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
         data = json.loads((directory / "lease.json").read_text("utf-8"))
@@ -377,7 +378,8 @@ class TestStart:
 
         class FakeDevices:
             def detach(self, platform_name: str, device_id: str, device=None) -> None:
-                calls.append((platform_name, device_id, (device or {}).get("avd")))
+                payload = device if device is not None else getattr(self, "_detach_record", None)
+                calls.append((platform_name, device_id, (payload or {}).get("avd")))
 
         directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
         data = json.loads((directory / "lease.json").read_text("utf-8"))
