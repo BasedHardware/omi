@@ -743,8 +743,8 @@ def test_non_extraction_failure_logs_cause_class_name(caplog):
 
 
 def test_oversized_input_trims_oldest_spine_rows_and_still_dispatches():
-    oldest = ("old-conv", "00:01 (work) " + ("oldest-fact " * 400))
-    newest = ("new-conv", "23:59 (work) " + ("newest-fact " * 400))
+    oldest = ("old-conv", "00:01 (work) " + ("oldest-fact " * 1200))
+    newest = ("new-conv", "23:59 (work) " + ("newest-fact " * 1200))
     llm = _ScriptedLlm(
         [_response(memories=[{"content": "Dave kept the newest fact", "conversation_ids": ["new-conv"]}])]
     )

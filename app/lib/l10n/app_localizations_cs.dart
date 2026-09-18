@@ -244,7 +244,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get searchConversations => 'Hledat konverzace...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Vybráno: $count';
   }
 
@@ -2047,10 +2047,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistory => 'Historie';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Povolit použití';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nepoužívat';
 
   @override
   String get undo => 'Vrátit zpět';
@@ -9997,4 +9997,19 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get home => 'Domů';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nepodařilo se aktualizovat stav výchozí paměti.';
+
+  @override
+  String get unstarConversation => 'Odebrat hvězdu z konverzace';
+
+  @override
+  String get moreOptions => 'Další možnosti';
+
+  @override
+  String get filterByDate => 'Filtrovat podle data';
+
+  @override
+  String get memoryGraph => 'Graf vzpomínek';
 }

@@ -109,6 +109,18 @@ describe('conversationSignals', () => {
       speakerCount: 0,
     });
   });
+
+  it('uses the selected app result for the conversation excerpt', () => {
+    const subject = {
+      id: 'c',
+      created_at: NOW.toISOString(),
+      started_at: NOW.toISOString(),
+      structured: { title: 'Standup', overview: 'Overview', category: 'business' },
+      apps_results: [{ app_id: 'app-1', content: 'App summary' }],
+    } as unknown as Conversation;
+
+    expect(conversationSignals(subject).excerpt).toBe('App summary');
+  });
 });
 
 describe('buildTimelineDayGroups', () => {
