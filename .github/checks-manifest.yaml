@@ -110,11 +110,16 @@ checks:
     triggers: ["sdks/device/typescript/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
-  - id: mobile-client-compat-catalog
-    command: ["python3", "scripts/check_client_compat.py", "--base", "{base}"]
-    triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
+  - id: capture-ownership-boundaries
+    command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/capture/boundary-baseline.json"]
+    triggers: ["app/lib/**/*.dart", "app/contracts/capture/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
+    reason: "WAL wake races edc8683e80/97ec3d9cea and late timer 05c43c014d: prevent regression in adopted capture files and debt in new files"
+  - id: mobile-boundary-check-tests
+    command: ["python3", "scripts/test_check_mobile_boundaries.py"]
+    triggers: ["scripts/*mobile_boundaries.py", "app/contracts/capture/**", "app/contracts/**/boundary-baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Lexical boundary scan must ignore prose, accept existing debt, and reject reintroduced debt"
   - id: spine-contracts
     command: ["python3", "scripts/check_spine_contracts.py", "--base", "{base}"]
     triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", "backend/testing/e2e/test_client_compat_replay.py", ".github/checks-manifest.yaml"]
@@ -1176,26 +1181,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
-  - id: capture-ownership-boundaries
-    command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/capture/boundary-baseline.json"]
-    triggers: ["app/lib/**/*.dart", "app/contracts/capture/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
+  - id: api-result-boundaries
+    command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/api-result/boundary-baseline.json"]
+    triggers: ["app/lib/**/*.dart", "app/contracts/api-result/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "WAL wake races edc8683e80/97ec3d9cea and late timer 05c43c014d: prevent regression in adopted capture files and debt in new files"
-  - id: mobile-boundary-check-tests
-    command: ["python3", "scripts/test_check_mobile_boundaries.py"]
-    triggers: ["scripts/*mobile_boundaries.py", "app/contracts/capture/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "Lexical boundary scan must ignore prose, accept existing debt, and reject reintroduced debt"
-  - id: registry-conflict-resolver-tests
-    command: ["python3", "scripts/test_resolve_registry_conflict.py"]
-    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
-  - id: mobile-event-registry
-    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
-    triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"
+    reason: "Outage-as-empty cfaaaf2fb9db and detail null conflation 06597a0757cb: prevent nullable HTTP regression after file adoption, and debt in new files"
   - id: app-addressability
     command: ["python3", "scripts/check_app_addressability.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["app/lib/**/*.dart", "app/test/support/addressability_widgets.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
@@ -1206,6 +1196,21 @@ checks:
     triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Token scan must reject child-key laundering and unknown explicit route declarations without taxing helpers or dialogs"
+  - id: registry-conflict-resolver-tests
+    command: ["python3", "scripts/test_resolve_registry_conflict.py"]
+    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
+  - id: mobile-event-registry
+    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"
+  - id: mobile-client-compat-catalog
+    command: ["python3", "scripts/check_client_compat.py", "--base", "{base}"]
+    triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

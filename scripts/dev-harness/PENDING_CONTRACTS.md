@@ -17,9 +17,12 @@ put `pendingContract('C1');` on its own line first inside the body. This survive
 Dart formatting (a named argument gets folded onto another line). The async body
 executes in its own zone; assertions/UnimplementedError print PENDING;
 success throws XPASS outside the catch. Ordinary errors still fail. Use
-awaited assertions. Compare collection-bearing Dart records field by field:
-record equality compares Map identity; pass the Map itself to `expect`. Compile/load errors happen before the wrapper and fail the
-owner suite; overriding `noSuchMethod` in a fake is valid Dart, not a compile bypass.
+awaited assertions; widget contracts use `contractWidgets` from
+`app/test/support/spine/widgets.dart`. Plain skip is forbidden. Compile/load
+errors precede the wrapper and fail the owner suite; overridden noSuchMethod
+is valid Dart. Unexpected runtime/framework/teardown errors stay red.
+Compare collection-bearing Dart records field by field: record equality compares
+Map identity; pass the Map itself to `expect`.
 
 Widget contracts use `contractWidgets` from `app/test/support/spine/widgets.dart`.
 Plain skip is forbidden; unexpected runtime/framework/teardown errors stay red.

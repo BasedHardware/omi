@@ -103,6 +103,7 @@ CI runs `test.sh`, `analyze_ratchet.sh` (no new info/warnings), and `journeys-he
 
 ### Test Patterns
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
+- HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
 - Typed analytics: [C7 registry contract](lib/utils/analytics/registry/REGISTRY.md); state machines use production seams.
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
