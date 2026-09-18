@@ -4,6 +4,12 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: crossref-app-tests
+    command: ["bash", "scripts/run-plugin-crossref-tests.sh"]
+    triggers: ["plugins/omi-crossref-app/**", "scripts/run-plugin-crossref-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #14523: Crossref DOI lookups must normalize resolver URLs at the HTTP boundary so URL encoding, query strings, and fragments cannot change the requested work"
+
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
