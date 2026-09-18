@@ -125,6 +125,187 @@ def _delete_user_documents(db_client: Any, collections: MemoryCollections) -> No
     db_client.document(f"{collections.user_root}/memory_control/daily_memory_sweep").delete()
 
 
+def _prove_completed_day_source_scan(db_client: Any, uid: str) -> None:
+    """Equal timestamps must not hide a processing row beyond the full-doc cap."""
+
+    started = datetime(2026, 8, 23, 8, tzinfo=timezone.utc)
+    collection = db_client.collection(f"users/{uid}/conversations")
+    refs = [collection.document(f"c-{i:04d}") for i in range(401)]
+    try:
+        batch = db_client.batch()
+        for index, ref in enumerate(refs):
+            batch.set(
+                ref,
+                {
+                    "id": ref.id,
+                    "created_at": started,
+                    "started_at": started,
+                    "finished_at": started + timedelta(minutes=1),
+                    "status": "processing" if index == 400 else "completed",
+                    "structured": {"title": "Meeting", "overview": "Planning", "category": "personal"},
+                    "transcript_segments": [],
+                },
+            )
+        batch.commit()
+        window = completed_local_day_window(date(2026, 8, 23), "UTC")
+        read = daily_sweep._read_completed_day_conversation_sources(
+            uid,
+            window,
+            db_client=db_client,
+            max_conversations=200,
+            max_summary_characters=120_000,
+        )
+        if read.status != "incomplete" or read.reason != "row_not_eligible":
+            raise AssertionError("row beyond selection page bypassed eligibility")
+        refs[-1].update({"status": "completed"})
+        read = daily_sweep._read_completed_day_conversation_sources(
+            uid,
+            window,
+            db_client=db_client,
+            max_conversations=8,
+            max_summary_characters=8_000,
+        )
+        if read.status != "complete" or read.rows_seen != 401 or read.rows_used != 8 or not read.truncated:
+            raise AssertionError("completed over-budget day did not produce a bounded selection")
+        if any(row.conversation_id not in {f"c-{i:04d}" for i in range(16)} for row in read.rows):
+            raise AssertionError("equal-timestamp page did not use document-id order")
+    finally:
+        batch = db_client.batch()
+        for ref in refs:
+            batch.delete(ref)
+        batch.commit()
+
+
+def _prove_window_admission_and_skip(db_client: Any, uid: str, now: datetime) -> None:
+    control, _ = _seed(db_client, uid, now)
+    identity = dict(
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=1,
+        window_id="round4-window",
+    )
+    entered, finish = threading.Event(), threading.Event()
+    calls: list[str] = []
+    results: list[Any] = []
+
+    def provider() -> tuple:
+        calls.append("first")
+        entered.set()
+        if not finish.wait(10):
+            raise AssertionError("admission overlap timed out")
+        return ()
+
+    def first() -> None:
+        results.append(
+            _invoke_model_once(
+                db_client,
+                uid,
+                lambda: "round4-first",
+                candidate_builder=provider,
+                input_digest="original",
+                now=now,
+                **identity,
+            )
+        )
+
+    with patch.object(daily_sweep, "_MODEL_INVOCATION_LOCK", nullcontext()):
+        worker = threading.Thread(target=first)
+        worker.start()
+        try:
+            if not entered.wait(10):
+                raise AssertionError("admitted worker failed to dispatch")
+            evidence: dict[str, Any] = {}
+            second = _invoke_model_once(
+                db_client,
+                uid,
+                lambda: "round4-future-identity",
+                candidate_builder=lambda: calls.append("second") or (),
+                input_digest="original",
+                now=now,
+                invocation_evidence=evidence,
+                **identity,
+            )
+            if second is not None or evidence.get("failure_reason") != "window_admission_busy":
+                raise AssertionError("real admission transaction did not serialize overlap")
+        finally:
+            finish.set()
+            worker.join(10)
+    if results != [()] or calls != ["first"]:
+        raise AssertionError("admission dispatched more than once")
+    replay = _invoke_model_once(
+        db_client,
+        uid,
+        lambda: "round4-future-identity",
+        candidate_builder=lambda: calls.append("third") or (),
+        input_digest="original",
+        now=now,
+        **identity,
+    )
+    if replay != () or calls != ["first"]:
+        raise AssertionError("released admission lost its durable identity binding")
+
+    legacy = db_client.document(f"{daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION}/round4-pre-lock")
+    legacy.set({"uid": uid, "claimed_at": now, "state": "pending"})
+    try:
+        daily_sweep.assert_no_live_pre_lock_claims(db_client, now=now, uids=(uid,))
+    except RuntimeError as error:
+        if str(error) != "pre_lock_claim_live":
+            raise
+    else:
+        raise AssertionError("pre-lock live claim passed rollout assertion")
+    daily_sweep.assert_no_live_pre_lock_claims(db_client, now=now + daily_sweep.MODEL_INVOCATION_LEASE, uids=(uid,))
+    legacy.delete()
+
+    fence = db_client.document(f"{daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION}/round4-first").get().to_dict()
+    attested_at = (
+        now + daily_sweep.MODEL_INVOCATION_LEASE + daily_sweep.MODEL_INVOCATION_REPAIR_MARGIN + timedelta(seconds=1)
+    )
+    evidence = {
+        "provider_outcome": "operator_attested_skip_window",
+        "window_disposition": "abandoned",
+        "provider_dispatch_status": "not_attested",
+        "accounting_checked": False,
+        "confirmation": daily_sweep.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
+        "attested_by": "emulator-operator",
+        "evidence_reference": "emulator:round4",
+        "attested_at": attested_at.isoformat(),
+        "claimed_at": now.isoformat(),
+        "claim_id": fence["claim_id"],
+        "claim_identity": {"uid": uid, "invocation_id": "round4-first", **identity},
+    }
+    daily_sweep.repair_daily_sweep_model_invocation(
+        db_client,
+        uid=uid,
+        invocation_id="round4-first",
+        provider_outcome_evidence=evidence,
+        repair_authority="emulator-operator",
+        now=attested_at,
+    )
+    if not daily_sweep._consume_attested_window_skip(db_client, uid, **identity):
+        raise AssertionError("real transaction failed to consume skip attestation")
+    if not daily_sweep._consume_attested_window_skip(db_client, uid, **identity):
+        raise AssertionError("skip outcome did not survive retry")
+
+
+def _prove_selected_source_lock_projection(db_client: Any, uid: str) -> None:
+    ref = db_client.document(f"users/{uid}/conversations/privacy-projection")
+    try:
+        ref.set({"is_locked": False, "transcript": "must not be projected"})
+        if ref.get(field_paths=["is_locked"]).to_dict() != {"is_locked": False}:
+            raise AssertionError("privacy projection transferred unrequested content")
+        daily_sweep._assert_selected_sources_unlocked(db_client, uid, ("privacy-projection",))
+        ref.update({"is_locked": True})
+        try:
+            daily_sweep._assert_selected_sources_unlocked(db_client, uid, ("privacy-projection",))
+        except MemoryExtractionError as error:
+            if error.extractor != "source_locked_before_dispatch":
+                raise
+        else:
+            raise AssertionError("fresh lock did not block the provider boundary")
+    finally:
+        ref.delete()
+
+
 def main() -> int:
     _assert_emulator_only()
     db_client: Any = firestore.Client(project=PROJECT_ID)
@@ -132,6 +313,11 @@ def main() -> int:
     authority = SweepAuthorityState(enabled=True)
     uids: list[str] = []
     try:
+        admission_uid = f"daily-memory-sweep-admission-{uuid4().hex}"
+        uids.append(admission_uid)
+        _prove_window_admission_and_skip(db_client, admission_uid, now)
+        _prove_selected_source_lock_projection(db_client, admission_uid)
+        _prove_completed_day_source_scan(db_client, f"daily-memory-sweep-source-{uuid4().hex}")
         # Crash-after-canonical-before-receipt: the pending claimant is safely
         # replayable and canonical apply remains the sole write authority.
         uid = f"daily-memory-sweep-crash-{uuid4().hex}"
@@ -398,7 +584,14 @@ def main() -> int:
             raise MemoryExtractionError("daily_sweep_summary_input_budget")
 
         if (
-            _invoke_model_once(db_client, uid, invocation_id, candidate_builder=preparation_failure, **identity)
+            _invoke_model_once(
+                db_client,
+                uid,
+                invocation_id,
+                candidate_builder=preparation_failure,
+                input_digest="before-release",
+                **identity,
+            )
             is not None
         ):
             raise AssertionError("pre-dispatch failure returned output")
@@ -410,7 +603,7 @@ def main() -> int:
         release_errors: list[Exception] = []
         release_barrier = threading.Barrier(2)
 
-        def release_worker() -> None:
+        def release_worker(input_digest: str) -> None:
             try:
                 release_barrier.wait(timeout=10)
                 _invoke_model_once(
@@ -418,6 +611,7 @@ def main() -> int:
                     uid,
                     invocation_id,
                     candidate_builder=lambda: paid_calls_after_release.append(1) or ({"candidate_id": "one"},),
+                    input_digest=input_digest,
                     **identity,
                 )
             except Exception as exc:
@@ -426,7 +620,7 @@ def main() -> int:
         saved_lock = daily_sweep._MODEL_INVOCATION_LOCK
         daily_sweep._MODEL_INVOCATION_LOCK = nullcontext()
         try:
-            workers = [threading.Thread(target=release_worker) for _ in range(2)]
+            workers = [threading.Thread(target=release_worker, args=(f"selection-{i}",)) for i in range(2)]
             for worker in workers:
                 worker.start()
             for worker in workers:
@@ -439,6 +633,48 @@ def main() -> int:
             )
         if ref.get().to_dict().get("state") != "returned":
             raise AssertionError("reclaimed output did not finalize")
+        bound_digest = ref.get().to_dict().get("input_digest")
+        payload_ref = db_client.document(f"users/{uid}/{daily_sweep.MODEL_INVOCATION_PATH}/{invocation_id}")
+        if (
+            bound_digest not in {"selection-0", "selection-1"}
+            or payload_ref.get().to_dict().get("input_digest") != bound_digest
+        ):
+            raise AssertionError("reclaimed output lost the transactionally bound source digest")
+        for changed_digest in ("late-row", "deleted-row", "enriched-row"):
+            result = _invoke_model_once(
+                db_client,
+                uid,
+                invocation_id,
+                candidate_builder=lambda: paid_calls_after_release.append(2) or (),
+                input_digest=changed_digest,
+                **identity,
+            )
+            if result is not None or paid_calls_after_release != [1]:
+                raise AssertionError("mutated source reopened a possibly dispatched window")
+        replayed = _invoke_model_once(
+            db_client,
+            uid,
+            invocation_id,
+            candidate_builder=lambda: paid_calls_after_release.append(3) or (),
+            input_digest=bound_digest,
+            **identity,
+        )
+        if replayed != ({"candidate_id": "one"},) or paid_calls_after_release != [1]:
+            raise AssertionError("unchanged source did not reuse its returned output")
+
+        # A historical transcript-keyed fence must block admission of a new
+        # window-keyed identity, even when account cleanup removed its payload.
+        payload_ref.delete()
+        legacy_retry = _invoke_model_once(
+            db_client,
+            uid,
+            "new-window-identity-" + uuid4().hex,
+            candidate_builder=lambda: paid_calls_after_release.append(4) or (),
+            input_digest="changed-after-old-deployment",
+            **identity,
+        )
+        if legacy_retry is not None or paid_calls_after_release != [1]:
+            raise AssertionError("historical invocation fence was bypassed by the window identity")
 
         # Real document cursors must read past a full foreign accounting page.
         accounting_refs = []
@@ -502,7 +738,11 @@ def main() -> int:
 
             if (
                 _invoke_model_once(
-                    db_client, uid, lost_invocation_id, candidate_builder=reserved_provider_crash, **identity
+                    db_client,
+                    uid,
+                    lost_invocation_id,
+                    candidate_builder=reserved_provider_crash,
+                    **{**identity, "window_id": "lost-accounting-window"},
                 )
                 is not None
             ):
@@ -590,7 +830,7 @@ def main() -> int:
 
         print(
             "PASS: daily memory sweep Firestore emulator retry/interruption proof "
-            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/accounting-pagination/lost-accounting-refusal)"
+            "(crash/deletion/generation/paid-wipe/pre-dispatch-release-contention/source-digest-binding/legacy-fence/source-projection/accounting-pagination/lost-accounting-refusal/window-admission/pre-lock-preflight/attested-skip/lock-projection)"
         )
         return 0
     finally:
@@ -598,6 +838,8 @@ def main() -> int:
             cleanup = MemoryCollections(uid=uid)
             _delete_user_documents(db_client, cleanup)
             db_client.document(f"account_deletions/{uid}").delete()
+        for snapshot in db_client.collection(daily_sweep.WINDOW_ADMISSION_COLLECTION).stream():
+            snapshot.reference.delete()
         for snapshot in db_client.collection(daily_sweep.MODEL_INVOCATION_FENCE_COLLECTION).stream():
             snapshot.reference.delete()
 
