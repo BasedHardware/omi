@@ -183,19 +183,9 @@ def shared_prefixes(root: Path, base: str, registry: dict, policy: dict, read, *
             raise ValueError(f"{path}: an oracle cannot be a shared scaffold")
         if not prefix or frozen not in policy.get("scaffolding", {}).get(path, []):
             raise ValueError(f"{path}: shared prefix requires an existing frozen scaffold")
-        # Verify the declared addition actually occurs in the immutable scaffold.
-        commits = git("log", "--full-history", "--format=%H", "HEAD", "--", path, root=root).splitlines()
-        for commit in commits:
-            try:
-                original = git("show", f"{commit}:{path}", root=root)
-            except subprocess.CalledProcessError:
-                continue
-            if digest(original) == frozen:
-                if not original.startswith(prefix):
-                    raise ValueError(f"{path}: declared prefix differs from frozen scaffold")
-                break
-        else:
-            raise ValueError(f"{path}: frozen scaffold payload missing; fetch full history")
+        # The immutable declaration pins the reviewed prefix itself. Do not
+        # reconstruct an old shared-file body from history: a squash may erase
+        # that payload while preserving both this declaration and target body.
         try:
             target = git("show", f"{base}:{path}", root=root)
         except subprocess.CalledProcessError:

@@ -557,6 +557,12 @@ def test_shared_scaffold_prefix_preserves_target_body_without_authorizing_implem
     git('switch', '--detach', 'origin/main')
     git('merge', '--no-ff', '--no-edit', candidate)
     assert checker.check(tmp_path) == []  # BASE-first merge has the same verdict
+    # Squash away the branch's original frozen shared-file payload. The reviewed
+    # prefix and target body are sufficient; incidentally reachable history is not.
+    tree = git('rev-parse', 'HEAD^{tree}').strip()
+    squash = git('commit-tree', tree, '-p', 'origin/main', '-m', 'squashed oracle correction').strip()
+    git('switch', '--detach', squash)
+    assert checker.check(tmp_path) == []
     runtime.write_text(prefix + accepted_body.replace('privacyFix', 'newImplementation'))
     assert any('mixed with implementation' in e for e in checker.check(tmp_path))
     runtime.write_text(prefix + accepted_body)
