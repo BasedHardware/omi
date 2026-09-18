@@ -23,6 +23,41 @@ def test_marker_removal_is_the_only_permitted_diff():
     assert not checker.allowed(dart, dart.replace('body', 'empty'))
 
 
+def test_quote_styles_share_listing_owner_and_marker_only_removal():
+    for line in ('@pending("V1")', "@pending('V1')", "pendingContract('C1');", 'pendingContract("C1");'):
+        match = checker.MARKER.fullmatch(line)
+        assert match is not None
+        assert next(value for value in match.groups() if value) == ('V1' if line.startswith('@') else 'C1')
+        original = line + '\nassert actual() == 42\n'
+        assert checker.allowed(original, 'assert actual() == 42\n')
+        assert not checker.allowed(original, 'assert actual() == 0\n')
+        assert not checker.allowed('assert actual() == 42\n', original)
+    for line in ('@pending("V1\')', '@pending("V1") # comment', 'pendingContract(package);'):
+        assert checker.MARKER.fullmatch(line) is None
+
+
+def test_dynamic_marker_calls_are_only_for_active_mechanism_self_tests(tmp_path):
+    import json
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True)
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.test')
+    registry = {'app/test/spine/self.dart': 'MECHANISM', 'app/test/spine/builder.dart': 'B1'}
+    for path in registry:
+        file = tmp_path / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text('pendingContract(package);\n')
+    file = tmp_path / checker.REGISTRY
+    file.parent.mkdir(parents=True)
+    file.write_text(json.dumps(registry))
+    git('add', '.')
+    git('commit', '-qm', 'fixture')
+    git('branch', 'origin/main')
+    errors = checker.check(tmp_path)
+    assert errors == ['app/test/spine/builder.dart:1: pending markers must be a complete standalone literal call']
+
+
 def test_pytest_runs_pending_and_xpass_is_red(tmp_path):
     helper = ROOT / 'scripts/dev-harness/tests/spine'
     path = tmp_path / 'test_pending.py'
@@ -500,3 +535,81 @@ def test_old_branch_consumes_accepted_squash_without_intermediate_payloads(tmp_p
         git('commit', '-qm', 'unaccepted revisions without intermediate payload')
         with pytest.raises(ValueError, match='revised bytes do not match pinned digest'):
             checker.check(root)
+
+
+def test_shared_scaffold_prefix_preserves_target_body_without_authorizing_implementation(tmp_path):
+    import json
+    import pytest
+
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True, stderr=subprocess.DEVNULL)
+
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.test')
+    path = 'app/lib/shared_owner.dart'  # category rule, not a production filename
+    prefix = "export 'typed.dart';\n\n"
+    body = "import 'legacy.dart';\n\n// Shared implementation.\n\nvoid existing() { oldBehavior(); }\n"
+    runtime = tmp_path / path
+    runtime.parent.mkdir(parents=True)
+    runtime.write_text(body)
+    oracle = 'app/test/spine/example.dart'
+    file = tmp_path / oracle
+    file.parent.mkdir(parents=True)
+    old = "pendingContract('C7');\nexpect(legacy(), true);\n"
+    new = old.replace('legacy()', 'typed()')
+    file.write_text(old)
+    declaration = tmp_path / checker.PREFIXES
+    declaration.parent.mkdir(parents=True)
+    (tmp_path / checker.REGISTRY).write_text(json.dumps({oracle: 'C7'}))
+    (tmp_path / checker.SCOPE).write_text(json.dumps({'scaffolding': {path: [checker.digest(prefix + body)]}}))
+    declaration.write_text(json.dumps({'prefixes': [dict(path=path, prefix=prefix,
+        scaffold_sha256=checker.digest(prefix + body))]}))
+    git('add', '.')
+    git('commit', '-qm', 'declare shared scaffold and oracle')
+    git('switch', '-qc', 'contract')
+    runtime.write_text(prefix + body)
+    git('add', '.')
+    git('commit', '-qm', 'original frozen scaffold')
+    git('switch', '-q', 'main')
+    accepted_body = body.replace('oldBehavior', 'privacyFix')
+    runtime.write_text(accepted_body)
+    git('add', '.')
+    git('commit', '-qm', 'independent accepted implementation fix')
+    git('branch', 'origin/main')
+    git('switch', '-q', 'contract')
+    git('merge', '--no-edit', 'main')
+    assert runtime.read_text() == prefix + accepted_body
+    file.write_text(new)
+    record = tmp_path / checker.REVISIONS / '001.json'
+    record.parent.mkdir()
+    record.write_text(json.dumps(dict(path=oracle, owner='C7', before=checker.digest(old),
+        after=checker.digest(new), reason='reviewed direct API boundary')))
+    git('add', '.')
+    git('commit', '-qm', 'oracle-only revision over accepted shared body')
+    assert checker.check(tmp_path) == []
+    candidate = git('rev-parse', 'HEAD').strip()
+    git('switch', '--detach', 'origin/main')
+    git('merge', '--no-ff', '--no-edit', candidate)
+    assert checker.check(tmp_path) == []  # BASE-first merge has the same verdict
+    # Squash away the branch's original frozen shared-file payload. The reviewed
+    # prefix and target body are sufficient; incidentally reachable history is not.
+    tree = git('rev-parse', 'HEAD^{tree}').strip()
+    squash = git('commit-tree', tree, '-p', 'origin/main', '-m', 'squashed oracle correction').strip()
+    git('switch', '--detach', squash)
+    assert checker.check(tmp_path) == []
+    runtime.write_text(prefix + accepted_body.replace('privacyFix', 'newImplementation'))
+    assert any('mixed with implementation' in e for e in checker.check(tmp_path))
+    runtime.write_text(prefix + accepted_body)
+    file.write_text(new.replace('true', 'false'))
+    assert checker.check(tmp_path)  # source-body accommodation cannot weaken oracle pins
+    file.write_text(new)
+    original_declaration = declaration.read_text()
+    declaration.write_text('{"prefixes":[]}')
+    with pytest.raises(ValueError, match='immutable'):
+        checker.check(tmp_path)
+    declaration.unlink()
+    with pytest.raises(ValueError, match='cannot be removed'):
+        checker.check(tmp_path)
+    declaration.write_text(original_declaration)
+    assert checker.check(tmp_path) == []

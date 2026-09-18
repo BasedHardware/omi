@@ -2,6 +2,21 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.364",
+      "date": "2026-09-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.363",
+      "date": "2026-09-18",
+      "changes": [
+        "Free-tier conversation summaries now run on this Mac with Apple Intelligence when it is available",
+        "Fixed on-device conversation summaries not appearing after sync"
+      ]
+    },
+    {
       "version": "0.12.362",
       "date": "2026-09-17",
       "changes": [

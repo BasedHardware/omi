@@ -96,6 +96,50 @@ if str(PLUGIN_DIR) not in sys.path:
 import main
 
 
+class _FakeResponse:
+    """Minimal httpx.Response stand-in that can also fail JSON decoding."""
+
+    def __init__(self, payload):
+        self.payload = payload
+        self.status_code = 200
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        if isinstance(self.payload, Exception):
+            raise self.payload
+        return self.payload
+
+
+def _fake_client_factory(responses):
+    """Build a fake AsyncClient class plus a list capturing each call.
+
+    ``responses`` maps a URL substring to the response object to serve, so a
+    test exercises main.py's real request/parse path (not a stubbed helper).
+    """
+    calls = []
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            self.timeout = kwargs.get("timeout")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, params=None):
+            calls.append((url, params, self.timeout))
+            for marker, response in responses.items():
+                if marker in url:
+                    return response
+            raise AssertionError(f"unexpected request to {url}")
+
+    return _FakeAsyncClient, calls
+
+
 class OpenMeteoHelperTests(unittest.TestCase):
     def test_format_number_formats_values_correctly(self):
         self.assertEqual(main._format_number(None), "n/a")
@@ -120,6 +164,60 @@ class OpenMeteoHelperTests(unittest.TestCase):
         self.assertEqual(main._format_unit_suffix(None, " "), "")
         self.assertEqual(main._format_unit_suffix("", " "), "")
         self.assertEqual(main._format_unit_suffix(123, " "), "")
+
+    def test_as_dict_and_as_list_guards(self):
+        self.assertEqual(main._as_dict({"a": 1}), {"a": 1})
+        self.assertEqual(main._as_dict(["not", "a", "dict"]), {})
+        self.assertEqual(main._as_dict("bare string"), {})
+        self.assertEqual(main._as_dict(None), {})
+        self.assertEqual(main._as_list([1, 2]), [1, 2])
+        self.assertEqual(main._as_list({"a": 1}), [])
+        self.assertEqual(main._as_list(None), [])
+        self.assertEqual(main._as_list("abc"), [])
+
+    def test_as_number_rejects_bools_and_non_numbers(self):
+        self.assertEqual(main._as_number(21.5), 21.5)
+        self.assertEqual(main._as_number(7), 7)
+        self.assertIsNone(main._as_number(True))
+        self.assertIsNone(main._as_number(False))
+        self.assertIsNone(main._as_number("21.5"))
+        self.assertIsNone(main._as_number(None))
+        self.assertIsNone(main._as_number({"value": 1}))
+
+    def test_numeric_item_validates_positional_fields(self):
+        self.assertEqual(main._numeric_item([1, 2.5, 3], 1), 2.5)
+        self.assertIsNone(main._numeric_item([1, "two", 3], 1))
+        self.assertIsNone(main._numeric_item([1, True, 3], 1))
+        self.assertIsNone(main._numeric_item([1, None, 3], 1))
+        self.assertIsNone(main._numeric_item([1], 5))
+        self.assertIsNone(main._numeric_item("not_a_list", 0))
+
+    def test_format_weather_code_rejects_non_numeric(self):
+        self.assertEqual(main._format_weather_code(0), "clear sky")
+        self.assertEqual(main._format_weather_code(61), "slight rain")
+        self.assertEqual(main._format_weather_code(None), "unknown")
+        self.assertEqual(main._format_weather_code(True), "unknown")
+        self.assertEqual(main._format_weather_code("61"), "unknown")
+
+    def test_format_observed_at_tolerates_non_dict_inputs(self):
+        self.assertEqual(main._format_observed_at(None, None), "unknown time")
+        self.assertEqual(main._format_observed_at(["not", "a", "dict"], "junk"), "unknown time")
+        # Non-string tz must not leak a bogus suffix into the rendered line.
+        self.assertEqual(
+            main._format_observed_at({"time": "2026-09-11T14:00"}, {"timezone": 42}),
+            "2026-09-11T14:00",
+        )
+
+    def test_format_place_tolerates_non_dict_inputs(self):
+        self.assertEqual(main._format_place(None), "")
+        self.assertEqual(main._format_place("junk"), "")
+
+    def test_require_dict_raises_clean_error(self):
+        self.assertEqual(main._require_dict({"a": 1}), {"a": 1})
+        with self.assertRaises(main.MalformedResponseError):
+            main._require_dict(["not", "a", "dict"])
+        with self.assertRaises(main.MalformedResponseError):
+            main._require_dict(None)
 
     def test_observed_at_formatting(self):
         # Includes timezone and offset
@@ -241,6 +339,193 @@ class OpenMeteoEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Air quality for Delhi, India", res.result)
         self.assertIn("PM2.5: 95.5", res.result)
         self.assertIn("Ozone: 45 μg/m³", res.result)
+
+
+class OpenMeteoMalformedPayloadTests(unittest.IsolatedAsyncioTestCase):
+    """Malformed upstream bodies must yield a clean tool error, never a traceback."""
+
+    def _patch_client(self, responses):
+        fake_client, calls = _fake_client_factory(responses)
+        return patch.object(main.httpx, "AsyncClient", fake_client), calls
+
+    async def test_non_dict_forecast_payload_returns_clean_error(self):
+        # A proxy/edge returning a JSON list where an object was documented used
+        # to raise AttributeError inside the handler.
+        place = {"name": "London", "country": "United Kingdom", "latitude": 51.5, "longitude": -0.1}
+        client_patch, _ = self._patch_client(
+            {
+                "geocoding-api": _FakeResponse({"results": [place]}),
+                "api.open-meteo.com": _FakeResponse(["unexpected", "list"]),
+            }
+        )
+
+        req = main.CurrentWeatherRequest(location="London")
+        with client_patch:
+            res = await main.get_current_weather(req)
+
+        self.assertIsNone(res.result)
+        self.assertIn("malformed JSON payload", res.error)
+
+    async def test_non_json_body_returns_clean_error(self):
+        place = {"name": "Paris", "country": "France", "latitude": 48.8, "longitude": 2.3}
+        import json
+
+        client_patch, _ = self._patch_client(
+            {
+                "geocoding-api": _FakeResponse({"results": [place]}),
+                "api.open-meteo.com": _FakeResponse(json.JSONDecodeError("boom", "<html>", 0)),
+            }
+        )
+
+        req = main.CurrentWeatherRequest(location="Paris")
+        with client_patch:
+            res = await main.get_current_weather(req)
+
+        self.assertIsNone(res.result)
+        self.assertIn("malformed JSON payload", res.error)
+
+    async def test_geocoding_results_not_a_list_returns_clean_error(self):
+        # results present but the wrong container type must be reported, not
+        # silently treated as "no result".
+        client_patch, _ = self._patch_client(
+            {"geocoding-api": _FakeResponse({"results": "not-a-list"})}
+        )
+
+        req = main.CurrentWeatherRequest(location="London")
+        with client_patch:
+            res = await main.get_current_weather(req)
+
+        self.assertIsNone(res.result)
+        self.assertIn("geocoding results were not a JSON array", res.error)
+
+    async def test_geocoding_without_numeric_coordinates_returns_clean_error(self):
+        # place["latitude"] was indexed directly, so a text coordinate raised
+        # TypeError when building the forecast query.
+        client_patch, _ = self._patch_client(
+            {
+                "geocoding-api": _FakeResponse(
+                    {"results": [{"name": "London", "latitude": "north", "longitude": None}]}
+                )
+            }
+        )
+
+        req = main.CurrentWeatherRequest(location="London")
+        with client_patch:
+            res = await main.get_current_weather(req)
+
+        self.assertIsNone(res.result)
+        self.assertIn("missing numeric coordinates", res.error)
+
+    async def test_non_dict_current_weather_entries_degrade_to_placeholders(self):
+        place = {"name": "Tokyo", "country": "Japan", "latitude": 35.6, "longitude": 139.6}
+        payload = {
+            "current": ["not", "a", "dict"],
+            "current_units": {"temperature_2m": "°C"},
+            "timezone": "Asia/Tokyo",
+        }
+
+        client_patch, _ = self._patch_client(
+            {
+                "geocoding-api": _FakeResponse({"results": [place]}),
+                "api.open-meteo.com": _FakeResponse(payload),
+            }
+        )
+
+        req = main.CurrentWeatherRequest(location="Tokyo")
+        with client_patch:
+            res = await main.get_current_weather(req)
+
+        self.assertIsNone(res.error)
+        self.assertIn("Current weather for Tokyo, Japan", res.result)
+        self.assertIn("Condition: unknown", res.result)
+        self.assertIn("Temperature: n/a", res.result)
+
+    async def test_non_numeric_daily_arrays_degrade_per_day(self):
+        place = {"name": "Paris", "country": "France", "latitude": 48.8, "longitude": 2.3}
+        payload = {
+            "daily": {
+                "time": ["2026-09-15", "2026-09-16"],
+                "weather_code": ["0", True],
+                "temperature_2m_max": [None, 22.0],
+                "temperature_2m_min": {"nested": "dict"},
+                "precipitation_probability_max": "not-a-list",
+                "wind_speed_10m_max": [10.0, "strong"],
+            },
+            "daily_units": {"temperature_2m_max": "°C", "temperature_2m_min": "°C"},
+        }
+
+        client_patch, _ = self._patch_client(
+            {
+                "geocoding-api": _FakeResponse({"results": [place]}),
+                "api.open-meteo.com": _FakeResponse(payload),
+            }
+        )
+
+        req = main.ForecastRequest(location="Paris", days=2)
+        with client_patch:
+            res = await main.get_weather_forecast(req)
+
+        self.assertIsNone(res.error)
+        self.assertIn("- 2026-09-15: unknown; high n/a, low n/a; rain n/a; wind up to 10", res.result)
+        self.assertIn("- 2026-09-16: unknown; high 22°C, low n/a; rain n/a; wind up to n/a", res.result)
+
+    async def test_daily_time_non_list_is_reported_as_no_forecast(self):
+        place = {"name": "Paris", "country": "France", "latitude": 48.8, "longitude": 2.3}
+        payload = {"daily": {"time": "2026-09-15"}}
+
+        client_patch, _ = self._patch_client(
+            {
+                "geocoding-api": _FakeResponse({"results": [place]}),
+                "api.open-meteo.com": _FakeResponse(payload),
+            }
+        )
+
+        req = main.ForecastRequest(location="Paris", days=3)
+        with client_patch:
+            res = await main.get_weather_forecast(req)
+
+        self.assertIsNone(res.error)
+        self.assertEqual(res.result, "No forecast data available for Paris, France.")
+
+    async def test_air_quality_non_dict_current_degrades_to_placeholders(self):
+        place = {"name": "Delhi", "country": "India", "latitude": 28.6, "longitude": 77.2}
+        payload = {"current": "junk", "current_units": None, "timezone": "Asia/Kolkata"}
+
+        client_patch, _ = self._patch_client(
+            {
+                "geocoding-api": _FakeResponse({"results": [place]}),
+                "air-quality-api": _FakeResponse(payload),
+            }
+        )
+
+        req = main.AirQualityRequest(location="Delhi")
+        with client_patch:
+            res = await main.get_air_quality(req)
+
+        self.assertIsNone(res.error)
+        self.assertIn("Air quality for Delhi, India", res.result)
+        self.assertIn("US AQI: n/a", res.result)
+        self.assertIn("PM2.5: n/a", res.result)
+
+    async def test_every_outbound_call_uses_the_timeout_constant(self):
+        place = {"name": "London", "country": "United Kingdom", "latitude": 51.5, "longitude": -0.1}
+        payload = {"current": {"time": "2026-09-15T12:00", "temperature_2m": 18.0}}
+
+        client_patch, calls = self._patch_client(
+            {
+                "geocoding-api": _FakeResponse({"results": [place]}),
+                "api.open-meteo.com": _FakeResponse(payload),
+            }
+        )
+
+        req = main.CurrentWeatherRequest(location="London")
+        with client_patch:
+            res = await main.get_current_weather(req)
+
+        self.assertIsNone(res.error)
+        self.assertTrue(calls)
+        for url, _params, timeout in calls:
+            self.assertEqual(timeout, main.REQUEST_TIMEOUT_SECONDS, url)
 
 
 if __name__ == "__main__":

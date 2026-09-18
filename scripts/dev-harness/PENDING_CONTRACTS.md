@@ -7,6 +7,8 @@ Both existing owner suites discover these directories. This command is also
 in the local/CI checks manifest. No separate test runner or ceremony.
 
 Python: put `@pending("V1")` on each test, imported from `.pending`.
+Either quote style is recognized; builder markers must be standalone literals.
+Active MECHANISM-owned tests may exercise dynamic calls to the marker API.
 It is pytest `xfail(strict=True)`: the body executes, expected assertion or
 skeleton failure is visible, unexpected success fails. Fixture/runtime errors
 are not expected failures. Parametrized cases are individually strict.
@@ -21,6 +23,10 @@ errors precede the wrapper and fail the owner suite; overridden noSuchMethod
 is valid Dart. Unexpected runtime/framework/teardown errors stay red.
 Compare collection-bearing Dart records field by field: record equality compares
 Map identity; pass the Map itself to `expect`.
+
+
+Widget contracts use `contractWidgets` from `app/test/support/spine/widgets.dart`.
+Plain skip is forbidden; unexpected runtime/framework/teardown errors stay red.
 
 **Pending green means an executed, unmet contract, not a verified feature or a
 correct oracle.** Missing behavior in existing code fails assertions without
@@ -76,7 +82,11 @@ sandbox. Keep dispatch direct; new indirection needs a reviewed invocation rule.
 Main may add guards/logging around those calls. A runner cannot also be an oracle.
 The runner declarations are immutable, like the legacy revision-scope snapshot;
 no builder can add its implementation to either allowlist. Spine-owned skeletons
-retain the existing exact-byte scope pins. The runner/checker and pure-oracle PRs
+retain exact-byte pins. `shared-prefixes.json` separately freezes an existing
+scaffold prefix on a shared implementation file: its remaining bytes must equal
+the accepted target exactly. Main’s body edits therefore survive; proposed body
+edits cannot accompany an oracle revision. Declarations are immutable and cannot
+classify an oracle as shared. The runner/checker and pure-oracle PRs
 still require coordinator review: Git cannot authenticate reviewer roles or stop
 a malicious replacement of the checker itself.
 

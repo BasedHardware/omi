@@ -48,15 +48,15 @@ class TweetDetector:
     @classmethod
     def extract_tweet_content(cls, text: str) -> Optional[str]:
         """Extract tweet content after trigger phrase."""
-        normalized = cls.normalize_text(text)
-        
-        # Find the trigger phrase
+        # Search the original string so match offsets refer to the same text
+        # that will be sliced. Normalizing with strip() first shifts the offset
+        # whenever a streamed transcript begins with whitespace.
         trigger_index = -1
         matched_trigger = None
         for trigger in cls.TRIGGER_PHRASES:
-            idx = normalized.find(trigger)
-            if idx != -1:
-                trigger_index = idx
+            match = re.search(re.escape(trigger), text, flags=re.IGNORECASE)
+            if match:
+                trigger_index = match.start()
                 matched_trigger = trigger
                 break
         
