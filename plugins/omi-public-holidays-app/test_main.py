@@ -29,6 +29,12 @@ def _install_dependency_stubs():
     class HTTPError(Exception):
         pass
 
+    class HTTPStatusError(HTTPError):
+        def __init__(self, message="", *, request=None, response=None):
+            super().__init__(message)
+            self.request = request
+            self.response = response
+
     class AsyncClient:
         def __init__(self, *args, **kwargs):
             self.is_closed = False
@@ -37,6 +43,7 @@ def _install_dependency_stubs():
             raise AssertionError("tests must stub the HTTP response")
 
     httpx.HTTPError = HTTPError
+    httpx.HTTPStatusError = HTTPStatusError
     httpx.AsyncClient = AsyncClient
     sys.modules["httpx"] = httpx
 
@@ -232,6 +239,34 @@ class PublicHolidayHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(response.error)
         self.assertIn("Unknown holiday", response.result)
         self.assertIn("New Year", response.result)
+
+    async def test_http_status_404_returns_friendly_error(self):
+        cases = (
+            (main.get_public_holidays, main.HolidayRequest(country_code="US", year=2026), "no holidays returned for US in 2026"),
+            (main.get_next_public_holidays, main.NextHolidayRequest(country_code="US"), "no upcoming holidays returned for US"),
+            (main.get_long_weekends, main.LongWeekendRequest(country_code="US", year=2026), "no long weekends returned for US in 2026"),
+        )
+        for handler, request, expected in cases:
+            with self.subTest(handler=handler.__name__):
+                resp_mock = types.SimpleNamespace(status_code=404)
+                with patch.object(main, "_request_json", side_effect=main.httpx.HTTPStatusError("Not Found", response=resp_mock)):
+                    response = await handler(request)
+                self.assertIsNone(response.result)
+                self.assertEqual(response.error, expected)
+
+    async def test_list_supported_countries_filters_non_dict_items(self):
+        payload = [None, "invalid", {"countryCode": "US", "name": "United States"}]
+        with patch.object(main, "_request_json", new=AsyncMock(return_value=payload)):
+            response = await main.list_supported_countries()
+        self.assertIsNone(response.error)
+        self.assertIn("- US: United States", response.result)
+
+    async def test_unexpected_exception_returns_clean_error_envelope(self):
+        with patch.object(main, "_request_json", side_effect=RuntimeError("unexpected crash")):
+            response = await main.get_public_holidays(main.HolidayRequest(country_code="US", year=2026))
+        self.assertIsNone(response.result)
+        self.assertIn("holiday lookup failed: unexpected crash", response.error)
+
 
 
 class RequestJsonTests(unittest.IsolatedAsyncioTestCase):
