@@ -39,6 +39,11 @@ checks:
     triggers: ["plugins/omi-hacker-news-app/**"]
     lanes: ["local", "ci"]
     reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+  - id: manual-import-route-tests
+    command: ["python3", "plugins/import/manual-import/test_app.py"]
+    triggers: ["plugins/import/manual-import/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14341: manual-import must post extracted memories to the documented /user/memories integration route instead of the nonexistent /user/facts route"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
