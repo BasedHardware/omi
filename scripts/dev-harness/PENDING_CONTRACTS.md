@@ -31,10 +31,12 @@ must not invent new obligations. Formatting still needs an exact pinned revision
 Register every oracle in `contracts/spine/files.json`. Resolve introductions and
 revision payloads from **all reachable history**, never a single simplified
 history path or a selected parent. Match revision payloads by their pinned digest;
-conflicting introductions/owners/records fail closed. A squash may absorb only a
-revision prefix ending at an exact accepted digest. Retired marker occurrences
-cannot return on either a branch head or a base-first PR merge. Missing/shallow
-history requires fetching it, never rebaselining.
+conflicting introductions/owners/records fail closed. A prefix whose records are
+already accepted by the target may start from an exact pinned target-tree version,
+even when an older branch introduction survives and squash erased intermediate
+payloads. New revision tails still require exact payloads and preserved markers.
+Retired markers cannot return on either parent order. Missing/shallow history
+requires fetching it, never rebaselining.
 
 A builder removes markers and makes those same tests pass. Corrections append
 `contracts/spine/revisions/NNN-description.json` with path, owner, before/after

@@ -434,6 +434,74 @@ def test_explicit_retired_rendering_is_exact_and_cannot_restore_markers(tmp_path
     assert any('retired markers cannot be restored' in error for error in checker.check(tmp_path))
 
 
+def test_old_branch_consumes_accepted_squash_without_intermediate_payloads(tmp_path):
+    """#14319: older introduction + accepted squash must not demand lost blobs."""
+    import json
+    import pytest
+    for retire_on_main in (False, True):
+        root = tmp_path / str(retire_on_main)
+        root.mkdir()
+        git, file, runtime, old, intermediate, revise = scope_repo(root)
+        target = str(file.relative_to(root))
+        git('switch', '-qc', 'builder')
+        runtime.write_text('return 1;\n')
+        git('add', '.')
+        git('commit', '-qm', 'builder predates both corrections')
+        builder = git('rev-parse', 'HEAD').strip()
+        git('switch', '-qc', 'spine', 'main')
+        revise()
+        git('add', '.')
+        git('commit', '-qm', 'first reviewed correction')
+        final = intermediate.replace('local_dev', 'verified_local_dev')
+        file.write_text(final)
+        second = root / checker.REVISIONS / '002.json'
+        second.write_text(json.dumps(dict(path=target, owner='V1', before=checker.digest(intermediate),
+            after=checker.digest(final), reason='second reviewed correction')))
+        git('add', '.')
+        git('commit', '-qm', 'second reviewed correction')
+        git('switch', '-q', 'main')
+        git('merge', '--squash', 'spine')
+        git('commit', '-qm', 'accepted squash contains only final payload')
+        if retire_on_main:
+            file.write_text(final.replace("pendingContract('V1');\n", ''))
+            git('add', '.')
+            git('commit', '-qm', 'main retires the marker')
+        base = git('rev-parse', 'HEAD').strip()
+        git('branch', '-f', 'origin/main', base)
+        expected = file.read_text()
+        # The intermediate exists on an unrelated ref, never in main/builder history.
+        versions = git('log', '--full-history', '--format=%H', base, '--', target).splitlines()
+        assert all(checker.digest(git('show', f'{sha}:{target}')) != checker.digest(intermediate) for sha in versions)
+        for order in ('branch-first', 'base-first'):
+            git('checkout', '-q', '--detach', builder if order == 'branch-first' else base)
+            git('merge', '--no-ff', '--no-edit', base if order == 'branch-first' else builder)
+            assert file.read_text() == expected
+            assert checker.check(root) == []
+            file.write_text(expected.replace('verified_local_dev', 'wrong'))
+            assert checker.check(root)  # matching history cannot launder current assertion edits
+            file.write_text(old)
+            assert checker.check(root)  # the old introduction is not an acceptable current oracle
+            file.write_text(expected.replace("pendingContract('V1');", "// pendingContract('V1');")
+                            if not retire_on_main else final)
+            assert checker.check(root)  # neither commented nor restored markers pass
+            file.write_text(expected)
+            if not retire_on_main:
+                file.write_text(expected.replace("pendingContract('V1');\n", ''))
+                assert checker.check(root) == []
+                file.write_text(expected)
+        # New records cannot borrow the accepted-prefix exception, even if a
+        # cycle ends at the accepted digest again and leaves the current file identical.
+        for name, before, after in [('003', final, final.replace('verified_local_dev', 'third')),
+                                    ('004', final.replace('verified_local_dev', 'third'), final)]:
+            (root / checker.REVISIONS / f'{name}.json').write_text(json.dumps(dict(
+                path=target, owner='V1', before=checker.digest(before), after=checker.digest(after), reason='unaccepted batch')))
+        file.write_text(final)
+        git('add', '.')
+        git('commit', '-qm', 'unaccepted revisions without intermediate payload')
+        with pytest.raises(ValueError, match='revised bytes do not match pinned digest'):
+            checker.check(root)
+
+
 def test_shared_scaffold_prefix_preserves_target_body_without_authorizing_implementation(tmp_path):
     import json
     import pytest
