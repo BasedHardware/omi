@@ -2617,7 +2617,12 @@ def process_conversation(
     # consulted the policy and continued to process_normally (paid upgrade).
     clear_stale_terminal_marker = False
     if (
-        free_tier_local_processing_enabled()
+        # `uid` is required, not optional: the flag is necessary but never
+        # sufficient, and `free_tier_local_processing_enabled(None)` is answered
+        # False while the flag is on, by design, so a boolean alone lights
+        # nobody. Calling it bare made this whole branch unreachable in every
+        # environment regardless of the configured cohort.
+        free_tier_local_processing_enabled(uid)
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
     ):
