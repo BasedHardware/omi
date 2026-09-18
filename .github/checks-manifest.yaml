@@ -1176,6 +1176,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
+  - id: shipbob-wro-disambiguation-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_create_wro_disambiguation.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13997: search_product_by_name and search_inventory_by_name matched a name by substring in list order, so 'Blue Mug Set of 4' resolved to the 'Blue Mug' inventory id and a WRO was posted against the wrong product; the suite asserts exact-first resolution, refusal on an ambiguous name, and that nothing is posted for an unknown name. The suite had no manifest entry, so it never ran in CI and its stub drifted out of import-compatibility with main.py unnoticed."
   - id: capture-ownership-boundaries
     command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/capture/boundary-baseline.json"]
     triggers: ["app/lib/**/*.dart", "app/contracts/capture/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
