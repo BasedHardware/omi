@@ -106,6 +106,24 @@ enum WakeWordSegmentParser {
     return result
   }
 
+  /// The rendering of the wake phrase that opens a sentence in the segment, whether or not a
+  /// command was accepted after it. Lets the service report a wake word the corroboration
+  /// rules turned down, which otherwise looks exactly like one that was never said.
+  static func openingRendering(in segmentText: String, wakePhrase: String) -> String? {
+    let phrase = configuredPhrase(wakePhrase)
+    guard !phrase.isEmpty else { return nil }
+    let candidates = self.candidates(for: phrase)
+    for sentence in sentences(in: segmentText) {
+      let normalized = normalize(dropLeadingPunctuationAndWhitespace(sentence))
+      let opening = candidates.first {
+        normalized.hasPrefix($0.text)
+          && hasBoundary(after: $0.text, in: normalized, requiringPunctuation: false)
+      }
+      if let opening { return opening.text }
+    }
+    return nil
+  }
+
   static func configuredPhrase(_ raw: String) -> String {
     normalize(raw).trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
   }

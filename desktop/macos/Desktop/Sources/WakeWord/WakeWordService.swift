@@ -68,7 +68,15 @@ final class WakeWordService {
     guard segment.isUser || segment.speaker == 0 else {
       return ignore("segment not attributed to the user (speaker \(segment.speaker))")
     }
-    guard let command = parsed else { return }
+    guard let command = parsed else {
+      // Names only the rendering, never what was said after it.
+      if let rendering = WakeWordSegmentParser.openingRendering(
+        in: segment.text, wakePhrase: AssistantSettings.shared.wakeWordPhrase)
+      {
+        log("WakeWord: ignored — '\(rendering)' opened a sentence, but no command followed it")
+      }
+      return
+    }
     // A backend segment is re-delivered as it grows, in place and under one id
     // (observed live: "what time it is?" → "what time it is? You speak English.
     // Got it."). Deduping on the id alone drops a genuinely new instruction that

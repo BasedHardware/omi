@@ -297,4 +297,29 @@ final class WakeWordSegmentParserTests: XCTestCase {
         "fired for \(segment)")
     }
   }
+
+  // MARK: - Reporting a rejected wake word
+
+  /// A rendering the corroboration rules turn down is still named, so the miss can be logged.
+  func testOpeningRenderingNamesAWakeWordThatWasTurnedDown() {
+    XCTAssertNil(
+      WakeWordSegmentParser.command(after: "O me order Thai food for Maya.", wakePhrase: "Omi"))
+    XCTAssertEqual(
+      WakeWordSegmentParser.openingRendering(
+        in: "O me order Thai food for Maya.", wakePhrase: "Omi"),
+      "o me")
+    XCTAssertEqual(
+      WakeWordSegmentParser.openingRendering(
+        in: "That was strange. Hey Omi.", wakePhrase: "Omi"),
+      "hey omi")
+  }
+
+  func testOpeningRenderingIgnoresSpeechWithoutTheWakePhrase() {
+    XCTAssertNil(
+      WakeWordSegmentParser.openingRendering(in: "We should order pizza", wakePhrase: "Omi"))
+    XCTAssertNil(
+      WakeWordSegmentParser.openingRendering(in: "Omnibus schedule changed", wakePhrase: "Omi"))
+    XCTAssertNil(
+      WakeWordSegmentParser.openingRendering(in: "I told Omi to order food", wakePhrase: "Omi"))
+  }
 }
