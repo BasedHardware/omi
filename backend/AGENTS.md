@@ -4,7 +4,7 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.11 required (Dockerfile pin, not 3.12+). `.python-version` + `uv` lock. Also FFmpeg, Opus (`opuslib`), Redis (optional). Harness typecheck: `make lane-backend` (wheels; not lock-hash identical). Locked env: `make setup-backend`.
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)

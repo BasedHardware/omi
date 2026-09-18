@@ -389,6 +389,19 @@ def changed_paths_in_range(root: Path, common: str, head: str) -> list[str]:
     return [line for line in output.splitlines() if line]
 
 
+def scope_hint_pattern(hint: str) -> str:
+    """Turn a `scope_hints` entry into an fnmatch pattern.
+
+    Authors write directory prefixes with a trailing slash
+    (``app/lib/pages/home/``). fnmatch treats that as a literal, so it never
+    matches a file under the directory. Expand a slash-terminated hint that
+    is not already a glob to ``<hint>**``.
+    """
+    if hint.endswith("/") and not any(character in hint for character in "*?["):
+        return hint + "**"
+    return hint
+
+
 def candidates_matching_scope(definitions: list[Definition], paths: list[str]) -> list[Definition]:
     """Definitions whose advisory `scope_hints` overlap the change's paths.
 
@@ -401,7 +414,7 @@ def candidates_matching_scope(definitions: list[Definition], paths: list[str]) -
     matched: list[Definition] = []
     for definition in definitions:
         hints = definition.data.get("scope_hints") or []
-        if any(fnmatch(path, hint) for hint in hints for path in paths):
+        if any(fnmatch(path, scope_hint_pattern(hint)) for hint in hints for path in paths):
             matched.append(definition)
     return matched
 

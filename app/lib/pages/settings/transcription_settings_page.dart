@@ -1939,7 +1939,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             _modelDownloadStatus = context.l10n.errorWithMessage(readableError(e));
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.downloadErrorWithMessage(readableError(e))), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text(context.l10n.downloadErrorWithMessage(readableError(e))), backgroundColor: Colors.red),
           );
         }
       }
@@ -2348,7 +2349,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Widget _buildBottomBar() {
     return Container(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: MediaQuery.of(context).padding.bottom + 16),
+      // The SafeArea below adds the system inset; adding it here as well left
+      // twice the inset of dead space under the content on inset devices.
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D0D),
         border: Border(top: BorderSide(color: Colors.grey.shade900)),
@@ -2601,7 +2604,9 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
 
   Widget _buildBottomBar() {
     return Container(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: MediaQuery.of(context).padding.bottom + 16),
+      // The SafeArea below adds the system inset; adding it here as well left
+      // twice the inset of dead space under the content on inset devices.
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D0D),
         border: Border(top: BorderSide(color: Colors.grey.shade900)),

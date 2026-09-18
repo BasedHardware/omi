@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "Želite biti znani pod drugim imenom?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "Kako se imenujete?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -10828,5 +10824,13 @@
     },
     "tapPlusToStartRecording": "Tapnite + za začetek snemanja",
     "processingTakingLonger": "Še poteka — traja dlje kot običajno.",
-    "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund."
+    "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.",
+    "home": "Domov",
+    "failedToUpdateBaselineStatus": "Posodobitev osnovnega statusa je spodletela.",
+    "memoryAllowUse": "Dovoli uporabo",
+    "memoryDontUse": "Ne uporabljaj",
+    "unstarConversation": "Odstrani zvezdico s pogovora",
+    "moreOptions": "Več možnosti",
+    "filterByDate": "Filtriraj po datumu",
+    "memoryGraph": "Graf spominov"
 }

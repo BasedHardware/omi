@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "Želiš li da ide sa nečim drugačijim?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "Koje je tvoje ime?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -10828,5 +10824,13 @@
     },
     "tapPlusToStartRecording": "Dodirnite + za početak snimanja",
     "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
-    "speechProfileEnrollmentPrompt": "Kako bi Omi znao koji je vaš glas — govorite oko 5 sekundi o bilo čemu."
+    "speechProfileEnrollmentPrompt": "Kako bi Omi znao koji je vaš glas — govorite oko 5 sekundi o bilo čemu.",
+    "home": "Početna",
+    "failedToUpdateBaselineStatus": "Nije moguće ažurirati osnovni status.",
+    "memoryAllowUse": "Dopusti korištenje",
+    "memoryDontUse": "Nemoj koristiti",
+    "unstarConversation": "Ukloni zvjezdicu s razgovora",
+    "moreOptions": "Više opcija",
+    "filterByDate": "Filtriraj po datumu",
+    "memoryGraph": "Graf sjećanja"
 }

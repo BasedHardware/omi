@@ -243,7 +243,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get searchConversations => 'Szukaj rozmów...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Wybrano: $count';
   }
 
@@ -2049,10 +2049,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get memoryHistory => 'Historia';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Zezwól na użycie';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nie używaj';
 
   @override
   String get undo => 'Cofnij';
@@ -10025,4 +10025,22 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Aby Omi wiedziało, który głos jest Twój — mów o czymkolwiek przez około 5 sekund.';
+
+  @override
+  String get home => 'Główna';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nie udało się zaktualizować statusu linii bazowej.';
+
+  @override
+  String get unstarConversation => 'Usuń gwiazdkę z rozmowy';
+
+  @override
+  String get moreOptions => 'Więcej opcji';
+
+  @override
+  String get filterByDate => 'Filtruj według daty';
+
+  @override
+  String get memoryGraph => 'Graf wspomnień';
 }

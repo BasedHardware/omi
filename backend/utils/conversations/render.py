@@ -11,6 +11,7 @@ from models.other import Person
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
+from utils.conversations.summary_selection import select_primary_summary
 
 logger = logging.getLogger(__name__)
 
@@ -242,14 +243,7 @@ def conversations_to_string(
 
         conversation_str += f"{str(conversation.structured.title).capitalize()}\n"
 
-        if (
-            conversation.apps_results
-            and len(conversation.apps_results) > 0
-            and conversation.apps_results[0].content.strip()
-        ):
-            conversation_str += f"{conversation.apps_results[0].content}\n"
-        else:
-            conversation_str += f"{str(conversation.structured.overview).capitalize()}\n"
+        conversation_str += f"{select_primary_summary(conversation).content}\n"
 
         # attendees
         if people_map:

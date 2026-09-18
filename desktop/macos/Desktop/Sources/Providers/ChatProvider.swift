@@ -715,6 +715,7 @@ struct ChatMessage: Identifiable {
   /// Kernel journal lifecycle when this message was projected from a journal
   /// row. Failed turns get a light visual treatment so they don't look completed.
   var journalStatus: KernelJournalTurnStatus?
+  var failureCode: AgentRuntimeFailureCode? = nil
   /// A journal-first continuation can reserve its assistant row before the
   /// query begins. It stays out of the transcript until real output arrives.
   var hidesEmptyStreamingPlaceholder: Bool
@@ -6268,6 +6269,7 @@ class ChatProvider: ObservableObject {
     fallbackAssistantMessage: ChatMessage? = nil
   ) -> ChatMessage? {
     if let index = messages.firstIndex(where: { $0.id == messageID }) {
+      messages[index].failureCode = notice.failureCode
       messages[index].text = notice.transcriptContent(partialText: messages[index].text)
       messages[index].isStreaming = false
       messages[index].journalStatus = .failed
@@ -6283,6 +6285,7 @@ class ChatProvider: ObservableObject {
       fallback.id == messageID,
       fallback.sender == .ai
     else { return nil }
+    fallback.failureCode = notice.failureCode
     fallback.text = notice.transcriptContent(partialText: fallback.text)
     fallback.isStreaming = false
     fallback.journalStatus = .failed

@@ -6,6 +6,7 @@ C2) or the session CLI (`mobile-session.sh`, C1) — it selects, admits,
 classifies, validates receipts, and writes the lane summary.
 
 ```bash
+make lane-bootstrap                                 # fresh worktree: cheap gates + app/test.sh
 make mobile-verify ARGS="doctor"                    # lane readiness (C1 doctor + verify surface)
 make mobile-verify ARGS="select --paths app/lib/pages/chat/page.dart"
 make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"   # focused hermetic feedback
@@ -45,6 +46,16 @@ failure. Selection is resolved by the shared `scripts/pre_push_ci_prediction.py`
 (covered by `test_pre_push_ci_prediction.py`); the lane is deliberately NOT a
 pre-push phase.
 
+The same workflow's Android Compile Smoke job (`android-compile-smoke`) builds
+`flutter build apk --debug --flavor dev --target-platform android-arm64` and
+uploads the APK as `app-dev-debug-<head-sha>` (5-day retention, in-repo debug
+keystore, no secrets). Extra ABIs OOM'd `ubuntu-latest` during
+`stripDebugSymbols` (`c8f35061fc`); this job does not compile the JNI opus shim
+for armeabi-v7a or x86_64. `:app:testDevDebugUnitTest` runs in a parallel
+`android-unit-tests` job, not after the APK. Gradle cache writes only on `main`
+(`cache-read-only: ${{ github.ref != 'refs/heads/main' }}`). These jobs do not
+change `journeys-hermetic` behavior.
+
 ## Receipts
 
 Every `fast`/`smoke` run writes `verify-receipt.json` (schema
@@ -72,6 +83,23 @@ make mobile-verify ARGS="select --paths app/lib/pages/chat/page.dart"
 make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"
 #   exit 0 + verify-receipt.json outcome=passed, or the exact rerun command on failure
 ```
+
+The hermetic Dart suite and this lane must not depend on the host calendar or
+timezone. The CI second timezone pass is the same commands under a forced `TZ`:
+
+```bash
+TZ=Pacific/Kiritimati bash app/test.sh
+TZ=Pacific/Pago_Pago bash app/test.sh
+TZ=Pacific/Kiritimati make mobile-verify ARGS="fast --all"
+TZ=Pacific/Pago_Pago make mobile-verify ARGS="fast --all"
+```
+
+Do not pass `--evidence-dir` or set `OMI_VERIFY_EVIDENCE_DIR` for the default
+local run: an empty env value is treated as unset and receipts go to a temp
+dir. A relative `--evidence-dir` (or env value) is resolved against the
+invocation working directory and passed to the runner as an absolute path —
+never against `app/`, which is only the runner's cwd. CI may still pass
+`--evidence-dir` to collect the `journey-evidence` artifact.
 
 Deliberately break it once (arm `suppress-assistant-reply` via the journey
 faults) and the lane fails with the missing invariant named — proving the

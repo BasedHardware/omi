@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-dark-claim-enforced-by-deploy-abstinence",
+  "violated_contract": "A change whose description promises that an environment stays unaffected ('prod stays ungated until a separate ask') must enforce that promise with a default-off control in the merged code, not with the expectation that nobody deploys. PR #14165 added three fail-closed basic-plan gates (402 on desktop proactivity completions, 402 on Gemini proxy embeds, and the deterministic minimum for flag-off desktop first-open and reprocess) with no switch at all, while its body stated production would stay ungated. Production backend and desktop-backend are promoted from main by routine manual dispatch, by more than one operator, so the next ordinary deploy would have removed screen embeddings and conversation summaries from every free desktop user before any on-device replacement had shipped. Nothing in CI could see it: the gates were correct, tested, and green.",
+  "canonical_prevention": "Give every user-visible takeaway its own rollout switch that is read at call time, defaults off when unset, is declared with an explicit value per environment on every service that hosts the gated code path, and performs no authorization lookup and writes no marker while off. Pin the default-off behaviour, the per-gate independence, and the explicit production value with tests, so the promise in the description is a property of the composed runtime manifest rather than of deploy scheduling.",
+  "canonical_prevention_artifact": [
+    "backend/utils/free_tier_basic_gates.py",
+    "backend/tests/unit/test_free_tier_basic_gates.py",
+    "backend/tests/unit/test_backend_runtime_env_validator.py",
+    "backend/scripts/runtime_env_capability_contracts.py"
+  ],
+  "evidence_prs": [
+    14165
+  ],
+  "scope_hints": [
+    "backend/utils/free_tier_*.py",
+    "backend/deploy/**",
+    "backend/charts/**"
+  ],
+  "status": "open"
+}
