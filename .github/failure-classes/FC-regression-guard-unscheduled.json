@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-regression-guard-unscheduled",
+  "violated_contract": "Every hermetic regression guard for a production behavior must be registered in the checks manifest and run in the local and CI lanes; an unregistered guard can stop importing or drift while the repository reports green.",
+  "canonical_prevention": "Register each regression suite with an explicit manifest id, narrow source triggers, and both local and CI lanes. Keep the suite hermetic and run the manifest-selected command in preflight so import drift and behavioral regressions fail closed instead of becoming invisible.",
+  "canonical_prevention_artifact": [
+    ".github/checks-manifest.yaml",
+    "plugins/omi-shipbob-app/test_create_wro_disambiguation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/checks-manifest.yaml",
+    "plugins/*/test_*.py"
+  ],
+  "status": "open"
+}
