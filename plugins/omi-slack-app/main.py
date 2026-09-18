@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi import Depends, FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
 import sys
@@ -12,6 +12,7 @@ sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure'
 
 from simple_storage import SimpleUserStorage, SimpleSessionStorage
 from slack_client import SlackClient
+from slack_webhook_auth import require_slack_webhook_auth
 from message_detector import MessageDetector
 
 load_dotenv()
@@ -650,7 +651,7 @@ async def logout(uid: str = Query(...)):
 @app.post("/webhook")
 async def webhook(
     request: Request,
-    uid: str = Query(..., description="User ID from OMI"),
+    uid: str = Depends(require_slack_webhook_auth),
     session_id: str = Query(None, description="Session ID from OMI (optional)")
 ):
     """

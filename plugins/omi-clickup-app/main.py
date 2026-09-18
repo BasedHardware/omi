@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi import Depends, FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import html
 import os
@@ -13,6 +13,7 @@ sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure'
 
 from simple_storage import SimpleUserStorage, SimpleSessionStorage
 from clickup_client import ClickUpClient
+from clickup_webhook_auth import require_clickup_webhook_auth
 from task_detector import TaskDetector
 from omi_notifications import notify_task_created, notify_task_failed
 
@@ -755,7 +756,7 @@ async def logout(uid: str = Query(...)):
 @app.post("/webhook")
 async def webhook(
     request: Request,
-    uid: str = Query(..., description="User ID from OMI"),
+    uid: str = Depends(require_clickup_webhook_auth),
     session_id: str = Query(None, description="Session ID from OMI (optional)")
 ):
     """

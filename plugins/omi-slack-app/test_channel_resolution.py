@@ -101,6 +101,7 @@ class NamedChannelNeverFallsBackTests(unittest.TestCase):
         framework.Request = object
         framework.HTTPException = Exception
         framework.Query = lambda *a, **k: None
+        framework.Depends = lambda *a, **k: None
         responses = types.ModuleType("fastapi.responses")
         responses.HTMLResponse = responses.RedirectResponse = responses.JSONResponse = Response
         storage = types.ModuleType("simple_storage")
