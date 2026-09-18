@@ -356,3 +356,79 @@ def test_shared_runner_changes_preserve_invocation_not_bytes(tmp_path):
     git('commit', '-qm', 'malicious removal and assertion rollback')
     with pytest.raises(ValueError, match='cannot be removed'):
         checker.check(tmp_path)
+
+
+def test_rejected_revision_reversion_does_not_poison_builder(tmp_path):
+    for separate_commits in (False, True):
+        root = tmp_path / str(separate_commits)
+        root.mkdir()
+        git, file, runtime, old, new, revise = scope_repo(root)
+        runtime.write_text('return 1;\n')
+        if separate_commits:
+            git('add', '.')
+            git('commit', '-qm', 'implementation first')
+        revise()
+        git('add', '.')
+        git('commit', '-qm', 'rejected self-authorization')
+        assert any('mixed with implementation' in error for error in checker.check(root))
+        # The correct remedy: restore the oracle and remove the rejected record.
+        file.write_text(old)
+        (root / checker.REVISIONS / '001.json').unlink()
+        git('add', '.')
+        git('commit', '-qm', 'comply with spine review')
+        assert checker.check(root) == []
+        file.write_text(old.replace("pendingContract('V1');\n", ''))
+        assert checker.check(root) == []
+        file.write_text(old.replace('expect(profile', '// expect(profile'))
+        assert checker.check(root)  # reverting a record never relaxes oracle bytes
+
+
+def test_authorized_revision_removal_fails_before_and_after_acceptance(tmp_path):
+    import pytest
+    git, file, runtime, old, new, revise = scope_repo(tmp_path)
+    revise()
+    git('add', '.')
+    git('commit', '-qm', 'oracle-only authorized revision')
+    authorized = git('rev-parse', 'HEAD').strip()
+    assert checker.check(tmp_path) == []
+    (tmp_path / checker.REVISIONS / '001.json').unlink()
+    file.write_text(old)
+    git('add', '.')
+    git('commit', '-qm', 'illegitimate removal of authorized correction')
+    with pytest.raises(ValueError, match='cannot be removed'):
+        checker.check(tmp_path)
+    git('branch', '-f', 'origin/main', authorized)
+    with pytest.raises(ValueError, match='cannot be removed'):
+        checker.check(tmp_path)
+
+
+def test_explicit_retired_rendering_is_exact_and_cannot_restore_markers(tmp_path):
+    import json
+    git, file, runtime, old, new, revise = scope_repo(tmp_path)
+    revise()
+    retired = new.replace("pendingContract('V1');\n", '') + '\n'
+    record_path = tmp_path / checker.REVISIONS / '001.json'
+    record = json.loads(record_path.read_text())
+    record['retired_sha256'] = checker.digest(retired)
+    record_path.write_text(json.dumps(record))
+    git('add', '.')
+    git('commit', '-qm', 'review exact pending and retired renderings')
+    assert checker.check(tmp_path) == []
+    git('branch', '-f', 'origin/main', 'HEAD')
+    runtime.write_text('return 1;\n')  # implementation may consume the accepted exact rendering
+    # A second introduction models the builder copy meeting the spine history.
+    git('rm', str(file.relative_to(tmp_path)))
+    git('commit', '-qm', 'temporary absence before alternate introduction')
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(retired)
+    git('add', '.')
+    git('commit', '-qm', 'exact retired rendering from builder history')
+    assert checker.check(tmp_path) == []
+    file.write_text(retired.replace('local_dev', 'wrong'))
+    assert checker.check(tmp_path)
+    file.write_text("pendingContract('V1');\n" + retired)
+    assert checker.check(tmp_path)
+    file.write_text(retired)
+    git('branch', '-f', 'origin/main', 'HEAD')
+    file.write_text(new)
+    assert any('retired markers cannot be restored' in error for error in checker.check(tmp_path))

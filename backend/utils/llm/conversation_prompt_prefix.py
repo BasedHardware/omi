@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, Iterable, List, Optional
 from zoneinfo import ZoneInfo
 
 from models.calendar_context import CalendarMeetingContext
@@ -41,6 +41,10 @@ class ConversationPromptPrefix:
 
     conversation_id: str
     context: str
+    # The IDs come from the source conversation, not from parsing untrusted
+    # transcript text.  Consumers use this set to validate model-authored
+    # evidence references.
+    transcript_segment_ids: frozenset[str] = frozenset()
 
     @property
     def cache_key(self) -> str:
@@ -70,6 +74,7 @@ def build_conversation_prompt_prefix(
     calendar_context: Optional[CalendarMeetingContext] = None,
     photos: Optional[List[ConversationPhoto]] = None,
     speaker_map: Optional[Mapping[int, Optional[str]]] = None,
+    transcript_segment_ids: Optional[Iterable[str]] = None,
 ) -> ConversationPromptPrefix:
     """Render the shared context prefix for conversation-wide LLM tasks.
 
@@ -134,4 +139,9 @@ def build_conversation_prompt_prefix(
         if photo_descriptions != 'None':
             context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
 
-    return ConversationPromptPrefix(conversation_id=conversation_id, context='\n\n'.join(context_parts))
+    source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
+    return ConversationPromptPrefix(
+        conversation_id=conversation_id,
+        context='\n\n'.join(context_parts),
+        transcript_segment_ids=source_ids,
+    )

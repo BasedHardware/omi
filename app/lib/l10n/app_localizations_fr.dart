@@ -245,7 +245,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get searchConversations => 'Rechercher des conversations...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count sélectionné(s)';
   }
 
@@ -2064,10 +2064,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryHistory => 'Historique';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Autoriser l\'utilisation';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Ne pas utiliser';
 
   @override
   String get undo => 'Annuler';
@@ -10085,4 +10085,19 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get home => 'Accueil';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Échec de la mise à jour du statut de référence.';
+
+  @override
+  String get unstarConversation => 'Retirer la conversation des favoris';
+
+  @override
+  String get moreOptions => 'Plus d’options';
+
+  @override
+  String get filterByDate => 'Filtrer par date';
+
+  @override
+  String get memoryGraph => 'Graphe des souvenirs';
 }

@@ -387,6 +387,24 @@ jobs:
         # stripDebugSymbols. Does not compile the JNI opus shim for armeabi-v7a or x86_64.
         run: flutter build apk --debug --flavor dev --target-platform android-arm64
 
+      # --analyze-size is release-mode + single-ABI only and would be a second
+      # ~10-15 min compile. Debug is not Play download size; this is a coarse
+      # zip breakdown of the APK this job already built. Never a gate.
+      - name: Report debug APK size
+        run: |
+          python3 .github/scripts/report_debug_apk_size.py \
+            --apk app/build/app/outputs/flutter-apk/app-dev-debug.apk \
+            --json "$GITHUB_WORKSPACE/apk-size-report.json" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload debug APK size report
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk-size-${{ github.event.pull_request.head.sha || github.sha }}
+          path: apk-size-report.json
+          if-no-files-found: error
+          retention-days: 5
+
       - name: Upload Flutter Android dev debug APK
         uses: actions/upload-artifact@v7
         with:

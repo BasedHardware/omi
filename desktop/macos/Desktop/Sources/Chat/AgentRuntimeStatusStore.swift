@@ -365,7 +365,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .authorizedToolExecution,
+    case .initMessage, .modelHeadersRequest, .toolUse, .authorizedToolExecution,
       .authRequired, .authSuccess, .controlToolResult,
       .journalOperationResult, .journalTurnChanged, .journalBackendSync, .journalBackendDelete,
       .journalBackendReconcile, .chatFirstDeferralDelivery,
