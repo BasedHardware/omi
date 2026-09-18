@@ -137,6 +137,33 @@ function presentOptionalFinite(value: unknown): void {
   }
   finite(value);
 }
+function presentNullableNum(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new DetailError('invalid');
+  }
+}
+function presentMatchSnippets(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const item of value) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      continue;
+    }
+    const snippet = item as Record<string, unknown>;
+    presentNullableNum(snippet.start);
+    presentNullableNum(snippet.end);
+    presentNullableNum(snippet.start_ms);
+    presentNullableNum(snippet.end_ms);
+    presentNullableNum(snippet.speaker_id);
+  }
+}
 function presentOptionalInteger(value: unknown): void {
   if (value === undefined || value === null) {
     return;
@@ -517,6 +544,7 @@ export async function loadLegacyConversationDetail(
   presentNullableDate(value.started_at);
   presentNullableDate(value.finished_at);
   presentNullableDate(value.updated_at);
+  presentMatchSnippets(value.match_snippets);
   presentUnusedStringListItems(value.suggested_summarization_apps);
   const structured = object(value.structured);
   presentNullableString(structured.category);

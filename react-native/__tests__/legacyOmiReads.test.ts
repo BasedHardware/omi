@@ -219,6 +219,88 @@ test('old conversations name Flutter Geolocation.fromJson padded GET time instea
   }
 });
 
+test('old conversations name Flutter TranscriptMatchSnippet.fromJson type-wrong GET match_snippets start instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    match_snippets: [{text: 'hello', start: 1.5, end: 2, start_ms: 1500, end_ms: 2000, speaker_id: 0}],
+  };
+  const titles = async (rows: unknown[]) =>
+    (await loadConversations(backend(rows).api)).items.map(item => item.title);
+  expect(await titles([row, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([
+      {
+        ...row,
+        match_snippets: [{text: 'hello'}],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(await titles([{...conversation, id: 'located', match_snippets: undefined}, neighbor])).toEqual([
+    'Real title',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([
+      {
+        ...row,
+        match_snippets: null,
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        match_snippets: 1,
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        match_snippets: [],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([
+      {
+        ...row,
+        match_snippets: [{start: null, end: null, start_ms: null, end_ms: null, speaker_id: null}, 1],
+      },
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  for (const extra of ['', '1', 'abc', true, [], {}]) {
+    for (const field of ['start', 'end', 'start_ms', 'end_ms', 'speaker_id']) {
+      await expect(
+        titles([
+          {
+            ...row,
+            match_snippets: [{text: 'hello', [field]: extra}],
+          },
+          neighbor,
+        ]),
+      ).rejects.toThrow('Omi order is malformed');
+    }
+  }
+});
+
 test('old conversations name Flutter ConversationListItem fromJson padded GET latitude instead of remapping to a conversation chip', async () => {
   const neighbor = {
     ...conversation,

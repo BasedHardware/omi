@@ -120,6 +120,27 @@ function presentNullableDouble(value: unknown): void {
     throw new Error('Omi order is malformed');
   }
 }
+function presentNullableNum(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error('Omi order is malformed');
+  }
+}
+function presentMatchSnippets(value: unknown): void {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      continue;
+    }
+    const snippet = item as Record<string, unknown>;
+    presentNullableNum(snippet.start);
+    presentNullableNum(snippet.end);
+    presentNullableNum(snippet.start_ms);
+    presentNullableNum(snippet.end_ms);
+    presentNullableNum(snippet.speaker_id);
+  }
+}
 function presentRequiredDouble(value: unknown): void {
   if (value === undefined || value === null) {
     throw new Error('Omi order is malformed');
@@ -605,6 +626,7 @@ export async function loadOmiConversations(
     presentSuggestedSummarizationApps(row.suggested_summarization_apps);
     presentNullableMap(row.external_data);
     presentClientProcessing(row.client_processing);
+    presentMatchSnippets(row.match_snippets);
     const emoji = conversationStructuredEmojiCopy(
       structured.emoji === undefined || structured.emoji === null
         ? structured.emoji

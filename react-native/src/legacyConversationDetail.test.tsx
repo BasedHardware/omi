@@ -749,6 +749,65 @@ test('old conversation details name Flutter Geolocation.fromJson padded GET time
   }
 });
 
+test('old conversation details name Flutter TranscriptMatchSnippet.fromJson type-wrong GET match_snippets start instead of remapping to a recap chip', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      match_snippets: [
+        {
+          text: 'hello',
+          start: 1.5,
+          end: 2,
+          start_ms: 1500,
+          end_ms: 2000,
+          speaker_id: 0,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      match_snippets: [{text: 'hello'}],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response({...fixture, match_snippets: null}));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response({...fixture, match_snippets: 1}));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  mockRequest.mockResolvedValue(response({...fixture, match_snippets: []}));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({title: 'A real conversation'}),
+  );
+  for (const extra of ['', '1', 'abc', true, [], {}]) {
+    for (const field of ['start', 'end', 'start_ms', 'end_ms', 'speaker_id']) {
+      mockRequest.mockResolvedValue(
+        response({
+          ...fixture,
+          match_snippets: [{text: 'hello', [field]: extra}],
+        }),
+      );
+      await expect(
+        loadLegacyConversationDetail(backend, fixture.id),
+      ).rejects.toMatchObject({kind: 'invalid'});
+    }
+  }
+});
+
 test('old conversation details name Flutter Conversation.fromGenerated type-wrong GET suggested_summarization_apps item instead of remapping to a recap chip', async () => {
   mockRequest.mockResolvedValue(
     response({
