@@ -78,17 +78,17 @@ void main() {
 }
 
 BtDevice _wearable() => BtDevice(
-  id: 'AA:AA:AA:AA:AA:01',
-  name: 'User-renamed device',
-  type: DeviceType.fieldy,
-  rssi: -50,
-  locator: DeviceLocator.bluetooth(deviceId: 'AA:AA:AA:AA:AA:01'),
-  modelNumber: 'Fieldy One',
-  firmwareRevision: '3.0.20',
-  hardwareRevision: 'rev-a',
-  manufacturerName: 'FieldLabs',
-  serialNumber: 'OMI-SERIAL-001',
-);
+      id: 'AA:AA:AA:AA:AA:01',
+      name: 'User-renamed device',
+      type: DeviceType.fieldy,
+      rssi: -50,
+      locator: DeviceLocator.bluetooth(deviceId: 'AA:AA:AA:AA:AA:01'),
+      modelNumber: 'Fieldy One',
+      firmwareRevision: '3.0.20',
+      hardwareRevision: 'rev-a',
+      manufacturerName: 'FieldLabs',
+      serialNumber: 'OMI-SERIAL-001',
+    );
 
 /// Fails when a payload copies BtDevice persistence keys. `type` is the one
 /// toJson key the dictionary already names explicitly; every other dump key is
