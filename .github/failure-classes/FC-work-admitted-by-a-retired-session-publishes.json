@@ -5,7 +5,8 @@
   "canonical_prevention": "Capture the admitted token before the first await, re-check isCurrent after every await — including error and finally — and refuse to publish rather than recapture. Write any fingerprint or cache only after a current commit succeeds: a finally that recaptures and then records accepted uploads will load the retired session's WAL list into the new one and suppress the next session's server-job progress. Prove it by rolling the generation mid-await and asserting the successor's published state and cache stay empty, with a current-generation control that still loads.",
   "canonical_prevention_artifact": [
     "app/test/providers/sync_provider_session_generation_test.dart",
-    "app/test/providers/device_provider_session_generation_test.dart"
+    "app/test/providers/device_provider_session_generation_test.dart",
+    "app/test/unit/local_wal_sync_session_generation_test.dart"
   ],
   "evidence_prs": [],
   "scope_hints": [
@@ -13,7 +14,9 @@
     "app/lib/utils/auth/**",
     "app/lib/services/auth_service.dart",
     "app/lib/services/capture/**",
-    "app/test/providers/**"
+    "app/lib/services/wals/**",
+    "app/test/providers/**",
+    "app/test/unit/local_wal_sync_session_generation_test.dart"
   ],
   "status": "open"
 }

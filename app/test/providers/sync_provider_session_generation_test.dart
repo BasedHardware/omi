@@ -37,6 +37,10 @@ class _FakeSyncs {
     cancelSyncCalls++;
   }
 
+  void clearUserData() {
+    cancelSync();
+  }
+
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     final hang = hangSyncWal;
     if (hang != null) return hang.future;

@@ -67,6 +67,10 @@ enum WalServiceStatus { init, ready, stop }
 abstract class LocalWalSync implements IWalSync {
   Future<void> addExternalWal(Wal wal);
   Future<List<Wal>> getAllWals();
+
+  /// Bump the session fence and stop publishing retired-account WALs.
+  /// Durable bytes stay on disk; [getAllWals] returns the current session only.
+  void clearUserData();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();

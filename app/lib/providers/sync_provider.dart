@@ -381,7 +381,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   void clearUserData() {
     _sessionGeneration++;
     _admittedWorkGeneration = -1;
-    _walService.getSyncs().cancelSync();
+    _walService.getSyncs().clearUserData();
     _allWals = [];
     _isLoadingWals = false;
     _syncState = const SyncState();
