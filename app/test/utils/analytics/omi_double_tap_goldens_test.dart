@@ -27,12 +27,12 @@ void fireOmiDoubleTapFeatures(AnalyticsManager analytics) {
 }
 
 List<List<Object>> omiDoubleTapGoldens(Map<String, Object> globals) => [
-  for (final feature in omiDoubleTapFeatures)
-    [
-      'Omi Double Tap',
-      {...globals, 'feature': feature},
-    ],
-];
+      for (final feature in omiDoubleTapFeatures)
+        [
+          'Omi Double Tap',
+          {...globals, 'feature': feature},
+        ],
+    ];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -76,8 +76,8 @@ void main() {
 }
 
 List<List<Object>> _emissionPayloads(List<_RecordedEvent> events) => [
-  for (final event in events) [event.eventName, event.properties],
-];
+      for (final event in events) [event.eventName, event.properties],
+    ];
 
 class _FakeAnalyticsAdapter implements AnalyticsAdapter {
   final List<_RecordedEvent> events = [];
