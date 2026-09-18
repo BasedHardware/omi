@@ -63,9 +63,8 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor: isCurrentResult
-              ? Colors.orange.withValues(alpha: 0.9)
-              : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor:
+              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -919,17 +918,17 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                ? _buildEditor(context)
-                : GestureDetector(
-                    onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
-                        ? null
-                        : () => _startEditing(content),
-                    child: ConversationMarkdownWidget(
-                      content: content,
-                      searchQuery: widget.searchQuery,
-                      currentResultIndex: widget.currentResultIndex,
-                    ),
-                  ),
+                    ? _buildEditor(context)
+                    : GestureDetector(
+                        onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+                            ? null
+                            : () => _startEditing(content),
+                        child: ConversationMarkdownWidget(
+                          content: content,
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                        ),
+                      ),
           ),
 
           // App info in a more subtle format below the content - only show if content is not empty
@@ -1236,7 +1235,9 @@ class GetGeolocationWidgets extends StatelessWidget {
                             // or on failure it renders the pin-dot canvas.
                             OmiMapPreview(
                               key: const ValueKey('conversation_location_map'),
-                              pins: [OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!)],
+                              pins: [
+                                OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!),
+                              ],
                               backgroundColor: const Color(0xFF2A2A2A),
                             ),
                             // Gradient blur overlay from bottom
