@@ -192,7 +192,7 @@ def test_detach_removes_only_recorded_reverses_and_deletes_the_avd(
     devices, record, home, _spawned, _env, _ = _attach(tmp_path, scripted)
     record["android_home"] = str(home)
     monkeypatch.setattr("dev_harness.safety.process_exists", lambda pid: False)
-    devices.detach("android", record["udid"], record=record)
+    devices.detach("android", record["udid"])
     removes = [call["argv"] for call in scripted.calls if "reverse" in call["argv"] and "--remove" in call["argv"]]
     assert removes == [
         [str(home / "platform-tools" / "adb"), "-s", "emulator-5554", "reverse", "--remove", "tcp:8100"],
@@ -211,7 +211,7 @@ def test_failed_kill_does_not_delete_the_avd(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setattr("dev_harness.safety.command_line_for_pid", lambda pid: "qemu-system foreign")
     before = [call for call in scripted.calls if "delete" in call["argv"] and "avd" in call["argv"]]
     with pytest.raises(ms.SessionError, match="ownership marker"):
-        devices.detach("android", record["udid"], record=record)
+        devices.detach("android", record["udid"])
     after = [call for call in scripted.calls if "delete" in call["argv"] and "avd" in call["argv"]]
     assert after == before
 

@@ -651,7 +651,7 @@ class DeviceController:
                     SessionError(f"adb reverse tcp:{host_port} failed: {out.strip()[:400]}"),
                 )
             reverses.append({"device": host_port, "host": host_port, "name": name})
-        return {
+        record = {
             "kind": "emulator",
             "udid": serial,
             "avd": avd_name,
@@ -666,6 +666,8 @@ class DeviceController:
             "mic_fixture_sha256": wav.sha256,
             "reverse": reverses,
         }
+        self._detach_record = record
+        return record
 
     def _refuse_live_harness_avd(self, adb: str, devices_out: str, avd_name: str) -> None:
         """Refuse only this session's AVD still running. Phones and foreign emulators pass."""
@@ -770,8 +772,8 @@ class DeviceController:
             env=env,
         )
 
-    def detach(self, platform_name: str, device_id: str, *, record: Mapping[str, Any] | None = None) -> None:
-        record = dict(record or {})
+    def detach(self, platform_name: str, device_id: str) -> None:
+        record = dict(getattr(self, "_detach_record", None) or {})
         if platform_name == "ios-simulator":
             self._runner(["xcrun", "simctl", "shutdown", device_id])
             self._runner(["xcrun", "simctl", "delete", device_id])
@@ -1083,7 +1085,9 @@ def stop(
 
     device = lease.get("device")
     if isinstance(device, Mapping) and device.get("udid") and device.get("kind") in {"simulator", "emulator"}:
-        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]), record=device)
+        controller = devices or DeviceController()
+        controller._detach_record = dict(device)
+        controller.detach(str(lease["platform"]), str(device["udid"]))
 
     code = _harness_call(lease, harness_cli.cmd_down)
     if code != 0:
