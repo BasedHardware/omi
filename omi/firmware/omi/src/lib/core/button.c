@@ -126,10 +126,25 @@ static inline void notify_button_state(uint8_t state, const char *label)
     }
 }
 
-static inline void notify_tap(void) { notify_button_state(SINGLE_TAP, "single tap"); }
-static inline void notify_double_tap(void) { notify_button_state(DOUBLE_TAP, "double tap"); }
-static inline void notify_triple_tap(void) { notify_button_state(TRIPLE_TAP, "triple tap"); }
-static inline void notify_long_tap(void) { notify_button_state(LONG_TAP, "long tap"); }
+static inline void notify_tap(void)
+{
+    notify_button_state(SINGLE_TAP, "single tap");
+}
+
+static inline void notify_double_tap(void)
+{
+    notify_button_state(DOUBLE_TAP, "double tap");
+}
+
+static inline void notify_triple_tap(void)
+{
+    notify_button_state(TRIPLE_TAP, "triple tap");
+}
+
+static inline void notify_long_tap(void)
+{
+    notify_button_state(LONG_TAP, "long tap");
+}
 
 #define BUTTON_PRESSED 1
 #define BUTTON_RELEASED 0
