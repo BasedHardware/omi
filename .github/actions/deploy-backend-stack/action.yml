@@ -872,6 +872,7 @@ runs:
           --audience backend-sync=${{ steps.candidate-urls.outputs.backend_sync_audience }} \
           --audience backend-sync-backfill=${{ steps.candidate-urls.outputs.backend_sync_backfill_audience }} \
           --audience backend-integration=${{ steps.candidate-urls.outputs.backend_integration_audience }} \
+          ${{ inputs.workload_identity_service_account != '' && format('--mint-impersonate {0}', inputs.workload_identity_service_account) || '' }} \
           --evidence-path artifacts/dev-backend-candidate-acceptance.json
 
     - name: Resolve transcription candidate URL

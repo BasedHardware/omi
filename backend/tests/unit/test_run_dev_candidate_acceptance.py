@@ -116,7 +116,7 @@ def test_probe_failure_captures_http_status_for_non_2xx(monkeypatch):
         contract='what_matters_now',
         command=('echo', '{base_url}'),
     )
-    monkeypatch.setattr(acceptance, 'mint_cloud_run_identity_token', lambda *, audience: 'token')
+    monkeypatch.setattr(acceptance, 'mint_cloud_run_identity_token', lambda *, audience, impersonate=None: 'token')
     monkeypatch.setattr(
         acceptance.subprocess,
         'run',
@@ -145,7 +145,7 @@ def test_probe_failure_records_conn_error_for_connection_exception(monkeypatch):
         command=('echo', '{base_url}'),
     )
 
-    def failing_mint(*, audience: str) -> str:
+    def failing_mint(*, audience: str, impersonate: str | None = None) -> str:
         raise OSError('network unreachable')
 
     monkeypatch.setattr(acceptance, 'mint_cloud_run_identity_token', failing_mint)
@@ -171,7 +171,9 @@ def test_probe_diagnostics_never_leak_stderr_urls_or_tokens(monkeypatch):
         contract='what_matters_now',
         command=('echo', '{base_url}'),
     )
-    monkeypatch.setattr(acceptance, 'mint_cloud_run_identity_token', lambda *, audience: 'raw-token-material')
+    monkeypatch.setattr(
+        acceptance, 'mint_cloud_run_identity_token', lambda *, audience, impersonate=None: 'raw-token-material'
+    )
     monkeypatch.setattr(
         acceptance.subprocess,
         'run',
@@ -227,7 +229,7 @@ def test_evidence_schema_stays_backward_compatible():
 
 
 def test_passing_run_emits_no_diagnostics_key(monkeypatch, tmp_path):
-    monkeypatch.setattr(acceptance, 'mint_cloud_run_identity_token', lambda *, audience: 'token')
+    monkeypatch.setattr(acceptance, 'mint_cloud_run_identity_token', lambda *, audience, impersonate=None: 'token')
     monkeypatch.setattr(
         acceptance.subprocess, 'run', lambda *args, **kwargs: _fake_completed_process(0, stdout='ok', stderr='')
     )
@@ -243,7 +245,7 @@ def test_passing_run_emits_no_diagnostics_key(monkeypatch, tmp_path):
 
 
 def test_failed_run_adds_diagnostics_to_the_artifact(monkeypatch, tmp_path):
-    monkeypatch.setattr(acceptance, 'mint_cloud_run_identity_token', lambda *, audience: 'token')
+    monkeypatch.setattr(acceptance, 'mint_cloud_run_identity_token', lambda *, audience, impersonate=None: 'token')
     monkeypatch.setattr(
         acceptance.subprocess,
         'run',

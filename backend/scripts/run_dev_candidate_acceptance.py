@@ -118,9 +118,17 @@ def _classify_mint_stderr(stderr: str) -> str:
     return CLASS_UNKNOWN
 
 
-def mint_cloud_run_identity_token(*, audience: str) -> str:
+def mint_cloud_run_identity_token(*, audience: str, impersonate: str | None = None) -> str:
+    # Under a WIF-federated session the caller has no private key, so the
+    # default self-signing mint fails (observed: rc=1, class=unknown in bake
+    # 35340203517). Explicit impersonation routes the mint through the IAM
+    # signJwt API, which the federated credential CAN call when it holds
+    # roles/iam.serviceAccountTokenCreator on the target SA.
+    command = ['gcloud', 'auth', 'print-identity-token', f'--audiences={audience}']
+    if impersonate:
+        command += [f'--impersonate-service-account={impersonate}']
     result = subprocess.run(
-        ['gcloud', 'auth', 'print-identity-token', f'--audiences={audience}'],
+        command,
         cwd=ROOT,
         check=False,
         capture_output=True,
@@ -187,10 +195,10 @@ def _parse_probe_http_status(stderr: str) -> int | None:
     return status if 100 <= status <= 599 else None
 
 
-def run_check(check: CandidateCheck, *, base_url: str, audience: str) -> CheckOutcome:
+def run_check(check: CandidateCheck, *, base_url: str, audience: str, impersonate: str | None = None) -> CheckOutcome:
     identity_token = ''
     try:
-        identity_token = mint_cloud_run_identity_token(audience=audience)
+        identity_token = mint_cloud_run_identity_token(audience=audience, impersonate=impersonate)
         environment = dict(os.environ)
         environment[IDENTITY_TOKEN_ENV] = identity_token
         command = [part.replace('{base_url}', base_url) for part in check.command]
@@ -266,6 +274,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument('--candidate', action='append', default=[], metavar='SERVICE=URL')
     parser.add_argument('--audience', action='append', default=[], metavar='SERVICE=URL')
+    parser.add_argument(
+        '--mint-impersonate',
+        default=os.environ.get('CLOUD_RUN_IDENTITY_MINT_IMPERSONATE') or None,
+        help='Service account to impersonate when minting identity tokens '
+        '(required under WIF-federated sessions, which hold no signing key).',
+    )
     parser.add_argument('--evidence-path', type=Path, required=True)
     args = parser.parse_args(argv)
     outcomes: list[CheckOutcome] = []
@@ -275,7 +289,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         candidate_urls = parse_candidate_urls(args.candidate, expected_services=expected_services)
         audiences = parse_candidate_urls(args.audience, expected_services=expected_services)
         for index, check in enumerate(checks):
-            outcome = run_check(check, base_url=candidate_urls[check.service], audience=audiences[check.service])
+            outcome = run_check(
+                check,
+                base_url=candidate_urls[check.service],
+                audience=audiences[check.service],
+                impersonate=args.mint_impersonate,
+            )
             outcomes.append(outcome)
             if outcome.status != 'PASS':
                 outcomes.extend(
