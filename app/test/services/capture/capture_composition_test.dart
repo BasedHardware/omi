@@ -119,6 +119,8 @@ void main() {
     expect(body, contains('preferences: dependencies.preferences'));
     expect(body, contains('bleListeners: dependencies.ble'));
     expect(body, contains('openConversationSocket'));
+    expect(body, contains('openConversationSocket ??'));
+    expect(body, contains('dependencies.openSocket('));
     expect(body, contains('sessionOwner: dependencies.owner'));
     final providerSource = File('lib/providers/capture_provider.dart').readAsStringSync();
     expect(providerSource, contains('super.walService'));

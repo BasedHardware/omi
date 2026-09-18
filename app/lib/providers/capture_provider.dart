@@ -27,6 +27,7 @@ class CaptureProvider extends CaptureController {
     LocalSegmentStore? localSegmentStore,
   }) : localSegmentStore = localSegmentStore ?? LocalSegmentStore.disabled() {
     addListener(_persistLiveSegments);
+    lifetime.own(() => removeListener(_persistLiveSegments));
   }
 
   final LocalSegmentStore localSegmentStore;
@@ -58,11 +59,5 @@ class CaptureProvider extends CaptureController {
       Logger.debug('Error persisting live segments: $e');
     });
     unawaited(_liveSegmentWrite);
-  }
-
-  @override
-  void dispose() {
-    removeListener(_persistLiveSegments);
-    super.dispose();
   }
 }

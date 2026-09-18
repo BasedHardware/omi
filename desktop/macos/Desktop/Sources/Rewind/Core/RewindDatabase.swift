@@ -2650,6 +2650,7 @@ actor RewindDatabase {
     KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
     Self.registerClientProcessingProjectionMigration(on: &migrator)
     Self.registerConversationSummarySectionsMigration(on: &migrator)
+    Self.registerConversationLocalSummaryMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
@@ -2712,6 +2713,13 @@ actor RewindDatabase {
   static func registerConversationSummarySectionsMigration(on migrator: inout DatabaseMigrator) {
     migrator.registerMigration("addConversationSummarySections") { db in
       try Self.addTranscriptionSessionColumnIfMissing(db, name: "sectionsJson", type: .text)
+    }
+  }
+
+  /// Display attribution is separate from clientProcessingJson, whose exact bytes own retries.
+  static func registerConversationLocalSummaryMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationLocalSummary") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "localSummaryJson", type: .text)
     }
   }
 
