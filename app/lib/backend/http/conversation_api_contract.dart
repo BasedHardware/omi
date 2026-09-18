@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -8,7 +9,22 @@ import 'api_result.dart';
 
 export 'package:omi/backend/http/api/conversations.dart' show ConversationApi;
 
-/// Must return the real provider; forceRefreshConversations consumes this API.
+/// Production constructor. [main.dart] calls this with no arguments so the
+/// shipped app always takes the typed list/detail path. Tests may pass [send]
+/// (loopback fixture) and [isSignedIn]; they must not skip [ConversationApi].
+ConversationProvider createProductionConversationProvider({
+  ApiSend? send,
+  bool Function()? isSignedIn,
+}) {
+  final baseUrl = Env.apiBaseUrl ?? 'http://127.0.0.1:8000/';
+  return ConversationProvider(
+    conversationApi: ConversationApi(baseUrl: baseUrl, send: send),
+    isSignedIn: isSignedIn,
+  );
+}
+
+/// Test helper that still returns the real provider. Production boot uses
+/// [createProductionConversationProvider] instead.
 ConversationProvider composeTypedConversationProvider(ConversationApi api) =>
     ConversationProvider(conversationApi: api, isSignedIn: () => true, dailySummariesChecker: () async => false);
 
