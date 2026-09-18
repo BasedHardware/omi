@@ -249,6 +249,75 @@ class NormalizeIdentifierTests(unittest.TestCase):
     def test_surrounding_whitespace_stripped(self):
         self.assertEqual(main.normalize_identifier("  10.1038/nature12373  "), "DOI:10.1038/nature12373")
 
+    def test_semanticscholar_paper_url_with_title_slug(self):
+        self.assertEqual(
+            main.normalize_identifier(
+                "https://www.semanticscholar.org/paper/Attention-Is-All-You-Need-Vaswani/204e3073870fae3d05bcbc2f6a8e263c9b72e776"
+            ),
+            "204e3073870fae3d05bcbc2f6a8e263c9b72e776",
+        )
+
+    def test_semanticscholar_paper_url_bare_id(self):
+        self.assertEqual(
+            main.normalize_identifier(
+                "https://semanticscholar.org/paper/204e3073870fae3d05bcbc2f6a8e263c9b72e776"
+            ),
+            "204e3073870fae3d05bcbc2f6a8e263c9b72e776",
+        )
+
+    def test_semanticscholar_paper_url_corpusid(self):
+        self.assertEqual(
+            main.normalize_identifier(
+                "https://www.semanticscholar.org/paper/CorpusID:215416146"
+            ),
+            "CorpusId:215416146",
+        )
+
+    def test_url_with_query_and_fragment_stripped(self):
+        self.assertEqual(
+            main.normalize_identifier(
+                "https://www.semanticscholar.org/paper/title/204e3073870fae3d05bcbc2f6a8e263c9b72e776?utm_source=chat#abstract"
+            ),
+            "204e3073870fae3d05bcbc2f6a8e263c9b72e776",
+        )
+
+    def test_wrapping_quotes_and_brackets_stripped(self):
+        self.assertEqual(
+            main.normalize_identifier('"10.1038/nature12373"'),
+            "DOI:10.1038/nature12373",
+        )
+        self.assertEqual(
+            main.normalize_identifier("<https://arxiv.org/abs/1706.03762>"),
+            "ARXIV:1706.03762",
+        )
+
+
+class NormalizeAuthorIdTests(unittest.TestCase):
+    def test_bare_author_id(self):
+        self.assertEqual(main.normalize_author_id("1741101"), "1741101")
+
+    def test_author_url_with_name_slug(self):
+        self.assertEqual(
+            main.normalize_author_id("https://www.semanticscholar.org/author/A.-Vaswani/1741101"),
+            "1741101",
+        )
+
+    def test_author_url_bare(self):
+        self.assertEqual(
+            main.normalize_author_id("https://semanticscholar.org/author/1741101"),
+            "1741101",
+        )
+
+    def test_author_url_with_query_params(self):
+        self.assertEqual(
+            main.normalize_author_id("https://www.semanticscholar.org/author/A.-Vaswani/1741101?tab=papers#citations"),
+            "1741101",
+        )
+
+    def test_author_prefix(self):
+        self.assertEqual(main.normalize_author_id("author: 1741101"), "1741101")
+
+
 
 class PaperSortKeyTests(unittest.TestCase):
     def test_mixed_type_years_and_citations_sort_descending(self):
@@ -351,12 +420,31 @@ class GetPaperHandlerTests(unittest.TestCase):
         self.assertIsNotNone(resp.result)
 
 
+    def test_semanticscholar_url_is_normalized_before_request(self):
+        req = main.GetPaperRequest(
+            paper_id_or_doi="https://www.semanticscholar.org/paper/Attention-Is-All-You-Need-Vaswani/204e3073870fae3d05bcbc2f6a8e263c9b72e776"
+        )
+        with mock.patch.object(main, "api_get", new=mock.AsyncMock(return_value=dict(_PAPER))) as api:
+            resp = _run(main.get_paper(req))
+        self.assertEqual(api.call_args[0][0], "/paper/204e3073870fae3d05bcbc2f6a8e263c9b72e776")
+        self.assertIsNotNone(resp.result)
+
+
 class GetAuthorPapersHandlerTests(unittest.TestCase):
     def test_happy_path(self):
         resp = _author_papers({"name": "Ada", "papers": [dict(_PAPER)]})
         self.assertIsNotNone(resp.result)
         self.assertIn("Recent papers by Ada:", resp.result)
         self.assertIn("Attention Is All You Need", resp.result)
+
+    def test_author_url_is_normalized_before_request(self):
+        req = main.GetAuthorPapersRequest(
+            author_id="https://www.semanticscholar.org/author/A.-Vaswani/1741101"
+        )
+        with mock.patch.object(main, "api_get", new=mock.AsyncMock(return_value={"name": "Vaswani", "papers": [dict(_PAPER)]})) as api:
+            resp = _run(main.get_author_papers(req))
+        self.assertEqual(api.call_args[0][0], "/author/1741101")
+        self.assertIsNotNone(resp.result)
 
     def test_mixed_type_years_sort_without_crashing(self):
         papers = [
@@ -400,6 +488,16 @@ class GetAuthorPapersHandlerTests(unittest.TestCase):
         self.assertEqual(resp.error, "Author not found.")
 
 
+class RequestModelTests(unittest.TestCase):
+    def test_search_papers_null_max_results_coerces_default(self):
+        req = main.SearchPapersRequest(query="machine learning", max_results=None)
+        self.assertEqual(req.max_results, 5)
+
+    def test_get_author_papers_null_max_results_coerces_default(self):
+        req = main.GetAuthorPapersRequest(author_id="1741101", max_results=None)
+        self.assertEqual(req.max_results, 5)
+
+
 class ResponseContractTests(unittest.TestCase):
     def test_response_requires_result_or_error(self):
         with self.assertRaises(ValueError):
@@ -408,3 +506,4 @@ class ResponseContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
