@@ -43,4 +43,3 @@ class DropboxUserSettings(BaseModel):
     save_summary: bool = True
     save_transcript: bool = True
     save_audio: bool = True
-
