@@ -15,6 +15,8 @@ Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
 
+Never edit generated `.g.dart`/`.gen.dart` files. Regenerate using the commands above after source changes; resolve build_runner conflicts with `--delete-conflicting-outputs`.
+
 ### Setup Sequence
 ```bash
 bash setup.sh ios    # or: bash setup.sh android
@@ -132,13 +134,6 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 ### API Base URLs
 - Dev: configured in `.dev.env` → `Env.apiBaseUrl`
 - Prod: configured in `.prod.env` → `Env.apiBaseUrl`
-
-## Codegen Rules
-
-- Run `flutter pub run build_runner build` after changing: env files, model annotations, pigeon contracts, or pubspec assets
-- Run `flutter gen-l10n` after changing ARB files
-- Never edit files ending in `.g.dart` or `.gen.dart`
-- If build_runner fails with conflicts: `flutter pub run build_runner build --delete-conflicting-outputs`
 
 ## App Flows & E2E
 

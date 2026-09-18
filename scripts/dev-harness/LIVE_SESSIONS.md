@@ -71,12 +71,12 @@ persist the VM auth URI, credentials, raw stderr or arbitrary control payloads
 in shareable evidence. `screenshot` calls simctl/adb for the exact lease device,
 writing a broker-assigned PNG under the session directory, then hashes it.
 `status` reports starting/ready/busy/blocked/stopped and build/source identity;
-app.started alone is not ready. For readiness require state profile `localDev`,
+app.started alone is not ready. For readiness require state profile `local_dev`,
 contract `semantic-controls/v1`, signedIn+routed+captureIdle all true and fixture
 principal uid equal to BOTH seeded lease.default_auth_uid and seed.json.uid,
 with matching fixture_version and status=seeded; missing/mismatched seed blocks.
 Live/simulator lanes use the real isolated uvicorn/emulator/redis session stack,
-with offline providers. Require opt-in `make setup-backend` (or existing owner
+with offline providers. Require opt-in `make lane-backend` (or existing owner
 setup) before start; doctor refuses missing uvicorn. Do not install backend in
 lane-bootstrap or substitute journeys' fixture server for real session seeding.
 
@@ -113,7 +113,9 @@ sorted path+content+mode of all app inputs, including untracked nonignored files
 Use a separate restart-input digest over native/assets/dependencies/config/SDK.
 Recheck inputs after operations; legacy dirty_digest omits untracked contents. `live` records generation, operation id/name/outcome, daemon code,
 UTC start/end, elapsed ms, loaded sequence, restart digest, and screenshot
-path/hash when applicable. Errors never advance loaded_source/sequence. Schema-only validation is NOT
+path/hash when applicable. Pin source and lease generation before startup and recheck after readiness, too.
+Errors never advance loaded_source/sequence. Measure UTC bounds around the work
+and elapsed/deadlines with the injected monotonic clock; progress cannot reset a deadline. Schema-only validation is NOT
 acceptance: `session_evidence.validate_evidence` always calls
 `live_session.validate_live_evidence`. This normative boundary checks traversal
 (including symlinks at write), dev/local_dev, successful loaded=requested identity,
@@ -139,7 +141,8 @@ two-day scope estimate, not a promise of real-device completion. Keep real launc
 and live-verify adapter pending for subsequent PRs: B0 plus real-stack boot and
 startup deadlines must be verified before enabling device start. `verify_live`
 is tested to contact the broker after selection, then refuse unsupported journeys;
-a pure admission helper is not evidence of attachment. No latency claim, Android
+a pure admission helper is not evidence of attachment. Cached status/logs remain available; concurrent VM reads must be refused busy or
+demultiplexed, never competing readers on stdio. No latency claim, Android
 reverse, physical support, or screenshot oracle in PR 1. Measure the <3 s target
 on each real platform later. Rejected: CLI-owned pipes, independent VM clients,
 silent cold fallback, and pid-only recovery.

@@ -91,8 +91,8 @@ checks:
     lanes: ["local", "ci"]
     reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
   - id: spine-contracts
-    command: ["python3", "scripts/check_spine_contracts.py"]
-    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", ".github/checks-manifest.yaml"]
+    command: ["python3", "scripts/check_spine_contracts.py", "--base", "{base}"]
+    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
