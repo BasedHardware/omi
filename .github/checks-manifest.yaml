@@ -1121,6 +1121,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: google-calendar-app-oauth-callback-xss-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_oauth_callback_xss.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "google_callback() interpolated the `error` query param and the uid parsed out of `state` into HTML with no escaping; `error` is reachable pre-consent and pre-state-check, so it was a zero-interaction reflected XSS"
   - id: mcp-date-filter-tests
     command: ["python3", "mcp/tests/test_date_filters.py"]
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
