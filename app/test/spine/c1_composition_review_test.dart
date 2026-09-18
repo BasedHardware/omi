@@ -12,7 +12,6 @@ class BatchPrefs extends MemoryPrefs {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 injected preferences remain authoritative after construction', () {
-    pendingContract('C1');
     final prefs = BatchPrefs();
     final p = composeCaptureProvider(dependencies(preferences: prefs));
     try {
