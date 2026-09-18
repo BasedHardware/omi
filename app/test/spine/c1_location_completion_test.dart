@@ -55,7 +55,6 @@ class WalSpy implements IWalService {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 old upload completion cannot publish geolocation into new capture WAL', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-upload-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {

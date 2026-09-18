@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart' show SyncLocalFilesResponse;
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/env/env.dart';
@@ -445,9 +446,7 @@ class CaptureReplayWorld {
       await coordinator.waitUntilIdle();
       if (!coordinator.hasInFlight && !scheduler.hasInFlightIo) return;
     }
-    throw StateError(
-      'CaptureReplayWorld.settle: coordinator/timer IO did not go idle after $maxTurns turns',
-    );
+    throw StateError('CaptureReplayWorld.settle: coordinator/timer IO did not go idle after $maxTurns turns');
   }
 
   /// Advance virtual time by [duration], firing due timers in order, then
@@ -546,6 +545,7 @@ class _ReplayCaptureController extends CaptureController {
     String? source,
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     final transport = ScriptedPureSocket();
     transport.connectAllowed = () => world.connected;

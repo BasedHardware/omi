@@ -27,6 +27,7 @@ class CaptureDependencies {
     required this.preferences,
     required this.ble,
     required this.openSocket,
+    this.openConversationSocket,
     required this.owner,
     required this.location,
     required this.localSegments,
@@ -48,6 +49,7 @@ class CaptureDependencies {
   final SharedPreferencesUtil preferences;
   final CaptureBleListeners ble;
   final CaptureSocketOpen openSocket;
+  final CaptureConversationSocketOpen? openConversationSocket;
   final CaptureSessionOwner owner;
   final ConversationLocationCapture location;
   final LocalSegmentStore localSegments;
@@ -69,7 +71,27 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => Capt
       scheduling: dependencies.scheduling,
       preferences: dependencies.preferences,
       bleListeners: dependencies.ble,
-      openSocket: dependencies.openSocket,
+      openSocket: dependencies.openConversationSocket ??
+          ({
+            required codec,
+            required sampleRate,
+            required language,
+            required force,
+            source,
+            clientConversationId,
+            customSttConfig,
+            geolocation,
+          }) =>
+              dependencies.openSocket(
+                codec: codec,
+                sampleRate: sampleRate,
+                language: language,
+                force: force,
+                source: source,
+                clientConversationId: clientConversationId,
+                customSttConfig: customSttConfig,
+              ),
+      sessionOwner: dependencies.owner,
       conversationLocationCapture: dependencies.location,
       inProgressConversationLoader: dependencies.refreshConversation,
       audioCodecLoader: dependencies.codec,

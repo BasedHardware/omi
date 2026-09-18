@@ -35,6 +35,7 @@ import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -88,7 +89,8 @@ class CaptureController extends ChangeNotifier
   final DateTime Function()? _nowOverride;
   final CaptureScheduling? _schedulingOverride;
   final CaptureBleListeners? _bleListeners;
-  final CaptureSocketOpen? _openSocketOverride;
+  final CaptureConversationSocketOpen? _openSocketOverride;
+  final CaptureSessionOwner? _sessionOwner;
   final SharedPreferencesUtil _preferences;
   final IMicRecorderService? _phoneMicBatchRecorder;
   Geolocation? _sessionGeolocation;
@@ -220,7 +222,8 @@ class CaptureController extends ChangeNotifier
     CaptureScheduling? scheduling,
     SharedPreferencesUtil? preferences,
     CaptureBleListeners? bleListeners,
-    CaptureSocketOpen? openSocket,
+    CaptureConversationSocketOpen? openSocket,
+    CaptureSessionOwner? sessionOwner,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ??
             ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
@@ -238,6 +241,7 @@ class CaptureController extends ChangeNotifier
         _schedulingOverride = scheduling,
         _bleListeners = bleListeners,
         _openSocketOverride = openSocket,
+        _sessionOwner = sessionOwner,
         _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
     // Restore a persisted device mute so it survives an app kill/restart. When
@@ -576,6 +580,20 @@ class CaptureController extends ChangeNotifier
       recordingState == RecordingState.interrupted ||
       recordingState == RecordingState.systemAudioRecord;
 
+  /// Injected capture-session owner. Null on the default production constructor.
+  @protected
+  CaptureSessionOwner? get sessionOwner => _sessionOwner;
+
+  bool _captureSessionIsCurrent(CaptureSessionToken? token) {
+    final owner = _sessionOwner;
+    if (owner == null) return true;
+    return token != null && owner.isCurrent(token);
+  }
+
+  void _rollCaptureSession(String identity) {
+    _sessionOwner?.replaceSession(identity);
+  }
+
   bool get havingRecordingDevice => _recordingDevice != null;
 
   BtDevice? get recordingDevice => _recordingDevice;
@@ -593,6 +611,7 @@ class CaptureController extends ChangeNotifier
 
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
+    _rollCaptureSession(device?.id ?? 'none');
     _recordingDevice = device;
     if (device == null) _endOfflineSession();
     notifyListeners();
@@ -821,6 +840,7 @@ class CaptureController extends ChangeNotifier
     String? source,
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) {
     return _openSocketOverride?.call(
           codec: codec,
@@ -830,6 +850,7 @@ class CaptureController extends ChangeNotifier
           source: source,
           clientConversationId: clientConversationId,
           customSttConfig: customSttConfig,
+          geolocation: geolocation ?? _sessionGeolocation,
         ) ??
         ServiceManager.instance().socket.conversation(
               codec: codec,
@@ -870,10 +891,12 @@ class CaptureController extends ChangeNotifier
     // Get language and custom STT config
     String language = _preferences.hasSetPrimaryLanguage ? _preferences.userPrimaryLanguage : "multi";
     final customSttConfig = _preferences.customSttConfig;
+    final sessionToken = _sessionOwner?.token;
     final decision = await SttModeResolver.instance.decide(
       persistedCustomStt: customSttConfig,
       codec: codec,
     );
+    if (!_captureSessionIsCurrent(sessionToken)) return;
 
     Logger.debug(
       'STT mode: path=${decision.path.name} reason=${decision.reason} '
@@ -920,13 +943,14 @@ class CaptureController extends ChangeNotifier
       source: source,
       clientConversationId: _recordingTelemetry.recordingId,
       customSttConfig: effectiveConfig,
+      geolocation: _sessionGeolocation,
     );
     if (socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
       return;
     }
-    if (generation != _websocketInitGeneration) {
+    if (generation != _websocketInitGeneration || !_captureSessionIsCurrent(sessionToken)) {
       await socket.stop(reason: 'stale transcription socket attempt');
       return;
     }
@@ -1587,6 +1611,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void dispose() {
+    _rollCaptureSession('disposed');
     _phoneBatchGeolocationPreference.invalidateSession();
     _clearSessionLocation();
     _recordingTelemetry.complete(reason: 'pipeline_closed');
@@ -1609,16 +1634,28 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<Geolocation?> _captureSessionLocation({bool uploadCompatibility = true, bool promptIfDenied = true}) async {
+    final owner = _sessionOwner;
+    final ownerToken = owner?.token;
     final generation = ++_sessionGeolocationGeneration;
     // Do not let a prior session's snapshot cover the interval while the new
     // capture is waiting on the location service.
     _sessionGeolocation = null;
     _wal.getSyncs().phone.setSessionGeolocation(null);
     _sessionGeolocationPublishedToWal = true;
-    final geolocation = uploadCompatibility
-        ? await _conversationLocationCapture.captureAndUpload(promptIfDenied: promptIfDenied)
-        : await _conversationLocationCapture.capture(promptIfDenied: promptIfDenied);
-    if (generation != _sessionGeolocationGeneration) return null;
+    final Geolocation? geolocation;
+    if (owner != null) {
+      geolocation = await _conversationLocationCapture.capture(promptIfDenied: promptIfDenied);
+      if (!owner.isCurrent(ownerToken!)) return null;
+      if (uploadCompatibility && geolocation != null) {
+        await _conversationLocationCapture.uploadCompatibilitySnapshot(geolocation);
+        if (!owner.isCurrent(ownerToken)) return null;
+      }
+    } else {
+      geolocation = uploadCompatibility
+          ? await _conversationLocationCapture.captureAndUpload(promptIfDenied: promptIfDenied)
+          : await _conversationLocationCapture.capture(promptIfDenied: promptIfDenied);
+      if (generation != _sessionGeolocationGeneration) return null;
+    }
     _sessionGeolocation = geolocation;
     _wal.getSyncs().phone.setSessionGeolocation(geolocation);
     _sessionGeolocationPublishedToWal = true;
@@ -1672,6 +1709,7 @@ class CaptureController extends ChangeNotifier
     // Drain any tail from the preceding phone session before replacing its
     // location. A stale session snapshot must never be applied to a later WAL.
     await _wal.getSyncs().phone.finalizeCurrentSession();
+    _rollCaptureSession('phone');
     _clearSessionLocation();
     // Mode is fixed for the whole session at start. On iOS and Android the phone
     // mic can capture Transcribe Later (batch) audio: explicitly when the user
@@ -1772,6 +1810,7 @@ class CaptureController extends ChangeNotifier
       _phoneMic.stop();
       _phoneBatchGeolocationPreference.invalidateSession();
       _endOfflineSession();
+      _rollCaptureSession('stopped');
       await _cleanupCurrentState();
       _phoneMicBatchActive = false;
       _clearSessionLocation();
@@ -1792,6 +1831,8 @@ class CaptureController extends ChangeNotifier
       }
       _phoneMicWalActive = false;
     }
+    // Invalidate before native/WAL teardown so in-flight work cannot publish.
+    _rollCaptureSession('stopped');
     await _cleanupCurrentState(disableNativeBackground: true);
     _micInterrupted = false;
     _phoneMic.stop();
@@ -1927,6 +1968,7 @@ class CaptureController extends ChangeNotifier
     // snapshot; otherwise those frames could be flushed under the next session's
     // location.
     await _wal.getSyncs().phone.finalizeCurrentSession();
+    _rollCaptureSession(_recordingDevice?.id ?? 'device');
     _clearSessionLocation();
     unawaited(_captureSessionLocation(promptIfDenied: device != null));
 
@@ -1945,6 +1987,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+    _rollCaptureSession('stopped');
     await _cleanupCurrentState(disableNativeBackground: true);
     await _wal.getSyncs().phone.finalizeCurrentSession();
     _clearSessionLocation();
@@ -2017,8 +2060,14 @@ class CaptureController extends ChangeNotifier
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     if (!_shouldReconnectTranscriptionSocket) return;
+    final keepAliveToken = _sessionOwner?.token;
     _keepAliveTimer = _scheduling.periodic(const Duration(seconds: 15), (t) async {
       Logger.debug("[Provider] keep alive");
+      if (!_captureSessionIsCurrent(keepAliveToken)) {
+        t.cancel();
+        _keepAliveTimer = null;
+        return;
+      }
       if (!_shouldReconnectTranscriptionSocket) {
         t.cancel();
         _keepAliveTimer = null;
@@ -2056,6 +2105,7 @@ class CaptureController extends ChangeNotifier
   /// re-presented a three-day-expired token every ~15s indefinitely. Refresh
   /// before the next attempt so the reconnect carries a new credential.
   Future<void> _refreshRejectedAuthToken() async {
+    final token = _sessionOwner?.token;
     final now = _now();
     final last = _lastRejectedTokenRefreshAt;
     if (last != null && now.difference(last) < _rejectedTokenRefreshInterval) return;
@@ -2063,20 +2113,25 @@ class CaptureController extends ChangeNotifier
     try {
       // refreshIdToken persists the new token and its expiry itself.
       final result = await _auth.refreshIdToken();
+      if (!_captureSessionIsCurrent(token)) return;
       Logger.debug('[Provider] token refresh after 4001: ${result.runtimeType}');
     } catch (e) {
+      if (!_captureSessionIsCurrent(token)) return;
       Logger.debug('[Provider] token refresh after 4001 failed: $e');
     }
   }
 
   Future<void> _reconnectActiveCapture() async {
+    final token = _sessionOwner?.token;
     final device = _recordingDevice;
     if (device != null && recordingState == RecordingState.deviceRecord && !_isPaused) {
       final codec = await _getAudioCodec(device.id);
+      if (!_captureSessionIsCurrent(token)) return;
       if (!_shouldReconnectTranscriptionSocket || _recordingDevice?.id != device.id) return;
       await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
       return;
     }
+    if (!_captureSessionIsCurrent(token)) return;
     if (recordingState == RecordingState.record ||
         recordingState == RecordingState.interrupted ||
         recordingState == RecordingState.systemAudioRecord) {
@@ -2412,27 +2467,36 @@ class CaptureController extends ChangeNotifier
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
   /// Called from synchronous onMessageEventReceived — fire-and-forget async.
   Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
+    final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;
     try {
       final phoneSync = _wal.getSyncs().phone;
       await phoneSync.finalizeCurrentSession();
+      if (!_captureSessionIsCurrent(ownerToken)) return;
       if (sessionStartSeconds > 0) {
         await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
       }
     } catch (e) {
       Logger.debug('_finalizeAndStampSession error: $e');
     } finally {
-      if (locationGeneration == _sessionGeolocationGeneration) {
+      if (_captureSessionIsCurrent(ownerToken) && locationGeneration == _sessionGeolocationGeneration) {
         _clearSessionLocation();
       }
     }
   }
 
   Future<void> _autoSyncSessionWals() async {
+    final token = _sessionOwner?.token;
     // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
     if (_pendingFinalizeAndStamp != null) {
       await _pendingFinalizeAndStamp;
       _pendingFinalizeAndStamp = null;
+    }
+    if (!_captureSessionIsCurrent(token)) return;
+    final owner = _sessionOwner;
+    if (owner != null) {
+      await owner.wakeIfCurrent(token!, WakeTrigger.cooldownElapsed);
+      return;
     }
     // The stamped conversation id stays on the WAL; the single transfer owner
     // will reconcile first and then offer retryable bytes through `syncAll`.
