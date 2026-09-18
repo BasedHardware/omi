@@ -49,6 +49,7 @@ def allowed(original: str, current: str) -> bool:
 REVISIONS = "contracts/spine/revisions"
 SCOPE = "contracts/spine/revision-scope.json"
 RUNNERS = "contracts/spine/runners.json"
+PREFIXES = "contracts/spine/shared-prefixes.json"
 
 
 def introductions(root: Path, path: str) -> list[str]:
@@ -163,6 +164,38 @@ def pinned_retired_rendering(root: Path, path: str, current: str) -> bool:
                for record in (json.loads(file.read_text()) for file in (root / REVISIONS).glob("*.json")))
 
 
+def shared_prefixes(root: Path, base: str, registry: dict, policy: dict, read, *, historical: bool = False) -> set[str]:
+    """Exact frozen additions to a shared file; its remaining bytes equal target.
+
+    Unlike a whole-file scaffold hash, an unchanged prefix survives unrelated
+    accepted implementation updates. This never permits proposed body edits.
+    """
+    raw = read(PREFIXES)
+    if raw is None:
+        if not historical and introductions(root, PREFIXES):
+            raise ValueError(f"{PREFIXES}: shared-prefix declarations cannot be removed")
+        return set()
+    pinned_text(root, PREFIXES, raw)
+    accepted = set()
+    for row in json.loads(raw)["prefixes"]:
+        path, prefix, frozen = row["path"], row["prefix"], row["scaffold_sha256"]
+        if path in registry or path.startswith(ROOTS + ("app/test/support/spine/",)):
+            raise ValueError(f"{path}: an oracle cannot be a shared scaffold")
+        if not prefix or frozen not in policy.get("scaffolding", {}).get(path, []):
+            raise ValueError(f"{path}: shared prefix requires an existing frozen scaffold")
+        # The immutable declaration pins the reviewed prefix itself. Do not
+        # reconstruct an old shared-file body from history: a squash may erase
+        # that payload while preserving both this declaration and target body.
+        try:
+            target = git("show", f"{base}:{path}", root=root)
+        except subprocess.CalledProcessError:
+            continue
+        expected = target if target.startswith(prefix) else prefix + target
+        if read(path) == expected:
+            accepted.add(path)
+    return accepted
+
+
 def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
     """A revision is an oracle-only PR, including unstaged/untracked edits.
 
@@ -182,6 +215,8 @@ def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
     shared_runners, runner_errors = runner_contracts(root, registry)
     if runner_errors:
         return runner_errors
+    read = lambda path: (root / path).read_text() if (root / path).is_file() else None
+    prefixes = shared_prefixes(root, base, registry, policy, read)
     changed = set(git("diff", "--name-only", base, "--", root=root).splitlines())
     changed.update(git("ls-files", "--others", "--exclude-standard", root=root).splitlines())
     needs_revision = False
@@ -203,8 +238,7 @@ def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
                 needs_revision = True
     if not needs_revision:
         return []
-    rejected = outside_oracle_scope(changed, policy, shared_runners,
-                                    lambda path: (root / path).read_text() if (root / path).is_file() else None)
+    rejected = outside_oracle_scope(changed, policy, shared_runners | prefixes, read)
     if not rejected:
         return []
     return ["Spine revision mixed with implementation/non-oracle paths: " + ", ".join(rejected)
@@ -262,7 +296,8 @@ def authorized_revision_paths(root: Path, base_ref: str, registry: dict, present
                 continue
             grandfathered = digest(raw) in policy.get("grandfathered_revisions", {}).get(path, [])
             changed = git("diff", "--name-only", base, commit, "--", root=root).splitlines()
-            if grandfathered or not outside_oracle_scope(changed, policy, runners, read):
+            prefixes = shared_prefixes(root, base, registry, policy, read, historical=True)
+            if grandfathered or not outside_oracle_scope(changed, policy, runners | prefixes, read):
                 accepted.add(path)
                 break
     return accepted
@@ -300,17 +335,18 @@ def revisions(root: Path, registry: dict, base_ref: str) -> dict:
     return result
 
 
-def revised_original(original: str, records: list) -> str:
+def revised_original(original: str, records: list, *, absorbed: int | None = None) -> str:
     for (previous, _), (following, _) in zip(records, records[1:]):
         if previous["after"] != following["before"]:
             raise ValueError(f"{following['path']}: broken revision chain")
     # A squash introduces the corrected file and its review records together.
     # That introducing commit is already the accepted oracle. Absorb only a
     # prefix ending at its exact digest; later revisions still need exact bytes.
-    absorbed = 0
-    for index, (record, _) in enumerate(records):
-        if record["after"] == digest(original):
-            absorbed = index + 1
+    if absorbed is None:
+        absorbed = 0
+        for index, (record, _) in enumerate(records):
+            if record["after"] == digest(original):
+                absorbed = index + 1
     for record, revised in records[absorbed:]:
         if digest(revised) != record["after"]:
             raise ValueError(f"{record['path']}: revised bytes do not match pinned digest")
@@ -322,6 +358,38 @@ def revised_original(original: str, records: list) -> str:
             raise ValueError(f"{record['path']}: revision must preserve pending markers; retire separately")
         original = revised
     return original
+
+
+def accepted_checkpoint(root: Path, path: str, records: list, base_ref: str) -> tuple[str, int] | None:
+    """Recover an exact accepted prefix without replaying squash-erased blobs.
+
+    Only records already on the target confer this authority. A matching PR
+    payload or an unrelated ref cannot authorize skipping a new revision.
+    """
+    accepted = [json.loads(git("show", f"{base_ref}:{name}", root=root))
+                for name in git("ls-tree", "-r", "--name-only", base_ref, "--", REVISIONS, root=root).splitlines()]
+    prefix = []
+    for record, _ in records:
+        if record not in accepted:
+            break
+        prefix.append(record["after"])
+    if not prefix:
+        return None
+    # Try the target tree first. If builders retired its markers, retain the
+    # exact full oracle from target history, never from an arbitrary branch.
+    versions = [base_ref] + git("log", "--full-history", "--format=%H", base_ref, "--", path, root=root).splitlines()
+    checkpoint, rank = None, -1
+    for version in versions:
+        try:
+            text = git("show", f"{version}:{path}", root=root)
+        except subprocess.CalledProcessError:
+            continue  # a deletion is not an oracle payload
+        fingerprint = digest(text)
+        if fingerprint in prefix and prefix.index(fingerprint) > rank:
+            checkpoint, rank = text, prefix.index(fingerprint)
+            if rank == len(prefix) - 1:
+                break
+    return (checkpoint, rank + 1) if checkpoint is not None else None
 
 
 def marker_slots(original: str, current: str) -> set[int] | None:
@@ -396,16 +464,23 @@ def _check(root: Path, base_ref: str) -> list[str]:
         if commits:
             introduced = {git("show", f"{commit}:{path}", root=root) for commit in commits}
             records = amendments.get(path, [])
+            absorbed = None
             if records:
                 accepted = [records[0][0]["before"]] + [record["after"] for record, _ in records]
                 candidates = [text for text in introduced if digest(text) in accepted]
                 if not candidates:
                     raise ValueError(f"{path}: no introduction matches the pinned revision chain")
-                initial = min(candidates, key=lambda text: accepted.index(digest(text)))
+                checkpoint = accepted_checkpoint(root, path, records, base_ref)
+                if checkpoint is None:
+                    initial = min(candidates, key=lambda text: accepted.index(digest(text)))
+                else:
+                    initial, absorbed = checkpoint
+                anchors = candidates
             else:
                 initial = max(introduced, key=lambda text: (len(text), text))
-            anchors = [initial] + [text for _, text in records if text]
-            original = revised_original(initial, records)
+                anchors = [initial]
+            original = revised_original(initial, records, absorbed=absorbed)
+            anchors += [text for _, text in records if text] + [original]
             retired_digests = {record["retired_sha256"] for record, _ in records if "retired_sha256" in record}
             def exact_retired(text):
                 return digest(text) in retired_digests and not any(MARKER.fullmatch(line) for line in text.splitlines())

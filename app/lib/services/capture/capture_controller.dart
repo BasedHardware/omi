@@ -501,6 +501,23 @@ class CaptureController extends ChangeNotifier
   /// Seconds of audio still in memory buffer (not yet chunked/flushed to disk).
   int get inFlightAudioSeconds => _wal.getSyncs().phone.getInFlightSeconds();
 
+  /// Deliberate retry for session WALs the live-capture indicator reports as
+  /// failed: each call resets that WAL's auto-retry budget and reuses the same
+  /// single-recording upload path as the sync pages' "Failed — tap Retry".
+  /// WALs that cannot succeed again (corrupted, out of recovery window) are
+  /// left alone — `syncWal` would only re-spend the verdict. Uploads run one
+  /// at a time with a repaint after each, so the indicator tracks progress
+  /// even when nothing else in the session is notifying.
+  Future<void> retryFailedSessionWalUploads() async {
+    final failed = unsyncedSessionWals.where((w) => isRetryableSyncState(w.syncDisplayState)).toList();
+    if (failed.isEmpty) return;
+    final phoneSync = _wal.getSyncs().phone;
+    for (final wal in failed) {
+      await phoneSync.syncWal(wal: wal);
+      notifyListeners();
+    }
+  }
+
   // Version counter for segments/photos content changes. Incremented on in-place mutations
   // (e.g., translation updates, photo description changes) to signal UI rebuilds when
   // list length and last-text remain unchanged.

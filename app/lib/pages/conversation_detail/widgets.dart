@@ -1235,9 +1235,7 @@ class GetGeolocationWidgets extends StatelessWidget {
                             // or on failure it renders the pin-dot canvas.
                             OmiMapPreview(
                               key: const ValueKey('conversation_location_map'),
-                              pins: [
-                                OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!),
-                              ],
+                              pins: [OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!)],
                               backgroundColor: const Color(0xFF2A2A2A),
                             ),
                             // Gradient blur overlay from bottom

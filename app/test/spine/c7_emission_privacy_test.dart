@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart' show AnalyticsManager;
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/platform/platform_service.dart';

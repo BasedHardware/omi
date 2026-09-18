@@ -97,11 +97,7 @@ void expectNoWholesaleDeviceDump(BtDevice device, Map<String, Object> properties
   const namedKeysThatShareToJsonSpelling = {'type'};
   final dumped = device.toJson().keys.toSet();
   final leaked = properties.keys.toSet().intersection(dumped).difference(namedKeysThatShareToJsonSpelling);
-  expect(
-    leaked,
-    isEmpty,
-    reason: 'analytics payload copied BtDevice.toJson keys $leaked',
-  );
+  expect(leaked, isEmpty, reason: 'analytics payload copied BtDevice.toJson keys $leaked');
 }
 
 void expectHashedIdentity(BtDevice device, Map<String, Object> properties) {
