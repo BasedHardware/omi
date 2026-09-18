@@ -1190,7 +1190,7 @@ def _extract_memories_probe(monkeypatch, pc, *, suppression_on: bool, decision) 
     monkeypatch.setattr(pc, '_extract_memories_inner', inner)
     monkeypatch.setattr(pc, 'MemoryService', MagicMock())
     monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: None)
-    monkeypatch.setattr(pc, 'free_tier_memory_suppression_enabled', lambda: suppression_on)
+    monkeypatch.setattr(pc, 'free_tier_memory_suppression_enabled', _flag_double(suppression_on))
     # The §1.8 gate's decision_for closure lives in utils.managed_compute, so
     # its authorize seam patches there. The funding-owner resolution is not
     # controlled by any stub in this file: managed_compute binds utils.byok's

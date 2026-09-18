@@ -1077,7 +1077,11 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # §1.8: plan denial is a second early return in this same boundary, not a
     # parallel branch. Everything below spends `get_llm('memories')`, so the
     # gate has to sit above it rather than inside the extractor.
-    if free_tier_memory_suppression_enabled():
+    # Same contract as the S6 gate below: the cohort admits nobody when it is
+    # not told which account it is deciding about, so a bare call leaves this
+    # branch unreachable however the cohort is configured. The sweep and the
+    # connectors already pass `uid`; this site was the exception.
+    if free_tier_memory_suppression_enabled(uid):
         verdict = memory_formation_verdict(decision_for=_managed_compute_decision_for(uid))
         if verdict.suppressed:
             logger.info(
