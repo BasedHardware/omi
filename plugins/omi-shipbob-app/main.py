@@ -15,11 +15,12 @@ from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import Depends, FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.exceptions import RequestValidationError
+from shipbob_tools_auth import require_shipbob_tools_auth
 
 from db import (
     store_shipbob_tokens,
@@ -597,7 +598,7 @@ async def select_channel(request: Request):
 
 
 @app.post("/tools/get_inventory", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_inventory(request: Request):
+async def tool_get_inventory(request: Request, _auth: None = Depends(require_shipbob_tools_auth)):
     """
     Get inventory levels for all items or a specific product.
     """
@@ -657,7 +658,7 @@ async def tool_get_inventory(request: Request):
 
 
 @app.post("/tools/get_products", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_products(request: Request):
+async def tool_get_products(request: Request, _auth: None = Depends(require_shipbob_tools_auth)):
     """
     Get list of products.
     """
@@ -701,7 +702,7 @@ async def tool_get_products(request: Request):
 
 
 @app.post("/tools/create_wro", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_create_wro(request: Request):
+async def tool_create_wro(request: Request, _auth: None = Depends(require_shipbob_tools_auth)):
     """
     Create a Warehouse Receiving Order (WRO).
     """
@@ -857,7 +858,7 @@ async def tool_create_wro(request: Request):
 
 
 @app.post("/tools/get_wros", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_wros(request: Request):
+async def tool_get_wros(request: Request, _auth: None = Depends(require_shipbob_tools_auth)):
     """
     Get Warehouse Receiving Orders.
     """
@@ -914,7 +915,7 @@ async def tool_get_wros(request: Request):
 
 
 @app.post("/tools/cancel_wro", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_cancel_wro(request: Request):
+async def tool_cancel_wro(request: Request, _auth: None = Depends(require_shipbob_tools_auth)):
     """
     Cancel a Warehouse Receiving Order.
     """
@@ -954,7 +955,7 @@ async def tool_cancel_wro(request: Request):
 
 
 @app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_orders(request: Request):
+async def tool_get_orders(request: Request, _auth: None = Depends(require_shipbob_tools_auth)):
     """
     Get recent orders.
     """
@@ -1016,7 +1017,7 @@ async def tool_get_orders(request: Request):
 
 
 @app.post("/tools/get_fulfillment_centers", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_fulfillment_centers(request: Request):
+async def tool_get_fulfillment_centers(request: Request, _auth: None = Depends(require_shipbob_tools_auth)):
     """
     Get available fulfillment centers.
     """
