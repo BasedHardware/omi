@@ -558,16 +558,16 @@ class AnalyticsManager {
   void transcribeLaterRecordingProcessed() => const TypedEvents().emit(const TranscribeLaterRecordingProcessed());
 
   // Phone Calls (VoIP)
-  void phoneCallPageOpened() => track('Phone Call Page Opened');
+  void phoneCallPageOpened() => const TypedEvents().emit(const PhoneCallPageOpened());
 
-  void phoneCallVerificationStarted() => track('Phone Call Verification Started');
+  void phoneCallVerificationStarted() => const TypedEvents().emit(const PhoneCallVerificationStarted());
 
-  void phoneCallVerificationCompleted() => track('Phone Call Verification Completed');
+  void phoneCallVerificationCompleted() => const TypedEvents().emit(const PhoneCallVerificationCompleted());
 
   void phoneCallStarted({String? contactName}) =>
       const TypedEvents().emit(PhoneCallStarted(hasContactName: contactName != null));
 
-  void phoneCallConnected() => track('Phone Call Connected');
+  void phoneCallConnected() => const TypedEvents().emit(const PhoneCallConnected());
 
   void phoneCallEnded({required int durationSeconds}) =>
       const TypedEvents().emit(PhoneCallEnded(durationSeconds: durationSeconds));
@@ -606,7 +606,7 @@ class AnalyticsManager {
   void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
 
   // Phone Calls Dialpad
-  void phoneCallDialpadOpened() => track('Phone Call Dialpad Opened');
+  void phoneCallDialpadOpened() => const TypedEvents().emit(const PhoneCallDialpadOpened());
 
   void phoneCallDialpadDigitPressed(String digit) =>
       track('Phone Call Dialpad Digit Pressed', properties: {'digit': digit});
@@ -615,9 +615,9 @@ class AnalyticsManager {
   void phoneCallUpsellShown({required String source}) =>
       track('Phone Call Upsell Shown', properties: {'source': source});
 
-  void phoneCallUpsellUpgradeTapped() => track('Phone Call Upsell Upgrade Tapped');
+  void phoneCallUpsellUpgradeTapped() => const TypedEvents().emit(const PhoneCallUpsellUpgradeTapped());
 
-  void phoneCallUpsellDismissed() => track('Phone Call Upsell Dismissed');
+  void phoneCallUpsellDismissed() => const TypedEvents().emit(const PhoneCallUpsellDismissed());
 
   void appResultExpanded(ServerConversation conversation, String appId) {
     track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
@@ -678,7 +678,7 @@ class AnalyticsManager {
     });
   }
 
-  void deviceDisconnected() => track('Device Disconnected');
+  void deviceDisconnected() => const TypedEvents().emit(const DeviceDisconnected());
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
     final properties = <String, Object>{
@@ -913,11 +913,11 @@ class AnalyticsManager {
     track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
   }
 
-  void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
+  void speechProfileCapturePageClicked() => const TypedEvents().emit(const SpeechProfileCapturePageClicked());
 
-  void speechProfileSkipped() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.skipped));
+  void speechProfileSkipped() => const TypedEvents().emit(const SpeechProfileSkipped());
 
-  void speechProfileUploadSucceeded() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadSucceeded));
+  void speechProfileUploadSucceeded() => const TypedEvents().emit(const SpeechProfileUploadSucceeded());
 
   void speechProfileUploadFailed({String? reason, int? statusCode}) => track(
         speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadFailed),
@@ -927,9 +927,9 @@ class AnalyticsManager {
         },
       );
 
-  void speechProfileEmbeddingStored() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.embeddingStored));
+  void speechProfileEmbeddingStored() => const TypedEvents().emit(const SpeechProfileEmbeddingStored());
 
-  void speechProfileContinued() => track(speechProfileContinuedEventName);
+  void speechProfileContinued() => const TypedEvents().emit(const SpeechProfileContinued());
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       const TypedEvents().emit(ShowDiscardedMemoriesToggled(showDiscarded: showDiscarded));
@@ -1105,9 +1105,10 @@ class AnalyticsManager {
 
   void batteryIndicatorClicked() => track('Battery Indicator Clicked');
 
-  void useWithoutDeviceOnboardingWelcome() => track('Use Without Device Onboarding Welcome');
+  void useWithoutDeviceOnboardingWelcome() => const TypedEvents().emit(const UseWithoutDeviceOnboardingWelcome());
 
-  void useWithoutDeviceOnboardingFindDevices() => track('Use Without Device Onboarding Find Devices');
+  void useWithoutDeviceOnboardingFindDevices() =>
+      const TypedEvents().emit(const UseWithoutDeviceOnboardingFindDevices());
 
   // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 

@@ -38,6 +38,21 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Daily Summary Toggled',
     'AI App Generator App Generated',
     'Action Items View Toggled',
-    'Phone Call Started'
+    'Phone Call Started',
+    'Phone Call Page Opened',
+    'Phone Call Verification Started',
+    'Phone Call Verification Completed',
+    'Phone Call Connected',
+    'Phone Call Dialpad Opened',
+    'Phone Call Upsell Upgrade Tapped',
+    'Phone Call Upsell Dismissed',
+    'Device Disconnected',
+    'Speech Profile Capture Page Clicked',
+    'Speech Profile Skipped',
+    'Speech Profile Upload Succeeded',
+    'Speech Profile Embedding Stored',
+    'Onboarding Step Speech Profile Continued',
+    'Use Without Device Onboarding Welcome',
+    'Use Without Device Onboarding Find Devices'
   )
 GROUP BY event ORDER BY event;

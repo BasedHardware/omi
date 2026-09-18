@@ -40,4 +40,19 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | aiAppGeneratorAppGenerated | AI App Generator App Generated | success | active | mobile-instrumentation-presence |
 | actionItemsViewToggled | Action Items View Toggled | grouped_view | active | mobile-instrumentation-presence |
 | phoneCallStarted | Phone Call Started | has_contact_name | active | mobile-instrumentation-presence |
+| phoneCallPageOpened | Phone Call Page Opened | none | active | mobile-instrumentation-presence |
+| phoneCallVerificationStarted | Phone Call Verification Started | none | active | mobile-instrumentation-presence |
+| phoneCallVerificationCompleted | Phone Call Verification Completed | none | active | mobile-instrumentation-presence |
+| phoneCallConnected | Phone Call Connected | none | active | mobile-instrumentation-presence |
+| phoneCallDialpadOpened | Phone Call Dialpad Opened | none | active | mobile-instrumentation-presence |
+| phoneCallUpsellUpgradeTapped | Phone Call Upsell Upgrade Tapped | none | active | mobile-instrumentation-presence |
+| phoneCallUpsellDismissed | Phone Call Upsell Dismissed | none | active | mobile-instrumentation-presence |
+| deviceDisconnected | Device Disconnected | none | active | mobile-instrumentation-presence |
+| speechProfileCapturePageClicked | Speech Profile Capture Page Clicked | none | active | mobile-instrumentation-presence |
+| speechProfileSkipped | Speech Profile Skipped | none | active | mobile-instrumentation-presence |
+| speechProfileUploadSucceeded | Speech Profile Upload Succeeded | none | active | mobile-instrumentation-presence |
+| speechProfileEmbeddingStored | Speech Profile Embedding Stored | none | active | mobile-instrumentation-presence |
+| speechProfileContinued | Onboarding Step Speech Profile Continued | none | active | mobile-instrumentation-presence |
+| useWithoutDeviceOnboardingWelcome | Use Without Device Onboarding Welcome | none | active | mobile-instrumentation-presence |
+| useWithoutDeviceOnboardingFindDevices | Use Without Device Onboarding Find Devices | none | active | mobile-instrumentation-presence |
 | typeExtensionProbe | Type Extension Probe | enabled, count, mode | active | c8-type-extension |

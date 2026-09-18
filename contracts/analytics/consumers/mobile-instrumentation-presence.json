@@ -40,7 +40,22 @@
     "dailySummaryToggled",
     "aiAppGeneratorAppGenerated",
     "actionItemsViewToggled",
-    "phoneCallStarted"
+    "phoneCallStarted",
+    "phoneCallPageOpened",
+    "phoneCallVerificationStarted",
+    "phoneCallVerificationCompleted",
+    "phoneCallConnected",
+    "phoneCallDialpadOpened",
+    "phoneCallUpsellUpgradeTapped",
+    "phoneCallUpsellDismissed",
+    "deviceDisconnected",
+    "speechProfileCapturePageClicked",
+    "speechProfileSkipped",
+    "speechProfileUploadSucceeded",
+    "speechProfileEmbeddingStored",
+    "speechProfileContinued",
+    "useWithoutDeviceOnboardingWelcome",
+    "useWithoutDeviceOnboardingFindDevices"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

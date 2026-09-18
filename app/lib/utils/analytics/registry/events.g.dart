@@ -340,6 +340,126 @@ final class PhoneCallStarted extends RegisteredEvent {
   Map<String, Object> get properties => {"has_contact_name": hasContactName};
 }
 
+final class PhoneCallPageOpened extends RegisteredEvent {
+  const PhoneCallPageOpened();
+  @override
+  String get wireName => "Phone Call Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PhoneCallVerificationStarted extends RegisteredEvent {
+  const PhoneCallVerificationStarted();
+  @override
+  String get wireName => "Phone Call Verification Started";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PhoneCallVerificationCompleted extends RegisteredEvent {
+  const PhoneCallVerificationCompleted();
+  @override
+  String get wireName => "Phone Call Verification Completed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PhoneCallConnected extends RegisteredEvent {
+  const PhoneCallConnected();
+  @override
+  String get wireName => "Phone Call Connected";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PhoneCallDialpadOpened extends RegisteredEvent {
+  const PhoneCallDialpadOpened();
+  @override
+  String get wireName => "Phone Call Dialpad Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PhoneCallUpsellUpgradeTapped extends RegisteredEvent {
+  const PhoneCallUpsellUpgradeTapped();
+  @override
+  String get wireName => "Phone Call Upsell Upgrade Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PhoneCallUpsellDismissed extends RegisteredEvent {
+  const PhoneCallUpsellDismissed();
+  @override
+  String get wireName => "Phone Call Upsell Dismissed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DeviceDisconnected extends RegisteredEvent {
+  const DeviceDisconnected();
+  @override
+  String get wireName => "Device Disconnected";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SpeechProfileCapturePageClicked extends RegisteredEvent {
+  const SpeechProfileCapturePageClicked();
+  @override
+  String get wireName => "Speech Profile Capture Page Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SpeechProfileSkipped extends RegisteredEvent {
+  const SpeechProfileSkipped();
+  @override
+  String get wireName => "Speech Profile Skipped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SpeechProfileUploadSucceeded extends RegisteredEvent {
+  const SpeechProfileUploadSucceeded();
+  @override
+  String get wireName => "Speech Profile Upload Succeeded";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SpeechProfileEmbeddingStored extends RegisteredEvent {
+  const SpeechProfileEmbeddingStored();
+  @override
+  String get wireName => "Speech Profile Embedding Stored";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SpeechProfileContinued extends RegisteredEvent {
+  const SpeechProfileContinued();
+  @override
+  String get wireName => "Onboarding Step Speech Profile Continued";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class UseWithoutDeviceOnboardingWelcome extends RegisteredEvent {
+  const UseWithoutDeviceOnboardingWelcome();
+  @override
+  String get wireName => "Use Without Device Onboarding Welcome";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class UseWithoutDeviceOnboardingFindDevices extends RegisteredEvent {
+  const UseWithoutDeviceOnboardingFindDevices();
+  @override
+  String get wireName => "Use Without Device Onboarding Find Devices";
+  @override
+  Map<String, Object> get properties => {};
+}
+
 enum TypeExtensionProbeMode {
   off("off"),
   headphonesOnly("headphones_only"),
