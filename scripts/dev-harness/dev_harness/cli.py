@@ -246,26 +246,139 @@ def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -
             os.killpg(pid, signal.SIGTERM)
         except (ProcessLookupError, PermissionError):
             pass
-    _reap_detached_port_holders(record, descendants)
+    _reap_detached_port_holders(cfg, record, descendants)
     remaining = [entry for entry in _process_records(cfg) if entry.get("service") != service]
     _save_manifests(cfg, remaining)
 
 
-def _require_port_available_or_owned(cfg: config.HarnessConfig, service: str, port: int) -> None:
-    if not _port_open("127.0.0.1", port):
-        return
-    record = _service_record(cfg, service)
-    if record is None:
-        raise RuntimeError(
-            f"Port {port} for {service} is already in use by a foreign process. Stop it or set a separate local harness state/port before retrying."
+_UNOWNED_PORT_REMEDY = (
+    "stop that pid or pick another OMI_HARNESS_PORT_OFFSET; " "the harness will not proceed on a port it does not own"
+)
+
+
+def _service_port(cfg: config.HarnessConfig, service: str) -> int:
+    ports = {
+        "firestore": cfg.firestore_port,
+        "auth": cfg.auth_port,
+        "typesense": cfg.typesense_port,
+        "backend": cfg.backend_port,
+        "llm-gateway": cfg.llm_gateway_port,
+        "desktop-backend": cfg.desktop_backend_port,
+        "redis": cfg.redis_port,
+    }
+    return int(ports.get(service, 0) or 0)
+
+
+def _unowned_port_message(service: str, port: int, pid: int) -> str:
+    cmdline = safety.command_line_for_pid(pid) or "<unknown command>"
+    return f"{service}: port {port} held by unowned pid {pid} ({cmdline}); {_UNOWNED_PORT_REMEDY}"
+
+
+def _typesense_container_publishes(cfg: config.HarnessConfig, port: int) -> bool:
+    """True when our named Typesense container is the one publishing 127.0.0.1:port."""
+
+    if typesense_runtime() != "docker":
+        return False
+    container = _typesense_container_name(cfg)
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "-f", "{{json .HostConfig.PortBindings}}", container],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=5,
+            check=False,
         )
-    safety.validate_port_owner(
-        port,
-        pid=int(record["pid"]),
-        port_manifest=cfg.layout.port_manifest,
-        process_manifest=cfg.layout.process_manifest,
-        service=service,
-    )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode != 0:
+        return False
+    try:
+        bindings = json.loads(result.stdout.strip() or "null")
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(bindings, dict):
+        return False
+    entries = bindings.get(f"{config.TYPESENSE_CONTAINER_PORT}/tcp")
+    if not isinstance(entries, list):
+        return False
+    want = str(int(port))
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("HostPort") or "") == want and str(entry.get("HostIp") or "") == "127.0.0.1":
+            return True
+    return False
+
+
+def _holder_is_owned(*, holder: int, supervisor: int, marker: str) -> bool:
+    if holder <= 0:
+        return False
+    if supervisor > 0 and holder == supervisor:
+        return True
+    if supervisor > 0 and safety.is_descendant_of(holder, supervisor):
+        return True
+    if marker and marker in safety.command_line_for_pid(holder):
+        return True
+    return False
+
+
+def _assert_leased_port_owned(cfg: config.HarnessConfig, service: str, port: int, supervisor: int) -> None:
+    if port <= 0:
+        return
+    try:
+        holders = safety.listening_pids(port)
+    except safety.SafetyError as exc:
+        raise safety.SafetyError(
+            f"{service}: cannot verify ownership of port {port}: {exc}; "
+            "the harness will not proceed on a port it cannot prove it owns"
+        ) from exc
+    marker = _marker(cfg, service)
+    unowned = [pid for pid in holders if not _holder_is_owned(holder=pid, supervisor=supervisor, marker=marker)]
+    if not unowned:
+        return
+    if service == "typesense" and _typesense_container_publishes(cfg, port):
+        return
+    raise safety.SafetyError(_unowned_port_message(service, port, unowned[0]))
+
+
+def _wait_for_ownership_marker(pid: int, marker: str, *, timeout: float = 5.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if marker and marker in safety.command_line_for_pid(pid):
+            return True
+        if not safety.process_exists(pid):
+            return False
+        time.sleep(0.05)
+    return bool(marker) and marker in safety.command_line_for_pid(pid)
+
+
+def _require_port_available_or_owned(cfg: config.HarnessConfig, service: str, port: int) -> None:
+    try:
+        holders = safety.listening_pids(port)
+    except safety.SafetyError as exc:
+        raise safety.SafetyError(
+            f"{service}: cannot verify ownership of port {port}: {exc}; refusing to start on an unverifiable port"
+        ) from exc
+    record = _service_record(cfg, service)
+    if holders:
+        if record is None:
+            raise safety.SafetyError(_unowned_port_message(service, port, holders[0]))
+        safety.validate_port_owner(
+            port,
+            pid=int(record["pid"]),
+            port_manifest=cfg.layout.port_manifest,
+            process_manifest=cfg.layout.process_manifest,
+            service=service,
+        )
+        _assert_leased_port_owned(cfg, service, port, int(record["pid"]))
+        return
+    if _port_open("127.0.0.1", port) and record is None:
+        raise safety.SafetyError(
+            f"{service}: port {port} accepts connections but lsof reported no listener; "
+            "refusing to start on an unverifiable port. Stop whatever holds it or pick another "
+            "OMI_HARNESS_PORT_OFFSET."
+        )
 
 
 def _http_ok(url: str, timeout: float = 1.0, headers: dict[str, str] | None = None) -> tuple[bool, str]:
@@ -644,6 +757,16 @@ def _start_process(
     proc = subprocess.Popen(
         supervised, cwd=str(cwd), env=child_env, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True
     )
+    if not _wait_for_ownership_marker(proc.pid, marker):
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+        raise RuntimeError(
+            f"{service}: started pid={proc.pid} but command line does not contain harness ownership "
+            f"marker {marker}; teardown cannot prove ownership so the process was not recorded. "
+            f"Inspect with: ps -ww -p {proc.pid} -o command="
+        )
     records = [record for record in _process_records(cfg) if record.get("service") != service]
     records.append(
         {
@@ -947,12 +1070,31 @@ def _wait_health(
                     continue
             if service == "redis":
                 if _port_open("127.0.0.1", cfg.redis_port):
+                    record = process_records.get(service) or _service_record(cfg, service)
+                    if record is not None:
+                        try:
+                            _assert_leased_port_owned(cfg, service, cfg.redis_port, int(record["pid"]))
+                        except safety.SafetyError as exc:
+                            failures[service] = str(exc)
+                            pending.pop(service)
+                            print(f"{service}: {exc}")
+                            continue
                     print("redis: healthy (port-open)")
                     pending.pop(service)
                     failures.pop(service, None)
                 continue
             ok, detail = _http_ok(url, headers=headers)
             if ok:
+                port = _service_port(cfg, service)
+                record = process_records.get(service) or _service_record(cfg, service)
+                if record is not None:
+                    try:
+                        _assert_leased_port_owned(cfg, service, port, int(record["pid"]))
+                    except safety.SafetyError as exc:
+                        failures[service] = str(exc)
+                        pending.pop(service)
+                        print(f"{service}: {exc}")
+                        continue
                 print(f"{service}: healthy ({detail})")
                 pending.pop(service)
                 failures.pop(service, None)
@@ -1100,27 +1242,35 @@ def _signal_owned_process_group(pid: int, service: str) -> None:
         raise safety.SafetyError(f"Cannot signal process group {pid}: {exc}") from exc
 
 
-def _reap_detached_port_holders(record: dict[str, object], descendants: tuple[int, ...]) -> None:
+def _reap_detached_port_holders(
+    cfg: config.HarnessConfig, record: dict[str, object], descendants: tuple[int, ...]
+) -> None:
     """Stop a detached child that survived the group signal and still owns the service port.
 
     Ownership is proven twice over: the PID was a descendant of the manifest-validated
     supervisor before any signal was sent, and it is still holding the port this service
-    recorded. Anything else on the port is left alone.
+    recorded. An unowned listener on a leased port is a hard failure: the lane does
+    not own that port and must not proceed as if it did.
     """
 
     service = str(record.get("service"))
     port = int(record.get("port", 0) or 0)
-    if port <= 0 or not descendants:
+    supervisor = int(record.get("pid", -1))
+    marker = str(record.get("ownership_marker") or _marker(cfg, service))
+    if port <= 0:
         return
+    if service == "typesense":
+        _remove_stale_typesense_container(cfg)
     try:
         holders = safety.listening_pids(port)
     except safety.SafetyError as exc:
-        print(f"{service}: cannot inspect port {port} after stop: {exc}")
-        return
-    owned = [pid for pid in holders if pid in descendants]
-    for pid in holders:
-        if pid not in descendants:
-            print(f"{service}: port {port} held by unowned pid {pid}; leaving it for safety inspection")
+        raise safety.SafetyError(f"{service}: cannot inspect port {port} after stop: {exc}") from exc
+    owned = [
+        pid
+        for pid in holders
+        if pid in descendants or _holder_is_owned(holder=pid, supervisor=supervisor, marker=marker)
+    ]
+    owned = list(dict.fromkeys(owned))
     for pid in owned:
         try:
             os.kill(pid, signal.SIGTERM)
@@ -1138,6 +1288,23 @@ def _reap_detached_port_holders(record: dict[str, object], descendants: tuple[in
             print(f"{service}: sent SIGKILL to detached child {pid} still holding port {port}")
         except (ProcessLookupError, PermissionError) as exc:
             print(f"{service}: detached child {pid} still holds port {port}: {exc}")
+    try:
+        leftover = safety.listening_pids(port)
+    except safety.SafetyError as exc:
+        raise safety.SafetyError(f"{service}: cannot inspect port {port} after stop: {exc}") from exc
+    still_unowned = [
+        pid
+        for pid in leftover
+        if pid not in descendants and not _holder_is_owned(holder=pid, supervisor=supervisor, marker=marker)
+    ]
+    if not still_unowned:
+        return
+    if service == "typesense" and _typesense_container_publishes(cfg, port):
+        raise safety.SafetyError(
+            _unowned_port_message(service, port, still_unowned[0])
+            + "; named typesense container still publishes this port after stop"
+        )
+    raise safety.SafetyError(_unowned_port_message(service, port, still_unowned[0]))
 
 
 def _stop_owned(cfg: config.HarnessConfig) -> None:
@@ -1145,16 +1312,23 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
     # Capture the tree while the supervisors are alive; detached children (the
     # Firestore emulator JVM) are unreachable through the process group.
     descendants = {int(record.get("pid", -1)): safety.descendant_pids(int(record.get("pid", -1))) for record in records}
+    failures: list[str] = []
     for record in records:
         pid = int(record.get("pid", -1))
         service = str(record.get("service"))
+        if service == "typesense":
+            _remove_stale_typesense_container(cfg)
         if not safety.process_exists(pid):
             continue
         try:
             safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
             _signal_owned_process_group(pid, service)
         except safety.SafetyError as exc:
-            print(f"{service}: not stopped: {exc}")
+            failures.append(
+                f"{service}: still running pid={pid}; {exc}. "
+                "Do not kill it unless `ps -ww` shows the harness ownership marker; "
+                "the pid may have been reused."
+            )
     deadline = time.time() + 8
     while time.time() < deadline and any(safety.process_exists(int(r.get("pid", -1))) for r in records):
         time.sleep(0.25)
@@ -1166,17 +1340,24 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
                 safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
                 os.killpg(pid, signal.SIGTERM)
                 print(f"{service}: sent SIGTERM to process group {pid}")
-            except (ProcessLookupError, safety.SafetyError) as exc:
-                print(f"{service}: still running pid={pid}; leaving it for safety inspection: {exc}")
+            except ProcessLookupError:
+                pass
+            except safety.SafetyError as exc:
+                failures.append(f"{service}: still running pid={pid}; {exc}")
     deadline = time.time() + 5
     while time.time() < deadline and any(safety.process_exists(int(r.get("pid", -1))) for r in records):
         time.sleep(0.25)
     for record in records:
         pid = int(record.get("pid", -1))
         if safety.process_exists(pid):
-            print(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
-        _reap_detached_port_holders(record, descendants.get(pid, ()))
+            failures.append(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
+        try:
+            _reap_detached_port_holders(cfg, record, descendants.get(pid, ()))
+        except safety.SafetyError as exc:
+            failures.append(str(exc))
     _save_manifests(cfg, records)
+    if failures:
+        raise safety.SafetyError("; ".join(failures))
 
 
 def cmd_down(args: argparse.Namespace) -> int:
@@ -1185,7 +1366,11 @@ def cmd_down(args: argparse.Namespace) -> int:
         print("No harness-owned state exists; nothing to stop.")
         return 0
     safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
-    _stop_owned(cfg)
+    try:
+        _stop_owned(cfg)
+    except safety.SafetyError as exc:
+        print(str(exc))
+        return 1
     return 0
 
 
@@ -1203,7 +1388,11 @@ def cmd_reset(args: argparse.Namespace) -> int:
     cfg = config.load_config(_repo_root(), create_layout=True)
     print(f"Resetting harness-owned state only: {cfg.layout.state_root}")
     safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
-    _stop_owned(cfg)
+    try:
+        _stop_owned(cfg)
+    except safety.SafetyError as exc:
+        print(str(exc))
+        return 1
     _clear_state(cfg)
     print("Reset complete.")
     return 0

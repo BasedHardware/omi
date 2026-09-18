@@ -501,12 +501,18 @@ def command_line_for_pid(pid: int) -> str:
     if proc_cmdline.exists():
         return proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
     try:
+        # `-ww` plus a wide COLUMNS so a late `--marker` survives `ps` truncation.
+        # Without this, teardown cannot prove ownership of a live supervisor and
+        # either leaks it or refuses to signal it (Firestore hits this every stop).
+        env = os.environ.copy()
+        env["COLUMNS"] = "2048"
         result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
+            ["ps", "-ww", "-p", str(pid), "-o", "command="],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
             check=False,
+            env=env,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
     except OSError:

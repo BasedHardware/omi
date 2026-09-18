@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev_harness import safety
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -295,3 +294,22 @@ def test_redis_reset_guard_refuses_shared_redis(tmp_path: Path) -> None:
             state_root=layout.state_root,
             expected_instance="default",
         )
+
+
+def test_command_line_for_pid_sees_late_marker_when_columns_is_narrow(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COLUMNS", "40")
+    marker = "omi-dev-harness:marker-visible-under-narrow-ps"
+    padding = "PAD" * 80
+    proc = subprocess.Popen([sys.executable, "-c", f"import time; time.sleep(30)  # {padding} {marker}"])
+    try:
+        deadline = time.time() + 2
+        cmdline = ""
+        while time.time() < deadline:
+            cmdline = safety.command_line_for_pid(proc.pid)
+            if marker in cmdline:
+                break
+            time.sleep(0.05)
+        assert marker in cmdline
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)

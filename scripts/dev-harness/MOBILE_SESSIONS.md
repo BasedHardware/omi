@@ -33,10 +33,15 @@ evidence receipt. Nothing is shared between concurrent sessions:
 
 Ownership is fail-closed: leases record owner host/user/pid; a **live foreign
 owner is never reclaimed**; a **foreign process occupying a port is refused,
-not killed**; `recover` only takes over a same-host lease whose owner pid is
-provably dead, bumping the lease generation; stop/reset/release only touch
-processes and paths recorded in the session's own manifests (harness ownership
-guards apply underneath).
+not killed**; an **unowned listener on a port the lease claims is a hard
+failure** (start and stop name the port, the holder pid, and the remedy — pick
+another offset or stop that pid; Typesense via Docker counts as owned only
+when the named container publishes `127.0.0.1:<port>`); `recover` only takes
+over a same-host lease whose owner pid is provably dead, bumping the lease
+generation; stop/reset/release only touch processes and paths recorded in the
+session's own manifests (harness ownership guards apply underneath). Harness
+child command lines must carry `omi-dev-harness:<instance>:<service>` at start
+so teardown can assert the same marker instead of guessing.
 
 ## Synthetic auth (reuse of open PR #11784 — not merged or closed)
 

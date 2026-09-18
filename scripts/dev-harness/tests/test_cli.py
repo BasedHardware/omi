@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -85,9 +87,7 @@ def test_java_stub_that_exits_nonzero_is_not_a_runtime(monkeypatch: pytest.Monke
 
 def test_java_reports_its_major_version(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
-    monkeypatch.setattr(
-        cli.subprocess, "run", _fake_java(0, 'openjdk version "21.0.12.1" 2026-08-18\n')
-    )
+    monkeypatch.setattr(cli.subprocess, "run", _fake_java(0, 'openjdk version "21.0.12.1" 2026-08-18\n'))
 
     assert cli._java_major_version() == 21
 
@@ -99,9 +99,7 @@ def test_legacy_java_1_8_version_line_reports_major_8(monkeypatch: pytest.Monkey
     assert cli._java_major_version() == 8
 
 
-def test_missing_java_runtime_is_reported_as_a_prerequisite(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_missing_java_runtime_is_reported_as_a_prerequisite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PROVIDER_MODE", "offline")
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
     monkeypatch.setattr(cli, "_java_major_version", lambda: None)
@@ -123,9 +121,7 @@ def test_missing_uvicorn_names_setup_backend(monkeypatch: pytest.MonkeyPatch, tm
     assert any("uvicorn" in item and "make lane-backend" in item for item in missing)
 
 
-def test_pre_21_java_is_reported_as_a_prerequisite(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_pre_21_java_is_reported_as_a_prerequisite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """firebase-tools rejects JDKs before 21, so the harness must too — not at
     emulator start (45s/90s health-check timeout) but in the prereq report.
     """
@@ -182,9 +178,7 @@ def test_current_node_on_path_is_not_reported_as_missing(monkeypatch: pytest.Mon
     assert not any(item.startswith("node >=") for item in missing)
 
 
-def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Without --yes, npx asks "Ok to proceed? (y)" on a pipe nothing can answer.
 
     The emulator runs detached with stdout redirected to a log file, so the prompt
@@ -325,9 +319,7 @@ def test_wait_health_returns_services_that_exhaust_their_deadlines(
     ]
 
 
-def test_wait_health_discards_transient_failure_after_recovery(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_wait_health_discards_transient_failure_after_recovery(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PROVIDER_MODE", "offline")
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
     cfg = config.load_config(REPO_ROOT)
@@ -355,8 +347,7 @@ def test_status_health_label_uses_http_probe_and_preserves_degraded(
 
     monkeypatch.setattr(cli, "_http_ok", lambda _url, headers=None: (False, "connection refused"))
     assert (
-        cli._status_health_label(cfg, "backend", alive=True, port=cfg.backend_port)
-        == "degraded (connection refused)"
+        cli._status_health_label(cfg, "backend", alive=True, port=cfg.backend_port) == "degraded (connection refused)"
     )
 
     monkeypatch.setattr(cli, "_port_open", lambda _host, _port: False)
@@ -563,3 +554,146 @@ def test_down_reaps_a_detached_child_still_holding_the_service_port(
                 os.kill(pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
+
+
+def test_unowned_listener_on_a_claimed_port_is_a_hard_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    port = sock.getsockname()[1]
+    try:
+        with pytest.raises(safety.SafetyError, match=rf"port {port} held by unowned pid {os.getpid()}"):
+            cli._require_port_available_or_owned(cfg, "typesense", port)
+    finally:
+        sock.close()
+
+
+def test_stop_fails_closed_on_unowned_port_holder_and_does_not_kill_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "typesense_runtime", lambda: "native")
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    port = sock.getsockname()[1]
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait(timeout=5)
+    record = {
+        "service": "redis",
+        "pid": dead.pid,
+        "process_group": dead.pid,
+        "port": port,
+        "endpoint": f"127.0.0.1:{port}",
+        "ownership_marker": cli._marker(cfg, "redis"),
+    }
+    try:
+        cli._write_json(
+            cfg.layout.process_manifest,
+            {"schema_version": 1, "updated_at": cli._now(), "processes": [record]},
+        )
+        cli._write_json(
+            cfg.layout.port_manifest,
+            {
+                "schema_version": 1,
+                "updated_at": cli._now(),
+                "ports": [{"service": "redis", "port": port, "pid": dead.pid, "endpoint": record["endpoint"]}],
+            },
+        )
+        with pytest.raises(safety.SafetyError, match=rf"port {port} held by unowned pid {os.getpid()}"):
+            cli._stop_owned(cfg)
+        assert os.getpid() in safety.listening_pids(port)
+    finally:
+        sock.close()
+
+
+def test_cmd_down_returns_nonzero_when_stop_cannot_prove_port_ownership(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    config.load_config(REPO_ROOT, create_layout=True)
+    monkeypatch.setattr(cli, "_repo_root", lambda: REPO_ROOT)
+    monkeypatch.setattr(
+        cli,
+        "_stop_owned",
+        lambda _cfg: (_ for _ in ()).throw(
+            safety.SafetyError(
+                "typesense: port 10908 held by unowned pid 40118 (ssh mux); "
+                "stop that pid or pick another OMI_HARNESS_PORT_OFFSET; "
+                "the harness will not proceed on a port it does not own"
+            )
+        ),
+    )
+    assert cli.cmd_down(SimpleNamespace()) == 1
+
+
+def test_docker_typesense_publish_counts_as_ownership_of_the_proxy_pid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "typesense_runtime", lambda: "docker")
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+    bindings = {
+        f"{config.TYPESENSE_CONTAINER_PORT}/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(cfg.typesense_port)}]
+    }
+
+    def fake_run(argv, **kwargs):
+        if list(argv[:2]) == ["docker", "inspect"]:
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(bindings), stderr="")
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(safety, "listening_pids", lambda _port: (40118,))
+    monkeypatch.setattr(safety, "is_descendant_of", lambda _holder, _supervisor: False)
+    monkeypatch.setattr(safety, "command_line_for_pid", lambda _pid: "ssh: colima/ssh.sock [mux]")
+    assert cli._typesense_container_publishes(cfg, cfg.typesense_port)
+    cli._assert_leased_port_owned(cfg, "typesense", cfg.typesense_port, 99)
+
+
+def test_healthy_typesense_port_held_by_unowned_pid_is_a_hard_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "typesense_runtime", lambda: "native")
+    monkeypatch.setattr(cli, "_typesense_container_publishes", lambda _cfg, _port: False)
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+    monkeypatch.setattr(safety, "listening_pids", lambda _port: (40118,))
+    monkeypatch.setattr(safety, "is_descendant_of", lambda _holder, _supervisor: False)
+    monkeypatch.setattr(safety, "command_line_for_pid", lambda _pid: "ssh: colima/ssh.sock [mux]")
+    with pytest.raises(safety.SafetyError, match=r"port .* held by unowned pid 40118"):
+        cli._assert_leased_port_owned(cfg, "typesense", cfg.typesense_port, 99)
+
+
+def test_start_process_does_not_record_a_pid_whose_marker_is_not_visible(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+    fake = SimpleNamespace(pid=424242, poll=lambda: None)
+    monkeypatch.setattr(cli.subprocess, "Popen", lambda *_a, **_k: fake)
+    monkeypatch.setattr(cli, "_wait_for_ownership_marker", lambda *_a, **_k: False)
+    monkeypatch.setattr(cli, "_require_port_available_or_owned", lambda *_a, **_k: None)
+    killed: list[int] = []
+    monkeypatch.setattr(cli.os, "killpg", lambda pid, _sig: killed.append(pid))
+    with pytest.raises(RuntimeError, match="ownership marker"):
+        cli._start_process(
+            cfg,
+            "redis",
+            ["redis-server"],
+            cwd=cfg.repo_root,
+            log_name="redis-test.log",
+            port=cfg.redis_port,
+        )
+    assert killed == [424242]
+    assert all(record.get("service") != "redis" for record in cli._process_records(cfg))
