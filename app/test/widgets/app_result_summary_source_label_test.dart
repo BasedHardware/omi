@@ -56,21 +56,21 @@ Future<void> _pumpSummary(
 }
 
 App _templateApp() => App(
-  id: 'app-1',
-  name: 'My Template',
-  author: 'tester',
-  description: 'test',
-  image: '',
-  capabilities: {'memories'},
-  status: 'approved',
-  category: 'test',
-  approved: true,
-  ratingCount: 0,
-  enabled: true,
-  deleted: false,
-  isPaid: false,
-  isUserPaid: false,
-);
+      id: 'app-1',
+      name: 'My Template',
+      author: 'tester',
+      description: 'test',
+      image: '',
+      capabilities: {'memories'},
+      status: 'approved',
+      category: 'test',
+      approved: true,
+      ratingCount: 0,
+      enabled: true,
+      deleted: false,
+      isPaid: false,
+      isUserPaid: false,
+    );
 
 void main() {
   // SCA-359: the summary attribution row used to render "Unknown App" for every
