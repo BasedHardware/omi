@@ -115,6 +115,43 @@ def test_deepgram_only_byok_does_not_exempt_llm_gate(monkeypatch, sub) -> None:
     assert sub.should_skip_omi_paid_postprocessing('uid', uses_custom_stt=True) is True
 
 
+def test_byok_enrolled_without_request_uid_falls_through_to_plan_check(monkeypatch, sub) -> None:
+    """Worker / keyless path: enrollment is not an exemption without request-scoped keys.
+
+    Leaves ``_byok_uid_ctx`` unset and does not monkeypatch
+    ``_request_has_llm_byok_key``. The live helper then sees no request uid
+    and returns False, so a BYOK-enrolled custom-STT user follows the plan
+    check — not ``llm_byok``.
+    """
+    assert sub.get_byok_uid() is None
+    monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', 'someone-else')
+    monkeypatch.setattr(sub.users_db, 'is_byok_active', lambda uid: True, raising=False)
+    monkeypatch.setattr(
+        sub.users_db,
+        'get_user_valid_subscription',
+        lambda uid: SimpleNamespace(plan=PlanType.basic),
+        raising=False,
+    )
+    monkeypatch.setattr(sub, 'get_monthly_usage_for_subscription', lambda uid: {'speech_seconds': BASIC_CAP})
+
+    assert sub.request_has_llm_byok_key() is False
+    allowance = sub.resolve_conversation_processing_allowance('uid')
+    assert allowance.reason == 'plan_allowance_exhausted'
+    assert allowance.allowed is False
+    assert sub.has_conversation_processing_credits('uid') is False
+    assert sub.should_skip_omi_paid_postprocessing('uid', uses_custom_stt=True) is True
+
+
+def test_subscription_inactive_custom_stt_skips_omi_paid_processing(monkeypatch, sub) -> None:
+    """Widest branch: no valid subscription means no Omi-paid post-processing."""
+    _situate_processing(monkeypatch, sub, plan=None)
+    allowance = sub.resolve_conversation_processing_allowance('uid')
+    assert allowance.reason == 'subscription_inactive'
+    assert allowance.allowed is False
+    assert sub.has_conversation_processing_credits('uid') is False
+    assert sub.should_skip_omi_paid_postprocessing('uid', uses_custom_stt=True) is True
+
+
 def test_processing_budget_reads_speech_seconds_not_transcription_seconds(monkeypatch, sub) -> None:
     _situate_processing(
         monkeypatch,
