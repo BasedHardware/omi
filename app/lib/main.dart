@@ -26,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
@@ -46,7 +47,6 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -426,7 +426,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setConnectivityProvider(connectivity)) ?? MemoriesProvider(),
         ),
         ChangeNotifierProvider(create: (context) => UserProvider()),
-        ChangeNotifierProvider(lazy: true, create: (context) => ActionItemsProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => createProductionActionItemsProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => GoalsProvider()..init()),
         ChangeNotifierProvider(create: (context) => SyncProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => TaskIntegrationProvider()),

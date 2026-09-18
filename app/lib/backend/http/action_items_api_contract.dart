@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/action_items.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -8,7 +9,18 @@ import 'api_result.dart';
 
 export 'package:omi/backend/http/api/action_items.dart' show ActionItemsApi;
 
-/// Must return the real provider; fetchActionItems consumes this API.
+/// Production constructor. [main.dart] calls this with no arguments so the
+/// shipped app always takes the typed list path. Tests may pass [send]
+/// (loopback fixture); they must not skip [ActionItemsApi].
+ActionItemsProvider createProductionActionItemsProvider({ApiSend? send}) {
+  final baseUrl = Env.apiBaseUrl ?? 'http://127.0.0.1:8000/';
+  return ActionItemsProvider(
+    actionItemsApi: ActionItemsApi(baseUrl: baseUrl, send: send),
+  );
+}
+
+/// Test helper that still returns the real provider. Production boot uses
+/// [createProductionActionItemsProvider] instead.
 ActionItemsProvider composeTypedActionItemsProvider(ActionItemsApi api) => ActionItemsProvider(actionItemsApi: api);
 
 /// Extracted status region used by ActionItemsPage, not a second tasks screen.

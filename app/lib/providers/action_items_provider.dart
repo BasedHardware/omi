@@ -93,6 +93,9 @@ class ActionItemsProvider extends ChangeNotifier {
   // Getters
   List<ActionItemWithMetadata> get actionItems => _actionItems;
   ApiViewState<List<ActionItemWithMetadata>> get apiViewState => _listViewState;
+
+  @visibleForTesting
+  bool get usesTypedActionItemsApi => _actionItemsApi != null;
   bool get isLoading => _isLoading;
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
@@ -234,7 +237,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 100,
         offset: 0,
         completed: false,
@@ -286,6 +289,49 @@ class ActionItemsProvider extends ChangeNotifier {
   static bool shouldAutoRevealCompleted(List<ActionItemWithMetadata> items) =>
       items.isNotEmpty && items.every((item) => item.completed);
 
+  /// Shared list fetch. A typed outage returns null so Home today and
+  /// load-more keep existing rows instead of looking like an empty account.
+  Future<ActionItemsResponse?> _fetchActionItemsPage({
+    required int limit,
+    required int offset,
+    bool? completed,
+    String? conversationId,
+    DateTime? startDate,
+    DateTime? endDate,
+    DateTime? dueStartDate,
+    DateTime? dueEndDate,
+    void Function(ApiResult<ActionItemsResponse> typed)? onTyped,
+  }) async {
+    final typedApi = _actionItemsApi;
+    if (typedApi != null) {
+      final typed = await typedApi.list(
+        limit: limit,
+        offset: offset,
+        completed: completed,
+        conversationId: conversationId,
+        startDate: startDate,
+        endDate: endDate,
+        dueStartDate: dueStartDate,
+        dueEndDate: dueEndDate,
+      );
+      onTyped?.call(typed);
+      return switch (typed) {
+        ApiSuccess(:final data) => data,
+        ApiFailure() => null,
+      };
+    }
+    return _getActionItems(
+      limit: limit,
+      offset: offset,
+      completed: completed,
+      conversationId: conversationId,
+      startDate: startDate,
+      endDate: endDate,
+      dueStartDate: dueStartDate,
+      dueEndDate: dueEndDate,
+    );
+  }
+
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     var loaded = false;
     if (showShimmer) {
@@ -295,33 +341,17 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final typedApi = _actionItemsApi;
-      if (typedApi != null) {
-        final typed = await typedApi.list(
-          limit: 100,
-          offset: 0,
-          completed: _includeCompleted ? null : false,
-          startDate: _startDate,
-          endDate: _endDate,
-        );
-        _projectTypedList(typed);
-        if (typed case ApiSuccess(:final data)) {
-          _applyFetchedActionItems(data);
-          loaded = true;
-        }
-      } else {
-        final response = await _getActionItems(
-          limit: 100,
-          offset: 0,
-          completed: _includeCompleted ? null : false,
-          startDate: _startDate,
-          endDate: _endDate,
-        );
-
-        if (response != null) {
-          _applyFetchedActionItems(response);
-          loaded = true;
-        }
+      final response = await _fetchActionItemsPage(
+        limit: 100,
+        offset: 0,
+        completed: _includeCompleted ? null : false,
+        startDate: _startDate,
+        endDate: _endDate,
+        onTyped: _projectTypedList,
+      );
+      if (response != null) {
+        _applyFetchedActionItems(response);
+        loaded = true;
       }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
@@ -380,7 +410,7 @@ class ActionItemsProvider extends ChangeNotifier {
     setFetching(true);
 
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 50,
         offset: _actionItems.length,
         completed: _includeCompleted ? null : false,
