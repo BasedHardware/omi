@@ -275,6 +275,32 @@ def get_products(uid: str, page: int = 1, limit: int = 50) -> List[Dict]:
     return []
 
 
+def _fetch_all_pages(fetch, uid: str, page_size: int = 100, max_pages: int = 25) -> List[Dict]:
+    """Follow ShipBob Page/Limit pagination until a short page or the safety cap.
+
+    ShipBob list endpoints return one page per request; a full page means more
+    items may exist. Anything matching by name needs the complete set or items
+    past page 1 are invisible to it.
+    """
+    items: List[Dict] = []
+    for page in range(1, max_pages + 1):
+        batch = fetch(uid, page=page, limit=page_size)
+        items.extend(batch)
+        if len(batch) < page_size:
+            break
+    return items
+
+
+def get_all_inventory(uid: str) -> List[Dict]:
+    """Get every inventory item across all pages."""
+    return _fetch_all_pages(get_inventory, uid)
+
+
+def get_all_products(uid: str) -> List[Dict]:
+    """Get every product across all pages."""
+    return _fetch_all_pages(get_products, uid)
+
+
 def match_name_candidates(items, name, key="name"):
     """Return (exact_hits, partial_hits) for a name query.
 
@@ -312,14 +338,14 @@ def format_name_candidates(candidates, what="product"):
 
 def find_product_candidates(uid: str, name: str):
     """All product hits for a name: exact hits, else partial hits."""
-    products = get_products(uid, limit=100)
+    products = get_all_products(uid)
     exact, partial = match_name_candidates(products, name)
     return exact or partial
 
 
 def find_inventory_candidates(uid: str, name: str):
     """All inventory hits for a name: exact hits, else partial hits."""
-    inventory = get_inventory(uid, limit=100)
+    inventory = get_all_inventory(uid)
     exact, partial = match_name_candidates(inventory, name)
     return exact or partial
 
@@ -674,7 +700,7 @@ async def tool_get_products(request: Request):
         if not headers:
             return ChatToolResponse(error="Please connect your ShipBob account first in the app settings.")
 
-        products = get_products(uid, limit=100 if search else limit)
+        products = get_all_products(uid) if search else get_products(uid, limit=limit)
 
         if search:
             search_lower = search.lower()
@@ -765,7 +791,7 @@ async def tool_create_wro(request: Request):
 
         if not inventory_id:
             # Try to get from inventory list
-            inventory = get_inventory(uid, limit=100)
+            inventory = get_all_inventory(uid)
             product_name_lower = str(product.get("name", "")).lower()
             for inv in inventory:
                 if isinstance(inv, dict) and str(inv.get("name", "")).lower() == product_name_lower:

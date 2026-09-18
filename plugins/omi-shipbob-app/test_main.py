@@ -658,5 +658,72 @@ class TestToolGetFulfillmentCenters(unittest.TestCase):
         self.assertIn("No fulfillment centers found", res.result)
 
 
+class TestPagination(unittest.TestCase):
+    """ShipBob list endpoints return one Page/Limit page per request. Anything
+    matching by name must aggregate pages or items past page 1 are invisible."""
+
+    def _pages(self, sizes, item):
+        """Return a make_shipbob_request side_effect yielding pages of `item`."""
+        calls = []
+
+        def fake(uid, method, endpoint, data=None, params=None):
+            page = params["Page"]
+            calls.append(page)
+            size = sizes[page - 1] if page - 1 < len(sizes) else 0
+            return [dict(item, id=page * 1000 + i) for i in range(size)]
+
+        return fake, calls
+
+    def test_get_all_products_aggregates_pages(self):
+        item = {"name": "Widget", "sku": "W1"}
+        fake, calls = self._pages([100, 100, 37], item)
+        with patch("main.make_shipbob_request", side_effect=fake):
+            products = main.get_all_products("u")
+        self.assertEqual(len(products), 237)
+        self.assertEqual(calls, [1, 2, 3])
+
+    def test_get_all_products_stops_on_short_page(self):
+        item = {"name": "Widget"}
+        fake, calls = self._pages([100, 42], item)
+        with patch("main.make_shipbob_request", side_effect=fake):
+            main.get_all_products("u")
+        self.assertEqual(calls, [1, 2])
+
+    def test_get_all_products_respects_cap(self):
+        item = {"name": "Widget"}
+        fake, calls = self._pages([100] * 40, item)
+        with patch("main.make_shipbob_request", side_effect=fake):
+            products = main.get_all_products("u")
+        self.assertEqual(len(calls), 25)
+        self.assertEqual(len(products), 2500)
+
+    def test_find_product_candidates_sees_past_page_one(self):
+        page1 = [{"name": f"Other {i}", "sku": f"O{i}"} for i in range(100)]
+        page2 = [{"name": "Blue Mug", "sku": "BM-1"}]
+        pages = {1: page1, 2: page2}
+
+        def fake(uid, method, endpoint, data=None, params=None):
+            return pages.get(params["Page"], [])
+
+        with patch("main.make_shipbob_request", side_effect=fake):
+            hits = main.find_product_candidates("u", "Blue Mug")
+        self.assertEqual(hits, [{"name": "Blue Mug", "sku": "BM-1"}])
+
+    @patch("main.get_shipbob_headers", return_value={"Authorization": "Bearer token"})
+    def test_search_finds_product_past_page_one(self, mock_headers):
+        page1 = [{"name": f"Other {i}"} for i in range(100)]
+        page2 = [{"name": "Red T-Shirt", "sku": "TSH-RED"}]
+        pages = {1: page1, 2: page2}
+
+        def fake(uid, method, endpoint, data=None, params=None):
+            return pages.get(params["Page"], [])
+
+        with patch("main.make_shipbob_request", side_effect=fake):
+            req = DummyRequest({"uid": "user1", "search": "shirt"})
+            res = run_async(main.tool_get_products(req))
+        self.assertIsNone(res.error)
+        self.assertIn("Red T-Shirt", res.result)
+
+
 if __name__ == "__main__":
     unittest.main()
