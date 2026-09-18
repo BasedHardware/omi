@@ -140,5 +140,20 @@ void main() {
       final updatedDevice = await baseDevice.getDeviceInfo(connection);
       expect(updatedDevice.name, 'Omi DevKit');
     });
+
+    test('getDeviceInfo keeps original name when getDeviceName throws', () async {
+      final transport = _MockTransport(testDeviceId);
+      final baseDevice = BtDevice(
+        id: testDeviceId,
+        name: 'Omi DevKit',
+        type: DeviceType.omi,
+        rssi: -55,
+        locator: DeviceLocator.bluetooth(deviceId: testDeviceId),
+      );
+      final connection = OmiDeviceConnection(baseDevice, transport);
+
+      final updatedDevice = await baseDevice.getDeviceInfo(connection);
+      expect(updatedDevice.name, 'Omi DevKit');
+    });
   });
 }

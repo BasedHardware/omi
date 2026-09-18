@@ -290,14 +290,26 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       ? null
                       : () async {
                           final newName = textController.text.trim();
-                          if (newName.isEmpty) return;
+                          if (newName.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Device name cannot be empty')),
+                            );
+                            return;
+                          }
 
                           setDialogState(() => isSaving = true);
                           try {
                             final connection = await ServiceManager.instance().device.ensureConnection(device.id);
                             if (connection != null) {
                               await connection.setDeviceName(newName);
-                              await provider.getDeviceInfo();
+                              provider.pairedDevice = provider.pairedDevice?.copyWith(name: newName);
+                              if (provider.connectedDevice?.id == device.id) {
+                                provider.connectedDevice = provider.connectedDevice?.copyWith(name: newName);
+                              }
+                              if (provider.pairedDevice != null) {
+                                SharedPreferencesUtil().btDevice = provider.pairedDevice!;
+                              }
+                              await provider.getDeviceInfo(force: true);
                             }
                             if (dialogContext.mounted) {
                               Navigator.of(dialogContext).pop();
@@ -335,7 +347,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           },
         );
       },
-    );
+    ).whenComplete(() => textController.dispose());
   }
 
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {

@@ -291,10 +291,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return firstPairedAt;
   }
 
-  Future getDeviceInfo() async {
+  Future getDeviceInfo({bool force = false}) async {
     final generation = _sessionGeneration;
     if (connectedDevice != null) {
-      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+      if (!force && pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
         if (!_isCurrent(generation)) return;
         SharedPreferencesUtil().btDevice = pairedDevice!;
         return;

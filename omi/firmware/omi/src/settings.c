@@ -136,7 +136,7 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
             if (rc < 0) {
                 return rc;
             }
-            device_name[len] = '\0';
+            device_name[rc] = '\0';
         }
         LOG_INF("Loaded device_name: %s", device_name);
         return 0;

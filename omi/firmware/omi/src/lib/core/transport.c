@@ -318,10 +318,36 @@ static const struct bt_data bt_ad[] = {
     BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
-// Scan response data
-static const struct bt_data bt_sd[] = {
+static char adv_device_name[MAX_DEVICE_NAME_LEN] = CONFIG_BT_DEVICE_NAME;
+
+// Scan response data (contains full custom name up to 31 bytes)
+static struct bt_data bt_sd[] = {
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
+    BT_DATA(BT_DATA_NAME_COMPLETE, adv_device_name, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
+
+static void update_advertising_name(const char *name)
+{
+    if (name != NULL && strlen(name) > 0) {
+        strncpy(adv_device_name, name, sizeof(adv_device_name) - 1);
+        adv_device_name[sizeof(adv_device_name) - 1] = '\0';
+    } else {
+        strncpy(adv_device_name, CONFIG_BT_DEVICE_NAME, sizeof(adv_device_name) - 1);
+        adv_device_name[sizeof(adv_device_name) - 1] = '\0';
+    }
+    bt_sd[1].data_len = strlen(adv_device_name);
+
+#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
+    bt_set_name(adv_device_name);
+#endif
+
+    int err = bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    if (err) {
+        LOG_WRN("Failed to update advertising data (err %d)", err);
+    } else {
+        LOG_INF("Updated advertising device name: %s", adv_device_name);
+    }
+}
 
 //
 // State and Characteristics
@@ -485,6 +511,11 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
                                                   uint16_t offset,
                                                   uint8_t flags)
 {
+    if (offset != 0) {
+        LOG_WRN("Invalid offset for device name write: %u", offset);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+
     if (len >= MAX_DEVICE_NAME_LEN) {
         LOG_WRN("Invalid length for device name write: %u (max %u)", len, MAX_DEVICE_NAME_LEN - 1);
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
@@ -503,11 +534,7 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
     }
 
-#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
-    if (strlen(new_name) > 0) {
-        bt_set_name(new_name);
-    }
-#endif
+    update_advertising_name(new_name);
 
     return len;
 }
@@ -1464,6 +1491,15 @@ int transport_start()
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
 #endif
+    const char *saved_name = app_settings_get_device_name();
+    if (saved_name != NULL && strlen(saved_name) > 0) {
+        strncpy(adv_device_name, saved_name, sizeof(adv_device_name) - 1);
+        adv_device_name[sizeof(adv_device_name) - 1] = '\0';
+        bt_sd[1].data_len = strlen(adv_device_name);
+#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
+        bt_set_name(adv_device_name);
+#endif
+    }
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d), continuing without BLE", err);
