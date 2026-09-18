@@ -15,8 +15,13 @@ from urllib.parse import urlencode
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import FastAPI, Request, Query, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+
+try:
+    from .twitter_tools_auth import require_twitter_tools_auth
+except ImportError:
+    from twitter_tools_auth import require_twitter_tools_auth
 
 from db import (
     store_twitter_tokens,
@@ -468,7 +473,7 @@ async def get_omi_tools_manifest():
 # Chat Tool Endpoints
 # ============================================
 
-@app.post("/tools/post_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/post_tweet", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_post_tweet(request: Request):
     """Post a new tweet."""
     try:
@@ -524,7 +529,7 @@ async def tool_post_tweet(request: Request):
         return ChatToolResponse(error=f"Failed to post tweet: {str(e)}")
 
 
-@app.post("/tools/get_timeline", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_timeline", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_get_timeline(request: Request):
     """Get user's home timeline."""
     try:
@@ -576,7 +581,7 @@ async def tool_get_timeline(request: Request):
         return ChatToolResponse(error=f"Failed to get timeline: {str(e)}")
 
 
-@app.post("/tools/get_my_tweets", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_my_tweets", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_get_my_tweets(request: Request):
     """Get user's own tweets."""
     try:
@@ -642,7 +647,7 @@ async def tool_get_my_tweets(request: Request):
         return ChatToolResponse(error=f"Failed to get tweets: {str(e)}")
 
 
-@app.post("/tools/get_mentions", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_mentions", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_get_mentions(request: Request):
     """Get tweets mentioning the user."""
     try:
@@ -692,7 +697,7 @@ async def tool_get_mentions(request: Request):
         return ChatToolResponse(error=f"Failed to get mentions: {str(e)}")
 
 
-@app.post("/tools/search_tweets", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/search_tweets", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_search_tweets(request: Request):
     """Search for tweets."""
     try:
@@ -743,7 +748,7 @@ async def tool_search_tweets(request: Request):
         return ChatToolResponse(error=f"Search failed: {str(e)}")
 
 
-@app.post("/tools/like_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/like_tweet", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_like_tweet(request: Request):
     """Like a tweet."""
     try:
@@ -779,7 +784,7 @@ async def tool_like_tweet(request: Request):
         return ChatToolResponse(error=f"Failed to like tweet: {str(e)}")
 
 
-@app.post("/tools/unlike_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/unlike_tweet", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_unlike_tweet(request: Request):
     """Unlike a tweet."""
     try:
@@ -813,7 +818,7 @@ async def tool_unlike_tweet(request: Request):
         return ChatToolResponse(error=f"Failed to unlike tweet: {str(e)}")
 
 
-@app.post("/tools/retweet", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/retweet", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_retweet(request: Request):
     """Retweet a tweet."""
     try:
@@ -849,7 +854,7 @@ async def tool_retweet(request: Request):
         return ChatToolResponse(error=f"Failed to retweet: {str(e)}")
 
 
-@app.post("/tools/delete_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/delete_tweet", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_delete_tweet(request: Request):
     """Delete a tweet."""
     try:
@@ -879,7 +884,7 @@ async def tool_delete_tweet(request: Request):
         return ChatToolResponse(error=f"Failed to delete tweet: {str(e)}")
 
 
-@app.post("/tools/get_user_profile", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_user_profile", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_twitter_tools_auth)])
 async def tool_get_user_profile(request: Request):
     """Get a user's profile."""
     try:

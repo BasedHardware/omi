@@ -1111,6 +1111,11 @@ checks:
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
+  - id: twitter-tools-auth-tests
+    command: ["bash", "scripts/run-plugin-twitter-tools-auth-tests.sh"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", "scripts/run-plugin-twitter-tools-auth-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "all ten /tools/* routes in omi-twitter-chat-tools-app lacked authentication, allowing callers to post/delete tweets or read user data using stored victim tokens"
   - id: coingecko-null-optionals-tests
     command: ["bash", "scripts/run-plugin-coingecko-tests.sh"]
     triggers: ["plugins/omi-coingecko-crypto-app/**", "scripts/run-plugin-coingecko-tests.sh", ".github/checks-manifest.yaml"]
