@@ -1832,11 +1832,8 @@ class AnalyticsManager {
     track('Conversation Star Toggled', properties: properties);
   }
 
-  void omiDoubleTap({required String feature, Map<String, dynamic>? additionalProperties}) {
-    track(
-      'Omi Double Tap',
-      properties: {'feature': feature, if (additionalProperties != null) ...additionalProperties},
-    );
+  void omiDoubleTap({required String feature}) {
+    track('Omi Double Tap', properties: {'feature': feature});
   }
 
   // ============================================================================
