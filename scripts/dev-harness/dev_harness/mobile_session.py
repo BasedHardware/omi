@@ -213,6 +213,36 @@ def _save_json_atomic(path: Path, data: Mapping[str, Any]) -> None:
 # Ownership guards
 # ---------------------------------------------------------------------------
 
+HELD_SESSION_LIVE_REMEDY = "pick another --name, or wait for that pid to finish; do not release a live foreign lease"
+HELD_SESSION_DEAD_REMEDY = "pick another --name, or run recover on that session before retrying"
+
+
+def held_session_message(session_id: str, existing: Mapping[str, Any]) -> str:
+    """Name the lease and holder immediately. Never imply the controls extension failed."""
+
+    owner = existing.get("owner") if isinstance(existing.get("owner"), Mapping) else {}
+    try:
+        pid = int(owner.get("pid", -1))
+    except (TypeError, ValueError):
+        pid = -1
+    user = owner.get("user") or "?"
+    host = owner.get("host") or "?"
+    if pid > 0 and safety.process_exists(pid):
+        return f"session {session_id} held by live pid {pid} ({user}@{host}); {HELD_SESSION_LIVE_REMEDY}"
+    return f"session {session_id} already exists (owner pid {pid} is dead); {HELD_SESSION_DEAD_REMEDY}"
+
+
+def refuse_live_foreign_session(session_id: str, lease: Mapping[str, Any]) -> None:
+    """Fail closed when another live process owns this session. Does not wait."""
+
+    owner = lease.get("owner") if isinstance(lease.get("owner"), Mapping) else {}
+    try:
+        pid = int(owner.get("pid", -1))
+    except (TypeError, ValueError):
+        pid = -1
+    if pid > 0 and pid != os.getpid() and safety.process_exists(pid):
+        raise SessionError(held_session_message(session_id, lease))
+
 
 def check_ownership(lease: Mapping[str, Any], *, allow_dead_owner: bool = True) -> None:
     """Refuse to act on a lease this caller does not own.
@@ -848,15 +878,7 @@ def acquire(
         handle = os.open(lease_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
     except FileExistsError:
         existing = _load_lease(lease_path)
-        owner = existing.get("owner", {})
-        hint = (
-            "its owner is live — do not take it over"
-            if safety.process_exists(int(owner.get("pid", -1)))
-            else "its owner is dead — run recover"
-        )
-        raise SessionError(
-            f"session {session_id} already exists ({hint}); pick another --name or release it first"
-        ) from None
+        raise SessionError(held_session_message(session_id, existing)) from None
     with os.fdopen(handle, "w", encoding="utf-8") as stream:
         stream.write("")
 
