@@ -519,6 +519,13 @@ class AppLocalizationsBs extends AppLocalizations {
   String get doubleTap => 'Dupli dodir';
 
   @override
+  String get deviceButtonActions => 'Radnje dugmeta uređaja';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Dozvoli da pritisci na dugme upravljaju snimanjem i glasovnim komandama';
+
+  @override
   String get ledBrightness => 'Svetlina LED-a';
 
   @override

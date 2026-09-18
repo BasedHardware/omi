@@ -164,6 +164,8 @@
     "modelNumber": "Model Numarası",
     "manufacturer": "Üretici",
     "doubleTap": "Çift Dokunma",
+    "deviceButtonActions": "Cihaz Düğmesi Eylemleri",
+    "deviceButtonActionsDescription": "Düğmeye basarak kaydı ve sesli komutları kontrol etmeye izin ver",
     "ledBrightness": "LED Parlaklığı",
     "micGain": "Mikrofon Kazancı",
     "disconnect": "Bağlantıyı Kes",

@@ -521,6 +521,13 @@ class AppLocalizationsTa extends AppLocalizations {
   String get doubleTap => 'இரட்டை தட்டு';
 
   @override
+  String get deviceButtonActions => 'சாதன பொத்தான் செயல்கள்';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'பொத்தான் அழுத்தங்கள் பதிவையும் குரல் கட்டளைகளையும் கட்டுப்படுத்த அனுமதிக்கவும்';
+
+  @override
   String get ledBrightness => 'LED பிரகாசம்';
 
   @override

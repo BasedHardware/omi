@@ -661,6 +661,8 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "இரட்டை தட்டு",
+    "deviceButtonActions": "சாதன பொத்தான் செயல்கள்",
+    "deviceButtonActionsDescription": "பொத்தான் அழுத்தங்கள் பதிவையும் குரல் கட்டளைகளையும் கட்டுப்படுத்த அனுமதிக்கவும்",
     "@doubleTap": {
         "description": "Double tap action label"
     },

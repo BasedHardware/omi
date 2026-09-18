@@ -520,6 +520,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String get doubleTap => 'ಗುಣ ಟ್ಯಾಪ್';
 
   @override
+  String get deviceButtonActions => 'ಸಾಧನ ಬಟನ್ ಕ್ರಿಯೆಗಳು';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'ಬಟನ್ ಒತ್ತುವ ಮೂಲಕ ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಧ್ವನಿ ಆಜ್ಞೆಗಳನ್ನು ನಿಯಂತ್ರಿಸಲು ಅನುಮತಿಸಿ';
+
+  @override
   String get ledBrightness => 'LED ಝಗಬೆಳಗುವುದು';
 
   @override

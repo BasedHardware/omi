@@ -519,6 +519,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get doubleTap => 'Dvojité klepnutí';
 
   @override
+  String get deviceButtonActions => 'Akce tlačítka zařízení';
+
+  @override
+  String get deviceButtonActionsDescription => 'Povolit ovládání nahrávání a hlasových příkazů stisknutím tlačítka';
+
+  @override
   String get ledBrightness => 'Jas LED';
 
   @override

@@ -661,6 +661,8 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "డబల్ నొక్కండి",
+    "deviceButtonActions": "పరికర బటన్ చర్యలు",
+    "deviceButtonActionsDescription": "బటన్ నొక్కడం ద్వారా రికార్డింగ్ మరియు వాయిస్ ఆదేశాలను నియంత్రించడానికి అనుమతించండి",
     "@doubleTap": {
         "description": "Double tap action label"
     },

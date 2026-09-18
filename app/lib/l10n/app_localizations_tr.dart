@@ -520,6 +520,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get doubleTap => 'Çift Dokunma';
 
   @override
+  String get deviceButtonActions => 'Cihaz Düğmesi Eylemleri';
+
+  @override
+  String get deviceButtonActionsDescription => 'Düğmeye basarak kaydı ve sesli komutları kontrol etmeye izin ver';
+
+  @override
   String get ledBrightness => 'LED Parlaklığı';
 
   @override

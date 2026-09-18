@@ -517,6 +517,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get doubleTap => 'Kaksoisnapautus';
 
   @override
+  String get deviceButtonActions => 'Laitteen painiketoiminnot';
+
+  @override
+  String get deviceButtonActionsDescription => 'Salli painikkeen painallusten ohjata tallennusta ja äänikomentoja';
+
+  @override
   String get ledBrightness => 'LED-kirkkaus';
 
   @override

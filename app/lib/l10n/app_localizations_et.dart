@@ -520,6 +520,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get doubleTap => 'Topeltpuudutus';
 
   @override
+  String get deviceButtonActions => 'Seadme nupu toimingud';
+
+  @override
+  String get deviceButtonActionsDescription => 'Luba nupuvajutustega juhtida salvestamist ja häälkäsklusi';
+
+  @override
   String get ledBrightness => 'LED heledus';
 
   @override

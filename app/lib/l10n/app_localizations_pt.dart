@@ -517,6 +517,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get doubleTap => 'Toque duplo';
 
   @override
+  String get deviceButtonActions => 'Ações do botão do dispositivo';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Permitir que os toques no botão controlem a gravação e os comandos de voz';
+
+  @override
   String get ledBrightness => 'Brilho do LED';
 
   @override

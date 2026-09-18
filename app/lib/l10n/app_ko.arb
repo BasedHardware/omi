@@ -164,6 +164,8 @@
     "modelNumber": "모델 번호",
     "manufacturer": "제조업체",
     "doubleTap": "더블 탭",
+    "deviceButtonActions": "기기 버튼 동작",
+    "deviceButtonActionsDescription": "버튼을 눌러 녹음과 음성 명령을 제어하도록 허용합니다",
     "ledBrightness": "LED 밝기",
     "micGain": "마이크 게인",
     "disconnect": "연결 해제",

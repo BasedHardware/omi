@@ -164,6 +164,8 @@
     "modelNumber": "Număr model",
     "manufacturer": "Producător",
     "doubleTap": "Dublă apăsare",
+    "deviceButtonActions": "Acțiunile butonului dispozitivului",
+    "deviceButtonActionsDescription": "Permite apăsărilor butonului să controleze înregistrarea și comenzile vocale",
     "ledBrightness": "Luminozitate LED",
     "micGain": "Câștig microfon",
     "disconnect": "Deconectează",
