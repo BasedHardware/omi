@@ -192,6 +192,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
         ? ''
         : text(row.app_version, 1_000_000);
     const content = object(row.content);
+    optionalNullableString(content.title);
     if (
       content.changes !== undefined &&
       content.changes !== null &&

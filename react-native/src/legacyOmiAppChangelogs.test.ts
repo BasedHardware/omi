@@ -1438,3 +1438,90 @@ test('loadOmiAppChangelogs names malformed GET instead of empty success', async 
     'Omi app changelogs are malformed',
   );
 });
+
+test('old app changelogs name Flutter ChangelogContent.fromJson type-wrong GET title instead of remapping to a What\'s New chip', () => {
+  const createdAt = '2026-09-09T12:00:00.000Z';
+  const changes = [{title: 'Offline replay', description: ''}];
+  const neighbor = {
+    id: 'ann-good',
+    type: 'changelog',
+    created_at: createdAt,
+    app_version: '1.2.0',
+    content: {changes},
+  };
+  const row = {
+    id: 'ann-title',
+    type: 'changelog',
+    created_at: createdAt,
+    app_version: '1.2.0',
+    content: {title: 'Release notes', changes},
+  };
+  const kept = [
+    {
+      key: 'ann-title:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Offline replay · ',
+    },
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Offline replay · ',
+    },
+  ];
+  const parsed = (content: Record<string, unknown>) =>
+    parseOmiAppChangelogs(JSON.stringify([{...row, content}, neighbor]));
+  expect(parsed({title: 'Release notes', changes})).toEqual(kept);
+  expect(parsed({changes})).toEqual(kept);
+  expect(parsed({title: null, changes})).toEqual(kept);
+  expect(parsed({title: '', changes})).toEqual(kept);
+  expect(parsed({title: '  Release notes  ', changes})).toEqual(kept);
+  expect(parsed({extra: 1, changes})).toEqual(kept);
+  for (const extra of [1, true, [], {}]) {
+    expect(() => parsed({title: extra, changes})).toThrow(
+      'Omi app changelogs are malformed',
+    );
+  }
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-bad-change-title',
+          type: 'changelog',
+          created_at: createdAt,
+          app_version: '1.0.0',
+          content: {
+            title: 'Release notes',
+            changes: [{title: 1, description: 'nope'}],
+          },
+        },
+        neighbor,
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Offline replay · ',
+    },
+  ]);
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-feature',
+          type: 'feature',
+          created_at: createdAt,
+          app_version: '1.2.0',
+          content: {title: 1, changes: [{title: 'Skip me', description: ''}]},
+        },
+        neighbor,
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Offline replay · ',
+    },
+  ]);
+});
