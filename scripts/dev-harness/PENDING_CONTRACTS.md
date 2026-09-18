@@ -21,6 +21,9 @@ awaited assertions. Compare collection-bearing Dart records field by field:
 record equality compares Map identity; pass the Map itself to `expect`. Compile/load errors happen before the wrapper and fail the
 owner suite; overriding `noSuchMethod` in a fake is valid Dart, not a compile bypass.
 
+Widget contracts use `contractWidgets` from `app/test/support/spine/widgets.dart`.
+Plain skip is forbidden; unexpected runtime/framework/teardown errors stay red.
+
 **Pending green means an executed, unmet contract, not a verified feature or a
 correct oracle.** Missing behavior in existing code fails assertions without
 throwing a stub error (B0 registration and C1 preference forwarding). An exception
