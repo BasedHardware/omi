@@ -6,7 +6,8 @@
   "canonical_prevention_artifact": [
     "app/test/providers/sync_provider_session_generation_test.dart",
     "app/test/providers/device_provider_session_generation_test.dart",
-    "app/test/unit/local_wal_sync_session_generation_test.dart"
+    "app/test/unit/local_wal_sync_session_generation_test.dart",
+    "app/test/providers/memories_provider_session_generation_test.dart"
   ],
   "evidence_prs": [],
   "scope_hints": [
