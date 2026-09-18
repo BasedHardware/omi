@@ -183,3 +183,13 @@ class SttModeResolver {
     );
   }
 }
+
+PurePollingSocket? customSttPollingSocket(Object? socket) {
+  final primary = socket is CompositeTranscriptionSocket ? socket.primarySocket : socket;
+  return primary is PurePollingSocket ? primary : null;
+}
+
+Duration? customSttBufferingFor(Object? socket, [DateTime? now]) {
+  final since = customSttPollingSocket(socket)?.bufferingSince;
+  return since == null ? null : (now ?? DateTime.now()).difference(since);
+}

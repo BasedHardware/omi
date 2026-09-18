@@ -113,7 +113,6 @@ CaptureDependencies dependencies(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 production composition refuses flutter test before resolving defaults', () {
-    pendingContract('C1');
     Object? refusal;
     try {
       composeProductionCaptureProvider();
@@ -125,7 +124,6 @@ void main() {
   });
 
   contractTest('C1 production provider constructs with every seam and no initialized globals', () async {
-    pendingContract('C1');
     // Deliberately no preferences init, ServiceManager, Firebase or plugin registration.
     final ble = TrackedBle();
     final changes = StreamController<bool>.broadcast(sync: true);

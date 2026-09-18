@@ -149,6 +149,24 @@ def _classify_probe_stderr(stderr: str) -> str:
         return CLASS_TIMEOUT
     if _HTTP_FAILURE_PATTERN in lowered:
         return CLASS_HTTP_FAILURE
+    if 'connection refused' in lowered:
+        return 'conn_refused'
+    if (
+        'name or service not known' in lowered
+        or 'temporary failure in name resolution' in lowered
+        or 'nodename nor servname' in lowered
+    ):
+        return 'conn_dns'
+    if 'connection reset' in lowered:
+        return 'conn_reset'
+    if 'certificate verify failed' in lowered or 'ssl' in lowered:
+        return 'conn_tls'
+    if (
+        'no route to host' in lowered
+        or 'network is unreachable' in lowered
+        or 'cannot assign requested address' in lowered
+    ):
+        return 'conn_unreachable'
     return CLASS_UNKNOWN
 
 
@@ -201,13 +219,18 @@ def run_check(check: CandidateCheck, *, base_url: str, audience: str) -> CheckOu
             status='FAIL',
             diagnostics=diagnostics,
         )
-    except (OSError, RuntimeError):
-        diagnostics = {
+    except (OSError, RuntimeError) as exc:
+        diagnostics: dict[str, Any] = {
             'stage': PROBE_STAGE,
             'service': check.service,
             'http_status': None,
             'class': CLASS_CONN_ERROR,
         }
+        # A mint failure raises RuntimeError with its own diagnostics payload
+        # (stage=mint); surface that verbatim instead of mislabeling it as a
+        # probe connection error.
+        if len(exc.args) > 1 and isinstance(exc.args[1], dict):
+            diagnostics = dict(exc.args[1])
         return CheckOutcome(
             service=check.service,
             contract=check.contract,
