@@ -245,7 +245,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchConversations => 'Αναζήτηση συνομιλιών...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count επιλεγμένα';
   }
 
@@ -2062,10 +2062,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryHistory => 'Ιστορικό';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Να επιτρέπεται η χρήση';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Να μην χρησιμοποιείται';
 
   @override
   String get undo => 'Αναίρεση';
@@ -2678,10 +2678,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reviewAndManageConversations => 'Ελέγξτε και διαχειριστείτε τις καταγεγραμμένες συνομιλίες σας';
 
   @override
-  String get startCapturingConversations =>
-      'Ξεκινήστε να καταγράφετε συνομιλίες με τη συσκευή Omi για να τις δείτε εδώ.';
-
-  @override
   String get useMobileAppToCapture => 'Χρησιμοποιήστε την εφαρμογή κινητού για να καταγράψετε ήχο';
 
   @override
@@ -3182,9 +3178,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get transcribing => 'Μεταγραφή...';
-
-  @override
-  String get transcriptionFailed => 'Η μεταγραφή απέτυχε';
 
   @override
   String get discardedConversation => 'Απορριφθείσα συνομιλία';
@@ -3712,10 +3705,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Προετοιμασία καταγραφής ήχου συστήματος';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'Κάντε κλικ στο κουμπί για να καταγράψετε ήχο για ζωντανές μεταγραφές, πληροφορίες AI και αυτόματη αποθήκευση.';
-
-  @override
   String get reconnecting => 'Επανασύνδεση...';
 
   @override
@@ -3761,9 +3750,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'Ξεκινήστε την καταγραφή για να δείτε τη ζωντανή μεταγραφή';
-
-  @override
   String get paused => 'Σε παύση';
 
   @override
@@ -3782,9 +3768,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'Ρύθμιση καταγραφής ήχου συστήματος';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'Καταγραφή ήχου και δημιουργία μεταγραφής';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'Κάντε κλικ για να ξεκινήσετε την καταγραφή ήχου συστήματος';
@@ -8834,6 +8817,43 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
+
+  @override
   String get willSyncAutomatically => 'θα συγχρονιστεί αυτόματα';
 
   @override
@@ -10065,4 +10085,81 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Για να ξέρει το Omi ποια φωνή είναι δική σας — μιλήστε για οτιδήποτε για περίπου 5 δευτερόλεπτα.';
+
+  @override
+  String get home => 'Αρχική';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Αποτυχία ενημέρωσης της βασικής κατάστασης.';
+
+  @override
+  String get unstarConversation => 'Αφαίρεση αστεριού από τη συνομιλία';
+
+  @override
+  String get moreOptions => 'Περισσότερες επιλογές';
+
+  @override
+  String get filterByDate => 'Φιλτράρισμα κατά ημερομηνία';
+
+  @override
+  String get memoryGraph => 'Γράφος αναμνήσεων';
+
+  @override
+  String voiceIntroduction(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try another prompt',
+        'start': 'Start speaking',
+        'skipPrompt': 'Skip this prompt',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint':
+            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
+        'saveVoice': 'Save voice profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set up my voice later',
+        'keep': 'Save selected answers',
+        'without': 'Continue without saving answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add another sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and finish',
+        'retryRemaining': 'Retry remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue with what is saved',
+        'reviewAnswers': 'Review answers',
+        'originalGoal': 'Use original wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 }

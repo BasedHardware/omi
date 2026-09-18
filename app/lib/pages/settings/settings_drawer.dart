@@ -800,12 +800,21 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       child: Row(
                         children: [
-                          GestureDetector(
+                          Semantics(
+                            button: true,
+                            label: context.l10n.search,
+                            excludeSemantics: true,
                             onTap: () {
                               setState(() => _isSearching = true);
                               Future.microtask(() => _searchFocusNode.requestFocus());
                             },
-                            child: const Icon(Icons.search, color: Colors.white, size: 22),
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _isSearching = true);
+                                Future.microtask(() => _searchFocusNode.requestFocus());
+                              },
+                              child: const Icon(Icons.search, color: Colors.white, size: 22),
+                            ),
                           ),
                           Expanded(
                             child: Center(

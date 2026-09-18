@@ -90,9 +90,26 @@ checks:
     triggers: ["sdks/device/typescript/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
+  - id: capture-ownership-boundaries
+    command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/capture/boundary-baseline.json"]
+    triggers: ["app/lib/**/*.dart", "app/contracts/capture/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WAL wake races edc8683e80/97ec3d9cea and late timer 05c43c014d: prevent regression in adopted capture files and debt in new files"
+
+  - id: mobile-boundary-check-tests
+    command: ["python3", "scripts/test_check_mobile_boundaries.py"]
+    triggers: ["scripts/*mobile_boundaries.py", "app/contracts/capture/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Lexical boundary scan must ignore prose, accept existing debt, and reject reintroduced debt"
+
+  - id: spine-contracts
+    command: ["python3", "scripts/check_spine_contracts.py", "--base", "{base}"]
+    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["Makefile", "scripts/dev-harness/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered, and the mobile-verify selection/discovery contract (SCA-490) executes here — journey runner, session evidence contract, and Makefile edits must keep it selected"
   - id: windows-update-feed-probe-tests
@@ -198,7 +215,7 @@ checks:
     reason: "the one-action production backend release contract must reject legacy release planes"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
-    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", "app/lib/**/*.dart", ".github/scripts/check_product_file_line_count_ratchet.py"]
     lanes: ["local", "ci"]
     requires_pr_body: true
     reason: "#9838 freezes oversized product files against the target branch without a shared metadata ledger; exact PR-body exceptions preserve reviewability without unrelated merge conflicts"
@@ -207,6 +224,11 @@ checks:
     triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
+  - id: debug-apk-size-report-tests
+    command: ["python3", ".github/scripts/test_report_debug_apk_size.py"]
+    triggers: [".github/scripts/report_debug_apk_size.py", ".github/scripts/test_report_debug_apk_size.py", ".github/workflows/mobile-app-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the compile-smoke APK size report must stay a non-gating zip breakdown of the debug APK this job already builds"
   - id: structured-string-sink-registry
     command: ["bash", "scripts/run-structured-string-sinks.sh"]
     triggers: [".github/workflows/**", ".github/actions/**", ".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sinks.sh", ".github/checks-manifest.yaml"]
@@ -306,7 +328,7 @@ checks:
     lanes: ["local", "ci"]
     reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
-    command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
+    command: ["python3", ".github/scripts/check_product_invariants.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     requires_pr_body: true
@@ -333,6 +355,11 @@ checks:
     triggers: ["scripts/failure-class", "scripts/test_failure_class.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the failure-class CLI is the registry's only schema authority; its hermetic tests had no blocking lane and had silently gone stale"
+  - id: registry-conflict-resolver-tests
+    command: ["python3", "scripts/test_resolve_registry_conflict.py"]
+    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
   - id: desktop-changelog-data
     command: ["python3", ".github/scripts/desktop-changelog.py", "validate"]
     triggers: ["all"]
@@ -354,6 +381,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: desktop-agent-credential-boundary
+    command: ["python3", "desktop/macos/scripts/check-agent-credentials.py"]
+    triggers: ["desktop/macos/Desktop/Sources/Chat/**", "desktop/macos/agent/src/**", "desktop/macos/pi-mono-extension/**", "desktop/macos/scripts/check-agent-credentials.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Beta v0.12.356 retained an expired Firebase token in pi-mono after one offline refresh killed its timer; prevent startup credential copies and refresh-driven restarts"
   - id: desktop-flow-contract-tests
     command: ["python3", "desktop/macos/tests/test_desktop_flow_contract.py"]
     triggers: ["desktop/macos/scripts/desktop_flow_contract.py", "desktop/macos/tests/test_desktop_flow_contract.py", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
@@ -1153,6 +1185,11 @@ checks:
     triggers: ["plugins/omi-stack-overflow-app/**", "scripts/run-plugin-hermetic-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Stack Exchange tool payloads can arrive as non-dict bodies, non-list items members, non-object entries, string tags or out-of-range timestamps; parsers must degrade instead of raising"
+  - id: mobile-event-registry
+    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

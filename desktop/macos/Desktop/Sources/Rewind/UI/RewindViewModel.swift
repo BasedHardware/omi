@@ -287,11 +287,6 @@ class RewindViewModel: ObservableObject {
       await loadScreenshotsForDate(selectedDate)
       guard ownerSnapshot.isCurrent() else { return }
 
-      // Load available apps for filtering
-      let loadedApps = try await RewindDatabase.shared.getUniqueAppNames()
-      guard ownerSnapshot.isCurrent() else { return }
-      availableApps = loadedApps
-
       // Mark as initialized after successful load
       isInitialized = true
 
@@ -316,12 +311,28 @@ class RewindViewModel: ObservableObject {
     // windows only as zoom or pan reaches them.
     Task { await self.surveyCapturedHistory(ownerSnapshot: ownerSnapshot) }
 
+    // The app-filter list is a full-table DISTINCT scan over every captured
+    // frame. The overlay's first paint and rewindPageDidLoad must not wait
+    // on it, so it loads after the page reports ready.
+    Task { await self.loadAvailableApps(ownerSnapshot: ownerSnapshot) }
+
     // Load stats asynchronously (includes storage size calculation which can be slow)
     Task {
       if let indexerStats = await RewindIndexer.shared.getStats() {
         guard ownerSnapshot.isCurrent() else { return }
         stats = indexerStats
       }
+    }
+  }
+
+  /// Populate the app filter list without gating the overlay's open path.
+  private func loadAvailableApps(ownerSnapshot: RewindCaptureOwnerSnapshot) async {
+    do {
+      let loadedApps = try await RewindDatabase.shared.getUniqueAppNames()
+      guard ownerSnapshot.isCurrent() else { return }
+      availableApps = loadedApps
+    } catch {
+      logError("RewindViewModel: Failed to load app filter list: \(error)")
     }
   }
 

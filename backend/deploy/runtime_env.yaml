@@ -297,6 +297,10 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: MODULATE_API_KEY
+          SONIOX_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: SONIOX_API_KEY
           GOOGLE_MAPS_API_KEY:
             secret:
               name: dev-omi-backend-secrets

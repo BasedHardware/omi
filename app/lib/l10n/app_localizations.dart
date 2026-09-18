@@ -649,7 +649,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{count} selected'**
-  String selectedCount(int count, Object s);
+  String selectedCount(int count);
 
   /// Merge button label
   ///
@@ -1275,16 +1275,16 @@ abstract class AppLocalizations {
   /// **'Hardware'**
   String get hardwareSection;
 
-  /// V2 device undeteced dialog title
+  /// Dialog title when the connected device has no SD-card offline sync
   ///
   /// In en, this message translates to:
-  /// **'V2 undetected'**
+  /// **'Offline Sync unavailable'**
   String get v2Undetected;
 
-  /// V2 device undeteced dialog message
+  /// Dialog message when the connected device has no SD-card offline sync
   ///
   /// In en, this message translates to:
-  /// **'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.'**
+  /// **'Offline Sync needs a connected Omi device with SD-card storage. Your current device doesn\'t support it.'**
   String get v2UndetectedMessage;
 
   /// End conversation action
@@ -5151,12 +5151,6 @@ abstract class AppLocalizations {
   /// **'Review and manage your captured conversations'**
   String get reviewAndManageConversations;
 
-  /// Message explaining how to get started with conversations
-  ///
-  /// In en, this message translates to:
-  /// **'Start capturing conversations with your Omi device to see them here.'**
-  String get startCapturingConversations;
-
   /// Tip about using mobile app for audio capture
   ///
   /// In en, this message translates to:
@@ -6116,12 +6110,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcribing...'**
   String get transcribing;
-
-  /// Error message when transcription fails
-  ///
-  /// In en, this message translates to:
-  /// **'Transcription failed'**
-  String get transcriptionFailed;
 
   /// Label for a discarded conversation
   ///
@@ -7119,12 +7107,6 @@ abstract class AppLocalizations {
   /// **'Preparing system audio capture'**
   String get preparingSystemAudioCapture;
 
-  /// Instructions for starting recording
-  ///
-  /// In en, this message translates to:
-  /// **'Click the button to capture audio for live transcripts, AI insights, and automatic saving.'**
-  String get clickTheButtonToCaptureAudio;
-
   /// Status when reconnecting to audio
   ///
   /// In en, this message translates to:
@@ -7203,12 +7185,6 @@ abstract class AppLocalizations {
   /// **'{count} segments'**
   String segmentsPlural(String count);
 
-  /// Empty state message for transcript
-  ///
-  /// In en, this message translates to:
-  /// **'Start recording to see live transcript'**
-  String get startRecordingToSeeTranscript;
-
   /// Recording status: paused
   ///
   /// In en, this message translates to:
@@ -7244,12 +7220,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Setting up system audio capture'**
   String get settingUpSystemAudioCapture;
-
-  /// Status when actively recording
-  ///
-  /// In en, this message translates to:
-  /// **'Capturing audio and generating transcript'**
-  String get capturingAudioAndGeneratingTranscript;
 
   /// Instruction to start system audio recording
   ///
@@ -10662,7 +10632,7 @@ abstract class AppLocalizations {
   /// Loading message shown while uploading voice profile
   ///
   /// In en, this message translates to:
-  /// **'Uploading your voice profile....'**
+  /// **'Uploading your voice profile...'**
   String get uploadingVoiceProfile;
 
   /// Loading message shown while processing voice profile
@@ -16401,6 +16371,60 @@ abstract class AppLocalizations {
   /// **'{duration} audio saved locally'**
   String audioSavedLocally(String duration);
 
+  /// Live-capture WAL indicator while unsynced audio is uploading
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading {duration} of audio for transcription...'**
+  String uploadingAudioForTranscription(String duration);
+
+  /// Live-capture WAL indicator after a failed upload attempt that will be retried automatically
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying upload... {duration} of audio kept on your phone'**
+  String audioUploadRetrying(String duration);
+
+  /// Live-capture WAL indicator when auto-retries are exhausted and a manual retry is available
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed — {duration} of audio kept on your phone. Tap to retry.'**
+  String audioUploadFailedTapRetry(String duration);
+
+  /// Live-capture WAL indicator when the recording can no longer be uploaded (corrupted or past the recovery window)
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed — {duration} of audio kept on your phone.'**
+  String audioUploadFailedKeptLocal(String duration);
+
+  /// Live-capture empty state on audio-only setups (no photo capture source)
+  ///
+  /// In en, this message translates to:
+  /// **'Listening… a transcript will appear here.'**
+  String get listeningTranscriptWillAppear;
+
+  /// Live-capture empty state while the device has no internet connection
+  ///
+  /// In en, this message translates to:
+  /// **'Recording offline — the transcript will catch up when you\'re back online.'**
+  String get recordingOfflineTranscriptWillCatchUp;
+
+  /// Live-capture empty state when the plan is out of transcription credits
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription is unavailable — recording continues and your audio is saved.'**
+  String get transcriptionUnavailableRecordingSaved;
+
+  /// Live-capture app bar title while both audio and photos are being captured
+  ///
+  /// In en, this message translates to:
+  /// **'Capturing'**
+  String get capturing;
+
+  /// Live-capture app bar title while only photos are being captured
+  ///
+  /// In en, this message translates to:
+  /// **'Capturing photos'**
+  String get capturingPhotos;
+
   /// No description provided for @willSyncAutomatically.
   ///
   /// In en, this message translates to:
@@ -17424,7 +17448,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with the phone microphone and Omi or Limitless wearables. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -18608,6 +18632,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
   String get speechProfileEnrollmentPrompt;
+
+  /// Screen-reader label for the Home tab in the bottom navigation bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get home;
+
+  /// Snackbar when toggling a memory's baseline flag fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update baseline status'**
+  String get failedToUpdateBaselineStatus;
+
+  /// Accessible name for the conversation-detail star button when the conversation is already starred
+  ///
+  /// In en, this message translates to:
+  /// **'Unstar conversation'**
+  String get unstarConversation;
+
+  /// Accessible name for the conversation-detail overflow menu
+  ///
+  /// In en, this message translates to:
+  /// **'More options'**
+  String get moreOptions;
+
+  /// Accessible name for the conversations calendar filter button
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by date'**
+  String get filterByDate;
+
+  /// Accessible name for the memories graph button
+  ///
+  /// In en, this message translates to:
+  /// **'Memory graph'**
+  String get memoryGraph;
+
+  /// Guided voice introduction copy. English source fallback pending translation review.
+  ///
+  /// In en, this message translates to:
+  /// **'{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}'**
+  String voiceIntroduction(String part);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

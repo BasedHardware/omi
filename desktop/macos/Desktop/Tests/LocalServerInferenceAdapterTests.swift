@@ -217,6 +217,132 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
     )
     XCTAssertFalse(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "http://10.0.0.4/v1"))))
   }
+
+  func testTitleOnlyDraftDoesNotRetry() async throws {
+    let http = RecordingLocalInferenceHTTPClient()
+    let url = try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1/chat/completions"))
+    await http.setResult(
+      .success(
+        (
+          try openaiEnvelope(#"{"title":"Standup"}"#),
+          try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+        )
+      )
+    )
+    let runtime = LocalInferenceRuntime(
+      engines: [
+        LocalServerInferenceAdapter(
+          configuration: LocalServerInferenceConfiguration(
+            baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1")),
+            model: "local",
+            contextWindowTokens: 8192,
+            timeout: 5
+          ),
+          httpClient: http
+        )
+      ],
+      killSwitches: .enabled,
+      fallback: DesktopLocalInferenceFallbackRecorder()
+    )
+    let result: LocalInferenceGeneration<LocalSummaryDraft> = await runtime.generateStructuredFailClosed(
+      prompt: "summarize",
+      schema: LocalSummaryDraft.jsonSchema,
+      minimumInput: DeterministicMinimumInput(
+        transcript: "We decided to ship the local runtime today.",
+        startedAt: Date(timeIntervalSince1970: 1_704_140_040)
+      )
+    )
+    guard case .engine(let draft, engineID: .localServer) = result else {
+      return XCTFail("title-only content still decodes via LocalSummaryDraft's missing-key defaults")
+    }
+    XCTAssertEqual(draft.title, "Standup")
+    XCTAssertEqual(draft.overview, "")
+    XCTAssertEqual(draft.sections, [])
+    let urls = await http.recordedURLs()
+    XCTAssertEqual(urls.count, 1, "a successful decode must not be retried")
+  }
+
+  func testMalformedNestedDraftIsInvalidResponseAndNotRetryable() async throws {
+    let http = RecordingLocalInferenceHTTPClient()
+    let url = try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1/chat/completions"))
+    await http.setResult(
+      .success(
+        (
+          try openaiEnvelope(
+            #"{"title":"x","overview":"y","sections":[{"heading":"Decision"}],"action_items":[]}"#
+          ),
+          try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+        )
+      )
+    )
+    let adapter = LocalServerInferenceAdapter(
+      configuration: LocalServerInferenceConfiguration(
+        baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1")),
+        model: "local",
+        contextWindowTokens: 8192,
+        timeout: 5
+      ),
+      httpClient: http
+    )
+    do {
+      let _: LocalSummaryDraft = try await adapter.generateStructured(
+        prompt: "summarize",
+        schema: LocalSummaryDraft.jsonSchema
+      )
+      XCTFail("missing section body_markdown must not decode")
+    } catch LocalInferenceError.invalidResponse(let reason) {
+      XCTAssertEqual(reason, "undecodable_content")
+    } catch {
+      XCTFail("expected invalidResponse, got \(error)")
+    }
+    XCTAssertFalse(LocalInferenceRuntime.isRetryable(LocalInferenceError.invalidResponse("undecodable_content")))
+
+    let runtimeClient = RecordingLocalInferenceHTTPClient()
+    await runtimeClient.setResult(
+      .success(
+        (
+          try openaiEnvelope(
+            #"{"title":"x","overview":"y","sections":[{"heading":"Decision"}],"action_items":[]}"#
+          ),
+          try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+        )
+      )
+    )
+    let runtime = LocalInferenceRuntime(
+      engines: [
+        LocalServerInferenceAdapter(
+          configuration: LocalServerInferenceConfiguration(
+            baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1")),
+            model: "local",
+            contextWindowTokens: 8192,
+            timeout: 5
+          ),
+          httpClient: runtimeClient
+        )
+      ],
+      killSwitches: .enabled,
+      fallback: DesktopLocalInferenceFallbackRecorder()
+    )
+    let result: LocalInferenceGeneration<LocalSummaryDraft> = await runtime.generateStructuredFailClosed(
+      prompt: "summarize",
+      schema: LocalSummaryDraft.jsonSchema,
+      minimumInput: DeterministicMinimumInput(
+        transcript: "We decided to ship the local runtime today.",
+        startedAt: Date(timeIntervalSince1970: 1_704_140_040)
+      )
+    )
+    guard case .deterministicMinimum = result else {
+      return XCTFail("undecodable nested content must fail closed")
+    }
+    let urls = await runtimeClient.recordedURLs()
+    XCTAssertEqual(urls.count, 1, "undecodable output must not be retried")
+  }
+}
+
+private func openaiEnvelope(_ content: String) throws -> Data {
+  try JSONSerialization.data(withJSONObject: [
+    "choices": [["message": ["content": content]]]
+  ])
 }
 
 final class LocalInferenceKillSwitchTests: XCTestCase {
