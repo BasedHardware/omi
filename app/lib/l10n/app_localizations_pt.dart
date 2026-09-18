@@ -243,7 +243,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get searchConversations => 'Pesquisar conversas...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count selecionados';
   }
 
@@ -2022,10 +2022,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get memoryHistory => 'Histórico';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Permitir uso';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Não usar';
 
   @override
   String get undo => 'Desfazer';
@@ -10007,4 +10007,19 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get home => 'Início';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Falha ao atualizar o estado da linha de base.';
+
+  @override
+  String get unstarConversation => 'Remover estrela da conversa';
+
+  @override
+  String get moreOptions => 'Mais opções';
+
+  @override
+  String get filterByDate => 'Filtrar por data';
+
+  @override
+  String get memoryGraph => 'Grafo de memórias';
 }

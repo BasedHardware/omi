@@ -25,6 +25,12 @@ class _MutePrefs implements SharedPreferencesUtil {
   dynamic noSuchMethod(Invocation i) => throw StateError('Unexpected preferences read: ${i.memberName}');
 }
 
+class _BatchPrefs extends _MutePrefs {
+  bool muted = true;
+  @override
+  bool get batchMuted => muted;
+}
+
 class _InertWal implements IWalService {
   @override
   dynamic noSuchMethod(Invocation i) => throw StateError('Construction must not start WAL: ${i.memberName}');
@@ -136,6 +142,15 @@ void main() {
     expect(provider.runtimeType, CaptureProvider);
     expect(provider.isConnected, isFalse);
     expect(provider.isPaused, isTrue);
+    provider.dispose();
+  });
+
+  test('injected preferences remain authoritative after construction', () {
+    final prefs = _BatchPrefs();
+    final provider = composeCaptureProvider(_deps(preferences: prefs));
+    expect(provider.offlineMuted, isTrue);
+    prefs.muted = false;
+    expect(provider.offlineMuted, isFalse);
     provider.dispose();
   });
 

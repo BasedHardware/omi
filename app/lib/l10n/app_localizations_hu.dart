@@ -245,7 +245,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get searchConversations => 'Beszélgetések keresése...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count kiválasztva';
   }
 
@@ -2060,10 +2060,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryHistory => 'Előzmények';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Használat engedélyezése';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Ne használd';
 
   @override
   String get undo => 'Visszavonás';
@@ -10039,4 +10039,19 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get home => 'Kezdőlap';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Az alapállapot frissítése sikertelen.';
+
+  @override
+  String get unstarConversation => 'Csillag eltávolítása a beszélgetésről';
+
+  @override
+  String get moreOptions => 'További lehetőségek';
+
+  @override
+  String get filterByDate => 'Szűrés dátum szerint';
+
+  @override
+  String get memoryGraph => 'Emlékgráf';
 }

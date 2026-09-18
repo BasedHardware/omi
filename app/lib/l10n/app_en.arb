@@ -11849,5 +11849,25 @@
     "home": "Home",
     "@home": {
         "description": "Screen-reader label for the Home tab in the bottom navigation bar."
+    },
+    "failedToUpdateBaselineStatus": "Failed to update baseline status",
+    "@failedToUpdateBaselineStatus": {
+        "description": "Snackbar when toggling a memory's baseline flag fails"
+    },
+    "unstarConversation": "Unstar conversation",
+    "@unstarConversation": {
+        "description": "Accessible name for the conversation-detail star button when the conversation is already starred"
+    },
+    "moreOptions": "More options",
+    "@moreOptions": {
+        "description": "Accessible name for the conversation-detail overflow menu"
+    },
+    "filterByDate": "Filter by date",
+    "@filterByDate": {
+        "description": "Accessible name for the conversations calendar filter button"
+    },
+    "memoryGraph": "Memory graph",
+    "@memoryGraph": {
+        "description": "Accessible name for the memories graph button"
     }
 }

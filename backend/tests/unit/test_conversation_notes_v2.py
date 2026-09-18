@@ -82,6 +82,7 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
         language_code='en',
         calendar_context=_meeting_context(),
         speaker_map=_speaker_map(),
+        transcript_segment_ids=[f's{i}' for i in range(100)] if marked_source else [],
     )
     captured = {}
 
@@ -270,6 +271,101 @@ def test_notes_without_calendar_context_strip_speaker_placeholders():
     assert leftover.search(structured.sections[0].body_markdown) is None
     assert leftover.search(structured.action_items[0].description) is None
     assert structured.action_items[0].owner_name is None
+
+
+def test_note_source_refs_are_membership_checked_and_deduplicated(monkeypatch):
+    from utils.llm import conversation_processing
+    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+
+    prefix = ConversationPromptPrefix(
+        conversation_id='conv-evidence',
+        context='CONVERSATION METADATA\n- Captured at: now (UTC)\n\n'
+        'FULL TRANSCRIPT\n[s1 0] First point\n[s2] Second point',
+        transcript_segment_ids=frozenset({'s1', 's2'}),
+    )
+
+    class Model:
+        def invoke(self, _messages):
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Evidence',
+                        'overview': 'compatibility',
+                        'emoji': '🧠',
+                        'category': 'work',
+                        'sections': [
+                            {
+                                'heading': 'Points',
+                                'body_markdown': '- Grounded',
+                                'source_segment_ids': ['s2', 's2', 'invented', 's1'],
+                            }
+                        ],
+                        'action_items': [
+                            {
+                                'description': 'Follow up',
+                                'source_segment_ids': ['invented', 's1', 's1'],
+                            }
+                        ],
+                        'events': [],
+                    }
+                )
+            )
+
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_args, **_kwargs: Model())
+    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
+    result = conversation_processing.get_conversation_notes(
+        prefix,
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        language_code='en',
+        output_language_code='en',
+        tz='UTC',
+        task_intelligence_capture=True,
+    )
+
+    assert result.sections[0].source_segment_ids == ['s2', 's1']
+    assert result.action_items[0].source_segment_ids == ['s1']
+
+
+def test_note_source_refs_are_empty_without_transcript_headers(monkeypatch):
+    from utils.llm import conversation_processing
+    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+
+    prefix = ConversationPromptPrefix(
+        conversation_id='conv-no-evidence',
+        context='FULL TRANSCRIPT\n[sFake 0] Bracket-like user text, not a source identity',
+    )
+
+    class Model:
+        def invoke(self, _messages):
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Evidence',
+                        'overview': 'compatibility',
+                        'emoji': '🧠',
+                        'category': 'work',
+                        'sections': [
+                            {'heading': 'Points', 'body_markdown': '- Ungrounded', 'source_segment_ids': ['s1']}
+                        ],
+                        'action_items': [{'description': 'Follow up', 'source_segment_ids': ['s1']}],
+                        'events': [],
+                    }
+                )
+            )
+
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_args, **_kwargs: Model())
+    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
+    result = conversation_processing.get_conversation_notes(
+        prefix,
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        language_code='en',
+        output_language_code='en',
+        tz='UTC',
+        task_intelligence_capture=True,
+    )
+
+    assert result.sections[0].source_segment_ids == []
+    assert result.action_items[0].source_segment_ids == []
 
 
 def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder():

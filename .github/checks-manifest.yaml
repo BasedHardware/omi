@@ -103,8 +103,8 @@ checks:
     reason: "Lexical boundary scan must ignore prose, accept existing debt, and reject reintroduced debt"
 
   - id: spine-contracts
-    command: ["python3", "scripts/check_spine_contracts.py"]
-    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", ".github/checks-manifest.yaml"]
+    command: ["python3", "scripts/check_spine_contracts.py", "--base", "{base}"]
+    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
@@ -224,6 +224,11 @@ checks:
     triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
+  - id: debug-apk-size-report-tests
+    command: ["python3", ".github/scripts/test_report_debug_apk_size.py"]
+    triggers: [".github/scripts/report_debug_apk_size.py", ".github/scripts/test_report_debug_apk_size.py", ".github/workflows/mobile-app-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the compile-smoke APK size report must stay a non-gating zip breakdown of the debug APK this job already builds"
   - id: structured-string-sink-registry
     command: ["bash", "scripts/run-structured-string-sinks.sh"]
     triggers: [".github/workflows/**", ".github/actions/**", ".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sinks.sh", ".github/checks-manifest.yaml"]
@@ -323,7 +328,7 @@ checks:
     lanes: ["local", "ci"]
     reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
-    command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
+    command: ["python3", ".github/scripts/check_product_invariants.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     requires_pr_body: true
@@ -371,6 +376,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: desktop-agent-credential-boundary
+    command: ["python3", "desktop/macos/scripts/check-agent-credentials.py"]
+    triggers: ["desktop/macos/Desktop/Sources/Chat/**", "desktop/macos/agent/src/**", "desktop/macos/pi-mono-extension/**", "desktop/macos/scripts/check-agent-credentials.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Beta v0.12.356 retained an expired Firebase token in pi-mono after one offline refresh killed its timer; prevent startup credential copies and refresh-driven restarts"
   - id: desktop-flow-contract-tests
     command: ["python3", "desktop/macos/tests/test_desktop_flow_contract.py"]
     triggers: ["desktop/macos/scripts/desktop_flow_contract.py", "desktop/macos/tests/test_desktop_flow_contract.py", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]

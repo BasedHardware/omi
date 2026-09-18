@@ -242,7 +242,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get searchConversations => 'Etsi keskusteluja...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count valittu';
   }
 
@@ -2044,10 +2044,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get memoryHistory => 'Historia';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Salli käyttö';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Älä käytä';
 
   @override
   String get undo => 'Kumoa';
@@ -9999,4 +9999,19 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get home => 'Koti';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Perustilan päivitys epäonnistui.';
+
+  @override
+  String get unstarConversation => 'Poista keskustelun tähti';
+
+  @override
+  String get moreOptions => 'Lisää vaihtoehtoja';
+
+  @override
+  String get filterByDate => 'Suodata päivämäärän mukaan';
+
+  @override
+  String get memoryGraph => 'Muistigraafi';
 }

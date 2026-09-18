@@ -174,4 +174,89 @@ void main() {
     scheduler.elapse(const Duration(seconds: 5));
     expect(fired, 0);
   });
+
+  test('concurrent close joins the in-flight drain; a later close is a no-op', () async {
+    final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+    final gate = Completer<void>();
+    bag.own(() => gate.future);
+    final first = bag.close();
+    var secondFinished = false;
+    final second = bag.close().then((_) => secondFinished = true);
+    await pumpEventQueue();
+    expect(secondFinished, isFalse);
+    gate.complete();
+    await Future.wait([first, second]);
+    expect(secondFinished, isTrue);
+    await bag.close();
+  });
+
+  test('asFuture untracks on completion and on error', () async {
+    final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+    final completed = StreamController<int>();
+    final completedSub = bag.listen(completed.stream, (_) {});
+    expect(bag.debugTrackedCount, 1);
+    final done = completedSub.asFuture<void>();
+    await completed.close();
+    await done;
+    expect(bag.debugTrackedCount, 0);
+    await bag.close();
+
+    final failing = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+    final errors = StreamController<int>();
+    final errorSub = failing.listen(errors.stream, (_) {});
+    expect(failing.debugTrackedCount, 1);
+    final expected = expectLater(errorSub.asFuture<void>(), throwsStateError);
+    errors.addError(StateError('synthetic'));
+    await expected;
+    await errors.close();
+    expect(failing.debugTrackedCount, 0);
+    await failing.close();
+  });
+
+  test('replacement data and error callbacks do not run after close begins', () async {
+    final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+    final gate = Completer<void>();
+    bag.own(() => gate.future);
+    final controller = StreamController<int>.broadcast(sync: true);
+    final events = <String>[];
+    final sub =
+        bag.listen(controller.stream, (_) => events.add('original'), onError: (Object _) => events.add('error'));
+    sub.onData((_) => events.add('replacement'));
+    controller.add(0);
+    controller.addError(StateError('before-close'));
+    expect(events, ['replacement', 'error']);
+    events.clear();
+    final closing = bag.close();
+    controller.add(1);
+    controller.addError(StateError('late'));
+    expect(events, isEmpty);
+    gate.complete();
+    await closing;
+    await controller.close();
+  });
+
+  test('original and replacement onDone do not run after close begins', () async {
+    for (final replace in [false, true]) {
+      final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+      final completed = StreamController<int>();
+      var delivered = 0;
+      bag.listen(completed.stream, (_) {}, onDone: () => delivered++);
+      await completed.close();
+      expect(delivered, 1);
+      expect(bag.debugTrackedCount, 0);
+      final gate = Completer<void>();
+      bag.own(() => gate.future);
+      final stream = StreamController<int>();
+      final sub = bag.listen(stream.stream, (_) {}, onDone: () => delivered++);
+      if (replace) sub.onDone(() => delivered += 2);
+      final closing = bag.close();
+      final done = stream.close();
+      await pumpEventQueue();
+      final leaked = delivered;
+      gate.complete();
+      await closing;
+      await done;
+      expect(leaked, 1, reason: 'completion may untrack, but cannot call the closed owner');
+    }
+  });
 }

@@ -41,6 +41,7 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
+import 'conversation_summary_selection.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
@@ -142,9 +143,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       }
     } else if (selectedTab == ConversationTab.summary) {
       // Count matches in app summaries
-      final summarizedApp = provider.getSummarizedApp();
-      if (summarizedApp != null && summarizedApp.content.trim().isNotEmpty) {
-        final appContent = summarizedApp.content.trim().decodeString.toLowerCase();
+      final summarySelection = provider.getSummarySelection();
+      if (summarySelection.content.isNotEmpty) {
+        final appContent = summarySelection.content.decodeString.toLowerCase();
         final query = _searchQuery.toLowerCase();
         int index = 0;
         while ((index = appContent.indexOf(query, index)) != -1) {
@@ -382,13 +383,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         _copyContent(context, provider.conversation.getTranscript(generate: true));
         break;
       case 'copy_summary':
-        // Use app-generated summary if available, otherwise fall back to structured summary
         final conversation = provider.conversation;
-        final summaryContent =
-            conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-                ? conversation.appResults[0].content.trim()
-                : conversation.structured.toString();
-        _copyContent(context, summaryContent);
+        _copyContent(context, ConversationSummarySelection.select(conversation).content);
         break;
       case 'download_audio':
         await _downloadAudio(context, provider);
@@ -692,6 +688,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                 onPressed: () {
                   HapticFeedback.mediumImpact();
                   if (widget.isFromOnboarding) {
@@ -762,6 +759,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
+                            tooltip: provider.conversation.starred
+                                ? context.l10n.unstarConversation
+                                : context.l10n.starConversation,
                             onPressed: _isTogglingStarred
                                 ? null
                                 : () async {
@@ -828,6 +828,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
+                            tooltip: context.l10n.share,
                             onPressed: _isSharing
                                 ? null
                                 : () async {
@@ -896,6 +897,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             ),
                             child: IconButton(
                               padding: EdgeInsets.zero,
+                              tooltip: context.l10n.search,
                               onPressed: () {
                                 setState(() {
                                   _isSearching = !_isSearching;
@@ -981,7 +983,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 onTap: () => _handleMenuSelection(context, 'delete', provider),
                               ),
                             ],
-                            buttonBuilder: (context, showMenu) => GestureDetector(
+                            buttonBuilder: (context, showMenu) => Semantics(
+                              button: true,
+                              label: context.l10n.moreOptions,
+                              excludeSemantics: true,
                               onTap: () {
                                 HapticFeedback.mediumImpact();
                                 PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
@@ -989,15 +994,24 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 );
                                 showMenu();
                               },
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.3),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Center(
-                                  child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                              child: GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
+                                    conversationId: provider.conversation.id,
+                                  );
+                                  showMenu();
+                                },
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withValues(alpha: 0.3),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Center(
+                                    child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1014,6 +1028,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           body: Stack(
             children: [
               GestureDetector(
+                excludeFromSemantics: true,
                 behavior: HitTestBehavior.translucent,
                 onTap: () {
                   // Close search if search bar is empty and user taps on content
@@ -1334,6 +1349,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   Widget build(BuildContext context) {
     super.build(context);
     return GestureDetector(
+      excludeFromSemantics: true,
       behavior: HitTestBehavior.translucent,
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -1366,9 +1382,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                           },
                           onEditStarted: (_) => PlatformManager.instance.analytics.editSummaryStarted(),
                           onEditCancelled: (_) => PlatformManager.instance.analytics.editSummaryCancelled(),
-                          onSaveSummary: (appId, newContent) {
+                          onSaveSummarySelection: (selection, newContent) {
                             PlatformManager.instance.analytics.editSummarySaved();
-                            context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
+                            context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                  selection,
+                                  newContent,
+                                );
                           },
                         ),
                   const SliverToBoxAdapter(child: GetGeolocationWidgets()),
@@ -1711,6 +1730,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         }
       },
       child: GestureDetector(
+        excludeFromSemantics: true,
         behavior: HitTestBehavior.translucent,
         onTap: () {
           FocusScope.of(context).unfocus();
