@@ -1314,6 +1314,7 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
     # Firestore emulator JVM) are unreachable through the process group.
     descendants = {int(record.get("pid", -1)): safety.descendant_pids(int(record.get("pid", -1))) for record in records}
     failures: list[str] = []
+    signaled: set[int] = set()
     for record in records:
         pid = int(record.get("pid", -1))
         service = str(record.get("service"))
@@ -1324,10 +1325,11 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
         try:
             safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
             _signal_owned_process_group(pid, service)
+            signaled.add(pid)
         except safety.SafetyError as exc:
             failures.append(
                 f"{service}: still running pid={pid}; {exc}. "
-                "Do not kill it unless `ps -ww` shows the harness ownership marker; "
+                "Do not kill it unless `ps -wwE` shows the harness ownership marker; "
                 "the pid may have been reused."
             )
     deadline = time.time() + 8
@@ -1336,22 +1338,41 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
     for record in records:
         pid = int(record.get("pid", -1))
         service = str(record.get("service"))
-        if safety.process_exists(pid):
+        if not safety.process_exists(pid):
+            continue
+        if pid in signaled:
             try:
-                safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
                 os.killpg(pid, signal.SIGTERM)
                 print(f"{service}: sent SIGTERM to process group {pid}")
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
-            except safety.SafetyError as exc:
-                failures.append(f"{service}: still running pid={pid}; {exc}")
+            continue
+        try:
+            safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
+            os.killpg(pid, signal.SIGTERM)
+            signaled.add(pid)
+            print(f"{service}: sent SIGTERM to process group {pid}")
+        except ProcessLookupError:
+            pass
+        except safety.SafetyError as exc:
+            failures.append(f"{service}: still running pid={pid}; {exc}")
     deadline = time.time() + 5
     while time.time() < deadline and any(safety.process_exists(int(r.get("pid", -1))) for r in records):
         time.sleep(0.25)
     for record in records:
         pid = int(record.get("pid", -1))
-        if safety.process_exists(pid):
-            failures.append(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
+        service = str(record.get("service"))
+        if safety.process_exists(pid) and pid in signaled:
+            try:
+                os.killpg(pid, signal.SIGKILL)
+                print(f"{service}: sent SIGKILL to process group {pid}")
+            except (ProcessLookupError, PermissionError):
+                pass
+        elif safety.process_exists(pid):
+            failures.append(
+                f"{service}: still running pid={pid}; command line does not contain harness ownership marker; "
+                "leaving it for safety inspection"
+            )
         try:
             _reap_detached_port_holders(cfg, record, descendants.get(pid, ()))
         except safety.SafetyError as exc:
