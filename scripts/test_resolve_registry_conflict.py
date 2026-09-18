@@ -227,6 +227,50 @@ class RegistryConflictResolverTests(unittest.TestCase):
         self.assertIn('"app/a.dart": "C1"', resolved)
         self.assertNotIn('{"app/a.dart":', resolved.replace(" ", ""))
 
+    def test_same_content_different_key_order_is_not_both_edited(self) -> None:
+        """A reorder of equal keys is not an owner disagreement.
+
+        pick_side compares canonical(parsed) per key (json.dumps sort_keys), not
+        file order. Reordering shared entries, or fields inside one entry, must
+        resolve rather than refuse.
+        """
+
+        base = '{\n  "app/a.dart": "C1",\n  "app/b.dart": "C1"\n}\n'
+        ours = '{\n  "app/a.dart": "C1",\n  "app/b.dart": "C1",\n  "app/ours.dart": "C3"\n}\n'
+        theirs = '{\n  "app/b.dart": "C1",\n  "app/a.dart": "C1",\n  "app/main.dart": "C1"\n}\n'
+        resolved = MOD.resolve_text(SPINE, base, ours, theirs)
+        parsed = json_loads(resolved)
+        self.assertEqual(parsed["app/a.dart"], "C1")
+        self.assertEqual(parsed["app/b.dart"], "C1")
+        self.assertEqual(parsed["app/ours.dart"], "C3")
+        self.assertEqual(parsed["app/main.dart"], "C1")
+
+        ours_fields = """checks:
+  - id: shared
+    reason: "base shared"
+    command: ["python3", "old.py"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+
+exempt:
+  - path: "keep.py"
+    reason: "must stay exempt"
+"""
+        theirs_fields = """checks:
+  - id: shared
+    command: ["python3", "old.py"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "base shared"
+
+exempt:
+  - path: "keep.py"
+    reason: "must stay exempt"
+"""
+        resolved_fields = MOD.resolve_text(MANIFEST, ours_fields, ours_fields, theirs_fields)
+        self.assertEqual(parsed_check_ids(resolved_fields), ["shared"])
+        self.assertEqual(parsed_shared_command(resolved_fields), ["python3", "old.py"])
+
     def test_allowlist_union_by_path(self) -> None:
         base = """{
   "entries": [
