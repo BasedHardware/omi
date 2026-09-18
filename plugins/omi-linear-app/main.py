@@ -190,7 +190,11 @@ def sanitize_issue_identifier(raw: Any) -> Optional[str]:
             return None
 
     value = urllib.parse.unquote(value).strip()
-    value = re.sub(r"^(?:linear\s+)?issue\s*[:#]?\s*", "", value, flags=re.IGNORECASE)
+    # Voice transcription may wrap an identifier in opening punctuation, but
+    # a team key literally named ISSUE must not be mistaken for the word
+    # "issue" and have its first segment stripped.
+    value = value.lstrip("([{<").strip()
+    value = re.sub(r"^(?:linear\s+)?issue(?:\s*[:#]\s*|\s+)", "", value, flags=re.IGNORECASE)
     value = re.sub(r"^#\s*", "", value)
     value = value.rstrip(".,;:)]}>").strip()
     if not _LINEAR_IDENTIFIER_RE.fullmatch(value):

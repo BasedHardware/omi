@@ -76,6 +76,12 @@ class IdentifierTests(unittest.TestCase):
     def test_shorthand_is_normalized(self):
         module = load_app()
         self.assertEqual(module.sanitize_issue_identifier("  issue: #eng-123. "), "ENG-123")
+        self.assertEqual(module.sanitize_issue_identifier("(ENG-123)"), "ENG-123")
+        self.assertEqual(module.sanitize_issue_identifier("(issue: ENG-123)"), "ENG-123")
+
+    def test_issue_team_key_is_not_stripped_as_a_prefix(self):
+        module = load_app()
+        self.assertEqual(module.sanitize_issue_identifier("ISSUE-123"), "ISSUE-123")
 
     def test_url_is_normalized(self):
         module = load_app()
