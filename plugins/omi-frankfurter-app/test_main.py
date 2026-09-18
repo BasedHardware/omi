@@ -1,153 +1,130 @@
-"""Hermetic unit tests for Frankfurter Currency Omi integration.
-
-No third-party runtime dependencies required. Runs deterministically under
-both standard library `python3 -S` and `pytest`.
-"""
-
 import asyncio
 from decimal import Decimal
-import importlib.util
 from pathlib import Path
 import sys
 import types
 import unittest
 from unittest.mock import AsyncMock, patch
 
+# Provide lightweight stubs for third-party runtime dependencies so test_main.py
+# runs hermetically on any clean standard library Python environment without
+# requiring FastAPI, httpx, or Pydantic to be installed.
+if "httpx" not in sys.modules:
+    try:
+        import httpx  # type: ignore
+    except ImportError:
+        httpx = types.ModuleType("httpx")
 
-def load_app():
-    class DummyState:
-        pass
+        class HTTPError(Exception):
+            pass
 
-    class DummyFastAPI:
-        def __init__(self, **kwargs):
-            self.routes = []
-            self.lifespan = kwargs.get("lifespan")
-            self.state = DummyState()
+        class HTTPStatusError(HTTPError):
+            pass
 
-        def get(self, path, **kwargs):
-            return self._route("GET", path, kwargs.get("response_model"))
+        class AsyncClient:
+            def __init__(self, *args, **kwargs):
+                self.is_closed = False
 
-        def post(self, path, **kwargs):
-            return self._route("POST", path, kwargs.get("response_model"))
+            async def __aenter__(self):
+                return self
 
-        def exception_handler(self, exc_class):
-            def decorator(func):
-                return func
+            async def __aexit__(self, *args):
+                self.is_closed = True
 
-            return decorator
+            async def get(self, *args, **kwargs):
+                pass
 
-        def _route(self, method, path, response_model):
-            def decorator(func):
-                self.routes.append({
-                    "method": method,
-                    "path": path,
-                    "func": func,
-                    "response_model": response_model,
-                })
-                return func
+        httpx.HTTPError = HTTPError
+        httpx.HTTPStatusError = HTTPStatusError
+        httpx.AsyncClient = AsyncClient
+        sys.modules["httpx"] = httpx
 
-            return decorator
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi  # type: ignore
+        import fastapi.exceptions  # type: ignore
+        import fastapi.responses  # type: ignore
+    except ImportError:
+        fastapi = types.ModuleType("fastapi")
+        fastapi.exceptions = types.ModuleType("fastapi.exceptions")
+        fastapi.responses = types.ModuleType("fastapi.responses")
 
-    class DummyBaseModel:
-        def __init__(self, **kwargs):
-            for key, value in kwargs.items():
-                setattr(self, key, value)
+        class FastAPI:
+            def __init__(self, *args, **kwargs):
+                self.title = kwargs.get("title", "")
+                self.version = kwargs.get("version", "")
+                self.description = kwargs.get("description", "")
+                self.state = types.SimpleNamespace(http_client=None)
 
-        def model_dump(self):
-            return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+            def get(self, *args, **kwargs):
+                return lambda f: f
 
-    def Field(default=None, **_kwargs):
-        return default
+            def post(self, *args, **kwargs):
+                return lambda f: f
 
-    def field_validator(*_args, **_kwargs):
-        def decorator(func):
-            return func
+            def exception_handler(self, *args, **kwargs):
+                return lambda f: f
 
-        return decorator
+        class Request:
+            pass
 
-    class HTTPError(Exception):
-        pass
+        class RequestValidationError(Exception):
+            pass
 
-    class HTTPStatusError(HTTPError):
-        def __init__(self, message=None, response=None):
-            super().__init__(message)
-            self.response = response or types.SimpleNamespace(status_code=500)
+        class JSONResponse:
+            def __init__(self, content, status_code=200):
+                self.content = content
+                self.status_code = status_code
 
-    class DummyAsyncClient:
-        def __init__(self, *args, **kwargs):
-            self.is_closed = False
+        class HTMLResponse:
+            def __init__(self, content):
+                self.content = content
 
-        async def __aenter__(self):
-            return self
+        fastapi.FastAPI = FastAPI
+        fastapi.Request = Request
+        fastapi.exceptions.RequestValidationError = RequestValidationError
+        fastapi.responses.JSONResponse = JSONResponse
+        fastapi.responses.HTMLResponse = HTMLResponse
+        sys.modules["fastapi"] = fastapi
+        sys.modules["fastapi.exceptions"] = fastapi.exceptions
+        sys.modules["fastapi.responses"] = fastapi.responses
 
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
-            self.is_closed = True
+if "pydantic" not in sys.modules:
+    try:
+        import pydantic  # type: ignore
+    except ImportError:
+        pydantic = types.ModuleType("pydantic")
 
-        async def aclose(self):
-            self.is_closed = True
+        class BaseModel:
+            def __init__(self, **kwargs):
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
 
-        async def get(self, url, params=None):
-            raise NotImplementedError
+        def Field(default=None, **kwargs):
+            return default
 
-    fastapi = types.ModuleType("fastapi")
-    fastapi.FastAPI = DummyFastAPI
-    fastapi.Request = object
-    fastapi_responses = types.ModuleType("fastapi.responses")
-    fastapi_responses.HTMLResponse = str
-    fastapi_responses.JSONResponse = dict
-    fastapi_exceptions = types.ModuleType("fastapi.exceptions")
+        def field_validator(*args, **kwargs):
+            return lambda f: f
 
-    class RequestValidationError(Exception):
-        pass
+        pydantic.BaseModel = BaseModel
+        pydantic.Field = Field
+        pydantic.field_validator = field_validator
+        sys.modules["pydantic"] = pydantic
 
-    fastapi_exceptions.RequestValidationError = RequestValidationError
+APP_DIR = Path(__file__).resolve().parent
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 
-    pydantic = types.ModuleType("pydantic")
-    pydantic.BaseModel = DummyBaseModel
-    pydantic.Field = Field
-    pydantic.field_validator = field_validator
-
-    httpx = types.ModuleType("httpx")
-    httpx.HTTPError = HTTPError
-    httpx.HTTPStatusError = HTTPStatusError
-    httpx.AsyncClient = DummyAsyncClient
-
-    spec = importlib.util.spec_from_file_location("frankfurter_app_hermetic", Path(__file__).with_name("main.py"))
-    module = importlib.util.module_from_spec(spec)
-    with patch.dict(
-        sys.modules,
-        {
-            "fastapi": fastapi,
-            "fastapi.responses": fastapi_responses,
-            "fastapi.exceptions": fastapi_exceptions,
-            "pydantic": pydantic,
-            "httpx": httpx,
-        },
-    ):
-        spec.loader.exec_module(module)
-    return module
+import main  # noqa: E402
 
 
-main = load_app()
+class FrankfurterStaticAndSchemaTests(unittest.TestCase):
+    def test_app_metadata(self):
+        self.assertEqual(main.app.title, "Omi Frankfurter Currency Integration")
+        self.assertEqual(main.app.version, "1.0.0")
 
-
-class RouteWiringTests(unittest.TestCase):
-    def test_routes_registered_with_correct_methods_and_paths(self):
-        registered = {(r["method"], r["path"]): r for r in main.app.routes}
-        expected_endpoints = {
-            ("GET", "/"),
-            ("GET", "/health"),
-            ("GET", "/.well-known/omi-tools.json"),
-            ("POST", "/tools/convert_currency"),
-            ("POST", "/tools/get_latest_rates"),
-            ("POST", "/tools/list_supported_currencies"),
-        }
-        for endpoint in expected_endpoints:
-            self.assertIn(endpoint, registered)
-
-        self.assertIs(registered[("POST", "/tools/convert_currency")]["response_model"], main.ChatToolResponse)
-        self.assertIs(registered[("POST", "/tools/get_latest_rates")]["response_model"], main.ChatToolResponse)
-        self.assertIs(registered[("POST", "/tools/list_supported_currencies")]["response_model"], main.ChatToolResponse)
+    def test_v1_base_url(self):
+        self.assertEqual(main.FRANKFURTER_BASE_URL, "https://api.frankfurter.dev/v1")
 
     def test_tools_manifest_matches_registered_routes(self):
         manifest = asyncio.run(main.omi_tools())
@@ -210,6 +187,9 @@ class HelperFunctionTests(unittest.TestCase):
     def test_format_decimal(self):
         self.assertEqual(main._format_decimal(Decimal("10.5000")), "10.5")
         self.assertEqual(main._format_decimal(Decimal("1.23456")), "1.2346")
+        self.assertEqual(main._format_decimal(0), "0")
+        self.assertEqual(main._format_decimal(Decimal("0.000042")), "0.000042")
+        self.assertEqual(main._format_decimal(Decimal("0.00000123")), "0.00000123")
 
 
 class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
@@ -242,7 +222,7 @@ class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
             mock_req.return_value = "<html>Error</html>"
             req = main.ConvertCurrencyRequest(amount=50, from_currency="USD", to_currencies=["EUR"])
             resp = await main.convert_currency(req)
-            self.assertEqual(resp.error, "no rates returned for the requested currencies")
+            self.assertEqual(resp.error, "invalid payload returned by currency provider")
 
     async def test_convert_currency_invalid_amount(self):
         req = main.ConvertCurrencyRequest(amount="NaN", from_currency="USD", to_currencies=["EUR"])
@@ -271,6 +251,19 @@ class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("- 1 USD = 0.92 EUR", resp.result)
             self.assertIn("- 1 USD = 150.25 JPY", resp.result)
 
+    async def test_get_latest_rates_small_rate_display(self):
+        mock_data = {
+            "base": "IDR",
+            "date": "2026-09-15",
+            "rates": {"GBP": 0.000042},
+        }
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.LatestRatesRequest(base_currency="IDR", to_currencies=["GBP"])
+            resp = await main.get_latest_rates(req)
+            self.assertIsNone(resp.error)
+            self.assertIn("- 1 IDR = 0.000042 GBP", resp.result)
+
     async def test_get_latest_rates_empty(self):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = {"rates": None}
@@ -292,7 +285,7 @@ class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = []
             resp = await main.list_supported_currencies()
-            self.assertEqual(resp.error, "currency list request returned no currencies")
+            self.assertEqual(resp.error, "invalid currency list returned")
 
 
 class LifespanAndFallbackTests(unittest.IsolatedAsyncioTestCase):

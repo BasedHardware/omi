@@ -16,20 +16,16 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 
-FRANKFURTER_BASE_URL = "https://api.frankfurter.app"
+FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_TARGET_CURRENCIES = 10
 
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=True) as client:
         app_instance.state.http_client = client
-        try:
-            yield
-        finally:
-            if hasattr(app_instance.state, "http_client") and app_instance.state.http_client is not None:
-                await app_instance.state.http_client.aclose()
+        yield
 
 
 app = FastAPI(
@@ -114,18 +110,32 @@ def _parse_amount(value: str | float | int) -> Decimal:
 
 
 def _format_decimal(value: Decimal | float | int) -> str:
-    number = Decimal(str(value)).quantize(Decimal("0.0001")).normalize()
-    return format(number, "f")
+    number = Decimal(str(value))
+    if number == 0:
+        return "0"
+    abs_num = abs(number)
+    if abs_num >= Decimal("0.0001"):
+        formatted = number.quantize(Decimal("0.0001")).normalize()
+    else:
+        formatted = number.quantize(Decimal("0.00000001")).normalize()
+    return format(formatted, "f")
 
 
-async def _request_json(path: str, params: dict[str, Any] | None = None) -> Any:
-    client = getattr(app.state, "http_client", None)
-    if client is None or getattr(client, "is_closed", False):
-        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
-        app.state.http_client = client
-    response = await client.get(f"{FRANKFURTER_BASE_URL}{path}", params=params)
-    response.raise_for_status()
-    return response.json()
+async def _request_json(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    client: Optional[httpx.AsyncClient] = getattr(app.state, "http_client", None)
+    if client is None or client.is_closed:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=True) as temp_client:
+            response = await temp_client.get(f"{FRANKFURTER_BASE_URL}{path}", params=params)
+            response.raise_for_status()
+            payload = response.json()
+    else:
+        response = await client.get(f"{FRANKFURTER_BASE_URL}{path}", params=params)
+        response.raise_for_status()
+        payload = response.json()
+
+    if not isinstance(payload, dict):
+        raise ValueError("unexpected non-dictionary response from upstream service")
+    return payload
 
 
 @app.exception_handler(RequestValidationError)
@@ -226,27 +236,19 @@ async def convert_currency(request: ConvertCurrencyRequest) -> ChatToolResponse:
             },
         )
         if not isinstance(payload, dict):
+            return ChatToolResponse(error="invalid payload returned by currency provider")
+        rates = payload.get("rates")
+        if not isinstance(rates, dict) or not rates:
             return ChatToolResponse(error="no rates returned for the requested currencies")
 
-        rates = payload.get("rates") if isinstance(payload.get("rates"), dict) else {}
-        if not rates:
-            return ChatToolResponse(error="no rates returned for the requested currencies")
-
-        base_curr = payload.get("base") or request.from_currency
-        date_val = payload.get("date") or "latest"
-        lines = [f"{_format_decimal(amount)} {base_curr} on {date_val}:"]
+        lines = [
+            f"{_format_decimal(amount)} {payload.get('base', request.from_currency)} on {payload.get('date', 'latest')}:"
+        ]
         for code in request.to_currencies:
-            if code in rates and rates[code] is not None:
-                try:
-                    lines.append(f"- {code}: {_format_decimal(rates[code])}")
-                except (ValueError, InvalidOperation):
-                    continue
-        if len(lines) == 1:
-            return ChatToolResponse(error="no rates returned for the requested currencies")
+            if code in rates:
+                lines.append(f"- {code}: {_format_decimal(rates[code])}")
         return ChatToolResponse(result="\n".join(lines))
     except (httpx.HTTPError, ValueError) as exc:
-        return ChatToolResponse(error=f"currency conversion failed: {exc}")
-    except Exception as exc:
         return ChatToolResponse(error=f"currency conversion failed: {exc}")
 
 
@@ -259,28 +261,18 @@ async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
 
         payload = await _request_json("/latest", params)
         if not isinstance(payload, dict):
-            return ChatToolResponse(error="no rates returned")
-
-        rates = payload.get("rates") if isinstance(payload.get("rates"), dict) else {}
-        if not rates:
+            return ChatToolResponse(error="invalid payload returned by currency provider")
+        rates = payload.get("rates")
+        if not isinstance(rates, dict) or not rates:
             return ChatToolResponse(error="no rates returned")
 
         codes = request.to_currencies or sorted(rates.keys())
-        base_curr = payload.get("base") or request.base_currency
-        date_val = payload.get("date") or "latest"
-        lines = [f"Latest {base_curr} reference rates for {date_val}:"]
+        lines = [f"Latest {payload.get('base', request.base_currency)} reference rates for {payload.get('date', 'latest')}:"]
         for code in codes[:MAX_TARGET_CURRENCIES]:
-            if code in rates and rates[code] is not None:
-                try:
-                    lines.append(f"- 1 {base_curr} = {_format_decimal(rates[code])} {code}")
-                except (ValueError, InvalidOperation):
-                    continue
-        if len(lines) == 1:
-            return ChatToolResponse(error="no rates returned")
+            if code in rates:
+                lines.append(f"- 1 {payload.get('base', request.base_currency)} = {_format_decimal(rates[code])} {code}")
         return ChatToolResponse(result="\n".join(lines))
     except (httpx.HTTPError, ValueError) as exc:
-        return ChatToolResponse(error=f"latest rates request failed: {exc}")
-    except Exception as exc:
         return ChatToolResponse(error=f"latest rates request failed: {exc}")
 
 
@@ -288,13 +280,11 @@ async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
 async def list_supported_currencies() -> ChatToolResponse:
     try:
         currencies = await _request_json("/currencies")
-        if not isinstance(currencies, dict) or not currencies:
-            return ChatToolResponse(error="currency list request returned no currencies")
+        if not isinstance(currencies, dict):
+            return ChatToolResponse(error="invalid currency list returned")
         lines = ["Frankfurter supported currencies:"]
         for code, name in sorted(currencies.items()):
             lines.append(f"- {code}: {name}")
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"currency list request failed: {exc}")
-    except Exception as exc:
+    except (httpx.HTTPError, ValueError) as exc:
         return ChatToolResponse(error=f"currency list request failed: {exc}")
