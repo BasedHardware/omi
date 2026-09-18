@@ -84,7 +84,7 @@ contract `semantic-controls/v1`, signedIn+routed+captureIdle all **boolean** tru
 principal uid equal to BOTH seeded lease.default_auth_uid and seed.json.uid,
 with matching fixture_version and status=seeded; missing/mismatched seed blocks.
 Live/simulator lanes use the real isolated uvicorn/emulator/redis session stack,
-with offline providers. Require opt-in `make setup-backend` (or existing owner
+with offline providers. Require opt-in `make lane-backend` (or existing owner
 setup) before start; doctor refuses missing uvicorn. Do not install backend in
 lane-bootstrap or substitute journeys' fixture server for real session seeding.
 

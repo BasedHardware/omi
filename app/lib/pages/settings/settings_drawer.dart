@@ -466,8 +466,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     }
 
     return Column(
-      children:
-          filtered.map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap)).toList(),
+      children: filtered
+          .map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap))
+          .toList(),
     );
   }
 
@@ -552,8 +553,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    final page =
-                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                    final page = SharedPreferencesUtil().deviceSupportsMultiFileSync
+                        ? const AutoSyncPage()
+                        : const SyncPage();
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),
@@ -800,12 +802,21 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       child: Row(
                         children: [
-                          GestureDetector(
+                          Semantics(
+                            button: true,
+                            label: context.l10n.search,
+                            excludeSemantics: true,
                             onTap: () {
                               setState(() => _isSearching = true);
                               Future.microtask(() => _searchFocusNode.requestFocus());
                             },
-                            child: const Icon(Icons.search, color: Colors.white, size: 22),
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _isSearching = true);
+                                Future.microtask(() => _searchFocusNode.requestFocus());
+                              },
+                              child: const Icon(Icons.search, color: Colors.white, size: 22),
+                            ),
                           ),
                           Expanded(
                             child: Center(

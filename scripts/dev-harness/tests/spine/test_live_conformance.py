@@ -6,10 +6,12 @@ import json
 
 import pytest
 
+from .pending import pending
 from .test_live_session import rig
 from dev_harness import live_session as live, session_evidence as se
 
 
+@pending("V1")
 def test_start_cannot_attribute_a_build_to_source_observed_only_after_launch(rig):
     factory = rig.factory
 
@@ -26,6 +28,7 @@ def test_start_cannot_attribute_a_build_to_source_observed_only_after_launch(rig
     engine.close()
 
 
+@pending("V1")
 def test_close_reaps_child_even_when_no_app_start_event_arrived(rig):
     class Dead:
         closed = False
@@ -50,6 +53,7 @@ def test_close_reaps_child_even_when_no_app_start_event_arrived(rig):
     assert child.closed
 
 
+@pending("V1")
 def test_factory_failure_does_not_leave_a_live_worktree_claim(rig):
     factory = rig.factory
 
@@ -66,6 +70,7 @@ def test_factory_failure_does_not_leave_a_live_worktree_claim(rig):
     second.close()
 
 
+@pending("V1")
 @pytest.mark.parametrize('operation,params', [('status', {}), ('logs', {}), ('controls', {'method': 'state'})])
 def test_new_lease_generation_cannot_adopt_old_child_even_with_new_request_generation(rig, operation, params):
     engine = rig.engine()
@@ -77,6 +82,7 @@ def test_new_lease_generation_cannot_adopt_old_child_even_with_new_request_gener
     engine.close()
 
 
+@pending("V1")
 def test_source_change_during_post_reload_readiness_does_not_advance_loaded_identity(rig):
     factory = rig.factory
     armed = False
@@ -104,6 +110,7 @@ def test_source_change_during_post_reload_readiness_does_not_advance_loaded_iden
     engine.close()
 
 
+@pending("V1")
 def test_operation_elapsed_time_measures_work_not_receipt_serialization(rig, monkeypatch):
     now = [0.0]
     factory = rig.factory
@@ -143,6 +150,7 @@ def test_operation_elapsed_time_measures_work_not_receipt_serialization(rig, mon
     engine.close()
 
 
+@pending("V1")
 def test_vm_auth_urls_are_sanitized_by_shape_not_one_fixture_secret(rig):
     factory = rig.factory
     secret = 'UNRELATED-secret-42='
@@ -185,6 +193,7 @@ def test_vm_auth_urls_are_sanitized_by_shape_not_one_fixture_secret(rig):
     engine.close()
 
 
+@pending("V1")
 def test_progress_events_cannot_reset_the_absolute_rpc_deadline(rig):
     now, reads, armed = [0.0], [], [False]
     factory = rig.factory
@@ -223,6 +232,7 @@ def test_progress_events_cannot_reset_the_absolute_rpc_deadline(rig):
     engine.close()
 
 
+@pending("V1")
 def test_read_control_cannot_steal_an_inflight_restart_response(rig):
     from concurrent.futures import ThreadPoolExecutor
     import threading

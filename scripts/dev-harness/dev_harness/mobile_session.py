@@ -20,8 +20,8 @@ a session-evidence-v1 receipt. Ownership is fail-closed:
 - leases are created atomically (``O_EXCL``) and record owner host/user/pid;
 - a live foreign owner is never reclaimed — recover only takes over a lease
   whose owner is provably dead on this host, bumping the generation;
-- ports are claimed in a registry and refused (never killed) when a foreign
-  process already listens;
+- ports are claimed by actual port number (including cross-role intersections)
+  and refused (never killed) when a foreign process already listens;
 - stop/release/reset only touch processes and state recorded under the
   session's own manifests (the harness's own ownership guards apply).
 
@@ -208,6 +208,25 @@ def check_ownership(lease: Mapping[str, Any], *, allow_dead_owner: bool = True) 
         )
 
 
+def _port_claim_path(ports_dir: Path, port: int) -> Path:
+    return ports_dir / f"port-{port}.json"
+
+
+def _write_exclusive_claim(path: Path, payload: Mapping[str, Any]) -> None:
+    handle = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    with os.fdopen(handle, "w", encoding="utf-8") as stream:
+        json.dump(payload, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+
+
+def _rollback_claims(paths: Sequence[Path]) -> None:
+    for path in paths:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _claim_port_offset(
     root: Path,
     session_id: str,
@@ -215,11 +234,11 @@ def _claim_port_offset(
     requested_offset: int | None = None,
     listeners: Callable[[int], tuple[int, ...]] = safety.listening_pids,
 ) -> tuple[int, dict[str, int]]:
-    """Atomically claim an isolated port offset, refusing foreign listeners.
+    """Atomically claim an isolated port set, refusing foreign listeners.
 
-    Each candidate offset is claimed with ``O_EXCL``; every port it derives is
-    then probed for live listeners. A foreign listener means the offset is
-    refused (never killed) and the next offset is tried.
+    Exclusive claims are the derived port numbers (including cross-role
+    intersections). The offset file is session metadata, not the isolation
+    boundary: offsets 1000 and 3700 both derive port 10080.
     """
 
     ports_dir = root / PORTS_DIRNAME
@@ -241,7 +260,7 @@ def _claim_port_offset(
     for offset in candidates:
         claim_path = ports_dir / f"{offset}.json"
         ports = config.harness_ports_from_env({config.PORT_OFFSET_ENV: str(offset)})
-        for port in sorted(ports.values()):
+        for port in sorted(set(ports.values())):
             try:
                 pids = listeners(port)
             except safety.SafetyError as exc:
@@ -255,27 +274,39 @@ def _claim_port_offset(
         if refusals:
             refusals = []
             continue
+        acquired: list[Path] = []
+        claimed_at = session_evidence.utc_now()
         try:
-            handle = os.open(claim_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-        except FileExistsError as exc:
-            if requested_offset is not None:
-                raise SessionError(
-                    f"port offset {offset} is already claimed by another session ({claim_path})"
-                ) from exc
-            continue
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(
+            _write_exclusive_claim(
+                claim_path,
                 {
                     "schema_version": 1,
                     "session_id": session_id,
                     "port_offset": offset,
-                    "claimed_at": session_evidence.utc_now(),
+                    "claimed_at": claimed_at,
                 },
-                stream,
-                indent=2,
-                sort_keys=True,
             )
-            stream.write("\n")
+            acquired.append(claim_path)
+            for port in sorted(set(ports.values())):
+                port_path = _port_claim_path(ports_dir, port)
+                _write_exclusive_claim(
+                    port_path,
+                    {
+                        "schema_version": 1,
+                        "session_id": session_id,
+                        "port": port,
+                        "port_offset": offset,
+                        "claimed_at": claimed_at,
+                    },
+                )
+                acquired.append(port_path)
+        except FileExistsError as exc:
+            _rollback_claims(acquired)
+            if requested_offset is not None:
+                raise SessionError(
+                    f"port set for offset {offset} is already claimed ({exc.filename or claim_path})"
+                ) from exc
+            continue
         return offset, dict(ports)
     raise SessionError(
         f"no free port offset in [{PORT_OFFSET_MIN}, {PORT_OFFSET_MAX}] after {MAX_OFFSET_ATTEMPTS} attempts; "
@@ -284,18 +315,34 @@ def _claim_port_offset(
 
 
 def _release_port_offset(root: Path, offset: int, session_id: str) -> None:
-    claim_path = root / PORTS_DIRNAME / f"{offset}.json"
+    ports_dir = root / PORTS_DIRNAME
+    claim_path = ports_dir / f"{offset}.json"
     try:
         claim = json.loads(claim_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return
+        claim = None
     except json.JSONDecodeError:
         raise SessionError(f"port claim {claim_path} is corrupt; inspect before deleting it") from None
-    if claim.get("session_id") != session_id:
+    if claim is not None and claim.get("session_id") != session_id:
         raise SessionError(
             f"port offset {offset} is claimed by session {claim.get('session_id')!r}, not {session_id!r}; refusing"
         )
-    claim_path.unlink()
+    ports = config.harness_ports_from_env({config.PORT_OFFSET_ENV: str(offset)})
+    for port in sorted(set(ports.values())):
+        port_path = _port_claim_path(ports_dir, port)
+        try:
+            payload = json.loads(port_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except json.JSONDecodeError:
+            raise SessionError(f"port claim {port_path} is corrupt; inspect before deleting it") from None
+        if payload.get("session_id") != session_id:
+            raise SessionError(
+                f"port {port} is claimed by session {payload.get('session_id')!r}, not {session_id!r}; refusing"
+            )
+        port_path.unlink()
+    if claim is not None:
+        claim_path.unlink()
 
 
 # ---------------------------------------------------------------------------
@@ -321,19 +368,32 @@ class DeviceController:
         return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
     def android_ready(self, android_home: str) -> tuple[bool, str]:
-        emulator = Path(android_home) / "emulator" / "emulator"
-        sdkmanager = Path(android_home) / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        home = Path(android_home or "")
+        emulator = home / "emulator" / "emulator"
         if not emulator.exists():
             return False, f"emulator engine missing at {emulator} (sdkmanager 'emulator' 'cmdline-tools;latest')"
+        sdkmanager = home / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+        list_code: int | None = None
+        list_output = ""
         if sdkmanager.exists():
-            code, out = self._runner([str(sdkmanager), "--list_installed"])
-            if code == 0 and not any(line.strip().startswith("system-images;") for line in out.splitlines()):
-                return (
-                    False,
-                    "no Android system image installed "
-                    "(sdkmanager 'system-images;android-36;google_apis;arm64-v8a')",
-                )
-        return True, "android emulator engine present"
+            list_code, list_output = self._runner([str(sdkmanager), "--list_installed"])
+        image = mobile_doctor.installed_android_system_image(home, list_output=list_output)
+        if image:
+            return True, f"android emulator engine present ({image})"
+        disk = home.joinpath(*mobile_doctor.PREFERRED_ANDROID_IMAGE_DIR)
+        if list_code is None:
+            return False, (
+                f"cannot determine Android system image: sdkmanager missing at {sdkmanager} "
+                f"and no on-disk image at {disk}; this is not a finding that the emulator engine is absent"
+            )
+        if list_code != 0:
+            snippet = " ".join(list_output.split())[:180]
+            return False, (
+                f"cannot determine Android system image: sdkmanager --list_installed exited {list_code}"
+                + (f" ({snippet})" if snippet else "")
+                + "; this is not a finding that the emulator engine is absent"
+            )
+        return False, f"no Android system image installed (sdkmanager '{mobile_doctor.PREFERRED_ANDROID_IMAGE}')"
 
     def attach_ios_simulator(self, session_id: str, device_type: str, runtime: str) -> tuple[str, str]:
         name = f"omi-session-{session_id}"
@@ -438,16 +498,9 @@ def acquire(
 
 
 def recover(repo_root: Path, session_id: str, env: Mapping[str, str] | None = None) -> dict[str, Any]:
-    from . import cli as harness_cli
-    from . import live_session
-
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease, allow_dead_owner=True)
-    live_session.teardown(repo_root, session_id, env)
-    code = _harness_call(lease, harness_cli.cmd_down)
-    if code != 0:
-        raise SessionError(f"session harness down failed during recover (exit {code}); generation was not bumped")
     lease = {**lease, "generation": int(lease.get("generation", 1)) + 1, "owner": owner_identity()}
     lease["recovered_at"] = session_evidence.utc_now()
     _save_json_atomic(directory / LEASE_FILENAME, lease)
@@ -575,9 +628,6 @@ def reset(
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease)
-    from . import live_session
-
-    live_session.teardown(repo_root, session_id, env)
     # The harness reset validates the instance sentinel itself, so the blast
     # radius is exactly this session's instance state root.
     code = _harness_call(lease, harness_reset or harness_cli.cmd_reset)
@@ -606,15 +656,14 @@ def stop(
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease, allow_dead_owner=True)
-    from . import live_session
 
-    live_session.teardown(repo_root, session_id, env)
-    code = _harness_call(lease, harness_cli.cmd_down)
-    if code != 0:
-        raise SessionError(f"session harness down failed (exit {code}); session services may still run")
     device = lease.get("device")
     if isinstance(device, Mapping) and device.get("kind") == "simulator" and device.get("udid"):
         (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]))
+
+    code = _harness_call(lease, harness_cli.cmd_down)
+    if code != 0:
+        raise SessionError(f"session harness down failed (exit {code}); session services may still run")
     lease = {**lease, "status": "stopped", "stopped_at": session_evidence.utc_now(), "device": None}
     _save_json_atomic(directory / LEASE_FILENAME, lease)
     return lease
@@ -855,7 +904,9 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--no-device", action="store_true", help="services only; skip the device lease")
 
     live = sub.add_parser("live", help="V1 live Flutter broker (pending implementation)")
-    live.add_argument("operation", choices=("start", "reload", "restart", "screenshot", "logs", "controls", "status", "stop"))
+    live.add_argument(
+        "operation", choices=("start", "reload", "restart", "screenshot", "logs", "controls", "status", "stop")
+    )
     live.add_argument("session_id")
     live.add_argument("--params", type=json.loads, default={}, help="operation-specific JSON object")
     live.add_argument("--json", action="store_true")
