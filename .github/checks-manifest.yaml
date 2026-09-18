@@ -316,7 +316,7 @@ checks:
     lanes: ["local", "ci"]
     reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
-    command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
+    command: ["python3", ".github/scripts/check_product_invariants.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     requires_pr_body: true

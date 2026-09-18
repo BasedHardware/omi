@@ -379,13 +379,23 @@ def merge_base(root: Path, base: str, head: str) -> str:
 
 
 def commit_subjects(root: Path, base: str, head: str) -> tuple[str, list[str]]:
+    """Commits reachable from *head* and not from the merge-base with *base*.
+
+    Use two-dot log from the merge-base, never ``base...head`` (that is
+    git-log's symmetric difference and would pick up unique base-side
+    commits) and never ``--first-parent`` / ``HEAD~`` (GitHub's merge ref
+    has BASE as first parent, so those walk the base instead of the PR).
+    ``--no-merges`` drops the synthetic merge commit so the subject list
+    is the same on the branch head and on either parent order of a merge.
+    """
     common = merge_base(root, base, head)
-    subjects = run_git(root, "log", "--format=%s", f"{common}..{head}")
+    subjects = run_git(root, "log", "--format=%s", "--no-merges", f"{common}..{head}")
     return common, [subject for subject in subjects.splitlines() if subject]
 
 
-def changed_paths_in_range(root: Path, common: str, head: str) -> list[str]:
-    output = run_git(root, "diff", "--name-only", common, head)
+def changed_paths_in_range(root: Path, base: str, head: str) -> list[str]:
+    """PR file list: three-dot diff of *base*...*head*, never first-parent."""
+    output = run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", f"{base}...{head}")
     return [line for line in output.splitlines() if line]
 
 
@@ -419,28 +429,26 @@ def candidates_matching_scope(definitions: list[Definition], paths: list[str]) -
     return matched
 
 
-def added_definition_paths(root: Path, common: str, head: str) -> list[Path]:
+def added_definition_paths(root: Path, base: str, head: str) -> list[Path]:
     output = run_git(
         root,
         "diff",
         "--name-only",
         "--diff-filter=A",
-        common,
-        head,
+        f"{base}...{head}",
         "--",
         str(DEFINITIONS_RELATIVE_PATH),
     )
     return [Path(line) for line in output.splitlines() if line]
 
 
-def changed_definition_paths(root: Path, common: str, head: str) -> list[Path]:
+def changed_definition_paths(root: Path, base: str, head: str) -> list[Path]:
     output = run_git(
         root,
         "diff",
         "--name-only",
         "--diff-filter=ACMRD",
-        common,
-        head,
+        f"{base}...{head}",
         "--",
         str(DEFINITIONS_RELATIVE_PATH),
     )
@@ -526,7 +534,7 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
     changed_definition_paths_in_range: list[Path] = []
     if common:
         try:
-            changed_definition_paths_in_range = changed_definition_paths(root, common, args.head)
+            changed_definition_paths_in_range = changed_definition_paths(root, args.base, args.head)
         except CliError as exc:
             errors.append(error("definition_change_check_failed", str(exc)))
     if declaration is None:
@@ -542,7 +550,7 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
     elif declaration == "new":
         if common:
             try:
-                added_paths = added_definition_paths(root, common, args.head)
+                added_paths = added_definition_paths(root, args.base, args.head)
             except CliError as exc:
                 errors.append(error("new_definition_check_failed", str(exc)))
             else:
@@ -667,7 +675,7 @@ def prepare_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any
     narrowing = "none: every definition is listed"
     if not args.all_candidates and common:
         try:
-            paths = changed_paths_in_range(root, common, args.head)
+            paths = changed_paths_in_range(root, args.base, args.head)
         except CliError as exc:
             errors.append(error("changed_path_check_failed", str(exc)))
         else:
