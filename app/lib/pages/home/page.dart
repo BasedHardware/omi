@@ -116,6 +116,7 @@ class _HomePageProductState extends State<_HomePageProduct> {
       // Check actual system permission state — the SharedPreferences flag may
       // be stale (e.g. user granted via Settings > Permissions, or reinstall).
       final notifGranted = await Permission.notification.isGranted;
+      if (!mounted) return;
       if (notifGranted) {
         SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();

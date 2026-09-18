@@ -16,7 +16,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 
-FRANKFURTER_BASE_URL = "https://api.frankfurter.app"
+# The legacy .app host permanently redirects to the canonical v1 API.  Keep
+# the version in the base URL so every request (including /currencies) avoids
+# an extra redirect; HTTPX deliberately does not follow redirects by default.
+FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_TARGET_CURRENCIES = 10
 
@@ -114,8 +117,22 @@ def _parse_amount(value: str | float | int) -> Decimal:
 
 
 def _format_decimal(value: Decimal | float | int) -> str:
-    number = Decimal(str(value)).quantize(Decimal("0.0001")).normalize()
-    return format(number, "f")
+    """Render a finite API number without rounding meaningful small rates to 0."""
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError("rate must be a number") from exc
+    if not number.is_finite():
+        raise ValueError("rate must be a finite number")
+    if number == 0:
+        return "0"
+
+    # Do not quantize to a fixed four decimal places: rates such as
+    # 0.000042 (IDR → GBP) are valid and would otherwise be displayed as 0.
+    rendered = format(number.normalize(), "f")
+    if "." in rendered:
+        rendered = rendered.rstrip("0").rstrip(".")
+    return rendered or "0"
 
 
 async def _request_json(path: str, params: dict[str, Any] | None = None) -> Any:
@@ -125,7 +142,10 @@ async def _request_json(path: str, params: dict[str, Any] | None = None) -> Any:
         app.state.http_client = client
     response = await client.get(f"{FRANKFURTER_BASE_URL}{path}", params=params)
     response.raise_for_status()
-    return response.json()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Frankfurter returned a non-object response")
+    return payload
 
 
 @app.exception_handler(RequestValidationError)
@@ -294,7 +314,7 @@ async def list_supported_currencies() -> ChatToolResponse:
         for code, name in sorted(currencies.items()):
             lines.append(f"- {code}: {name}")
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError) as exc:
         return ChatToolResponse(error=f"currency list request failed: {exc}")
     except Exception as exc:
         return ChatToolResponse(error=f"currency list request failed: {exc}")

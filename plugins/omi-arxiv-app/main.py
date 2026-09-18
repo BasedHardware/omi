@@ -105,7 +105,11 @@ def _safe_category(category: Any) -> str:
     value = _clean_text(category).lower()
     if not value:
         return ""
-    if re.fullmatch(r"[a-z\-]+(\.[a-z]{2})?", value):
+    # Archive names are hyphenated (cond-mat, gr-qc, math-ph) and
+    # subcategories are not limited to two letters: the official arXiv
+    # taxonomy includes physics.acc-ph, physics.optics, cond-mat.mes-hall,
+    # cond-mat.soft, astro-ph.GA, ... so accept any [a-z-] subject class.
+    if re.fullmatch(r"[a-z\-]+(\.[a-z\-]+)?", value):
         return value[:32]
     return ""
 

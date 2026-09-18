@@ -103,7 +103,7 @@ void main() {
                   'id': 'due-today',
                   'description': 'due today',
                   'completed': false,
-                  'due_at': DateTime.utc(2026, 9, 18, 10).toIso8601String(),
+                  'due_at': DateTime.now().toUtc().toIso8601String(),
                 },
               ],
               'has_more': false,
@@ -134,8 +134,8 @@ void main() {
     expect(provider.actionItems.map((item) => item.id), ['page-one']);
     await provider.loadMoreActionItems();
     expect(provider.actionItems.map((item) => item.id), ['page-one', 'page-two']);
-    await provider.ensureHomeTodayTasksLoaded(now: DateTime.utc(2026, 9, 18, 15));
-    expect(provider.todayPreviewTasks(now: DateTime.utc(2026, 9, 18, 15)).map((item) => item.id), ['due-today']);
+    await provider.ensureHomeTodayTasksLoaded(now: DateTime.now());
+    expect(provider.todayPreviewTasks(now: DateTime.now()).map((item) => item.id), ['due-today']);
     final listUrls = urls.where((uri) => uri.path == '/v1/action-items').toList();
     expect(listUrls.length, greaterThanOrEqualTo(3));
     expect(listUrls.any((uri) => uri.queryParameters['offset'] == '1'), isTrue);
@@ -162,11 +162,11 @@ void main() {
     addTearDown(provider.dispose);
     await provider.ensureLoaded();
     expect(provider.apiViewState.phase, ApiViewPhase.empty);
-    await provider.ensureHomeTodayTasksLoaded(now: DateTime.utc(2026, 9, 18, 15));
+    await provider.ensureHomeTodayTasksLoaded(now: DateTime.now());
     expect(provider.todayPreviewTasks(now: DateTime.utc(2026, 9, 18, 15)), isEmpty);
     expect(provider.apiViewState.phase, ApiViewPhase.empty);
     failDueWindow = false;
-    await provider.ensureHomeTodayTasksLoaded(now: DateTime.utc(2026, 9, 18, 15));
+    await provider.ensureHomeTodayTasksLoaded(now: DateTime.now());
     expect(provider.apiViewState.phase, ApiViewPhase.empty);
   });
 }

@@ -257,6 +257,17 @@ class BuildSearchQueryTest(unittest.TestCase):
         self.assertIn("search_query=au%3AYann+LeCun", encoded)
         self.assertNotIn("%2B", encoded)
 
+    def test_category_only_search_builds_cat_clause(self):
+        # issue #14380: a category-only search must produce a cat: filter,
+        # not a "Provide query, title, author, or category." error
+        query = main._build_search_query({"category": "physics.acc-ph"})
+        self.assertEqual(query, "cat:physics.acc-ph")
+
+    def test_category_with_query_is_ANDed_not_dropped(self):
+        # issue #14380: the category must survive when a keyword is present
+        query = main._build_search_query({"query": "electron", "category": "physics.acc-ph"})
+        self.assertEqual(query, "all:electron AND cat:physics.acc-ph")
+
 
 class SanitizerAndHelperTests(unittest.TestCase):
     def test_clean_text(self):
@@ -281,6 +292,13 @@ class SanitizerAndHelperTests(unittest.TestCase):
         self.assertEqual(main._safe_category("stat.ML"), "stat.ml")
         self.assertEqual(main._safe_category("quant-ph"), "quant-ph")
         self.assertEqual(main._safe_category("  math.PR  "), "math.pr")
+        # official arXiv taxonomy categories beyond two-letter subjects
+        # (issue #14380)
+        self.assertEqual(main._safe_category("physics.acc-ph"), "physics.acc-ph")
+        self.assertEqual(main._safe_category("physics.optics"), "physics.optics")
+        self.assertEqual(main._safe_category("cond-mat.mes-hall"), "cond-mat.mes-hall")
+        self.assertEqual(main._safe_category("cond-mat.soft"), "cond-mat.soft")
+        self.assertEqual(main._safe_category("astro-ph.GA"), "astro-ph.ga")
         self.assertEqual(main._safe_category("invalid_cat;DROP TABLE"), "")
         self.assertEqual(main._safe_category(None), "")
 

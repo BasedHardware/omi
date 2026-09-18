@@ -509,6 +509,84 @@ class SelectionTests(unittest.TestCase):
                 self.assertEqual(sorted(live_diff), ["pr_file.txt"])
                 self.assertEqual(sorted(stale_diff), ["pr_file.txt", "unrelated_file.txt"])
 
+    def test_changed_files_agrees_on_branch_head_and_both_merge_parent_orders(self) -> None:
+        """make preflight / product-invariants consume this list.
+
+        Two-dot `main HEAD` includes files unique to main on the branch head
+        and drops them on GitHub's merge ref. Three-dot is parent-order
+        invariant.
+        """
+        git_isolation = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+        def run(*args: str, cwd: Path) -> None:
+            subprocess.run(
+                ["git", *git_isolation, *args],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+
+        def rev_parse(cwd: Path, ref: str = "HEAD") -> str:
+            result = subprocess.run(
+                ["git", *git_isolation, "rev-parse", ref],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            return result.stdout.strip()
+
+        with patch.dict(os.environ):
+            for key in list(os.environ):
+                if key.startswith("GIT_"):
+                    del os.environ[key]
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                run("init", "-q", "-b", "main", cwd=root)
+                run("config", "user.email", "test@example.com", cwd=root)
+                run("config", "user.name", "Test", cwd=root)
+                (root / "root.txt").write_text("root", encoding="utf-8")
+                run("add", "root.txt", cwd=root)
+                run("commit", "-q", "-m", "root", cwd=root)
+
+                run("checkout", "-q", "-b", "pr", cwd=root)
+                (root / "pr_file.txt").write_text("pr", encoding="utf-8")
+                run("add", "pr_file.txt", cwd=root)
+                run("commit", "-q", "-m", "pr", cwd=root)
+                pr_sha = rev_parse(root)
+
+                run("checkout", "-q", "main", cwd=root)
+                (root / "unrelated_file.txt").write_text("main", encoding="utf-8")
+                run("add", "unrelated_file.txt", cwd=root)
+                run("commit", "-q", "-m", "main advanced", cwd=root)
+                main_sha = rev_parse(root)
+
+                run("checkout", "-q", "--detach", pr_sha, cwd=root)
+                run("merge", "--no-ff", "-q", "-m", "branch-first", main_sha, cwd=root)
+                branch_first = rev_parse(root)
+                run("checkout", "-q", "--detach", main_sha, cwd=root)
+                run("merge", "--no-ff", "-q", "-m", "base-first", pr_sha, cwd=root)
+                base_first = rev_parse(root)
+
+                expected = ["pr_file.txt"]
+                self.assertEqual(changed_files(root, "main", pr_sha), expected)
+                self.assertEqual(changed_files(root, "main", branch_first), expected)
+                self.assertEqual(changed_files(root, "main", base_first), expected)
+                # Two-dot against the live main tip is the parent-order defect:
+                # on the branch head it includes main's unique file.
+                two_dot_branch = subprocess.run(
+                    ["git", *git_isolation, "diff", "--name-only", main_sha, pr_sha],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                ).stdout.splitlines()
+                self.assertIn("unrelated_file.txt", two_dot_branch)
+
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
             ["make", "-n", "preflight"],

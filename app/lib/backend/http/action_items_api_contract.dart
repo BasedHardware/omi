@@ -6,6 +6,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 import 'api_presentation.dart';
 import 'api_result.dart';
+import '../../services/dev_controls/addressability_catalog.dart';
 
 export 'package:omi/backend/http/api/action_items.dart' show ActionItemsApi;
 
@@ -64,7 +65,11 @@ class ActionItemsApiStatus extends StatelessWidget {
                   style: const TextStyle(color: Colors.white),
                 ),
                 if (view.problem?.retryable == true)
-                  TextButton(onPressed: () => provider.forceRefreshActionItems(), child: Text(context.l10n.retry)),
+                  TextButton(
+                    key: OmiKeys.actionItemsRetry,
+                    onPressed: () => provider.forceRefreshActionItems(),
+                    child: Text(context.l10n.retry),
+                  ),
               ],
             ),
           ),
