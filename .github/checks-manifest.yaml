@@ -1127,6 +1127,11 @@ checks:
     triggers: ["plugins/**/*.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
+  - id: wikipedia-app-tests
+    command: ["python3", "plugins/omi-wikipedia-app/test_main.py"]
+    triggers: ["plugins/omi-wikipedia-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13948: a null query block, null content_urls/desktop chain, non-dict upstream JSON, or non-dict items in search/random lists crashed the Wikipedia tool handlers with AttributeError; the suite executes all three handlers, the lifespan pooled-client fallback, and request normalization through hermetic seams"
 
   - id: plugin-oauth-hardening-tests
     command: ["python3", "plugins/oauth/test_oauth_hardening.py"]
