@@ -16,6 +16,27 @@ class _MockTransport implements DeviceTransport {
   final List<Map<String, dynamic>> writeCalls = [];
 
   @override
+  Stream<DeviceTransportState> get connectionStateStream => const Stream.empty();
+
+  @override
+  Future<bool> isConnected() async => true;
+
+  @override
+  Future<bool> ping() async => true;
+
+  @override
+  Future<void> connect() async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<bool> requestBond() async => true;
+
+  @override
+  Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) => const Stream.empty();
+
+  @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
     writeCalls.add({
       'serviceUuid': serviceUuid,
@@ -32,9 +53,6 @@ class _MockTransport implements DeviceTransport {
 
   @override
   Future<void> dispose() async {}
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
