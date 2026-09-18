@@ -38,4 +38,3 @@ is not AudioRecord and is not a `platform_mic` receipt. The Omi app's
 AudioRecord path still needs a started capture (architect seam or a production
 record-control tap).
 
-
