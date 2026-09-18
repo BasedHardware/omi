@@ -6,6 +6,8 @@ and chat tools for managing issues, projects, and workflows.
 """
 import os
 import base64
+import hmac
+import hashlib
 import urllib.parse
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
@@ -371,18 +373,39 @@ async def home(request: Request, uid: Optional[str] = None):
     })
 
 
+def _oauth_state_for(uid: str) -> str:
+    """Sign uid into the OAuth state so a callback can't rebind the grant."""
+    sig = hmac.new(
+        LINEAR_CLIENT_SECRET.encode('utf-8'),
+        uid.encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()[:32]
+    return f"{uid}:{sig}"
+
+
+def _oauth_state_uid(state: str) -> Optional[str]:
+    """Return the uid from a signed state, or None if it wasn't issued here."""
+    uid, sep, sig = state.rpartition(":")
+    if not sep or not uid:
+        return None
+    expected = _oauth_state_for(uid).rpartition(":")[2]
+    if not hmac.compare_digest(expected, sig):
+        return None
+    return uid
+
+
 @app.get("/auth/linear")
 async def linear_auth(uid: str):
     """Initiate Linear OAuth flow."""
     if not uid:
         raise HTTPException(status_code=400, detail="User ID is required")
-    
+
     params = {
         "client_id": LINEAR_CLIENT_ID,
         "response_type": "code",
         "redirect_uri": LINEAR_REDIRECT_URI,
         "scope": ",".join(LINEAR_SCOPES),
-        "state": uid,
+        "state": _oauth_state_for(uid),
         "prompt": "consent",
     }
     
@@ -406,8 +429,17 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
             "authenticated": False,
             "error": "Invalid callback parameters"
         })
-    
-    uid = state
+
+    # Only trust a state this server signed: Linear doesn't sign callbacks,
+    # so an attacker-initiated flow could otherwise bind their workspace
+    # grant to a victim uid.
+    uid = _oauth_state_uid(state)
+    if uid is None:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid OAuth state"
+        })
     
     # Exchange code for tokens
     response = requests.post(
