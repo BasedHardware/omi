@@ -7,14 +7,44 @@ USGS FDSN event API.
 
 from __future__ import annotations
 
+import inspect
+import json
 import math
 import os
+import urllib.parse
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from fastapi import FastAPI, Request
+
+try:
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+except ImportError:
+    class RequestValidationError(Exception):
+        def errors(self):
+            return []
+
+    class JSONResponse:
+        def __init__(self, content=None, status_code=200, **kwargs):
+            self.content = content or {}
+            self.status_code = status_code
+
+        async def __call__(self, scope, receive, send):
+            if send is not None:
+                await send({
+                    "type": "http.response.start",
+                    "status": self.status_code,
+                    "headers": [[b"content-type", b"application/json"]],
+                })
+                import json
+                body = json.dumps(self.content).encode("utf-8")
+                await send({
+                    "type": "http.response.body",
+                    "body": body,
+                })
 
 try:
     from .models import (
@@ -97,6 +127,26 @@ app = FastAPI(
 )
 
 
+if hasattr(app, "exception_handler"):
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        """Gracefully envelope validation errors for chat tool endpoints."""
+        errs = exc.errors() if hasattr(exc, "errors") else []
+        err_msg = (
+            errs[0].get("msg", "Invalid request payload")
+            if errs and isinstance(errs[0], dict)
+            else "Invalid request payload"
+        )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": False,
+                "message": f"Invalid tool request: {err_msg}",
+                "data": {"error": "validation_error", "details": errs},
+            },
+        )
+
+
 def _get_http_client() -> Tuple[httpx.AsyncClient, bool]:
     client = getattr(app.state, "http_client", None)
     if client is not None and not getattr(client, "is_closed", False):
@@ -164,6 +214,37 @@ def _safe_orderby(value: Any) -> str:
     return orderby
 
 
+def _clean_event_id(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    if raw.startswith("#"):
+        raw = raw[1:].strip()
+
+    is_url = "://" in raw or "earthquake.usgs.gov" in raw
+    if is_url:
+        try:
+            parsed = urllib.parse.urlparse(raw)
+            query_params = urllib.parse.parse_qs(parsed.query)
+            if "eventid" in query_params and query_params["eventid"]:
+                return query_params["eventid"][0].strip()
+
+            path_parts = [p for p in parsed.path.strip("/").split("/") if p]
+            if "eventpage" in path_parts:
+                idx = path_parts.index("eventpage")
+                if idx + 1 < len(path_parts):
+                    return path_parts[idx + 1].strip()
+            # If URL has no recognized eventpage segment or eventid param, reject to avoid squashing hostname
+            return ""
+        except Exception:
+            return ""
+
+    raw = raw.split("?")[0].split("#")[0].rstrip("/")
+    cleaned = "".join(c for c in raw if c.isalnum() or c in ("-", "_"))
+    return cleaned
+
+
 def _invalid_json_response() -> ChatToolResponse:
     return ChatToolResponse(
         success=False,
@@ -176,13 +257,47 @@ async def _read_json_body(
     request: Request,
 ) -> tuple[Optional[Dict[str, Any]], Optional[ChatToolResponse]]:
     try:
-        body = await request.json()
-    except Exception:
+        raw = request.json()
+        if inspect.isawaitable(raw):
+            body = await raw
+        elif isinstance(raw, str):
+            body = json.loads(raw)
+        else:
+            body = raw
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
         return None, _invalid_json_response()
 
     if not isinstance(body, dict):
         return None, _invalid_json_response()
     return body, None
+
+
+async def _extract_request_data(
+    payload: Any,
+) -> tuple[Dict[str, Any], Optional[ChatToolResponse]]:
+    if payload is None:
+        return {}, None
+    if isinstance(payload, dict):
+        return payload, None
+    if Request is not object and isinstance(payload, Request):
+        body, error = await _read_json_body(payload)
+        return body or {}, error
+    if hasattr(payload, "model_dump") and callable(payload.model_dump):
+        return payload.model_dump(), None
+    if hasattr(payload, "dict") and callable(payload.dict):
+        return payload.dict(), None
+    if hasattr(payload, "json") and callable(payload.json):
+        body, error = await _read_json_body(payload)
+        return body or {}, error
+    if hasattr(payload, "__dict__"):
+        res = {}
+        for cls in reversed(payload.__class__.__mro__):
+            for k, v in getattr(cls, "__dict__", {}).items():
+                if not k.startswith("_") and not callable(v):
+                    res[k] = v
+        res.update(payload.__dict__)
+        return res, None
+    return {}, None
 
 
 def _query_params(body: Dict[str, Any], default_hours: int = 24) -> Dict[str, Any]:
@@ -249,26 +364,43 @@ def _summarize_feature(feature: Any) -> Dict[str, Any]:
     }
 
 
-async def _usgs_get(params: Dict[str, Any]) -> Dict[str, Any]:
-    client, should_close = _get_http_client()
+async def _usgs_get(
+    params: Dict[str, Any], client: Optional[httpx.AsyncClient] = None
+) -> Dict[str, Any]:
+    active_client = client
+    should_close = False
+    if active_client is None:
+        active_client, should_close = _get_http_client()
     try:
-        response = await client.get(USGS_QUERY_URL, params=params)
+        response = await active_client.get(USGS_QUERY_URL, params=params)
         response.raise_for_status()
         data = response.json()
         if not isinstance(data, dict):
             return {"error": "USGS returned an invalid non-dict payload"}
         return data
+    except httpx.HTTPStatusError as exc:
+        status_code = getattr(exc.response, "status_code", 500)
+        return {"error": f"USGS request failed with status {status_code}: {exc}"}
+    except httpx.TimeoutException:
+        return {"error": f"USGS request timed out after {REQUEST_TIMEOUT_SECONDS}s"}
     except httpx.HTTPError as exc:
         return {"error": f"USGS request failed: {exc}"}
     except ValueError:
         return {"error": "USGS returned a non-JSON response"}
+    except Exception as exc:
+        return {"error": f"Unexpected error during USGS request: {exc}"}
     finally:
         if should_close:
-            await client.aclose()
+            await active_client.aclose()
 
 
-async def _list_earthquakes(params: Dict[str, Any]) -> Dict[str, Any]:
-    payload = await _usgs_get(params)
+async def _list_earthquakes(
+    params: Dict[str, Any], client: Optional[httpx.AsyncClient] = None
+) -> Dict[str, Any]:
+    if client is not None:
+        payload = await _usgs_get(params, client=client)
+    else:
+        payload = await _usgs_get(params)
     if "error" in payload:
         return payload
 
@@ -294,6 +426,18 @@ async def _list_earthquakes(params: Dict[str, Any]) -> Dict[str, Any]:
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "omi-usgs-earthquake-app"}
+
+
+@app.get("/status")
+async def status():
+    return {
+        "status": "ok",
+        "service": "omi-usgs-earthquake-app",
+        "version": "1.0.0",
+        "usgs_query_url": USGS_QUERY_URL,
+        "timeout_seconds": REQUEST_TIMEOUT_SECONDS,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/.well-known/omi-tools.json")
@@ -405,8 +549,8 @@ async def get_manifest_alias():
 
 
 @app.post("/tools/recent_earthquakes", response_model=ChatToolResponse)
-async def tool_recent_earthquakes(request: Request):
-    body, error = await _read_json_body(request)
+async def tool_recent_earthquakes(payload: Optional[RecentEarthquakesRequest] = None):
+    body, error = await _extract_request_data(payload)
     if error:
         return error
     result = await _list_earthquakes(_query_params(body, default_hours=24))
@@ -423,8 +567,8 @@ async def tool_recent_earthquakes(request: Request):
 
 
 @app.post("/tools/nearby_earthquakes", response_model=ChatToolResponse)
-async def tool_nearby_earthquakes(request: Request):
-    body, error = await _read_json_body(request)
+async def tool_nearby_earthquakes(payload: NearbyEarthquakesRequest):
+    body, error = await _extract_request_data(payload)
     if error:
         return error
     latitude = _parse_float(body.get("latitude"))
@@ -466,11 +610,12 @@ async def tool_nearby_earthquakes(request: Request):
 
 
 @app.post("/tools/earthquake_details", response_model=ChatToolResponse)
-async def tool_earthquake_details(request: Request):
-    body, error = await _read_json_body(request)
+async def tool_earthquake_details(payload: EarthquakeDetailsRequest):
+    body, error = await _extract_request_data(payload)
     if error:
         return error
-    event_id = str(body.get("event_id") or "").strip()
+    raw_event_id = body.get("event_id")
+    event_id = _clean_event_id(raw_event_id)
     if not event_id:
         return ChatToolResponse(
             success=False,

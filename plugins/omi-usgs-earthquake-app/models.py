@@ -12,6 +12,23 @@ except ImportError:
             for key, value in kwargs.items():
                 setattr(self, key, value)
 
+        def dict(self):
+            res = {}
+            for cls in reversed(self.__class__.__mro__):
+                for k, v in getattr(cls, "__dict__", {}).items():
+                    if not k.startswith("_") and not callable(v):
+                        res[k] = v
+            res.update(self.__dict__)
+            return res
+
+        def model_dump(self):
+            return self.dict()
+
+        def json(self):
+            import json
+
+            return json.dumps(self.dict())
+
     def Field(default=None, **kwargs):
         return default
 
