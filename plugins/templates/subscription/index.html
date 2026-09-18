@@ -558,7 +558,7 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="subscription-container" data-uid="{{ uid }}">
         <div class="header">
             <div class="omi-device">
                 <img src="/templates/static/images/omi.png" alt="Omi Device" />
@@ -786,17 +786,24 @@
     </div>
 
     <script>
-        // Get UID from URL parameters if not provided by template
+        // Get UID safely from DOM data attribute or URL parameters with sanitization
+        const containerElement = document.getElementById('subscription-container');
+        const templateUid = (containerElement && containerElement.getAttribute('data-uid')) || '';
         const urlParams = new URLSearchParams(window.location.search);
-        const uid = urlParams.get('uid') || '{{ uid }}';
+        const rawParamUid = urlParams.get('uid') || '';
+        
+        // Strict client-side validation to eliminate script injection
+        const safeUidPattern = /^[a-zA-Z0-9_-]{1,128}$/;
+        const paramUid = safeUidPattern.test(rawParamUid) ? rawParamUid : '';
+        const uid = paramUid || templateUid;
         
         // Update button links with UID if needed
-        if (uid && uid !== '{{ uid }}') {
+        if (uid && uid !== templateUid) {
             const buttons = document.querySelectorAll('.cta-button');
             buttons.forEach(button => {
                 const href = button.getAttribute('href');
-                if (href && !href.includes('uid=')) {
-                    button.setAttribute('href', href + (href.includes('?') ? '&' : '?') + 'uid=' + encodeURIComponent(uid));
+                if (href && !href.includes('client_reference_id=')) {
+                    button.setAttribute('href', href + (href.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(uid));
                 }
             });
         }
