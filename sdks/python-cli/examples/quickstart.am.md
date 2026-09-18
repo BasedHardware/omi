@@ -183,7 +183,7 @@ omi --json action-item list --open | jq '.'
 > * ስህተት፦ `omi memory list --json`
 
 ### ገጽ መከፋፈል
-የ `list` ትእዛዞች `--limit` እና `--offset` ይደግፋሉ፦
+የ `memory`፣ `conversation`፣ እና `action-item` `list` ትእዛዞች `--limit` እና `--offset` ይደግፋሉ (የ `goal list` ግን `--limit` ብቻ ይደግፋል፣ `--offset` አይደግፍም)፦
 
 ```bash
 omi --json memory list --limit 50 --offset 50
