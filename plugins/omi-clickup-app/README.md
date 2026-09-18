@@ -59,6 +59,7 @@ OMI_APP_ID=your_omi_app_id
 OMI_APP_SECRET=your_omi_app_secret
 
 # Server config
+CLICKUP_WEBHOOK_SECRET=your_webhook_shared_secret  # Required: authenticates /webhook transcript deliveries
 APP_HOST=0.0.0.0
 APP_PORT=8000
 ```

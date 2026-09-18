@@ -176,6 +176,7 @@ Add these in Railway dashboard:
 ```
 SLACK_CLIENT_ID
 SLACK_CLIENT_SECRET
+SLACK_WEBHOOK_SECRET=your_webhook_shared_secret
 OPENAI_API_KEY
 OAUTH_REDIRECT_URL=https://your-app.up.railway.app/auth/callback
 APP_HOST=0.0.0.0
@@ -183,7 +184,7 @@ APP_PORT=8000
 PYTHONUNBUFFERED=1
 ```
 
-**Note**: `PYTHONUNBUFFERED=1` ensures instant log output (no buffering delays)
+**Note**: `SLACK_WEBHOOK_SECRET` is required to authenticate transcript webhooks (`/webhook`) and chat-tool endpoints (`/api/*`). `PYTHONUNBUFFERED=1` ensures instant log output (no buffering delays).
 
 ## 🧪 Testing
 
