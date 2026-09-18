@@ -1,3 +1,4 @@
+import '../analytics_manager.dart';
 import 'events.g.dart';
 
 /// Only this seam forwards generated events into AnalyticsManager.track.
@@ -5,7 +6,8 @@ import 'events.g.dart';
 class TypedEvents {
   const TypedEvents();
 
-  void emit(RegisteredEvent event) => throw UnimplementedError('C7: route through existing AnalyticsManager');
+  void emit(RegisteredEvent event) =>
+      AnalyticsManager().track(event.wireName, properties: Map<String, dynamic>.from(event.properties));
 }
 
 /// Reserved for F1, not emitted by C7's legacy point events.
