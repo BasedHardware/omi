@@ -7,7 +7,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import SystemMessage
@@ -29,6 +29,7 @@ from utils.conversations.wake_word import (
     WAKE_WORD_PROMPT_RULES,
     has_structural_wake_word_marker,
 )
+from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -1117,17 +1118,39 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
     return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
 
 
-def render_sections_markdown(sections: List[Any]) -> str:
-    """Project the additive section model into the legacy overview field."""
-    rendered: List[str] = []
-    for section in sections:
-        heading = str(getattr(section, 'heading', '') or '').strip()
-        body = str(getattr(section, 'body_markdown', '') or '').strip()
-        if heading and body:
-            rendered.append(f'## {heading}\n\n{body}')
-        elif body:
-            rendered.append(body)
-    return '\n\n'.join(rendered)
+def _validate_source_segment_ids(values: Any, valid_ids: set[str]) -> list[str]:
+    """Keep valid, unique source IDs in model order; reject all other values."""
+
+    if not valid_ids or not values:
+        return []
+    validated: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str) or value not in valid_ids or value in seen:
+            continue
+        seen.add(value)
+        validated.append(value)
+    return validated
+
+
+def validate_structured_source_segment_ids(
+    structured: Structured, transcript_segment_ids: Optional[Iterable[str]]
+) -> Structured:
+    """Drop fabricated/duplicate evidence references from any summary output.
+
+    The caller supplies IDs from typed ``TranscriptSegment`` objects. This
+    boundary intentionally has no transcript-string parser: external text and
+    bracket-like content are not evidence of a persisted segment identity.
+    """
+
+    valid_ids = {
+        segment_id for segment_id in (transcript_segment_ids or ()) if isinstance(segment_id, str) and segment_id
+    }
+    for section in structured.sections:
+        section.source_segment_ids = _validate_source_segment_ids(section.source_segment_ids, valid_ids)
+    for action_item in structured.action_items:
+        action_item.source_segment_ids = _validate_source_segment_ids(action_item.source_segment_ids, valid_ids)
+    return structured
 
 
 # Diarization placeholders are transcript machinery, not people. Prompt wording alone
@@ -1319,6 +1342,7 @@ DATE CONTEXT
     )
     response = extraction_parser.parse(_content_str(model.invoke(messages)))
     structured = response.to_structured()
+    validate_structured_source_segment_ids(structured, prefix.transcript_segment_ids)
 
     for action_item in structured.action_items:
         if action_item.created_at is None:
@@ -1348,6 +1372,7 @@ def get_transcript_structure(
     photos: Optional[List[ConversationPhoto]] = None,
     calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
     output_language_code: Optional[str] = None,
+    transcript_segment_ids: Optional[Iterable[str]] = None,
 ) -> Structured:
     # Legacy writer: with CONVERSATION_NOTES_V2_ENABLED prod-on (2026-09-01) this runs
     # only where the flag is still off. Retire 2026-09-29 after the four-week prod bake —
@@ -1469,7 +1494,9 @@ def get_transcript_structure(
             event.duration = 180
         event.created = False
 
-    return sanitize_structured_speaker_placeholders(response)
+    return validate_structured_source_segment_ids(
+        sanitize_structured_speaker_placeholders(response), transcript_segment_ids
+    )
 
 
 def get_reprocess_transcript_structure(
@@ -1479,6 +1506,7 @@ def get_reprocess_transcript_structure(
     tz: str,
     photos: Optional[List[ConversationPhoto]] = None,
     output_language_code: Optional[str] = None,
+    transcript_segment_ids: Optional[Iterable[str]] = None,
 ) -> Structured:
     context_parts: List[str] = []
     if transcript and transcript.strip():
@@ -1570,7 +1598,9 @@ def get_reprocess_transcript_structure(
             event.duration = 180
         event.created = False
 
-    return sanitize_structured_speaker_placeholders(response)
+    return validate_structured_source_segment_ids(
+        sanitize_structured_speaker_placeholders(response), transcript_segment_ids
+    )
 
 
 def get_app_result(

@@ -47,7 +47,9 @@ class _NameWidgetState extends State<NameWidget> {
         // Bottom drawer card - wraps content
         Container(
           width: double.infinity,
-          padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
+          // The SafeArea below adds the system inset; adding it here as well left
+          // twice the inset of dead space under the content on inset devices.
+          padding: const EdgeInsets.fromLTRB(32, 26, 32, 8),
           decoration: const BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),

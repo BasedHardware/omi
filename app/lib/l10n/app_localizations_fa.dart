@@ -243,7 +243,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get searchConversations => 'جستجوی گفتگوها...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count انتخاب‌شده';
   }
 
@@ -2044,10 +2044,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryHistory => 'تاریخچه';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'اجازه استفاده';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'استفاده نکن';
 
   @override
   String get undo => 'بازگشت';
@@ -9995,4 +9995,22 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.';
+
+  @override
+  String get home => 'خانه';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'به‌روزرسانی وضعیت پایه ناموفق بود.';
+
+  @override
+  String get unstarConversation => 'برداشتن ستاره از گفتگو';
+
+  @override
+  String get moreOptions => 'گزینه‌های بیشتر';
+
+  @override
+  String get filterByDate => 'فیلتر بر اساس تاریخ';
+
+  @override
+  String get memoryGraph => 'نمودار خاطرات';
 }

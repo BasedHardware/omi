@@ -574,7 +574,6 @@
     "permissionsRequired": "権限が必要です",
     "permissionsRequiredDesc": "このアプリが正しく機能するにはBluetoothと位置情報の権限が必要です。設定で有効にしてください。",
     "openSettings": "設定を開く",
-    "wantDifferentName": "別の名前を使いますか？",
     "whatsYourName": "お名前は何ですか？",
     "speakTranscribeSummarize": "話す。文字起こし。要約。",
     "signInWithApple": "Appleでサインイン",
@@ -3238,5 +3237,13 @@
     },
     "tapPlusToStartRecording": "＋をタップして録音を開始",
     "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。",
-    "speechProfileEnrollmentPrompt": "Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。"
+    "speechProfileEnrollmentPrompt": "Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。",
+    "home": "ホーム",
+    "failedToUpdateBaselineStatus": "ベースライン状態の更新に失敗しました。",
+    "memoryAllowUse": "使用を許可",
+    "memoryDontUse": "使用しない",
+    "unstarConversation": "会話のスターを解除",
+    "moreOptions": "その他のオプション",
+    "filterByDate": "日付で絞り込む",
+    "memoryGraph": "メモリグラフ"
 }

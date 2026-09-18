@@ -244,7 +244,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get searchConversations => 'Konuşmaları ara...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count seçildi';
   }
 
@@ -2051,10 +2051,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryHistory => 'Geçmiş';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Kullanıma izin ver';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Kullanma';
 
   @override
   String get undo => 'Geri Al';
@@ -10007,4 +10007,22 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Omi\'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.';
+
+  @override
+  String get home => 'Ana Sayfa';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Temel durum güncellenemedi.';
+
+  @override
+  String get unstarConversation => 'Konuşmanın yıldızını kaldır';
+
+  @override
+  String get moreOptions => 'Diğer seçenekler';
+
+  @override
+  String get filterByDate => 'Tarihe göre filtrele';
+
+  @override
+  String get memoryGraph => 'Anı grafiği';
 }

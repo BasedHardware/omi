@@ -126,11 +126,14 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_reprocess_transcript_structure',
         'extract_action_items',
         'get_conversation_notes',
+        'validate_structured_source_segment_ids',
     ):
         setattr(conv_proc, attr, MagicMock())
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
+    gateway_error_contract = add('utils.llm.gateway_error_contract', AutoMockModule('utils.llm.gateway_error_contract'))
+    gateway_error_contract.conversation_processing_http_exception = lambda error: error
     add('utils.apps', AutoMockModule('utils.apps'))
     add('utils.analytics', AutoMockModule('utils.analytics')).record_usage = MagicMock()
     add('utils.conversations.transcript_chunks', AutoMockModule('utils.conversations.transcript_chunks'))
@@ -1496,6 +1499,7 @@ def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted
 
 def _flag_off(monkeypatch, pc) -> None:
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
 
 
 def _identified_basic_deny(pc) -> Any:
@@ -1621,3 +1625,28 @@ def test_flag_off_non_desktop_basic_keeps_eager_extraction(monkeypatch, pc) -> N
     pc.process_conversation('basic-uid', 'en', omi_create, force_process=True)
 
     spies['get_structured'].assert_called_once()
+
+
+def test_eager_extraction_switch_off_first_open_basic_reaches_structured_without_authorize(monkeypatch, pc) -> None:
+    """Unset switch: first-open basic is byte-identical to main before #14165."""
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.delenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', raising=False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    auth_calls: list[str] = []
+
+    def boom(*_args, **_kwargs):
+        auth_calls.append('authorize')
+        raise AssertionError('authorize_managed_compute must not run when the eager-extraction switch is off')
+
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', boom)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: pytest.fail('policy consulted when the eager-extraction switch is off'),
+    )
+    _stub_completed_for_normal_path(monkeypatch, pc)
+
+    pc.process_conversation('basic-uid', 'en', _desktop_create(), force_process=True)
+
+    spies['get_structured'].assert_called_once()
+    assert auth_calls == []

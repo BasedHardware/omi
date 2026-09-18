@@ -138,18 +138,18 @@ def _db(*rows):
     )
     run_path = f"{OPERATOR.QA_SWEEP_RUN_COLLECTION}/{RUN_ID}"
     policy = {
-        "model_name": "gpt-5.6-luna",
-        "max_model_candidates": 1,
-        "max_model_cost_usd": 0.05,
-        "max_catch_up_days": 1,
-        "max_summary_conversations": 1,
-        "max_summary_input_characters": 2000,
-        "max_transcript_fetches": 0,
-        "max_transcript_fetch_characters": 0,
-        "max_memory_lookups": 0,
-        "sdk_max_retries": 0,
-        "gateway_max_attempts": 1,
-        "provider_calls_allowed": 1,
+        "model_name": OPERATOR.QA_SWEEP_MODEL_NAME,
+        "max_model_candidates": OPERATOR.QA_SWEEP_MAX_MODEL_CANDIDATES,
+        "max_model_cost_usd": OPERATOR.QA_SWEEP_MAX_MODEL_COST_USD,
+        "max_catch_up_days": OPERATOR.QA_SWEEP_MAX_CATCH_UP_DAYS,
+        "max_summary_conversations": OPERATOR.QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
+        "max_summary_input_characters": OPERATOR.QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS,
+        "max_transcript_fetches": OPERATOR.QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
+        "max_transcript_fetch_characters": OPERATOR.QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS,
+        "max_memory_lookups": OPERATOR.QA_SWEEP_MAX_MEMORY_LOOKUPS,
+        "sdk_max_retries": OPERATOR.QA_SWEEP_MAX_SDK_RETRIES,
+        "gateway_max_attempts": OPERATOR.QA_SWEEP_MAX_GATEWAY_ATTEMPTS,
+        "provider_calls_allowed": OPERATOR.QA_SWEEP_MAX_PROVIDER_CALLS,
         "max_input_tokens": OPERATOR.QA_SWEEP_MAX_INPUT_TOKENS,
         "max_output_tokens": OPERATOR.QA_SWEEP_MAX_OUTPUT_TOKENS,
         "max_spend_micro_usd": OPERATOR.QA_SWEEP_MAX_SPEND_MICRO_USD,
@@ -371,7 +371,12 @@ def test_consumer_requires_exact_ledger_schema_and_dispatch_bounds():
     with pytest.raises(OPERATOR.JITQASweepOperatorError, match="request id is malformed"):
         OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
 
-    db = _db(_source_row(), _source_row(memory_id="memory-qa-2", candidate_digest="digest-qa-2"))
+    db = _db(
+        _source_row(),
+        _source_row(memory_id="memory-qa-2", candidate_digest="digest-qa-2"),
+        _source_row(memory_id="memory-qa-3", candidate_digest="digest-qa-3"),
+        _source_row(memory_id="memory-qa-4", candidate_digest="digest-qa-4"),
+    )
     with pytest.raises(OPERATOR.JITQASweepOperatorError, match="outside the admitted bound"):
         OPERATOR.verify_qa_sweep_run(db, run_id=RUN_ID)
 
@@ -457,7 +462,7 @@ def test_qa_environment_validation_uses_explicit_mapping_and_fixed_policy():
         "MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH": "false",
         "MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED": "true",
         "MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME": "gpt-5.6-luna",
-        "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES": "1",
+        "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES": str(OPERATOR.QA_SWEEP_MAX_MODEL_CANDIDATES),
         "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD": "0.05",
         "MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED": "true",
         "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG": "jit-qa-sweep-v1",
@@ -471,3 +476,98 @@ def test_qa_environment_validation_uses_explicit_mapping_and_fixed_policy():
     assert OPERATOR.validate_qa_sweep_environment(environment) == RUN_ID
     with pytest.raises(ValueError, match="OMI_ENV_STAGE"):
         OPERATOR.validate_qa_sweep_environment({"OMI_JIT_QA_SWEEP_RUN_ID": RUN_ID})
+
+
+def _attested_repair_receipt():
+    identity = {
+        "uid": OPERATOR.QA_SWEEP_UID,
+        "invocation_id": "inv-1",
+        "account_generation": 1,
+        "source_generation": 4,
+        "sweep_generation": 1,
+        "window_id": "window-a",
+    }
+    return {
+        **identity,
+        "schema_version": OPERATOR.MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
+        "consumed": False,
+        "repair_authority": "operator:test",
+        "prior_claim_id": "claim-a",
+        "prior_claimed_at": "2026-09-17T10:00:00+00:00",
+        "repaired_at": "2026-09-17T11:00:00+00:00",
+        "provider_outcome_summary": "operator_attested_no_dispatch",
+        "provider_outcome_evidence": {
+            "provider_outcome": "operator_attested_no_dispatch",
+            "attempts": [],
+            "confirmation": "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED",
+            "claim_identity": identity,
+            "claim_id": "claim-a",
+            "attested_by": "operator:test",
+            "evidence_reference": "incident:reviewed-evidence",
+            "claimed_at": "2026-09-17T10:00:00+00:00",
+            "attested_at": "2026-09-17T11:00:00+00:00",
+        },
+    }
+
+
+def test_repair_receipt_labels_operator_attestation_without_invented_run():
+    assert (
+        OPERATOR.validate_sweep_repair_receipt(_attested_repair_receipt(), invocation_id="inv-1")
+        == "operator_attested_no_dispatch"
+    )
+
+
+@pytest.mark.parametrize("change", ["assertion", "fake_run", "foreign", "unexpired", "attempt", "actor"])
+def test_repair_receipt_rejects_invalid_attestation(change):
+    receipt = _attested_repair_receipt()
+    evidence = receipt["provider_outcome_evidence"]
+    if change == "assertion":
+        evidence["confirmation"] = ""
+    elif change == "fake_run":
+        evidence["jit_run_id"] = "invented"
+    elif change == "foreign":
+        evidence["claim_identity"] = {**evidence["claim_identity"], "uid": "foreign"}
+    elif change == "unexpired":
+        receipt["repaired_at"] = "2026-09-17T10:01:00+00:00"
+    elif change == "actor":
+        evidence["attested_by"] = "other-operator"
+    else:
+        evidence["attempts"] = [{"request_id": REQUEST_ID}]
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="attestation is invalid"):
+        OPERATOR.validate_sweep_repair_receipt(receipt, invocation_id="inv-1")
+
+
+def test_operator_rejects_previously_accepted_accounting_absence_receipt():
+    receipt = _attested_repair_receipt()
+    receipt["provider_outcome_summary"] = "no_recorded_attempt"
+    receipt["provider_outcome_evidence"] = {
+        "provider_outcome": "no_recorded_attempt",
+        "attempts": [],
+        "accounting_read_complete": True,
+        "uid": OPERATOR.QA_SWEEP_UID,
+        "feature": "memories",
+        "claimed_at": "2026-09-17T10:00:00+00:00",
+        "window_start": "2026-09-17T09:58:00+00:00",
+        "window_end": "2026-09-17T11:00:00+00:00",
+    }
+    with pytest.raises(OPERATOR.JITQASweepOperatorError, match="explicit operator attestation"):
+        OPERATOR.validate_sweep_repair_receipt(receipt, invocation_id="inv-1")
+
+
+def test_qa_envelope_constants_stay_in_lockstep_with_the_sweep_module():
+    from utils.memory import daily_memory_sweep as sweep
+
+    assert OPERATOR.QA_SWEEP_MAX_MODEL_CANDIDATES == sweep.QA_SWEEP_MAX_MODEL_CANDIDATES
+    assert OPERATOR.QA_SWEEP_MAX_MODEL_COST_USD == sweep.QA_SWEEP_MAX_MODEL_COST_USD
+    assert OPERATOR.QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == sweep.QA_SWEEP_MAX_SUMMARY_CONVERSATIONS
+    assert OPERATOR.QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == sweep.QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS
+    assert OPERATOR.QA_SWEEP_MAX_INPUT_TOKENS == sweep.QA_SWEEP_MAX_INPUT_TOKENS
+    assert OPERATOR.QA_SWEEP_MAX_OUTPUT_TOKENS == sweep.QA_SWEEP_MAX_OUTPUT_TOKENS
+    assert OPERATOR.QA_SWEEP_MAX_SPEND_MICRO_USD == sweep.QA_SWEEP_MAX_SPEND_MICRO_USD
+    assert OPERATOR.QA_SWEEP_MAX_PROVIDER_CALLS == sweep.QA_SWEEP_MAX_PROVIDER_CALLS
+    assert OPERATOR.QA_SWEEP_MAX_MODEL_CANDIDATES == 3
+    assert OPERATOR.QA_SWEEP_MAX_SUMMARY_CONVERSATIONS == 8
+    assert OPERATOR.QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS == 8_000
+    assert OPERATOR.QA_SWEEP_MAX_INPUT_TOKENS == 24_576
+    assert OPERATOR.QA_SWEEP_MAX_OUTPUT_TOKENS == 2_048
+    assert OPERATOR.QA_SWEEP_MAX_SPEND_MICRO_USD == 50_000

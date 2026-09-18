@@ -32,6 +32,7 @@ os.environ.setdefault(
 # (round-2 regression). Each test sets the env it needs via `index_env`.
 
 from database import conversations as conversations_db
+from database import helpers as database_helpers
 from utils.conversations import lifecycle as conversations_lifecycle
 from utils.conversations import typesense_index
 from utils.conversations.typesense_index import (
@@ -470,6 +471,15 @@ class TestConversationWriteWiring:
         delete = MagicMock()
         monkeypatch.setattr(typesense_index, "sync_conversation_index_after_write", sync)
         monkeypatch.setattr(typesense_index, "delete_conversation_index_doc", delete)
+
+        # ``create_conversation_if_absent_with_lifecycle`` is wrapped by
+        # ``set_data_protection_level``.  Its policy lookup belongs to the
+        # helpers module, rather than the conversations DB client patched
+        # below; leaving it live makes this hermetic wiring test reach Redis
+        # and then the user-profile/Firestore path.  Return the same
+        # deterministic policy used by the fake Firestore record while
+        # retaining the real decorator and write path under test.
+        monkeypatch.setattr(database_helpers.redis_db, "get_user_data_protection_level", lambda uid: "standard")
 
         conversation_ref = _Ref(_Snapshot({"data_protection_level": "standard"}))
         db = MagicMock()

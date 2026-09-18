@@ -492,13 +492,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 }
 
-/// One headed block of the conversation's written summary.
-///
-/// The backend moved the substance of a summary out of `overview` and into these when the notes
-/// pipeline landed: `overview` became a single short compatibility paragraph, and the headed
-/// detail — what was discussed, the friction, the follow-ups — lives here. The generated wire DTO
-/// has carried them since; this domain model did not, so every desktop surface was rendering the
-/// compatibility paragraph and calling it the summary.
+/// One headed block of the conversation's written summary. The overview may be a compatibility
+/// projection of these sections or an explicit legacy/user-edited body; the selection policy owns
+/// which representation is displayed.
 struct SummarySection: Codable, Equatable, Identifiable {
   var id: String { heading }
   let heading: String
@@ -525,8 +521,7 @@ struct Structured: Codable, Equatable {
   let category: String
   let actionItems: [ActionItem]
   let events: [Event]
-  /// The headed blocks the backend writes the real summary into. Empty for captures processed
-  /// before the notes pipeline, which is why every reader must fall back to `overview`.
+  /// Headed summary blocks. Older captures may omit them; the selection policy then uses overview.
   let sections: [SummarySection]
 
   init(from decoder: Decoder) throws {

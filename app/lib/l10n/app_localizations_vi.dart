@@ -244,7 +244,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchConversations => 'Tìm kiếm cuộc trò chuyện...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Đã chọn $count';
   }
 
@@ -2049,10 +2049,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryHistory => 'Lịch sử';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Cho phép dùng';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Không dùng';
 
   @override
   String get undo => 'Hoàn tác';
@@ -9990,4 +9990,22 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
+
+  @override
+  String get home => 'Trang chủ';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Không thể cập nhật trạng thái đường cơ sở.';
+
+  @override
+  String get unstarConversation => 'Bỏ gắn sao cuộc trò chuyện';
+
+  @override
+  String get moreOptions => 'Tùy chọn khác';
+
+  @override
+  String get filterByDate => 'Lọc theo ngày';
+
+  @override
+  String get memoryGraph => 'Đồ thị ký ức';
 }

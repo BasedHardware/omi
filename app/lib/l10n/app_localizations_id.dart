@@ -243,7 +243,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get searchConversations => 'Cari percakapan...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count dipilih';
   }
 
@@ -2051,10 +2051,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryHistory => 'Riwayat';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Izinkan penggunaan';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Jangan gunakan';
 
   @override
   String get undo => 'Batalkan';
@@ -10005,4 +10005,22 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik.';
+
+  @override
+  String get home => 'Beranda';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Gagal memperbarui status baseline.';
+
+  @override
+  String get unstarConversation => 'Hapus bintang percakapan';
+
+  @override
+  String get moreOptions => 'Opsi lainnya';
+
+  @override
+  String get filterByDate => 'Filter berdasarkan tanggal';
+
+  @override
+  String get memoryGraph => 'Graf memori';
 }
