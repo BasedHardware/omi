@@ -193,28 +193,55 @@ def get_user_shop(uid: str) -> Optional[str]:
 
 
 def _oauth_state_for(uid: str) -> str:
-    """Generate a tamper-proof signed state token binding the flow to the initiating uid."""
+    """Generate a tamper-proof signed state token binding the flow to the initiating uid with a timestamp."""
+    ts = str(int(datetime.utcnow().timestamp()))
+    payload = f"{uid}:{ts}"
     sig = hmac.new(
         SHOPIFY_CLIENT_SECRET.encode("utf-8"),
-        uid.encode("utf-8"),
+        payload.encode("utf-8"),
         hashlib.sha256
     ).hexdigest()
-    return f"{uid}.{sig}"
+    return f"{payload}.{sig}"
 
 
-def _verify_and_extract_state_uid(state: Optional[str]) -> Optional[str]:
-    """Verify cryptographic signature on state and return uid, or None if invalid/tampered."""
+def _verify_and_extract_state_uid(state: Optional[str], max_age_seconds: int = 900) -> Optional[str]:
+    """Verify cryptographic signature on state and return uid, or None if invalid/tampered/expired.
+    
+    Splits from the right (rsplit) so uids containing dots or colons are safely preserved.
+    Enforces a 15-minute TTL to prevent replay attacks.
+    """
     if not state or "." not in state:
         return None
-    uid, sig = state.split(".", 1)
+    payload, sig = state.rsplit(".", 1)
+    if ":" not in payload:
+        # Fallback for backwards compatibility with un-timestamped token format (uid.sig)
+        expected_sig = hmac.new(
+            SHOPIFY_CLIENT_SECRET.encode("utf-8"),
+            payload.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()
+        if hmac.compare_digest(sig, expected_sig):
+            return payload
+        return None
+
+    uid, ts_str = payload.rsplit(":", 1)
     expected_sig = hmac.new(
         SHOPIFY_CLIENT_SECRET.encode("utf-8"),
-        uid.encode("utf-8"),
+        payload.encode("utf-8"),
         hashlib.sha256
     ).hexdigest()
-    if hmac.compare_digest(sig, expected_sig):
-        return uid
-    return None
+    if not hmac.compare_digest(sig, expected_sig):
+        return None
+
+    try:
+        ts = int(ts_str)
+        now = int(datetime.utcnow().timestamp())
+        if now - ts > max_age_seconds or ts > now + 300:
+            return None
+    except (ValueError, TypeError):
+        return None
+
+    return uid
 
 
 def verify_shopify_hmac(query_string: str, hmac_value: str) -> bool:

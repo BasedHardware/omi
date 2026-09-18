@@ -116,10 +116,22 @@ class TestShopifyCallbackSecurity(unittest.TestCase):
         recovered = shopify._verify_and_extract_state_uid(state)
         self.assertEqual(recovered, uid)
 
+    def test_state_signing_uid_with_dots(self):
+        uid = "user.name.with.dots@example.com"
+        state = shopify._oauth_state_for(uid)
+        recovered = shopify._verify_and_extract_state_uid(state)
+        self.assertEqual(recovered, uid)
+
+    def test_state_signing_expired(self):
+        uid = "user_expired"
+        state = shopify._oauth_state_for(uid)
+        # Verify with max_age_seconds=-1 to simulate expired token
+        self.assertIsNone(shopify._verify_and_extract_state_uid(state, max_age_seconds=-1))
+
     def test_state_signing_tamper_detection(self):
         uid = "user_victim"
         state = shopify._oauth_state_for(uid)
-        tampered = "user_attacker." + state.split(".", 1)[1]
+        tampered = "user_attacker." + state.rsplit(".", 1)[1]
         self.assertIsNone(shopify._verify_and_extract_state_uid(tampered))
 
     def test_state_signing_malformed_inputs(self):
