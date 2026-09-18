@@ -1,8 +1,6 @@
 #import "OmiGlassPanelView.h"
 
 #import <React/RCTViewManager.h>
-#import <objc/message.h>
-#import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 
 static const CGFloat defaultCornerRadius = 22.0;
@@ -16,34 +14,12 @@ static NSAppearance *OmiInkGlassAppearance(void)
   return [NSAppearance appearanceNamed:NSAppearanceNameAqua];
 }
 
-static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
-{
-  Class glassClass = NSClassFromString(@"NSGlassEffectView");
-  if (glassClass == Nil) {
-    return nil;
-  }
-  NSView *glass = [[glassClass alloc] initWithFrame:frame];
-  glass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  if ([glass respondsToSelector:@selector(setCornerRadius:)]) {
-    ((void (*)(id, SEL, CGFloat))objc_msgSend)(glass, @selector(setCornerRadius:), radius);
-  }
-  if ([glass respondsToSelector:@selector(setStyle:)]) {
-    ((void (*)(id, SEL, NSInteger))objc_msgSend)(glass, @selector(setStyle:), 0);
-  }
-  if ([glass respondsToSelector:@selector(setTintColor:)]) {
-    ((void (*)(id, SEL, id))objc_msgSend)(
-        glass, @selector(setTintColor:), [NSColor colorWithCalibratedWhite:1.0 alpha:OmiGlassScrimAlpha]);
-  }
-  return glass;
-}
-
 @interface OmiGlassPanelView ()
 
 {
   CGFloat _glassCornerRadius;
 }
 
-@property (nonatomic, strong) NSView *liquidGlass;
 @property (nonatomic, strong) NSVisualEffectView *material;
 @property (nonatomic, strong) NSView *fallback;
 @property (nonatomic, strong) CALayer *scrim;
@@ -120,11 +96,9 @@ RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
   self.appearance = OmiInkGlassAppearance();
   self.layer.borderWidth = 1;
 
-  self.liquidGlass = OmiMakeLiquidGlass(self.bounds, defaultCornerRadius);
-  if (self.liquidGlass != nil) {
-    [self addSubview:self.liquidGlass];
-  }
-
+  // This is a window backdrop, not a floating control. NSGlassEffectView
+  // requires a contentView; Apple explicitly advises against placing it
+  // behind content as a sibling (WWDC25, Build an AppKit app, 18:26).
   self.material = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
   self.material.appearance = OmiInkGlassAppearance();
   self.material.material = NSVisualEffectMaterialHUDWindow;
@@ -176,10 +150,6 @@ RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
   self.fallback.layer.cornerCurve = kCACornerCurveContinuous;
   self.scrim.cornerRadius = _glassCornerRadius;
   self.scrim.cornerCurve = kCACornerCurveContinuous;
-  if (self.liquidGlass != nil && [self.liquidGlass respondsToSelector:@selector(setCornerRadius:)]) {
-    ((void (*)(id, SEL, CGFloat))objc_msgSend)(
-        self.liquidGlass, @selector(setCornerRadius:), _glassCornerRadius);
-  }
 }
 
 - (BOOL)acceptsFirstMouse:(NSEvent *)event
@@ -195,20 +165,22 @@ RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
 - (void)layout
 {
   [super layout];
-  self.liquidGlass.frame = self.bounds;
+  // Window/onboarding geometry changes must not animate a stale scrim through
+  // the content. React owns content motion; the backdrop tracks bounds exactly.
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
   self.material.frame = self.bounds;
   self.fallback.frame = self.bounds;
   self.scrim.frame = self.bounds;
   self.sheen.frame = NSMakeRect(0, NSMaxY(self.bounds) - OmiGlassSheenHeight, NSWidth(self.bounds),
       OmiGlassSheenHeight);
+  [CATransaction commit];
 }
 
 - (void)applyAccessibilityAppearance
 {
   BOOL reduceTransparency = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
-  BOOL hasLiquid = self.liquidGlass != nil;
-  self.liquidGlass.hidden = reduceTransparency || !hasLiquid;
-  self.material.hidden = reduceTransparency || hasLiquid;
+  self.material.hidden = reduceTransparency;
   self.fallback.hidden = !reduceTransparency;
   self.appearance = OmiInkGlassAppearance();
   [self.appearance performAsCurrentDrawingAppearance:^{

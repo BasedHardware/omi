@@ -1022,6 +1022,27 @@ test('Recall typing debounces the shared input into actual timeline reads', asyn
   }
 });
 
+test('ready-to-onboarding transitions unmount the omnibar rather than cover it', () => {
+  const renderer = renderDesktop();
+  const props = renderer.root.findByType(DesktopApp)
+    .props as React.ComponentProps<typeof DesktopApp>;
+  expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+  for (const session of [
+    'probing',
+    'signed-out',
+    'ready',
+    'signed-out',
+  ] as const) {
+    act(() => renderer.update(<DesktopApp {...props} session={session} />));
+    expect(renderer.root.findAllByType(TextInput)).toHaveLength(
+      session === 'ready' ? 1 : 0,
+    );
+    expect(renderedText(renderer).includes('Welcome to Omi')).toBe(
+      session === 'signed-out',
+    );
+  }
+});
+
 test('signed-out Mac sees only the Welcome, never product chrome', () => {
   const onSignIn = jest.fn();
   const renderer = renderDesktop({

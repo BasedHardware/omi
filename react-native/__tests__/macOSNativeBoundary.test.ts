@@ -639,27 +639,27 @@ test('glass material never swallows hits', () => {
   expect(source).toContain('return NO;');
 });
 
-test('keeps the glass reduce-transparency fallback intact', () => {
+test('static guard: keeps the glass reduce-transparency fallback intact', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
 
   expect(source).toContain('@property (nonatomic, strong) NSView *fallback;');
   expect(source).toContain('self.fallback.hidden = !reduceTransparency;');
-  expect(source).toContain(
-    'self.material.hidden = reduceTransparency || hasLiquid;',
-  );
+  expect(source).toContain('self.material.hidden = reduceTransparency;');
   expect(source).toContain('self.sheen.hidden = reduceTransparency;');
   expect(source).toContain(
     'CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;',
   );
 });
 
-test('keeps the shared HUD material translucent with a semantic opaque fallback', () => {
+test('static guard: window glass uses a backdrop material, not an empty floating control', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
 
+  // Apple WWDC25 310, 18:26: do not place NSGlassEffectView behind content as
+  // a sibling. Native behavior is covered in OmiGlassPanelViewTest.mm.
   expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.46;');
   expect(source).toContain('NSAppearanceNameAqua');
-  expect(source).toContain('NSClassFromString(@"NSGlassEffectView")');
-  expect(source).toContain('self.liquidGlass');
+  expect(source).not.toContain('NSClassFromString(@"NSGlassEffectView")');
+  expect(source).not.toContain('self.liquidGlass');
   expect(source).toContain('self.sheen');
   expect(source).toContain('NSMaxY(self.bounds) - OmiGlassSheenHeight');
   expect(source).toContain(
