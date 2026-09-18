@@ -39,6 +39,11 @@ checks:
     triggers: ["plugins/omi-hacker-news-app/**"]
     lanes: ["local", "ci"]
     reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+  - id: twitter-callback-escaping-tests
+    command: ["python3", "plugins/omi-twitter-app/test_callback_error_escaping.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14350: Twitter OAuth setup and callback error pages must encode user-controlled state before interpolating it into HTML links"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
