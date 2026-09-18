@@ -460,6 +460,572 @@ final class UseWithoutDeviceOnboardingFindDevices extends RegisteredEvent {
   Map<String, Object> get properties => {};
 }
 
+final class MemoriesPageEditedMemory extends RegisteredEvent {
+  const MemoriesPageEditedMemory();
+  @override
+  String get wireName => "Fact Page Edited Fact";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class MemoriesPageCreateMemoryBtn extends RegisteredEvent {
+  const MemoriesPageCreateMemoryBtn();
+  @override
+  String get wireName => "Fact Page Create Fact Button Pressed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class MemoriesManagementSheetOpened extends RegisteredEvent {
+  const MemoriesManagementSheetOpened();
+  @override
+  String get wireName => "Facts Management Sheet Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ConversationMergeSelectionModeEntered extends RegisteredEvent {
+  const ConversationMergeSelectionModeEntered();
+  @override
+  String get wireName => "Conversation Merge Selection Mode Entered";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ConversationMergeSelectionModeExited extends RegisteredEvent {
+  const ConversationMergeSelectionModeExited();
+  @override
+  String get wireName => "Conversation Merge Selection Mode Exited";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class AddManualConversationClicked extends RegisteredEvent {
+  const AddManualConversationClicked();
+  @override
+  String get wireName => "Add Manual Memory Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class UserIDCopied extends RegisteredEvent {
+  const UserIDCopied();
+  @override
+  String get wireName => "User ID Copied";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ExportMemories extends RegisteredEvent {
+  const ExportMemories();
+  @override
+  String get wireName => "Dev Mode Export Memories";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ImportMemories extends RegisteredEvent {
+  const ImportMemories();
+  @override
+  String get wireName => "Dev Mode Import Memories";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ImportedMemories extends RegisteredEvent {
+  const ImportedMemories();
+  @override
+  String get wireName => "Dev Mode Imported Memories";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SupportContacted extends RegisteredEvent {
+  const SupportContacted();
+  @override
+  String get wireName => "Support Contacted";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class UpgradeSucceeded extends RegisteredEvent {
+  const UpgradeSucceeded();
+  @override
+  String get wireName => "Upgrade Succeeded";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class UpgradeCancelled extends RegisteredEvent {
+  const UpgradeCancelled();
+  @override
+  String get wireName => "Upgrade Cancelled";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class UpgradeModalDismissed extends RegisteredEvent {
+  const UpgradeModalDismissed();
+  @override
+  String get wireName => "Upgrade Modal Dismissed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class UpgradeModalClicked extends RegisteredEvent {
+  const UpgradeModalClicked();
+  @override
+  String get wireName => "Upgrade Modal Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionCancelFlowStarted extends RegisteredEvent {
+  const SubscriptionCancelFlowStarted();
+  @override
+  String get wireName => "Subscription Cancel Flow Started";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ConnectFriendClicked extends RegisteredEvent {
+  const ConnectFriendClicked();
+  @override
+  String get wireName => "Connect Friend Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DisconnectFriendClicked extends RegisteredEvent {
+  const DisconnectFriendClicked();
+  @override
+  String get wireName => "Disconnect Friend Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class BatteryIndicatorClicked extends RegisteredEvent {
+  const BatteryIndicatorClicked();
+  @override
+  String get wireName => "Battery Indicator Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class AddedPerson extends RegisteredEvent {
+  const AddedPerson();
+  @override
+  String get wireName => "Added Person";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class RemovedPerson extends RegisteredEvent {
+  const RemovedPerson();
+  @override
+  String get wireName => "Removed Person";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class TagSheetOpened extends RegisteredEvent {
+  const TagSheetOpened();
+  @override
+  String get wireName => "Tag Sheet Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class UntaggedSegment extends RegisteredEvent {
+  const UntaggedSegment();
+  @override
+  String get wireName => "Untagged Segment";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class EditSegmentTextStarted extends RegisteredEvent {
+  const EditSegmentTextStarted();
+  @override
+  String get wireName => "Edit Segment Text Started";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class EditSegmentTextSaved extends RegisteredEvent {
+  const EditSegmentTextSaved();
+  @override
+  String get wireName => "Edit Segment Text Saved";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class EditSegmentTextCancelled extends RegisteredEvent {
+  const EditSegmentTextCancelled();
+  @override
+  String get wireName => "Edit Segment Text Cancelled";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class EditSummaryStarted extends RegisteredEvent {
+  const EditSummaryStarted();
+  @override
+  String get wireName => "Edit Summary Started";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class EditSummarySaved extends RegisteredEvent {
+  const EditSummarySaved();
+  @override
+  String get wireName => "Edit Summary Saved";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class EditSummaryCancelled extends RegisteredEvent {
+  const EditSummaryCancelled();
+  @override
+  String get wireName => "Edit Summary Cancelled";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DeleteAccountClicked extends RegisteredEvent {
+  const DeleteAccountClicked();
+  @override
+  String get wireName => "Delete Account Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DeleteAccountConfirmed extends RegisteredEvent {
+  const DeleteAccountConfirmed();
+  @override
+  String get wireName => "Delete Account Confirmed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DeleteAccountCancelled extends RegisteredEvent {
+  const DeleteAccountCancelled();
+  @override
+  String get wireName => "Delete Account Cancelled";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DeleteAccountFlowStarted extends RegisteredEvent {
+  const DeleteAccountFlowStarted();
+  @override
+  String get wireName => "Delete Account Flow Started";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class AppsFilterOpened extends RegisteredEvent {
+  const AppsFilterOpened();
+  @override
+  String get wireName => "Apps Filter Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class AppsFilterApplied extends RegisteredEvent {
+  const AppsFilterApplied();
+  @override
+  String get wireName => "Apps Filter Applied";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class AppsClearFilters extends RegisteredEvent {
+  const AppsClearFilters();
+  @override
+  String get wireName => "Apps Clear Filters";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class BrainMapOpened extends RegisteredEvent {
+  const BrainMapOpened();
+  @override
+  String get wireName => "Brain Map Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class BrainMapShareClicked extends RegisteredEvent {
+  const BrainMapShareClicked();
+  @override
+  String get wireName => "Brain Map Share Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ActionItemsPageOpened extends RegisteredEvent {
+  const ActionItemsPageOpened();
+  @override
+  String get wireName => "Action Items Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ActionItemsDateFilterCleared extends RegisteredEvent {
+  const ActionItemsDateFilterCleared();
+  @override
+  String get wireName => "Action Items Date Filter Cleared";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class TrainingDataOptInSubmitted extends RegisteredEvent {
+  const TrainingDataOptInSubmitted();
+  @override
+  String get wireName => "Training Data Opt-In Submitted";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class TrainingDataOptInApproved extends RegisteredEvent {
+  const TrainingDataOptInApproved();
+  @override
+  String get wireName => "Training Data Opt-In Approved";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class CalendarFilterCleared extends RegisteredEvent {
+  const CalendarFilterCleared();
+  @override
+  String get wireName => "Calendar Filter Cleared";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SearchBarFocused extends RegisteredEvent {
+  const SearchBarFocused();
+  @override
+  String get wireName => "Search Bar Focused";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SearchQueryCleared extends RegisteredEvent {
+  const SearchQueryCleared();
+  @override
+  String get wireName => "Search Query Cleared";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ExportTasksBannerClicked extends RegisteredEvent {
+  const ExportTasksBannerClicked();
+  @override
+  String get wireName => "Export Tasks Banner Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class CreateFolderButtonClicked extends RegisteredEvent {
+  const CreateFolderButtonClicked();
+  @override
+  String get wireName => "Create Folder Button Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class WrappedPageOpened extends RegisteredEvent {
+  const WrappedPageOpened();
+  @override
+  String get wireName => "Wrapped Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class WrappedBannerClicked extends RegisteredEvent {
+  const WrappedBannerClicked();
+  @override
+  String get wireName => "Wrapped Banner Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class WrappedGenerationStarted extends RegisteredEvent {
+  const WrappedGenerationStarted();
+  @override
+  String get wireName => "Wrapped Generation Started";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DailySummarySettingsOpened extends RegisteredEvent {
+  const DailySummarySettingsOpened();
+  @override
+  String get wireName => "Daily Summary Settings Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PermissionsSettingsOpened extends RegisteredEvent {
+  const PermissionsSettingsOpened();
+  @override
+  String get wireName => "Permissions Settings Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PermissionsInterstitialShown extends RegisteredEvent {
+  const PermissionsInterstitialShown();
+  @override
+  String get wireName => "Permissions Interstitial Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PermissionsInterstitialCompleted extends RegisteredEvent {
+  const PermissionsInterstitialCompleted();
+  @override
+  String get wireName => "Permissions Interstitial Completed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PermissionsInterstitialSkipped extends RegisteredEvent {
+  const PermissionsInterstitialSkipped();
+  @override
+  String get wireName => "Permissions Interstitial Skipped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class RecapTabOpened extends RegisteredEvent {
+  const RecapTabOpened();
+  @override
+  String get wireName => "Recap Tab Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class WhatsNewOpened extends RegisteredEvent {
+  const WhatsNewOpened();
+  @override
+  String get wireName => "Whats New Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DailyScoreHelpTapped extends RegisteredEvent {
+  const DailyScoreHelpTapped();
+  @override
+  String get wireName => "Daily Score Help Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class IntegrationsPageOpened extends RegisteredEvent {
+  const IntegrationsPageOpened();
+  @override
+  String get wireName => "Integrations Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class PaymentsPageOpened extends RegisteredEvent {
+  const PaymentsPageOpened();
+  @override
+  String get wireName => "Payments Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ConnectDevicePageOpened extends RegisteredEvent {
+  const ConnectDevicePageOpened();
+  @override
+  String get wireName => "Connect Device Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class GetOmiDeviceClicked extends RegisteredEvent {
+  const GetOmiDeviceClicked();
+  @override
+  String get wireName => "Get Omi Device Clicked";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ConnectionGuideOpened extends RegisteredEvent {
+  const ConnectionGuideOpened();
+  @override
+  String get wireName => "Connection Guide Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DataPrivacyPageOpened extends RegisteredEvent {
+  const DataPrivacyPageOpened();
+  @override
+  String get wireName => "Data Privacy Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class AiAppGeneratorPageOpened extends RegisteredEvent {
+  const AiAppGeneratorPageOpened();
+  @override
+  String get wireName => "AI App Generator Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ImportHistoryPageOpened extends RegisteredEvent {
+  const ImportHistoryPageOpened();
+  @override
+  String get wireName => "Import History Page Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class LiveTranscriptCardClicked extends RegisteredEvent {
+  const LiveTranscriptCardClicked({required this.hasSegments, required this.hasPhotos, required this.segmentCount, required this.photoCount});
+  final bool hasSegments;
+  final bool hasPhotos;
+  final int segmentCount;
+  final int photoCount;
+  @override
+  String get wireName => "Live Transcript Card Clicked";
+  @override
+  Map<String, Object> get properties => {"has_segments": hasSegments, "has_photos": hasPhotos, "segment_count": segmentCount, "photo_count": photoCount};
+}
+
+final class AppleRemindersSyncCompleted extends RegisteredEvent {
+  const AppleRemindersSyncCompleted({required this.pendingExported, required this.syncedChecked, required this.completionsPulled, required this.completionsPushed, required this.titleDuePulled, required this.titleDuePushed, required this.remindersUnlinked});
+  final int pendingExported;
+  final int syncedChecked;
+  final int completionsPulled;
+  final int completionsPushed;
+  final int titleDuePulled;
+  final int titleDuePushed;
+  final int remindersUnlinked;
+  @override
+  String get wireName => "Apple Reminders Sync Completed";
+  @override
+  Map<String, Object> get properties => {"pending_exported": pendingExported, "synced_checked": syncedChecked, "completions_pulled": completionsPulled, "completions_pushed": completionsPushed, "title_due_pulled": titleDuePulled, "title_due_pushed": titleDuePushed, "reminders_unlinked": remindersUnlinked};
+}
+
+final class WrappedGenerationCompleted extends RegisteredEvent {
+  const WrappedGenerationCompleted({required this.totalConversations, required this.totalMinutes, required this.daysActive});
+  final int totalConversations;
+  final int totalMinutes;
+  final int daysActive;
+  @override
+  String get wireName => "Wrapped Generation Completed";
+  @override
+  Map<String, Object> get properties => {"total_conversations": totalConversations, "total_minutes": totalMinutes, "days_active": daysActive};
+}
+
 enum TypeExtensionProbeMode {
   off("off"),
   headphonesOnly("headphones_only"),

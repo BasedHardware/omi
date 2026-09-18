@@ -737,9 +737,9 @@ class AnalyticsManager {
   void memoriesPageDeletedMemory(Memory memory) =>
       track('Fact Page Deleted Fact', properties: {'fact_category': memory.category.toString().split('.').last});
 
-  void memoriesPageEditedMemory() => track('Fact Page Edited Fact');
+  void memoriesPageEditedMemory() => const TypedEvents().emit(const MemoriesPageEditedMemory());
 
-  void memoriesPageCreateMemoryBtn() => track('Fact Page Create Fact Button Pressed');
+  void memoriesPageCreateMemoryBtn() => const TypedEvents().emit(const MemoriesPageCreateMemoryBtn());
 
   void memoriesPageCreatedMemory(MemoryCategory category) =>
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
@@ -821,7 +821,7 @@ class AnalyticsManager {
 
   void memoriesFiltered(String filter) => track('Facts Filtered', properties: {'filter': filter});
 
-  void memoriesManagementSheetOpened() => track('Facts Management Sheet Opened');
+  void memoriesManagementSheetOpened() => const TypedEvents().emit(const MemoriesManagementSheetOpened());
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
     String transcriptCopy = transcript.substring(0, transcript.length);
@@ -965,9 +965,10 @@ class AnalyticsManager {
   }
 
   // Conversation Merge Events
-  void conversationMergeSelectionModeEntered() => track('Conversation Merge Selection Mode Entered');
+  void conversationMergeSelectionModeEntered() =>
+      const TypedEvents().emit(const ConversationMergeSelectionModeEntered());
 
-  void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
+  void conversationMergeSelectionModeExited() => const TypedEvents().emit(const ConversationMergeSelectionModeExited());
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
         'Conversation Selected For Merge',
@@ -1013,7 +1014,7 @@ class AnalyticsManager {
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
-  void addManualConversationClicked() => track('Add Manual Memory Clicked');
+  void addManualConversationClicked() => const TypedEvents().emit(const AddManualConversationClicked());
 
   void manualConversationCreated(ServerConversation conversation) =>
       track('Manual Memory Created', properties: getConversationEventProperties(conversation));
@@ -1039,15 +1040,15 @@ class AnalyticsManager {
     setUserProperty('Dev Mode Enabled', false);
   }
 
-  void userIDCopied() => track('User ID Copied');
+  void userIDCopied() => const TypedEvents().emit(const UserIDCopied());
 
-  void exportMemories() => track('Dev Mode Export Memories');
+  void exportMemories() => const TypedEvents().emit(const ExportMemories());
 
-  void importMemories() => track('Dev Mode Import Memories');
+  void importMemories() => const TypedEvents().emit(const ImportMemories());
 
-  void importedMemories() => track('Dev Mode Imported Memories');
+  void importedMemories() => const TypedEvents().emit(const ImportedMemories());
 
-  void supportContacted() => track('Support Contacted');
+  void supportContacted() => const TypedEvents().emit(const SupportContacted());
 
   void copiedConversationDetails(ServerConversation conversation, {String source = ''}) =>
       track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
@@ -1076,16 +1077,16 @@ class AnalyticsManager {
         'change_source': 'mobile_checkout',
       },
     );
-    track('Upgrade Succeeded');
+    const TypedEvents().emit(const UpgradeSucceeded());
   }
 
-  void upgradeCancelled() => track('Upgrade Cancelled');
+  void upgradeCancelled() => const TypedEvents().emit(const UpgradeCancelled());
 
-  void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
+  void upgradeModalDismissed() => const TypedEvents().emit(const UpgradeModalDismissed());
 
-  void upgradeModalClicked() => track('Upgrade Modal Clicked');
+  void upgradeModalClicked() => const TypedEvents().emit(const UpgradeModalClicked());
 
-  void subscriptionCancelFlowStarted() => track('Subscription Cancel Flow Started');
+  void subscriptionCancelFlowStarted() => const TypedEvents().emit(const SubscriptionCancelFlowStarted());
 
   void subscriptionCancelReasonSelected({required String reason}) =>
       track('Subscription Cancel Reason Selected', properties: {'reason': reason});
@@ -1099,11 +1100,11 @@ class AnalyticsManager {
   void subscriptionCancelAbandoned({required int step, String? reason}) =>
       track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
 
-  void connectFriendClicked() => track('Connect Friend Clicked');
+  void connectFriendClicked() => const TypedEvents().emit(const ConnectFriendClicked());
 
-  void disconnectFriendClicked() => track('Disconnect Friend Clicked');
+  void disconnectFriendClicked() => const TypedEvents().emit(const DisconnectFriendClicked());
 
-  void batteryIndicatorClicked() => track('Battery Indicator Clicked');
+  void batteryIndicatorClicked() => const TypedEvents().emit(const BatteryIndicatorClicked());
 
   void useWithoutDeviceOnboardingWelcome() => const TypedEvents().emit(const UseWithoutDeviceOnboardingWelcome());
 
@@ -1112,35 +1113,35 @@ class AnalyticsManager {
 
   // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 
-  void addedPerson() => track('Added Person');
+  void addedPerson() => const TypedEvents().emit(const AddedPerson());
 
-  void removedPerson() => track('Removed Person');
+  void removedPerson() => const TypedEvents().emit(const RemovedPerson());
 
-  void tagSheetOpened() => track('Tag Sheet Opened');
+  void tagSheetOpened() => const TypedEvents().emit(const TagSheetOpened());
 
   void taggedSegment(String assignType) => track('Tagged Segment $assignType');
 
-  void untaggedSegment() => track('Untagged Segment');
+  void untaggedSegment() => const TypedEvents().emit(const UntaggedSegment());
 
-  void editSegmentTextStarted() => track('Edit Segment Text Started');
+  void editSegmentTextStarted() => const TypedEvents().emit(const EditSegmentTextStarted());
 
-  void editSegmentTextSaved() => track('Edit Segment Text Saved');
+  void editSegmentTextSaved() => const TypedEvents().emit(const EditSegmentTextSaved());
 
-  void editSegmentTextCancelled() => track('Edit Segment Text Cancelled');
+  void editSegmentTextCancelled() => const TypedEvents().emit(const EditSegmentTextCancelled());
 
-  void editSummaryStarted() => track('Edit Summary Started');
+  void editSummaryStarted() => const TypedEvents().emit(const EditSummaryStarted());
 
-  void editSummarySaved() => track('Edit Summary Saved');
+  void editSummarySaved() => const TypedEvents().emit(const EditSummarySaved());
 
-  void editSummaryCancelled() => track('Edit Summary Cancelled');
+  void editSummaryCancelled() => const TypedEvents().emit(const EditSummaryCancelled());
 
-  void deleteAccountClicked() => track('Delete Account Clicked');
+  void deleteAccountClicked() => const TypedEvents().emit(const DeleteAccountClicked());
 
-  void deleteAccountConfirmed() => track('Delete Account Confirmed');
+  void deleteAccountConfirmed() => const TypedEvents().emit(const DeleteAccountConfirmed());
 
-  void deleteAccountCancelled() => track('Delete Account Cancelled');
+  void deleteAccountCancelled() => const TypedEvents().emit(const DeleteAccountCancelled());
 
-  void deleteAccountFlowStarted() => track('Delete Account Flow Started');
+  void deleteAccountFlowStarted() => const TypedEvents().emit(const DeleteAccountFlowStarted());
 
   void deleteAccountReasonSelected({required String reason}) =>
       track('Delete Account Reason Selected', properties: {'reason': reason});
@@ -1162,8 +1163,8 @@ class AnalyticsManager {
       });
 
   // Apps Filter
-  void appsFilterOpened() => track('Apps Filter Opened');
-  void appsFilterApplied() => track('Apps Filter Applied');
+  void appsFilterOpened() => const TypedEvents().emit(const AppsFilterOpened());
+  void appsFilterApplied() => const TypedEvents().emit(const AppsFilterApplied());
   void appsCategoryFilter(String category, bool isSelected) {
     track('Apps Category Filter', properties: {'category': category, 'selected': isSelected});
   }
@@ -1184,16 +1185,16 @@ class AnalyticsManager {
     track('Apps Capability Filter', properties: {'capability': capability, 'selected': isSelected});
   }
 
-  void appsClearFilters() => track('Apps Clear Filters');
+  void appsClearFilters() => const TypedEvents().emit(const AppsClearFilters());
 
   // Brain Map Events
-  void brainMapOpened() => track('Brain Map Opened');
+  void brainMapOpened() => const TypedEvents().emit(const BrainMapOpened());
 
   void brainMapNodeClicked(String nodeId, String label, String type) {
     track('Brain Map Node Clicked', properties: {'node_id': nodeId, 'label': label, 'type': type});
   }
 
-  void brainMapShareClicked() => track('Brain Map Share Clicked');
+  void brainMapShareClicked() => const TypedEvents().emit(const BrainMapShareClicked());
 
   // Summarized Apps Sheet Events
   void summarizedAppSheetViewed({required String conversationId, String? currentSummarizedAppId}) {
@@ -1230,7 +1231,7 @@ class AnalyticsManager {
   }
 
   // Action Items Page Events
-  void actionItemsPageOpened() => track('Action Items Page Opened');
+  void actionItemsPageOpened() => const TypedEvents().emit(const ActionItemsPageOpened());
 
   void actionItemsViewToggled(bool isGroupedView) {
     const TypedEvents().emit(ActionItemsViewToggled(groupedView: isGroupedView));
@@ -1265,9 +1266,7 @@ class AnalyticsManager {
     track('Action Items Date Filter Applied', properties: {'filter_type': filterType});
   }
 
-  void actionItemsDateFilterCleared() {
-    track('Action Items Date Filter Cleared');
-  }
+  void actionItemsDateFilterCleared() => const TypedEvents().emit(const ActionItemsDateFilterCleared());
 
   void actionItemTabChanged(String tabName) {
     track('Action Item Tab Changed', properties: {'tab_name': tabName});
@@ -1278,12 +1277,12 @@ class AnalyticsManager {
   }
 
   void trainingDataOptInSubmitted() {
-    track('Training Data Opt-In Submitted');
+    const TypedEvents().emit(const TrainingDataOptInSubmitted());
     setUserProperty('Training Data Opted In', true);
   }
 
   void trainingDataOptInApproved() {
-    track('Training Data Opt-In Approved');
+    const TypedEvents().emit(const TrainingDataOptInApproved());
     setUserProperty('Training Data Status', 'approved');
   }
 
@@ -1308,13 +1307,9 @@ class AnalyticsManager {
     );
   }
 
-  void calendarFilterCleared() {
-    track('Calendar Filter Cleared');
-  }
+  void calendarFilterCleared() => const TypedEvents().emit(const CalendarFilterCleared());
 
-  void searchBarFocused() {
-    track('Search Bar Focused');
-  }
+  void searchBarFocused() => const TypedEvents().emit(const SearchBarFocused());
 
   void searchQueryEntered(String query, int resultsCount) {
     track(
@@ -1323,9 +1318,7 @@ class AnalyticsManager {
     );
   }
 
-  void searchQueryCleared() {
-    track('Search Query Cleared');
-  }
+  void searchQueryCleared() => const TypedEvents().emit(const SearchQueryCleared());
 
   void conversationOpenedFromSearch({
     required ServerConversation conversation,
@@ -1343,17 +1336,13 @@ class AnalyticsManager {
     required bool hasPhotos,
     required int segmentCount,
     required int photoCount,
-  }) {
-    track(
-      'Live Transcript Card Clicked',
-      properties: {
-        'has_segments': hasSegments,
-        'has_photos': hasPhotos,
-        'segment_count': segmentCount,
-        'photo_count': photoCount,
-      },
-    );
-  }
+  }) =>
+      const TypedEvents().emit(LiveTranscriptCardClicked(
+        hasSegments: hasSegments,
+        hasPhotos: hasPhotos,
+        segmentCount: segmentCount,
+        photoCount: photoCount,
+      ));
 
   void conversationListItemClickedWithTimeDifference({
     required ServerConversation conversation,
@@ -1450,9 +1439,7 @@ class AnalyticsManager {
     );
   }
 
-  void exportTasksBannerClicked() {
-    track('Export Tasks Banner Clicked');
-  }
+  void exportTasksBannerClicked() => const TypedEvents().emit(const ExportTasksBannerClicked());
 
   void taskIntegrationEnabled({required String appName, required bool success}) {
     track('Task Integration Enabled', properties: {'app_name': appName, 'success': success});
@@ -1593,20 +1580,16 @@ class AnalyticsManager {
     required int titleDuePulled,
     required int titleDuePushed,
     required int remindersUnlinked,
-  }) {
-    track(
-      'Apple Reminders Sync Completed',
-      properties: {
-        'pending_exported': pendingExported,
-        'synced_checked': syncedChecked,
-        'completions_pulled': completionsPulled,
-        'completions_pushed': completionsPushed,
-        'title_due_pulled': titleDuePulled,
-        'title_due_pushed': titleDuePushed,
-        'reminders_unlinked': remindersUnlinked,
-      },
-    );
-  }
+  }) =>
+      const TypedEvents().emit(AppleRemindersSyncCompleted(
+        pendingExported: pendingExported,
+        syncedChecked: syncedChecked,
+        completionsPulled: completionsPulled,
+        completionsPushed: completionsPushed,
+        titleDuePulled: titleDuePulled,
+        titleDuePushed: titleDuePushed,
+        remindersUnlinked: remindersUnlinked,
+      ));
 
   void appleReminderDirectSync({required String actionItemId}) {
     track('Apple Reminder Direct Sync', properties: {'action_item_id': actionItemId});
@@ -1784,9 +1767,7 @@ class AnalyticsManager {
     track('Folder Context Menu Opened', properties: {'folder_id': folderId, 'folder_name': folderName});
   }
 
-  void createFolderButtonClicked() {
-    track('Create Folder Button Clicked');
-  }
+  void createFolderButtonClicked() => const TypedEvents().emit(const CreateFolderButtonClicked());
 
   void conversationDetailFolderChipClicked({required String conversationId, String? currentFolderId}) {
     track(
@@ -1871,16 +1852,12 @@ class AnalyticsManager {
   // WRAPPED 2025 TRACKING
   // ============================================================================
 
-  void wrappedPageOpened() {
-    track('Wrapped Page Opened');
-  }
+  void wrappedPageOpened() => const TypedEvents().emit(const WrappedPageOpened());
 
-  void wrappedBannerClicked() {
-    track('Wrapped Banner Clicked');
-  }
+  void wrappedBannerClicked() => const TypedEvents().emit(const WrappedBannerClicked());
 
   void wrappedGenerationStarted() {
-    track('Wrapped Generation Started');
+    const TypedEvents().emit(const WrappedGenerationStarted());
     startTimingEvent('Wrapped Generation Completed');
   }
 
@@ -1888,12 +1865,12 @@ class AnalyticsManager {
     required int totalConversations,
     required int totalMinutes,
     required int daysActive,
-  }) {
-    track(
-      'Wrapped Generation Completed',
-      properties: {'total_conversations': totalConversations, 'total_minutes': totalMinutes, 'days_active': daysActive},
-    );
-  }
+  }) =>
+      const TypedEvents().emit(WrappedGenerationCompleted(
+        totalConversations: totalConversations,
+        totalMinutes: totalMinutes,
+        daysActive: daysActive,
+      ));
 
   void wrappedGenerationFailed({String? error}) {
     track('Wrapped Generation Failed', properties: {if (error != null) 'error': error});
@@ -1932,23 +1909,23 @@ class AnalyticsManager {
   // DAILY SUMMARY / RECAP TRACKING
   // ============================================================================
 
-  void dailySummarySettingsOpened() => track('Daily Summary Settings Opened');
+  void dailySummarySettingsOpened() => const TypedEvents().emit(const DailySummarySettingsOpened());
 
   // ============================================================================
   // Permissions
   // ============================================================================
 
-  void permissionsSettingsOpened() => track('Permissions Settings Opened');
+  void permissionsSettingsOpened() => const TypedEvents().emit(const PermissionsSettingsOpened());
 
   void permissionChanged({required String permission, required bool granted}) {
     track('Permission Changed', properties: {'permission': permission, 'granted': granted});
   }
 
-  void permissionsInterstitialShown() => track('Permissions Interstitial Shown');
+  void permissionsInterstitialShown() => const TypedEvents().emit(const PermissionsInterstitialShown());
 
-  void permissionsInterstitialCompleted() => track('Permissions Interstitial Completed');
+  void permissionsInterstitialCompleted() => const TypedEvents().emit(const PermissionsInterstitialCompleted());
 
-  void permissionsInterstitialSkipped() => track('Permissions Interstitial Skipped');
+  void permissionsInterstitialSkipped() => const TypedEvents().emit(const PermissionsInterstitialSkipped());
 
   void dailySummaryToggled({required bool enabled}) {
     const TypedEvents().emit(DailySummaryToggled(enabled: enabled));
@@ -1980,7 +1957,7 @@ class AnalyticsManager {
     track('Daily Summary Test Generation Failed', properties: {'date': date, if (error != null) 'error': error});
   }
 
-  void recapTabOpened() => track('Recap Tab Opened');
+  void recapTabOpened() => const TypedEvents().emit(const RecapTabOpened());
 
   void recapSummaryCardClicked({required String summaryId, required String date, required int cardIndex}) {
     track('Recap Summary Card Clicked', properties: {'summary_id': summaryId, 'date': date, 'card_index': cardIndex});
@@ -2057,7 +2034,7 @@ class AnalyticsManager {
     const TypedEvents().emit(ChangelogDismissed(changelogCount: changelogCount));
   }
 
-  void whatsNewOpened() => track('Whats New Opened');
+  void whatsNewOpened() => const TypedEvents().emit(const WhatsNewOpened());
 
   // ============================================================================
   // GOALS TRACKING
@@ -2121,13 +2098,13 @@ class AnalyticsManager {
     track('Daily Score CTA Tapped', properties: {'cta_type': ctaType});
   }
 
-  void dailyScoreHelpTapped() => track('Daily Score Help Tapped');
+  void dailyScoreHelpTapped() => const TypedEvents().emit(const DailyScoreHelpTapped());
 
   // ============================================================================
   // INTEGRATIONS PAGE TRACKING
   // ============================================================================
 
-  void integrationsPageOpened() => track('Integrations Page Opened');
+  void integrationsPageOpened() => const TypedEvents().emit(const IntegrationsPageOpened());
 
   void integrationConnectAttempted({required String integrationName}) {
     track('Integration Connect Attempted', properties: {'integration_name': integrationName});
@@ -2149,7 +2126,7 @@ class AnalyticsManager {
   // PAYMENTS PAGE TRACKING
   // ============================================================================
 
-  void paymentsPageOpened() => track('Payments Page Opened');
+  void paymentsPageOpened() => const TypedEvents().emit(const PaymentsPageOpened());
 
   void paymentMethodSelected({required String methodName}) {
     track('Payment Method Selected', properties: {'method_name': methodName});
@@ -2159,11 +2136,11 @@ class AnalyticsManager {
   // OTHER PAGES TRACKING
   // ============================================================================
 
-  void connectDevicePageOpened() => track('Connect Device Page Opened');
+  void connectDevicePageOpened() => const TypedEvents().emit(const ConnectDevicePageOpened());
 
-  void getOmiDeviceClicked() => track('Get Omi Device Clicked');
+  void getOmiDeviceClicked() => const TypedEvents().emit(const GetOmiDeviceClicked());
 
-  void connectionGuideOpened() => track('Connection Guide Opened');
+  void connectionGuideOpened() => const TypedEvents().emit(const ConnectionGuideOpened());
 
   void connectionGuideDeviceTapped(String deviceId) =>
       track('Connection Guide Device Tapped', properties: {'device_id': deviceId});
@@ -2174,9 +2151,9 @@ class AnalyticsManager {
   void connectionGuideReportIssue(String deviceId) =>
       track('Connection Guide Report Issue', properties: {'device_id': deviceId});
 
-  void dataPrivacyPageOpened() => track('Data Privacy Page Opened');
+  void dataPrivacyPageOpened() => const TypedEvents().emit(const DataPrivacyPageOpened());
 
-  void aiAppGeneratorPageOpened() => track('AI App Generator Page Opened');
+  void aiAppGeneratorPageOpened() => const TypedEvents().emit(const AiAppGeneratorPageOpened());
 
   void aiAppGeneratorPromptSubmitted({required int promptLength}) {
     const TypedEvents().emit(AiAppGeneratorPromptSubmitted(promptLength: promptLength));
@@ -2186,7 +2163,7 @@ class AnalyticsManager {
     const TypedEvents().emit(AiAppGeneratorAppGenerated(success: success));
   }
 
-  void importHistoryPageOpened() => track('Import History Page Opened');
+  void importHistoryPageOpened() => const TypedEvents().emit(const ImportHistoryPageOpened());
 
   void importStarted({required String source}) {
     track('Import Started', properties: {'source': source});

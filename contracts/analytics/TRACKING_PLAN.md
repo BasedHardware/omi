@@ -55,4 +55,73 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | speechProfileContinued | Onboarding Step Speech Profile Continued | none | active | mobile-instrumentation-presence |
 | useWithoutDeviceOnboardingWelcome | Use Without Device Onboarding Welcome | none | active | mobile-instrumentation-presence |
 | useWithoutDeviceOnboardingFindDevices | Use Without Device Onboarding Find Devices | none | active | mobile-instrumentation-presence |
+| memoriesPageEditedMemory | Fact Page Edited Fact | none | active | mobile-instrumentation-presence |
+| memoriesPageCreateMemoryBtn | Fact Page Create Fact Button Pressed | none | active | mobile-instrumentation-presence |
+| memoriesManagementSheetOpened | Facts Management Sheet Opened | none | active | mobile-instrumentation-presence |
+| conversationMergeSelectionModeEntered | Conversation Merge Selection Mode Entered | none | active | mobile-instrumentation-presence |
+| conversationMergeSelectionModeExited | Conversation Merge Selection Mode Exited | none | active | mobile-instrumentation-presence |
+| addManualConversationClicked | Add Manual Memory Clicked | none | active | mobile-instrumentation-presence |
+| userIDCopied | User ID Copied | none | active | mobile-instrumentation-presence |
+| exportMemories | Dev Mode Export Memories | none | active | mobile-instrumentation-presence |
+| importMemories | Dev Mode Import Memories | none | active | mobile-instrumentation-presence |
+| importedMemories | Dev Mode Imported Memories | none | active | mobile-instrumentation-presence |
+| supportContacted | Support Contacted | none | active | mobile-instrumentation-presence |
+| upgradeSucceeded | Upgrade Succeeded | none | active | mobile-instrumentation-presence |
+| upgradeCancelled | Upgrade Cancelled | none | active | mobile-instrumentation-presence |
+| upgradeModalDismissed | Upgrade Modal Dismissed | none | active | mobile-instrumentation-presence |
+| upgradeModalClicked | Upgrade Modal Clicked | none | active | mobile-instrumentation-presence |
+| subscriptionCancelFlowStarted | Subscription Cancel Flow Started | none | active | mobile-instrumentation-presence |
+| connectFriendClicked | Connect Friend Clicked | none | active | mobile-instrumentation-presence |
+| disconnectFriendClicked | Disconnect Friend Clicked | none | active | mobile-instrumentation-presence |
+| batteryIndicatorClicked | Battery Indicator Clicked | none | active | mobile-instrumentation-presence |
+| addedPerson | Added Person | none | active | mobile-instrumentation-presence |
+| removedPerson | Removed Person | none | active | mobile-instrumentation-presence |
+| tagSheetOpened | Tag Sheet Opened | none | active | mobile-instrumentation-presence |
+| untaggedSegment | Untagged Segment | none | active | mobile-instrumentation-presence |
+| editSegmentTextStarted | Edit Segment Text Started | none | active | mobile-instrumentation-presence |
+| editSegmentTextSaved | Edit Segment Text Saved | none | active | mobile-instrumentation-presence |
+| editSegmentTextCancelled | Edit Segment Text Cancelled | none | active | mobile-instrumentation-presence |
+| editSummaryStarted | Edit Summary Started | none | active | mobile-instrumentation-presence |
+| editSummarySaved | Edit Summary Saved | none | active | mobile-instrumentation-presence |
+| editSummaryCancelled | Edit Summary Cancelled | none | active | mobile-instrumentation-presence |
+| deleteAccountClicked | Delete Account Clicked | none | active | mobile-instrumentation-presence |
+| deleteAccountConfirmed | Delete Account Confirmed | none | active | mobile-instrumentation-presence |
+| deleteAccountCancelled | Delete Account Cancelled | none | active | mobile-instrumentation-presence |
+| deleteAccountFlowStarted | Delete Account Flow Started | none | active | mobile-instrumentation-presence |
+| appsFilterOpened | Apps Filter Opened | none | active | mobile-instrumentation-presence |
+| appsFilterApplied | Apps Filter Applied | none | active | mobile-instrumentation-presence |
+| appsClearFilters | Apps Clear Filters | none | active | mobile-instrumentation-presence |
+| brainMapOpened | Brain Map Opened | none | active | mobile-instrumentation-presence |
+| brainMapShareClicked | Brain Map Share Clicked | none | active | mobile-instrumentation-presence |
+| actionItemsPageOpened | Action Items Page Opened | none | active | mobile-instrumentation-presence |
+| actionItemsDateFilterCleared | Action Items Date Filter Cleared | none | active | mobile-instrumentation-presence |
+| trainingDataOptInSubmitted | Training Data Opt-In Submitted | none | active | mobile-instrumentation-presence |
+| trainingDataOptInApproved | Training Data Opt-In Approved | none | active | mobile-instrumentation-presence |
+| calendarFilterCleared | Calendar Filter Cleared | none | active | mobile-instrumentation-presence |
+| searchBarFocused | Search Bar Focused | none | active | mobile-instrumentation-presence |
+| searchQueryCleared | Search Query Cleared | none | active | mobile-instrumentation-presence |
+| exportTasksBannerClicked | Export Tasks Banner Clicked | none | active | mobile-instrumentation-presence |
+| createFolderButtonClicked | Create Folder Button Clicked | none | active | mobile-instrumentation-presence |
+| wrappedPageOpened | Wrapped Page Opened | none | active | mobile-instrumentation-presence |
+| wrappedBannerClicked | Wrapped Banner Clicked | none | active | mobile-instrumentation-presence |
+| wrappedGenerationStarted | Wrapped Generation Started | none | active | mobile-instrumentation-presence |
+| dailySummarySettingsOpened | Daily Summary Settings Opened | none | active | mobile-instrumentation-presence |
+| permissionsSettingsOpened | Permissions Settings Opened | none | active | mobile-instrumentation-presence |
+| permissionsInterstitialShown | Permissions Interstitial Shown | none | active | mobile-instrumentation-presence |
+| permissionsInterstitialCompleted | Permissions Interstitial Completed | none | active | mobile-instrumentation-presence |
+| permissionsInterstitialSkipped | Permissions Interstitial Skipped | none | active | mobile-instrumentation-presence |
+| recapTabOpened | Recap Tab Opened | none | active | mobile-instrumentation-presence |
+| whatsNewOpened | Whats New Opened | none | active | mobile-instrumentation-presence |
+| dailyScoreHelpTapped | Daily Score Help Tapped | none | active | mobile-instrumentation-presence |
+| integrationsPageOpened | Integrations Page Opened | none | active | mobile-instrumentation-presence |
+| paymentsPageOpened | Payments Page Opened | none | active | mobile-instrumentation-presence |
+| connectDevicePageOpened | Connect Device Page Opened | none | active | mobile-instrumentation-presence |
+| getOmiDeviceClicked | Get Omi Device Clicked | none | active | mobile-instrumentation-presence |
+| connectionGuideOpened | Connection Guide Opened | none | active | mobile-instrumentation-presence |
+| dataPrivacyPageOpened | Data Privacy Page Opened | none | active | mobile-instrumentation-presence |
+| aiAppGeneratorPageOpened | AI App Generator Page Opened | none | active | mobile-instrumentation-presence |
+| importHistoryPageOpened | Import History Page Opened | none | active | mobile-instrumentation-presence |
+| liveTranscriptCardClicked | Live Transcript Card Clicked | has_segments, has_photos, segment_count, photo_count | active | mobile-instrumentation-presence |
+| appleRemindersSyncCompleted | Apple Reminders Sync Completed | pending_exported, synced_checked, completions_pulled, completions_pushed, title_due_pulled, title_due_pushed, reminders_unlinked | active | mobile-instrumentation-presence |
+| wrappedGenerationCompleted | Wrapped Generation Completed | total_conversations, total_minutes, days_active | active | mobile-instrumentation-presence |
 | typeExtensionProbe | Type Extension Probe | enabled, count, mode | active | c8-type-extension |
