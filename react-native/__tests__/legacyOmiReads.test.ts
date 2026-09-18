@@ -1676,15 +1676,6 @@ test('old conversations name Flutter ConversationListItem fromJson type-wrong GE
       neighbor,
     ]),
   ).toEqual(['Market street', 'Neighbor walk']);
-  expect(
-    await titles([
-      {
-        ...row,
-        external_data: {text: 1},
-      },
-      neighbor,
-    ]),
-  ).toEqual(['Market street', 'Neighbor walk']);
   for (const extra of [1, true, []]) {
     await expect(
       titles([
@@ -1695,6 +1686,59 @@ test('old conversations name Flutter ConversationListItem fromJson type-wrong GE
         neighbor,
       ]),
     ).rejects.toThrow('Omi response is malformed');
+  }
+});
+
+test('old conversations name Flutter ConversationExternalData.fromJson type-wrong GET text instead of remapping to a conversation chip', async () => {
+  const neighbor = {
+    ...conversation,
+    id: 'named',
+    structured: {title: 'Neighbor walk', overview: 'Kept neighbor'},
+  };
+  const row = {
+    ...conversation,
+    id: 'located',
+    structured: {title: 'Market street', overview: 'Located recap'},
+    external_data: {text: 'Imported Slack thread'},
+  };
+  const titles = async (rows: unknown[]) =>
+    (await loadConversations(backend(rows).api)).items.map(item => item.title);
+  expect(await titles([row, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(await titles([{...row, external_data: undefined}, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(await titles([{...row, external_data: null}, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(await titles([{...row, external_data: {}}, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([{...row, external_data: {text: null}}, neighbor]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(await titles([{...row, external_data: {text: ''}}, neighbor])).toEqual([
+    'Market street',
+    'Neighbor walk',
+  ]);
+  expect(
+    await titles([
+      {...row, external_data: {text: '  Imported Slack thread  '}},
+      neighbor,
+    ]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  expect(
+    await titles([{...row, external_data: {extra: 1}}, neighbor]),
+  ).toEqual(['Market street', 'Neighbor walk']);
+  for (const extra of [1, true, [], {}]) {
+    await expect(
+      titles([{...row, external_data: {text: extra}}, neighbor]),
+    ).rejects.toThrow('Omi text is malformed');
   }
 });
 

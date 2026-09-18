@@ -4616,3 +4616,80 @@ test('conversation list names Flutter Folder.fromGenerated type-wrong GET color 
   expect(tree).not.toContain('Neighbor');
 });
 
+test('conversation list names Flutter ConversationExternalData.fromJson type-wrong GET text as load-error instead of remapping Market street', () => {
+  const page = {
+    ...incompletePage,
+    windowStatus: 'complete' as const,
+    complete: true,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const item = (id: string, title: string): ConversationProjection => ({
+    kind: 'conversation',
+    id,
+    title,
+    summary: 'A walk.',
+    searchableText: `${title}\nA walk.`,
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'error',
+          error: desktopReadErrorCopy(new Error('Omi text is malformed')),
+        }}
+      />,
+    );
+  });
+  try {
+    const copy = textOf(renderer);
+    expect(copy).toContain(
+      desktopReadErrorCopy(new Error('Omi text is malformed')),
+    );
+    expect(copy).not.toContain('Market street');
+    expect(copy).not.toContain('Neighbor walk');
+  } finally {
+    act(() => renderer.unmount());
+  }
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              item('located', 'Market street'),
+              item('named', 'Neighbor walk'),
+            ],
+            page,
+          },
+        }}
+      />,
+    );
+  });
+  try {
+    const copy = textOf(renderer);
+    expect(copy).toContain('Market street');
+    expect(copy).toContain('Neighbor walk');
+    expect(copy).not.toContain(
+      desktopReadErrorCopy(new Error('Omi text is malformed')),
+    );
+  } finally {
+    act(() => renderer.unmount());
+  }
+});
+

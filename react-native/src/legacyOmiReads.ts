@@ -360,6 +360,11 @@ function presentNullableMap(value: unknown): void {
   if (value === undefined || value === null) return;
   object(value);
 }
+function presentExternalData(value: unknown): void {
+  if (value === undefined || value === null) return;
+  const data = object(value);
+  presentNullableString(data.text);
+}
 function presentUnusedMapListItems(value: unknown): void {
   if (value === undefined || value === null) return;
   if (!Array.isArray(value)) return;
@@ -625,7 +630,7 @@ export async function loadOmiConversations(
     presentAppResults(row.apps_results);
     presentAppResults(row.plugins_results);
     presentSuggestedSummarizationApps(row.suggested_summarization_apps);
-    presentNullableMap(row.external_data);
+    presentExternalData(row.external_data);
     presentClientProcessing(row.client_processing);
     presentMatchSnippets(row.match_snippets);
     const emoji = conversationStructuredEmojiCopy(
