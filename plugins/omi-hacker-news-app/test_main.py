@@ -142,6 +142,53 @@ class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
                 response = await app.get_discussion({"item_id": bad_id})
                 self.assertIsNotNone(response.error)
 
+    async def test_discussion_filters_deleted_comments_before_limiting(self):
+        item = {
+            "title": "Story",
+            "author": "alice",
+            "points": 3,
+            "children": [
+                {"author": "deleted", "text": None},
+                {"author": "bob", "text": "<p>First visible</p>"},
+                {"author": "dead", "text": "   "},
+                {"author": "carol", "text": "Second visible"},
+                {"author": "dave", "text": "Beyond the limit"},
+            ],
+        }
+        with patch.object(app, "_request_json", AsyncMock(return_value=item)):
+            response = await app.get_discussion({"item_id": 1, "comment_limit": 2})
+
+        self.assertIsNone(response.error)
+        self.assertIn("Top 2 comments:", response.result)
+        self.assertIn("1. bob: First visible", response.result)
+        self.assertIn("2. carol: Second visible", response.result)
+        self.assertNotIn("deleted", response.result)
+        self.assertNotIn("Beyond the limit", response.result)
+
+    async def test_discussion_uses_no_comments_branch_when_all_children_are_deleted(self):
+        item = {"title": "Story", "children": [{"text": None}, {"text": "<p> </p>"}]}
+        with patch.object(app, "_request_json", AsyncMock(return_value=item)):
+            response = await app.get_discussion({"item_id": 2})
+
+        self.assertIsNone(response.error)
+        self.assertIn("No top-level comments returned.", response.result)
+        self.assertNotIn("Top ", response.result)
+
+    async def test_discussion_treats_null_missing_and_non_list_children_as_empty(self):
+        for item in ({"title": "Null", "children": None}, {"title": "Missing"}, {"title": "Wrong", "children": {}}):
+            with self.subTest(item=item), patch.object(app, "_request_json", AsyncMock(return_value=item)):
+                response = await app.get_discussion({"item_id": 3})
+            self.assertIsNone(response.error)
+            self.assertIn("No top-level comments returned.", response.result)
+
+    async def test_discussion_safely_handles_non_dict_item_payload(self):
+        with patch.object(app, "_request_json", AsyncMock(return_value=["not", "an", "item"])):
+            response = await app.get_discussion({"item_id": 4})
+
+        self.assertIsNone(response.error)
+        self.assertIn("(untitled)", response.result)
+        self.assertIn("No top-level comments returned.", response.result)
+
     async def test_handles_non_dict_payload_gracefully(self):
         with patch.object(app, "_request_json", AsyncMock(return_value={"hits": []})):
             response = await app.get_front_page(None)
