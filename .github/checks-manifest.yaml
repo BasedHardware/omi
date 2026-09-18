@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: subscription-plugin-tests
+    command: ["python3", "plugins/subscription/test_main.py"]
+    triggers: ["plugins/subscription/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Subscription plugin router endpoints and template rendering context must function reliably without unused dead dependencies"
   - id: omi-stack-overflow-tests
     command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
     triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
