@@ -135,6 +135,7 @@ from utils.llm.conversation_processing import (
     get_reprocess_transcript_structure,
     extract_action_items,
     get_conversation_notes,
+    validate_structured_source_segment_ids,
 )
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
@@ -488,6 +489,7 @@ def _get_structured(
                             task_intelligence_capture=task_intelligence_capture,
                             existing_action_items=_fetch_dedup_candidates_for_query(uid, ext_conv.text, conversation),
                         )
+                    validate_structured_source_segment_ids(structured, ())
                     return structured, False
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_transcript_structure(
@@ -498,6 +500,7 @@ def _get_structured(
                         uid,
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
+                        transcript_segment_ids=(),
                     )
                 with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                     structured.action_items = extract_action_items(
@@ -511,6 +514,7 @@ def _get_structured(
                         task_intelligence_capture=task_intelligence_capture,
                         primary_user_name=_primary_user_name(uid),
                     )
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             if ext_conv.text_source == ExternalIntegrationConversationSource.message:
@@ -523,17 +527,24 @@ def _get_structured(
                         ext_conv.text_source_spec,
                         output_language_code=user_language,
                     )
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             if ext_conv.text_source == ExternalIntegrationConversationSource.other:
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = summarize_experience_text(ext_conv.text, ext_conv.text_source_spec, tz=tz)
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
+        transcript_segment_ids = [
+            segment_id
+            for segment_id in (getattr(segment, 'id', None) for segment in (main_conv.transcript_segments or []))
+            if isinstance(segment_id, str) and segment_id
+        ]
         transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
@@ -550,6 +561,7 @@ def _get_structured(
                     calendar_context=calendar_context,
                     photos=main_conv.photos,
                     speaker_map=speaker_map,
+                    transcript_segment_ids=transcript_segment_ids,
                 )
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_conversation_notes(
@@ -562,6 +574,7 @@ def _get_structured(
                         existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                         trusted_wake_word_markers=has_wake_word_marker,
                     )
+                validate_structured_source_segment_ids(structured, transcript_segment_ids)
                 return structured, False
             # reprocess endpoint
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
@@ -572,6 +585,7 @@ def _get_structured(
                     tz_str,
                     photos=main_conv.photos,
                     output_language_code=user_language,
+                    transcript_segment_ids=transcript_segment_ids,
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
@@ -586,6 +600,7 @@ def _get_structured(
                     trusted_wake_word_markers=has_wake_word_marker,
                     primary_user_name=_primary_user_name(uid),
                 )
+            validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
 
         # A second capture client already carrying this speech (#3244: Omi device
@@ -640,6 +655,7 @@ def _get_structured(
                 calendar_context=calendar_context,
                 photos=main_conv.photos,
                 speaker_map=speaker_map,
+                transcript_segment_ids=transcript_segment_ids,
             )
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_conversation_notes(
@@ -652,6 +668,7 @@ def _get_structured(
                     existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                     trusted_wake_word_markers=has_wake_word_marker,
                 )
+            validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = get_transcript_structure(
@@ -663,6 +680,7 @@ def _get_structured(
                 photos=main_conv.photos,
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
+                transcript_segment_ids=transcript_segment_ids,
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
@@ -678,6 +696,7 @@ def _get_structured(
                 trusted_wake_word_markers=has_wake_word_marker,
                 primary_user_name=_primary_user_name(uid),
             )
+        validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
     except Exception as e:
         raise conversation_processing_http_exception(e) from e
@@ -879,6 +898,9 @@ def trigger_conversation_apps(
                     calendar_context=_stored_meeting_context(conversation),
                     photos=conversation.photos,
                     speaker_map=app_speaker_map,
+                    transcript_segment_ids=[
+                        getattr(segment, 'id', None) for segment in conversation.transcript_segments
+                    ],
                 )
             result = get_app_result(
                 transcript,
@@ -1532,6 +1554,7 @@ def _extract_memories_canonical(
                 calendar_context=calendar_context,
                 photos=conversation.photos,
                 speaker_map=prompt_speaker_map,
+                transcript_segment_ids=[getattr(segment, 'id', None) for segment in conversation.transcript_segments],
             )
         try:
             extracted_candidates = extract_canonical_l1_memory_candidates(
