@@ -3796,6 +3796,113 @@ test('Settings names a failed usage today GET instead of empty success', async (
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names Flutter UsagePage DateTime.parse empty GET history date as load-error instead of remapping usage stats', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=monthly') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          monthly: {
+            transcription_seconds: 180,
+            words_transcribed: 40,
+            insights_gained: 5,
+            memories_created: 2,
+            speech_seconds: 99,
+          },
+          history: [{date: ''}],
+        }),
+      };
+    }
+    if (request.path === '/v1/users/me/usage?period=yearly') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          yearly: {
+            transcription_seconds: 0,
+            words_transcribed: 0,
+            insights_gained: 0,
+            memories_created: 0,
+          },
+        }),
+      };
+    }
+    if (request.path === '/v1/users/me/usage?period=all_time') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          all_time: {
+            transcription_seconds: 3600,
+            words_transcribed: 80,
+            insights_gained: 9,
+            memories_created: 4,
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('This Month');
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain('This Month · Listening');
+  expect(tree).not.toContain('3 minutes');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET usage monthly yearly all-time without Upgrade', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

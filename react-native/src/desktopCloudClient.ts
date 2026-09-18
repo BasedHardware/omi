@@ -446,6 +446,13 @@ export function parseCloudUsage(
       if (typeof point.date !== 'string') {
         throw new Error(`${label} history[${index}] date is malformed`);
       }
+      if (visibleDisplayText(point.date) !== point.date) {
+        throw new Error(`${label} history[${index}] date is malformed`);
+      }
+      const parsed = Date.parse(point.date);
+      if (point.date === '' || !Number.isFinite(parsed)) {
+        throw new Error(`${label} history[${index}] date is malformed`);
+      }
       requiredUsageInteger(
         point.transcription_seconds,
         `${label} history[${index}] transcription_seconds`,

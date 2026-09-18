@@ -1,3 +1,4 @@
+import {visibleDisplayText} from './desktopReadClient';
 import type {OmiBackend} from './omiNativeTypes';
 
 export type OmiUsagePeriod = 'today' | 'monthly' | 'yearly' | 'all_time';
@@ -68,6 +69,13 @@ function optionalUsageHistory(value: unknown): void {
   for (const raw of value) {
     const point = object(raw);
     if (typeof point.date !== 'string') {
+      throw new UsageError();
+    }
+    if (visibleDisplayText(point.date) !== point.date) {
+      throw new UsageError();
+    }
+    const parsed = Date.parse(point.date);
+    if (point.date === '' || !Number.isFinite(parsed)) {
       throw new UsageError();
     }
     requiredUsageInteger(point.transcription_seconds);

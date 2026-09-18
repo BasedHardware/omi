@@ -5700,6 +5700,64 @@ test('Settings names Flutter ChangelogContent.fromJson type-wrong GET title as l
   expect(tree).not.toContain('✨');
 });
 
+test('Settings names Flutter UsagePage DateTime.parse empty GET history date as load-error instead of remapping usage stats', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=monthly') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          monthly: {
+            transcription_seconds: 180,
+            words_transcribed: 40,
+            insights_gained: 5,
+            memories_created: 2,
+            speech_seconds: 99,
+          },
+          history: [{date: ''}],
+        }),
+      };
+    }
+    if (request.path === '/v1/users/me/usage?period=yearly') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          yearly: {
+            transcription_seconds: 0,
+            words_transcribed: 0,
+            insights_gained: 0,
+            memories_created: 0,
+          },
+        }),
+      };
+    }
+    if (request.path === '/v1/users/me/usage?period=all_time') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          all_time: {
+            transcription_seconds: 3600,
+            words_transcribed: 80,
+            insights_gained: 9,
+            memories_created: 4,
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('This Month');
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain('This Month · Listening');
+  expect(tree).not.toContain('3 minutes');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET usage monthly yearly all-time without Upgrade', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

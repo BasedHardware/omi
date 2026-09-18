@@ -7907,7 +7907,7 @@ test('loadAccountSettings names GET usage today without inventing zeros', async 
           transcription_seconds: 180,
           speech_seconds: 0,
         },
-        history: [{date: '', speech_seconds: '0'}],
+        history: [{date: '2026-09-08', speech_seconds: '0'}],
       },
       'Usage',
     ),
@@ -7917,6 +7917,57 @@ test('loadAccountSettings names GET usage today without inventing zeros', async 
     insightsGained: 0,
     memoriesCreated: 0,
   });
+});
+
+test('old usage names Flutter UsagePage DateTime.parse empty GET history date instead of remapping to a today usage chip', () => {
+  expect(
+    parseCloudUsage(
+      {
+        today: {
+          transcription_seconds: 90,
+          speech_seconds: 99,
+        },
+        history: [{date: '2026-09-09', transcription_seconds: 1}],
+      },
+      'Usage',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 90,
+    wordsTranscribed: 0,
+    insightsGained: 0,
+    memoriesCreated: 0,
+  });
+  expect(
+    parseCloudUsage(
+      {
+        today: {transcription_seconds: 90},
+        history: null,
+      },
+      'Usage',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 90,
+    wordsTranscribed: 0,
+    insightsGained: 0,
+    memoriesCreated: 0,
+  });
+  for (const date of [
+    '',
+    '  2026-09-09  ',
+    '2026-09-09 ',
+    ' 2026-09-09',
+    'not-a-date',
+  ]) {
+    expect(() =>
+      parseCloudUsage(
+        {
+          today: {transcription_seconds: 90},
+          history: [{date}],
+        },
+        'Usage',
+      ),
+    ).toThrow('Usage history[0] date is malformed');
+  }
 });
 
 test('loadAccountSettings names GET primary language without inventing Not set', async () => {

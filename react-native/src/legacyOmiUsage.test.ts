@@ -202,7 +202,7 @@ test('keeps GET usage periods when speech_seconds, sibling buckets, or history a
           memories_created: 1,
         },
         history: [
-          {date: '', speech_seconds: '0'},
+          {date: '2026-09-08', speech_seconds: '0'},
           {date: '2026-09-09', transcription_seconds: 1},
         ],
       }),
@@ -307,4 +307,71 @@ test('loadOmiUsagePeriod names malformed GET instead of empty success', async ()
   }));
   const backend = {request} as unknown as OmiBackend;
   await expect(loadOmiUsagePeriod(backend, 'monthly')).rejects.toThrow();
+});
+
+test('old usage names Flutter UsagePage DateTime.parse empty GET history date instead of remapping to a usage chip', () => {
+  const monthly = {
+    transcription_seconds: 180,
+    words_transcribed: 40,
+    insights_gained: 5,
+    memories_created: 2,
+  };
+  expect(
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        monthly,
+        history: [{date: '2026-09-09', transcription_seconds: 1}],
+      }),
+      'monthly',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 180,
+    wordsTranscribed: 40,
+    insightsGained: 5,
+    memoriesCreated: 2,
+  });
+  expect(
+    parseOmiUsagePeriod(JSON.stringify({monthly, history: undefined}), 'monthly'),
+  ).toEqual({
+    transcriptionSeconds: 180,
+    wordsTranscribed: 40,
+    insightsGained: 5,
+    memoriesCreated: 2,
+  });
+  expect(
+    parseOmiUsagePeriod(JSON.stringify({monthly, history: null}), 'monthly'),
+  ).toEqual({
+    transcriptionSeconds: 180,
+    wordsTranscribed: 40,
+    insightsGained: 5,
+    memoriesCreated: 2,
+  });
+  expect(
+    parseOmiUsagePeriod(JSON.stringify({monthly, extra: 1}), 'monthly'),
+  ).toEqual({
+    transcriptionSeconds: 180,
+    wordsTranscribed: 40,
+    insightsGained: 5,
+    memoriesCreated: 2,
+  });
+  for (const date of [
+    '',
+    '  2026-09-09  ',
+    '2026-09-09 ',
+    ' 2026-09-09',
+    'not-a-date',
+  ]) {
+    expect(() =>
+      parseOmiUsagePeriod(
+        JSON.stringify({monthly, history: [{date}]}),
+        'monthly',
+      ),
+    ).toThrow('Omi usage is malformed');
+  }
+  expect(() =>
+    parseOmiUsagePeriod(
+      JSON.stringify({monthly, history: [{date: 1}]}),
+      'monthly',
+    ),
+  ).toThrow('Omi usage is malformed');
 });
