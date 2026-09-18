@@ -432,3 +432,75 @@ def test_explicit_retired_rendering_is_exact_and_cannot_restore_markers(tmp_path
     git('branch', '-f', 'origin/main', 'HEAD')
     file.write_text(new)
     assert any('retired markers cannot be restored' in error for error in checker.check(tmp_path))
+
+
+def test_shared_scaffold_prefix_preserves_target_body_without_authorizing_implementation(tmp_path):
+    import json
+    import pytest
+
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True, stderr=subprocess.DEVNULL)
+
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.test')
+    path = 'app/lib/shared_owner.dart'  # category rule, not a production filename
+    prefix = "export 'typed.dart';\n\n"
+    body = "import 'legacy.dart';\n\n// Shared implementation.\n\nvoid existing() { oldBehavior(); }\n"
+    runtime = tmp_path / path
+    runtime.parent.mkdir(parents=True)
+    runtime.write_text(body)
+    oracle = 'app/test/spine/example.dart'
+    file = tmp_path / oracle
+    file.parent.mkdir(parents=True)
+    old = "pendingContract('C7');\nexpect(legacy(), true);\n"
+    new = old.replace('legacy()', 'typed()')
+    file.write_text(old)
+    declaration = tmp_path / checker.PREFIXES
+    declaration.parent.mkdir(parents=True)
+    (tmp_path / checker.REGISTRY).write_text(json.dumps({oracle: 'C7'}))
+    (tmp_path / checker.SCOPE).write_text(json.dumps({'scaffolding': {path: [checker.digest(prefix + body)]}}))
+    declaration.write_text(json.dumps({'prefixes': [dict(path=path, prefix=prefix,
+        scaffold_sha256=checker.digest(prefix + body))]}))
+    git('add', '.')
+    git('commit', '-qm', 'declare shared scaffold and oracle')
+    git('switch', '-qc', 'contract')
+    runtime.write_text(prefix + body)
+    git('add', '.')
+    git('commit', '-qm', 'original frozen scaffold')
+    git('switch', '-q', 'main')
+    accepted_body = body.replace('oldBehavior', 'privacyFix')
+    runtime.write_text(accepted_body)
+    git('add', '.')
+    git('commit', '-qm', 'independent accepted implementation fix')
+    git('branch', 'origin/main')
+    git('switch', '-q', 'contract')
+    git('merge', '--no-edit', 'main')
+    assert runtime.read_text() == prefix + accepted_body
+    file.write_text(new)
+    record = tmp_path / checker.REVISIONS / '001.json'
+    record.parent.mkdir()
+    record.write_text(json.dumps(dict(path=oracle, owner='C7', before=checker.digest(old),
+        after=checker.digest(new), reason='reviewed direct API boundary')))
+    git('add', '.')
+    git('commit', '-qm', 'oracle-only revision over accepted shared body')
+    assert checker.check(tmp_path) == []
+    candidate = git('rev-parse', 'HEAD').strip()
+    git('switch', '--detach', 'origin/main')
+    git('merge', '--no-ff', '--no-edit', candidate)
+    assert checker.check(tmp_path) == []  # BASE-first merge has the same verdict
+    runtime.write_text(prefix + accepted_body.replace('privacyFix', 'newImplementation'))
+    assert any('mixed with implementation' in e for e in checker.check(tmp_path))
+    runtime.write_text(prefix + accepted_body)
+    file.write_text(new.replace('true', 'false'))
+    assert checker.check(tmp_path)  # source-body accommodation cannot weaken oracle pins
+    file.write_text(new)
+    original_declaration = declaration.read_text()
+    declaration.write_text('{"prefixes":[]}')
+    with pytest.raises(ValueError, match='immutable'):
+        checker.check(tmp_path)
+    declaration.unlink()
+    with pytest.raises(ValueError, match='cannot be removed'):
+        checker.check(tmp_path)
+    declaration.write_text(original_declaration)
+    assert checker.check(tmp_path) == []

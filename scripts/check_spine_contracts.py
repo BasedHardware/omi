@@ -49,6 +49,7 @@ def allowed(original: str, current: str) -> bool:
 REVISIONS = "contracts/spine/revisions"
 SCOPE = "contracts/spine/revision-scope.json"
 RUNNERS = "contracts/spine/runners.json"
+PREFIXES = "contracts/spine/shared-prefixes.json"
 
 
 def introductions(root: Path, path: str) -> list[str]:
@@ -163,6 +164,48 @@ def pinned_retired_rendering(root: Path, path: str, current: str) -> bool:
                for record in (json.loads(file.read_text()) for file in (root / REVISIONS).glob("*.json")))
 
 
+def shared_prefixes(root: Path, base: str, registry: dict, policy: dict, read, *, historical: bool = False) -> set[str]:
+    """Exact frozen additions to a shared file; its remaining bytes equal target.
+
+    Unlike a whole-file scaffold hash, an unchanged prefix survives unrelated
+    accepted implementation updates. This never permits proposed body edits.
+    """
+    raw = read(PREFIXES)
+    if raw is None:
+        if not historical and introductions(root, PREFIXES):
+            raise ValueError(f"{PREFIXES}: shared-prefix declarations cannot be removed")
+        return set()
+    pinned_text(root, PREFIXES, raw)
+    accepted = set()
+    for row in json.loads(raw)["prefixes"]:
+        path, prefix, frozen = row["path"], row["prefix"], row["scaffold_sha256"]
+        if path in registry or path.startswith(ROOTS + ("app/test/support/spine/",)):
+            raise ValueError(f"{path}: an oracle cannot be a shared scaffold")
+        if not prefix or frozen not in policy.get("scaffolding", {}).get(path, []):
+            raise ValueError(f"{path}: shared prefix requires an existing frozen scaffold")
+        # Verify the declared addition actually occurs in the immutable scaffold.
+        commits = git("log", "--full-history", "--format=%H", "HEAD", "--", path, root=root).splitlines()
+        for commit in commits:
+            try:
+                original = git("show", f"{commit}:{path}", root=root)
+            except subprocess.CalledProcessError:
+                continue
+            if digest(original) == frozen:
+                if not original.startswith(prefix):
+                    raise ValueError(f"{path}: declared prefix differs from frozen scaffold")
+                break
+        else:
+            raise ValueError(f"{path}: frozen scaffold payload missing; fetch full history")
+        try:
+            target = git("show", f"{base}:{path}", root=root)
+        except subprocess.CalledProcessError:
+            continue
+        expected = target if target.startswith(prefix) else prefix + target
+        if read(path) == expected:
+            accepted.add(path)
+    return accepted
+
+
 def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
     """A revision is an oracle-only PR, including unstaged/untracked edits.
 
@@ -182,6 +225,8 @@ def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
     shared_runners, runner_errors = runner_contracts(root, registry)
     if runner_errors:
         return runner_errors
+    read = lambda path: (root / path).read_text() if (root / path).is_file() else None
+    prefixes = shared_prefixes(root, base, registry, policy, read)
     changed = set(git("diff", "--name-only", base, "--", root=root).splitlines())
     changed.update(git("ls-files", "--others", "--exclude-standard", root=root).splitlines())
     needs_revision = False
@@ -203,8 +248,7 @@ def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
                 needs_revision = True
     if not needs_revision:
         return []
-    rejected = outside_oracle_scope(changed, policy, shared_runners,
-                                    lambda path: (root / path).read_text() if (root / path).is_file() else None)
+    rejected = outside_oracle_scope(changed, policy, shared_runners | prefixes, read)
     if not rejected:
         return []
     return ["Spine revision mixed with implementation/non-oracle paths: " + ", ".join(rejected)
@@ -262,7 +306,8 @@ def authorized_revision_paths(root: Path, base_ref: str, registry: dict, present
                 continue
             grandfathered = digest(raw) in policy.get("grandfathered_revisions", {}).get(path, [])
             changed = git("diff", "--name-only", base, commit, "--", root=root).splitlines()
-            if grandfathered or not outside_oracle_scope(changed, policy, runners, read):
+            prefixes = shared_prefixes(root, base, registry, policy, read, historical=True)
+            if grandfathered or not outside_oracle_scope(changed, policy, runners | prefixes, read):
                 accepted.add(path)
                 break
     return accepted
