@@ -65,7 +65,11 @@ enum WalServiceStatus { init, ready, stop }
 
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
-  Future<void> addExternalWal(Wal wal);
+  /// Session fence observed by device downloads. Capture at download
+  /// admission and pass to [addExternalWal]; do not re-read after an await.
+  int get sessionGeneration;
+
+  Future<void> addExternalWal(Wal wal, {required int admittedGeneration});
   Future<List<Wal>> getAllWals();
 
   /// Bump the session fence and stop publishing retired-account WALs.

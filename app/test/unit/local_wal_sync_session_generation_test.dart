@@ -69,7 +69,7 @@ void main() {
     expect(await sync.getAllWals(), isEmpty);
 
     final newWal = _wal(timerStart: 2000);
-    await sync.addExternalWal(newWal);
+    await sync.addExternalWal(newWal, admittedGeneration: sync.sessionGeneration);
 
     final published = await sync.getAllWals();
     expect(published, hasLength(1));
@@ -81,5 +81,31 @@ void main() {
       containsAll([oldWal.id, newWal.id]),
       reason: 'saves must persist retired durable bytes plus the current session',
     );
+  });
+
+  test('WAL admitted under a previous generation is refused and does not mutate _wals', () async {
+    final persistCalls = <List<Wal>>[];
+    final listener = _MockListener();
+    final sync = LocalWalSyncImpl(
+      listener,
+      persistWals: (wals) async {
+        persistCalls.add(List<Wal>.of(wals));
+      },
+    );
+    final admitted = sync.sessionGeneration;
+    sync.clearUserData();
+    expect(sync.testWals, isEmpty);
+
+    final wal = _wal(timerStart: 3000);
+    await sync.addExternalWal(wal, admittedGeneration: admitted);
+
+    expect(
+      sync.testWals,
+      isEmpty,
+      reason: 'refusing the save is not enough: a retired-session WAL must not enter the live list',
+    );
+    expect(await sync.getAllWals(), isEmpty);
+    expect(listener.walUpdatedCount, 0);
+    expect(persistCalls, isEmpty);
   });
 }

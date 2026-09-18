@@ -198,6 +198,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         _persistWalsOverride = persistWals,
         _loadWalsOverride = loadWals;
 
+  @override
+  int get sessionGeneration => _sessionGeneration;
+
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
 
@@ -216,8 +219,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<void> addExternalWal(Wal wal) async {
-    final generation = _sessionGeneration;
+  Future<void> addExternalWal(Wal wal, {required int admittedGeneration}) async {
+    if (!_isCurrent(admittedGeneration)) return;
     // Native-storage recovery can surface old WALs while a new recording is
     // active. Only inherit the current session's location for WALs that began
     // at (or after) this session, never for historical recordings.
@@ -232,9 +235,10 @@ class LocalWalSyncImpl implements LocalWalSync {
       Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
       return;
     }
+    if (!_isCurrent(admittedGeneration)) return;
     _wals.add(wal);
-    await _saveWalsToFile(generation);
-    _notifyUpdated(generation);
+    await _saveWalsToFile(admittedGeneration);
+    _notifyUpdated(admittedGeneration);
     Logger.debug("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
   }
 
