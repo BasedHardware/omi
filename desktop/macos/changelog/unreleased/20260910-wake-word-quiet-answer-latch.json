@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the notch after a hands-free wake-word answer: agent chats and tapped notifications open properly again instead of staying scrunched, and proactive cards and the hover menu keep working"
-}
