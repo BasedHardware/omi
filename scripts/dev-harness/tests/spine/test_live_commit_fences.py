@@ -45,7 +45,6 @@ def test_lease_roll_during_readiness_cannot_advance_loaded_identity(rig, operati
         engine.close()
 
 
-@pending("V1")
 def test_readiness_requires_boolean_true_not_truthy_values(rig):
     factory = rig.factory
 

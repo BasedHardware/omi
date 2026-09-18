@@ -833,8 +833,18 @@ class LiveSession:
         readiness = state.get("readiness")
         if not isinstance(readiness, Mapping):
             return False
-        # Non-empty strings such as "false" must not satisfy readiness.
-        if any(readiness.get(key) is not True for key in ("signedIn", "routed", "captureIdle")):
+        # A present-but-non-boolean flag is a malformed response, not a
+        # not-ready state: strings such as "false" must fail closed here
+        # rather than fall through to the wait_ready recovery path.
+        for key in ("signedIn", "routed", "captureIdle"):
+            if key not in readiness:
+                return False
+            value = readiness[key]
+            if not isinstance(value, bool):
+                raise LiveError(
+                    "malformed-response", f"readiness.{key} must be boolean, got {value!r}"
+                )
+        if not all(readiness[key] for key in ("signedIn", "routed", "captureIdle")):
             return False
         principal = state.get("principal")
         if not isinstance(principal, Mapping):

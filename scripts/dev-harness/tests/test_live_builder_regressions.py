@@ -351,8 +351,10 @@ def test_stringy_false_readiness_is_not_ready(rig):
     rig.factory = _wrap_receive(rig.factory, hook)
     engine = rig.engine()
     reply = engine.start()
+    # Fail closed: a stringy readiness flag is malformed, not merely unready,
+    # so start blocks on malformed-response instead of probing wait_ready.
     assert reply["outcome"] == "blocked"
-    assert reply["error_code"] == "unready"
+    assert reply["error_code"] == "malformed-response"
     assert reply["evidence"]["live"]["loaded_source"] is None
     engine.close()
 
