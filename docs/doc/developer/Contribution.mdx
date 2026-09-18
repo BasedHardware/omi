@@ -36,15 +36,15 @@ Maintainers declining a PR for direction or taste will cite an invariant ID or o
 
 ---
 
-## Mobile HTTP changes
+## Mobile capture changes
 
-The [typed API result contract](https://github.com/BasedHardware/Omi/blob/main/app/lib/backend/http/API_RESULTS.md)
-keeps transport/auth failures distinct from empty data and defines locked and
-terminal outcomes. Migrate endpoint families with their direct consumers; batch
-small files and split large ones. Declare completed file/rule adoption in
-`app/contracts/api-result/boundary-baseline.json`. Only adopted files and new files
-are constrained; ordinary legacy-file growth stays unblocked. Protected contracts
-run in `TZ=UTC bash app/test.sh`, using synthetic loopback fixtures.
+The [capture ownership contract](https://github.com/BasedHardware/Omi/blob/main/app/lib/services/capture/OWNERSHIP.md)
+defines constructor seams, session generations and staged recovery/foreground
+ownership handoffs. Declare completed file/rule adoption in
+`app/contracts/capture/boundary-baseline.json`. Only adopted files and new files
+are constrained; ordinary legacy-file growth stays unblocked. Diagnostics name
+the request interface to use. Run `TZ=UTC bash app/test.sh` for the protected contracts. Pending tests
+execute and fail on unexpected success; builders remove only their pending marker.
 
 ## Pull Request Quality
 
