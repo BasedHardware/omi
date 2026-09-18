@@ -81,8 +81,10 @@ class TestAcquire:
 
     def test_duplicate_name_is_refused_with_owner_hint(self, tmp_path: Path, env: dict) -> None:
         ms.acquire(REPO_ROOT, env, name="dup", listeners=_no_listeners)
-        with pytest.raises(ms.SessionError, match="already exists"):
+        with pytest.raises(ms.SessionError, match=rf"session oms-dup held by live pid {os.getpid()}") as err:
             ms.acquire(REPO_ROOT, env, name="dup", listeners=_no_listeners)
+        assert "do not release a live foreign lease" in str(err.value)
+        assert "method not available" not in str(err.value)
 
     def test_failed_acquire_leaves_no_half_state(self, tmp_path: Path, env: dict) -> None:
         root = ms.sessions_root(REPO_ROOT, env)
