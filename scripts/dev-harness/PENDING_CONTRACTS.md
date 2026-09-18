@@ -24,6 +24,7 @@ is valid Dart. Unexpected runtime/framework/teardown errors stay red.
 Compare collection-bearing Dart records field by field: record equality compares
 Map identity; pass the Map itself to `expect`.
 
+
 Widget contracts use `contractWidgets` from `app/test/support/spine/widgets.dart`.
 Plain skip is forbidden; unexpected runtime/framework/teardown errors stay red.
 

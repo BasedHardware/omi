@@ -4,11 +4,6 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
-  - id: omi-stack-overflow-tests
-    command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
-    triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "Stack Overflow search, question retrieval, and answer reading must safely parse full URLs, normalize question targets, guard against NoneType in answer owners, and handle API errors gracefully"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
@@ -34,11 +29,6 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
-  - id: gcal-uid-reflection-encoding-tests
-    command: ["python3", "plugins/omi-google-calendar-app/test_uid_reflection.py"]
-    triggers: ["plugins/omi-google-calendar-app/**"]
-    lanes: ["local", "ci"]
-    reason: "GET /auth/google/callback interpolated the raw error query param into HTML text and GET / reflected the client-controlled uid into href attributes and a hidden input value; both routes are unauthenticated"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
@@ -49,11 +39,6 @@ checks:
     triggers: ["plugins/omi-hacker-news-app/**"]
     lanes: ["local", "ci"]
     reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
-  - id: twitter-tweet-offset-tests
-    command: ["python3", "plugins/omi-twitter-app/test_tweet_offsets.py"]
-    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#14351: TweetDetector must slice content using offsets from the original transcript, not a stripped copy"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
@@ -84,11 +69,6 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13920: tool_list_my_issues and tool_list_recent_issues interpolated limit and team into GraphQL text, so null/string/over-cap limits produced malformed queries and crafted team keys could inject GraphQL; limits must be coerced and inputs bound as variables"
-  - id: linear-search-issues-params-tests
-    command: ["python3", "plugins/omi-linear-app/test_search_issues_params.py"]
-    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#14270: tool_search_issues bound a raw body.get('limit', 5) to a non-nullable $first: Int!, so the null the backend sends for an omitted limit failed both the searchIssues query and the issues(filter:) fallback; the limit must run through coerce_limit()"
   - id: ms365-calendar-pagination-tests
     command: ["python3", "plugins/omi-ms365-app/test_calendar_pagination.py"]
     triggers: ["plugins/omi-ms365-app/**"]
@@ -836,11 +816,6 @@ checks:
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/fast-dev-bundle.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-fast-dev-bundle.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a bundle built without Contents/Resources/pi-mono-extension accepted every chat turn and failed all of them (pi-mono exited 1 on `Unknown provider \"omi\"`); the fast lane reused it because the source fingerprint still matched, so packaging must verify the installed payload and not just its inputs"
-  - id: desktop-build-source-identity
-    command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
-    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#13126: a healthy named bundle could be signed, authenticated, and routed correctly while exposing no source receipt, so verification from a reused E2E pool slot could not prove which revision actually ran"
   - id: desktop-signed-artifact-smoke
     command: ["bash", "desktop/macos/tests/test-signed-artifact-smoke.sh"]
     triggers: ["desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]
@@ -1186,6 +1161,31 @@ checks:
     triggers: ["app/lib/**/*.dart", "app/contracts/api-result/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Outage-as-empty cfaaaf2fb9db and detail null conflation 06597a0757cb: prevent nullable HTTP regression after file adoption, and debt in new files"
+  - id: omi-stack-overflow-tests
+    command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
+    triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Stack Overflow search, question retrieval, and answer reading must safely parse full URLs, normalize question targets, guard against NoneType in answer owners, and handle API errors gracefully"
+  - id: gcal-uid-reflection-encoding-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_uid_reflection.py"]
+    triggers: ["plugins/omi-google-calendar-app/**"]
+    lanes: ["local", "ci"]
+    reason: "GET /auth/google/callback interpolated the raw error query param into HTML text and GET / reflected the client-controlled uid into href attributes and a hidden input value; both routes are unauthenticated"
+  - id: twitter-tweet-offset-tests
+    command: ["python3", "plugins/omi-twitter-app/test_tweet_offsets.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14351: TweetDetector must slice content using offsets from the original transcript, not a stripped copy"
+  - id: linear-search-issues-params-tests
+    command: ["python3", "plugins/omi-linear-app/test_search_issues_params.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14270: tool_search_issues bound a raw body.get('limit', 5) to a non-nullable $first: Int!, so the null the backend sends for an omitted limit failed both the searchIssues query and the issues(filter:) fallback; the limit must run through coerce_limit()"
+  - id: desktop-build-source-identity
+    command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13126: a healthy named bundle could be signed, authenticated, and routed correctly while exposing no source receipt, so verification from a reused E2E pool slot could not prove which revision actually ran"
   - id: app-addressability
     command: ["python3", "scripts/check_app_addressability.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["app/lib/**/*.dart", "app/test/support/addressability_widgets.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
