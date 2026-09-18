@@ -194,22 +194,40 @@ def get_user_shop(uid: str) -> Optional[str]:
 
 def verify_shopify_hmac(query_string: str, hmac_value: str) -> bool:
     """Verify the HMAC signature from Shopify."""
-    # Parse query string and remove hmac parameter
-    params = urllib.parse.parse_qs(query_string)
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
     params.pop('hmac', None)
-    
-    # Sort and encode parameters
-    sorted_params = sorted(params.items())
-    encoded = urllib.parse.urlencode([(k, v[0]) for k, v in sorted_params])
-    
-    # Calculate HMAC
+
+    # Shopify signs the decoded "key=value" pairs sorted by key and joined
+    # with '&' — values are NOT percent-encoded again (shopify.dev OAuth docs).
+    message = "&".join(f"{k}={v[0]}" for k, v in sorted(params.items()))
     digest = hmac.new(
         SHOPIFY_CLIENT_SECRET.encode('utf-8'),
-        encoded.encode('utf-8'),
+        message.encode('utf-8'),
         hashlib.sha256
     ).hexdigest()
-    
+
     return hmac.compare_digest(digest, hmac_value)
+
+
+def _oauth_state_for(uid: str) -> str:
+    """Sign uid into the OAuth state so a callback can't rebind the grant."""
+    sig = hmac.new(
+        SHOPIFY_CLIENT_SECRET.encode('utf-8'),
+        uid.encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()[:32]
+    return f"{uid}:{sig}"
+
+
+def _oauth_state_uid(state: str) -> Optional[str]:
+    """Return the uid from a signed state, or None if it wasn't issued here."""
+    uid, sep, sig = state.rpartition(":")
+    if not sep or not uid:
+        return None
+    expected = _oauth_state_for(uid).rpartition(":")[2]
+    if not hmac.compare_digest(expected, sig):
+        return None
+    return uid
 
 
 def format_currency(amount: str, currency: str = "USD") -> str:
@@ -291,7 +309,7 @@ async def shopify_auth(uid: str, shop: Optional[str] = None):
         "client_id": SHOPIFY_CLIENT_ID,
         "scope": scopes,
         "redirect_uri": SHOPIFY_REDIRECT_URI,
-        "state": uid,  # Use uid as state to identify user on callback
+        "state": _oauth_state_for(uid),  # Signed state identifies user on callback
     }
     
     auth_url = f"https://{shop}/admin/oauth/authorize?{urllib.parse.urlencode(params)}"
@@ -327,8 +345,26 @@ async def shopify_callback(
             "authenticated": False,
             "error": "Invalid callback parameters"
         })
-    
-    uid = state
+
+    # Verify Shopify's signature before trusting any callback parameter:
+    # without it, a forged request can aim the code exchange (and the app
+    # client secret) at a bad host.
+    if not hmac or not verify_shopify_hmac(request.url.query, hmac):
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid OAuth signature"
+        })
+
+    # Verify our own signed state so an attacker-initiated flow cannot
+    # bind their shop's grant to a different uid.
+    uid = _oauth_state_uid(state)
+    if uid is None:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid OAuth state"
+        })
     
     # Exchange code for access token
     token_url = f"https://{shop}/admin/oauth/access_token"
