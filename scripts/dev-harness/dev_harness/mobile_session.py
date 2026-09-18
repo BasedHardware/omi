@@ -67,6 +67,12 @@ PORT_OFFSET_MAX = 5000
 MAX_OFFSET_ATTEMPTS = 48
 
 PLATFORMS = ("android", "ios-simulator")
+# Doctor historically took --platform ios. Accept it as the session platform.
+SESSION_PLATFORM_ALIASES = {
+    "android": "android",
+    "ios-simulator": "ios-simulator",
+    "ios": "ios-simulator",
+}
 DEFAULT_APP_IDS = {
     "android": "com.friend.ios.dev",
     "ios-simulator": "com.friend-app-with-wearable.ios12.development",
@@ -77,6 +83,35 @@ DEFAULT_FLAVOR = "dev"
 
 class SessionError(RuntimeError):
     """Raised for ownership/safety violations and fail-closed refusals."""
+
+
+def normalize_session_platform(platform_name: str) -> str:
+    """Map doctor/session CLI names onto acquire platforms.
+
+    Canonical session values are ``android`` and ``ios-simulator``. Doctor
+    historically took ``ios``; accept it as an alias.
+    """
+
+    mapped = SESSION_PLATFORM_ALIASES.get(platform_name)
+    if mapped is None:
+        raise SessionError(
+            f"platform must be one of {PLATFORMS} (ios is an alias for ios-simulator), " f"got {platform_name!r}"
+        )
+    return mapped
+
+
+def _parse_session_platform(value: str) -> str:
+    try:
+        return normalize_session_platform(value)
+    except SessionError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _parse_doctor_platform(value: str) -> str:
+    try:
+        return mobile_doctor.normalize_doctor_platform(value)
+    except mobile_doctor.DoctorError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -403,16 +438,64 @@ class DeviceController:
             raise SessionError(f"simctl create failed for session simulator: {out.strip() or code}")
         code, out = self._runner(["xcrun", "simctl", "boot", udid])
         if code != 0 and "already booted" not in out.lower():
-            self._runner(["xcrun", "simctl", "delete", udid])
+            dcode, dout = self._runner(["xcrun", "simctl", "delete", udid])
+            if dcode != 0:
+                raise SessionError(
+                    f"simctl boot failed for {udid}: {out.strip()}; "
+                    f"delete also failed ({dout.strip() or dcode}); device may still exist"
+                )
             raise SessionError(f"simctl boot failed for {udid}: {out.strip()}")
         return udid, f"{device_type} ({runtime})"
 
+    def _simctl_device(self, udid: str) -> dict[str, Any] | None:
+        code, out = self._runner(["xcrun", "simctl", "list", "devices", "-j"])
+        if code != 0:
+            raise SessionError(f"simctl list failed: {out.strip() or code}")
+        try:
+            payload = json.loads(out)
+        except json.JSONDecodeError as exc:
+            raise SessionError("simctl list did not return JSON") from exc
+        for devices in (payload.get("devices") or {}).values():
+            if not isinstance(devices, list):
+                continue
+            for device in devices:
+                if isinstance(device, Mapping) and str(device.get("udid")) == udid:
+                    return dict(device)
+        return None
+
+    def _confirm_simulator_shutdown(self, udid: str) -> None:
+        record = self._simctl_device(udid)
+        if record is None:
+            return
+        state = str(record.get("state") or "")
+        if state.lower() == "shutdown":
+            return
+        raise SessionError(f"simulator {udid} is not proven dead (state={state!r}); not deleting")
+
     def detach(self, platform_name: str, device_id: str) -> None:
-        if platform_name == "ios-simulator":
-            self._runner(["xcrun", "simctl", "shutdown", device_id])
-            self._runner(["xcrun", "simctl", "delete", device_id])
-        # android: AVD-based emulators stop with the session services; the AVD
-        # template stays for reuse and is owned by the session's lease record.
+        if platform_name != "ios-simulator":
+            # android: AVD-based emulators stop with the session services; the AVD
+            # template stays for reuse and is owned by the session's lease record.
+            return
+        code, out = self._runner(["xcrun", "simctl", "shutdown", device_id])
+        text = (out or "").lower()
+        already_gone = any(token in text for token in ("invalid device", "could not find", "not found"))
+        already_down = "current state: shutdown" in text or "already shutdown" in text
+        if code != 0 and not already_gone and not already_down:
+            raise SessionError(
+                f"simctl shutdown failed for {device_id}: {out.strip() or code}; "
+                "simulator was not proven dead and will not be deleted"
+            )
+        if already_gone:
+            return
+        self._confirm_simulator_shutdown(device_id)
+        code, out = self._runner(["xcrun", "simctl", "delete", device_id])
+        text = (out or "").lower()
+        if code != 0 and not any(token in text for token in ("invalid device", "could not find", "not found")):
+            raise SessionError(f"simctl delete failed for {device_id}: {out.strip() or code}")
+        leftover = self._simctl_device(device_id)
+        if leftover is not None:
+            raise SessionError(f"simulator {device_id} still listed after delete (state={leftover.get('state')!r})")
 
 
 # ---------------------------------------------------------------------------
@@ -432,8 +515,7 @@ def acquire(
 ) -> dict[str, Any]:
     root = sessions_root(repo_root, env)
     session_id = _validate_session_id(f"{SESSION_ID_PREFIX}{name}" if name else new_session_id())
-    if platform_name not in PLATFORMS:
-        raise SessionError(f"platform must be one of {PLATFORMS}, got {platform_name!r}")
+    platform_name = normalize_session_platform(platform_name)
     fixture = mobile_fixtures.load_fixture(fixture_version)  # fail fast on unknown fixture
     directory = root / session_id
     directory.mkdir(parents=True, exist_ok=True)
@@ -518,14 +600,23 @@ def _session_env(lease: Mapping[str, Any]) -> dict[str, str]:
     return env
 
 
-def _harness_call(lease: Mapping[str, Any], command: Callable[[argparse.Namespace], int]) -> int:
+def _harness_call(
+    lease: Mapping[str, Any],
+    command: Callable[[argparse.Namespace], int],
+    *,
+    stdout_to_stderr: bool = False,
+) -> int:
     """Run a dev-harness CLI command against the session's instance/offset."""
 
     saved = dict(os.environ)
+    old_stdout = sys.stdout
     try:
         os.environ.update(_session_env(lease))
+        if stdout_to_stderr:
+            sys.stdout = sys.stderr
         return command(argparse.Namespace())
     finally:
+        sys.stdout = old_stdout
         os.environ.clear()
         os.environ.update(saved)
 
@@ -537,6 +628,7 @@ def start(
     *,
     devices: DeviceController | None = None,
     attach_device: bool = True,
+    json_stdout: bool = False,
 ) -> dict[str, Any]:
     from . import cli as harness_cli
 
@@ -561,7 +653,7 @@ def start(
             udid, label = devices.attach_ios_simulator(session_id, device_type, runtime)
             lease = {**lease, "device": {"kind": "simulator", "udid": udid, "label": label, "owner": "session"}}
 
-    code = _harness_call(lease, harness_cli.cmd_up)
+    code = _harness_call(lease, harness_cli.cmd_up, stdout_to_stderr=json_stdout)
     if code != 0:
         lease = {**lease, "status": "failed", "blocked_reason": "harness services failed to start (see logs)"}
         _save_json_atomic(directory / LEASE_FILENAME, lease)
@@ -873,7 +965,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     doctor = sub.add_parser("doctor", help="structured readiness report")
-    doctor.add_argument("--platform", action="append", choices=[mobile_doctor.LANE_ANDROID, mobile_doctor.LANE_IOS])
+    doctor.add_argument(
+        "--platform",
+        action="append",
+        type=_parse_doctor_platform,
+        help="android, ios, or ios-simulator (alias for ios)",
+    )
     doctor.add_argument("--json", action="store_true")
     doctor.add_argument("--min-free-gb", type=float, default=mobile_doctor.MIN_FREE_GB_EMULATOR_LANES)
     doctor.add_argument("--skip-capacity", action="store_true")
@@ -883,7 +980,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     acq = sub.add_parser("acquire", help="atomically acquire an isolated session lease")
     acq.add_argument("--name", help="session name suffix (default: generated)")
-    acq.add_argument("--platform", default="android", choices=list(PLATFORMS))
+    acq.add_argument(
+        "--platform",
+        default="android",
+        type=_parse_session_platform,
+        help="android, ios-simulator, or ios (alias for ios-simulator)",
+    )
     acq.add_argument("--fixture-version", default=mobile_fixtures.CURRENT_FIXTURE_VERSION)
     acq.add_argument("--offset", type=int, default=None, help="explicit port offset (default: auto)")
     acq.add_argument("--json", action="store_true")
@@ -1012,7 +1114,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _emit(lease, as_json=args.json)
             return 0
         if args.command == "start":
-            lease = start(repo_root, args.session_id, attach_device=not args.no_device)
+            lease = start(repo_root, args.session_id, attach_device=not args.no_device, json_stdout=args.json)
             _emit(lease, as_json=args.json)
             return 0
         if args.command == "seed":
@@ -1040,7 +1142,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "device":
             return _dispatch_device(args, repo_root)
-    except (SessionError, safety.SafetyError, EvidenceError, mobile_fixtures.FixtureError) as exc:
+    except (
+        SessionError,
+        safety.SafetyError,
+        EvidenceError,
+        mobile_fixtures.FixtureError,
+        mobile_doctor.DoctorError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     raise AssertionError(f"unhandled command {args.command!r}")

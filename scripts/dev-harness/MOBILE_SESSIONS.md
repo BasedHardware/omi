@@ -71,7 +71,10 @@ token is involved at any point.
 `doctor` classifies every prerequisite exactly one of `ready`,
 `agent-remediable` (remedy command included), or `operator-action-needed`
 (privileged install/license/host capacity), per lane (`backend`, `android`,
-`ios`). Pins: Flutter version comes from `.github/workflows/mobile-app-checks.yml`
+`ios`). `--platform ios-simulator` is an alias for the `ios` lane; `acquire
+--platform ios` is an alias for `ios-simulator`. Unknown names are refused
+with a message that lists the valid values. Pins: Flutter version comes from
+`.github/workflows/mobile-app-checks.yml`
 (never "latest"); the backend venv must be Python 3.11 **and** able to import
 `yaml` and `dotenv` (a `.venv` directory is not enough); JDK ≥ 21 for the
 Firebase emulators. `app/.dev.env` with a non-loopback `API_BASE_URL`, or
@@ -108,7 +111,9 @@ were not installed and shared capacity was ~15GiB — device-attach paths are
 implemented and unit-tested with injected runners, and the live Android lane
 fails closed through `doctor`/`start` with the exact remedy. iOS simulator
 attach is implemented (`simctl create/boot/shutdown/delete` of a session-owned
-device); live boots were deferred by the same capacity gate. Concurrency
+device); live boots were deferred by the same capacity gate. `detach` confirms
+`simctl shutdown` left the device in Shutdown (or already gone) before
+`simctl delete`; a failed teardown leaves the lease unreleased. Concurrency
 (two live sessions), physical-device and untethered-signing acceptance remain
 open and are tracked in SCA-487/SCA-491.
 

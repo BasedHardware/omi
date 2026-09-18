@@ -237,6 +237,30 @@ class TestSeedResetStop:
         ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
         assert calls == [("ios-simulator", "AAA-BBB-CCC")]
 
+    def test_failed_simulator_teardown_leaves_the_lease_unreleased(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="sim-keep", platform_name="ios-simulator", listeners=_no_listeners)
+        monkeypatch.setattr("dev_harness.cli.cmd_down", lambda namespace: 0)
+
+        class FakeDevices:
+            def detach(self, platform_name: str, device_id: str) -> None:
+                raise ms.SessionError("simulator was not proven dead and will not be deleted")
+
+        directory = ms.session_dir(REPO_ROOT, lease["session_id"], env)
+        data = json.loads((directory / "lease.json").read_text("utf-8"))
+        data["status"] = "running"
+        data["device"] = {"kind": "simulator", "udid": "AAA-BBB-CCC", "label": "iPhone", "owner": "session"}
+        (directory / "lease.json").write_text(json.dumps(data), "utf-8")
+        with pytest.raises(ms.SessionError, match="not proven dead"):
+            ms.stop(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        kept = json.loads((directory / "lease.json").read_text("utf-8"))
+        assert kept["status"] == "running"
+        assert kept["device"]["udid"] == "AAA-BBB-CCC"
+        with pytest.raises(ms.SessionError, match="not proven dead"):
+            ms.release(REPO_ROOT, lease["session_id"], env, devices=FakeDevices())
+        assert (directory / "lease.json").is_file()
+
 
 class TestStart:
     def test_start_android_fails_closed_when_the_lane_is_not_ready(self, tmp_path: Path, env: dict) -> None:
@@ -282,6 +306,52 @@ class TestStart:
         assert seen["provider_mode"] == "offline"
         assert started["device"]["udid"] == "DEADBEEF-1234"
 
+    def test_start_json_keeps_cmd_up_logs_off_stdout(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="jsonup", platform_name="ios-simulator", listeners=_no_listeners)
+
+        def fake_up(namespace) -> int:
+            print("cmd_up: starting services")
+            return 0
+
+        monkeypatch.setattr("dev_harness.cli.cmd_up", fake_up)
+
+        class FakeDevices:
+            def attach_ios_simulator(self, sid: str, device_type: str, runtime: str) -> tuple[str, str]:
+                return "DEADBEEF-1234", "iPhone 17 Pro"
+
+            def android_ready(self, home: str) -> tuple[bool, str]:
+                return True, "ready"
+
+            def detach(self, platform: str, device: str) -> None:
+                pass
+
+        started = ms.start(REPO_ROOT, lease["session_id"], env, devices=FakeDevices(), json_stdout=True)
+        assert started["status"] == "running"
+        captured = capsys.readouterr()
+        assert "cmd_up: starting services" in captured.err
+        assert "cmd_up: starting services" not in captured.out
+
+    def test_start_json_cli_stdout_is_pure_json(
+        self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="jsoncli", listeners=_no_listeners)
+
+        def fake_up(namespace) -> int:
+            print("cmd_up: starting services")
+            return 0
+
+        monkeypatch.setattr("dev_harness.cli.cmd_up", fake_up)
+        monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", env["OMI_LOCAL_STATE_ROOT"])
+        monkeypatch.chdir(REPO_ROOT)
+        assert ms.main(["start", lease["session_id"], "--json", "--no-device"]) == 0
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["session_id"] == lease["session_id"]
+        assert payload["status"] == "running"
+        assert "cmd_up: starting services" in captured.err
+
 
 class TestEvidence:
     def test_ready_requires_an_artifact(self, tmp_path: Path, env: dict) -> None:
@@ -299,6 +369,17 @@ class TestEvidence:
         # Round-trips through the strict validator on read-back.
         path = ms.session_dir(REPO_ROOT, lease["session_id"], env) / "evidence.json"
         assert se.read_evidence(path)["session_id"] == lease["session_id"]
+
+    def test_ready_binds_an_ios_app_bundle_directory(self, tmp_path: Path, env: dict) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="iosapp", platform_name="ios-simulator", listeners=_no_listeners)
+        bundle = tmp_path / "Runner.app"
+        bundle.mkdir()
+        (bundle / "Info.plist").write_bytes(b"ios-bundle")
+        document = ms.evidence(REPO_ROOT, lease["session_id"], env, state="ready", artifact_path=bundle)
+        assert document["artifact"]["kind"] == "ios-app-bundle"
+        assert document["artifact"]["sha256"] == se.file_sha256(bundle)
+        path = ms.session_dir(REPO_ROOT, lease["session_id"], env) / "evidence.json"
+        assert se.validate_evidence(se.read_evidence(path)) == []
 
     def test_stale_source_cannot_report_ready(self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch) -> None:
         lease = ms.acquire(REPO_ROOT, env, name="stale", listeners=_no_listeners)
@@ -351,6 +432,21 @@ class TestListAndCLI:
         ms.acquire(REPO_ROOT, env, name="listed", listeners=_no_listeners)
         sessions = ms.list_sessions(REPO_ROOT, env)
         assert [s["session_id"] for s in sessions] == ["oms-listed"]
+
+    def test_acquire_accepts_ios_as_ios_simulator_alias(self, tmp_path: Path, env: dict) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="iosalias", platform_name="ios", listeners=_no_listeners)
+        assert lease["platform"] == "ios-simulator"
+        assert lease["app_id"] == ms.DEFAULT_APP_IDS["ios-simulator"]
+
+    def test_acquire_rejects_unknown_platform_naming_valid_values(self, tmp_path: Path, env: dict) -> None:
+        with pytest.raises(ms.SessionError, match="ios-simulator"):
+            ms.acquire(REPO_ROOT, env, name="badplat", platform_name="iphone", listeners=_no_listeners)
+
+    def test_cli_platform_aliases_round_trip(self) -> None:
+        doctor = ms.build_parser().parse_args(["doctor", "--platform", "ios-simulator"])
+        assert doctor.platform == ["ios"]
+        acquire = ms.build_parser().parse_args(["acquire", "--platform", "ios"])
+        assert acquire.platform == "ios-simulator"
 
     def test_main_doctor_exit_codes_follow_the_report(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class Blocked:
@@ -462,6 +558,69 @@ def test_device_controller_default_runner_missing_binary_is_127(monkeypatch: pyt
     code, out = ms.DeviceController._default_runner(["xcrun", "simctl", "list"])
     assert code == 127
     assert "xcrun" in out
+
+
+def _simctl_list_json(udid: str, state: str | None) -> str:
+    devices: list[dict[str, str]] = [] if state is None else [{"udid": udid, "state": state, "name": "omi-session"}]
+    return json.dumps({"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-26-5": devices}})
+
+
+class ScriptedSimctl:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+        self.shutdown = (0, "")
+        self.delete = (0, "")
+        self.list_payloads: list[str] = []
+
+    def __call__(self, command: list[str] | tuple[str, ...]) -> tuple[int, str]:
+        argv = [str(part) for part in command]
+        self.calls.append(argv)
+        if "shutdown" in argv:
+            return self.shutdown
+        if "delete" in argv:
+            return self.delete
+        if "list" in argv:
+            if self.list_payloads:
+                return 0, self.list_payloads.pop(0)
+            return 0, _simctl_list_json("DEAD-BEEF", None)
+        return 0, ""
+
+
+def test_detach_confirms_shutdown_before_delete() -> None:
+    scripted = ScriptedSimctl()
+    scripted.list_payloads = [_simctl_list_json("DEAD-BEEF", "Shutdown"), _simctl_list_json("DEAD-BEEF", None)]
+    ms.DeviceController(runner=scripted).detach("ios-simulator", "DEAD-BEEF")
+    verbs = [argv[argv.index("simctl") + 1] for argv in scripted.calls if "simctl" in argv]
+    assert verbs[:2] == ["shutdown", "list"]
+    assert "delete" in verbs
+    assert verbs[-1] == "list"
+
+
+def test_detach_does_not_delete_a_simulator_still_booted() -> None:
+    scripted = ScriptedSimctl()
+    scripted.shutdown = (1, "Unable to shutdown device in current state: Booted")
+    scripted.list_payloads = [_simctl_list_json("DEAD-BEEF", "Booted")]
+    with pytest.raises(ms.SessionError, match="not proven dead"):
+        ms.DeviceController(runner=scripted).detach("ios-simulator", "DEAD-BEEF")
+    assert not any("delete" in argv for argv in scripted.calls)
+
+
+def test_boot_failure_does_not_ignore_a_failed_delete() -> None:
+    calls: list[list[str]] = []
+
+    def runner(command):
+        argv = [str(part) for part in command]
+        calls.append(argv)
+        if "create" in argv:
+            return 0, "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\n"
+        if "boot" in argv:
+            return 1, "Unable to boot device"
+        if "delete" in argv:
+            return 1, "delete failed: device busy"
+        return 0, ""
+
+    with pytest.raises(ms.SessionError, match="delete also failed"):
+        ms.DeviceController(runner=runner).attach_ios_simulator("oms-bootfail", "iPhone", "iOS-26-5")
 
 
 def test_device_doctor_cli_accepts_json_after_the_subcommand() -> None:

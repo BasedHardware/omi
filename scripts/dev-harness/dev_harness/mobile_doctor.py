@@ -32,6 +32,12 @@ OPERATOR = "operator-action-needed"
 LANE_BACKEND = "backend"
 LANE_ANDROID = "android"
 LANE_IOS = "ios"
+# Session acquire uses ios-simulator; doctor reports the ios lane. Accept both.
+DOCTOR_PLATFORM_ALIASES = {
+    "android": LANE_ANDROID,
+    "ios": LANE_IOS,
+    "ios-simulator": LANE_IOS,
+}
 
 # mobile-session start + pre-push typecheck. yaml/dotenv alone is the cheap gate.
 BACKEND_RUNTIME_PROBE = "import dotenv, google.auth, pyright, uvicorn, yaml"
@@ -599,6 +605,22 @@ def _check_egress_env(repo_root: Path, env: Mapping[str, str]) -> CheckResult:
     )
 
 
+def normalize_doctor_platform(value: str) -> str:
+    """Map CLI/session platform names onto doctor lanes.
+
+    ``ios-simulator`` is the session-acquire vocabulary; doctor checks the
+    ``ios`` lane. Unknown names raise rather than being silently dropped.
+    """
+
+    mapped = DOCTOR_PLATFORM_ALIASES.get(value)
+    if mapped is None:
+        raise DoctorError(
+            f"platform {value!r} is not one of android, ios "
+            "(ios-simulator is an alias for ios)"
+        )
+    return mapped
+
+
 def run_doctor(
     repo_root: Path,
     env: Mapping[str, str] | None = None,
@@ -610,7 +632,13 @@ def run_doctor(
 ) -> DoctorReport:
     source = dict(os.environ if env is None else env)
     probe = runner or Runner()
-    wanted_lanes = {LANE_BACKEND, *(p for p in platforms if p in (LANE_ANDROID, LANE_IOS))}
+    mapped: list[str] = []
+    for raw in platforms:
+        if raw == LANE_BACKEND:
+            mapped.append(LANE_BACKEND)
+        else:
+            mapped.append(normalize_doctor_platform(raw))
+    wanted_lanes = {LANE_BACKEND, *mapped}
     root = Path(repo_root)
 
     checks: list[CheckResult] = [
