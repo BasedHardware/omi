@@ -24,6 +24,10 @@ cross-platform decision instead of a single-platform drive-by.
 | `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads                                    |
 | `conversation_duration.json`       | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records   |
 
+The [conversation summary contract](conversation-summary.md) and `conversation_summary.json`
+define one primary body across backend, Flutter, macOS, and web, including edited overviews,
+section projections, and unattributed app results.
+
 ## Conformance suites
 
 | Platform                       | Suite                                                                                                                                                                                    | Runs                                                      |

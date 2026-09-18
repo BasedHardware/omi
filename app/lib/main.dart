@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/services/dev_controls/semantic_controls.dart';
 import 'package:marionette_flutter/marionette_flutter.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -49,6 +50,7 @@ import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -254,6 +256,11 @@ void main() {
       // Ensure
       if (kDebugMode) {
         MarionetteBinding.ensureInitialized();
+        // Typed semantic controls for the seeded-journey lane: same debug VM
+        // service transport as Marionette, installed only in eligible
+        // local-dev test builds (inert everywhere else, including
+        // production-flavor debug builds).
+        SemanticControls.instance.installIfEligible();
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }
@@ -370,7 +377,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
             CaptureProvider>(
-          create: (context) => CaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
+          create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
@@ -379,7 +386,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               usageProvider: usage,
             );
             return (previous?..updateExternalActions(externalActions)) ??
-                CaptureProvider(externalActions: externalActions, localSegmentStore: LocalSegmentStore.appSupport());
+                composeProductionCaptureProvider(
+                  externalActions: externalActions,
+                  localSegmentStore: LocalSegmentStore.appSupport(),
+                );
           },
         ),
         ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(

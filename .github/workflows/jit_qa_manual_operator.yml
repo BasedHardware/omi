@@ -36,6 +36,16 @@ on:
         required: false
         default: ''
         type: string
+      repair_attestation_confirmation:
+        description: Optional human assertion ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED; never infer from absent accounting
+        required: false
+        default: ''
+        type: string
+      repair_attestation_reference:
+        description: Content-free reference to independently reviewed claim evidence (required with repair attestation)
+        required: false
+        default: ''
+        type: string
       resume_execution:
         description: Existing first drain execution to resume after a bounded launcher timeout
         required: false
@@ -83,6 +93,9 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           CONFIRMATION: ${{ inputs.confirmation }}
           INVOCATION_ID: ${{ inputs.invocation_id }}
+          REPAIR_ATTESTATION_CONFIRMATION: ${{ inputs.repair_attestation_confirmation }}
+          REPAIR_ATTESTATION_REFERENCE: ${{ inputs.repair_attestation_reference }}
+          RESUME_EXECUTION: ${{ inputs.resume_execution }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -114,6 +127,12 @@ jobs:
           elif [[ -n "$INVOCATION_ID" ]]; then
             echo "ERROR: invocation_id is only valid for sweep-repair." >&2
             exit 1
+          fi
+          if [[ -n "$REPAIR_ATTESTATION_CONFIRMATION" || -n "$REPAIR_ATTESTATION_REFERENCE" ]]; then
+            if [[ "$OPERATION" != sweep-repair || "$REPAIR_ATTESTATION_CONFIRMATION" != ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED || ! "$REPAIR_ATTESTATION_REFERENCE" =~ ^[A-Za-z0-9][A-Za-z0-9._:/#@-]{0,255}$ ]]; then
+              echo "ERROR: repair attestation requires sweep-repair, exact assertion, and a content-free evidence reference." >&2
+              exit 1
+            fi
           fi
           if [[ -n "$RESUME_EXECUTION" && "$OPERATION" != drain-verify ]]; then
             echo "ERROR: resume_execution is only valid for drain-verify." >&2
@@ -475,7 +494,7 @@ jobs:
           MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH: "false"
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED: "true"
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME: gpt-5.6-luna
-          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES: "1"
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES: "3"
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD: "0.05"
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED: "true"
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG: jit-qa-sweep-v1
@@ -525,7 +544,7 @@ jobs:
             --project "$QA_PROJECT" \
             --region "$QA_REGION" \
             --async \
-            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=1,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
+            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=3,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
             --format=json > "$operator_dir/sweep.launch.json"
           execution="$("$QA_PYTHON" - "$operator_dir/sweep.launch.json" <<'PY'
           import json
@@ -606,6 +625,8 @@ jobs:
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
           INVOCATION_ID: ${{ inputs.invocation_id }}
+          REPAIR_ATTESTATION_CONFIRMATION: ${{ inputs.repair_attestation_confirmation }}
+          REPAIR_ATTESTATION_REFERENCE: ${{ inputs.repair_attestation_reference }}
           GOOGLE_CLOUD_PROJECT: ${{ env.QA_PROJECT }}
           GCLOUD_PROJECT: ${{ env.QA_PROJECT }}
           OMI_ENV_STAGE: dev
@@ -622,18 +643,30 @@ jobs:
           mkdir -p "$operator_dir/artifacts"
           PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_repair.py list \
             > "$operator_dir/artifacts/sweep-repair-tombstones.json"
+          attestation_args=()
+          if [[ -n "$REPAIR_ATTESTATION_CONFIRMATION" || -n "$REPAIR_ATTESTATION_REFERENCE" ]]; then
+            attestation_args=(--attestation-confirmation "$REPAIR_ATTESTATION_CONFIRMATION" --attestation-reference "$REPAIR_ATTESTATION_REFERENCE")
+          fi
           PYTHONPATH=backend "$QA_PYTHON" backend/scripts/jit_qa_sweep_repair.py repair \
             --invocation-id "$INVOCATION_ID" \
-            --authority "operator:gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}:source-${SOURCE_SHA:0:12}" \
+            --authority "operator:${GITHUB_ACTOR}:gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}:source-${SOURCE_SHA:0:12}" \
+            "${attestation_args[@]}" \
             | tee "$operator_dir/artifacts/sweep-repair-receipt.json"
-          python3 - "$INVOCATION_ID" "$SOURCE_SHA" <<'PY' > "$operator_dir/artifacts/operator-receipt.json"
+          PYTHONPATH=backend "$QA_PYTHON" - "$INVOCATION_ID" "$SOURCE_SHA" "$operator_dir/artifacts/sweep-repair-receipt.json" <<'PY' > "$operator_dir/artifacts/operator-receipt.json"
           import json
           import sys
+
+          from scripts.jit_qa_sweep_operator import validate_sweep_repair_receipt
+
+          with open(sys.argv[3]) as source:
+              repair = json.load(source)
+          provider_outcome = validate_sweep_repair_receipt(repair, invocation_id=sys.argv[1])
 
           print(json.dumps({
               "schema_version": "omi.jit.qa.manual.operator.v1",
               "status": "PASS",
               "operation": "sweep-repair",
+              "provider_outcome": provider_outcome,
               "source_sha": sys.argv[2],
               "invocation_id": sys.argv[1],
               "project": "based-hardware-dev",

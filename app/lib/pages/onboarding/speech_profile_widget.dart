@@ -1,611 +1,484 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-
-import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/speech_profile.dart';
-import 'package:omi/pages/settings/language_selection_dialog.dart';
-import 'package:omi/pages/speech_profile/speech_progress_bar.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
-import 'package:omi/widgets/dialog.dart';
-import 'package:omi/widgets/device_widget.dart';
-import 'package:omi/widgets/fade_in_words_text.dart';
+import 'guided_voice_controller.dart';
+import 'guided_voice_io.dart';
 
+/// A bounded introduction: user-paced prompts, independent voice enrollment,
+/// and explicit review before any personal statement becomes a memory.
 class SpeechProfileWidget extends StatefulWidget {
+  const SpeechProfileWidget({
+    super.key,
+    required this.goNext,
+    required this.onSkip,
+    this.controller,
+    this.flowSource = 'first_run',
+    this.flowVariant = 'guided_voice_v1',
+  });
   final VoidCallback goNext;
   final VoidCallback onSkip;
-
-  const SpeechProfileWidget({super.key, required this.goNext, required this.onSkip});
+  final GuidedVoiceController? controller;
+  final String flowSource;
+  final String flowVariant;
 
   @override
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
 }
 
-class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
-  SpeechProfileProvider? _speechProvider;
-  // Guards the pre-flight availability check itself, which runs before
-  // provider.isInitialising ever becomes true — without this, a rapid double
-  // tap during that network round-trip could start two concurrent sessions.
-  bool _isCheckingAvailability = false;
-
-  /// How long the finished recording (final words, card, full bar) stays on
-  /// screen after the profile is saved before switching to All done.
-  static const Duration allDoneHold = Duration(milliseconds: 1500);
-  bool _allDoneVisible = false;
-  Timer? _allDoneTimer;
-
-  /// Snapshot of the recording view taken the moment recording ends, so every
-  /// part of it (last words, card, bar, mic disclaimer) holds still and later
-  /// fades out together instead of pieces changing on their own.
-  String? _frozenText;
-  bool? _frozenNoDevice;
-  double? _frozenProgress;
-
-  void _syncAllDone(SpeechProfileProvider provider) {
-    final ended = provider.uploadingProfile || provider.profileCompleted;
-    if (ended && _frozenText == null) {
-      _frozenText = provider.text;
-      _frozenNoDevice = provider.device == null;
-      // Recording ends at the target, so the bar stays full until it fades.
-      _frozenProgress = 1.0;
-    } else if (!ended && _frozenText != null) {
-      _frozenText = null;
-      _frozenNoDevice = null;
-      _frozenProgress = null;
-    }
-    if (provider.profileCompleted) {
-      if (_allDoneVisible || _allDoneTimer != null) return;
-      _allDoneTimer = Timer(allDoneHold, () {
-        _allDoneTimer = null;
-        if (mounted) setState(() => _allDoneVisible = true);
-      });
-    } else if (_allDoneVisible || _allDoneTimer != null) {
-      _allDoneTimer?.cancel();
-      _allDoneTimer = null;
-      _allDoneVisible = false;
-    }
-  }
+class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsBindingObserver {
+  late final GuidedVoiceController flow;
+  bool _stoppingCapture = false;
+  bool _attemptedSave = false;
+  bool _finishing = false;
+  Future<void>? _startTask;
+  Future<void> Function()? _resumeCapture;
+  bool _captureChecked = false;
+  final _scrollController = ScrollController();
+  int _shownPrompt = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-        await LanguageSelectionDialog.show(context);
-      }
-      if (!mounted) return;
-      // Don't wait for Get Started — that extra tap is where Android users
-      // drop between permissions and any speech-profile skip/complete event.
-      await _startOnboardingRecording();
+    flow = widget.controller ??
+        GuidedVoiceController(DeviceGuidedVoiceIO(), flowSource: widget.flowSource, flowVariant: widget.flowVariant);
+    flow.markStarted();
+    WidgetsBinding.instance.addObserver(this);
+    _shownPrompt = flow.promptIndex;
+    flow.addListener(_showCurrentPrompt);
+  }
+
+  void _showCurrentPrompt() {
+    if (_shownPrompt == flow.promptIndex) return;
+    _shownPrompt = flow.promptIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) _scrollController.jumpTo(0);
     });
   }
 
-  Future<void> _startOnboardingRecording() async {
-    if (!mounted) return;
-    final provider = context.read<SpeechProfileProvider>();
-    if (provider.startedRecording || provider.isInitialising || _isCheckingAvailability) return;
-
-    setState(() => _isCheckingAvailability = true);
-    final available = await isSttAvailable();
-    final useLocalStt = !available && await provider.enableLocalStt();
-    if (mounted) setState(() => _isCheckingAvailability = false);
-    if (!available && !useLocalStt) {
-      if (!mounted) return;
-      await showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () {
-            Navigator.pop(context);
-            widget.onSkip();
-          },
-          () => Navigator.pop(context),
-          context.l10n.connectionError,
-          context.l10n.speechToTextUnavailableDesc,
-          okButtonText: context.l10n.ok,
-          cancelButtonText: context.l10n.skipForNow,
-        ),
-        barrierDismissible: false,
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
-    final success = await provider.initialise(
-      usePhoneMic: true,
-      isOnboardingFlow: true,
-      processConversationCallback: () {
-        Provider.of<CaptureProvider>(context, listen: false).forceProcessingCurrentConversation();
-      },
-    );
-    if (!success) return;
-    provider.forceCompletionTimer = Timer(
-      Duration(seconds: provider.maxDuration),
-      () async {
-        provider.finalize();
-      },
-    );
+  @override
+  void didChangeMetrics() {
+    if (mounted) setState(() {});
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // This now reads the shared app-root SpeechProfileProvider (see main.dart)
-    // rather than a fresh instance built just for onboarding, so a stale
-    // question/transcript/completed-profile from an earlier Settings-triggered
-    // recording (e.g. a prior account in the same app session) must be reset
-    // before this step is shown, not just on the Settings page's own entry.
-    if (_speechProvider == null) {
-      _speechProvider = context.read<SpeechProfileProvider>();
-      _speechProvider!.close();
-    }
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) unawaited(flow.pause());
   }
 
   @override
   void dispose() {
-    _speechProvider?.forceCompletionTimer?.cancel();
-    _speechProvider?.forceCompletionTimer = null;
-    _allDoneTimer?.cancel();
-
+    WidgetsBinding.instance.removeObserver(this);
+    flow.removeListener(_showCurrentPrompt);
+    _scrollController.dispose();
+    if (widget.controller == null) flow.dispose();
+    final resume = _resumeCapture;
+    if (resume != null) {
+      unawaited(() async {
+        await _startTask;
+        await resume();
+      }());
+    }
     super.dispose();
   }
 
-  /// The last three lines the user said while recording. The 2 s grace before
-  /// finalizing keeps the final sentence visible before the state changes.
-  List<Widget> _transcript(BuildContext context, String text) {
-    if (text.isEmpty) return const [];
-    return [
-      // The widget keeps only the last three whole lines, so the
-      // area is never clipped: at least three lines tall (so the
-      // card below stays put), growing if rendered lines run taller.
-      ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: MediaQuery.textScalerOf(context).scale(20) * 1.5 * 3,
-        ),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: FadeInWordsText(
-            text: text,
-            visibleLines: 3,
-            style: const TextStyle(
+  String copy(String part) => context.l10n.voiceIntroduction(part);
+
+  Future<void> _start() => _startTask = _startRecording();
+
+  Future<void> _startRecording() async {
+    if (_stoppingCapture || flow.busy || flow.active) return;
+    setState(() => _stoppingCapture = true);
+    try {
+      if (widget.controller == null && !_captureChecked) {
+        _captureChecked = true;
+        final capture = context.read<CaptureProvider>();
+        if (capture.recordingState == RecordingState.deviceRecord) {
+          final device = capture.recordingDevice;
+          _resumeCapture = () async {
+            await capture.streamDeviceRecording(device: device);
+          };
+          await capture.stopStreamDeviceRecording();
+        } else if (capture.recordingState == RecordingState.record ||
+            capture.recordingState == RecordingState.interrupted) {
+          _resumeCapture = () async {
+            await capture.streamRecording();
+          };
+          await capture.stopStreamRecording();
+        }
+      }
+      if (mounted) await flow.start();
+    } finally {
+      if (mounted) setState(() => _stoppingCapture = false);
+    }
+  }
+
+  Future<void> _saveAndFinish() async {
+    if (flow.busy || _finishing) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _attemptedSave = true);
+    await flow.saveAll();
+    if (!mounted) return;
+    if (widget.controller == null && flow.goalSaved) {
+      unawaited(context.read<GoalsProvider>().loadGoals());
+    }
+    if (flow.stage == IntroductionStage.done) {
+      _finishing = true;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(copy('savedAll'))));
+      widget.goNext();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scrollController.hasClients) {
+          unawaited(_scrollController.animateTo(_scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 200), curve: Curves.easeOut));
+        }
+      });
+    }
+  }
+
+  Future<void> _skip() async {
+    flow.markSkipped();
+    await flow.pause();
+    if (mounted) widget.onSkip();
+  }
+
+  Widget _button(String text, VoidCallback? onPressed, String key, {bool secondary = false}) {
+    return SizedBox(
+      width: double.infinity,
+      child: secondary
+          ? OutlinedButton(
+              key: Key(key),
+              onPressed: onPressed,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 52),
+                side: const BorderSide(color: Colors.white38),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              ),
+              child: Text(text, textAlign: TextAlign.center))
+          : FilledButton(
+              key: Key(key),
+              onPressed: onPressed,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                minimumSize: const Size(0, 56),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              ),
+              child: Text(text, textAlign: TextAlign.center)),
+    );
+  }
+
+  Widget _status(String text, {bool loading = false, bool success = false}) => Semantics(
+        liveRegion: true,
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (loading)
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+          else
+            Icon(success ? Icons.check_circle_outline : Icons.mic_none, size: 20, color: Colors.white),
+          const SizedBox(width: 10),
+          Flexible(child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70))),
+        ]),
+      );
+
+  String get _prompt {
+    if (flow.isGoalPrompt) return copy('goalPrompt');
+    if (flow.alternative == 1) return copy('food');
+    if (flow.alternative == 2) return copy('remember');
+    return copy(['name', 'work', 'enjoy'][flow.promptIndex.clamp(0, 2)]);
+  }
+
+  Widget _recording() {
+    final ready = flow.stage == IntroductionStage.ready;
+    final paused = flow.stage == IntroductionStage.paused;
+    final transcribing = flow.stage == IntroductionStage.transcribing;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Text('${flow.promptIndex + 1} / ${GuidedVoiceController.promptCount}',
+            style: const TextStyle(color: Colors.white70, fontSize: 16)),
+        const SizedBox(width: 16),
+        Expanded(
+            child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  key: const Key('introduction_progress'),
+                  value: flow.progress,
+                  minHeight: 6,
+                  color: Colors.white,
+                  backgroundColor: Colors.white24,
+                  semanticsLabel: copy('title'),
+                  semanticsValue: '${(flow.progress * 100).round()}%',
+                ))),
+      ]),
+      const SizedBox(height: 28),
+      Text(copy('hint'), style: const TextStyle(color: Colors.white70, height: 1.5, fontSize: 16)),
+      const SizedBox(height: 20),
+      Text(_prompt,
+          key: const Key('introduction_prompt'),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 30,
+            height: 1.35,
+            fontWeight: FontWeight.w600,
+          )),
+      const SizedBox(height: 12),
+      if (ready && !flow.isGoalPrompt)
+        Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const Key('introduction_another'),
+              onPressed: ready && !flow.isGoalPrompt ? flow.changePrompt : null,
+              style: TextButton.styleFrom(foregroundColor: Colors.white70),
+              child: Text(copy('another')),
+            )),
+      const SizedBox(height: 24),
+      if (flow.active) ...[
+        _status(flow.level > 0.04 ? copy('audio') : context.l10n.listening),
+        const SizedBox(height: 12),
+        Semantics(
+            label: context.l10n.microphone,
+            child: LinearProgressIndicator(
+              key: const Key('introduction_audio_level'),
+              value: flow.level,
+              minHeight: 8,
+              backgroundColor: Colors.white12,
               color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w400,
-              height: 1.5,
-              fontFamily: 'Manrope',
-            ),
+            )),
+        const SizedBox(height: 12),
+        Text(copy('silence'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, height: 1.4)),
+      ] else if (flow.busy || _stoppingCapture)
+        _status(transcribing ? context.l10n.transcribing : context.l10n.loading, loading: true)
+      else if (paused)
+        _status(context.l10n.recordingPaused),
+      const SizedBox(height: 20),
+      ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 58),
+          child: Text(
+            flow.transcript,
+            key: const Key('introduction_transcript'),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white70, fontSize: 17, height: 1.4),
+          )),
+      if (flow.error != null) ...[
+        const SizedBox(height: 12),
+        Text(flow.error == 'microphone' ? context.l10n.microphoneAccessDescription : copy('transcriptionError'),
+            style: const TextStyle(color: Colors.white, height: 1.5)),
+      ],
+    ]);
+  }
+
+  Widget _review() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(copy('review'), style: const TextStyle(fontSize: 27, color: Colors.white, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 12),
+        Text(copy('reviewHint'), style: const TextStyle(color: Colors.white70, height: 1.5, fontSize: 16)),
+        const SizedBox(height: 20),
+        for (var i = 0; i < flow.answers.length; i++) ...[
+          DecoratedBox(
+            decoration:
+                BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(18)),
+            child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Checkbox(
+                      value: flow.answers[i].keep,
+                      activeColor: Colors.white,
+                      checkColor: Colors.black,
+                      onChanged:
+                          flow.busy || flow.answers[i].locked ? null : (value) => flow.setKeep(i, value ?? false)),
+                  Expanded(
+                      child: TextFormField(
+                    key: Key('introduction_memory_${flow.answers[i].id}_${flow.answers[i].editRevision}'),
+                    initialValue: flow.answers[i].text,
+                    minLines: 1,
+                    maxLines: 5,
+                    maxLength: flow.answers[i].isGoal ? 500 : null,
+                    enabled: !flow.busy && !flow.answers[i].locked,
+                    onChanged: (value) => flow.edit(i, value),
+                    style: const TextStyle(color: Colors.white, height: 1.5),
+                    decoration: InputDecoration(
+                        border: InputBorder.none,
+                        counterText: '',
+                        labelText: flow.answers[i].isGoal ? context.l10n.myGoal : context.l10n.memories,
+                        labelStyle: const TextStyle(color: Colors.white70)),
+                  )),
+                  if (flow.answers[i].saved)
+                    const Padding(
+                        padding: EdgeInsets.only(top: 14), child: Icon(Icons.check, color: Colors.white, size: 18)),
+                ])),
           ),
-        ),
-      ),
-      const SizedBox(height: 36),
+          if (flow.answers[i].isGoal &&
+              flow.answers[i].originalText != null &&
+              flow.answers[i].originalText != flow.answers[i].text &&
+              !flow.answers[i].locked)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: Key('introduction_original_${flow.answers[i].id}'),
+                  onPressed: flow.busy ? null : () => flow.useOriginalGoal(i),
+                  child: Text(copy('originalGoal'), style: const TextStyle(color: Colors.white70)),
+                )),
+          const SizedBox(height: 12),
+        ],
+        if (flow.answers.isEmpty) Text(copy('noMemories'), style: const TextStyle(color: Colors.white70, height: 1.5)),
+        const SizedBox(height: 20),
+        if (flow.stage == IntroductionStage.savingMemories) _status(copy('savingAnswers'), loading: true),
+        if (flow.voiceSaved)
+          _status(copy('savedVoice'), success: true)
+        else if (flow.stage == IntroductionStage.savingVoice)
+          _status(copy('savingVoice'), loading: true)
+        else if (flow.voiceError == 'short')
+          Text(copy('short'), style: const TextStyle(color: Colors.white, height: 1.5))
+        else if (flow.voiceError == 'upload')
+          Text(copy('uploadError'), style: const TextStyle(color: Colors.white, height: 1.5)),
+        if (flow.voiceError == 'voiceUnavailable')
+          Text(copy('voiceUnavailable'), style: const TextStyle(color: Colors.white, height: 1.5)),
+        if (flow.error == 'goal' || flow.error == 'goalLong')
+          Text(copy(flow.error == 'goal' ? 'goalError' : 'goalLong'),
+              style: const TextStyle(color: Colors.white, height: 1.5)),
+        if (flow.error == 'memories')
+          Text(copy('memoryError'), style: const TextStyle(color: Colors.white, height: 1.5)),
+      ]);
+
+  List<Widget> _actions() {
+    // Scaffold removes consumed insets from its body MediaQuery. Read the
+    // view to retain keyboard visibility after the body has been resized.
+    final editing = View.of(context).viewInsets.bottom > 0;
+    if (flow.stage == IntroductionStage.done) {
+      return [
+        _button(context.l10n.continueButton, widget.goNext, 'introduction_continue'),
+      ];
+    }
+    if (flow.promptIndex >= GuidedVoiceController.promptCount && flow.answers.isEmpty) {
+      return [_button(context.l10n.continueButton, widget.onSkip, 'introduction_continue')];
+    }
+    if (flow.promptIndex >= GuidedVoiceController.promptCount) {
+      return [
+        _button(
+            flow.busy
+                ? context.l10n.saving
+                : copy(_attemptedSave && flow.error != 'goalLong' ? 'retryRemaining' : 'saveFinish'),
+            flow.busy ? null : () => unawaited(_saveAndFinish()),
+            'introduction_save_all'),
+        if (!_attemptedSave && !editing) ...[
+          const SizedBox(height: 8),
+          Text(copy('saveHint'),
+              textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        ],
+        if (flow.voiceError == 'short' && !editing)
+          TextButton(
+            key: const Key('introduction_add_sample'),
+            onPressed: flow.busy
+                ? null
+                : () {
+                    flow.addSample();
+                    unawaited(_start());
+                  },
+            child: Text(copy('addSample'), style: const TextStyle(color: Colors.white70)),
+          ),
+        if (!editing)
+          TextButton(
+              key: const Key('introduction_leave_review'),
+              onPressed: flow.busy ? null : widget.goNext,
+              child: Text(copy(_attemptedSave ? 'continueSaved' : 'without'),
+                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70))),
+      ];
+    }
+    return [
+      if (flow.busy)
+        _button(flow.stage == IntroductionStage.transcribing ? context.l10n.transcribing : context.l10n.loading, null,
+            'introduction_wait')
+      else if (flow.active || (flow.stage == IntroductionStage.paused && flow.canFinish)) ...[
+        _button(
+            flow.promptIndex == GuidedVoiceController.promptCount - 1 ? copy('reviewAnswers') : context.l10n.nextButton,
+            flow.canFinish && !flow.busy ? () => unawaited(flow.next()) : null,
+            'introduction_next'),
+        const SizedBox(height: 8),
+        _button(
+            flow.active ? context.l10n.pauseRecording : context.l10n.continueRecording,
+            flow.busy
+                ? null
+                : () {
+                    if (flow.active) {
+                      unawaited(flow.pause());
+                    } else {
+                      unawaited(_start());
+                    }
+                  },
+            'introduction_pause',
+            secondary: true),
+      ] else
+        _button(
+            copy('start'), flow.busy || _stoppingCapture ? null : () => unawaited(_start()), 'speech_profile_start'),
+      const SizedBox(height: 8),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Flexible(
+            child: TextButton(
+                key: const Key('introduction_skip_prompt'),
+                onPressed: flow.busy ? null : () => unawaited(flow.skipPrompt()),
+                child: Text(copy('skipPrompt'),
+                    textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)))),
+        Flexible(
+            child: TextButton(
+                key: const Key('speech_profile_skip_intro'),
+                onPressed: () => unawaited(_skip()),
+                child: Text(context.l10n.skipForNow, style: const TextStyle(color: Colors.white70)))),
+      ]),
     ];
   }
 
   @override
-  Widget build(BuildContext context) {
-    Future restartDeviceRecording() async {
-      Logger.debug("restartDeviceRecording $mounted");
-
-      // Restart device recording, clear transcripts
-      if (mounted) {
-        Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
-        final device = Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice;
-        if (device != null) {
-          Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: device);
-        }
-      }
-    }
-
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) async {
-        final speechProvider = context.read<SpeechProfileProvider>();
-        speechProvider.close();
-        restartDeviceRecording();
-      },
-      child: Consumer2<SpeechProfileProvider, CaptureProvider>(
-        builder: (context, provider, _, child) {
-          _syncAllDone(provider);
-          final recordingText = _frozenText ?? provider.text;
-          final showMicDisclaimer = _frozenNoDevice ?? (provider.device == null);
-          final recordingProgress = _frozenProgress ?? provider.recordingProgress;
-          return MessageListener<SpeechProfileProvider>(
-            showInfo: (info) {
-              if (info == 'SKIP_UNAVAILABLE') {
-                AppSnackbar.showSnackbarError(context.l10n.reconnecting);
-              }
-            },
-            showError: (error) {
-              if (error == 'SOCKET_INIT_FAILED') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                      widget.onSkip();
-                    },
-                    () => Navigator.pop(context),
-                    context.l10n.connectionError,
-                    context.l10n.connectionErrorDesc,
-                    okButtonText: context.l10n.ok,
-                    cancelButtonText: context.l10n.skipForNow,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'MULTIPLE_SPEAKERS') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      provider.close();
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.invalidRecordingMultipleSpeakers,
-                    context.l10n.multipleSpeakersDesc,
-                    okButtonText: context.l10n.tryAgain,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'TOO_SHORT') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                      widget.onSkip();
-                    },
-                    () => Navigator.pop(context),
-                    context.l10n.areYouThere,
-                    context.l10n.tooShortDesc,
-                    okButtonText: context.l10n.ok,
-                    cancelButtonText: context.l10n.skipForNow,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'UPLOAD_FAILED') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                      widget.onSkip();
-                    },
-                    () => Navigator.pop(context),
-                    context.l10n.connectionError,
-                    context.l10n.connectionErrorDesc,
-                    okButtonText: context.l10n.ok,
-                    cancelButtonText: context.l10n.skipForNow,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'INVALID_RECORDING') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                      //  Navigator.pop(context);
-                    },
-                    () {},
-                    // TODO: improve this
-                    context.l10n.invalidRecordingMultipleSpeakers,
-                    context.l10n.invalidRecordingDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == "NO_SPEECH") {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.areYouThere,
-                    context.l10n.noSpeechDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      provider.close();
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.connectionLost,
-                    context.l10n.connectionLostDesc,
-                    okButtonText: context.l10n.tryAgain,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'STT_UNAVAILABLE') {
-                // The provider already gave up reconnecting after repeated
-                // 1011 closes with no captured speech, so offer the same
-                // way out as the "Skip for now" link instead of a "Try
-                // again" that would only restart the same failing loop.
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      provider.close();
-                      widget.onSkip();
-                    },
-                    () {},
-                    context.l10n.connectionLost,
-                    context.l10n.connectionLostDesc,
-                    okButtonText: context.l10n.skipForNow,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              }
-            },
-            child: Column(
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          if (provider.startedRecording && !provider.profileCompleted && !provider.uploadingProfile)
-                            // Mic feedback: a plain white glow behind the device graphic
-                            // that grows brighter/larger with mic level, matching the
-                            // Settings speech-profile redo page.
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              width: 180 + provider.micLevel * 40,
-                              height: 180 + provider.micLevel * 40,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.white.withValues(alpha: 0.08 + provider.micLevel * 0.18),
-                                    blurRadius: 32 + provider.micLevel * 24,
-                                    spreadRadius: 2 + provider.micLevel * 10,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          DeviceAnimationWidget(
-                            animatedBackground: true,
-                            deviceType: provider.device?.type,
-                            deviceName: provider.device?.name,
-                            modelNumber: provider.device?.modelNumber,
-                            isConnected: provider.device != null,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-                  ),
-                  child: SafeArea(
-                    top: false,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(height: 32),
-
-                        // Title — hidden once the profile is complete or
-                        // uploading, matching the Settings redo page (which has
-                        // no title in those states, only the All-Done/loading UI).
-                        if (!provider.profileCompleted && !provider.uploadingProfile) ...[
-                          Text(
-                            context.l10n.teachOmiYourVoice,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              height: 1.2,
-                              fontFamily: 'Manrope',
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Content area changes based on state
-                        if (!provider.startedRecording) ...[
-                          // Intro text
-                          Text(
-                            context.l10n.speechProfileEnrollmentPrompt,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              fontSize: 16,
-                              height: 1.5,
-                              fontFamily: 'Manrope',
-                            ),
-                          ),
-
-                          const SizedBox(height: 32),
-
-                          // Get Started button
-                          (provider.isInitialising || _isCheckingAvailability)
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : SizedBox(
-                                  width: double.infinity,
-                                  height: 56,
-                                  child: ElevatedButton(
-                                    key: const Key('speech_profile_start'),
-                                    onPressed: () => _startOnboardingRecording(),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: Colors.black,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                      elevation: 0,
-                                    ),
-                                    child: Text(
-                                      context.l10n.getStarted,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
-                                        fontFamily: 'Manrope',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                          // Only relevant while actually recording with the phone mic —
-                          // matches the Settings speech-profile page's disclaimer.
-                          if (provider.device == null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 16),
-                              child: Text(
-                                context.l10n.noDeviceConnectedUseMic,
-                                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          const SizedBox(height: 16),
-                          TextButton(
-                            key: const Key('speech_profile_skip_intro'),
-                            onPressed: widget.onSkip,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.grey.shade400,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                            ),
-                            child: Text(
-                              context.l10n.skipForNow,
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontFamily: 'Manrope'),
-                            ),
-                          ),
-                        ] else ...[
-                          // The finished recording holds still (see _frozenText) and then
-                          // fades out as one block while All done fades in.
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 450),
-                            switchInCurve: Curves.easeIn,
-                            switchOutCurve: Curves.easeOut,
-                            child: _allDoneVisible
-                                ? Column(
-                                    key: const ValueKey('onboarding-speech-profile-done'),
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // All Done state (after the hold on the finished recording)
-                                      const SizedBox(height: 16),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        height: 56,
-                                        child: ElevatedButton(
-                                          onPressed: () => widget.goNext(),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.white,
-                                            foregroundColor: Colors.black,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                            elevation: 0,
-                                          ),
-                                          child: Text(
-                                            context.l10n.allDone,
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w600,
-                                              fontFamily: 'Manrope',
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : Column(
-                                    key: const ValueKey('onboarding-speech-profile-recording'),
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // Recording state - transcript + instructions + progress
-                                      // Transcript styling matches the Settings speech-profile page
-                                      // exactly (fontSize 20, full-white, taller viewport), hidden
-                                      // entirely until the first words arrive.
-                                      ..._transcript(context, recordingText),
-
-                                      Text(
-                                        context.l10n.speechProfileEnrollmentPrompt,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
-                                      ),
-
-                                      const SizedBox(height: 12),
-
-                                      SpeechProgressBar(progress: recordingProgress),
-
-                                      const SizedBox(height: 12),
-
-                                      if (!provider.uploadingProfile && !provider.profileCompleted)
-                                        TextButton(
-                                          key: const Key('speech_profile_skip_recording'),
-                                          onPressed: () {
-                                            provider.close();
-                                            widget.onSkip();
-                                          },
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: Colors.grey.shade400,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                                          ),
-                                          child: Text(
-                                            context.l10n.skipForNow,
-                                            style: TextStyle(
-                                                color: Colors.grey.shade400, fontSize: 14, fontFamily: 'Manrope'),
-                                          ),
-                                        ),
-
-                                      if (showMicDisclaimer)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 8),
-                                          child: Text(
-                                            context.l10n.noDeviceConnectedUseMic,
-                                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                          ),
-                        ],
+  Widget build(BuildContext context) => AnimatedBuilder(
+      animation: flow,
+      builder: (context, _) {
+        final done = flow.stage == IntroductionStage.done;
+        return PopScope(
+            canPop: !flow.saving,
+            child: ColoredBox(
+                color: Colors.black,
+                child: SafeArea(
+                    child: Column(children: [
+                  Expanded(
+                      child: SingleChildScrollView(
+                    key: const Key('introduction_scroll'),
+                    controller: _scrollController,
+                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Text(copy('title'),
+                          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+                      if (flow.promptIndex == 0 && flow.stage == IntroductionStage.ready) ...[
+                        const SizedBox(height: 12),
+                        Text(copy('intro'), style: const TextStyle(color: Colors.white70, height: 1.5, fontSize: 16)),
                       ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
+                      const SizedBox(height: 28),
+                      if (done) ...[
+                        const Icon(Icons.check_circle_outline, size: 64, color: Colors.white),
+                        const SizedBox(height: 24),
+                        _status(flow.savedMemoryCount > 0 ? copy('savedMemories') : copy('noMemories'), success: true),
+                        if (flow.goalSaved) ...[const SizedBox(height: 16), _status(copy('savedGoal'), success: true)],
+                        if (flow.voiceSaved) ...[
+                          const SizedBox(height: 16),
+                          _status(copy('savedVoice'), success: true)
+                        ],
+                      ] else if (flow.promptIndex >= GuidedVoiceController.promptCount)
+                        _review()
+                      else
+                        _recording(),
+                    ]),
+                  )),
+                  Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _actions(),
+                      )),
+                ]))));
+      });
 }

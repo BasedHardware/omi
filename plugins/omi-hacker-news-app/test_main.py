@@ -1,7 +1,7 @@
-"""Hermetic Hacker News text-cleaning regressions.
+"""Hermetic Hacker News text-cleaning and input-hardening regressions.
 
 Import the production module with framework-only stubs, then exercise its real
-cleaner and discussion handler. No network, credentials, or third-party runtime
+cleaner, formatting, and tool handlers. No network, credentials, or third-party runtime
 packages are required.
 """
 
@@ -74,6 +74,43 @@ class CleanTextTests(unittest.TestCase):
         self.assertEqual(app._clean_text(raw), "Hello & goodbye\n\n`<vector>`\nnext")
 
 
+class SafeLimitTests(unittest.TestCase):
+    def test_default_on_none_or_empty(self):
+        self.assertEqual(app._safe_limit(None), 10)
+        self.assertEqual(app._safe_limit(""), 10)
+
+    def test_rejects_booleans(self):
+        self.assertEqual(app._safe_limit(True), 10)
+        self.assertEqual(app._safe_limit(False), 10)
+
+    def test_clamps_bounds(self):
+        self.assertEqual(app._safe_limit(-5), 1)
+        self.assertEqual(app._safe_limit(0), 1)
+        self.assertEqual(app._safe_limit(5), 5)
+        self.assertEqual(app._safe_limit(50), 20)
+
+    def test_unparseable_strings(self):
+        self.assertEqual(app._safe_limit("invalid"), 10)
+        self.assertEqual(app._safe_limit([1, 2]), 10)
+
+
+class FormatStoryTests(unittest.TestCase):
+    def test_format_story_handles_missing_object_id(self):
+        hit = {
+            "title": "A Great Story",
+            "author": "tester",
+            "points": 42,
+            "num_comments": 15,
+            "objectID": None,
+            "story_id": None,
+            "url": "https://example.com",
+        }
+        formatted = app._format_story(hit, 1)
+        self.assertIn("1. A Great Story", formatted)
+        self.assertIn("by tester | 42 points | 15 comments", formatted)
+        self.assertNotIn("id=None", formatted)
+
+
 class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
     async def test_discussion_preserves_escaped_text_in_post_and_comment(self):
         item = {
@@ -97,6 +134,94 @@ class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Post text:\nUse <vector> here.", response.result)
         self.assertIn("1. bob: if a < b and c > d", response.result)
         provider.assert_awaited_once_with("/items/9995409")
+
+    async def test_discussion_rejects_missing_and_invalid_item_ids(self):
+        cases = [None, "", True, False, -1, 0, "not-a-number"]
+        for bad_id in cases:
+            with self.subTest(bad_id=bad_id):
+                response = await app.get_discussion({"item_id": bad_id})
+                self.assertIsNotNone(response.error)
+
+    async def test_deleted_comments_do_not_inflate_the_count(self):
+        # Algolia returns deleted/dead children with a null text. The handler
+        # sliced children before dropping those, so the header counted
+        # comments it never printed.
+        item = {
+            "title": "Story",
+            "author": "alice",
+            "children": [
+                {"author": "gone", "text": None},
+                {"author": "bob", "text": "<p>real comment</p>"},
+                {"author": "alsogone", "text": "   "},
+            ],
+        }
+        with patch.object(app, "_request_json", AsyncMock(return_value=item)):
+            response = await app.get_discussion({"item_id": 1, "comment_limit": 10})
+
+        self.assertIsNone(response.error)
+        self.assertIn("Top 1 comments:", response.result)
+        self.assertIn("1. bob: real comment", response.result)
+        self.assertNotIn("gone", response.result)
+
+    async def test_comment_limit_counts_printable_comments(self):
+        # A limit of 2 must yield 2 printable comments, not 2 raw children of
+        # which some are dropped.
+        children = [{"author": "gone", "text": None} for _ in range(5)]
+        children += [{"author": f"u{i}", "text": f"comment {i}"} for i in range(3)]
+        item = {"title": "Story", "author": "alice", "children": children}
+        with patch.object(app, "_request_json", AsyncMock(return_value=item)):
+            response = await app.get_discussion({"item_id": 1, "comment_limit": 2})
+
+        self.assertIsNone(response.error)
+        self.assertIn("Top 2 comments:", response.result)
+        self.assertIn("1. u0: comment 0", response.result)
+        self.assertIn("2. u1: comment 1", response.result)
+        self.assertNotIn("u2", response.result)
+
+    async def test_all_deleted_comments_reports_none_rather_than_an_empty_list(self):
+        item = {
+            "title": "Story",
+            "author": "alice",
+            "children": [{"author": "gone", "text": None}, {"author": "x", "text": ""}],
+        }
+        with patch.object(app, "_request_json", AsyncMock(return_value=item)):
+            response = await app.get_discussion({"item_id": 1})
+
+        self.assertIsNone(response.error)
+        self.assertIn("No top-level comments returned.", response.result)
+        self.assertNotIn("comments:", response.result.lower().split("no top-level")[0])
+
+    async def test_null_children_is_not_reported_as_a_bad_item_id(self):
+        # children arrives as an explicit null for items with no replies. The
+        # resulting TypeError was caught by the item_id handler and surfaced
+        # as "item_id must be an integer", which is misleading.
+        for payload in ({"title": "S", "author": "a", "children": None},
+                        {"title": "S", "author": "a"},
+                        {"title": "S", "author": "a", "children": "oops"}):
+            with self.subTest(children=payload.get("children")):
+                with patch.object(app, "_request_json", AsyncMock(return_value=payload)):
+                    response = await app.get_discussion({"item_id": 1})
+                self.assertIsNone(response.error)
+                self.assertIn("No top-level comments returned.", response.result)
+
+    async def test_non_dict_item_payload_does_not_crash(self):
+        for bad in ([], "nope", None, 5):
+            with self.subTest(item=bad):
+                with patch.object(app, "_request_json", AsyncMock(return_value=bad)):
+                    response = await app.get_discussion({"item_id": 1})
+                self.assertIsNotNone(response)
+                self.assertNotIn("must be an integer", response.error or "")
+
+    async def test_handles_non_dict_payload_gracefully(self):
+        with patch.object(app, "_request_json", AsyncMock(return_value={"hits": []})):
+            response = await app.get_front_page(None)
+            self.assertIsNotNone(response)
+
+        response_search = await app.search_stories(None)
+        self.assertEqual(response_search.error, "Missing required field: query")
+
+        response_discussion = await app.get_discussion(None)
+        self.assertEqual(response_discussion.error, "Missing required field: item_id")
 
 
 if __name__ == "__main__":

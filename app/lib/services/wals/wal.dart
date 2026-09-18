@@ -47,8 +47,45 @@ enum SyncMethod { ble }
 ///                  a Retry the user would spend forever
 enum WalSyncDisplayState { syncing, uploaded, synced, waiting, retrying, failed, corrupted, outsideRecoveryWindow }
 
-/// Max automatic sync attempts before a recording is considered [WalSyncDisplayState.failed].
-/// Mirrors the `maxRetries` used by the auto-sync loop in capture_provider.
+/// Worst user-facing sync outcome across a set of WALs, so an aggregate
+/// indicator (the live-capture one) can name the state that matters instead
+/// of always claiming a healthy local save. Ordering: a WAL that can no
+/// longer upload on its own (failed/corrupted/outside the recovery window)
+/// outranks one that is retrying, which outranks one that is uploading;
+/// healthy/quiet states lose to everything.
+WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
+  WalSyncDisplayState? worst;
+  for (final wal in wals) {
+    final state = wal.syncDisplayState;
+    if (worst == null || _syncOutcomeRank(state) > _syncOutcomeRank(worst)) {
+      worst = state;
+    }
+  }
+  return worst;
+}
+
+/// Whether the state is terminal for automatic uploads and a deliberate
+/// retry can still help (the sync pages' "Failed — tap Retry" case, which
+/// resets the auto-retry budget). Corrupted and out-of-window recordings
+/// cannot be retried into success.
+bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
+
+int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
+      WalSyncDisplayState.failed => 4,
+      WalSyncDisplayState.corrupted => 4,
+      WalSyncDisplayState.outsideRecoveryWindow => 4,
+      WalSyncDisplayState.retrying => 3,
+      WalSyncDisplayState.syncing => 2,
+      WalSyncDisplayState.uploaded => 1,
+      WalSyncDisplayState.synced => 1,
+      WalSyncDisplayState.waiting => 1,
+    };
+
+/// Max automatic sync attempts before a recording is considered
+/// [WalSyncDisplayState.failed]. This is the budget itself, not a display
+/// mirror: `isAutoUploadEligible` in local_wal_sync.dart drops a recording that
+/// has spent it from every automatic drain, so the label and the behaviour
+/// cannot drift apart. Only the per-recording manual Retry ignores it.
 const int walMaxAutoRetries = 3;
 
 class WalStats {

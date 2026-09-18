@@ -85,6 +85,9 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            category: rollout
+            value: 'true'
           WAKE_WORD_ADJUDICATION_ENABLED:
             value: 'true'
             category: rollout
@@ -236,6 +239,9 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            category: rollout
+            value: 'true'
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -291,6 +297,10 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: MODULATE_API_KEY
+          SONIOX_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: SONIOX_API_KEY
           GOOGLE_MAPS_API_KEY:
             secret:
               name: dev-omi-backend-secrets
@@ -404,6 +414,12 @@ environments:
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
           value: 'true'
+        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+          category: rollout
+          value: 'true'
+        BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+          category: rollout
+          value: 'true'
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
           category: rollout
@@ -489,6 +505,12 @@ environments:
               category: rollout
               value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
+              category: rollout
+              value: 'true'
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'true'
+            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
               category: rollout
               value: 'true'
             WAKE_WORD_ADJUDICATION_ENABLED:
@@ -722,6 +744,9 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'true'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -791,6 +816,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'true'
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1437,6 +1465,9 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            category: rollout
+            value: 'false'
           WAKE_WORD_ADJUDICATION_ENABLED:
             value: 'true'
             category: rollout
@@ -1618,6 +1649,9 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            category: rollout
+            value: 'false'
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -1675,6 +1709,12 @@ environments:
     desktop_backend:
       env:
         MEMORY_BELIEF_MODEL_ENABLED:
+          category: rollout
+          value: 'false'
+        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+          category: rollout
+          value: 'false'
+        BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
           category: rollout
           value: 'false'
         MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -1767,6 +1807,12 @@ environments:
               category: rollout
               value: 'false'
             CONVERSATION_OCR_CONTEXT_ENABLED:
+              category: rollout
+              value: 'false'
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'false'
+            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
               category: rollout
               value: 'false'
             WAKE_WORD_ADJUDICATION_ENABLED:
@@ -2017,6 +2063,9 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'false'
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'false'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -2088,6 +2137,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'false'
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9

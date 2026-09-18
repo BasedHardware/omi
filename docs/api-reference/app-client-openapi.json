@@ -17740,6 +17740,16 @@
             "title": "Apps",
             "type": "object"
           },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScreenActivityCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total_screenshots": {
             "default": 0,
             "title": "Total Screenshots",
@@ -22546,6 +22556,59 @@
         "title": "ScreenActivityAppSummary",
         "type": "object"
       },
+      "ScreenActivityCoverage": {
+        "properties": {
+          "capture_completeness": {
+            "const": "unknown",
+            "default": "unknown",
+            "title": "Capture Completeness",
+            "type": "string"
+          },
+          "first_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Observed At"
+          },
+          "last_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Observed At"
+          },
+          "row_limit": {
+            "minimum": 1.0,
+            "title": "Row Limit",
+            "type": "integer"
+          },
+          "source": {
+            "const": "synced_screen_activity",
+            "default": "synced_screen_activity",
+            "title": "Source",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "row_limit",
+          "truncated"
+        ],
+        "title": "ScreenActivityCoverage",
+        "type": "object"
+      },
       "ScreenActivityRow": {
         "properties": {
           "appName": {
@@ -22628,6 +22691,16 @@
             },
             "title": "Apps",
             "type": "object"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScreenActivityCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "total_screenshots": {
             "title": "Total Screenshots",

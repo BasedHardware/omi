@@ -1,3 +1,5 @@
+export 'registry/typed_events.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -13,6 +15,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/speech_profile_enroll_events.dart';
@@ -59,12 +62,19 @@ class AnalyticsManager {
         PlatformService.isAnalyticsSupported,
         adapter.init,
       ).timeout(timeout);
+      _registerBuildProvenance(adapter);
       await _loadGlobalEventProperties(timeout: timeout);
       await _loadPersonPropertyCache();
       _analyticsReady = true;
       _retryTimer?.cancel();
       _retryTimer = null;
       _scheduleFlush();
+    } catch (_) {}
+  }
+
+  static void _registerBuildProvenance(AnalyticsAdapter adapter) {
+    try {
+      adapter.registerSuperProperties(BuildProvenance.fromEnvironment().asProperties);
     } catch (_) {}
   }
 
@@ -645,16 +655,7 @@ class AnalyticsManager {
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track(
-      'Device Connected',
-      properties: {
-        ...device.toJson(),
-        'type': device.type.name,
-        'device_vendor': vendor,
-        'hardware_family': hardwareFamily,
-        ..._deviceIdentityProperties(device),
-      },
-    );
+    track('Device Connected', properties: _deviceConnectionEventProperties(device));
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
   }
@@ -662,16 +663,7 @@ class AnalyticsManager {
   void devicePaired(String firstPairedAt) {
     final device = _preferences.btDevice;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track(
-      'Device Paired',
-      properties: {
-        ...device.toJson(),
-        'type': device.type.name,
-        'device_vendor': device.type.analyticsVendor,
-        'hardware_family': hardwareFamily,
-        ..._deviceIdentityProperties(device),
-      },
-    );
+    track('Device Paired', properties: _deviceConnectionEventProperties(device));
     _setUserPropertiesBatch({
       'has_paired_device': true,
       'first_paired_at': firstPairedAt,
@@ -698,6 +690,16 @@ class AnalyticsManager {
   }
 
   static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
+
+  /// Closed Device Connected / Device Paired properties. Persistence fields
+  /// from [BtDevice.toJson] (raw id, name, serial, locator, RSSI) stay off
+  /// the analytics channel; hashed identity is the join key.
+  static Map<String, Object> _deviceConnectionEventProperties(BtDevice device) => {
+        'type': device.type.name,
+        'device_vendor': device.type.analyticsVendor,
+        'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
+        ..._deviceIdentityProperties(device),
+      };
 
   static Map<String, Object> _deviceIdentityProperties(BtDevice device) {
     final serial = device.serialNumber?.trim();
@@ -833,18 +835,21 @@ class AnalyticsManager {
   }
 
   void conversationCreated(ServerConversation conversation, {BtDevice? recordingDevice}) {
-    var properties = getConversationEventProperties(conversation);
-    properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
-    properties['action_items_count'] = conversation.structured.actionItems.length;
-    properties['transcript_language'] = _preferences.userPrimaryLanguage;
-
-    // Additional properties for conversation creation
-    properties['conversation_source'] = conversation.source?.toString().split('.').last ?? 'unknown';
-    properties['duration_seconds'] = conversation.getDurationInSeconds();
-    properties['timestamp'] = conversation.createdAt.toIso8601String();
+    // Named fields only. getConversationEventProperties reads getTranscript()
+    // to derive counts; Memory Created must not pull user content into analytics.
+    final properties = <String, dynamic>{
+      'memory_id': conversation.id,
+      'memory_discarded': conversation.discarded,
+      'memory_hours_since_creation': DateTime.now().difference(conversation.createdAt).inHours,
+      'memory_result': conversation.discarded ? 'discarded' : 'saved',
+      'action_items_count': conversation.structured.actionItems.length,
+      'transcript_language': _preferences.userPrimaryLanguage,
+      'conversation_source': conversation.source?.toString().split('.').last ?? 'unknown',
+      'duration_seconds': conversation.getDurationInSeconds(),
+      'timestamp': conversation.createdAt.toIso8601String(),
+    };
     properties.addAll(recordingDeviceProperties(recordingDevice));
 
-    // Get the summarized app info if available
     if (conversation.appResults.isNotEmpty) {
       var summarizedApp = conversation.appResults.firstOrNull;
       if (summarizedApp != null && summarizedApp.appId != null) {
@@ -903,15 +908,204 @@ class AnalyticsManager {
 
   void speechProfileUploadFailed({String? reason, int? statusCode}) => track(
         speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadFailed),
-        properties: {
-          if (reason != null) 'reason': reason,
-          if (statusCode != null) 'status_code': statusCode,
-        },
+        properties: {if (reason != null) 'reason': reason, if (statusCode != null) 'status_code': statusCode},
       );
 
   void speechProfileEmbeddingStored() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.embeddingStored));
 
   void speechProfileContinued() => track(speechProfileContinuedEventName);
+
+  void guidedIntroStarted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptCount,
+  }) =>
+      track(
+        'Guided Intro Started',
+        properties: {'session_id': sessionId, 'source': source, 'variant': variant, 'prompt_count': promptCount},
+      );
+
+  void guidedIntroPromptViewed({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+  }) =>
+      track(
+        'Guided Intro Prompt Viewed',
+        properties: {'session_id': sessionId, 'source': source, 'variant': variant, 'prompt_index': promptIndex},
+      );
+
+  void guidedIntroRecordingStarted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required int attempt,
+  }) =>
+      track(
+        'Guided Intro Recording Started',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'attempt': attempt,
+        },
+      );
+
+  void guidedIntroRecordingFailed({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required String failureClass,
+  }) =>
+      track(
+        'Guided Intro Recording Failed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'failure_class': failureClass,
+        },
+      );
+
+  void guidedIntroPromptCompleted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required String result,
+    required int durationMs,
+    required bool transcriptPresent,
+  }) =>
+      track(
+        'Guided Intro Prompt Completed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'result': result,
+          'duration_ms': durationMs,
+          'transcript_present': transcriptPresent,
+        },
+      );
+
+  void guidedIntroReviewShown({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int answerCount,
+    required bool goalPresent,
+    required int reviewAttempt,
+  }) =>
+      track(
+        'Guided Intro Review Shown',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'answer_count': answerCount,
+          'goal_present': goalPresent,
+          'review_attempt': reviewAttempt,
+        },
+      );
+
+  void guidedIntroSaveSubmitted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int selectedAnswerCount,
+    required int selectedMemoryCount,
+    required bool goalSelected,
+    required bool voiceAttempted,
+    required int attempt,
+  }) =>
+      track(
+        'Guided Intro Save Submitted',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'selected_answer_count': selectedAnswerCount,
+          'selected_memory_count': selectedMemoryCount,
+          'goal_selected': goalSelected,
+          'voice_attempted': voiceAttempted,
+          'attempt': attempt,
+        },
+      );
+
+  void guidedIntroVoiceEnrollment({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required String result,
+    required int durationMs,
+    required int attempt,
+  }) =>
+      track(
+        'Guided Intro Voice Enrollment',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'result': result,
+          'duration_ms': durationMs,
+          'attempt': attempt,
+        },
+      );
+
+  void guidedIntroContentSave({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int memoryAttempted,
+    required int memorySaved,
+    required int memoryFailed,
+    required String goalResult,
+    required int attempt,
+  }) =>
+      track(
+        'Guided Intro Content Save',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'memory_attempted': memoryAttempted,
+          'memory_saved': memorySaved,
+          'memory_failed': memoryFailed,
+          'goal_result': goalResult,
+          'attempt': attempt,
+        },
+      );
+
+  void guidedIntroCompleted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required String completionMode,
+    required String voiceResult,
+    required int memorySaved,
+    required String goalResult,
+    required int elapsedMs,
+  }) =>
+      track(
+        'Guided Intro Completed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'completion_mode': completionMode,
+          'voice_result': voiceResult,
+          'memory_saved': memorySaved,
+          'goal_result': goalResult,
+          'elapsed_ms': elapsedMs,
+        },
+      );
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
@@ -1832,11 +2026,8 @@ class AnalyticsManager {
     track('Conversation Star Toggled', properties: properties);
   }
 
-  void omiDoubleTap({required String feature, Map<String, dynamic>? additionalProperties}) {
-    track(
-      'Omi Double Tap',
-      properties: {'feature': feature, if (additionalProperties != null) ...additionalProperties},
-    );
+  void omiDoubleTap({required String feature}) {
+    track('Omi Double Tap', properties: {'feature': feature});
   }
 
   // ============================================================================

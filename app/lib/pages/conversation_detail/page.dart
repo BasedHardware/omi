@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -40,6 +41,7 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
+import 'conversation_summary_selection.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
@@ -52,6 +54,14 @@ import 'package:omi/backend/preferences.dart';
 // import 'share.dart';
 // import 'package:omi/pages/settings/developer.dart';
 // import 'package:omi/backend/http/webhooks.dart';
+
+/// Offset of the floating bottom bar from the bottom of the screen.
+///
+/// 32pt is the bar's resting position and already clears the iPhone home
+/// indicator. Android 16 draws a 3-button navigation bar up to 48dp tall over
+/// this edge-to-edge body, which covered the lower part of the bar's buttons,
+/// so the bar never sits lower than the inset the window reports.
+double detailFloatingBarBottom(double bottomSystemInset) => math.max(32, bottomSystemInset);
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -74,10 +84,10 @@ class ConversationDetailPage extends StatefulWidget {
   });
 
   @override
-  State<ConversationDetailPage> createState() => _ConversationDetailPageState();
+  State<ConversationDetailPage> createState() => ConversationDetailPageState();
 }
 
-class _ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
+class ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
@@ -102,6 +112,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
   List<int> _searchResultPositions = []; // Track positions of search results
+  final List<(Timer, Completer<void>)> _ownedDelays = [];
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -133,9 +144,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       }
     } else if (selectedTab == ConversationTab.summary) {
       // Count matches in app summaries
-      final summarizedApp = provider.getSummarizedApp();
-      if (summarizedApp != null && summarizedApp.content.trim().isNotEmpty) {
-        final appContent = summarizedApp.content.trim().decodeString.toLowerCase();
+      final summarySelection = provider.getSummarySelection();
+      if (summarySelection.content.isNotEmpty) {
+        final appContent = summarySelection.content.decodeString.toLowerCase();
         final query = _searchQuery.toLowerCase();
         int index = 0;
         while ((index = appContent.indexOf(query, index)) != -1) {
@@ -255,7 +266,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       // Auto-open share to contacts sheet if requested (from important conversation notification)
       if (widget.openShareToContactsOnLoad && mounted) {
         // Small delay to ensure the page is fully rendered
-        await Future.delayed(const Duration(milliseconds: 500));
+        await _delay(const Duration(milliseconds: 500));
         if (mounted) {
           _showShareToContactsBottomSheet();
         }
@@ -271,12 +282,39 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   void dispose() {
+    _cancelOwnedTimers();
     _controller?.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Test seam for the cancel-completes-waiter contract. Production callers use [_delay].
+  @visibleForTesting
+  Future<void> ownedDelayForTesting(Duration duration) => _delay(duration);
+
+  Future<void> _delay(Duration duration) {
+    if (!mounted) return Future.value();
+    final completer = Completer<void>();
+    late final Timer timer;
+    timer = Timer(duration, () {
+      _ownedDelays.remove((timer, completer));
+      if (!completer.isCompleted) completer.complete();
+    });
+    _ownedDelays.add((timer, completer));
+    return completer.future;
+  }
+
+  void _cancelOwnedTimers() {
+    for (final (timer, completer) in _ownedDelays) {
+      timer.cancel();
+      // Complete normally: `await _delay` sits in audio cleanup's try/finally.
+      // An error would look like a download failure and arm another delay in catch.
+      if (!completer.isCompleted) completer.complete();
+    }
+    _ownedDelays.clear();
   }
 
   /// Show the share to contacts bottom sheet
@@ -373,13 +411,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         _copyContent(context, provider.conversation.getTranscript(generate: true));
         break;
       case 'copy_summary':
-        // Use app-generated summary if available, otherwise fall back to structured summary
         final conversation = provider.conversation;
-        final summaryContent =
-            conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-                ? conversation.appResults[0].content.trim()
-                : conversation.structured.toString();
-        _copyContent(context, summaryContent);
+        _copyContent(context, ConversationSummarySelection.select(conversation).content);
         break;
       case 'download_audio':
         await _downloadAudio(context, provider);
@@ -560,7 +593,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         currentState = AudioDownloadState.success;
         updateSheet?.call(() {});
 
-        await Future.delayed(const Duration(milliseconds: 500));
+        await _delay(const Duration(milliseconds: 500));
 
         if (sheetContext.mounted) {
           Navigator.maybeOf(sheetContext)?.pop();
@@ -585,7 +618,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         currentState = AudioDownloadState.error;
         updateSheet?.call(() {});
 
-        await Future.delayed(const Duration(seconds: 2));
+        await _delay(const Duration(seconds: 2));
 
         if (sheetContext.mounted) {
           Navigator.maybeOf(sheetContext)?.pop();
@@ -618,7 +651,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       currentState = AudioDownloadState.error;
       updateSheet?.call(() {});
 
-      await Future.delayed(const Duration(seconds: 2));
+      await _delay(const Duration(seconds: 2));
 
       if (sheetContext.mounted) {
         Navigator.maybeOf(sheetContext)?.pop();
@@ -683,6 +716,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                 onPressed: () {
                   HapticFeedback.mediumImpact();
                   if (widget.isFromOnboarding) {
@@ -753,6 +787,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
+                            tooltip: provider.conversation.starred
+                                ? context.l10n.unstarConversation
+                                : context.l10n.starConversation,
                             onPressed: _isTogglingStarred
                                 ? null
                                 : () async {
@@ -819,6 +856,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
+                            tooltip: context.l10n.share,
                             onPressed: _isSharing
                                 ? null
                                 : () async {
@@ -851,7 +889,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
                                       );
                                       // Small delay to let share sheet appear, then clear loading
-                                      await Future.delayed(const Duration(milliseconds: 150));
+                                      await _delay(const Duration(milliseconds: 150));
+                                      if (!mounted) return;
                                       setState(() {
                                         _isSharing = false;
                                       });
@@ -887,6 +926,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             ),
                             child: IconButton(
                               padding: EdgeInsets.zero,
+                              tooltip: context.l10n.search,
                               onPressed: () {
                                 setState(() {
                                   _isSearching = !_isSearching;
@@ -972,7 +1012,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 onTap: () => _handleMenuSelection(context, 'delete', provider),
                               ),
                             ],
-                            buttonBuilder: (context, showMenu) => GestureDetector(
+                            buttonBuilder: (context, showMenu) => Semantics(
+                              button: true,
+                              label: context.l10n.moreOptions,
+                              excludeSemantics: true,
                               onTap: () {
                                 HapticFeedback.mediumImpact();
                                 PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
@@ -980,15 +1023,24 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 );
                                 showMenu();
                               },
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.3),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Center(
-                                  child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                              child: GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
+                                    conversationId: provider.conversation.id,
+                                  );
+                                  showMenu();
+                                },
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withValues(alpha: 0.3),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Center(
+                                    child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1005,6 +1057,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           body: Stack(
             children: [
               GestureDetector(
+                excludeFromSemantics: true,
                 behavior: HitTestBehavior.translucent,
                 onTap: () {
                   // Close search if search bar is empty and user taps on content
@@ -1105,7 +1158,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   // slot when the keyboard rose, tearing down the search
                   // TextField subtree and dropping the IME mid-frame.
                   key: const ValueKey('detail_floating_bottom_bar'),
-                  bottom: 32,
+                  bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
                   left: 0,
                   right: 0,
                   child: Consumer<ConversationDetailProvider>(
@@ -1325,6 +1378,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   Widget build(BuildContext context) {
     super.build(context);
     return GestureDetector(
+      excludeFromSemantics: true,
       behavior: HitTestBehavior.translucent,
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -1357,9 +1411,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                           },
                           onEditStarted: (_) => PlatformManager.instance.analytics.editSummaryStarted(),
                           onEditCancelled: (_) => PlatformManager.instance.analytics.editSummaryCancelled(),
-                          onSaveSummary: (appId, newContent) {
+                          onSaveSummarySelection: (selection, newContent) {
                             PlatformManager.instance.analytics.editSummarySaved();
-                            context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
+                            context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                  selection,
+                                  newContent,
+                                );
                           },
                         ),
                   const SliverToBoxAdapter(child: GetGeolocationWidgets()),
@@ -1702,6 +1759,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         }
       },
       child: GestureDetector(
+        excludeFromSemantics: true,
         behavior: HitTestBehavior.translucent,
         onTap: () {
           FocusScope.of(context).unfocus();
@@ -1853,9 +1911,12 @@ class ActionItemDetailWidget extends StatefulWidget {
 class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
   final AppReviewService _appReviewService = AppReviewService();
+  Timer? _pendingClearTimer;
 
   @override
   void dispose() {
+    _pendingClearTimer?.cancel();
+    _pendingClearTimer = null;
     // Clean up any pending state for this item when widget is disposed
     _pendingStates.remove(widget.actionItem.description);
     super.dispose();
@@ -1965,7 +2026,9 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       await conversationProvider.updateGlobalActionItemState(provider.conversation, itemDescription, newValue);
 
       // Wait for 200ms before clearing pending state (allows user to see the change before item moves)
-      Future.delayed(const Duration(milliseconds: 200), () {
+      _pendingClearTimer?.cancel();
+      _pendingClearTimer = Timer(const Duration(milliseconds: 200), () {
+        _pendingClearTimer = null;
         if (mounted) {
           setState(() {
             _pendingStates.remove(itemDescription); // Clear pending state so item moves to correct section
