@@ -739,6 +739,7 @@ def _start_process(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = log_path.open("ab")
     child_env = config.child_env_for(cfg) if env is None else env
+    child_env["OMI_HARNESS_OWNERSHIP_MARKER"] = marker
     python_paths = [cfg.repo_root / "scripts" / "dev-harness"]
     if service == "backend":
         python_paths.append(cfg.repo_root / "backend")

@@ -313,3 +313,22 @@ def test_command_line_for_pid_sees_late_marker_when_columns_is_narrow(monkeypatc
     finally:
         proc.kill()
         proc.wait(timeout=5)
+
+
+def test_command_line_for_pid_sees_ownership_marker_in_process_environment() -> None:
+    marker = "omi-dev-harness:env-only-marker"
+    env = os.environ.copy()
+    env["OMI_HARNESS_OWNERSHIP_MARKER"] = marker
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], env=env)
+    try:
+        deadline = time.time() + 2
+        cmdline = ""
+        while time.time() < deadline:
+            cmdline = safety.command_line_for_pid(proc.pid)
+            if marker in cmdline:
+                break
+            time.sleep(0.05)
+        assert marker in cmdline
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)

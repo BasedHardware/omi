@@ -520,8 +520,11 @@ class SimulatorSmoke:
     def run(self, *, session_id: str | None = None, name: str = "v2smoke") -> dict[str, Any]:
         tree_snapshot = snapshot_flutter_tree_files(self.repo_root)
         started = time.monotonic()
+        passed = False
         try:
-            return self._run(session_id=session_id, name=name)
+            result = self._run(session_id=session_id, name=name)
+            passed = True
+            return result
         except (SmokeBlocked, SessionError):
             raise
         except Exception as exc:
@@ -534,15 +537,24 @@ class SimulatorSmoke:
             self._timings["total_s"] = round(time.monotonic() - started, 1)
             self._stop_child()
             restore_flutter_tree_files(self.repo_root, tree_snapshot)
+            teardown_error: BaseException | None = None
             if self._acquired_id:
                 old_stdout = sys.stdout
                 try:
                     sys.stdout = sys.stderr
                     self._release(self._acquired_id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    teardown_error = exc
                 finally:
                     sys.stdout = old_stdout
+            if passed and teardown_error is not None:
+                raise SmokeBlocked(
+                    f"app checks passed but session teardown failed: {teardown_error}",
+                    remedy=(
+                        "inspect harness logs; an unowned port or unprovable pid must not be reported as a passed smoke"
+                    ),
+                    payload={"classification": mobile_doctor.AGENT_REMEDIABLE},
+                ) from teardown_error
 
     def _run(self, *, session_id: str | None, name: str) -> dict[str, Any]:
         report = self._doctor(platforms=(self.platform,), skip_capacity=False)

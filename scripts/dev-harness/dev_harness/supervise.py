@@ -27,6 +27,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("command is required after --")
     if os.environ.get("OMI_HARNESS_PRIVATE_UMASK") == "077":
         os.umask(0o077)
+    os.environ["OMI_HARNESS_OWNERSHIP_MARKER"] = args.marker
     signal.signal(signal.SIGTERM, _forward)
     signal.signal(signal.SIGINT, _forward)
     # Keep a second, independent marker-bearing process in the owned group.

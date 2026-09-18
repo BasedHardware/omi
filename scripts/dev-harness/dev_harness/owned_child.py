@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import signal
 import subprocess
 
@@ -23,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("command is required after --")
+    os.environ["OMI_HARNESS_OWNERSHIP_MARKER"] = args.marker
     signal.signal(signal.SIGTERM, _forward)
     signal.signal(signal.SIGINT, _forward)
     global _child
