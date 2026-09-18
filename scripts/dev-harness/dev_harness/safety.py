@@ -499,15 +499,21 @@ def command_line_for_pid(pid: int) -> str:
 
     proc_cmdline = Path("/proc") / str(pid) / "cmdline"
     if proc_cmdline.exists():
-        return proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+        cmdline = proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+        environ_path = Path("/proc") / str(pid) / "environ"
+        try:
+            environ = environ_path.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+        except OSError:
+            return cmdline
+        return f"{cmdline} {environ}".strip()
     try:
-        # `-ww` plus a wide COLUMNS so a late `--marker` survives `ps` truncation.
-        # Without this, teardown cannot prove ownership of a live supervisor and
-        # either leaks it or refuses to signal it (Firestore hits this every stop).
+        # `-wwE` keeps a late `--marker` and the ownership env var visible.
+        # `command=` alone drops environment, and a process that execs (npx →
+        # node → java) can lose the original argv while keeping our env.
         env = os.environ.copy()
         env["COLUMNS"] = "2048"
         result = subprocess.run(
-            ["ps", "-ww", "-p", str(pid), "-o", "command="],
+            ["ps", "-wwE", "-p", str(pid), "-o", "command="],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,

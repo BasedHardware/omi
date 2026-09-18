@@ -328,3 +328,12 @@ def test_smoke_restores_flutter_lockfiles_it_dirtied(tmp_path: Path) -> None:
     smoke.restore_flutter_tree_files(tmp_path, snapshot)
     assert pod.read_text(encoding="utf-8") == "PODS:\n"
     assert gradle.read_text(encoding="utf-8") == "android.useAndroidX=true\n"
+
+
+def test_smoke_does_not_pass_when_session_teardown_fails(tmp_path: Path) -> None:
+    def boom(_session_id: str):
+        raise smoke.SessionError("session harness down failed (exit 1); session services may still run")
+
+    engine = _engine(tmp_path, release=boom)
+    with pytest.raises(smoke.SmokeBlocked, match="teardown failed"):
+        engine.run()
