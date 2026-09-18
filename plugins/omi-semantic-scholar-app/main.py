@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 from urllib.parse import quote
 
@@ -18,10 +19,19 @@ from models import (
 API_BASE = "https://api.semanticscholar.org/graph/v1"
 TIMEOUT = 20
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        app.state.client = client
+        yield
+
+
 app = FastAPI(
     title="Semantic Scholar Omi Integration",
     description="No-auth Semantic Scholar chat tools for Omi",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -47,6 +57,115 @@ _NAMESPACE_CANONICAL = {
     "dblp": "DBLP",
     "url": "URL",
 }
+
+_SEMANTIC_SCHOLAR_PAPER_URL_RE = re.compile(
+    r"^(?:https?://)?(?:www\.)?semanticscholar\.org/paper/(?:[^/?#]+/)?([^/?#]+)",
+    re.IGNORECASE,
+)
+
+_SEMANTIC_SCHOLAR_AUTHOR_URL_RE = re.compile(
+    r"^(?:https?://)?(?:www\.)?semanticscholar\.org/author/(?:[^/?#]+/)?([^/?#]+)",
+    re.IGNORECASE,
+)
+
+
+def _strip_quotes_and_brackets(text: str) -> str:
+    cleaned = text.strip()
+    if (cleaned.startswith('"') and cleaned.endswith('"')) or \
+       (cleaned.startswith("'") and cleaned.endswith("'")) or \
+       (cleaned.startswith("<") and cleaned.endswith(">")):
+        cleaned = cleaned[1:-1].strip()
+    return cleaned
+
+
+def normalize_identifier(raw: str) -> str:
+    """Normalize a user/agent supplied identifier to the canonical form.
+
+    Accepts:
+    - Semantic Scholar paper URLs (e.g. https://www.semanticscholar.org/paper/.../<id>)
+    - Raw DOIs (10.xxxx/...)
+    - doi.org and arxiv.org URLs
+    - Namespaced identifiers (doi:, arxiv:, pmid:, corpusid:, ...) in any casing
+    - Bare Semantic Scholar 40-character hex SHA paper IDs
+    Strips wrapping quotes, angle brackets, query parameters, and URL fragments.
+    """
+    if not isinstance(raw, str):
+        return ""
+
+    value = _strip_quotes_and_brackets(raw)
+    if not value:
+        return ""
+
+    # Check for Semantic Scholar paper URL
+    m_s2 = _SEMANTIC_SCHOLAR_PAPER_URL_RE.match(value)
+    if m_s2:
+        extracted = m_s2.group(1).strip()
+        if extracted:
+            if extracted.lower().startswith("corpusid:"):
+                return f"CorpusId:{extracted[9:].strip()}"
+            return extracted
+
+    # Strip query parameters or fragments
+    cleaned_url = re.split(r"[?#]", value)[0].strip()
+    lower = cleaned_url.lower()
+
+    for marker, namespace in _IDENTIFIER_URL_MARKERS:
+        index = lower.find(marker)
+        if index != -1:
+            identifier = cleaned_url[index + len(marker):].strip().rstrip("/")
+            if not identifier:
+                return value
+            if namespace == "ARXIV" and identifier.lower().endswith(".pdf"):
+                identifier = identifier[:-4]
+            return f"{namespace}:{identifier}"
+
+    # Handle namespaced identifier like doi:10.xxx or CorpusId:123
+    namespace, separator, rest = value.partition(":")
+    if separator and rest.strip():
+        ns_key = namespace.strip().lower()
+        if ns_key in _NAMESPACE_CANONICAL:
+            clean_rest = rest.strip()
+            if ns_key == "url":
+                return f"URL:{clean_rest}"
+            clean_rest = re.split(r"[?#]", clean_rest)[0].strip()
+            return f"{_NAMESPACE_CANONICAL[ns_key]}:{clean_rest}"
+
+    # A bare DOI must be prefixed for the Graph API to resolve it.
+    bare_clean = re.split(r"[?#]", value)[0].strip()
+    if _BARE_DOI_RE.match(bare_clean):
+        return f"DOI:{bare_clean}"
+
+    return bare_clean
+
+
+def normalize_author_id(raw: str) -> str:
+    """Normalize a user/agent supplied author identifier.
+
+    Accepts:
+    - Semantic Scholar author URLs (e.g. https://www.semanticscholar.org/author/.../<id>)
+    - Strings with author: prefix
+    - Bare numeric/alphanumeric author IDs
+    """
+    if not isinstance(raw, str):
+        return ""
+
+    value = _strip_quotes_and_brackets(raw)
+    if not value:
+        return ""
+
+    # Check for Semantic Scholar author URL
+    m_author = _SEMANTIC_SCHOLAR_AUTHOR_URL_RE.match(value)
+    if m_author:
+        extracted = m_author.group(1).strip()
+        if extracted:
+            return extracted
+
+    # Check for author: prefix
+    if value.lower().startswith("author:"):
+        value = value[7:].strip()
+
+    # Strip query string or fragments
+    return re.split(r"[?#]", value)[0].strip()
 
 
 def _to_int(value: Any) -> int:
@@ -90,41 +209,15 @@ def format_year(year: Any) -> str:
     return str(value) if value > 0 else "Unknown"
 
 
-def normalize_identifier(raw: str) -> str:
-    """Normalize a user/agent supplied identifier to the <NAMESPACE>:<id> form.
-
-    Accepts raw DOIs (10.xxxx/...), doi.org and arxiv.org URLs, and namespaced
-    identifiers (doi:, arxiv:, pmid:, corpusid:, ...) in any casing. Anything
-    else, e.g. a bare Semantic Scholar paper ID, is returned unchanged.
-    """
-    value = raw.strip()
-    lower = value.lower()
-
-    for marker, namespace in _IDENTIFIER_URL_MARKERS:
-        index = lower.find(marker)
-        if index != -1:
-            identifier = value[index + len(marker):].strip().rstrip("/")
-            if not identifier:
-                return value
-            if namespace == "ARXIV" and identifier.lower().endswith(".pdf"):
-                identifier = identifier[:-4]
-            return f"{namespace}:{identifier}"
-
-    namespace, separator, rest = value.partition(":")
-    if separator and rest.strip() and namespace.lower() in _NAMESPACE_CANONICAL:
-        return f"{_NAMESPACE_CANONICAL[namespace.lower()]}:{rest.strip()}"
-
-    # A bare DOI must be prefixed for the Graph API to resolve it.
-    if _BARE_DOI_RE.match(value):
-        return f"DOI:{value}"
-
-    return value
-
-
 async def api_get(path: str, params: Dict[str, Any]) -> Dict[str, Any]:
     url = f"{API_BASE}{path}"
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    client = getattr(getattr(app, "state", None), "client", None)
+    if client is not None:
         resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()
+    async with httpx.AsyncClient(timeout=TIMEOUT) as fallback:
+        resp = await fallback.get(url, params=params)
         resp.raise_for_status()
         return resp.json()
 
@@ -196,9 +289,10 @@ async def manifest() -> Dict[str, Any]:
 
 @app.post("/tools/search_semantic_scholar_papers", response_model=ChatToolResponse)
 async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
+    limit = req.max_results or 5
     params: Dict[str, Any] = {
-        "query": req.query,
-        "limit": req.max_results,
+        "query": req.query.strip(),
+        "limit": limit,
         "fields": "title,year,authors,citationCount,url,venue",
     }
     if req.min_year:
@@ -235,7 +329,10 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
 @app.post("/tools/get_semantic_scholar_paper", response_model=ChatToolResponse)
 async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
     try:
-        identifier = quote(normalize_identifier(req.paper_id_or_doi), safe=":")
+        norm_id = normalize_identifier(req.paper_id_or_doi)
+        if not norm_id:
+            return ChatToolResponse(error="Paper ID or DOI is required.")
+        identifier = quote(norm_id, safe=":")
         data = await api_get(
             f"/paper/{identifier}",
             {"fields": "title,abstract,year,authors,citationCount,referenceCount,url,venue"},
@@ -276,7 +373,11 @@ async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
 @app.post("/tools/get_semantic_scholar_author_papers", response_model=ChatToolResponse)
 async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
     try:
-        author_id = quote(req.author_id.strip(), safe="")
+        raw_author_id = normalize_author_id(req.author_id)
+        if not raw_author_id:
+            return ChatToolResponse(error="Author ID is required.")
+        author_id = quote(raw_author_id, safe="")
+        limit = req.max_results or 5
         data = await api_get(
             f"/author/{author_id}",
             {
@@ -290,7 +391,7 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
         if not papers:
             return ChatToolResponse(result=f"No papers found for author {author_name}.")
 
-        papers_sorted = sorted(papers, key=_paper_sort_key, reverse=True)[: req.max_results]
+        papers_sorted = sorted(papers, key=_paper_sort_key, reverse=True)[:limit]
 
         lines = [f"Recent papers by {author_name}:"]
         for i, paper in enumerate(papers_sorted, start=1):
