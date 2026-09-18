@@ -1,3 +1,5 @@
+export 'registry/typed_events.dart';
+
 import 'dart:async';
 import 'dart:convert';
 

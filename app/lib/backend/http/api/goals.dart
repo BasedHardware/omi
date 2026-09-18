@@ -297,7 +297,9 @@ Future<Goal?> createIntroductionGoal({
     timeout: const Duration(seconds: 30),
   );
   if (response?.statusCode != 200) return null;
-  return Goal.fromJson(json.decode(response!.body) as Map<String, dynamic>);
+  return Goal.fromGenerated(
+    wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response!.body) as Map<String, dynamic>)),
+  );
 }
 
 /// Update an existing goal
