@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import re
 import pytest
 
 from plugins.subscription.main import router, _sanitize_uid

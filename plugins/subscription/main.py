@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import logging
+import re
 from datetime import datetime
 from urllib.parse import quote
 
@@ -26,7 +27,6 @@ def _sanitize_uid(uid: str) -> str:
     """
     if not uid:
         return ""
-    import re
     cleaned = str(uid).strip()
     if re.fullmatch(r"^[a-zA-Z0-9_-]{1,128}$", cleaned):
         return cleaned
