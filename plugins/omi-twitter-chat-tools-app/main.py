@@ -30,7 +30,7 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
-from twitter_tools_auth import require_twitter_tools_auth
+from twitter_tools_auth import disconnect_sig, require_twitter_tools_auth, verify_disconnect_sig
 
 load_dotenv()
 
@@ -1035,7 +1035,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Who mentioned me on Twitter?"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={uid}&sig={disconnect_sig(uid)}" class="btn btn-secondary btn-block">
                     Disconnect Twitter
                 </a>
 
@@ -1230,8 +1230,9 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
+async def disconnect(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Twitter."""
+    verify_disconnect_sig(uid, sig)
     delete_twitter_tokens(uid)
     return RedirectResponse(url=f"/?uid={uid}")
 

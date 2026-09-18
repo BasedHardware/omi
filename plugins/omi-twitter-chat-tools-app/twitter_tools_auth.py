@@ -40,3 +40,21 @@ def require_twitter_tools_auth(request: Request) -> None:
     token = _presented_token(request)
     if not token or not hmac.compare_digest(token, secret):
         raise HTTPException(status_code=401, detail='unauthorized')
+
+
+def disconnect_sig(uid: str) -> str:
+    """HMAC signature binding a /disconnect link to a uid.
+
+    The settings page renders a browser GET link, so the Bearer/secret
+    guard cannot apply; the server signs the uid and the endpoint
+    verifies it instead.
+    """
+    secret = _configured_secret() or ''
+    return hmac.new(secret.encode(), uid.encode(), 'sha256').hexdigest()[:32]
+
+
+def verify_disconnect_sig(uid: str, sig: str) -> None:
+    if _configured_secret() is None:
+        raise HTTPException(status_code=503, detail='twitter tools auth is not configured')
+    if not sig or not hmac.compare_digest(sig, disconnect_sig(uid)):
+        raise HTTPException(status_code=401, detail='unauthorized')

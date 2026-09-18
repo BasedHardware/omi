@@ -88,5 +88,41 @@ class TestRequireTwitterToolsAuth(unittest.TestCase):
         self.assertIsNone(auth.require_twitter_tools_auth(req))
 
 
+class TestDisconnectSig(unittest.TestCase):
+    """/disconnect is a browser GET link — it deletes a victim's tokens by
+    uid, so the server signs the rendered link and verifies it here."""
+
+    def setUp(self):
+        self._old = os.environ.get('TWITTER_TOOLS_SECRET')
+        os.environ['TWITTER_TOOLS_SECRET'] = SECRET
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop('TWITTER_TOOLS_SECRET', None)
+        else:
+            os.environ['TWITTER_TOOLS_SECRET'] = self._old
+
+    def test_valid_sig_accepted(self):
+        sig = auth.disconnect_sig('user-1')
+        self.assertIsNone(auth.verify_disconnect_sig('user-1', sig))
+
+    def test_wrong_uid_rejected(self):
+        sig = auth.disconnect_sig('user-1')
+        with self.assertRaises(auth.HTTPException) as ctx:
+            auth.verify_disconnect_sig('user-2', sig)
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_missing_sig_rejected(self):
+        with self.assertRaises(auth.HTTPException) as ctx:
+            auth.verify_disconnect_sig('user-1', '')
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_unconfigured_fails_closed(self):
+        os.environ.pop('TWITTER_TOOLS_SECRET', None)
+        with self.assertRaises(auth.HTTPException) as ctx:
+            auth.verify_disconnect_sig('user-1', 'x')
+        self.assertEqual(ctx.exception.status_code, 503)
+
+
 if __name__ == '__main__':
     unittest.main()
