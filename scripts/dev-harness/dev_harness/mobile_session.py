@@ -770,7 +770,7 @@ class DeviceController:
             env=env,
         )
 
-    def detach(self, platform_name: str, device_id: str, device: Mapping[str, Any] | None = None) -> None:
+    def detach(self, platform_name: str, device_id: str, *, device: Mapping[str, Any] | None = None) -> None:
         record = dict(device or {})
         if platform_name == "ios-simulator":
             self._runner(["xcrun", "simctl", "shutdown", device_id])
@@ -1083,7 +1083,7 @@ def stop(
 
     device = lease.get("device")
     if isinstance(device, Mapping) and device.get("udid") and device.get("kind") in {"simulator", "emulator"}:
-        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]), device)
+        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]), device=device)
 
     code = _harness_call(lease, harness_cli.cmd_down)
     if code != 0:
