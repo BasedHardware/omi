@@ -28,7 +28,7 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
-from whoop_tools_auth import require_whoop_tools_auth
+from whoop_tools_auth import disconnect_sig, require_whoop_tools_auth, verify_disconnect_sig
 
 load_dotenv()
 
@@ -1077,7 +1077,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Show my recent workouts"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={uid}&sig={disconnect_sig(uid)}" class="btn btn-secondary btn-block">
                     Disconnect Whoop
                 </a>
 
@@ -1248,8 +1248,9 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
+async def disconnect(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Whoop."""
+    verify_disconnect_sig(uid, sig)
     delete_whoop_tokens(uid)
     return RedirectResponse(url=f"/?uid={uid}")
 
