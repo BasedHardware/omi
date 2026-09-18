@@ -138,7 +138,49 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// only. Adopting the current generation is not a fix.
   final List<Wal> _retiredWals = [];
 
+  /// Durable inventory parked at load: records whose [Wal.ownerUid] names a
+  /// different account. They are excluded from [_wals] (never rendered, never
+  /// uploaded) but included in every persist — the save rewrites the whole
+  /// index from memory, so leaving them out would silently delete the other
+  /// account's recordings from disk.
+  final List<Wal> _foreignWals = [];
+
   bool _isCurrent(int generation) => generation == _sessionGeneration;
+
+  /// The owner stamp for records created in this session: the signed-in uid,
+  /// or a fixed marker when there is none (anonymous/pre-auth capture).
+  String _currentWalOwnerUid() {
+    final uid = SharedPreferencesUtil().uid;
+    return uid.isEmpty ? 'legacy' : uid;
+  }
+
+  /// Load admission for a disk record: it belongs to this session when it
+  /// predates owner stamping (null — pre-upgrade data), was marked shared
+  /// ('legacy'), or was created by the current account.
+  bool _walAdmittedAtLoad(Wal wal) {
+    final owner = wal.ownerUid;
+    return owner == null || owner == 'legacy' || owner == _currentWalOwnerUid();
+  }
+
+  /// Partitions a freshly-loaded disk index into current-session records and
+  /// foreign-owner records. Foreign records are parked in [_foreignWals] so
+  /// every later persist rewrites them back to disk untouched. Both call
+  /// sites load the full disk index, so parking uses replace semantics.
+  void _admitLoadedWals(List<Wal> loaded) {
+    final admitted = <Wal>[];
+    final foreign = <Wal>[];
+    for (final wal in loaded) {
+      if (_walAdmittedAtLoad(wal)) {
+        admitted.add(wal);
+      } else {
+        foreign.add(wal);
+      }
+    }
+    _wals = admitted;
+    _foreignWals
+      ..clear()
+      ..addAll(foreign);
+  }
 
   void _notifyUpdated(int generation) {
     if (!_isCurrent(generation)) return;
@@ -149,6 +191,13 @@ class LocalWalSyncImpl implements LocalWalSync {
   void clearUserData() {
     _sessionGeneration++;
     cancelSync();
+    // Back-fill the owner on retiring records that predate stamping, while the
+    // logout path still has the signing-out uid available (clearUserData runs
+    // before prefs are cleared). Unstamped records otherwise fall through the
+    // load filter as "shared" and would reappear in the next account.
+    for (final wal in _wals) {
+      wal.ownerUid ??= _currentWalOwnerUid();
+    }
     _retiredWals.addAll(_wals);
     _wals = [];
     _frames = [];
@@ -221,6 +270,10 @@ class LocalWalSyncImpl implements LocalWalSync {
   @override
   Future<void> addExternalWal(Wal wal, {required int admittedGeneration}) async {
     if (!_isCurrent(admittedGeneration)) return;
+    // Cover all four external callers: any record admitted into this session
+    // is owned by the signed-in account. Stamp only when unstamped so a
+    // record surfaced by native recovery keeps its original owner.
+    wal.ownerUid ??= _currentWalOwnerUid();
     // Native-storage recovery can surface old WALs while a new recording is
     // active. Only inherit the current session's location for WALs that began
     // at (or after) this session, never for historical recordings.
@@ -269,7 +322,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       if (!_walReady.isCompleted) _walReady.complete();
       return;
     }
-    _wals = loaded;
+    _admitLoadedWals(loaded);
     Logger.debug("wal service start: ${_wals.length}");
 
     final missingCount = _wals.where((w) => w.status == WalStatus.miss).length;
@@ -288,7 +341,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
     if (migratedCount > 0) {
       // Reload WALs after migration
-      _wals = _loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals();
+      _admitLoadedWals(_loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals());
       if (!_isCurrent(generation)) {
         if (!_walReady.isCompleted) _walReady.complete();
         return;
@@ -414,6 +467,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           seconds: chunkFrameCount ~/ _framesPerSecond,
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
+          ownerUid: _currentWalOwnerUid(),
           geolocation: _copyGeolocation(_sessionGeolocation),
         );
         _wals.add(wal);
@@ -486,7 +540,11 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   Future<void> _saveWalsToFile(int generation) async {
     if (!_isCurrent(generation)) return;
-    final snapshot = [..._retiredWals, ..._wals];
+    // The save rewrites the whole index from memory, so every durable bucket
+    // must be included: retired (logged-out) and foreign-owner (parked at
+    // load) records alike — omitting either would silently delete those
+    // recordings from disk on the next save.
+    final snapshot = [..._retiredWals, ..._foreignWals, ..._wals];
     Logger.debug('Saving WALs to file');
     if (_persistWalsOverride != null) {
       await _persistWalsOverride!(snapshot);
@@ -611,6 +669,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             seconds: chunkFrameCount ~/ _framesPerSecond,
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
+            ownerUid: _currentWalOwnerUid(),
             geolocation: _copyGeolocation(_sessionGeolocation),
           ),
         );
