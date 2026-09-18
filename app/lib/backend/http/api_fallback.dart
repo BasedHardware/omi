@@ -1,7 +1,5 @@
 /// Mobile emitter for the shared fallback contract. Never accept payloads,
 /// URLs, record ids, exception messages, or arbitrary labels.
-library;
-
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 enum ApiFallbackReason { partialDecode, staleData }

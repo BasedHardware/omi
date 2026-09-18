@@ -4,6 +4,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as api;
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_presentation.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/services/action_item_export_service.dart';
@@ -31,13 +34,17 @@ class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
     ActionItemsFetcher? getActionItems,
     DeleteActionItemRequest? deleteActionItemRequest,
+    api.ActionItemsApi? actionItemsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
-        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
+        _actionItemsApi = actionItemsApi {
     unawaited(_preload());
   }
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
+  final api.ActionItemsApi? _actionItemsApi;
+  ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
   Future<void>? _homeTodayLoad;
@@ -85,6 +92,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
   // Getters
   List<ActionItemWithMetadata> get actionItems => _actionItems;
+  ApiViewState<List<ActionItemWithMetadata>> get apiViewState => _listViewState;
+
+  @visibleForTesting
+  bool get usesTypedActionItemsApi => _actionItemsApi != null;
   bool get isLoading => _isLoading;
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
@@ -110,10 +121,7 @@ class ActionItemsProvider extends ChangeNotifier {
     return byId.values.take(limit).toList();
   }
 
-  static List<ActionItemWithMetadata> filterTodayTasks(
-    List<ActionItemWithMetadata> items, {
-    required DateTime now,
-  }) {
+  static List<ActionItemWithMetadata> filterTodayTasks(List<ActionItemWithMetadata> items, {required DateTime now}) {
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     return items.where((item) {
@@ -229,7 +237,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 100,
         offset: 0,
         completed: false,
@@ -281,6 +289,49 @@ class ActionItemsProvider extends ChangeNotifier {
   static bool shouldAutoRevealCompleted(List<ActionItemWithMetadata> items) =>
       items.isNotEmpty && items.every((item) => item.completed);
 
+  /// Shared list fetch. A typed outage returns null so Home today and
+  /// load-more keep existing rows instead of looking like an empty account.
+  Future<ActionItemsResponse?> _fetchActionItemsPage({
+    required int limit,
+    required int offset,
+    bool? completed,
+    String? conversationId,
+    DateTime? startDate,
+    DateTime? endDate,
+    DateTime? dueStartDate,
+    DateTime? dueEndDate,
+    void Function(ApiResult<ActionItemsResponse> typed)? onTyped,
+  }) async {
+    final typedApi = _actionItemsApi;
+    if (typedApi != null) {
+      final typed = await typedApi.list(
+        limit: limit,
+        offset: offset,
+        completed: completed,
+        conversationId: conversationId,
+        startDate: startDate,
+        endDate: endDate,
+        dueStartDate: dueStartDate,
+        dueEndDate: dueEndDate,
+      );
+      onTyped?.call(typed);
+      return switch (typed) {
+        ApiSuccess(:final data) => data,
+        ApiFailure() => null,
+      };
+    }
+    return _getActionItems(
+      limit: limit,
+      offset: offset,
+      completed: completed,
+      conversationId: conversationId,
+      startDate: startDate,
+      endDate: endDate,
+      dueStartDate: dueStartDate,
+      dueEndDate: dueEndDate,
+    );
+  }
+
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     var loaded = false;
     if (showShimmer) {
@@ -290,38 +341,17 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 100,
         offset: 0,
         completed: _includeCompleted ? null : false,
         startDate: _startDate,
         endDate: _endDate,
+        onTyped: _projectTypedList,
       );
-
       if (response != null) {
-        // Snapshot server IDs before filtering so tombstone retirement is
-        // based on the full server response, not the filtered subset.
-        final serverIds = response.actionItems.map((e) => e.id).toSet();
-        // Filter into a new list rather than mutating response.actionItems
-        // in-place: the response list may be unmodifiable, and aliasing it
-        // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
-        // and retire tombstones prematurely.
-        _actionItems = _pendingDeletionIds.isEmpty
-            ? List.of(response.actionItems)
-            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
-        // Lazily retire tombstones once the server confirms the item is gone:
-        // any ID still tracked as pending-deletion that did not appear in the
-        // fresh server response can be cleared, because subsequent refreshes
-        // will no longer see it.
-        if (_pendingDeletionIds.isNotEmpty) {
-          _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
-        }
-        _hasMore = response.hasMore;
+        _applyFetchedActionItems(response);
         loaded = true;
-
-        if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
-          _showCompletedView = true;
-        }
       }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
@@ -337,13 +367,50 @@ class ActionItemsProvider extends ChangeNotifier {
     return loaded;
   }
 
+  void _projectTypedList(ApiResult<ActionItemsResponse> result) {
+    _listViewState = presentApiResult(
+      switch (result) {
+        ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(data.actionItems, rejectedRows: rejectedRows),
+        ApiFailure(:final problem) => ApiFailure<List<ActionItemWithMetadata>>(problem),
+      },
+      previous: _actionItems.isNotEmpty ? _actionItems : null,
+      isEmpty: (rows) => rows.isEmpty,
+      fallback: recordFallback,
+    );
+  }
+
+  void _applyFetchedActionItems(ActionItemsResponse response) {
+    // Snapshot server IDs before filtering so tombstone retirement is
+    // based on the full server response, not the filtered subset.
+    final serverIds = response.actionItems.map((e) => e.id).toSet();
+    // Filter into a new list rather than mutating response.actionItems
+    // in-place: the response list may be unmodifiable, and aliasing it
+    // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
+    // and retire tombstones prematurely.
+    _actionItems = _pendingDeletionIds.isEmpty
+        ? List.of(response.actionItems)
+        : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+    // Lazily retire tombstones once the server confirms the item is gone:
+    // any ID still tracked as pending-deletion that did not appear in the
+    // fresh server response can be cleared, because subsequent refreshes
+    // will no longer see it.
+    if (_pendingDeletionIds.isNotEmpty) {
+      _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
+    }
+    _hasMore = response.hasMore;
+
+    if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
+      _showCompletedView = true;
+    }
+  }
+
   Future<void> loadMoreActionItems() async {
     if (_isFetching || !_hasMore) return;
 
     setFetching(true);
 
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 50,
         offset: _actionItems.length,
         completed: _includeCompleted ? null : false,

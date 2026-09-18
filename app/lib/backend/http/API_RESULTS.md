@@ -43,6 +43,12 @@ WAL stall-as-complete, 200-with-zero-byte exports, or generated wire DTO drift.
 
 First endpoint family: conversation list/detail plus initial load,
 forceRefreshConversations, detail lifecycle and ConversationsPage empty hero.
+Second family: action-items list plus fetchActionItems, forceRefreshActionItems
+and ActionItemsPage empty-tasks hero. composeTypedActionItemsProvider returns
+the REAL provider using ActionItemsApi. Expose apiViewState; ActionItemsApiStatus
+precedes empty/loading branches with localized accessible copy and retry only when
+permitted. Error is a Semantics liveRegion. Keys: omi.action_items.error/.locked/
+.terminal/.auth/.empty. A failed first load never shows the no-tasks hero.
 composeTypedConversationProvider returns the REAL provider using ConversationApi.
 Expose apiViewState; ConversationApiStatus precedes empty/loading branches with
 localized accessible copy and retry only when permitted. Error is a Semantics

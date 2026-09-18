@@ -60,5 +60,6 @@
   "app/test/spine/b1_surface_contract.dart": "B1",
   "app/test/spine/b1_tasks_surface_test.dart": "B1",
   "app/test/spine/b1_template_mechanism_test.dart": "B1",
-  "app/test/spine/b1_wire_test.dart": "B1"
+  "app/test/spine/b1_wire_test.dart": "B1",
+  "app/test/spine/c3_action_items_test.dart": "C3"
 }
