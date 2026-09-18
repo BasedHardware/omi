@@ -19,16 +19,15 @@ abstract interface class CaptureBleListeners {
   void removeBatchRecordingFinalizedListener(void Function(String) callback);
 }
 
-typedef CaptureSocketOpen =
-    Future<TranscriptSegmentSocketService?> Function({
-      required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      required bool force,
-      String? source,
-      String? clientConversationId,
-      CustomSttConfig? customSttConfig,
-    });
+typedef CaptureSocketOpen = Future<TranscriptSegmentSocketService?> Function({
+  required BleAudioCodec codec,
+  required int sampleRate,
+  required String language,
+  required bool force,
+  String? source,
+  String? clientConversationId,
+  CustomSttConfig? customSttConfig,
+});
 
 /// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
 /// All fields required; supplying some fakes can never select production defaults.
@@ -79,7 +78,6 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) =>
 
 /// Composition entry signature for main.dart. Builder must resolve defaults
 /// ONLY here, after refusing FLUTTER_TEST; no static/eager default evaluation.
-CaptureProvider composeProductionCaptureProvider({
-  LocalSegmentStore? localSegmentStore,
-  CaptureExternalActions? externalActions,
-}) => throw UnimplementedError('C1 production composition root');
+CaptureProvider composeProductionCaptureProvider(
+        {LocalSegmentStore? localSegmentStore, CaptureExternalActions? externalActions}) =>
+    throw UnimplementedError('C1 production composition root');

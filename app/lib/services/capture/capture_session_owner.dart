@@ -37,7 +37,8 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
     required String configuration,
     required Future<T> Function() open,
     required Future<void> Function(T) close,
-  }) => throw UnimplementedError('C1 single socket attempt');
+  }) =>
+      throw UnimplementedError('C1 single socket attempt');
 
   Future<void> setForegroundRequired(bool required) => throw UnimplementedError('C1 ordered FGS intent');
   bool get foregroundRunning => throw UnimplementedError('C1 settled FGS state');

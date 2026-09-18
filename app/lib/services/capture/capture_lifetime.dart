@@ -17,13 +17,9 @@ class CaptureLifetime implements CaptureScheduling {
   @override
   Timer periodic(Duration interval, void Function(Timer) callback) => throw UnimplementedError('C1 owned timer');
   int get debugTrackedCount => throw UnimplementedError('C1 active registration inventory');
-  StreamSubscription<T> listen<T>(
-    Stream<T> stream,
-    void Function(T) onData, {
-    Function? onError,
-    void Function()? onDone,
-    bool? cancelOnError,
-  }) => throw UnimplementedError('C1 owned subscription');
+  StreamSubscription<T> listen<T>(Stream<T> stream, void Function(T) onData,
+          {Function? onError, void Function()? onDone, bool? cancelOnError}) =>
+      throw UnimplementedError('C1 owned subscription');
   CaptureOwned own(FutureOr<void> Function() cancel) => throw UnimplementedError('C1 owned listener removal');
   Future<void> close() => throw UnimplementedError('C1 idempotent disposal');
 }
