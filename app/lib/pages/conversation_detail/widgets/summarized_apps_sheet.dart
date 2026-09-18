@@ -415,9 +415,8 @@ class _AppsListState extends State<_AppsList> {
       PlatformManager.instance.analytics.summarizedAppSelected(
         conversationId: conversationId,
         selectedAppId: app.id,
-        previousAppId: conversationProvider.getSummarySelection().isApp
-            ? conversationProvider.getSummarySelection().appId
-            : null,
+        previousAppId:
+            conversationProvider.getSummarySelection().isApp ? conversationProvider.getSummarySelection().appId : null,
       );
 
       // Track the last used app
@@ -660,8 +659,7 @@ class _AppListItemState extends State<_AppListItem> {
 
   Widget _buildTrailingWidget() {
     // Check if this app is currently being processed
-    final isProcessing =
-        widget.provider != null &&
+    final isProcessing = widget.provider != null &&
         widget.provider!.loadingReprocessConversation &&
         widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
 
