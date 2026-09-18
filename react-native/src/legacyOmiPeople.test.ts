@@ -390,6 +390,66 @@ test('old people names name Flutter Person.fromGenerated type-wrong GET speech_s
   }
 });
 
+test('old people names name Flutter Person.fromJson type-wrong GET color_idx instead of remapping to a person chip', () => {
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          color_idx: 1,
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {id: 'person-alex', name: 'Alex Chen'},
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  expect(
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {
+          id: 'person-alex',
+          name: 'Alex Chen',
+          color_idx: null,
+        },
+        {id: 'person-kept', name: 'Neighbor'},
+      ]),
+    ),
+  ).toEqual(
+    new Map([
+      ['person-alex', 'Alex Chen'],
+      ['person-kept', 'Neighbor'],
+    ]),
+  );
+  for (const extra of ['', '3', 'abc', 1.5, true, [], {}]) {
+    expect(() =>
+      parseOmiPeopleNames(
+        JSON.stringify([
+          {id: 'person-alex', name: 'Alex Chen', color_idx: extra},
+          {id: 'person-kept', name: 'Neighbor'},
+        ]),
+      ),
+    ).toThrow('Omi people are malformed');
+  }
+});
+
 test('loadOmiPeopleNames names resolved GET people and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'people',
@@ -458,6 +518,24 @@ test('old people names name Flutter Person.fromGenerated type-wrong GET speech_s
         id: 'person-alex',
         name: 'Alex Chen',
         speech_samples: [1],
+      },
+    ]),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiPeopleNames(backend)).rejects.toThrow(
+    'Omi people are malformed',
+  );
+});
+
+test('old people names name Flutter Person.fromJson type-wrong GET color_idx instead of omitting People', async () => {
+  const request = jest.fn(async () => ({
+    id: 'people',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'person-alex',
+        name: 'Alex Chen',
+        color_idx: true,
       },
     ]),
   }));

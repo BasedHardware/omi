@@ -60,6 +60,16 @@ function presentDefaultInt(value: unknown): void {
   throw new PeopleError();
 }
 
+function presentNullableInt(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    return;
+  }
+  throw new PeopleError();
+}
+
 function presentUnusedStringListItems(value: unknown): void {
   if (value === undefined || value === null) {
     return;
@@ -87,6 +97,7 @@ export function parseOmiPeopleNames(body: string): Map<string, string> {
     presentNullableDate(person.created_at);
     presentNullableDate(person.updated_at);
     presentDefaultInt(person.speech_samples_version);
+    presentNullableInt(person.color_idx);
     presentUnusedStringListItems(person.speech_samples);
     presentUnusedStringListItems(person.speech_sample_transcripts);
     names.set(id, name);
