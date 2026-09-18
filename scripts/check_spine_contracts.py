@@ -154,6 +154,15 @@ def grandfathered_oracle(root: Path, path: str, current: str, policy: dict) -> b
     return False
 
 
+def pinned_retired_rendering(root: Path, path: str, current: str) -> bool:
+    # Record immutability and whole-proposal scope are checked independently.
+    # A newly supplied pin still triggers scope through its changed record path.
+    if any(MARKER.fullmatch(line) for line in current.splitlines()):
+        return False
+    return any(record.get("path") == path and record.get("retired_sha256") == digest(current)
+               for record in (json.loads(file.read_text()) for file in (root / REVISIONS).glob("*.json")))
+
+
 def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
     """A revision is an oracle-only PR, including unstaged/untracked edits.
 
@@ -189,19 +198,13 @@ def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
             file = root / path
             if not file.is_file():
                 needs_revision = True
-            elif not allowed(old, file.read_text()) and not grandfathered_oracle(root, path, file.read_text(), policy):
+            elif (not allowed(old, file.read_text()) and not grandfathered_oracle(root, path, file.read_text(), policy)
+                  and not pinned_retired_rendering(root, path, file.read_text())):
                 needs_revision = True
     if not needs_revision:
         return []
-    permitted = set(policy.get("oracle_paths", [])) | {"scripts/check_spine_contracts.py", "scripts/dev-harness/tests/test_spine_mechanism.py"}
-    rejected = []
-    for path in sorted(changed):
-        if path.startswith(ROOTS + ("contracts/spine/", "app/test/support/spine/")) or path in permitted or path in shared_runners:
-            continue
-        file = root / path
-        if file.is_file() and hashlib.sha256(file.read_bytes()).hexdigest() in policy.get("scaffolding", {}).get(path, []):
-            continue
-        rejected.append(path)
+    rejected = outside_oracle_scope(changed, policy, shared_runners,
+                                    lambda path: (root / path).read_text() if (root / path).is_file() else None)
     if not rejected:
         return []
     return ["Spine revision mixed with implementation/non-oracle paths: " + ", ".join(rejected)
@@ -209,15 +212,71 @@ def revision_scope(root: Path, base: str, registry: dict) -> list[str]:
             "Land the oracle-only revision separately, then base the implementation on it. Separate commits in one PR do not satisfy this rule."]
 
 
+def outside_oracle_scope(paths, policy, shared_runners, read):
+    permitted = set(policy.get("oracle_paths", [])) | {"scripts/check_spine_contracts.py", "scripts/dev-harness/tests/test_spine_mechanism.py"}
+    rejected = []
+    for path in sorted(paths):
+        if path.startswith(ROOTS + ("contracts/spine/", "app/test/support/spine/")) or path in permitted or path in shared_runners:
+            continue
+        source = read(path)
+        if source is not None and digest(source) in policy.get("scaffolding", {}).get(path, []):
+            continue
+        rejected.append(path)
+    return rejected
+
+
+def authorized_revision_paths(root: Path, base_ref: str, registry: dict, present: set[str]) -> set[str]:
+    """Accepted target content plus scope-eligible proposals, not every addition.
+
+    Eligibility is the WHOLE proposal relative to its target, not one commit:
+    splitting a self-authorization into two commits cannot make it append-only.
+    A target that already accepted a rejected record's absence is authoritative.
+    Review identity still belongs to the coordinator, not Git.
+    """
+    accepted = set(git("ls-tree", "-r", "--name-only", base_ref, "--", REVISIONS, root=root).splitlines())
+    policy = json.loads((root / SCOPE).read_text()) if (root / SCOPE).is_file() else {}
+    runners, _ = runner_contracts(root, registry)
+    paths = set(git("log", "--full-history", "--diff-filter=A", "--name-only", "--format=", "HEAD", "--", REVISIONS, root=root).splitlines()) - {""}
+    for path in paths - accepted - present:
+        for commit in introductions(root, path):
+            base = git("merge-base", commit, base_ref, root=root).strip()
+            if base == commit:
+                continue  # accepted target content already resolves this proposal
+            def read(name):
+                try:
+                    return git("show", f"{commit}:{name}", root=root)
+                except subprocess.CalledProcessError:
+                    return None
+            raw = read(path)
+            try:
+                record = json.loads(raw)
+            except (ValueError, TypeError):
+                continue  # malformed rejected proposals acquire no authority
+            if not isinstance(record, dict) or not all(isinstance(value, str) for value in record.values()):
+                continue
+            if (set(record) - {"retired_sha256"} != {"path", "owner", "before", "after", "reason"}
+                    or registry.get(record["path"]) != record["owner"]
+                    or not record["reason"].strip()
+                    or read(record["path"]) is None
+                    or digest(read(record["path"])) != record["after"]):
+                continue
+            grandfathered = digest(raw) in policy.get("grandfathered_revisions", {}).get(path, [])
+            changed = git("diff", "--name-only", base, commit, "--", root=root).splitlines()
+            if grandfathered or not outside_oracle_scope(changed, policy, runners, read):
+                accepted.add(path)
+                break
+    return accepted
+
+
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def revisions(root: Path, registry: dict) -> dict:
+def revisions(root: Path, registry: dict, base_ref: str) -> dict:
     """Reviewed, append-only exact replacements; never a builder rebaseline flag."""
     directory = root / REVISIONS
-    existing = set(git("log", "--full-history", "--diff-filter=A", "--name-only", "--format=", "HEAD", "--", REVISIONS, root=root).splitlines()) - {""}
     present = {str(p.relative_to(root)) for p in directory.glob("*.json")}
+    existing = authorized_revision_paths(root, base_ref, registry, present)
     if existing - present:
         raise ValueError("Spine revision records cannot be removed")
     result = {}
@@ -226,8 +285,10 @@ def revisions(root: Path, registry: dict) -> dict:
         commits = introductions(root, path)
         pinned_text(root, path, raw)
         record = json.loads(raw)
-        if set(record) != {"path", "owner", "before", "after", "reason"} or not record["reason"].strip():
+        if set(record) - {"retired_sha256"} != {"path", "owner", "before", "after", "reason"} or not record["reason"].strip():
             raise ValueError(f"{path}: invalid spine revision record")
+        if "retired_sha256" in record and not re.fullmatch(r"[0-9a-f]{64}", record["retired_sha256"]):
+            raise ValueError(f"{path}: invalid exact retired-content digest")
         target = record["path"]
         if registry.get(target) != record["owner"]:
             raise ValueError(f"{path}: revision owner differs from registry")
@@ -323,7 +384,7 @@ def _check(root: Path, base_ref: str) -> list[str]:
                   if p.is_file() and p.suffix in (".py", ".dart", ".json") and "__pycache__" not in p.parts}
     for path in discovered - registry.keys():
         errors.append(f"{path}: unregistered spine file")
-    amendments = revisions(root, registry)
+    amendments = revisions(root, registry, base_ref)
     count = 0
     for path, owner in registry.items():
         file = root / path
@@ -345,9 +406,12 @@ def _check(root: Path, base_ref: str) -> list[str]:
                 initial = max(introduced, key=lambda text: (len(text), text))
             anchors = [initial] + [text for _, text in records if text]
             original = revised_original(initial, records)
-            if any(not any(allowed(anchor, text) for anchor in anchors) for text in introduced):
+            retired_digests = {record["retired_sha256"] for record, _ in records if "retired_sha256" in record}
+            def exact_retired(text):
+                return digest(text) in retired_digests and not any(MARKER.fullmatch(line) for line in text.splitlines())
+            if any(not exact_retired(text) and not any(allowed(anchor, text) for anchor in anchors) for text in introduced):
                 raise ValueError(f"{path}: conflicting oracle introductions in reachable history")
-            if not allowed(original, current):
+            if not allowed(original, current) and not exact_retired(current):
                 errors.append(f"{path}: only pending-marker removal allowed (spine {commits[-1]})")
             # Also enforce monotonic retirement against current main.
             try:
@@ -356,7 +420,11 @@ def _check(root: Path, base_ref: str) -> list[str]:
                 base_text = original
             # Corrections preserve ordered marker slots. Retiring another test
             # cannot pay for restoring a marker already retired on main.
-            monotonic = retirement_allowed(anchors, base_text, current) if amendments.get(path) else allowed(base_text, current)
+            # A reviewed exact marker-free rendering has zero remaining slots.
+            retired = "".join(line for line in original.splitlines(keepends=True) if not MARKER.fullmatch(line.rstrip("\n")))
+            comparable_base = retired if exact_retired(base_text) else base_text
+            comparable_current = retired if exact_retired(current) else current
+            monotonic = retirement_allowed(anchors, comparable_base, comparable_current) if amendments.get(path) else allowed(base_text, current)
             if not monotonic:
                 errors.append(f"{path}: retired markers cannot be restored")
         else:
