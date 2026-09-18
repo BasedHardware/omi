@@ -254,6 +254,8 @@ async def _usgs_get(params: Dict[str, Any]) -> Dict[str, Any]:
     try:
         response = await client.get(USGS_QUERY_URL, params=params)
         response.raise_for_status()
+        if response.status_code == 204:
+            return {}
         data = response.json()
         if not isinstance(data, dict):
             return {"error": "USGS returned an invalid non-dict payload"}
