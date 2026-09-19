@@ -444,8 +444,14 @@ def _make_callback_handler(
                     "<p>Close this tab and run <code>omi auth login --browser</code> again.</p>"
                     "</body></html>"
                 )
-            self.wfile.write(body.encode("utf-8"))
+            # Signal completion before writing the HTTP response so that a
+            # browser disconnect during the write does not prevent the CLI
+            # from proceeding with the captured code/state/error values.
             received_event.set()
+            try:
+                self.wfile.write(body.encode("utf-8"))
+            except OSError:
+                pass  # browser already closed — callback was captured above
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 — stdlib signature
             # Silence the default access-log noise. The CLI manages its own UX.
