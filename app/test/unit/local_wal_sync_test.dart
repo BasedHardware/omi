@@ -471,7 +471,7 @@ void main() {
       sync.setSessionGeolocation(null);
 
       final wal = Wal(timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000, codec: BleAudioCodec.opus, seconds: 1);
-      await sync.addExternalWal(wal);
+      await sync.addExternalWal(wal, admittedGeneration: sync.sessionGeneration);
 
       expect(wal.geolocation, isNull);
     });
@@ -558,7 +558,7 @@ void main() {
       // Old timerStart → backfill lane, so no fresh-upload network call runs.
       final wal = Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 60);
 
-      await freshSync.addExternalWal(wal);
+      await freshSync.addExternalWal(wal, admittedGeneration: freshSync.sessionGeneration);
 
       expect(freshSync.testWals.map((w) => w.id), contains(wal.id));
     });
