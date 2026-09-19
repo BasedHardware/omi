@@ -1,4 +1,3 @@
-import 'package:omi/services/capture/capture_policy.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -25,7 +24,7 @@ import '../support/spine/contract.dart';
 
 class MemoryPrefs implements SharedPreferencesUtil {
   @override
-  CapturePolicy get capturePolicy => const CapturePolicy(revision: 0, muted: true);
+  bool get deviceMuted => true;
   @override
   dynamic noSuchMethod(Invocation i) => throw StateError('Unexpected preferences read: ${i.memberName}');
 }

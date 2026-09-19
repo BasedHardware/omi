@@ -416,7 +416,7 @@ class CaptureController extends ChangeNotifier
   /// muted — the "captured so far" timer freezes at this point.
   int? _offlineMuteStartedAt;
 
-  bool get offlineMuted => isPaused;
+  bool get offlineMuted => _preferences.batchMuted;
 
   /// Elapsed seconds of the *current* recording for the capture-card timer:
   /// frozen while muted, and reset on each cut (manual or the 15-min rotation).
@@ -566,7 +566,7 @@ class CaptureController extends ChangeNotifier
 
   RecordingState recordingState = RecordingState.stop;
 
-  bool get isPaused => _preferences.capturePolicy.muted;
+  bool get isPaused => _preferences.deviceMuted;
   bool get isCallActive => _micInterrupted;
 
   // Flag to star the conversation when it ends

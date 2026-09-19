@@ -231,6 +231,11 @@ class SharedPreferencesUtil {
   /// corresponding write is acknowledged.
   CapturePolicy get capturePolicy => _capturePolicyCache;
 
+  // Read-only compatibility projections for existing injected preference
+  // contracts. Neither alias reads or writes a legacy preference key.
+  bool get deviceMuted => capturePolicy.muted;
+  bool get batchMuted => capturePolicy.muted;
+
   /// Persists a new capture authorization in revision order.
   ///
   /// Writes are serialized because native readers may observe the preference
