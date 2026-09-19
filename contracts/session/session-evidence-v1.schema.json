@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omi.dev/contracts/session/session-evidence-v1.schema.json",
   "title": "Omi mobile session evidence v1",
-  "description": "Proposed minimal receipt emitted per isolated local mobile session (SCA-487 C1). Not frozen until C2/C3/C4 consumers review it with the coordinator. Consumers: C2 semantic journeys, C3 capture replay, C4 verification integration, C5 device qualification. Additive changes require consumer tests and a bumped schema_version; v1 documents stay closed (additionalProperties: false). No field may ever carry a credential: token, secret, password, or key material must not appear under any key.",
+  "description": "Frozen V8 mobile session evidence. Validation structure is immutable; see README.md. The optional live section was added before freeze. No credentials may appear anywhere.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,6 +19,104 @@
   "properties": {
     "schema_version": { "const": 1 },
     "session_id": { "$ref": "#/$defs/session_id" },
+    "live": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional V1 broker evidence. Top-level source/artifact retain cold-build identity. Loaded identity advances only after successful reload and readiness.",
+      "required": [
+        "generation",
+        "operation_id",
+        "operation",
+        "outcome",
+        "requested_source",
+        "loaded_source",
+        "loaded_sequence",
+        "restart_sha256",
+        "started_at",
+        "finished_at",
+        "elapsed_ms"
+      ],
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9-]{1,80}$"
+        },
+        "operation": {
+          "enum": [
+            "start",
+            "reload",
+            "restart",
+            "screenshot",
+            "logs",
+            "controls",
+            "status",
+            "stop",
+            "verify"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "rejected",
+            "restart-required",
+            "blocked"
+          ]
+        },
+        "requested_source": {
+          "$ref": "#/$defs/live_source"
+        },
+        "loaded_source": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/live_source"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "loaded_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "restart_sha256": {
+          "$ref": "#/$defs/hex64"
+        },
+        "daemon_code": {
+          "type": "integer"
+        },
+        "started_at": {
+          "$ref": "#/$defs/rfc3339_utc"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/rfc3339_utc"
+        },
+        "elapsed_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "screenshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/relative_path"
+            },
+            "sha256": {
+              "$ref": "#/$defs/hex64"
+            }
+          }
+        }
+      }
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,
@@ -131,6 +229,27 @@
     }
   },
   "$defs": {
+    "live_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_sha",
+        "dirty_digest",
+        "inputs_sha256"
+      ],
+      "properties": {
+        "git_sha": {
+          "$ref": "#/$defs/hex40"
+        },
+        "dirty_digest": {
+          "type": "string",
+          "pattern": "^(clean|dirty:sha256:[0-9a-f]{64})$"
+        },
+        "inputs_sha256": {
+          "$ref": "#/$defs/hex64"
+        }
+      }
+    },
     "session_id": {
       "type": "string",
       "pattern": "^oms-[a-z0-9][a-z0-9-]{0,63}$"

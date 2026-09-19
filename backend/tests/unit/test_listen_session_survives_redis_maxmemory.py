@@ -74,16 +74,6 @@ class _MaxMemorySocket:
         raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
 
-class _ExpireOnlyOOMSocket(_MaxMemorySocket):
-    """SET lands (memory freed mid-incident) but EXPIRE still raises OOM."""
-
-    def __init__(self) -> None:
-        self.store: Dict[str, Any] = {}
-
-    def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
-        self.store[key] = value
-
-
 class _RecordingSocket:
     """Healthy Redis socket recording writes for assertions."""
 
@@ -93,6 +83,8 @@ class _RecordingSocket:
 
     def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
         self.store[key] = value.encode() if isinstance(value, str) else value
+        if ex is not None:
+            self.ttls[key] = ex
 
     def expire(self, key: str, ttl: int) -> None:
         self.ttls[key] = ttl
@@ -548,14 +540,14 @@ def test_healthy_pointer_read_returns_conversation_id():
         assert redis_db.get_in_progress_conversation_id('uid-1') == 'conv-1'
 
 
-def test_expire_oom_also_fails_open():
-    """Maxmemory denies EXPIRE just as readily as SET: the second command of
-    the pointer write must not raise either (partial write: key present, no
-    TTL — the degraded state, honestly asserted)."""
-    socket = _ExpireOnlyOOMSocket()
+def test_atomic_write_leaves_no_partial_write_on_oom():
+    """Pointer writes are one atomic ``SET ... EX`` command (#11302): a
+    maxmemory denial mid-incident cannot leave a key without a TTL — the
+    degraded state is 'key absent', which every reader already handles."""
+    socket = _MaxMemorySocket()
     with _swap_redis_socket(socket):
-        redis_db.set_in_progress_conversation_id('uid-1', 'conv-1')
-        assert socket.store.get('users:uid-1:in_progress_memory_id') is not None
+        redis_db.set_in_progress_conversation_id('uid-1', 'conv-1')  # must not raise
+        assert redis_db.get_in_progress_conversation_id('uid-1') == ''
 
 
 def test_real_redis_oom_exception_class_fails_open():

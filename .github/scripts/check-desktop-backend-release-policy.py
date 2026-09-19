@@ -276,7 +276,6 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         ("Mint candidate probe identity",)
         if production
         else (
-            "Stage candidate probe signer",
             "Mint candidate probe identity",
         )
     )
@@ -346,11 +345,9 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "GCP_LOCATION=us-central1",
             "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
             "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
-            "${{ secrets.GCP_SERVICE_ACCOUNT }}",
-            'chmod 600 "$signer_file"',
-            "base64 --decode",
-            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
-            'rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
+            "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}",
+            '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"',
+            'if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then',
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing development traffic guard {fragment!r}")
@@ -366,6 +363,15 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         if "GCP_SERVICE_ACCOUNT:latest" in text or "GCP_SERVICE_ACCOUNT=GCP_SERVICE_ACCOUNT" in text:
             errors.append(
                 f"{workflow}: the Firebase probe signer must never become desktop-backend runtime configuration"
+            )
+        if "${{ secrets.GCP_SERVICE_ACCOUNT }}" in text:
+            # Phase C credential rotation: the development probe signs via IAM
+            # signJwt as vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT. A JSON
+            # key staged through this secret is exactly the material this
+            # policy exists to keep out of the runner.
+            errors.append(
+                f"{workflow}: development probe signing must use the named signer "
+                'vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT, not the GCP_SERVICE_ACCOUNT key secret'
             )
         if "FIREBASE_AUTH_PROJECT_ID: based-hardware-dev" in text or "FIREBASE_PROJECT_ID=based-hardware-dev" in text:
             errors.append(f"{workflow}: development serving must retain the production Firebase project")

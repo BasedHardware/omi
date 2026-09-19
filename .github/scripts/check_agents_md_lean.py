@@ -29,7 +29,7 @@ from pathlib import Path
 BUDGETS: dict[str, tuple[int, int]] = {
     "AGENTS.md": (180, 18_000),
     ".github/AGENTS.md": (45, 4_500),
-    "app/AGENTS.md": (170, 11_500),
+    "app/AGENTS.md": (164, 11_411),
     "backend/AGENTS.md": (350, 39_000),
     # main grew this with Codemagic release-pipeline detail after the budget was
     # first set from a stale base; recalibrated to current main + headroom.
@@ -39,6 +39,7 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "web/admin/AGENTS.md": (25, 1_500),
     "web/app/AGENTS.md": (55, 2_400),
     "docs/AGENTS.md": (34, 1_309),
+    "scripts/dev-harness/AGENTS.md": (15, 861),
 }
 
 SKIP_PARTS = {"node_modules", ".build", ".git"}

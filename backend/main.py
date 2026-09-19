@@ -323,7 +323,7 @@ async def startup_event():
     start_metrics_sidecar_server()
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
-    asyncio.create_task(log_executor_health())
+    start_background_task(log_executor_health(), name='executor_health')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(

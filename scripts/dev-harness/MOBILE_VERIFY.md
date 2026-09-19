@@ -6,6 +6,7 @@ C2) or the session CLI (`mobile-session.sh`, C1) — it selects, admits,
 classifies, validates receipts, and writes the lane summary.
 
 ```bash
+make lane-bootstrap                                 # fresh worktree: cheap gates + app/test.sh
 make mobile-verify ARGS="doctor"                    # lane readiness (C1 doctor + verify surface)
 make mobile-verify ARGS="select --paths app/lib/pages/chat/page.dart"
 make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"   # focused hermetic feedback
@@ -44,6 +45,21 @@ fork-safe. Receipts upload as the `journey-evidence` artifact on pass AND
 failure. Selection is resolved by the shared `scripts/pre_push_ci_prediction.py`
 (covered by `test_pre_push_ci_prediction.py`); the lane is deliberately NOT a
 pre-push phase.
+
+The same workflow's Android Compile Smoke job (`android-compile-smoke`) builds
+`flutter build apk --debug --flavor dev --target-platform android-arm64` and
+uploads the APK as `app-dev-debug-<head-sha>` (5-day retention, in-repo debug
+keystore, no secrets). Extra ABIs OOM'd `ubuntu-latest` during
+`stripDebugSymbols` (`c8f35061fc`); this job does not compile the JNI opus shim
+for armeabi-v7a or x86_64. `:app:testDevDebugUnitTest` runs in a parallel
+`android-unit-tests` job, not after the APK. Gradle cache writes only from
+`android-unit-tests` on `main` (`cache-read-only: ${{ github.ref != 'refs/heads/main' }}`);
+the compile-smoke job is restore-only on every ref so its POST save is not on
+the workflow wall. A parallel `Dart Tests (Pacific/Kiritimati)` job runs the
+harness Z1 contract `TZ=Pacific/Kiritimati bash app/test.sh` and
+`TZ=Pacific/Pago_Pago bash app/test.sh`; it is not on the critical path and is
+expected red until that Z1 PR merges. These jobs do not change
+`journeys-hermetic` behavior.
 
 ## Receipts
 
@@ -103,3 +119,10 @@ full app. Missing infrastructure exits `2` with the remedy — CI never runs it.
 `mobile-session device` plus `scripts/dev-harness/PHYSICAL_DEVICES.md`;
 hardware evidence comes only from that trusted device path on provisioned
 phones and is reported separately from simulator/hermetic results.
+
+## Live attachment (V1 skeleton)
+
+`fast --session oms-<id>` is reserved for attachment to the owned live broker.
+It currently exits 2 (not implemented), with no cold fallback. The existing
+flag-free hermetic lane is unchanged. Admission and unsupported-journey rules:
+[LIVE_SESSIONS.md](LIVE_SESSIONS.md).
