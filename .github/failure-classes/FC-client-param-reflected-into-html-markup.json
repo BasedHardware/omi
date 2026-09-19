@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-client-param-reflected-into-html-markup",
+  "violated_contract": "A client-controlled query parameter interpolated into server-rendered HTML markup or attribute context must be percent-encoded (URL context) or HTML-escaped (text context) at the interpolation site: a raw value containing a double quote breaks out of the attribute (reflected XSS on an unauthenticated route), and a bare '&' or '#' corrupts the query handed to the next hop. omi-twitter-app's /auth/callback error branch interpolated the OAuth state param raw into the retry href and the setup page interpolated uid raw into its href (issue #14350).",
+  "canonical_prevention": "Every plugin page that reflects a query parameter into markup encodes the value once at the reflection site, and a manifest-registered hermetic suite drives the real handlers through hostile values (quotes, script tags, ampersands, fragments) asserting the encoded form and the intact link.",
+  "canonical_prevention_artifact": [
+    "plugins/test_uid_reflection_twitter.py",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["plugins/**"],
+  "status": "open"
+}

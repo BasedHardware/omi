@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
+from urllib.parse import quote
 from dotenv import load_dotenv
 from typing import List, Dict, Any
 
@@ -29,7 +30,10 @@ async def root(uid: str = Query(None)):
     """Root endpoint with setup instructions."""
     # If uid provided, show personalized setup page
     if uid:
-        auth_url = f"/auth?uid={uid}"
+        # uid is reflected into the href below — percent-encode it so
+        # quotes cannot break the attribute and &, #, or .. cannot
+        # corrupt the query (same hardening as the other plugin apps).
+        auth_url = f"/auth?uid={quote(uid, safe='')}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -522,8 +526,11 @@ async def auth_callback(
             """
         )
     
-    except Exception as e:
-        error_uid = state if state else "unknown"
+    except Exception:
+        # `state` is client-controlled and is reflected into the href
+        # below — percent-encode it so a crafted state cannot inject
+        # HTML into the error page.
+        error_uid = quote(state, safe="") if state else "unknown"
         return HTMLResponse(
             content=f"""
             <html>
