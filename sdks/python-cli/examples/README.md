@@ -2,6 +2,8 @@
 
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
+* [`agent_quickstart.vi.md`](agent_quickstart.vi.md) — hướng dẫn omi-cli cho
+  Agent (Vietnamese agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
