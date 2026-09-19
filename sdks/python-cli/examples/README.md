@@ -90,3 +90,11 @@
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
+* [`quickstart.haw.md`](quickstart.haw.md) — Ka hoʻomaka ʻana me omi-cli (Hawaiian Quickstart).
+* [`quickstart.sm.md`](quickstart.sm.md) — Amata faʻaaoga le omi-cli (Samoan Quickstart).
+* [`quickstart.to.md`](quickstart.to.md) — Kamata ngāue mo e omi-cli (Tongan Quickstart).
+* [`quickstart.mi.md`](quickstart.mi.md) — Te tīmata me te omi-cli (Maori Quickstart).
+* [`quickstart.kl.md`](quickstart.kl.md) — omi-cli-mut aallartinneq (Greenlandic Quickstart).
+* [`quickstart.lb.md`](quickstart.lb.md) — Ufänke mat omi-cli (Luxembourgish Quickstart).
+* [`quickstart.fo.md`](quickstart.fo.md) — Kom í gongd við omi-cli (Faroese Quickstart).
+* [`quickstart.co.md`](quickstart.co.md) — Principià cù omi-cli (Corsican Quickstart).
