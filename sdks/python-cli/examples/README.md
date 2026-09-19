@@ -8,6 +8,20 @@
   omi-cli 指南 (Traditional Chinese agent guide).
 * [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
   omi-cli ガイド (Japanese agent guide).
+* [`agent_quickstart.sk.md`](agent_quickstart.sk.md) — sprievodca omi-cli pre
+  agentov (Slovak agent guide).
+* [`agent_quickstart.bg.md`](agent_quickstart.bg.md) — omi-cli за агенти
+  (Bulgarian agent guide).
+* [`agent_quickstart.no.md`](agent_quickstart.no.md) — omi-cli for agenter
+  (Norwegian agent guide).
+* [`agent_quickstart.fi.md`](agent_quickstart.fi.md) — omi-cli agenteille
+  (Finnish agent guide).
+* [`agent_quickstart.hu.md`](agent_quickstart.hu.md) — omi-cli ágenseknek
+  (Hungarian agent guide).
+* [`agent_quickstart.th.md`](agent_quickstart.th.md) — คู่มือ omi-cli สำหรับเอเจนต์
+  (Thai agent guide).
+* [`agent_quickstart.da.md`](agent_quickstart.da.md) — omi-cli for agenter
+  (Danish agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
