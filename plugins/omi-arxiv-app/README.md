@@ -39,12 +39,20 @@ curl -X POST http://localhost:8080/tools/search_papers \
   -d '{"query":"retrieval augmented generation", "limit":3}'
 ```
 
-Fetch details:
+Category-only search (any official arXiv category, e.g. `physics.acc-ph`):
+
+```bash
+curl -X POST http://localhost:8080/tools/search_papers \
+  -H "Content-Type: application/json" \
+  -d '{"category":"physics.acc-ph"}'
+```
+
+Fetch details (latest or specific revision `vN`):
 
 ```bash
 curl -X POST http://localhost:8080/tools/get_paper_details \
   -H "Content-Type: application/json" \
-  -d '{"paper_id":"2401.01234"}'
+  -d '{"paper_id":"1706.03762v1"}'
 ```
 
 Search an author:
