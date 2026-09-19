@@ -1,0 +1,3 @@
+{
+  "change": "Behind an off-by-default setting, a wake word can hand its command to the realtime voice session so the assistant answers in its own voice"
+}

@@ -117,6 +117,65 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var activeRealtimeSlowToolAcknowledgement: RealtimeSlowToolAcknowledgementKind?
   private var activeRealtimeSlowToolAcknowledgementTransport: String?
 
+  /// What this service has recently said, so ambient capture can recognise Omi's own voice
+  /// coming back through the microphone instead of treating it as the user
+  /// (`VoicePlaybackEchoPolicy`). Kept for a window *after* playback ends, because the
+  /// transcript of the last words arrives about a second behind the audio.
+  private var spokenWordHistory: [(word: String, at: Date)] = []
+  /// Last text recorded from an engine outside this service, so a streamed reply that
+  /// repeats or extends itself is entered once rather than once per event.
+  private var lastExternallySpokenText: String?
+  private static let spokenHistoryWordCap = 300
+
+  /// Each word expires on its own clock rather than the history being kept alive as a
+  /// block. Extending one shared deadline on every chunk left several turns of speech
+  /// matchable at once, and a few hundred words of ordinary English will align with almost
+  /// any short sentence — live, "Sorry my mistake it's taking" was deleted that way. An
+  /// echo arrives a second or two behind the audio, so this only has to outlive that.
+  private static let spokenWordLifetime: TimeInterval = 15
+
+  /// Playback from the last few seconds, which is all an echo can be an echo of.
+  var recentlySpokenWords: [String] {
+    let cutoff = Date().addingTimeInterval(-Self.spokenWordLifetime)
+    return spokenWordHistory.filter { $0.at > cutoff }.map(\.word)
+  }
+
+  /// Record speech this app produced through some other engine.
+  ///
+  /// The realtime session plays its own audio rather than routing through this service, so
+  /// nothing here would know what was said — and the microphone hears it identically. Left
+  /// unrecorded, the model's own answer comes back through ambient capture and is attributed
+  /// to the user, which is the exact defect `VoicePlaybackEchoPolicy` exists to prevent.
+  /// What matters to the echo check is that Omi said it out loud, not which engine spoke it.
+  /// Arrives as a stream, and providers differ on whether each event is the new fragment or
+  /// the whole reply so far. Recording every event verbatim would enter the same words over
+  /// and over, and a padded history matches more of what a person says — the direction that
+  /// deletes real speech. Only the part that extends what was already recorded is kept.
+  func recordExternallySpokenText(_ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    defer { lastExternallySpokenText = trimmed }
+    guard let previous = lastExternallySpokenText else { return recordSpokenText(trimmed) }
+    if trimmed == previous { return }
+    if trimmed.hasPrefix(previous) {
+      let addition = String(trimmed.dropFirst(previous.count))
+      return recordSpokenText(addition)
+    }
+    recordSpokenText(trimmed)
+  }
+
+  private func recordSpokenText(_ text: String) {
+    let words = VoicePlaybackEchoPolicy.words(text)
+    guard !words.isEmpty else { return }
+    let now = Date()
+    let cutoff = now.addingTimeInterval(-Self.spokenWordLifetime)
+    spokenWordHistory.removeAll { $0.at <= cutoff }
+    spokenWordHistory.append(contentsOf: words.map { (word: $0, at: now) })
+    if spokenWordHistory.count > Self.spokenHistoryWordCap {
+      spokenWordHistory.removeFirst(spokenWordHistory.count - Self.spokenHistoryWordCap)
+    }
+  }
+
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
   var tracer: QueryTracer?
@@ -689,6 +748,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }
       audioPlayer = player
       activePlayerFallbackText = fallbackText
+      recordSpokenText(fallbackText)
       if let lease = activePTTLease {
         _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
       }
@@ -823,6 +883,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       leaseID: activePTTLease?.id,
       utterance: utterance)
     speechSynthesizer.speak(utterance)
+    recordSpokenText(text)
     tracer?.end("tts_start")
   }
 
