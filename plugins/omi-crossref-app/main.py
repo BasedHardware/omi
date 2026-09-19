@@ -1,7 +1,7 @@
 import html
 import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 from fastapi import FastAPI
@@ -204,7 +204,18 @@ async def search_crossref_works(payload: SearchWorksInput):
 @app.post("/tools/get_crossref_work", response_model=ChatToolResponse)
 async def get_crossref_work(payload: GetWorkInput):
     normalized = payload.doi.strip()
-    if "/" not in normalized:
+    if normalized.lower().startswith("doi:"):
+        normalized = normalized[4:].strip()
+    elif normalized.lower().startswith(("https://", "http://")):
+        try:
+            resolver = urlsplit(normalized)
+        except ValueError:
+            return ChatToolResponse(error="Invalid DOI URL.")
+        if resolver.netloc.lower() not in ("doi.org", "dx.doi.org"):
+            return ChatToolResponse(error="Use a DOI or a doi.org resolver URL.")
+        # Decode URL paths once; a percent sign in a bare DOI is literal.
+        normalized = unquote(resolver.path.removeprefix("/"))
+    if not re.fullmatch(r"10\.\d+(?:\.\d+)*/\S+", normalized):
         return ChatToolResponse(error="Invalid DOI format. Example: 10.1038/nphys1170")
     if ".." in normalized:
         return ChatToolResponse(error="Invalid DOI value.")
