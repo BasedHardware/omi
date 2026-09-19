@@ -83,3 +83,11 @@
 * [`quickstart.zu.md`](quickstart.zu.md) — Izinyathelo Zokuqala nge-omi-cli (Zulu Quickstart).
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
+* [`quickstart.dz.md`](quickstart.dz.md) — omi-cli གི་འགོ་ཐོག་ལམ་སྟོན། (Dzongkha Quickstart).
+* [`quickstart.chr.md`](quickstart.chr.md) — omi-cli ᎠᎴᏅᏗ ᎠᎵᏍᏕᎵᏍᎩ (Cherokee Quickstart).
+* [`quickstart.iu.md`](quickstart.iu.md) — omi-cli ᐱᒋᐊᕈᑎᒃᓴᐃᑦ ᒪᓕᒐᒃᓴᖅ (Inuktitut Quickstart).
+* [`quickstart.nv.md`](quickstart.nv.md) — omi-cli Bee Haʼalzhish Biyáazh Naaltsoos (Navajo Quickstart).
+* [`quickstart.crh.md`](quickstart.crh.md) — omi-cli ile Tez Başlanğıç Reberi (Crimean Tatar Quickstart).
+* [`quickstart.rn.md`](quickstart.rn.md) — Intangamarara yo gukoresha omi-cli (Kirundi Quickstart).
+* [`quickstart.an.md`](quickstart.an.md) — Guía rapida d'inicio con omi-cli (Aragonese Quickstart).
+* [`quickstart.fur.md`](quickstart.fur.md) — Prims pas cun omi-cli (Friulian Quickstart).
