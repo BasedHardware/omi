@@ -65,6 +65,43 @@ class NotionSecuritySanitizationTests(unittest.TestCase):
         self.assertIsInstance(res_xss, dict)
         self.assertEqual(res_xss["app"], "Notion Omi Integration")
 
+    def test_callback_escapes_error_xss_payload(self):
+        import asyncio
+        import html
+
+        payload = "<script>alert('xss')</script>"
+        res = asyncio.run(main.notion_callback(error=payload))
+        self.assertEqual(res.status_code, 400)
+        body = res.body.decode("utf-8")
+        self.assertNotIn(payload, body)
+        self.assertIn(html.escape(payload), body)
+
+    def test_callback_success_escapes_uid_attribute_breakout(self):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        evil_uid = 'attacker" onfocus="alert(1)'
+        state = f"{evil_uid}:random_secret"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "access_token": "token_123",
+            "workspace_id": "ws_123",
+            "workspace_name": "Test Workspace",
+            "bot_id": "bot_123",
+        }
+
+        with patch.object(main, "get_oauth_state", return_value=state), \
+             patch.object(main, "delete_oauth_state"), \
+             patch.object(main.requests, "post", return_value=mock_resp), \
+             patch.object(main, "store_notion_tokens"):
+            res = asyncio.run(main.notion_callback(code="valid_code", state=state))
+            self.assertEqual(res.status_code, 200)
+            body = res.body.decode("utf-8")
+            self.assertNotIn(f'href="/?uid={evil_uid}"', body)
+            self.assertIn('href="/?uid=attacker%22%20onfocus%3D%22alert%281%29"', body)
+
 
 if __name__ == "__main__":
     unittest.main()

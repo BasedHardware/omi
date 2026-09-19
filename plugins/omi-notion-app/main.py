@@ -11,7 +11,7 @@ import sys
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from dotenv import load_dotenv
@@ -961,8 +961,8 @@ async def root(uid: str = Query(None)):
     tokens = get_notion_tokens(clean_uid)
 
     if not tokens:
-        safe_uid = html.escape(clean_uid, quote=True)
-        auth_url = f"/auth/notion?uid={safe_uid}"
+        safe_uid = quote(clean_uid, safe='')
+        safe_auth_url = html.escape(f"/auth/notion?uid={safe_uid}", quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -976,7 +976,7 @@ async def root(uid: str = Query(None)):
                     <h1>Notion</h1>
                     <p>Manage your Notion workspace through Omi chat</p>
 
-                    <a href="{auth_url}" class="btn btn-primary btn-block">
+                    <a href="{safe_auth_url}" class="btn btn-primary btn-block">
                         Connect Notion
                     </a>
 
@@ -1004,8 +1004,9 @@ async def root(uid: str = Query(None)):
         """)
 
     # User is connected
-    safe_uid = html.escape(clean_uid, quote=True)
+    safe_uid = quote(clean_uid, safe='')
     workspace_name = html.escape(tokens.get("workspace_name", "Your Workspace"), quote=True)
+    safe_disconnect_url = html.escape(f"/disconnect?uid={safe_uid}", quote=True)
 
     return HTMLResponse(content=f"""
     <html>
@@ -1029,7 +1030,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Search for budget in Notion"</div>
                 </div>
 
-                <a href="/disconnect?uid={safe_uid}" class="btn btn-secondary btn-block">
+                <a href="{safe_disconnect_url}" class="btn btn-secondary btn-block">
                     Disconnect Notion
                 </a>
 
@@ -1067,12 +1068,13 @@ async def notion_auth(uid: str = Query(...)):
 
 @app.get("/auth/notion/callback")
 async def notion_callback(
-    code: str = Query(None),
-    state: str = Query(None),
-    error: str = Query(None)
+    code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    error: Optional[str] = Query(None)
 ):
     """Handle Notion OAuth2 callback."""
-    if error:
+    if error and isinstance(error, str):
+        safe_error = html.escape(error)
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>
@@ -1080,14 +1082,14 @@ async def notion_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{safe_error}</p>
                     </div>
                 </div>
             </body>
         </html>
         """, status_code=400)
 
-    if not code or not state:
+    if not code or not state or not isinstance(code, str) or not isinstance(state, str):
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>
@@ -1148,6 +1150,8 @@ async def notion_callback(
 
         store_notion_tokens(uid, access_token, workspace_id, workspace_name, bot_id)
 
+        safe_continue_url = html.escape(f"/?uid={quote(uid, safe='')}", quote=True)
+
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1163,7 +1167,7 @@ async def notion_callback(
                         <p>Your Notion workspace is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="{safe_continue_url}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1201,7 +1205,7 @@ async def disconnect(uid: str = Query(...)):
     if not clean_uid:
         return RedirectResponse(url="/")
     delete_notion_tokens(clean_uid)
-    return RedirectResponse(url=f"/?uid={clean_uid}")
+    return RedirectResponse(url=f"/?uid={quote(clean_uid, safe='')}")
 
 
 @app.get("/health")
