@@ -342,6 +342,34 @@ class TestAcceptEndpoint:
             except Exception as e:
                 assert e.status_code == 503
 
+    def _accept_one(self, original):
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db, patch("routers.action_items.send_action_item_data_message") as reminder:
+            mock_redis.get_task_share.return_value = self._mock_share_data()
+            mock_redis.try_accept_task_share.return_value = True
+            mock_db.get_action_item.return_value = original
+            mock_db.create_action_item.return_value = "new_t1"
+            accept_shared_action_items(request, uid="uid_bob")
+        return reminder
+
+    def test_accept_schedules_reminder_for_task_with_due_date(self):
+        due = datetime(2026, 9, 20, 9, 0, tzinfo=timezone.utc)
+        reminder = self._accept_one({"id": "t1", "description": "Review PR", "due_at": due})
+
+        reminder.assert_called_once_with(
+            user_id="uid_bob",
+            action_item_id="new_t1",
+            description="Review PR",
+            due_at=due.isoformat(),
+        )
+
+    def test_accept_schedules_no_reminder_without_due_date(self):
+        reminder = self._accept_one({"id": "t1", "description": "Review PR", "due_at": None})
+
+        reminder.assert_not_called()
+
 
 class TestCompletionNotification:
     """Completing a shared task notifies the sender."""
