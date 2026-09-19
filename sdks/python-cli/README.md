@@ -73,6 +73,8 @@ Tables without predefined columns include fields from every row, in first-seen o
 
 > 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
 
+> Looking for localized guides? See the [asturianu (Asturian Quickstart)](examples/quickstart.ast.md), the [vèneto (Venetian Quickstart)](examples/quickstart.vec.md), the [corsu (Corsican Quickstart)](examples/quickstart.co.md), the [gagana Samoa (Samoan Quickstart)](examples/quickstart.sm.md), the [lea faka-Tonga (Tongan Quickstart)](examples/quickstart.to.md), the [ʻōlelo Hawaiʻi (Hawaiian Quickstart)](examples/quickstart.haw.md), the [kalaallisut (Greenlandic Quickstart)](examples/quickstart.kl.md), the [মৈতৈলোন (Meitei Quickstart)](examples/quickstart.mni.md), the [ತುಳು (Tulu Quickstart)](examples/quickstart.tcy.md), the [isiNdebele (Ndebele Quickstart)](examples/quickstart.nd.md), the [Kikongo (Kongo Quickstart)](examples/quickstart.kg.md), or the [chisena (Sena Quickstart)](examples/quickstart.seh.md).
+
 > Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md).
 
 > Looking for localized guides? See the [कोंकणींत सुरवात (Konkani Quickstart)](examples/quickstart.kok.md).
