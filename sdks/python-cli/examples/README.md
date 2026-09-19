@@ -2,6 +2,8 @@
 
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
+* [`agent_quickstart.sr.md`](agent_quickstart.sr.md) — водич за AI агенте
+  на српском (Serbian Agent Quickstart).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
