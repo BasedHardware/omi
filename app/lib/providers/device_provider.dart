@@ -100,7 +100,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
-
   /// Bumped on [clearUserData]. Capture at admission; never re-read after an
   /// await. Adopting the live counter would publish a retired connect into the
   /// session that replaced it.

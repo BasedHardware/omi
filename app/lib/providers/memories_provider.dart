@@ -105,9 +105,6 @@ class MemoriesProvider extends ChangeNotifier {
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
   int _sessionGeneration = 0;
-
-  bool _isCurrent(int generation) => generation == _sessionGeneration;
-
   int _loadSequence = 0;
   int _ledgerProjectionRevision = 0;
   final FetchMemoriesRequest _fetchMemoriesRequest;
@@ -140,7 +137,6 @@ class MemoriesProvider extends ChangeNotifier {
   /// Concurrent same-parameter callers join it instead of starting races the
   /// sequence guard would discard.
   Future<void>? _inFlightLoad;
-  int _inFlightLoadGeneration = -1;
   int _inFlightLoadLimit = 100;
   bool _inFlightLoadDeviceScoped = false;
   MemoryCollectionView _inFlightLoadView = MemoryCollectionView.usefulNow;
@@ -414,7 +410,6 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void toggleCategoryFilter(MemoryCategory category) async {
-    final generation = _sessionGeneration;
     if (_selectedCategories.contains(category)) {
       _selectedCategories.remove(category);
     } else {
@@ -424,7 +419,6 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    if (!_isCurrent(generation)) return;
     await prefs.setStringList(
       'memories_filter_categories',
       _selectedCategories.map((e) => e.name).toList(),
@@ -432,13 +426,11 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void clearCategoryFilter() async {
-    final generation = _sessionGeneration;
     _selectedCategories.clear();
     _showOnlyManual = false;
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    if (!_isCurrent(generation)) return;
     await prefs.remove('memories_filter_categories');
     // Clear old single filter key as well to be clean
     await prefs.remove('memories_filter');
@@ -539,9 +531,7 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<void> _loadFilter() async {
-    final generation = _sessionGeneration;
     final prefs = await SharedPreferences.getInstance();
-    if (!_isCurrent(generation)) return;
 
     final filterList = prefs.getStringList('memories_filter_categories');
 
@@ -573,7 +563,6 @@ class MemoriesProvider extends ChangeNotifier {
     // in-flight one via the sequence guard as before.
     final inFlight = _inFlightLoad;
     if (inFlight != null &&
-        _inFlightLoadGeneration == _sessionGeneration &&
         _inFlightLoadLimit == limit &&
         _inFlightLoadDeviceScoped == _filterThisDeviceOnly &&
         _inFlightLoadView == _collectionView) {
@@ -595,7 +584,6 @@ class MemoriesProvider extends ChangeNotifier {
   Future<void> _startMemoryLoad({required int limit}) async {
     final loadFuture = _loadMemoriesInternal(limit: limit);
     _inFlightLoad = loadFuture;
-    _inFlightLoadGeneration = _sessionGeneration;
     _inFlightLoadLimit = limit;
     _inFlightLoadDeviceScoped = _filterThisDeviceOnly;
     _inFlightLoadView = _collectionView;
@@ -1084,7 +1072,7 @@ class MemoriesProvider extends ChangeNotifier {
       return false;
     } finally {
       _memoryUseInFlight.remove(memory.id);
-      if (_isCurrent(generation)) notifyListeners();
+      notifyListeners();
     }
   }
 
@@ -1350,7 +1338,6 @@ class MemoriesProvider extends ChangeNotifier {
       return;
     }
 
-    final generation = _sessionGeneration;
     final id = _pendingDeletionId!;
 
     final deletedMemory = _lastDeletedMemory;
@@ -1368,8 +1355,6 @@ class MemoriesProvider extends ChangeNotifier {
         deleteSucceeded = false;
       }
     }
-
-    if (!_isCurrent(generation)) return;
 
     if (!deleteSucceeded && _pendingDeletionId == id && deletedMemory?.id == id) {
       if (!_memories.any((memory) => memory.id == id)) {
@@ -1407,10 +1392,8 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void deleteAllMemories() async {
-    final generation = _sessionGeneration;
     final int countBeforeDeletion = _memories.length;
     await deleteAllMemoriesServer();
-    if (!_isCurrent(generation)) return;
     _memories.clear();
     if (countBeforeDeletion > 0) {
       PlatformManager.instance.analytics.memoriesAllDeleted(
@@ -1481,9 +1464,7 @@ class MemoriesProvider extends ChangeNotifier {
     Memory memory,
     MemoryVisibility visibility,
   ) async {
-    final generation = _sessionGeneration;
     await updateMemoryVisibilityServer(memory.id, visibility.name);
-    if (!_isCurrent(generation)) return;
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
     if (idx != -1) {
@@ -1500,9 +1481,7 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<bool> toggleMemoryBaseline(Memory memory, bool isBaseline) async {
-    final generation = _sessionGeneration;
     final success = await updateMemoryBaselineServer(memory.id, isBaseline);
-    if (!_isCurrent(generation)) return success;
 
     if (success) {
       final idx = _memories.indexWhere((m) => m.id == memory.id);
@@ -1528,9 +1507,7 @@ class MemoriesProvider extends ChangeNotifier {
             memory.isLocked)) {
       return false;
     }
-    final generation = _sessionGeneration;
     final result = await _editMemoryRequest(memory.id, value);
-    if (!_isCurrent(generation)) return result.persisted;
 
     if (result.persisted) {
       final idx = _memories.indexWhere((m) => m.id == memory.id);
@@ -1575,17 +1552,14 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
-    final generation = _sessionGeneration;
     final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
     int updatedCount = 0;
     List<Memory> memoriesSuccessfullyUpdated = [];
 
     for (var memory in List.from(_memories)) {
-      if (!_isCurrent(generation)) return;
       if (memory.visibility != visibility) {
         try {
           await updateMemoryVisibilityServer(memory.id, visibility.name);
-          if (!_isCurrent(generation)) return;
           final idx = _memories.indexWhere((m) => m.id == memory.id);
           if (idx != -1) {
             _memories[idx].visibility = visibility;
@@ -1597,8 +1571,6 @@ class MemoriesProvider extends ChangeNotifier {
         }
       }
     }
-
-    if (!_isCurrent(generation)) return;
 
     if (updatedCount > 0) {
       PlatformManager.instance.analytics.memoriesAllVisibilityChanged(
