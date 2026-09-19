@@ -941,6 +941,7 @@ async def root(uid: str = Query(None)):
 
     safe_username = html.escape(github_username)
     safe_masked_agent_key = html.escape(masked_agent_key, quote=True)
+    safe_uid_json = json.dumps(uid).replace('</', '<\\/')  # '\/' keeps a raw '</script>' out of the inline <script> block
 
     repo_options = ""
     for repo in repos:
@@ -1080,7 +1081,7 @@ async def root(uid: str = Query(None)):
             </div>
 
             <script>
-                const CURRENT_UID = {json.dumps(uid)};
+                const CURRENT_UID = {safe_uid_json};
                 const ENCODED_UID = encodeURIComponent(CURRENT_UID);
 
                 async function updateRepo() {{

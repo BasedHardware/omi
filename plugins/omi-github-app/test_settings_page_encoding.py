@@ -106,6 +106,21 @@ class GitHubSettingsEncodingTests(unittest.TestCase):
         self.assertIn("'/update-repo?uid=' + ENCODED_UID", content)
         self.assertIn("'/refresh-repos?uid=' + ENCODED_UID", content)
 
+    def test_authenticated_page_escapes_script_element_terminator_in_uid(self):
+        malicious_uid = "user</script><script>alert('xss')</script>"
+        user = {
+            "access_token": "valid_token",
+            "github_username": "octocat",
+            "selected_repo": "owner/repo",
+            "available_repos": [{"full_name": "owner/repo", "private": False}]
+        }
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user):
+            content = asyncio.run(main.root(uid=malicious_uid)).content
+
+        self.assertIn('const CURRENT_UID = "user<\\/script><script>alert(\'xss\')<\\/script>";', content)
+        self.assertNotIn('const CURRENT_UID = "user</script>', content)
+        self.assertNotIn('</script><script>alert', content)
+
     def test_callback_success_escapes_username_and_encodes_uid(self):
         mock_github = Mock()
         mock_github.exchange_code_for_token.return_value = {"access_token": "tok123"}
