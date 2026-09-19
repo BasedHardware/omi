@@ -363,6 +363,56 @@ class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
             resp = await main.get_latest_rates(req)
             self.assertEqual(resp.error, "no rates returned")
 
+    async def test_convert_currency_identity_only_skips_upstream_call(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            req = main.ConvertCurrencyRequest(amount=50, from_currency="USD", to_currencies=["USD"])
+            resp = await main.convert_currency(req)
+            mock_req.assert_not_called()
+            self.assertIsNone(resp.error)
+            self.assertIn("50 USD on latest:", resp.result)
+            self.assertIn("- USD: 50", resp.result)
+
+    async def test_convert_currency_mixed_identity_and_other_target(self):
+        mock_data = {
+            "amount": 100.0,
+            "base": "USD",
+            "date": "2026-09-15",
+            "rates": {"EUR": 0.92},
+        }
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.ConvertCurrencyRequest(amount=100, from_currency="USD", to_currencies=["USD", "EUR"])
+            resp = await main.convert_currency(req)
+            mock_req.assert_called_once()
+            self.assertEqual(mock_req.call_args.args[1]["to"], "EUR")
+            self.assertIsNone(resp.error)
+            self.assertIn("- USD: 100", resp.result)
+            self.assertIn("- EUR: 0.92", resp.result)
+
+    async def test_get_latest_rates_identity_only_skips_upstream_call(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            req = main.LatestRatesRequest(base_currency="USD", to_currencies=["USD"])
+            resp = await main.get_latest_rates(req)
+            mock_req.assert_not_called()
+            self.assertIsNone(resp.error)
+            self.assertIn("- 1 USD = 1 USD", resp.result)
+
+    async def test_get_latest_rates_mixed_identity_and_other_target(self):
+        mock_data = {
+            "base": "USD",
+            "date": "2026-09-15",
+            "rates": {"EUR": 0.92},
+        }
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.LatestRatesRequest(base_currency="USD", to_currencies=["USD", "EUR"])
+            resp = await main.get_latest_rates(req)
+            mock_req.assert_called_once()
+            self.assertEqual(mock_req.call_args.args[1]["to"], "EUR")
+            self.assertIsNone(resp.error)
+            self.assertIn("- 1 USD = 1 USD", resp.result)
+            self.assertIn("- 1 USD = 0.92 EUR", resp.result)
+
     async def test_list_supported_currencies_success(self):
         mock_data = {"USD": "United States Dollar", "EUR": "Euro", "GBP": "British Pound"}
         with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
