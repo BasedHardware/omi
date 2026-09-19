@@ -618,6 +618,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingDeletionIds.add(item.id);
 
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
+    final index = _actionItems.indexWhere((actionItem) => actionItem.id == item.id);
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
 
@@ -628,6 +629,7 @@ class ActionItemsProvider extends ChangeNotifier {
         Logger.debug('Failed to delete action item on server');
         // On failure, remove from pending set so a future reload can re-fetch it
         _pendingDeletionIds.remove(item.id);
+        _restoreDeletedItem(item, index);
       }
       // On success, the tombstone is intentionally retained: a refresh that
       // started before the server processed the deletion may still return the
@@ -638,8 +640,15 @@ class ActionItemsProvider extends ChangeNotifier {
       Logger.debug('Error deleting action item: $e');
       // On error, remove from pending set so a future reload can re-fetch it
       _pendingDeletionIds.remove(item.id);
+      _restoreDeletedItem(item, index);
       return false;
     }
+  }
+
+  void _restoreDeletedItem(ActionItemWithMetadata item, int index) {
+    if (index == -1 || _actionItems.any((actionItem) => actionItem.id == item.id)) return;
+    _actionItems.insert(index.clamp(0, _actionItems.length), item);
+    notifyListeners();
   }
 
   Future<ActionItemWithMetadata?> createActionItem({
