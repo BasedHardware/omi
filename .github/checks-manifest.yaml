@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: omi-openfoodfacts-tests
+    command: ["python3", "plugins/omi-openfoodfacts-app/test_main.py"]
+    triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Open Food Facts tools must sanitize barcodes and URLs, handle 404s gracefully, and accurately detect allergens across Unicode, accented, and CJK ingredients without crashing or false negatives"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
