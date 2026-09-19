@@ -55,51 +55,64 @@ class ConvertCurrencyRequest(BaseModel):
     from_currency: str = Field(..., min_length=3, max_length=3)
     to_currencies: list[str] = Field(..., min_length=1, max_length=MAX_TARGET_CURRENCIES)
 
-    @field_validator("from_currency")
+    @field_validator("from_currency", mode="before")
     @classmethod
     def normalize_from_currency(cls, value: str) -> str:
         return _normalize_currency_code(value)
 
-    @field_validator("to_currencies")
+    @field_validator("to_currencies", mode="before")
     @classmethod
     def normalize_to_currencies(cls, values: list[str]) -> list[str]:
-        seen: set[str] = set()
-        normalized: list[str] = []
-        for value in values:
-            code = _normalize_currency_code(value)
-            if code not in seen:
-                normalized.append(code)
-                seen.add(code)
-        return normalized
+        return _coerce_currency_list(values, allow_null=False)
 
 
 class LatestRatesRequest(BaseModel):
     base_currency: str = Field(..., min_length=3, max_length=3)
     to_currencies: list[str] = Field(default_factory=list, max_length=MAX_TARGET_CURRENCIES)
 
-    @field_validator("base_currency")
+    @field_validator("base_currency", mode="before")
     @classmethod
     def normalize_base_currency(cls, value: str) -> str:
         return _normalize_currency_code(value)
 
-    @field_validator("to_currencies")
+    @field_validator("to_currencies", mode="before")
     @classmethod
     def normalize_to_currencies(cls, values: list[str]) -> list[str]:
-        seen: set[str] = set()
-        normalized: list[str] = []
-        for value in values:
-            code = _normalize_currency_code(value)
-            if code not in seen:
-                normalized.append(code)
-                seen.add(code)
-        return normalized
+        return _coerce_currency_list(values, allow_null=True)
 
 
 def _normalize_currency_code(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("currency codes must be 3 letters, such as USD or EUR")
     code = value.strip().upper()
     if len(code) != 3 or not code.isalpha():
         raise ValueError("currency codes must be 3 letters, such as USD or EUR")
     return code
+
+
+def _coerce_currency_list(values: Any, *, allow_null: bool) -> list[str]:
+    """Accept a single code or a list of codes; tolerate JSON null for optional fields.
+
+    Chat runners forward unprovided optional parameters as JSON ``null`` and
+    sometimes collapse single-element lists to a bare string. Normalize both so
+    an optional filter cannot turn into a rejected tool call.
+    """
+    if values is None:
+        if allow_null:
+            return []
+        raise ValueError("to_currencies must be a list of 3-letter currency codes")
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple)):
+        raise ValueError("to_currencies must be a list of 3-letter currency codes")
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        code = _normalize_currency_code(value)
+        if code not in seen:
+            seen.add(code)
+            normalized.append(code)
+    return normalized
 
 
 def _parse_amount(value: str | float | int) -> Decimal:
