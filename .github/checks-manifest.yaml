@@ -1171,6 +1171,11 @@ checks:
     triggers: ["plugins/omi-google-calendar-app/**"]
     lanes: ["local", "ci"]
     reason: "GET /auth/google/callback interpolated the raw error query param into HTML text and GET / reflected the client-controlled uid into href attributes and a hidden input value; both routes are unauthenticated"
+  - id: shipbob-tools-auth-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_tools_auth.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "eight chat-tool routes in omi-shipbob-app trusted a body uid and acted with that user's stored ShipBob OAuth token, with no caller authentication"
   - id: twitter-tweet-offset-tests
     command: ["python3", "plugins/omi-twitter-app/test_tweet_offsets.py"]
     triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
