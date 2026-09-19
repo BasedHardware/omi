@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit; find_state_by_name must refuse an ambiguous status name (partial match or a shared workflow type) instead of silently moving the issue to whichever state a team happens to list first"
+  - id: plugins-setup-url-hardening-tests
+    command: ["python3", "plugins/test_plugins_setup_url_hardening.py"]
+    triggers: ["plugins/omi-linear-app/**", "plugins/omi-hive-app/**", "plugins/omi-shopify-app/**", "plugins/test_plugins_setup_url_hardening.py"]
+    lanes: ["local", "ci"]
+    reason: "harden setup page templates and redirect URLs in linear, hive, and shopify plugins against parameter/query injection"
   - id: github-app-coerce-tests
     command: ["python3", "plugins/omi-github-app/test_main.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
