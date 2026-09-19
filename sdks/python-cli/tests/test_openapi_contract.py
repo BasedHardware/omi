@@ -16,6 +16,7 @@ PUBLIC_OPENAPI_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'openapi.json'
 CLI_ROUTES = {
     ('GET', '/v1/dev/user/action-items'),
     ('POST', '/v1/dev/user/action-items'),
+    ('POST', '/v1/dev/user/action-items/batch'),
     ('PATCH', '/v1/dev/user/action-items/{action_item_id}'),
     ('DELETE', '/v1/dev/user/action-items/{action_item_id}'),
     ('GET', '/v1/dev/user/conversations'),
