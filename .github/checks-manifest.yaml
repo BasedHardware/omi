@@ -1206,6 +1206,11 @@ checks:
     triggers: ["plugins/omi-google-calendar-app/**"]
     lanes: ["local", "ci"]
     reason: "GET /auth/google/callback interpolated the raw error query param into HTML text and GET / reflected the client-controlled uid into href attributes and a hidden input value; both routes are unauthenticated"
+  - id: ms365-tools-auth-tests
+    command: ["python3", "plugins/omi-ms365-app/test_tools_auth.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the /tools/{tool_name} dispatch route in omi-ms365-app trusted a body uid and ran Graph tools with that user's Microsoft token; _auth_guard only checked the victim was connected, not that the caller owned the uid"
   - id: twitter-tweet-offset-tests
     command: ["python3", "plugins/omi-twitter-app/test_tweet_offsets.py"]
     triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
