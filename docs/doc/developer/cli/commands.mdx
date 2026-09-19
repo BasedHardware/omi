@@ -88,7 +88,7 @@ omi --json memory search "food preferences" | jq '.items[] | {id, content, relev
 ```
 
 Search uses the developer API's semantic search and requires a developer API
-key with `memories.read` scope and a persisted default-memory read grant.
+key with `memories:read` scope and a persisted default-memory read grant.
 Access denials are reported as errors, without a fallback to other memory
 reads. The API retains authority over which memories are visible.
 

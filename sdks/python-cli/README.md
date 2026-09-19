@@ -47,7 +47,7 @@ omi auth login
 
 # 2. Start using it:
 omi memory list
-omi memory search "food preferences" --limit 5
+omi memory search "food preferences" --limit 5  # API key required; see scope/grant requirements below
 omi conversation list --limit 5
 omi action-item list --open
 omi goal list
@@ -65,7 +65,7 @@ emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
 
 `omi memory search QUERY` uses the developer API's semantic memory search.
-It requires a developer API key with `memories.read` scope and a persisted
+It requires a developer API key with `memories:read` scope and a persisted
 default-memory read grant. Access denials remain errors; the command does not
 fall back to listing other memories. `--limit` defaults to 10 and accepts
 1–100; the server may return fewer results (currently at most 20).
