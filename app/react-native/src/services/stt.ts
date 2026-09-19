@@ -1,5 +1,3 @@
-import { ENV } from '@/config/env';
-
 export interface DeepgramMessage {
   channel?: { alternatives?: { transcript?: string; words?: { speaker?: number; word: string; start: number; end: number }[] }[] };
   is_final?: boolean;
@@ -13,24 +11,48 @@ export interface TranscriptSegment {
   isFinal: boolean;
 }
 
-type OnSegment = (seg: TranscriptSegment) => void;
+export interface SttHandlers {
+  onSegment: (seg: TranscriptSegment) => void;
+  onOpen?: () => void;
+  onError?: (err: unknown) => void;
+  onClose?: () => void;
+}
 
 /**
- * Streaming STT via Deepgram (nova-2 + diarize), matching the desktop/linux
- * deepgramListen.ts behaviour. PCM16/Opus audio is sent over the websocket;
- * speaker numbers are resolved to labels by the voiceprint module.
+ * Streaming STT client.
+ *
+ * SECURITY: this class intentionally does NOT build a provider URL from a
+ * bundled API key. The caller passes an already-authorized websocket `url` —
+ * normally the Omi backend STT proxy (`ENV.listenWsUrl`), which authenticates
+ * with the short-lived user ID token and keeps provider credentials server-side.
+ * For local development a caller may supply an ephemeral Deepgram URL out-of-band;
+ * that token must never be committed or read from `expo.extra`.
  */
 export class DeepgramStream {
   private ws: WebSocket | null = null;
-  private url: string;
 
-  constructor(private onSegment: OnSegment, apiKey = ENV.deepgramApiKey) {
-    this.url = `${ENV.deepgramWsUrl}&access_token=${apiKey}`;
-  }
+  constructor(private handlers: SttHandlers, private url: string) {}
 
-  connect() {
-    this.ws = new WebSocket(this.url);
+  connect(): void {
+    if (!this.url) {
+      this.handlers.onError?.(new Error('STT not configured: no authorized endpoint'));
+      return;
+    }
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.url);
+    } catch (e) {
+      this.handlers.onError?.(e);
+      return;
+    }
+    this.ws = ws;
     this.ws.binaryType = 'arraybuffer';
+    this.ws.onopen = () => this.handlers.onOpen?.();
+    this.ws.onerror = (ev) => this.handlers.onError?.(ev);
+    this.ws.onclose = () => {
+      this.ws = null;
+      this.handlers.onClose?.();
+    };
     this.ws.onmessage = (ev) => this.handleMessage(ev.data);
   }
 
@@ -40,7 +62,7 @@ export class DeepgramStream {
       const alt = msg.channel?.alternatives?.[0];
       if (!alt?.transcript) return;
       const speaker = alt.words?.[0]?.speaker ?? 0;
-      this.onSegment({
+      this.handlers.onSegment({
         text: alt.transcript,
         speaker: `speaker_${speaker}`,
         start: alt.words?.[0]?.start ?? 0,
@@ -53,7 +75,7 @@ export class DeepgramStream {
   }
 
   sendAudio(chunk: ArrayBuffer) {
-    this.ws?.readyState === WebSocket.OPEN && this.ws.send(chunk);
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(chunk);
   }
 
   close() {

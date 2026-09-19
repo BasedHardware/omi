@@ -32,32 +32,54 @@ omiApi.interceptors.request.use((config) => {
   return config;
 });
 
-export interface Paginated<T> {
-  results: T[];
-  count: number;
-  limit: number;
-  offset: number;
+/**
+ * Normalize a list response into a plain array.
+ *
+ * The Omi backend returns *bare arrays* for `/v3/memories` and
+ * `/v1/conversations`, and an `{ action_items: [...] }` envelope for
+ * `/v1/action-items`. Some endpoints have historically returned a
+ * `{ results: [...] }` shape. Accept every supported envelope so callers never
+ * crash on a successful response (the prior `res.data.results` read broke the
+ * Home/Goals flows on the array payloads).
+ */
+export function asList<T>(data: unknown, key?: string): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    const candidates = key ? [obj[key], obj.results] : [obj.results];
+    for (const c of candidates) {
+      if (Array.isArray(c)) return c as T[];
+    }
+  }
+  return [];
 }
 
 /** Lightweight helpers matching the desktop/linux usage patterns. */
-export async function getMemories(limit = 200, offset = 0) {
-  return omiApi.get<Paginated<Memory>>('/v3/memories', { params: { limit, offset } });
+export async function getMemories(limit = 200, offset = 0): Promise<Memory[]> {
+  const res = await omiApi.get<Memory[]>('/v3/memories', { params: { limit, offset } });
+  return asList<Memory>(res.data);
 }
 
-export async function createMemory(content: string, tags: string[] = []) {
-  return omiApi.post<Memory>('/v3/memories', { content, tags });
+export async function createMemory(content: string, tags: string[] = []): Promise<Memory> {
+  const res = await omiApi.post<Memory>('/v3/memories', { content, tags });
+  return res.data;
 }
 
-export async function listConversations(limit = 50, offset = 0) {
-  return omiApi.get<Paginated<Conversation>>('/v1/conversations', { params: { limit, offset } });
+export async function listConversations(limit = 50, offset = 0): Promise<Conversation[]> {
+  const res = await omiApi.get<Conversation[]>('/v1/conversations', { params: { limit, offset } });
+  return asList<Conversation>(res.data);
 }
 
-export async function getConversation(id: string) {
-  return omiApi.get<Conversation>(`/v1/conversations/${id}`);
+export async function getConversation(id: string): Promise<Conversation> {
+  const res = await omiApi.get<Conversation>(`/v1/conversations/${id}`);
+  return res.data;
 }
 
-export async function getActionItems(limit = 50, offset = 0) {
-  return omiApi.get<Paginated<ActionItem>>('/v1/action-items', { params: { limit, offset } });
+export async function getActionItems(limit = 50, offset = 0): Promise<ActionItem[]> {
+  const res = await omiApi.get<{ action_items?: ActionItem[] }>('/v1/action-items', {
+    params: { limit, offset },
+  });
+  return asList<ActionItem>(res.data, 'action_items');
 }
 
 export interface ActionItem {

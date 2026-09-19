@@ -25,7 +25,7 @@ export default function GoalsScreen() {
   useEffect(() => {
     let active = true;
     getActionItems()
-      .then((res) => { if (active) setItems(res.data.results); })
+      .then((items) => { if (active) setItems(items); })
       .catch(() => { if (active) setItems([]); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
