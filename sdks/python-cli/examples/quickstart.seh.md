@@ -1,29 +1,60 @@
-# Matangiriro ne omi-cli (Sena)
+# Kutoma na omi-cli
 
-Buku ino iri kufokotoza mafambidwe akutoma mu Chisena. Madzina a mapulogalamu
-anakhala mu Chingerezi.
+Bukhu iyi isasandikira mafala a kutoma mu Cisena. Madzina a mafala na mphangwa za
+porogalama ziri mu Cizungu. Pire vitsanzo pino nkhabe kucinja ma memory, macedzo,
+mabasa peno pyakufuna pyanu.
 
-## Kuikha Pulogalamu
+## Kuikhira Porogalama
 
-Mukusoweka: Python 3.10 na akaunti ya Omi.
+Pinafunika: Python 3.10 peno yapamwamba na akawunti ya Omi.
+
+Khombo muna `pipx`:
 
 ```sh
 pipx install omi-cli
 omi --help
 ```
 
-## Kulumikiza Akaunti
+Munakwanisa kukhazikisa pontho mu Python virtual environment yakufunika:
+
+```sh
+python -m pip install omi-cli
+omi --help
+```
+
+Ngakhale terminal nkhabe kuona `omi`, yang'anani ngakhale mbuto ya `pipx` iri pa `$PATH`.
+
+## Kulumikiza Akawunti Yanu
+
+Yambisani cibverano:
 
 ```sh
 omi auth login
+```
+
+Sankhani kupita na browser peno kuikha API key ya Omi.
+Kupita na njira ineyi kubisa key; lekani kulemba mu fala inacita kukhala mu mbiri ya terminal.
+
+Kuti muende mwacindunji ku browser:
+
+```sh
 omi auth login --browser
+```
+
+Pitani pa ntcini ubodzi-bodzi ule uli na terminal. Tobzerani pyakubveka pa skrini.
+
+Pambuyo pace, yang'anani makhazikisikidwe na kupita ku API:
+
+```sh
 omi auth status
 omi auth whoami
 ```
 
-Sungani bwino pa `~/.omi/config.toml`.
+`status` isapangiza ciri pa ntcini. `whoami` isatsimikiza kuti key ikuphata basa mwadidi.
 
-## Kuona Mbiri Yanu
+Pyonsene piri mu `~/.omi/config.toml`. Lekani kugawira fayelo ino thangwi iri na pyakubisika.
+
+## Kuyang'ana Pidziwiso Pyanu
 
 ```sh
 omi memory list --limit 5
@@ -32,17 +63,38 @@ omi action-item list --open
 omi goal list
 ```
 
-## Kutenga JSON
+Lisiti ya pezi isabveka nkhabe cinthu cidagwirizana. Phatisirani ciphedzo:
+
+```sh
+omi memory list --help
+omi action-item list --help
+```
+
+## Kutapa JSON na Matsamba (Pagination)
+
+Ikhani `--json` **patsogolo** pa fala:
 
 ```sh
 omi --json memory list --limit 25 --offset 0
-omi --json memory list --limit 25 --offset 0 > mbiri-1.json
+omi --json memory list --limit 25 --offset 25
 ```
 
-## Kubuluka (Logout)
+Fala yakutoma isaphemba ma memory 25 akutoma; yaciwiri isaphemba 25 anabwera pambuyo. JSON isakoya ma ID onsene.
+
+Kuti mukoye tsamba mu fayelo:
+
+```sh
+omi --json memory list --limit 25 --offset 0 > memory-tsamba-1.json
+```
+
+Fayelo ino inakwanisa kukhala na mphangwa za munthu mwini: koyani mwacibisobiso.
+
+## Kubuda (Logout)
 
 ```sh
 omi auth logout
 ```
 
-Onani [Buku ya Chingerezi](../README.md).
+Fala iyi isafuta key pa ntcini wanu. Kuti mufute key ku server, pitani pa gulu ya developer key mu akawunti yanu.
+
+Kuti muone mafala anango, yang'anani [bukhu ya Cizungu](../README.md) na `omi --help`.

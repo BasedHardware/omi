@@ -70,7 +70,7 @@ omi memory list --help
 omi action-item list --help
 ```
 
-## Download JSON no pájina sira
+## Download JSON no pájina sira (Pagination)
 
 Tau opsaun globál `--json` **molok** grupu komandu:
 
@@ -95,6 +95,6 @@ Arkivu ne'e bele iha informasaun privadu: rai ho segredu.
 omi auth logout
 ```
 
-Komandu ne'e hamoos dadus tama nian husi lokál.
+Komandu ne'e hamoos dadus tama nian husi lokál. Atu halo xave ne'e la vale iha server, uza jestaun xave dezenvolvedór iha ita-boot nia konta.
 
 Ba komandu seluk, haree [matadalan prinsipál iha lian Inglés](../README.md) no `omi --help`.
