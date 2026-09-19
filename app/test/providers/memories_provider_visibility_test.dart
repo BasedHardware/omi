@@ -57,6 +57,20 @@ void main() {
     expect(provider.memories.map((memory) => memory.visibility), everyElement(MemoryVisibility.public));
   });
 
+  test('making one memory private keeps it public when the server rejects it', () async {
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        return GetMemoriesResult([publicMemory('a')], true);
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await provider.updateMemoryVisibility(provider.memories.single, MemoryVisibility.private);
+
+    expect(provider.memories.single.visibility, MemoryVisibility.public);
+  });
+
   testWidgets('the sheet does not say all memories are private when the change failed', (tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;

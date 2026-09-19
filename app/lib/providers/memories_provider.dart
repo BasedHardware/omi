@@ -1470,11 +1470,11 @@ class MemoriesProvider extends ChangeNotifier {
     return true;
   }
 
-  Future<void> updateMemoryVisibility(
+  Future<bool> updateMemoryVisibility(
     Memory memory,
     MemoryVisibility visibility,
   ) async {
-    await updateMemoryVisibilityServer(memory.id, visibility.name);
+    if (!await updateMemoryVisibilityServer(memory.id, visibility.name)) return false;
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
     if (idx != -1) {
@@ -1488,6 +1488,7 @@ class MemoriesProvider extends ChangeNotifier {
       );
       _setCategories();
     }
+    return true;
   }
 
   Future<bool> toggleMemoryBaseline(Memory memory, bool isBaseline) async {
