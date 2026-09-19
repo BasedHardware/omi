@@ -184,5 +184,83 @@ class SlackSettingsPageEncodingTests(unittest.TestCase):
         self.assertIn("/logout?uid=usr_12345", page)
 
 
+    def test_authenticated_inline_js_uid_encoding(self):
+        """Authenticated page inline JS (updateChannel, refreshChannels, logoutUser) must encode uid."""
+        malicious_uid = "u1' + alert('pwn') + '"
+        user = {
+            "access_token": "xoxp-test-token",
+            "team_name": "Test Team",
+            "selected_channel": "C123",
+            "available_channels": []
+        }
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user):
+            res = asyncio.run(main.root(uid=malicious_uid))
+            page = res.content
+
+        # Raw single-quote JS injection string must not appear anywhere
+        self.assertNotIn("update-channel?uid=u1' + alert('pwn')", page)
+        self.assertNotIn("refresh-channels?uid=u1' + alert('pwn')", page)
+        self.assertNotIn("logout?uid=u1' + alert('pwn')", page)
+
+        # Encoded version must be used everywhere
+        expected_encoded_uid = quote(malicious_uid, safe="")
+        self.assertIn(f"/update-channel?uid={expected_encoded_uid}&channel=", page)
+        self.assertIn(f"/refresh-channels?uid={expected_encoded_uid}", page)
+        self.assertIn(f"/logout?uid={expected_encoded_uid}", page)
+        self.assertIn(f"/?uid={expected_encoded_uid}", page)
+
+    def test_dev_test_interface_escapes_uid(self):
+        """The /test development interface must escape uid to prevent reflected XSS."""
+        malicious_uid = 'test_user"><script>alert("reflected")</script>'
+        res = asyncio.run(main.test_interface(uid=malicious_uid, dev="true"))
+        page = res.content
+        self.assertEqual(res.status_code, 200)
+
+        # Raw script tag must NOT be present
+        self.assertNotIn('<script>alert("reflected")</script>', page)
+        self.assertNotIn(f'value="{malicious_uid}"', page)
+
+        # HTML-escaped attribute value must be present
+        escaped_uid = html.escape(malicious_uid, quote=True)
+        self.assertIn(f'value="{escaped_uid}"', page)
+
+    def test_dev_test_interface_without_dev_returns_404(self):
+        """The /test interface without dev=true returns 404."""
+        res = asyncio.run(main.test_interface(uid="test", dev=None))
+        self.assertEqual(res.status_code, 404)
+        self.assertIn("Page Not Found", res.content)
+
+    def test_none_team_name_renders_fallback(self):
+        """If team_name is None, it should fall back to 'Unknown' gracefully without error."""
+        user = {
+            "access_token": "xoxp-test-token",
+            "team_name": None,
+            "selected_channel": "",
+            "available_channels": []
+        }
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user):
+            res = asyncio.run(main.root(uid="u1"))
+            page = res.content
+
+        self.assertIn("Connected to <span class=\"username\">Unknown</span>", page)
+        self.assertNotIn("Connected to <span class=\"username\">None</span>", page)
+
+    def test_html_responses_contain_meta_charset(self):
+        """All HTML responses must declare utf-8 charset."""
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=None):
+            unauth_page = asyncio.run(main.root(uid="u1")).content
+            self.assertIn('<meta charset="utf-8">', unauth_page)
+
+        auth_user = {
+            "access_token": "xoxp-test-token",
+            "team_name": "Team",
+            "selected_channel": "",
+            "available_channels": []
+        }
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=auth_user):
+            auth_page = asyncio.run(main.root(uid="u1")).content
+            self.assertIn('<meta charset="utf-8">', auth_page)
+
+
 if __name__ == "__main__":
     unittest.main()

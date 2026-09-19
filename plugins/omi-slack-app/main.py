@@ -175,6 +175,7 @@ async def root(uid: str = Query(None)):
         return HTMLResponse(content=f"""
         <html>
             <head>
+                <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
                     {get_mobile_css()}
@@ -245,21 +246,22 @@ async def root(uid: str = Query(None)):
     # Authenticated - show channel selection page
     channels = user.get("available_channels", [])
     selected_channel = user.get("selected_channel", "")
-    team_name = user.get("team_name", "Unknown")
-    team_name_escaped = html.escape(str(team_name))
+    team_name = user.get("team_name") or "Unknown"
+    team_name_escaped = html.escape(str(team_name), quote=True)
     uid_q = quote(str(uid), safe="")
     
     channel_options = '<option value="">Select a channel...</option>'
     for channel in channels:
         selected_attr = 'selected' if channel['id'] == selected_channel else ''
         privacy = "🔒" if channel.get('is_private') else "#"
-        escaped_id = html.escape(str(channel['id']))
-        escaped_name = html.escape(str(channel['name']))
+        escaped_id = html.escape(str(channel['id']), quote=True)
+        escaped_name = html.escape(str(channel['name']), quote=True)
         channel_options += f'<option value="{escaped_id}" {selected_attr}>{privacy} {escaped_name}</option>'
     
     return HTMLResponse(content=f"""
     <html>
         <head>
+            <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Slack Messages - Settings</title>
             <style>
@@ -356,7 +358,7 @@ async def root(uid: str = Query(None)):
                     const channel = select.value;
                     
                     try {{
-                        const response = await fetch('/update-channel?uid={uid}&channel=' + encodeURIComponent(channel), {{
+                        const response = await fetch('/update-channel?uid={uid_q}&channel=' + encodeURIComponent(channel), {{
                             method: 'POST'
                         }});
                         
@@ -442,11 +444,12 @@ async def auth_callback(
 ):
     """Handle OAuth callback from Slack."""
     if error:
-        error_escaped = html.escape(str(error))
+        error_escaped = html.escape(str(error), quote=True)
         return HTMLResponse(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -468,6 +471,7 @@ async def auth_callback(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -491,6 +495,7 @@ async def auth_callback(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -533,13 +538,14 @@ async def auth_callback(
         if state in oauth_states:
             del oauth_states[state]
         
-        team_name_escaped = html.escape(str(team_name))
+        team_name_escaped = html.escape(str(team_name or "Unknown"), quote=True)
         uid_q = quote(str(uid), safe="")
 
         return HTMLResponse(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <title>Connected Successfully!</title>
                     <style>
@@ -586,6 +592,7 @@ async def auth_callback(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -975,6 +982,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
         return HTMLResponse(content=f"""
         <html>
             <head>
+                <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>Not Found</title>
                 <style>{get_mobile_css()}</style>
@@ -992,9 +1000,11 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
         </html>
         """, status_code=404)
     
+    uid_escaped = html.escape(str(uid), quote=True)
     return HTMLResponse(content=f"""
     <html>
         <head>
+            <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Slack Messages - Test Interface</title>
             <style>
@@ -1012,7 +1022,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     <h2>Authentication</h2>
                     <div class="input-group">
                         <label>User ID (UID):</label>
-                        <input type="text" id="uid" value="{uid}">
+                        <input type="text" id="uid" value="{uid_escaped}">
                     </div>
                     <button class="btn btn-primary" onclick="authenticate()">🔐 Authenticate Slack</button>
                     <button class="btn btn-secondary" onclick="checkAuth()">🔍 Check Auth Status</button>
@@ -1078,7 +1088,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 async function checkAuth() {{
                     const uid = document.getElementById('uid').value;
                     try {{
-                        const response = await fetch(`/setup-completed?uid=${{uid}}`);
+                        const response = await fetch(`/setup-completed?uid=${{encodeURIComponent(uid)}}`);
                         const data = await response.json();
                         
                         const authStatus = document.getElementById('authStatus');
@@ -1097,7 +1107,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 function authenticate() {{
                     const uid = document.getElementById('uid').value;
                     addLog('Opening Slack authentication...');
-                    window.open(`/auth?uid=${{uid}}`, '_blank');
+                    window.open(`/auth?uid=${{encodeURIComponent(uid)}}`, '_blank');
                     setTimeout(() => addLog('After authenticating, click "Check Auth Status"'), 1000);
                 }}
                 
@@ -1123,7 +1133,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                             end: 5.0
                         }}];
                         
-                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{uid}}`, {{
+                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
                             body: JSON.stringify(segments)
@@ -1167,7 +1177,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     
                     try {{
                         addLog('Logging out...');
-                        const response = await fetch(`/logout?uid=${{uid}}`, {{
+                        const response = await fetch(`/logout?uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST'
                         }});
                         
