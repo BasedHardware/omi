@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+import html
 import os
 import sys
+from urllib.parse import quote
 from dotenv import load_dotenv
 from typing import List, Any
 import secrets
@@ -168,7 +170,8 @@ async def root(uid: str = Query(None)):
     
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        uid_q = quote(uid, safe="")
+        auth_url = f"/auth?uid={uid_q}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -243,12 +246,16 @@ async def root(uid: str = Query(None)):
     channels = user.get("available_channels", [])
     selected_channel = user.get("selected_channel", "")
     team_name = user.get("team_name", "Unknown")
+    team_name_escaped = html.escape(str(team_name))
+    uid_q = quote(str(uid), safe="")
     
     channel_options = '<option value="">Select a channel...</option>'
     for channel in channels:
         selected_attr = 'selected' if channel['id'] == selected_channel else ''
         privacy = "🔒" if channel.get('is_private') else "#"
-        channel_options += f'<option value="{channel["id"]}" {selected_attr}>{privacy} {channel["name"]}</option>'
+        escaped_id = html.escape(str(channel['id']))
+        escaped_name = html.escape(str(channel['name']))
+        channel_options += f'<option value="{escaped_id}" {selected_attr}>{privacy} {escaped_name}</option>'
     
     return HTMLResponse(content=f"""
     <html>
@@ -264,7 +271,7 @@ async def root(uid: str = Query(None)):
                 <div class="card" style="margin-top: 20px;">
                     <h2>💬 Slack Settings</h2>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
-                        Connected to <span class="username">{team_name}</span>
+                        Connected to <span class="username">{team_name_escaped}</span>
                     </p>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 16px;">
                         Default channel (optional - you can specify channel in voice command):
@@ -366,7 +373,7 @@ async def root(uid: str = Query(None)):
                 }}
                 
                 function refreshChannels() {{
-                    fetch('/refresh-channels?uid={uid}', {{
+                    fetch('/refresh-channels?uid={uid_q}', {{
                         method: 'POST'
                     }})
                     .then(response => response.json())
@@ -385,14 +392,14 @@ async def root(uid: str = Query(None)):
                 
                 async function logoutUser() {{
                     try {{
-                        const response = await fetch('/logout?uid={uid}', {{
+                        const response = await fetch('/logout?uid={uid_q}', {{
                             method: 'POST'
                         }});
                         
                         const data = await response.json();
                         
                         if (data.success) {{
-                            window.location.href = '/?uid={uid}';
+                            window.location.href = '/?uid={uid_q}';
                         }} else {{
                             alert('❌ Logout failed: ' + data.error);
                         }}
@@ -430,9 +437,32 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
 async def auth_callback(
     request: Request,
     code: str = Query(None),
-    state: str = Query(None)
+    state: str = Query(None),
+    error: str = Query(None)
 ):
     """Handle OAuth callback from Slack."""
+    if error:
+        error_escaped = html.escape(str(error))
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>{get_mobile_css()}</style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
+                            <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Failed</h2>
+                            <p style="margin-bottom: 0;">Access was not granted: {error_escaped}</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+
     if not code or not state:
         return HTMLResponse(
             content=f"""
@@ -503,6 +533,9 @@ async def auth_callback(
         if state in oauth_states:
             del oauth_states[state]
         
+        team_name_escaped = html.escape(str(team_name))
+        uid_q = quote(str(uid), safe="")
+
         return HTMLResponse(
             content=f"""
             <html>
@@ -519,14 +552,14 @@ async def auth_callback(
                             <div class="icon" style="font-size: 72px; animation: pulse 1.5s infinite;">🎉</div>
                             <h2 style="font-size: 28px; margin: 16px 0;">Successfully Connected!</h2>
                             <p style="font-size: 17px; margin: 12px 0;">
-                                Your Slack workspace <strong>{team_name}</strong> is now linked
+                                Your Slack workspace <strong>{team_name_escaped}</strong> is now linked
                             </p>
                             <p style="font-size: 16px; margin: 8px 0;">
                                 Found <strong>{len(channels)}</strong> {('channel' if len(channels) == 1 else 'channels')}
                             </p>
                         </div>
                         
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={uid_q}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings →
                         </a>
                         
@@ -548,6 +581,7 @@ async def auth_callback(
     except Exception as e:
         import traceback
         traceback.print_exc()
+        uid_q = quote(str(uid), safe="") if uid else ""
         return HTMLResponse(
             content=f"""
             <html>
@@ -560,7 +594,7 @@ async def auth_callback(
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
                             <p style="margin-bottom: 16px;">Failed to complete authentication.</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <a href="/auth?uid={uid_q}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
