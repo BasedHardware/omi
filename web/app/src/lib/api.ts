@@ -2022,10 +2022,12 @@ export async function createPerson(name: string): Promise<Person> {
  * Update person name
  */
 export async function updatePersonName(personId: string, name: string): Promise<void> {
-  await fetchWithAuth(`/v1/users/people/${personId}/name`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name }),
-  });
+  await fetchWithAuth(
+    `/v1/users/people/${personId}/name?value=${encodeURIComponent(name)}`,
+    {
+      method: 'PATCH',
+    },
+  );
 }
 
 /**
