@@ -90,3 +90,11 @@
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
+* [`quickstart.bn.md`](quickstart.bn.md) — omi-cli এর সাথে পরিচিতি (Bengali Quickstart).
+* [`quickstart.gu.md`](quickstart.gu.md) — omi-cli સાથે શરૂઆત (Gujarati Quickstart).
+* [`quickstart.kn.md`](quickstart.kn.md) — omi-cli ನೊಂದಿಗೆ ಪ್ರಾರಂಭಿಸಿ (Kannada Quickstart).
+* [`quickstart.ml.md`](quickstart.ml.md) — omi-cli ആരംഭിക്കുക (Malayalam Quickstart).
+* [`quickstart.mr.md`](quickstart.mr.md) — omi-cli सोबत सुरुवात (Marathi Quickstart).
+* [`quickstart.or.md`](quickstart.or.md) — omi-cli ସହିତ ଆରମ୍ଭ କରନ୍ତୁ (Odia Quickstart).
+* [`quickstart.ta.md`](quickstart.ta.md) — omi-cli உடன் தொடங்குதல் (Tamil Quickstart).
+* [`quickstart.ur.md`](quickstart.ur.md) — omi-cli کے ساتھ آغاز (Urdu Quickstart).
