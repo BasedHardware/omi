@@ -255,9 +255,10 @@ async def oauth_token(
             )
 
         try:
-            await run_blocking(db_executor, enable_app, uid, app_id)
+            newly_enabled = await run_blocking(db_executor, enable_app, uid, app_id)
             if (
-                (app.private is None or not app.private)
+                newly_enabled
+                and (app.private is None or not app.private)
                 and (app.uid is None or app.uid != uid)
                 and not await run_blocking(db_executor, is_tester, uid)
             ):
