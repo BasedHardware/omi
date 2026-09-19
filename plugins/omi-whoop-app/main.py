@@ -916,7 +916,7 @@ async def tool_get_body_measurements(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
-        result = whoop_api_request(uid, "GET", "/body_measurement")
+        result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
