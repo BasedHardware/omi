@@ -1265,3 +1265,10 @@ exempt:
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
     reason: "OpenAPI generation contract has component dependencies"
+
+  - id: dropbox-app-unit-tests
+    command: ["python3", "-m", "pytest", "plugins/omi-dropbox-app/test_main.py", "-v"]
+    triggers: ["plugins/omi-dropbox-app/**"]
+    lanes: ["local", "ci"]
+    reason: "hermetic unit tests for omi-dropbox-app: model contracts, defensive parsing, audio buffer bounds, and manifest structure"
+
