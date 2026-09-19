@@ -582,20 +582,14 @@ extension SBOnboardingModel {
       beginShortcutRecording(isTalk: isTalk)
       shortcutRecording = false
     }
-    GlobalShortcutManager.shared.setRegistrationSuspended(true)
-    if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
-    NSApp.mainMenu = nil
+    shortcutCaptureSession.begin()
     installShortcutMonitors()
   }
 
   func disarmShortcutSummon() {
     for m in shortcutMonitors { NSEvent.removeMonitor(m) }
     shortcutMonitors.removeAll()
-    if let saved = savedMainMenu {
-      NSApp.mainMenu = saved
-      savedMainMenu = nil
-    }
-    GlobalShortcutManager.shared.setRegistrationSuspended(false)
+    shortcutCaptureSession.end()
   }
 
   private func installShortcutMonitors() {

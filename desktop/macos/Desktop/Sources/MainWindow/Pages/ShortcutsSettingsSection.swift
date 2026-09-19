@@ -27,6 +27,9 @@ struct ShortcutsSettingsSection: View {
   @State private var captureError: String?
   @State private var pendingModifierOnlyShortcut: ShortcutSettings.KeyboardShortcut?
   @State private var localShortcutCaptureMonitor: Any?
+  /// Held for the life of the view rather than made per capture: `deinit` is what returns the menu
+  /// bar and Ask Omi if Settings is dismissed while a recorder is still listening.
+  @State private var captureSession = ShortcutCaptureSession()
 
   init(highlightedSettingId: Binding<String?> = .constant(nil)) {
     self._highlightedSettingId = highlightedSettingId
@@ -44,8 +47,6 @@ struct ShortcutsSettingsSection: View {
       doubleTapCard
       pttSoundsCard
       muteAudioCard
-    }
-    .onAppear {
     }
     .onDisappear {
       stopShortcutCapture()
@@ -446,6 +447,10 @@ struct ShortcutsSettingsSection: View {
     recordingTarget = target
     captureError = nil
     pendingModifierOnlyShortcut = nil
+    // Before the monitor, not after: the chord the user is about to press is most likely the one
+    // already bound, and until this runs that chord belongs to a Carbon hotkey or a menu key
+    // equivalent and never reaches the monitor at all.
+    captureSession.begin()
 
     localShortcutCaptureMonitor = NSEvent.addLocalMonitorForEvents(matching: [
       .flagsChanged, .keyDown,
@@ -459,6 +464,7 @@ struct ShortcutsSettingsSection: View {
       NSEvent.removeMonitor(monitor)
       localShortcutCaptureMonitor = nil
     }
+    captureSession.end()
     recordingTarget = nil
     captureError = nil
     pendingModifierOnlyShortcut = nil

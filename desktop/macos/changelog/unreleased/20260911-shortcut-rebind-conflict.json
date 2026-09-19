@@ -1,0 +1,3 @@
+{
+  "change": "You can now record a shortcut over the keys an existing one already uses. Retyping the chord Ask Omi was bound to used to run it and toggle the window instead of rebinding, retyping a ⌘ chord could close the window, and retyping the push-to-talk chord started a voice turn. While a recorder is listening, Omi's own shortcuts now stand down."
+}
