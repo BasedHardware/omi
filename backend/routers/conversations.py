@@ -92,6 +92,7 @@ from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import (
@@ -589,6 +590,7 @@ def process_in_progress_conversation(
 def finalize_conversation(
     conversation_id: str,
     request: ProcessConversationRequest = None,
+    http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     """Finalize exactly one backend conversation.
@@ -655,8 +657,14 @@ def finalize_conversation(
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
             client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
+            app_build=extract_app_build(http_request),
         )
     except lifecycle_service.FinalizationDispatchUnavailable as error:
+        record_product_event(
+            'conversation_finalized',
+            request=http_request,
+            outcome='error',
+        )
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
 
     if finalization['route'] == 'noop':
@@ -667,6 +675,11 @@ def finalize_conversation(
     # The only accepted outcomes are an enqueued task or an outbox row retained
     # for reconciler retry after an uncertain task-create acknowledgement.
     if finalization['route'] not in {'cloud_tasks', 'queued'}:
+        record_product_event(
+            'conversation_finalized',
+            request=http_request,
+            outcome='error',
+        )
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable')
 
     conversation.status = ConversationStatus.processing
@@ -1220,6 +1233,7 @@ def delete_conversation(
     # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
     # backend/docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
+    http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
@@ -1269,6 +1283,7 @@ def delete_conversation(
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 
+    record_product_event('conversation_deleted', request=http_request)
     return {"status": "Ok"}
 
 

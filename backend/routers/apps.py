@@ -10,7 +10,7 @@ from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
-from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query
+from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query, Request
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -124,6 +124,7 @@ from utils.subscription import enforce_chat_quota
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
+from utils.product_metrics import record_product_event
 from utils.request_validation import (
     backfill_app_home_url_from_auth_steps,
     normalize_required_webhook_url,
@@ -2185,7 +2186,7 @@ def _disabled_app_install_detail(app: App, uid: str) -> str:
 
 
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
-async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -2213,11 +2214,12 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
         and not await run_blocking(db_executor, is_tester, uid)
     ):
         await run_blocking(db_executor, increase_app_installs_count, app_id)
+    record_product_event('app_enabled', request=request, op='enable')
     return {'status': 'ok'}
 
 
 @router.post('/v1/apps/disable', response_model=AppMutationResponse)
-def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def disable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.get_current_user_uid)):
     # Allow users to always disable apps they have installed, even if the app
     # was made private after installation (see issue #4886).
     if is_app_enabled(uid, app_id):
@@ -2227,6 +2229,7 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
             app = App(**app)
             if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
                 decrease_app_installs_count(app_id)
+        record_product_event('app_enabled', request=request, op='disable')
         return {'status': 'ok'}
 
     raise HTTPException(status_code=404, detail='App not found')

@@ -34,6 +34,7 @@ from utils.metrics import record_action_items_list_cache
 from utils.users import get_user_display_name
 from utils.share_links import build_share_url
 from utils.other import endpoints as auth
+from utils.product_metrics import record_product_event
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
@@ -306,6 +307,7 @@ def create_action_item(
     request: ActionItemCreateRequest,
     uid: str = Depends(auth.get_current_user_uid),
     idempotency_key: Annotated[Optional[str], Header(alias='Idempotency-Key', max_length=256)] = None,
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Create a new action item.
 
@@ -349,6 +351,7 @@ def create_action_item(
 
     submit_with_context(postprocess_executor, _run_auto_sync)
 
+    record_product_event('action_item_created', request=http_request)
     return ActionItemResponse(**action_item)
 
 
@@ -653,7 +656,10 @@ def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_use
 
 @router.patch("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
 def update_action_item(
-    action_item_id: str, request: ActionItemUpdateRequest, uid: str = Depends(auth.get_current_user_uid)
+    action_item_id: str,
+    request: ActionItemUpdateRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Update an action item."""
     # Check if action item exists
@@ -725,6 +731,7 @@ def update_action_item(
             due_at=updated_item.get('due_at'),
         )
 
+    record_product_event('action_item_mutated', request=http_request, op='update')
     return ActionItemResponse(**updated_item)
 
 
@@ -733,6 +740,7 @@ def toggle_action_item_completion(
     action_item_id: str,
     completed: bool = Query(description="Whether to mark as completed or not"),
     uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Mark an action item as completed or uncompleted."""
     # Check if action item exists
@@ -775,11 +783,16 @@ def toggle_action_item_completion(
                 f"{recipient_name} completed: {description}",
             )
 
+    record_product_event('action_item_mutated', request=http_request, op='toggle_complete')
     return ActionItemResponse(**updated_item)
 
 
 @router.delete("/v1/action-items/{action_item_id}", status_code=204, tags=['action-items'])
-def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_action_item(
+    action_item_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
+):
     """Delete an action item."""
     _get_valid_action_item(uid, action_item_id)
     success = action_items_db.delete_action_item(uid, action_item_id)
@@ -791,6 +804,7 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
 
     # Send FCM deletion message to cancel scheduled notification
     send_action_item_deletion_message(user_id=uid, action_item_id=action_item_id)
+    record_product_event('action_item_mutated', request=http_request, op='delete')
 
 
 class BatchDeleteActionItemsRequest(BaseModel):
@@ -798,7 +812,11 @@ class BatchDeleteActionItemsRequest(BaseModel):
 
 
 @router.post("/v1/action-items/batch-delete", response_model=BatchDeleteActionItemsResponse, tags=['action-items'])
-def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
+def batch_delete_action_items(
+    request: BatchDeleteActionItemsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
+):
     """Delete multiple action items in one request.
 
     Firestore deletes go through chunked batched commits in the DB layer; the
@@ -820,6 +838,8 @@ def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str =
         delete_action_item_vectors_batch(uid, deleted_ids)
         send_action_items_batch_deletion_message(user_id=uid, action_item_ids=deleted_ids)
 
+    if deleted_ids:
+        record_product_event('action_item_mutated', request=http_request, op='batch_delete', count=len(deleted_ids))
     return {"status": "Ok", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
 
 
@@ -895,7 +915,9 @@ def delete_conversation_action_items(conversation_id: str, uid: str = Depends(au
 
 @router.post("/v1/action-items/batch", response_model=BatchCreateActionItemsResponse, tags=['action-items'])
 def create_action_items_batch(
-    action_items: List[ActionItemCreateRequest], uid: str = Depends(auth.get_current_user_uid)
+    action_items: List[ActionItemCreateRequest],
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Create multiple action items in a batch."""
     if not action_items:
@@ -944,6 +966,8 @@ def create_action_items_batch(
     )
     _wake_task_changes(uid, created_ids, datetime.now(timezone.utc))
 
+    if created_ids:
+        record_product_event('action_item_created', request=http_request, count=len(created_ids))
     return {"action_items": created_items, "created_count": len(created_items)}
 
 

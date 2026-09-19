@@ -21,7 +21,7 @@ from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
-from utils.product_metrics import extract_app_version, extract_surface, record_product_event
+from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
@@ -1890,8 +1890,8 @@ def _create_conversation_from_segments(
     *,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
-    app_version: Optional[str] = None,
-    surface: Optional[str] = None,
+    client_kind: Optional[str] = None,
+    app_build: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -2106,7 +2106,12 @@ def _create_conversation_from_segments(
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
     # Only new successful ingests reach here; idempotent replays return above.
-    record_product_event("conversation_created", app_version=app_version, surface=surface)
+    record_product_event(
+        "conversation_created",
+        client_kind=client_kind,
+        app_build=app_build,
+        uid=uid,
+    )
     return ConversationResponse(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
@@ -2132,8 +2137,8 @@ def create_conversation_from_segments_user(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
-        app_version=extract_app_version(http_request),
-        surface=extract_surface(http_request),
+        client_kind=extract_client_kind(http_request),
+        app_build=extract_app_build(http_request),
     )
 
 
@@ -2201,8 +2206,8 @@ def create_conversation_from_segments(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
-        app_version=extract_app_version(http_request),
-        surface="unknown",  # Developer API key does not establish a first-party surface.
+        client_kind='unknown',
+        app_build='unknown',
     )
 
 

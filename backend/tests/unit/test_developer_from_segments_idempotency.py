@@ -747,19 +747,27 @@ def test_dev_from_segments_route_uses_the_dedicated_rate_limited_dependency():
     assert parameter.default.dependency is developer.get_uid_with_conversations_from_segments_write
 
 
-@pytest.mark.parametrize('platform,surface', [('ios', 'mobile'), ('macos', 'desktop'), ('', 'unknown')])
+@pytest.mark.parametrize(
+    'platform,client_kind',
+    [('ios', 'mobile_ios'), ('macos', 'desktop_macos'), ('', 'unknown')],
+)
 @pytest.mark.parametrize('metric_failure', [False, True])
 @pytest.mark.parametrize('developer_auth', [False, True])
-def test_product_creation_metric_through_http(monkeypatch, platform, surface, metric_failure, developer_auth):
+def test_product_creation_metric_through_http(monkeypatch, platform, client_kind, metric_failure, developer_auth):
     from prometheus_client import CollectorRegistry, Counter
     from utils import product_metrics
 
     registry = CollectorRegistry()
-    counter = Counter('omi_product_event_total', 'Events', ['event', 'app_version', 'surface'], registry=registry)
+    counter = Counter(
+        'omi_product_event_total',
+        'Events',
+        ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
+        registry=registry,
+    )
     if metric_failure:
         counter.labels = MagicMock(side_effect=RuntimeError('metrics unavailable'))
     monkeypatch.setattr(product_metrics, 'OMI_PRODUCT_EVENT_TOTAL', counter)
-    monkeypatch.setattr(product_metrics, '_versions', set())
+    monkeypatch.setattr(product_metrics, '_builds', set())
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
@@ -770,7 +778,7 @@ def test_product_creation_metric_through_http(monkeypatch, platform, surface, me
     if developer_auth:
         app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
         route = '/v1/dev/user/conversations/from-segments'
-        surface = 'unknown'
+        client_kind = 'unknown'
     client = TestClient(app)
     payload = _request(client_session_id='metric-session').model_dump(mode='json')
     response = client.post(
@@ -779,7 +787,14 @@ def test_product_creation_metric_through_http(monkeypatch, platform, surface, me
         headers={'X-App-Version': '0.12.365', 'X-App-Platform': platform},
     )
     assert response.status_code == 200, response.text
-    labels = dict(event='conversation_created', app_version='0.12.365', surface=surface)
+    labels = dict(
+        event='conversation_created',
+        client_kind=client_kind,
+        app_build='unknown' if developer_auth else '0.12.365',
+        outcome='none',
+        source='none',
+        op='none',
+    )
     if not metric_failure:
         assert registry.get_sample_value('omi_product_event_total', labels) == 1
 
