@@ -15,12 +15,20 @@ class DummyFastAPI:
     def __init__(self, **_kwargs):
         self.routes = []
         self.state = DummyState()
+        self.exception_handlers = {}
 
     def get(self, path, **_kwargs):
         return self._route("GET", path)
 
     def post(self, path, **_kwargs):
         return self._route("POST", path)
+
+    def exception_handler(self, exc_class):
+        def decorator(func):
+            self.exception_handlers[exc_class] = func
+            return func
+
+        return decorator
 
     def _route(self, method, path):
         def decorator(func):
@@ -29,11 +37,114 @@ class DummyFastAPI:
 
         return decorator
 
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            path = scope.get("path", "")
+            method = scope.get("method", "GET")
+            body_bytes = b""
+            if receive:
+                while True:
+                    msg = await receive()
+                    body_bytes += msg.get("body", b"")
+                    if not msg.get("more_body", False):
+                        break
+            for r_method, r_path, handler in self.routes:
+                if r_method == method and r_path == path:
+                    import inspect
+                    import json
+
+                    sig = inspect.signature(handler)
+                    kwargs = {}
+                    if body_bytes:
+                        try:
+                            parsed_body = json.loads(body_bytes.decode("utf-8"))
+                        except Exception:
+                            parsed_body = None
+                    else:
+                        parsed_body = None
+
+                    for param_name, param in sig.parameters.items():
+                        annotation = param.annotation
+                        model_cls = None
+                        if isinstance(annotation, str):
+                            stripped = annotation.replace("Optional[", "").rstrip("]").strip()
+                            model_cls = getattr(main, stripped, None)
+                        elif annotation is not inspect.Parameter.empty and hasattr(annotation, "__mro__"):
+                            model_cls = annotation
+
+                        if model_cls is not None and callable(model_cls):
+                            if parsed_body is not None and isinstance(parsed_body, dict):
+                                kwargs[param_name] = model_cls(**parsed_body)
+                            else:
+                                kwargs[param_name] = None
+                        elif param_name == "request":
+                            kwargs[param_name] = DummyRequest(parsed_body)
+                        elif param_name == "payload":
+                            kwargs[param_name] = parsed_body
+
+                    try:
+                        resp = await handler(**kwargs)
+                    except Exception as exc:
+                        handler_exc = None
+                        for exc_cls, eh in self.exception_handlers.items():
+                            if isinstance(exc, exc_cls):
+                                handler_exc = eh
+                                break
+                        if handler_exc:
+                            resp = await handler_exc(DummyRequest(parsed_body), exc)
+                        else:
+                            raise
+
+                    if callable(resp):
+                        await resp(scope, receive, send)
+                        return
+
+                    status_code = getattr(resp, "status_code", 200)
+                    if hasattr(resp, "model_dump"):
+                        content = resp.model_dump()
+                    elif hasattr(resp, "dict"):
+                        content = resp.dict()
+                    elif isinstance(resp, dict):
+                        content = resp
+                    else:
+                        content = getattr(resp, "content", {})
+                    content_bytes = json.dumps(content).encode("utf-8")
+                    await send({
+                        "type": "http.response.start",
+                        "status": status_code,
+                        "headers": [[b"content-type", b"application/json"]],
+                    })
+                    await send({
+                        "type": "http.response.body",
+                        "body": content_bytes,
+                    })
+                    return
+
+            await send({"type": "http.response.start", "status": 404, "headers": []})
+            await send({"type": "http.response.body", "body": b"Not Found"})
+
 
 class DummyBaseModel:
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def dict(self):
+        res = {}
+        for cls in reversed(self.__class__.__mro__):
+            for k, v in getattr(cls, "__dict__", {}).items():
+                if not k.startswith("_") and not callable(v):
+                    res[k] = v
+        res.update(self.__dict__)
+        return res
+
+    def model_dump(self):
+        return self.dict()
+
+    def json(self):
+        import json
+
+        return json.dumps(self.dict())
 
 
 class DummyRequest:
@@ -50,8 +161,42 @@ class DummyRequest:
 def install_dependency_stubs():
     fastapi = types.ModuleType("fastapi")
     fastapi.FastAPI = DummyFastAPI
-    fastapi.Request = object
+    fastapi.Request = DummyRequest
+
+    class DummyJSONResponse:
+        def __init__(self, content=None, status_code=200, **kwargs):
+            self.content = content or {}
+            self.status_code = status_code
+
+        async def __call__(self, scope, receive, send):
+            if send is not None:
+                await send({
+                    "type": "http.response.start",
+                    "status": self.status_code,
+                    "headers": [[b"content-type", b"application/json"]],
+                })
+                import json
+                body = json.dumps(self.content).encode("utf-8")
+                await send({
+                    "type": "http.response.body",
+                    "body": body,
+                })
+
+    class DummyRequestValidationError(Exception):
+        def __init__(self, errors=None):
+            self._errors = errors or []
+
+        def errors(self):
+            return self._errors
+
+    fastapi.responses = types.ModuleType("fastapi.responses")
+    fastapi.responses.JSONResponse = DummyJSONResponse
+    fastapi.exceptions = types.ModuleType("fastapi.exceptions")
+    fastapi.exceptions.RequestValidationError = DummyRequestValidationError
+
     sys.modules.setdefault("fastapi", fastapi)
+    sys.modules.setdefault("fastapi.responses", fastapi.responses)
+    sys.modules.setdefault("fastapi.exceptions", fastapi.exceptions)
 
     pydantic = types.ModuleType("pydantic")
     pydantic.BaseModel = DummyBaseModel
@@ -64,6 +209,12 @@ def install_dependency_stubs():
 
     httpx = types.ModuleType("httpx")
     httpx.HTTPError = Exception
+    httpx.HTTPStatusError = type(
+        "HTTPStatusError",
+        (Exception,),
+        {"response": types.SimpleNamespace(status_code=500)},
+    )
+    httpx.TimeoutException = type("TimeoutException", (Exception,), {})
 
     class DummyAsyncClient:
         def __init__(self, *args, **kwargs):
@@ -543,6 +694,266 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         self.assertFalse(should_close)
         self.assertIs(reused_client, dummy_client)
         main.app.state.http_client = None
+
+    def test_clean_event_id_direct_and_whitespace(self):
+        self.assertEqual(main._clean_event_id("us7000abcd"), "us7000abcd")
+        self.assertEqual(main._clean_event_id("  nc12345678  "), "nc12345678")
+        self.assertEqual(main._clean_event_id("#us7000abcd"), "us7000abcd")
+        self.assertEqual(main._clean_event_id("ci12345/"), "ci12345")
+
+    def test_clean_event_id_usgs_eventpage_urls(self):
+        url1 = "https://earthquake.usgs.gov/earthquakes/eventpage/us7000m8v4/executive"
+        self.assertEqual(main._clean_event_id(url1), "us7000m8v4")
+
+        url2 = "https://earthquake.usgs.gov/earthquakes/eventpage/nc75001234#executive"
+        self.assertEqual(main._clean_event_id(url2), "nc75001234")
+
+        url3 = "https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=ci39876543&format=geojson"
+        self.assertEqual(main._clean_event_id(url3), "ci39876543")
+
+    def test_clean_event_id_empty_and_non_string(self):
+        self.assertEqual(main._clean_event_id(None), "")
+        self.assertEqual(main._clean_event_id(""), "")
+        self.assertEqual(main._clean_event_id("   "), "")
+        self.assertEqual(main._clean_event_id(12345), "12345")
+
+    def test_clean_event_id_unparseable_url_does_not_squash_host(self):
+        self.assertEqual(main._clean_event_id("https://earthquake.usgs.gov/"), "")
+        self.assertEqual(main._clean_event_id("https://earthquake.usgs.gov/earthquakes"), "")
+        self.assertEqual(main._clean_event_id("https://example.com/some/path"), "")
+
+    def test_earthquake_details_extracts_id_from_url(self):
+        captured_params = []
+
+        async def fake_usgs_get(params, client=None):
+            captured_params.append(params)
+            return {
+                "type": "Feature",
+                "id": params.get("eventid"),
+                "properties": {"mag": 5.1, "place": "Near URL Test"},
+                "geometry": {"coordinates": [10.0, 20.0, 5.0]},
+            }
+
+        original_usgs_get = main._usgs_get
+        main._usgs_get = fake_usgs_get
+        try:
+            req = DummyRequest(
+                {
+                    "event_id": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000url1/executive"
+                }
+            )
+            resp = asyncio.run(main.tool_earthquake_details(req))
+            self.assertTrue(resp.success)
+            self.assertEqual(captured_params[0]["eventid"], "us7000url1")
+            self.assertEqual(resp.data["earthquake"]["event_id"], "us7000url1")
+        finally:
+            main._usgs_get = original_usgs_get
+
+    def test_status_endpoint(self):
+        status_data = asyncio.run(main.status())
+        self.assertEqual(status_data["status"], "ok")
+        self.assertEqual(status_data["service"], "omi-usgs-earthquake-app")
+        self.assertIn("usgs_query_url", status_data)
+        self.assertIn("timeout_seconds", status_data)
+        self.assertIn("timestamp", status_data)
+
+    def test_validation_exception_handler(self):
+        handler = getattr(main, "validation_exception_handler", None)
+        self.assertIsNotNone(handler)
+
+        class FakeValidationError:
+            def errors(self):
+                return [{"loc": ("body", "latitude"), "msg": "Field required", "type": "missing"}]
+
+        resp = asyncio.run(handler(DummyRequest(), FakeValidationError()))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.content["success"])
+        self.assertIn("Field required", resp.content["message"])
+        self.assertEqual(resp.content["data"]["error"], "validation_error")
+
+    def test_validation_handler_middleware_dispatch_executes_callable_response(self):
+        handler = getattr(main, "validation_exception_handler", None)
+        self.assertIsNotNone(handler)
+
+        class FakeValidationError:
+            def errors(self):
+                return [
+                    {
+                        "loc": ("body", "min_magnitude"),
+                        "msg": "Input should be a valid number",
+                        "type": "float_parsing",
+                    }
+                ]
+
+        response = asyncio.run(handler(DummyRequest(), FakeValidationError()))
+        self.assertTrue(callable(response), "Starlette exception middleware requires response to be callable")
+
+        events = []
+
+        async def fake_send(message):
+            events.append(message)
+
+        async def run_asgi():
+            await response({"type": "http", "method": "POST"}, None, fake_send)
+
+        asyncio.run(run_asgi())
+        self.assertTrue(any(e.get("type") == "http.response.start" and e.get("status") == 200 for e in events))
+        self.assertTrue(any(e.get("type") == "http.response.body" for e in events))
+
+    def test_tool_endpoints_accept_typed_request_models(self):
+        try:
+            from models import NearbyEarthquakesRequest, RecentEarthquakesRequest
+        except ImportError:
+            from .models import NearbyEarthquakesRequest, RecentEarthquakesRequest
+
+        async def fake_usgs_get(params, client=None):
+            return {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "id": "event-model-1",
+                        "properties": {"mag": 4.5, "place": "Typed Model City"},
+                        "geometry": {"coordinates": [-120.0, 36.0, 10.0]},
+                    }
+                ],
+                "metadata": {"count": 1},
+            }
+
+        original_usgs_get = main._usgs_get
+        main._usgs_get = fake_usgs_get
+        try:
+            recent_req = RecentEarthquakesRequest(hours=48, min_magnitude=3.0, limit=3)
+            recent_resp = asyncio.run(main.tool_recent_earthquakes(recent_req))
+            self.assertTrue(recent_resp.success)
+            self.assertEqual(recent_resp.data["count"], 1)
+
+            nearby_req = NearbyEarthquakesRequest(latitude=36.0, longitude=-120.0, radius_km=100.0)
+            nearby_resp = asyncio.run(main.tool_nearby_earthquakes(nearby_req))
+            self.assertTrue(nearby_resp.success)
+            self.assertEqual(nearby_resp.data["count"], 1)
+        finally:
+            main._usgs_get = original_usgs_get
+
+    def test_end_to_end_app_stack_with_transport_mock(self):
+        try:
+            from models import EarthquakeDetailsRequest, NearbyEarthquakesRequest, RecentEarthquakesRequest
+        except ImportError:
+            from .models import EarthquakeDetailsRequest, NearbyEarthquakesRequest, RecentEarthquakesRequest
+
+        async def fake_usgs_get(params, client=None):
+            event_id = params.get("eventid", "")
+            if event_id:
+                return {
+                    "type": "Feature",
+                    "id": event_id,
+                    "properties": {
+                        "mag": 6.2,
+                        "place": "Off Coast of Northern California",
+                        "time": 1700000000000,
+                        "url": f"https://earthquake.usgs.gov/earthquakes/eventpage/{event_id}",
+                        "status": "reviewed",
+                        "alert": "green",
+                    },
+                    "geometry": {"coordinates": [-124.5, 40.3, 10.0]},
+                }
+            return {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "id": "event-e2e-1",
+                        "properties": {"mag": 4.8, "place": "30km S of San Jose, CA", "time": 1700000000000},
+                        "geometry": {"coordinates": [-121.8, 37.1, 8.5]},
+                    }
+                ],
+                "metadata": {"count": 1},
+            }
+
+        original_usgs_get = main._usgs_get
+        main._usgs_get = fake_usgs_get
+
+        async def asgi_request(app, method, path, json_data=None):
+            import json
+
+            body_bytes = json.dumps(json_data).encode("utf-8") if json_data is not None else b""
+            events = []
+
+            async def receive():
+                return {"type": "http.request", "body": body_bytes, "more_body": False}
+
+            async def send(message):
+                events.append(message)
+
+            scope = {
+                "type": "http",
+                "method": method,
+                "path": path,
+                "headers": [[b"content-type", b"application/json"]] if json_data is not None else [],
+            }
+            await app(scope, receive, send)
+
+            status = None
+            body = b""
+            for event in events:
+                if event["type"] == "http.response.start":
+                    status = event["status"]
+                elif event["type"] == "http.response.body":
+                    body += event.get("body", b"")
+            parsed_json = json.loads(body.decode("utf-8")) if body else None
+            return status, parsed_json
+
+        try:
+            # 1. Direct typed Pydantic model calls (verifying .json() synchronous method does not cause TypeError)
+            recent_req = RecentEarthquakesRequest(hours=12, min_magnitude=4.0, limit=3)
+            self.assertTrue(hasattr(recent_req, "json") and callable(recent_req.json))
+            self.assertIsInstance(recent_req.json(), str)
+            direct_recent = asyncio.run(main.tool_recent_earthquakes(recent_req))
+            self.assertTrue(direct_recent.success)
+            self.assertEqual(direct_recent.data["count"], 1)
+
+            nearby_req = NearbyEarthquakesRequest(latitude=37.7, longitude=-122.4, radius_km=150.0)
+            self.assertTrue(hasattr(nearby_req, "json") and callable(nearby_req.json))
+            self.assertIsInstance(nearby_req.json(), str)
+            direct_nearby = asyncio.run(main.tool_nearby_earthquakes(nearby_req))
+            self.assertTrue(direct_nearby.success)
+            self.assertEqual(direct_nearby.data["count"], 1)
+
+            details_req = EarthquakeDetailsRequest(event_id="https://earthquake.usgs.gov/earthquakes/eventpage/us7000e2e1/executive")
+            self.assertTrue(hasattr(details_req, "json") and callable(details_req.json))
+            self.assertIsInstance(details_req.json(), str)
+            direct_details = asyncio.run(main.tool_earthquake_details(details_req))
+            self.assertTrue(direct_details.success)
+            self.assertEqual(direct_details.data["earthquake"]["event_id"], "us7000e2e1")
+
+            # 2. Full HTTP ASGI stack requests with JSON payloads (simulating live FastAPI/Starlette dispatch)
+            status, data = asyncio.run(
+                asgi_request(main.app, "POST", "/tools/recent_earthquakes", {"hours": 12, "min_magnitude": 4.0, "limit": 3})
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(data["success"])
+            self.assertEqual(data["data"]["count"], 1)
+
+            status, data = asyncio.run(
+                asgi_request(main.app, "POST", "/tools/nearby_earthquakes", {"latitude": 37.7, "longitude": -122.4})
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(data["success"])
+            self.assertEqual(data["data"]["count"], 1)
+
+            status, data = asyncio.run(
+                asgi_request(
+                    main.app,
+                    "POST",
+                    "/tools/earthquake_details",
+                    {"event_id": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000e2e1/executive"},
+                )
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(data["success"])
+            self.assertEqual(data["data"]["earthquake"]["event_id"], "us7000e2e1")
+        finally:
+            main._usgs_get = original_usgs_get
 
 
 if __name__ == "__main__":
