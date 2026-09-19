@@ -43,6 +43,18 @@ void main() {
       expect(restored.appResults.first.content, 'legacy summary');
     });
 
+    test('source round trips as the wire value', () {
+      final conv = ServerConversation(
+        id: 'test-id',
+        createdAt: DateTime.utc(2026, 7, 1, 12, 0, 0),
+        structured: Structured('Test', 'Test'),
+        source: ConversationSource.sdcard,
+      );
+      final json = jsonDecode(jsonEncode(conv.toJson()));
+      expect(json['source'], 'sdcard');
+      expect(ServerConversation.fromJson(json).source, ConversationSource.sdcard);
+    });
+
     test('plugin result with null plugin_id round trips', () {
       final conv = _conversation(appResults: [AppResponse('no app id', appId: null)]);
       final restored = ServerConversation.fromJson(jsonDecode(jsonEncode(conv.toJson())));
