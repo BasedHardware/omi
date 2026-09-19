@@ -5,6 +5,7 @@ This app provides Twitter/X integration through OAuth2 authentication
 and chat tools for managing tweets, reading timeline, and more.
 """
 import os
+import html
 import sys
 import secrets
 import hashlib
@@ -1024,7 +1025,7 @@ async def root(uid: str = Query(None)):
                 <div class="success-box">
                     <div class="icon" style="font-size: 48px;">✓</div>
                     <h2>Twitter Connected</h2>
-                    <p>Connected as @{username}</p>
+                    <p>Connected as @{html.escape(username or "", quote=True)}</p>
                 </div>
 
                 <div class="card">
@@ -1088,7 +1089,7 @@ async def twitter_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error or "", quote=True)}</p>
                     </div>
                 </div>
             </body>
@@ -1195,7 +1196,7 @@ async def twitter_callback(
                     <div class="success-box">
                         <div class="icon" style="font-size: 72px;">🎉</div>
                         <h2>Successfully Connected!</h2>
-                        <p>Your Twitter account @{username} is now linked to Omi</p>
+                        <p>Your Twitter account @{html.escape(username or "", quote=True)} is now linked to Omi</p>
                     </div>
 
                     <a href="/?uid={uid}" class="btn btn-primary btn-block">
