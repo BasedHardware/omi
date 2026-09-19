@@ -19,10 +19,24 @@ import OmiTheme
 import SwiftUI
 
 struct SpineHourRail: View {
-  /// One entry per hour, indexed 0…23, each 0…1 against the day's own busiest hour.
-  let density: [Double]
-  /// The hour under the top of the list, or nil before anything has been read.
-  let currentHour: Int?
+  /// Every loaded day, newest first — the whole strip, not just the one being read. See
+  /// `SpineRibbon`.
+  let days: [SpineRibbonDay]
+  /// Where the strip sits, in strip points — already blended between the two rows nearest the
+  /// reading line, so it moves every frame the list moves. See `SpineReadingPosition`.
+  ///
+  /// A closure rather than a value because the scale of the strip is the column's own height (one
+  /// day is one column) and only the `GeometryReader` below knows it.
+  let depth: (CGFloat) -> CGFloat
+  /// Whether any hour is being read. `false` when no row has been reported — every day folded shut,
+  /// or nothing read yet — where the strip still parks somewhere but lights nothing.
+  let highlightsMarker: Bool
+  /// The hour to *say*. Which hour is drawn heavier is derived from `depth`, but speech has no
+  /// column height to derive anything from, and "Reading 12 PM" is the one part of this column a
+  /// listener cannot get from the headline. `nil` when nothing is being read.
+  let readingHour: Int?
+  /// The list's scroll view, so a wheel over the ribbon moves the list. See `SpineScrollLink`.
+  let scrollLink: SpineScrollLink
   /// The headline: how much screen capture the day being read holds, or `nil` while that day's index
   /// is still being read. `nil` is not zero — see `headlineCaption`.
   let momentCount: Int?
@@ -55,13 +69,6 @@ struct SpineHourRail: View {
   /// shortened forms out of 10,234 and removes the coin flip.
   private nonisolated static let scopeFitBudget: CGFloat = contentWidth - 1
 
-  /// Labelled hours. Four is enough to orient without turning the rail into an axis.
-  private static let labelledHours: Set<Int> = [0, 6, 12, 18]
-
-  /// A bar this fraction of the peak or more is drawn heavier. Not a hue — the rail is one ink at
-  /// two weights, like every other ranking in this system.
-  private static let hotThreshold = 0.6
-
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       // Number, noun, day — "0 screen moments, Yesterday", read straight down. **The day goes last,
@@ -80,7 +87,7 @@ struct SpineHourRail: View {
         }
       }
 
-      bars
+      ribbon
 
       if let footer = Self.footer(conversationCount: conversationCount) {
         Text(footer)
@@ -98,7 +105,7 @@ struct SpineHourRail: View {
           momentCount: momentCount,
           dayTitle: dayTitle,
           conversationCount: conversationCount,
-          currentHour: currentHour)))
+          currentHour: readingHour)))
   }
 
   /// **The rail counts one day of screen capture; the panel's corner counts the whole account.**
@@ -237,63 +244,27 @@ struct SpineHourRail: View {
     return text
   }
 
-  /// The bars themselves, drawn 23 → 0 top to bottom.
-  private var bars: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      ForEach(Self.renderedHours, id: \.self) { hour in
-        SpineHourBar(
-          hour: hour,
-          weight: density.indices.contains(hour) ? density[hour] : 0,
-          isHot: (density.indices.contains(hour) ? density[hour] : 0) >= Self.hotThreshold,
-          isCurrent: hour == currentHour,
-          label: Self.labelledHours.contains(hour) ? SpineFormat.hourLabel(hour) : nil
-        )
-        .frame(maxHeight: .infinity)
-      }
+  /// The strip, and the wheel target over it.
+  ///
+  /// Inside a `GeometryReader` because the strip's scale is the column's own height — one day is one
+  /// column (`SpineRibbonGeometry.dayHeight`), so the position can only be worked out where that
+  /// height is known. The forwarder sits on top rather than the ribbon owning a scroll view, because
+  /// there is only ever one scroll here and it belongs to the list — see `SpineScrollLink`.
+  ///
+  /// **No `.animation` on the position, deliberately.** The strip is told where to be several times
+  /// a second while scrolling, and an animation on a value that keeps changing never settles: the
+  /// strip spends the whole scroll interpolating towards a target it has already been given a newer
+  /// version of, which is what "laggy" was. The position is continuous at source now — that is where
+  /// smoothness belongs, and an easing curve laid over it could only add delay.
+  private var ribbon: some View {
+    GeometryReader { proxy in
+      SpineRibbon(
+        days: days,
+        depth: depth(proxy.size.height),
+        highlightsMarker: highlightsMarker
+      )
+      .overlay(SpineWheelForwarder(link: scrollLink))
     }
     .frame(maxHeight: .infinity)
-  }
-}
-
-/// One hour.
-struct SpineHourBar: View {
-  let hour: Int
-  let weight: Double
-  let isHot: Bool
-  let isCurrent: Bool
-  let label: String?
-
-  /// The shortest a bar is ever drawn. An hour with nothing in it is still an hour, and a gap in the
-  /// column would read as the rail having ended.
-  private static let minimumWidth: CGFloat = 14
-  private static let maximumExtra: CGFloat = 78
-
-  /// The hour being read, when it is not one of the four the rail labels anyway.
-  ///
-  /// **The marker is the bar itself, not a band behind it.** A full-width wash across the current
-  /// row was the first attempt and it read as a stray scrollbar — a long dark rule among short pale
-  /// pills looks like chrome that escaped, not like "you are here". Now the current hour is simply
-  /// the darkest bar with its hour named beside it: one object getting heavier, which is how every
-  /// other ranking in this system is drawn, and unmistakably part of the rail.
-  private var caption: String? {
-    if let label { return label }
-    return isCurrent ? SpineFormat.hourLabel(hour) : nil
-  }
-
-  var body: some View {
-    HStack(spacing: 7) {
-      Capsule()
-        .fill(Ink.primary.opacity(isCurrent ? 0.85 : (isHot ? 0.42 : 0.2)))
-        .frame(width: Self.minimumWidth + CGFloat(weight) * Self.maximumExtra, height: isCurrent ? 6 : 5)
-      if let caption {
-        Text(caption)
-          .font(.system(size: 9, weight: isCurrent ? .semibold : .regular))
-          .tracking(0.6)
-          .foregroundStyle(isCurrent ? Ink.primary : Ink.secondary)
-          .lineLimit(1)
-          .fixedSize()
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
