@@ -1081,6 +1081,12 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_desktop_backend_drift.py", ".github/scripts/test_check_desktop_backend_drift.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "drift script must treat missing health SHAs as unknown and keep --strict off the promotion path"
+
+  - id: hume-ai-create-memory-route-tests
+    command: ["python3", "plugins/hume-ai/test_create_omi_memory_route.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
   - id: guardrail-pulse-tests
     command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
