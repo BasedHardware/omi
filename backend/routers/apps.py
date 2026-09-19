@@ -413,6 +413,12 @@ def _write_file(path: str, data: bytes):
         f.write(data)
 
 
+def _set_instructions_url_flag(external_integration: dict) -> None:
+    if path := (external_integration.get('setup_instructions_file_path') or '').strip():
+        external_integration['setup_instructions_file_path'] = path
+        external_integration['is_instructions_url'] = path.startswith('http')
+
+
 def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
     """Fetch and process chat tools manifest, updating and returning app_dict.
 
@@ -839,14 +845,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         # Trigger on
         if external_integration.get('triggers_on'):
             normalize_required_webhook_url(external_integration)
-            if external_integration.get('setup_instructions_file_path'):
-                external_integration['setup_instructions_file_path'] = external_integration[
-                    'setup_instructions_file_path'
-                ].strip()
-                if external_integration['setup_instructions_file_path'].startswith('http'):
-                    external_integration['is_instructions_url'] = True
-                else:
-                    external_integration['is_instructions_url'] = False
+            _set_instructions_url_flag(external_integration)
 
         # Actions
         if actions := external_integration.get('actions'):
@@ -1096,6 +1095,7 @@ def update_app(
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         backfill_app_home_url_from_auth_steps(data['external_integration'])
+        _set_instructions_url_flag(data['external_integration'])
 
     try:
         update_app = AppUpdate.model_validate(data)
