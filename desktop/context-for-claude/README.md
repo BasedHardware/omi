@@ -60,7 +60,9 @@ Legacy cdhash records migrate only if they match the running binary; an unrecogn
 record may require one confirmation after updating. macOS still owns all actual grants, and a tap
 refusal still overrides the cache. No permission dialog is triggered just to inspect the cache.
 
-An unchanged signing identity does not prove a TCC grant is valid. On an isolated Mac, verify granted and denied states
+For repeated setup after reboot, compare `cfc_permission_cache`, `cfc_permission_action`, and the
+launch permission snapshots in [`docs/analytics.md`](docs/analytics.md). An unchanged signing
+identity does not prove a TCC grant is valid. On an isolated Mac, verify granted and denied states
 across quit/relaunch, reboot, a same-identity signed update, and explicit revocation in Settings.
 These OS transitions cannot be validated by the Linux portable-core tests.
 

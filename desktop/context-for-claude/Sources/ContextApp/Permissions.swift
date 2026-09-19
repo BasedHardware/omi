@@ -303,6 +303,7 @@ enum Permissions {
         state.begin(c)
         defer { state.end(c) }
 
+        ContextAnalytics.record(.permissionAction(AnalyticsEvent.Permission(c), .requested))
         switch c {
         case .microphone:
             return await requestMicrophone()
@@ -327,7 +328,9 @@ enum Permissions {
         // `screenSettingsWasOpened`.
         if c == .screen { screenSettingsOpened.signal() }
         let open = {
-            NSWorkspace.shared.open(url)
+            if NSWorkspace.shared.open(url) {
+                ContextAnalytics.record(.permissionAction(AnalyticsEvent.Permission(c), .settingsOpened))
+            }
             ContextLog.info("Opened the \(c.rawValue) pane in System Settings", "permissions")
         }
         if Thread.isMainThread {

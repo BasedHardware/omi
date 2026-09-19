@@ -79,6 +79,23 @@ final class AnalyticsPayloadTests: XCTestCase {
         XCTAssertNil(AnalyticsPayload(persisted: [:]))
     }
 
+    func testPermissionDiagnosticsSurviveSpoolingWithoutSigningIdentityOrContent() throws {
+        let cache = try XCTUnwrap(AnalyticsPayload(persisted: payload(.permissionCache(.identityChanged)).json))
+        XCTAssertEqual(cache.name, "cfc_permission_cache")
+        XCTAssertEqual(AnalyticsEvent.permissionCache(.identityChanged).properties, [
+            "permission": .string("systemAudio"), "outcome": .string("identity_changed"),
+        ])
+        XCTAssertEqual(cache.properties["outcome"], .string("identity_changed"))
+        let action = try XCTUnwrap(AnalyticsPayload(persisted: payload(
+            .permissionAction(.screen, .settingsOpened)).json))
+        XCTAssertEqual(action.name, "cfc_permission_action")
+        XCTAssertEqual(AnalyticsEvent.permissionAction(.screen, .settingsOpened).properties, [
+            "permission": .string("screen"), "action": .string("settings_opened"),
+        ])
+        XCTAssertEqual(action.properties["permission"], .string("screen"))
+        XCTAssertEqual(action.properties["action"], .string("settings_opened"))
+    }
+
     // MARK: - Identity
 
     /// A second stored id is a second thing that can be lost, and an id that resets makes every
@@ -113,6 +130,8 @@ final class AnalyticsEventTests: XCTestCase {
         // the compiler gives up on it.
         var allowed: [String] = AnalyticsEvent.Permission.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.PermissionState.allCases.map(\.rawValue)
+        allowed += Permissions.SystemAudioRecordOutcome.allCases.map(\.rawValue)
+        allowed += AnalyticsEvent.PermissionAction.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.CaptureSource.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.Surface.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.OpenSource.allCases.map(\.rawValue)
@@ -724,6 +743,10 @@ extension AnalyticsEvent {
         events += Permission.allCases.flatMap { permission in
             PermissionState.allCases.map { AnalyticsEvent.permission(permission, $0) }
         }
+        events += Permissions.SystemAudioRecordOutcome.allCases.map { AnalyticsEvent.permissionCache($0) }
+        events += Permission.allCases.flatMap { permission in
+            PermissionAction.allCases.map { AnalyticsEvent.permissionAction(permission, $0) }
+        }
         events += CaptureSource.allCases.flatMap { source in
             [AnalyticsEvent.captureStateChanged(source: source, live: true),
              AnalyticsEvent.captureStateChanged(source: source, live: false)]
@@ -761,6 +784,7 @@ final class AnalyticsEventShapeTests: XCTestCase {
         let covered = Set(AnalyticsEvent.everyShape.map(\.name))
         let expected: Set<String> = [
             "cfc_first_launch", "cfc_app_launched", "cfc_daily_active", "cfc_permission",
+            "cfc_permission_cache", "cfc_permission_action",
             "cfc_onboarding_step", "cfc_onboarding_finished", "cfc_account_state",
             "cfc_capture_state", "cfc_gesture_fired", "cfc_surface_opened", "cfc_surface_closed",
             "cfc_claude_handoff", "cfc_control_used", "cfc_tutorial_step", "cfc_search_ran",

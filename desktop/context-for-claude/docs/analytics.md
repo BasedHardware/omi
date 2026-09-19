@@ -38,6 +38,8 @@ enum; `AnalyticsEventTests.testNoEventCarriesFreeFormText` fails if a free strin
 | `cfc_app_launched` | the only signal from someone who opens the app and does nothing |
 | `cfc_daily_active` | **DAU, retention, and "how much"** — see below |
 | `cfc_permission` | the setup funnel, per capability, snapshotted every launch |
+| `cfc_permission_cache` | why system-audio cached answers were retained or cleared at launch |
+| `cfc_permission_action` | brokered requests and successful Settings opens, per capability |
 | `cfc_onboarding_step` / `cfc_onboarding_finished` | where first run is abandoned |
 | `cfc_account_state` | whether an Omi account is attached (never which) |
 | `cfc_capture_state` | mic / system audio / screen going live and stopping |
@@ -255,6 +257,62 @@ GROUP BY event ORDER BY n DESC
 ```
 
 ## Asking it questions
+
+Use PostHog project `302298` → SQL insight for these read-only queries. These count anonymous
+installations, not named people; one person with two Macs can appear twice. Airgapped and local
+development builds are excluded. A `403` from the query API means the supplied credential cannot
+read the project; it is not evidence that there are no users. Do not send fabricated production
+events to test these queries.
+
+Active installations, versions and last-seen dates over the last 14 days:
+
+```sql
+SELECT properties.app_version AS version,
+       count(DISTINCT distinct_id) AS active_installs,
+       max(timestamp) AS last_seen
+FROM events
+WHERE timestamp > now() - INTERVAL 14 DAY
+  AND properties.app = 'context-for-claude'
+  AND event IN ('cfc_first_launch', 'cfc_app_launched', 'cfc_daily_active')
+GROUP BY version ORDER BY active_installs DESC
+```
+
+An install can appear under more than one version after an update; do not sum these rows to get
+unique users. To obtain a total, omit the version column and `GROUP BY`.
+
+Permission cache outcomes by version:
+
+```sql
+SELECT properties.app_version AS version, properties.outcome AS outcome,
+       count() AS launches, count(DISTINCT distinct_id) AS installs
+FROM events
+WHERE timestamp > now() - INTERVAL 14 DAY
+  AND properties.app = 'context-for-claude' AND event = 'cfc_permission_cache'
+GROUP BY version, outcome ORDER BY launches DESC
+```
+
+`unchanged` retains the cache; `initialized` means no prior records; `legacy_migrated` converts a
+matching old cdhash; `identity_changed` clears records from a different or unknown identity;
+`identity_unavailable` leaves records untouched because Security.framework could not identify the
+running code. These are cache decisions, **not** OS permission grants. The event follows analytics
+startup and is emitted once per launch, not by the permission polling loop. No code hashes or
+signing requirements are sent.
+
+Repeated permission actions (requests are not proof that macOS displayed a prompt):
+
+```sql
+SELECT properties.permission AS permission, properties.action AS action,
+       count() AS actions, count(DISTINCT distinct_id) AS installs
+FROM events
+WHERE timestamp > now() - INTERVAL 14 DAY
+  AND properties.app = 'context-for-claude' AND event = 'cfc_permission_action'
+GROUP BY permission, action ORDER BY actions DESC
+```
+
+`requested` counts entry to the serialized permission action; `settings_opened` counts accepted
+Settings opens. One request can also open Settings, so do not sum the two into a prompt count.
+Compare with `cfc_permission` launch snapshots and `cfc_capture_state` to distinguish repeated
+setup from working capture. These diagnostics retain the existing shipping-only and Airgap gates.
 
 `~/.claude/skills/omi-analytics/scripts/ph.py --preset cfc` covers actives, installs, tool-call
 volume and the permission funnel. Anything else is HogQL against `properties.app =
