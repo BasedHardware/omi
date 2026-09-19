@@ -24,6 +24,7 @@ import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from models.conversation import AppResult
+from models.screen_activity import ScreenActivityCoverage
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
@@ -94,6 +95,7 @@ class McpScreenActivityAppSummary(BaseModel):
 class McpScreenActivitySummaryResponse(BaseModel):
     apps: Dict[str, McpScreenActivityAppSummary] = {}
     total_screenshots: int = 0
+    coverage: Optional[ScreenActivityCoverage] = None
 
 
 @router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)

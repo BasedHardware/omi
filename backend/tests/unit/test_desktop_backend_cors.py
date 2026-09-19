@@ -94,12 +94,19 @@ def test_desktop_backend_cors_middleware_enforces_allowlist(monkeypatch):
                 'Access-Control-Request-Method': 'GET',
             },
         )
+        exposed = client.get('/', headers={'Origin': 'https://app.example'})
         without_origin = client.get('/')
 
     assert allowed.status_code == 200
     assert allowed.headers['access-control-allow-origin'] == 'https://app.example'
     assert denied.status_code == 400
     assert 'access-control-allow-origin' not in denied.headers
+    exposed_headers = {name.strip().lower() for name in exposed.headers['access-control-expose-headers'].split(',')}
+    assert {
+        'x-omi-memory-belief-enabled',
+        'x-omi-memory-next-cursor',
+        'x-omi-list-truncated',
+    } <= exposed_headers
     assert 'access-control-allow-origin' not in without_origin.headers
 
 

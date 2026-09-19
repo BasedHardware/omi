@@ -340,17 +340,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       Container(), // FindDevicesPage placeholder
       widget.forceAuthPage
           ? const SizedBox.shrink()
-          // Reuses the app-root SpeechProfileProvider (see main.dart) instead of a
-          // second, independently-constructed instance, so onboarding and the
-          // Settings speech profile page share one connection/recording state
-          // and setProviders(deviceProvider) actually gets called on it.
+          // The guided introduction owns its transcription-only session and
+          // reviews statements before explicitly saving them as memories.
           : SpeechProfileWidget(
+              flowSource: 'first_run',
               goNext: () {
-                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
+                // All Done is not enroll success (#12765). Upload/embedding
+                // events fire only from the guided I/O upload receipt.
+                PlatformManager.instance.analytics.speechProfileContinued();
                 _controller!.animateTo(kKnowledgeGraphPage);
               },
               onSkip: () {
-                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
+                PlatformManager.instance.analytics.speechProfileSkipped();
                 _controller!.animateTo(kKnowledgeGraphPage);
               },
             ),

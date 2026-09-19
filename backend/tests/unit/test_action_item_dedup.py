@@ -22,7 +22,9 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
+
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
@@ -196,14 +198,17 @@ class TestFindSimilarActionItems:
 
         assert result == []
 
-    def test_empty_query_still_calls_pinecone(self, monkeypatch, vector_db):
-        """The helper itself doesn't gate on empty query — that's the caller's concern.
-        Embedding an empty string is harmless; Pinecone returns no matches; helper returns []."""
-        _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
+    def test_empty_or_blank_query_skips_the_embedding_call(self, monkeypatch, vector_db):
+        """GH #13505: empty input is exactly what the embeddings gateway 400s on.
 
-        result = vector_db.find_similar_action_items('uid-abc', '')
+        The helper validates before embedding — an empty or blank query returns
+        "no candidates" without spending the gateway call.
+        """
+        _, fake_embeddings = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
 
-        assert result == []
+        assert vector_db.find_similar_action_items('uid-abc', '') == []
+        assert vector_db.find_similar_action_items('uid-abc', '   ') == []
+        fake_embeddings.embed_query.assert_not_called()
 
     def test_preserves_pinecone_match_order(self, monkeypatch, vector_db):
         """Pinecone returns matches sorted by relevance; we must not re-order."""
@@ -239,6 +244,71 @@ class TestFindSimilarActionItems:
 
         assert [r['action_item_id'] for r in result] == ['good-1', 'good-2']
         assert all(r['action_item_id'] for r in result)
+
+
+def _gateway_400() -> Exception:
+    request = httpx.Request('POST', 'http://llm-gateway.internal/v1/embeddings')
+    response = httpx.Response(400, request=request)
+    return httpx.HTTPStatusError(
+        "Client error '400 Bad Request' for url '.../v1/embeddings'", request=request, response=response
+    )
+
+
+class TestActionItemEmbeddingGateway400:
+    """GH #13505: the embeddings gateway answers 400 on empty/oversized/invalid
+    input, and that 400 propagates out of ``embed_query`` as
+    ``httpx.HTTPStatusError``. ``search_action_items_by_vector`` (backing
+    GET /v1/action-items/search and the MCP search path) had no guard at all —
+    the 400 surfaced as a 500 on a real user request. Both similarity helpers
+    must degrade to "no candidates": validate and clip the query before the
+    call, and swallow the gateway failure when it still rejects it.
+    """
+
+    def test_search_returns_empty_on_gateway_400(self, monkeypatch, vector_db):
+        _setup_mocks(monkeypatch, vector_db, embed_raises=_gateway_400())
+
+        assert vector_db.search_action_items_by_vector('uid-abc', 'buy milk') == []
+
+    def test_search_returns_empty_on_pinecone_failure(self, monkeypatch, vector_db):
+        _setup_mocks(monkeypatch, vector_db, query_raises=RuntimeError('pinecone is down'))
+
+        assert vector_db.search_action_items_by_vector('uid-abc', 'buy milk') == []
+
+    def test_search_empty_query_skips_the_embedding_call(self, monkeypatch, vector_db):
+        _, fake_embeddings = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
+
+        assert vector_db.search_action_items_by_vector('uid-abc', '') == []
+        fake_embeddings.embed_query.assert_not_called()
+
+    def test_search_clips_oversized_query_before_embedding(self, monkeypatch, vector_db):
+        """A scraped/oversized action-item string must not reach the gateway raw."""
+        _, fake_embeddings = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
+        oversized = 'x' * (vector_db._ACTION_ITEM_QUERY_MAX_CHARS * 3)
+
+        vector_db.search_action_items_by_vector('uid-abc', oversized)
+
+        sent = fake_embeddings.embed_query.call_args.args[0]
+        assert len(sent) == vector_db._ACTION_ITEM_QUERY_MAX_CHARS
+
+    def test_search_returns_kept_match_ids(self, monkeypatch, vector_db):
+        response = {
+            'matches': [
+                {'metadata': {'action_item_id': 'a1'}, 'score': 0.9},
+                {'metadata': {'action_item_id': 'a2'}, 'score': 0.1},  # below default 0.3
+            ]
+        }
+        _setup_mocks(monkeypatch, vector_db, query_response=response)
+
+        assert vector_db.search_action_items_by_vector('uid-abc', 'buy milk') == ['a1']
+
+    def test_find_similar_clips_oversized_query_before_embedding(self, monkeypatch, vector_db):
+        _, fake_embeddings = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
+        oversized = 'y' * (vector_db._ACTION_ITEM_QUERY_MAX_CHARS * 3)
+
+        vector_db.find_similar_action_items('uid-abc', oversized)
+
+        sent = fake_embeddings.embed_query.call_args.args[0]
+        assert len(sent) == vector_db._ACTION_ITEM_QUERY_MAX_CHARS
 
 
 class TestQueryConversationVectors:

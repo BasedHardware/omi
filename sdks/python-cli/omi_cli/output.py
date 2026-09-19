@@ -72,7 +72,7 @@ class Renderer:
             return
 
         if isinstance(data, list):
-            self._emit_table(data, columns=columns, title=title)
+            self._emit_table(coalesce_rows(data), columns=columns, title=title)
         elif isinstance(data, Mapping):
             self._emit_mapping(data, title=title)
         else:
@@ -96,8 +96,8 @@ class Renderer:
             self._stdout.print("[dim](no results)[/dim]")
             return
 
-        # Pick columns. Caller-supplied wins; otherwise use the keys of the first row.
-        cols = list(columns) if columns else list(rows[0].keys())
+        # Explicit columns win; inferred columns preserve keys from every row.
+        cols = list(columns) if columns else list(dict.fromkeys(key for row in rows for key in row))
 
         table = Table(title=title, show_lines=False, header_style="bold")
         for col in cols:

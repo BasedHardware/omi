@@ -35,7 +35,19 @@ def _get(pins, width=300, height=150, uid=UID):
 
 
 def test_malformed_pins_are_rejected_with_400():
-    for bad in ['abc', '1.0', '1.0,2.0,3.0', '91,0', '0,181', 'a,b', '']:
+    for bad in [
+        'abc',
+        '1.0',
+        '1.0,2.0,3.0',
+        '91,0',
+        '0,181',
+        'a,b',
+        '',
+        '90.00004,0',
+        '-90.00004,0',
+        '0,180.00004',
+        '0,-180.00004',
+    ]:
         with pytest.raises(HTTPException) as excinfo:
             _get(bad)
         assert excinfo.value.status_code == 400, bad
@@ -121,6 +133,18 @@ def test_parse_pins_caps_at_50():
     assert len(static_map_mod.parse_pins(raw)) == 50
 
 
+def test_parse_pins_rejects_out_of_bounds_coordinates_before_quantization():
+    # Coordinates just outside legal [-90, 90] and [-180, 180] bounds must not
+    # round onto the legal boundary and get accepted.
+    for bad in ['90.00004,0', '-90.00004,0', '0,180.00004', '0,-180.00004']:
+        with pytest.raises(static_map_mod.MalformedPinsError, match='pin coordinates out of bounds'):
+            static_map_mod.parse_pins(bad)
+
+    # Exact boundary coordinates remain legal and quantize properly.
+    assert static_map_mod.parse_pins('90.0,180.0') == [(90.0, 180.0)]
+    assert static_map_mod.parse_pins('-90.0,-180.0') == [(-90.0, -180.0)]
+
+
 def test_single_pin_url_centers_at_street_zoom():
     url = static_map_mod.build_static_map_url([(37.7749, -122.4194)], 300, 150, 'k-test')
     assert 'center=37.7749,-122.4194' in url
@@ -177,8 +201,11 @@ class _FakeRedis:
         self.store.pop(key, None)
 
 
-def _fake_response(status_code=200, content=b'png-bytes', content_type='image/png'):
-    return SimpleNamespace(status_code=status_code, headers={'content-type': content_type}, content=content)
+def _fake_response(status_code=200, content=b'png-bytes', content_type='image/png', warning=None):
+    headers = {'content-type': content_type}
+    if warning is not None:
+        headers['X-Staticmap-API-Warning'] = warning
+    return SimpleNamespace(status_code=status_code, headers=headers, content=content)
 
 
 def _patch_environment(monkeypatch, response=None, redis=None, delay=0.0):
@@ -320,6 +347,20 @@ async def test_provider_error_status_is_returned_as_none_and_not_cached(monkeypa
 
     assert result is None
     assert redis.store == {}  # failures are never cached
+
+
+@pytest.mark.asyncio
+async def test_degraded_render_with_provider_warning_header_is_none_and_not_cached(monkeypatch):
+    # Google serves the authorization / "for development purposes only" watermark
+    # as a normal HTTP 200 image/png, flagged only by X-Staticmap-API-Warning.
+    # Treat it as a failure so a single poisoned render is never cached and
+    # shared to every user for the whole cache TTL.
+    redis, _ = _patch_environment(monkeypatch, response=_fake_response(warning='For development purposes only'))
+
+    result = await static_map_mod.fetch_static_map([(37.7749, -122.4194)], 300, 150)
+
+    assert result is None
+    assert redis.store == {}  # degraded renders are never cached
 
 
 @pytest.mark.asyncio

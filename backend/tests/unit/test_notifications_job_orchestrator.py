@@ -48,8 +48,9 @@ def test_notifications_job_orders_primary_notifications_then_health_then_x_flex(
     started_at = source.index("job_started_at = time.monotonic()")
     notifications = source.index("await start_cron_notification_job()")
     materialization_health = source.index("await run_blocking(db_executor, run_scheduled_check)")
+    redis_memory = source.index("await run_blocking(db_executor, run_redis_memory_check)")
     x_sync = source.index("await run_x_sync_job(job_started_at=job_started_at)")
-    assert started_at < notifications < materialization_health < x_sync
+    assert started_at < notifications < materialization_health < redis_memory < x_sync
 
 
 def test_notifications_job_deploy_routes_materialization_decision_review():
@@ -58,6 +59,8 @@ def test_notifications_job_deploy_routes_materialization_decision_review():
 
     assert 'chat_first_materialization_health review=true' in workflow
     assert 'chat_first_materialization_review_due' in workflow
+    assert 'redis_memory_threshold threshold=90' in workflow
+    assert 'redis_memory_90' in workflow
     assert '--notification-channels="$ALERT_CHANNELS"' in workflow
     assert '--set-notification-channels="$ALERT_CHANNELS"' in workflow
 

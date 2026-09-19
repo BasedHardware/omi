@@ -78,7 +78,9 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(accepted.model.turn?.phase, .terminal(.success))
     XCTAssertEqual(
       accepted.model.lastTerminal,
-      .init(turnID: turnID, reason: .success, route: .hub(sessionID: sessionID)))
+      .init(
+        turnID: turnID, reason: .success, route: .hub(sessionID: sessionID),
+        answerTextCompleted: true))
     XCTAssertEqual(accepted.effects.filter(\.isTerminal).count, 1)
 
     let duplicate = reduce(accepted.model, .finish(turnID: turnID, reason: .success))

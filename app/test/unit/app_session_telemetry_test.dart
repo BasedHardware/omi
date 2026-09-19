@@ -81,6 +81,9 @@ class _FakeAnalyticsAdapter implements AnalyticsAdapter {
   void setInteractionContext({String? screenName, required String target}) {}
 
   @override
+  void registerSuperProperties(Map<String, Object> properties) {}
+
+  @override
   void enable() {}
 
   @override

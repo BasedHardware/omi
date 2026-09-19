@@ -50,6 +50,32 @@ def test_local_configure_persists_profile_config(config_path: Path, cli_runner) 
     assert profile.local_token == FAKE_LOCAL_TOKEN
 
 
+def test_local_configure_escapes_markup_like_profile_name(config_path: Path, cli_runner) -> None:
+    """Rich markup in a profile name must be escaped in the configure message.
+
+    `omi local configure` prints the profile name inside a Rich-markup
+    message; a profile named 'bad[/bold]' would otherwise crash the render
+    after the config had already been saved.
+    """
+    tricky = "bad[/bold]"
+    result = cli_runner.invoke(
+        app,
+        [
+            "--profile",
+            tricky,
+            "local",
+            "configure",
+            "--url",
+            FAKE_LOCAL_URL,
+            "--token",
+            FAKE_LOCAL_TOKEN,
+        ],
+    )
+    assert result.exit_code == 0, repr(result.exception)
+    assert "bad[/bold]" in result.output
+    assert cfg.load().get_profile(tricky).local_api_url == FAKE_LOCAL_URL
+
+
 def test_local_status_without_config_is_json(config_path: Path, cli_runner) -> None:
     result = cli_runner.invoke(app, ["--json", "local", "status"])
 
@@ -101,6 +127,22 @@ def test_local_call_accepts_args_json(config_path: Path, cli_runner) -> None:
         "arguments": {"query": "deck", "days": 3},
     }
     assert json.loads(result.stdout) == {"ok": True}
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_local_call_preserves_fields_from_later_result_rows(config_path: Path, cli_runner, json_mode: bool) -> None:
+    _configure_local_profile(config_path)
+    rows = [{"id": "first"}, {"id": "second", "detail": "later-value"}]
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(rows)))
+        result = cli_runner.invoke(app, (["--json"] if json_mode else []) + ["local", "call", "test_tool"])
+
+    assert result.exit_code == 0, result.output
+    if json_mode:
+        assert json.loads(result.stdout) == rows
+    else:
+        assert "detail" in result.stdout
+        assert "later-value" in result.stdout
 
 
 def test_local_call_exits_nonzero_when_api_reports_error(config_path: Path, cli_runner) -> None:
@@ -315,6 +357,38 @@ def test_sql_json_structures_single_column_table_text(config_path: Path, cli_run
     }
 
 
+def test_sql_json_falls_back_to_raw_text_when_cells_contain_pipes_or_newlines(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    # Cell with pipe delimiter in single column output
+    sql_text_pipe = "value\n-----\na|b\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_pipe)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 'a|b' AS value"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"text": sql_text_pipe}
+
+    # Multiline cell resulting in row count mismatch
+    sql_text_newline = "value\n-----\na\nb\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_newline)))
+        result_nl = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 'a' || char(10) || 'b' AS value"])
+
+    assert result_nl.exit_code == 0, result_nl.output
+    assert json.loads(result_nl.stdout) == {"text": sql_text_newline}
+
+    # Multiline cell containing an empty continuation line
+    sql_text_empty_cont = "value\n-----\na\n\nb\n\n2 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_empty_cont)))
+        result_empty_cont = cli_runner.invoke(
+            app, ["--json", "local", "sql", "SELECT 'a' || char(10) || char(10) || 'b' AS value"]
+        )
+
+    assert result_empty_cont.exit_code == 0, result_empty_cont.output
+    assert json.loads(result_empty_cont.stdout) == {"text": sql_text_empty_cont}
+
+
 def test_task_commands_route_to_local_tools(config_path: Path, cli_runner) -> None:
     _configure_local_profile(config_path)
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
@@ -401,6 +475,56 @@ def test_screenshot_copies_existing_file_response(config_path: Path, cli_runner,
     assert output.read_bytes() == source.read_bytes()
 
 
+def test_screenshot_same_source_and_output_is_noop(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Writing a screenshot onto its own source path must not raise SameFileError."""
+    _configure_local_profile(config_path)
+    source = tmp_path / "shot.jpg"
+    source.write_bytes(b"synthetic-image")
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(str(source))))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(source)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert source.read_bytes() == b"synthetic-image"
+    assert json.loads(result.stdout)["bytes"] == len(b"synthetic-image")
+
+
+def test_screenshot_same_source_and_output_is_noop_mapping_path(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Same-file no-op must also hold for the mapping-with-path response shape."""
+    _configure_local_profile(config_path)
+    source = tmp_path / "shot.jpg"
+    source.write_bytes(b"synthetic-image")
+    # The Desktop tool may return a structured mapping (path/file_path/...)
+    # rather than a bare path string; the API envelope's result field is then
+    # an object, not a JSON-encoded string.
+    response = {"ok": True, "name": "tool", "content_type": "text/plain", "result": {"path": str(source)}}
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=response))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(source)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert source.read_bytes() == b"synthetic-image"
+    assert json.loads(result.stdout)["bytes"] == len(b"synthetic-image")
+
+
+def test_screenshot_hard_link_output_is_noop(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Writing a screenshot to a hard link of its source must not raise SameFileError."""
+    _configure_local_profile(config_path)
+    import os
+
+    source = tmp_path / "shot.jpg"
+    source.write_bytes(b"synthetic-image")
+    link = tmp_path / "shot-link.jpg"
+    os.link(source, link)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(str(source))))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(link)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert link.read_bytes() == b"synthetic-image"
+    assert json.loads(result.stdout)["bytes"] == len(b"synthetic-image")
+
+
 def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Path, cli_runner, tmp_path: Path) -> None:
     _configure_local_profile(config_path)
     output = tmp_path / "pending.jpg"
@@ -441,6 +565,67 @@ def test_non_json_error_escapes_structured_extra_markup(capsys: pytest.CaptureFi
     captured = capsys.readouterr()
     assert "hint: Use [safe] text" in captured.err
     assert "[danger]: <value>" in captured.err
+
+
+def test_unwrap_tool_response_raises_on_embedded_failure(config_path: Path) -> None:
+    """A structured Desktop failure inside the result JSON must raise, not pass through."""
+    from omi_cli.errors import CliError
+    from omi_cli.local_client import _unwrap_tool_response
+
+    failure = {
+        "ok": False,
+        "database_available": False,
+        "screen_history_available": False,
+        "message": "Failed to read local Omi status: test",
+    }
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps(failure),
+    }
+    with pytest.raises(CliError) as excinfo:
+        _unwrap_tool_response(envelope)
+    assert "Failed to read local Omi status" in str(excinfo.value)
+    assert excinfo.value.exit_code == 1
+
+
+def test_unwrap_tool_response_passes_healthy_result(config_path: Path) -> None:
+    """A healthy embedded result must still unwrap to its parsed value."""
+    from omi_cli.local_client import _unwrap_tool_response
+
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps({"ok": True, "database_available": True, "screen_history_available": True}),
+    }
+    result = _unwrap_tool_response(envelope)
+    assert isinstance(result, dict)
+    assert result["ok"] is True
+    assert result["database_available"] is True
+
+
+def test_unwrap_tool_response_extracts_message_from_structured_error(config_path: Path) -> None:
+    """A structured error object must surface its message, not the whole mapping."""
+    from omi_cli.errors import CliError
+    from omi_cli.local_client import _unwrap_tool_response
+
+    failure = {
+        "ok": False,
+        "error": {"message": "Desktop backend unavailable", "code": "ERR_DESKTOP_DOWN"},
+    }
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps(failure),
+    }
+    with pytest.raises(CliError) as excinfo:
+        _unwrap_tool_response(envelope)
+    # The human message is the extracted error.message, not the whole mapping.
+    assert "Desktop backend unavailable" in excinfo.value.message
+    assert not excinfo.value.message.startswith("{")
 
 
 def test_local_api_error_preserves_not_found_subclass(config_path: Path) -> None:

@@ -43,6 +43,10 @@ struct SettingsSearchItem: Identifiable {
       name: "Reset Window Size", subtitle: "Restore the default window dimensions",
       keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
       settingId: "general.fontsize"),
+    SettingsSearchItem(
+      name: "Transparency", subtitle: "How much of the desktop shows through the glass",
+      keywords: ["glass", "transparent", "opacity", "opaque", "blur", "see-through", "translucent"],
+      section: .general, icon: "circle.lefthalf.filled", settingId: "general.transparency"),
 
     // Rewind
     SettingsSearchItem(
@@ -105,6 +109,17 @@ struct SettingsSearchItem: Identifiable {
       name: "Local VAD Gate", subtitle: "Skip silence to reduce transcription cost",
       keywords: ["vad", "silence", "gate", "cost", "deepgram"], section: .transcription,
       icon: "waveform", settingId: "transcription.vadgate"),
+    SettingsSearchItem(
+      name: "Silent Type", subtitle: "Keeps what you dictate with Omi Type out of the chat",
+      keywords: ["silent", "type", "dictation", "voice typing", "private", "chat context"],
+      section: .transcription,
+      icon: "keyboard", settingId: "transcription.silenttype"),
+    SettingsSearchItem(
+      name: "Ignore Dictation Apps",
+      subtitle: "Stop listening while Wispr Flow, superwhisper, or macOS Dictation uses the mic",
+      keywords: ["dictation", "wispr", "superwhisper", "noise", "mute", "conversations"],
+      section: .transcription,
+      icon: "mic.slash", settingId: "transcription.ignoredictationapps"),
 
     // Notifications
     SettingsSearchItem(

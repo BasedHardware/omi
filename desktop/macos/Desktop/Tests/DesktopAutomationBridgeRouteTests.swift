@@ -48,6 +48,15 @@ private final class StubPresentationCoordinator: DesktopAutomationPresentationCo
 
 @MainActor
 final class DesktopAutomationBridgeRouteTests: XCTestCase {
+  func testOpenAskOmiIsRegisteredOnTheMainChatSurface() throws {
+    DesktopAutomationActionRegistry.shared.registerBuiltins()
+    let descriptor = try XCTUnwrap(
+      DesktopAutomationActionRegistry.shared.descriptors().first { $0.name == "open_ask_omi" })
+    XCTAssertEqual(descriptor.surfaces, ["main_chat"])
+    XCTAssertTrue(descriptor.summary.contains("quiet"))
+    XCTAssertFalse(descriptor.summary.contains("Ask Omi input panel"))
+  }
+
   func testQuietNavigationKeepsItsNonActivatingContractAcrossTheNotificationHandoff() {
     let payload = DesktopAutomationNavigationRequest(
       target: "settings",
@@ -146,6 +155,10 @@ final class DesktopAutomationBridgeRouteTests: XCTestCase {
       JSONSerialization.jsonObject(with: response.body) as? [String: Any]
     )
     XCTAssertEqual(object["requiresAuth"] as? Bool, true)
+    let sourceIdentity = try XCTUnwrap(object["sourceIdentity"] as? [String: Any])
+    XCTAssertEqual(sourceIdentity["schemaVersion"] as? Int, 1)
+    XCTAssertEqual(sourceIdentity["revision"] as? String, "unknown")
+    XCTAssertEqual(sourceIdentity["workingTreeState"] as? String, "unknown")
     XCTAssertNotNil(object["backendEnvironment"] as? String)
     XCTAssertNotNil(object["pythonBackendURL"] as? String)
     XCTAssertNotNil(object["rustBackendURL"] as? String)

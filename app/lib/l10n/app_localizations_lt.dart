@@ -243,7 +243,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchConversations => 'Ieškoti pokalbių...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Pasirinkta: $count';
   }
 
@@ -2042,6 +2042,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryHistoryPartial => 'Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.';
 
   @override
+  String get memoryHistory => 'Istorija';
+
+  @override
+  String get memoryAllowUse => 'Leisti naudoti';
+
+  @override
+  String get memoryDontUse => 'Nenaudoti';
+
+  @override
   String get undo => 'Atšaukti';
 
   @override
@@ -2650,9 +2659,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reviewAndManageConversations => 'Peržiūrėkite ir tvarkykite įrašytus pokalbius';
 
   @override
-  String get startCapturingConversations => 'Pradėkite fiksuoti pokalbius su Omi įrenginiu, kad juos matytumėte čia.';
-
-  @override
   String get useMobileAppToCapture => 'Naudokite mobilią programą garso įrašymui';
 
   @override
@@ -3149,9 +3155,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcribing => 'Transkribuojama...';
-
-  @override
-  String get transcriptionFailed => 'Transkripcija nepavyko';
 
   @override
   String get discardedConversation => 'Atmestas pokalbis';
@@ -3674,10 +3677,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Ruošiamas sistemos garso įrašymas';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'Spustelėkite mygtuką, kad įrašytumėte garsą tiesioginiam transkribavimui, AI įžvalgoms ir automatiniam išsaugojimui.';
-
-  @override
   String get reconnecting => 'Jungiamasi iš naujo...';
 
   @override
@@ -3723,9 +3722,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'Pradėkite įrašymą, kad matytumėte tiesioginį transkribavimą';
-
-  @override
   String get paused => 'Pristabdyta';
 
   @override
@@ -3744,9 +3740,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'Nustatomas sistemos garso įrašymas';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'Įrašomas garsas ir generuojamas transkribavimas';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'Spustelėkite, kad pradėtumėte sistemos garso įrašymą';
@@ -8771,6 +8764,43 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
+
+  @override
   String get willSyncAutomatically => 'bus sinchronizuota automatiškai';
 
   @override
@@ -9998,4 +10028,88 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.';
+
+  @override
+  String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes.';
+
+  @override
+  String get home => 'Pradžia';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Nepavyko atnaujinti bazinės būsenos.';
+
+  @override
+  String get unstarConversation => 'Pašalinti pokalbio žvaigždutę';
+
+  @override
+  String get moreOptions => 'Daugiau parinkčių';
+
+  @override
+  String get filterByDate => 'Filtruoti pagal datą';
+
+  @override
+  String get memoryGraph => 'Prisiminimų grafas';
+
+  @override
+  String voiceIntroduction(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try another prompt',
+        'start': 'Start speaking',
+        'skipPrompt': 'Skip this prompt',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint':
+            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
+        'saveVoice': 'Save voice profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set up my voice later',
+        'keep': 'Save selected answers',
+        'without': 'Continue without saving answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add another sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and finish',
+        'retryRemaining': 'Retry remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue with what is saved',
+        'reviewAnswers': 'Review answers',
+        'originalGoal': 'Use original wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 }

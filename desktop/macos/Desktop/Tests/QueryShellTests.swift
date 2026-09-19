@@ -38,6 +38,25 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(QueryComposerPlaceholder.chat, "Ask Omi")
   }
 
+  /// `chat_composer_snapshot` must expose the same placeholder/mode the composer draws, or a
+  /// harness cannot assert the Ask Omi prompt through the supported headless bridge (#13201).
+  func testChatComposerSnapshotExposesPlaceholderAndMode() {
+    let answer = ChatComposerAutomationSnapshot.detail(
+      draft: "", stagedAttachments: 0, firstAttachment: "", mode: .answer)
+    XCTAssertEqual(answer["placeholder"], "Ask Omi")
+    XCTAssertEqual(answer["mode"], "answer")
+    QueryShellComposerAutomation.publish(.answer)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, "Ask Omi")
+
+    let results = ChatComposerAutomationSnapshot.detail(
+      draft: "priya", stagedAttachments: 0, firstAttachment: "", mode: .results)
+    XCTAssertEqual(results["placeholder"], RewindSearchMetrics.placeholder)
+    XCTAssertEqual(results["mode"], "results")
+    QueryShellComposerAutomation.publish(.results)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, RewindSearchMetrics.placeholder)
+    QueryShellComposerAutomation.publish(.homeDefault)
+  }
+
   /// The search placement keeps its own prompt; it is a different control.
   func testSearchingKeepsTheSearchPlaceholder() {
     XCTAssertEqual(QueryComposerPlaceholder.text(mode: .results), RewindSearchMetrics.placeholder)

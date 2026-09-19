@@ -1290,3 +1290,42 @@ class TestGeminiThinkingBudget:
 
         opts = get_route_options('chat', 'gemini-2.5-flash-lite', 'gemini')
         assert opts.get('thinking_budget') == 0
+
+
+def test_company_paid_profiles_and_pins_never_resolve_pro_or_image_gemini():
+    """SCA-481 fail-closed selection guard: Pro-text and image-output Gemini
+    shapes are PayGo-only SKUs and can never serve managed (company-paid)
+    extraction/proactivity/summarization traffic. BYOK may keep Pro."""
+    from utils.llm import model_config
+
+    # The shipped configuration must pass its own import-time guard.
+    model_config.validate_no_prohibited_company_paid_models(
+        model_config.MODEL_QOS_PROFILES, model_config._PINNED_FEATURES
+    )
+
+    bad_profiles = {
+        'premium': {'memories': ('gemini-3-pro-preview', 'gemini')},
+        'max': {},
+        'byok': {},
+    }
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models(bad_profiles, {})
+
+    bad_profiles = {
+        'premium': {'chat_agent': ('gemini-3.1-flash-image', 'gemini')},
+        'max': {},
+        'byok': {},
+    }
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models(bad_profiles, {})
+
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models({}, {'fair_use': ('imagen-4.0-generate-001', 'gemini')})
+
+    # BYOK pays for what it asks: a Pro pin on the byok profile stays legal.
+    byok_pro = {
+        'premium': {},
+        'max': {},
+        'byok': {'persona_chat_premium': ('gemini-3-pro-preview', 'gemini')},
+    }
+    model_config.validate_no_prohibited_company_paid_models(byok_pro, {})

@@ -105,6 +105,10 @@ def _version_callback(value: bool) -> None:
         typer.echo(f"omi-cli {__version__}")
         raise typer.Exit(code=0)
 
+def _profile_completion(incomplete: str) -> list[str]:
+    """Return configured profile names matching the partially typed value."""
+    return [name for name in cfg.load().list_profiles() if name.startswith(incomplete)]
+
 
 @app.callback()
 def _root(
@@ -115,6 +119,7 @@ def _root(
         "--profile",
         "-p",
         help="Profile to use from ~/.omi/config.toml. Falls back to $OMI_PROFILE then 'default'.",
+        autocompletion=_profile_completion,
     ),
     api_base: Optional[str] = typer.Option(
         None,
@@ -148,8 +153,12 @@ def _root(
 
 
 @app.command(help="Print the omi-cli version.")
-def version() -> None:
-    typer.echo(f"omi-cli {__version__}")
+def version(typer_ctx: typer.Context) -> None:
+    ctx: AppContext = typer_ctx.obj
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"version": __version__})
+    else:
+        typer.echo(f"omi-cli {__version__}")
 
 
 @app.command(help="Ask a natural-language question, answered from your own Omi conversations.")

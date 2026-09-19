@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:version/version.dart';
@@ -47,6 +48,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   SDCardWalSyncImpl(this.listener);
+
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
+
+  @visibleForTesting
+  set testDevice(BtDevice? device) => _device = device;
 
   bool _supportsTimestampMarkers() {
     if (_device == null) return false;
@@ -106,9 +113,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future deleteWal(Wal wal) async {
+    if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
     _wals.removeWhere((w) => w.id == wal.id);
 
-    if (_device != null) {
+    if (_device != null && wal.device == _device!.id) {
       await _writeToStorage(_device!.id, wal.fileNum, 1, 0);
     }
 
@@ -617,6 +625,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       throw Exception('Local sync service not available. Cannot safely download SD card data.');
     }
 
+    final admittedGeneration = _localSync!.sessionGeneration;
+
     int chunksDownloaded = 0;
     int lastOffset = wal.storageOffset;
     int totalBytesToDownload = wal.storageTotalBytes - wal.storageOffset;
@@ -641,7 +651,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
         int bytesInChunk = offset - lastOffset;
         _updateSpeed(bytesInChunk);
-        await _registerSingleChunk(wal, file, timerStart, chunkFrames);
+        await _registerSingleChunk(wal, file, timerStart, chunkFrames, admittedGeneration);
         chunksDownloaded++;
         lastOffset = offset;
 
@@ -682,7 +692,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
   }
 
-  Future<void> _registerSingleChunk(Wal wal, File file, int timerStart, int chunkFrames) async {
+  Future<void> _registerSingleChunk(Wal wal, File file, int timerStart, int chunkFrames, int admittedGeneration) async {
     if (_localSync == null) {
       Logger.debug("SDCard: WARNING - Cannot register chunk, LocalWalSync not available");
       return;
@@ -706,7 +716,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       originalStorage: WalStorage.sdcard,
     );
 
-    await _localSync!.addExternalWal(localWal);
+    await _localSync!.addExternalWal(localWal, admittedGeneration: admittedGeneration);
     Logger.debug(
       "SDCard: Registered chunk (ts: $timerStart) with LocalWalSync - codec=${localWal.codec}, sampleRate=${localWal.sampleRate}, channel=${localWal.channel}",
     );

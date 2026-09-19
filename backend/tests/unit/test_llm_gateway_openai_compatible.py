@@ -13,6 +13,7 @@ from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.accounting import UsageStatus
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
+from llm_gateway.gateway import executor as gateway_executor
 from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for
@@ -169,6 +170,98 @@ def test_jit_budget_preflight_rejects_overlarge_input():
 
     with pytest.raises(openai_compatible.GatewayInvalidRequestError, match='input budget exceeded'):
         openai_compatible._apply_jit_request_budget(valid_request(), budget)
+
+
+def test_jit_budget_preserves_tool_schema_types_and_output_ceiling():
+    budget = JITBudgetHeaders(
+        contract_version='jit-cloud-qa-v1',
+        run_id='jit-tool-schema',
+        max_attempts=3,
+        max_output_tokens=2_048,
+        max_input_tokens=32_768,
+        max_spend_micro_usd=50_000,
+    )
+    tools = [
+        {
+            'type': 'function',
+            'function': {
+                'name': 'search_knowledge',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'type': {'type': 'string'},
+                        'query': {'type': ['string', 'null']},
+                    },
+                },
+            },
+        }
+    ]
+    body = valid_request(tools=tools)
+
+    openai_compatible._apply_jit_request_budget(body, budget)
+
+    assert body['tools'] == tools
+    assert body['max_completion_tokens'] == 2_048
+
+
+def test_jit_chat_route_accepts_tool_schema_through_http_preflight(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
+    tools = [
+        {
+            'type': 'function',
+            'function': {
+                'name': 'search_knowledge',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'type': {'type': 'string'},
+                        'query': {'type': ['string', 'null']},
+                    },
+                },
+            },
+        }
+    ]
+    provider = FakeChatCompletionProvider()
+    reservations: list[dict[str, object]] = []
+    settlements: list[dict[str, object]] = []
+
+    async def reserve_jit_attempt(**kwargs):
+        reservations.append(kwargs)
+        return object()
+
+    async def settle_jit_attempt(_reservation, **kwargs):
+        settlements.append(kwargs)
+        return True
+
+    monkeypatch.setattr(gateway_executor, 'reserve_jit_attempt', reserve_jit_attempt)
+    monkeypatch.setattr(gateway_executor, 'settle_jit_attempt', settle_jit_attempt)
+    app.dependency_overrides[dependencies.get_gateway_config] = _tools_enabled_gateway_config
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(tools=tools),
+            headers={
+                **auth_headers(),
+                'x-omi-jit-contract-version': 'jit-cloud-qa-v1',
+                'x-omi-jit-run-id': 'jit-tool-schema-http',
+                'x-omi-jit-max-attempts': '3',
+                'x-omi-jit-max-output-tokens': '2048',
+                'x-omi-jit-max-input-tokens': '32768',
+                'x-omi-jit-max-spend-micro-usd': '50000',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(provider.calls) == 1
+    assert provider.calls[0].request['tools'] == tools
+    assert provider.calls[0].request['max_completion_tokens'] == 2_048
+    assert len(reservations) == 1
+    assert reservations[0]['run_id'] == 'jit-tool-schema-http'
+    assert settlements and settlements[0]['status'] == 'succeeded'
 
 
 def test_jit_budget_preflight_rejects_unpriced_image_or_audio_inputs():
@@ -1376,6 +1469,19 @@ def _streaming_enabled_gateway_config():
     config = load_gateway_config(prod_mode=True)
     lane = config.lanes[LANE_ID]
     capabilities = lane.capabilities.model_copy(update={'streaming': True})
+    lane = lane.model_copy(update={'capabilities': capabilities})
+    route_artifacts = dict(config.route_artifacts)
+    for route_id in (lane.active_route, lane.last_known_good):
+        route_artifacts[route_id] = route_artifacts[route_id].model_copy(update={'capabilities': capabilities})
+    lanes = dict(config.lanes)
+    lanes[LANE_ID] = lane
+    return config.model_copy(update={'lanes': lanes, 'route_artifacts': route_artifacts})
+
+
+def _tools_enabled_gateway_config():
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes[LANE_ID]
+    capabilities = lane.capabilities.model_copy(update={'tools': True})
     lane = lane.model_copy(update={'capabilities': capabilities})
     route_artifacts = dict(config.route_artifacts)
     for route_id in (lane.active_route, lane.last_known_good):

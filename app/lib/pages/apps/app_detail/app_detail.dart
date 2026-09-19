@@ -36,6 +36,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/app_detail/app_detail_config.dart';
 import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
@@ -61,6 +62,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
   Timer? _setupCheckTimer;
+  int _setupCheckGeneration = 0;
+  int _markdownLoadGeneration = 0;
   late App app;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _reviewsSectionKey = GlobalKey();
@@ -94,16 +97,44 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   checkSetupCompleted({bool autoInstallIfCompleted = false}) {
-    if (app.externalIntegration == null) return;
+    if (app.externalIntegration == null) {
+      _setupCheckGeneration++;
+      return;
+    }
     // TODO: move check to backend
-    isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
-      if (mounted) {
-        setState(() => setupCompleted = value);
+    final generation = ++_setupCheckGeneration;
+    final requestedUrl = app.externalIntegration!.setupCompletedUrl;
+    isAppSetupCompleted(requestedUrl).then((value) {
+      if (!mounted) return;
+      if (generation != _setupCheckGeneration) return;
+      if (app.externalIntegration?.setupCompletedUrl != requestedUrl) return;
 
-        if (autoInstallIfCompleted && value && !app.enabled) {
-          _tryAutoInstallAfterSetup();
-        }
+      setState(() => setupCompleted = value);
+
+      if (autoInstallIfCompleted && value && !app.enabled) {
+        _tryAutoInstallAfterSetup();
       }
+    });
+  }
+
+  void _loadSetupInstructionsMarkdown() {
+    final generation = ++_markdownLoadGeneration;
+    final path = app.externalIntegration?.setupInstructionsFilePath;
+    if (path == null || path.isEmpty || !path.contains('raw.githubusercontent.com')) {
+      return;
+    }
+
+    final appId = app.id;
+    getAppMarkdown(path).then((value) {
+      if (!mounted) return;
+      if (generation != _markdownLoadGeneration) return;
+      if (app.externalIntegration?.setupInstructionsFilePath != path) return;
+
+      value = value.replaceAll(
+        '](assets/',
+        '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/$appId/assets/',
+      );
+      setState(() => instructionsMarkdown = value);
     });
   }
 
@@ -226,17 +257,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
     if (app.worksExternally()) {
       checkSetupCompleted();
-      if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
-        if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
-          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
-            value = value.replaceAll(
-              '](assets/',
-              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-            );
-            if (mounted) setState(() => instructionsMarkdown = value);
-          });
-        }
-      }
+      _loadSetupInstructionsMarkdown();
     }
 
     super.initState();
@@ -263,6 +284,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
   }
 
+  void _onExternalIntegrationUpdated() {
+    if (!app.worksExternally()) {
+      _setupCheckGeneration++;
+      _markdownLoadGeneration++;
+      return;
+    }
+    checkSetupCompleted();
+    _loadSetupInstructionsMarkdown();
+  }
+
+  void _applyProviderAppUpdate(App updatedApp) {
+    setState(() {
+      app = updatedApp;
+    });
+    _onExternalIntegrationUpdated();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -272,16 +310,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       // Check if app has been updated in the provider
       final appProvider = context.read<AppProvider>();
       final updatedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id);
-      if (updatedApp != null) {
-        // Compare critical fields to detect if app was updated
-        final appHomeUrlChanged = updatedApp.externalIntegration?.appHomeUrl != app.externalIntegration?.appHomeUrl;
-        final nameChanged = updatedApp.name != app.name;
-        final descriptionChanged = updatedApp.description != app.description;
-
-        if (appHomeUrlChanged || nameChanged || descriptionChanged) {
-          // App was updated, refresh the details
-          await _refreshAppDetails();
-        }
+      if (updatedApp != null && hasAppDetailConfigChanged(app, updatedApp)) {
+        // App was updated, refresh the details
+        await _refreshAppDetails();
+        _onExternalIntegrationUpdated();
       }
     });
   }
@@ -541,22 +573,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
       builder: (context, appProvider, child) {
         // Check if app has been updated in the provider
         final updatedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id);
-        if (updatedApp != null) {
-          // Compare critical fields to detect if app was actually updated
-          final appHomeUrlChanged = updatedApp.externalIntegration?.appHomeUrl != app.externalIntegration?.appHomeUrl;
-          final nameChanged = updatedApp.name != app.name;
-          final descriptionChanged = updatedApp.description != app.description;
-
-          if (appHomeUrlChanged || nameChanged || descriptionChanged) {
-            // Update local app state when provider's app changes
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                setState(() {
-                  app = updatedApp;
-                });
-              }
-            });
-          }
+        if (updatedApp != null && hasAppDetailConfigChanged(app, updatedApp)) {
+          // Update local app state when provider's app changes
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _applyProviderAppUpdate(updatedApp);
+            }
+          });
         }
 
         bool isIntegration = app.worksExternally();

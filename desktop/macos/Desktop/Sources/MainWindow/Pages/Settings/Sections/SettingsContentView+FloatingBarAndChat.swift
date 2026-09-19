@@ -19,6 +19,9 @@ extension SettingsContentView {
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
             .onChange(of: showAskOmiBar) { _, newValue in
+              // A change that merely mirrors the preference (arriving via
+              // `.floatingBarEnabledDidChange`) is already applied; only a user flip acts.
+              guard newValue != FloatingControlBarManager.shared.isEnabled else { return }
               if newValue {
                 FloatingControlBarManager.shared.show()
               } else {

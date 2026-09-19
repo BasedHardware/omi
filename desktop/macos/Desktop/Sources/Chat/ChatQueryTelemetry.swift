@@ -355,7 +355,7 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
       switch classified.code {
       case .providerBillingExhausted, .planLimitReached:
         classifierOwnsCode = true
-      case .providerAuthExpired, .credentialLeakSuspected:
+      case .providerAuthExpired, .credentialLeakSuspected, .upstreamProviderFailed:
         classifierOwnsCode = failure.failureCode == .unknown
       default:
         classifierOwnsCode = false
@@ -363,14 +363,15 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
       return ChatQueryErrorDetail(
         errorCode: classifierOwnsCode ? classified.code.rawValue : failure.failureCode.rawValue,
         retryable: classifierOwnsCode ? classified.retryable : failure.retryable,
-        failureCode: boundedFailureCode(failure.code),
+        failureCode: failure.failureCode == .unknown ? boundedFailureCode(failure.code) : failure.failureCode.rawValue,
         failureSource: failure.source,
         adapterId: failure.adapterId,
         provider: failure.provider,
         recoveryAction: failure.recoveryAction == "worker_recycled" ? "worker_recycled" : nil,
         recoveryOutcome: ["recovered", "stop_failed", "binding_stale_failed"].contains(failure.recoveryOutcome ?? "")
           ? failure.recoveryOutcome : nil,
-        retryDisposition: failure.retryDisposition == "next_send" ? "next_send" : nil)
+        retryDisposition: ["next_send", "same_turn"].contains(failure.retryDisposition ?? "")
+          ? failure.retryDisposition : nil)
     default:
       return nil
     }

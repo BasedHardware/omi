@@ -93,6 +93,8 @@ _deepgram_circuit = ProviderCircuitBreaker(
 _modulate_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
+    serve_error_cooldown_seconds=float(os.getenv('MODULATE_SERVE_ERROR_CIRCUIT_COOLDOWN_SECONDS', '180')),
+    serve_error_successes_to_close=int(os.getenv('MODULATE_SERVE_ERROR_SUCCESSES_TO_CLOSE', '3')),
 )
 _soniox_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
@@ -449,6 +451,22 @@ deepgram_nova3_languages = {
 # Compatibility export for callers. Its value is owned by stt_provider_policy.
 DEFAULT_STT_SERVICE_MODELS = default_models_for_surface(STTServingSurface.STREAMING)
 stt_service_models = os.getenv('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS)).split(',')
+
+
+def validate_streaming_stt_env(env: Any = None) -> None:
+    """Fail listen/pusher startup when soniox is listed without a key.
+
+    Selection already skips an empty key, but the listed slot still looks like
+    a next hop in the documented chain. Do not print secret values.
+    """
+    source = os.environ if env is None else env
+    models = source.get('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS))
+    listed = [model.strip() for model in models.split(',') if model.strip()]
+    if 'soniox' in listed and not (source.get('SONIOX_API_KEY') or '').strip():
+        raise RuntimeError(
+            'STT_SERVICE_MODELS lists soniox but SONIOX_API_KEY is empty; '
+            'remove soniox from the serving chain or set the key'
+        )
 
 
 def modulate_is_configured_fallback(language: Optional[str]) -> bool:

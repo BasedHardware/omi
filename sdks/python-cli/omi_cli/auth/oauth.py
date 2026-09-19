@@ -27,6 +27,7 @@ import http.server
 import secrets
 import socket
 import socketserver
+import sys
 import threading
 import time
 import urllib.parse
@@ -134,8 +135,9 @@ def login_with_browser(
         thread.start()
 
         try:
-            print(f"Opening browser for {provider} sign-in...")
-            print(f"If your browser does not open, visit:\n  {auth_url}")
+            # Status messages go to stderr so --json keeps stdout pristine.
+            print(f"Opening browser for {provider} sign-in...", file=sys.stderr)
+            print(f"If your browser does not open, visit:\n  {auth_url}", file=sys.stderr)
             if open_browser:
                 # webbrowser.open returns False on failure but is otherwise
                 # silent; we always print the URL above as a fallback.

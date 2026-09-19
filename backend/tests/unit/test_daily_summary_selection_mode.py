@@ -52,12 +52,14 @@ def _loaded_notifications() -> Iterator[Tuple[ModuleType, ModuleType, ModuleType
         get_users_for_daily_summary=no_db_work,
         get_users_for_daily_summary_indexed=no_db_work,
         get_users_token_in_timezones=no_db_work,
+        get_users_id_in_timezones=no_db_work,
     )
     redis_db = _module(
         'database.redis_db',
         try_acquire_daily_summary_lock=lambda *_args: True,
         release_daily_summary_lock=lambda *_args: None,
         try_acquire_notifications_job_run_lock=lambda *_args, **_kwargs: True,
+        try_acquire_daily_wear_lock=lambda *_args, **_kwargs: True,
         release_notifications_job_run_lock=lambda *_args, **_kwargs: None,
     )
     notification_message = type(
@@ -365,7 +367,55 @@ def test_start_cron_job_fails_open_when_acquire_raises(caplog) -> None:
         with caplog.at_level(logging.WARNING):
             asyncio.run(notifications.start_cron_job())
 
-        assert calls == ['daily', 'summary']
+        assert calls == ['summary']
         assert released == []
         assert 'notifications_job_run_lock_acquire_failed' in caplog.text
         assert 'redis down' in caplog.text
+
+
+def test_send_daily_wear_disabled_does_not_bulk_send() -> None:
+    with _loaded_notifications() as (notifications, _db, _redis):
+        sent: list[object] = []
+
+        async def fake_bulk(*_a: Any, **_k: Any) -> None:
+            sent.append(1)
+
+        notifications.send_bulk_notification = fake_bulk
+        asyncio.run(notifications.send_daily_notification())
+        assert sent == []
+
+
+def test_send_daily_wear_caps_one_send_per_uid(caplog) -> None:
+    with _loaded_notifications() as (notifications, db, redis_db):
+        notifications.should_send_wear_device_reminder = lambda: True
+        notifications._get_timezones_at_time = lambda _t: ['America/New_York']
+        db.get_users_id_in_timezones = lambda _chunk: [
+            ('u1', ['t1'], 'America/New_York'),
+            ('u2', [], 'America/New_York'),
+            ('u3', ['t3a', 't3b'], 'America/New_York'),
+        ]
+        held: list[str] = []
+
+        def wear_lock(uid: str, _date: str, ttl: int = 60 * 60 * 24) -> bool:
+            assert ttl == 60 * 60 * 24
+            if uid in held:
+                return False
+            held.append(uid)
+            return True
+
+        redis_db.try_acquire_daily_wear_lock = wear_lock
+        sent: list[list[str]] = []
+
+        async def fake_bulk(tokens: list[str], title: str, body: str) -> None:
+            sent.append(list(tokens))
+            assert title == 'omi says'
+
+        notifications.send_bulk_notification = fake_bulk
+
+        with caplog.at_level(logging.INFO):
+            asyncio.run(notifications.send_daily_notification())
+            asyncio.run(notifications.send_daily_notification())
+
+        assert sent == [['t1', 't3a', 't3b']]
+        assert held == ['u1', 'u3']
+        assert 'notification_blast kind=wear users=2 tokens=3' in caplog.text

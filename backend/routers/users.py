@@ -57,6 +57,7 @@ from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from utils.feedback import record_chat_message_feedback
+from utils.marketplace_reviewers import is_marketplace_reviewer
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -1223,8 +1224,7 @@ def _user_subscription_response(
             phone_call_quota=unlimited_phone_quota,
         )
 
-    marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
-    if uid in marketplace_reviewers:
+    if is_marketplace_reviewer(uid):
         unlimited_sub = Subscription(
             plan=PlanType.unlimited,
             status=SubscriptionStatus.active,

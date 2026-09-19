@@ -14,12 +14,30 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     var writeSucceeds = true
     var appliesWrite = true
     var replacementResult: DictationTextReplacementResult = .applied
+    /// Reads that must pass before an applied write becomes visible, the way a
+    /// web-backed editor applies one on a later run-loop turn.
+    var readsBeforeWriteIsVisible = 0
+    /// Where the editor parks the caret once it has applied the write, for
+    /// editors that do not collapse it after the inserted text.
+    var caretAfterWrite: NSRange?
+    private var pendingWrite: (value: String, selection: NSRange)?
+    private(set) var reads = 0
     var writes: [String] = []
     var didSelect: (() -> Void)?
     var didWrite: (() -> Void)?
 
     func readFocusedText() -> FocusedDictationText? {
+      reads += 1
       guard readable else { return nil }
+      if let pendingWrite {
+        if readsBeforeWriteIsVisible > 0 {
+          readsBeforeWriteIsVisible -= 1
+        } else {
+          value = pendingWrite.value
+          selection = pendingWrite.selection
+          self.pendingWrite = nil
+        }
+      }
       return FocusedDictationText(
         elementID: AnyHashable(field), processID: 42, bundleIdentifier: "test.editor",
         value: value, selection: selection, canReplaceSelection: writable)
@@ -29,8 +47,15 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
       guard writeSucceeds, readFocusedText()?.target == target else { return .notAttempted }
       writes.append(text)
       if appliesWrite {
-        value = (value as NSString).replacingCharacters(in: selection, with: text)
-        selection = NSRange(location: selection.location + (text as NSString).length, length: 0)
+        let written = (value as NSString).replacingCharacters(in: selection, with: text)
+        let caret =
+          caretAfterWrite ?? NSRange(location: selection.location + (text as NSString).length, length: 0)
+        if readsBeforeWriteIsVisible > 0 {
+          pendingWrite = (written, caret)
+        } else {
+          value = written
+          selection = caret
+        }
       }
       didWrite?()
       return replacementResult
@@ -53,24 +78,45 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     var clock: TimeInterval = 100
     var clipboard = "User clipboard"
     var postedPastes: [String] = []
+    /// Whether a dispatched Cmd-V reaches the editor, as it does in an app
+    /// that reads the pasteboard but exposes no writable selected text.
+    var pasteLands = false
+    /// Wall-clock a verification tick costs, for an app whose Accessibility
+    /// server answers slowly enough that ten reads would hold the turn.
+    var verificationTickCost: TimeInterval = 0
+    /// Runs on each verification tick, so a test can act while a delivery is
+    /// still awaiting its read-back.
+    var onVerificationTick: (() -> Void)?
     var receiptSleeper: (@MainActor (TimeInterval) async throws -> Void)?
     lazy var sink = makeSink()
 
     private func makeSink() -> PasteboardTextInsertionSink {
       let paste: (String, TextInsertionTarget) -> Bool = { [unowned self] text, _ in
         postedPastes.append(text)
+        if pasteLands {
+          editor.value = (editor.value as NSString).replacingCharacters(in: editor.selection, with: text)
+          editor.selection = NSRange(
+            location: editor.selection.location + (text as NSString).length, length: 0)
+        }
         return true
       }
       let copy: (String) -> Void = { [unowned self] in clipboard = $0 }
+      // Verification polling runs its reads back to back: the editor fake
+      // decides when the insertion becomes visible, not the wall clock.
+      let noVerificationDelay: @MainActor (TimeInterval) async throws -> Void = { [unowned self] _ in
+        clock += verificationTickCost
+        onVerificationTick?()
+      }
       if let receiptSleeper {
         return PasteboardTextInsertionSink(
           access: editor, now: { [unowned self] in clock },
           clipboardPaste: paste, clipboardCopy: copy,
-          sleepForReceiptExpiry: receiptSleeper)
+          sleepForReceiptExpiry: receiptSleeper, sleepForVerification: noVerificationDelay)
       }
       return PasteboardTextInsertionSink(
         access: editor, now: { [unowned self] in clock },
-        clipboardPaste: paste, clipboardCopy: copy)
+        clipboardPaste: paste, clipboardCopy: copy,
+        sleepForVerification: noVerificationDelay)
     }
 
     lazy var session = VoiceTypeSession(
@@ -84,53 +130,57 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
       XCTAssertTrue(session.claim(transcript: "Type hello"))
     }
 
-    func deliver(_ text: String = "Hello") {
-      XCTAssertEqual(session.deliver(text), .pasted(text))
+    func deliver(_ text: String = "Hello") async {
+      let delivered = await session.deliver(text)
+      XCTAssertEqual(delivered, .pasted(text))
     }
   }
 
-  func testSwitchingFieldsInTheSameAppCopiesInsteadOfWriting() {
+  func testSwitchingFieldsInTheSameAppCopiesInsteadOfWriting() async {
     let fixture = Fixture()
     fixture.begin()
     fixture.editor.field = "second-field"
-    XCTAssertEqual(fixture.session.deliver("Hello"), .copied("Hello"))
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertTrue(fixture.editor.writes.isEmpty)
     XCTAssertTrue(fixture.postedPastes.isEmpty)
     XCTAssertEqual(fixture.clipboard, "Hello")
   }
 
-  func testMovingCaretOrEditingTheSameFieldInvalidatesCapture() {
+  func testMovingCaretOrEditingTheSameFieldInvalidatesCapture() async {
     for moveCaret in [true, false] {
       let fixture = Fixture()
       fixture.begin()
       if moveCaret { fixture.editor.selection.location = 2 } else { fixture.editor.value = "Changed! " }
-      XCTAssertEqual(fixture.session.deliver("Hello"), .copied("Hello"))
+      let delivered = await fixture.session.deliver("Hello")
+      XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
       XCTAssertTrue(fixture.editor.writes.isEmpty)
       XCTAssertTrue(fixture.postedPastes.isEmpty)
     }
   }
 
-  func testUnreadableTargetAndRevokedAccessibilityCopySafely() {
+  func testUnreadableTargetAndRevokedAccessibilityCopySafely() async {
     for denied in [true, false] {
       let fixture = Fixture()
       if !denied { fixture.editor.readable = false }
       fixture.begin()
       if denied { fixture.trusted = false }
-      XCTAssertEqual(fixture.session.deliver("Hello"), .copied("Hello"))
+      let delivered = await fixture.session.deliver("Hello")
+      XCTAssertEqual(delivered, .copied("Hello", denied ? .accessibilityDenied : .insertionUnavailable))
       XCTAssertTrue(fixture.editor.writes.isEmpty)
       XCTAssertTrue(fixture.postedPastes.isEmpty)
       XCTAssertFalse(fixture.session.canUndoLastDictation)
     }
   }
 
-  func testReadableEditorWithoutWritableAXRequestsPasteWithoutClaimingDelivery() {
+  func testReadableEditorWithoutWritableAXRequestsPasteWithoutClaimingDelivery() async {
     let fixture = Fixture()
     fixture.editor.writable = false
     fixture.begin()
-    let completion = fixture.session.deliver("Hello")
+    let completion = await fixture.session.deliver("Hello")
     XCTAssertEqual(completion, .pasteRequested("Hello"))
     XCTAssertFalse(completion.isConfirmedDelivery)
-    XCTAssertEqual(completion.statusHint, "Paste requested — check the editor")
+    XCTAssertEqual(completion.statusHint, "Couldn't confirm it landed — check the editor")
     XCTAssertEqual(fixture.postedPastes, ["Hello"])
     XCTAssertEqual(fixture.clipboard, "User clipboard", "no copy-for-retry fallback follows a dispatched paste")
     XCTAssertFalse(fixture.session.canUndoLastDictation)
@@ -138,22 +188,23 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     XCTAssertTrue(fixture.editor.writes.isEmpty)
   }
 
-  func testSinkReportsPasteDispatchSeparatelyFromVerifiedInsertion() throws {
+  func testSinkReportsPasteDispatchSeparatelyFromVerifiedInsertion() async throws {
     let fixture = Fixture()
     fixture.editor.writable = false
     let target = try XCTUnwrap(fixture.sink.focusTarget())
-    XCTAssertEqual(fixture.sink.paste("Hello", into: target), .pastePosted)
+    let result = await fixture.sink.paste("Hello", into: target)
+    XCTAssertEqual(result, .pastePosted)
     XCTAssertEqual(fixture.postedPastes, ["Hello"])
     XCTAssertFalse(fixture.sink.canUndoInsertion)
     XCTAssertEqual(fixture.editor.value, "Original ", "dispatch alone supplies no insertion evidence")
   }
 
-  func testVerifiedInsertionUndoDeletesOnlyDictationAndPreservesClipboard() {
+  func testVerifiedInsertionUndoDeletesOnlyDictationAndPreservesClipboard() async {
     let fixture = Fixture()
     fixture.editor.value = "Original"
     fixture.editor.selection.location = 8
     fixture.begin()
-    fixture.deliver("Hello 🌍")
+    await fixture.deliver("Hello 🌍")
     XCTAssertEqual(fixture.editor.value, "Original Hello 🌍")
     // Successful manager terminal cleanup must not revoke the receipt.
     fixture.session.abandon()
@@ -166,20 +217,20 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     XCTAssertFalse(fixture.session.undoLastDictation())
   }
 
-  func testReplacingSelectedContentDoesNotOfferDestructiveUndo() {
+  func testReplacingSelectedContentDoesNotOfferDestructiveUndo() async {
     let fixture = Fixture()
     fixture.editor.selection = NSRange(location: 0, length: 8)
     fixture.begin()
-    fixture.deliver()
+    await fixture.deliver()
     XCTAssertEqual(fixture.editor.value, "Hello ")
     XCTAssertFalse(fixture.session.canUndoLastDictation)
   }
 
-  func testUserEditOrCaretMoveRevokesUndoWithoutTouchingTheirWork() {
+  func testUserEditOrCaretMoveRevokesUndoWithoutTouchingTheirWork() async {
     for moveCaret in [true, false] {
       let fixture = Fixture()
       fixture.begin()
-      fixture.deliver()
+      await fixture.deliver()
       if moveCaret { fixture.editor.selection.location = 1 } else { fixture.editor.value += " My next edit" }
       let expected = fixture.editor.value
       XCTAssertFalse(fixture.session.undoLastDictation())
@@ -188,39 +239,40 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     }
   }
 
-  func testUndoRevalidatesContentAfterSelectingTheInsertedRange() {
+  func testUndoRevalidatesContentAfterSelectingTheInsertedRange() async {
     let fixture = Fixture()
     fixture.begin()
-    fixture.deliver()
+    await fixture.deliver()
     fixture.editor.didSelect = { fixture.editor.value += " Concurrent user edit" }
     XCTAssertFalse(fixture.session.undoLastDictation())
     XCTAssertEqual(fixture.editor.value, "Original Hello Concurrent user edit")
     XCTAssertEqual(fixture.editor.writes, ["Hello"])
   }
 
-  func testNewTurnAndExpiryRevokeUndo() {
+  func testNewTurnAndExpiryRevokeUndo() async {
     for newTurn in [true, false] {
       let fixture = Fixture()
       fixture.begin()
-      fixture.deliver()
+      await fixture.deliver()
       if newTurn { fixture.session.begin() } else { fixture.clock += 30 }
       XCTAssertFalse(fixture.session.undoLastDictation())
       XCTAssertEqual(fixture.editor.value, "Original Hello")
     }
   }
 
-  func testOwnerChangeAndSameOwnerReauthenticationRevokeUndoAndDelivery() {
+  func testOwnerChangeAndSameOwnerReauthenticationRevokeUndoAndDelivery() async {
     for sameOwner in [true, false] {
       for delivered in [true, false] {
         let fixture = Fixture()
         fixture.begin()
-        if delivered { fixture.deliver() }
+        if delivered { await fixture.deliver() }
         fixture.authority.beginTransition()
         if !sameOwner { fixture.owner = "owner-B" }
         fixture.authority.endTransition(ownerID: fixture.owner)
         XCTAssertFalse(fixture.session.undoLastDictation())
         if !delivered {
-          XCTAssertEqual(fixture.session.deliver("Hello"), .none)
+          let delivered = await fixture.session.deliver("Hello")
+          XCTAssertEqual(delivered, .none)
           XCTAssertTrue(fixture.editor.writes.isEmpty)
         }
         XCTAssertEqual(fixture.clipboard, "User clipboard")
@@ -228,11 +280,12 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     }
   }
 
-  func testSuccessfulAXReplyWithoutVerifiedTextReportsUncertaintyWithoutCopying() {
+  func testSuccessfulAXReplyWithoutVerifiedTextReportsUncertaintyWithoutCopying() async {
     let fixture = Fixture()
     fixture.begin()
     fixture.editor.didWrite = { fixture.editor.value = "Unexpected editor contents" }
-    XCTAssertEqual(fixture.session.deliver("Hello"), .insertionUncertain("Hello"))
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .insertionUncertain("Hello"))
     XCTAssertEqual(fixture.editor.writes, ["Hello"])
     XCTAssertEqual(fixture.editor.value, "Unexpected editor contents")
     XCTAssertEqual(fixture.clipboard, "User clipboard")
@@ -240,32 +293,34 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     XCTAssertFalse(fixture.session.canUndoLastDictation)
   }
 
-  func testFailedAddressedWriteDoesNotRetryAnUncertainMutationWithPaste() {
+  func testFailedAddressedWriteDoesNotRetryAnUncertainMutationWithPaste() async {
     let fixture = Fixture()
     fixture.begin()
     fixture.editor.writeSucceeds = false
-    XCTAssertEqual(fixture.session.deliver("Hello"), .copied("Hello"))
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertTrue(fixture.postedPastes.isEmpty)
     XCTAssertFalse(fixture.session.canUndoLastDictation)
   }
 
-  func testFailedWriteKeepsSeparatorForManualPasteIntoUnchangedTarget() {
+  func testFailedWriteKeepsSeparatorForManualPasteIntoUnchangedTarget() async {
     let fixture = Fixture()
     fixture.editor.value = "Original"
     fixture.editor.selection = NSRange(location: 8, length: 0)
     fixture.begin()
     fixture.editor.writeSucceeds = false
-    XCTAssertEqual(fixture.session.deliver("Hello"), .copied("Hello"))
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertEqual(fixture.clipboard, " Hello")
     XCTAssertEqual(fixture.editor.value, "Original")
     XCTAssertTrue(fixture.postedPastes.isEmpty)
   }
 
-  func testMenuFocusAvailabilityReadsPreserveReceiptUntilTheAction() {
+  func testMenuFocusAvailabilityReadsPreserveReceiptUntilTheAction() async {
     for menuHasReadableElement in [true, false] {
       let fixture = Fixture()
       fixture.begin()
-      fixture.deliver()
+      await fixture.deliver()
       fixture.editor.readable = menuHasReadableElement
       fixture.editor.field = "menu"
       XCTAssertTrue(fixture.session.canUndoLastDictation)
@@ -279,11 +334,11 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     }
   }
 
-  func testAvailabilityDoesNotAuthorizeUndoIntoAMenuOrAnotherField() {
+  func testAvailabilityDoesNotAuthorizeUndoIntoAMenuOrAnotherField() async {
     for readable in [true, false] {
       let fixture = Fixture()
       fixture.begin()
-      fixture.deliver()
+      await fixture.deliver()
       fixture.editor.readable = readable
       fixture.editor.field = "second-field"
       XCTAssertTrue(fixture.session.canUndoLastDictation)
@@ -310,7 +365,7 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
       }
     }
     fixture.begin()
-    fixture.deliver()
+    await fixture.deliver()
     await fulfillment(of: [sleeperStarted], timeout: 1)
     let expired = expectation(description: "receipt expiry published")
     var publications = 0
@@ -332,11 +387,11 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     subscription.cancel()
   }
 
-  func testOwnerRevocationAndExpiryStillOverrideMenuAvailability() {
+  func testOwnerRevocationAndExpiryStillOverrideMenuAvailability() async {
     for expire in [true, false] {
       let fixture = Fixture()
       fixture.begin()
-      fixture.deliver()
+      await fixture.deliver()
       fixture.editor.readable = false
       XCTAssertTrue(fixture.session.canUndoLastDictation)
       if expire { fixture.clock += 30 } else { fixture.authority.beginTransition() }
@@ -347,7 +402,7 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     }
   }
 
-  func testPartialMutationWithFailedAXReplyIsUncertainAndNeverCopiedForRetry() {
+  func testPartialMutationWithFailedAXReplyIsUncertainAndNeverCopiedForRetry() async {
     let fixture = Fixture()
     fixture.begin()
     // Models AXUIElementSetAttributeValue returning a failure after only part
@@ -357,7 +412,8 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
       fixture.editor.value = "Original Hel"
       fixture.editor.selection = NSRange(location: 12, length: 0)
     }
-    XCTAssertEqual(fixture.session.deliver("Hello"), .insertionUncertain("Hello"))
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .insertionUncertain("Hello"))
     XCTAssertEqual(fixture.editor.value, "Original Hel")
     XCTAssertEqual(fixture.editor.writes, ["Hello"])
     XCTAssertEqual(fixture.clipboard, "User clipboard")
@@ -365,46 +421,191 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     XCTAssertFalse(fixture.session.canUndoLastDictation)
   }
 
-  func testFailedDispatchedAXRequestWithUnchangedRereadRemainsUncertain() {
+  func testFailedDispatchedAXRequestWithUnchangedRereadRemainsUncertain() async {
     let fixture = Fixture()
     fixture.begin()
     fixture.editor.appliesWrite = false
     fixture.editor.replacementResult = .uncertain
-    XCTAssertEqual(fixture.session.deliver("Hello"), .insertionUncertain("Hello"))
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .insertionUncertain("Hello"))
     XCTAssertEqual(fixture.editor.value, "Original ")
     XCTAssertEqual(fixture.clipboard, "User clipboard")
     XCTAssertTrue(fixture.postedPastes.isEmpty)
     XCTAssertFalse(fixture.session.canUndoLastDictation)
   }
 
-  func testFailedAXReplyWithExactVerifiedResultIsAConfirmedInsertion() {
+  func testFailedAXReplyWithExactVerifiedResultIsAConfirmedInsertion() async {
     let fixture = Fixture()
     fixture.begin()
     fixture.editor.replacementResult = .uncertain
-    fixture.deliver()
+    await fixture.deliver()
     XCTAssertEqual(fixture.editor.value, "Original Hello")
     XCTAssertTrue(fixture.session.undoLastDictation())
     XCTAssertEqual(fixture.editor.value, "Original ")
     XCTAssertEqual(fixture.clipboard, "User clipboard")
   }
 
+  func testAnEditorThatAppliesTheWriteOnALaterReadIsAConfirmedInsertion() async {
+    // Web-backed and Electron editors apply an addressed write a run-loop turn
+    // or two after the request. A single immediate read called those correct
+    // insertions unverified, and the bar sent the user off to check an editor
+    // that already had the dictation in it.
+    let fixture = Fixture()
+    fixture.begin()
+    fixture.editor.readsBeforeWriteIsVisible = 3
+    await fixture.deliver()
+    XCTAssertEqual(fixture.editor.value, "Original Hello")
+    XCTAssertTrue(fixture.session.canUndoLastDictation)
+  }
+
+  func testAnEditorThatParksTheCaretElsewhereStillConfirmsTheInsertion() async {
+    // The exact expected value is in the captured field, so the text landed.
+    // Where the editor then left the caret is the receipt's business.
+    let fixture = Fixture()
+    fixture.begin()
+    fixture.editor.caretAfterWrite = NSRange(location: 0, length: 0)
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .pasted("Hello"))
+    XCTAssertEqual(fixture.editor.value, "Original Hello")
+    XCTAssertEqual(fixture.clipboard, "User clipboard")
+    XCTAssertFalse(fixture.session.canUndoLastDictation, "no verified caret, no range to take back")
+  }
+
+  func testAPasteReadBackFromTheEditorIsAConfirmedInsertion() async {
+    let fixture = Fixture()
+    fixture.editor.writable = false
+    fixture.pasteLands = true
+    fixture.begin()
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .pasted("Hello"))
+    XCTAssertEqual(fixture.postedPastes, ["Hello"])
+    XCTAssertEqual(fixture.editor.value, "Original Hello")
+    XCTAssertEqual(fixture.clipboard, "User clipboard", "a landed paste is never copied for retry")
+    XCTAssertFalse(fixture.session.canUndoLastDictation, "Cmd-V hands back no inserted range")
+  }
+
+  func testAnAcknowledgedWriteThatChangedNothingFallsBackToPaste() async {
+    // The Chromium shape, measured live: AXSelectedText reports settable, the
+    // write is answered with success, and the field is untouched. Before this
+    // the turn ended as an unverified insertion and the dictation was lost.
+    let fixture = Fixture()
+    fixture.editor.appliesWrite = false
+    fixture.pasteLands = true
+    fixture.begin()
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .pasted("Hello"))
+    XCTAssertEqual(fixture.editor.writes, ["Hello"], "the addressed write is still tried first")
+    XCTAssertEqual(fixture.postedPastes, ["Hello"])
+    XCTAssertEqual(fixture.editor.value, "Original Hello")
+    XCTAssertEqual(fixture.clipboard, "User clipboard")
+    XCTAssertFalse(fixture.session.canUndoLastDictation, "Cmd-V hands back no inserted range")
+  }
+
+  func testADroppedWriteThatCannotBePastedEitherIsReportedNotTyped() async {
+    let fixture = Fixture()
+    fixture.editor.appliesWrite = false
+    fixture.begin()
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .pasteRequested("Hello"))
+    XCTAssertEqual(fixture.postedPastes, ["Hello"])
+    XCTAssertEqual(fixture.editor.value, "Original ")
+    XCTAssertEqual(fixture.clipboard, "User clipboard", "a dispatched paste is never copied for retry")
+  }
+
+  func testAnEditorThatMovedUnderAnAcknowledgedWriteIsNeverRetriedWithPaste() async {
+    // Anything other than the captured field, caret and revision may hold a
+    // half-applied write. Only an untouched field earns the Cmd-V retry.
+    let fixture = Fixture()
+    fixture.begin()
+    fixture.editor.didWrite = {
+      fixture.editor.value = "Original Hel"
+      fixture.editor.selection = NSRange(location: 12, length: 0)
+    }
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .insertionUncertain("Hello"))
+    XCTAssertTrue(fixture.postedPastes.isEmpty)
+    XCTAssertEqual(fixture.clipboard, "User clipboard")
+  }
+
+  func testASlowAccessibilityServerCannotStretchVerificationPastItsWindow() async {
+    // Every read is a synchronous AX round trip. Against an app whose AX
+    // server answers slowly, the read count alone would let verification hold
+    // the turn for seconds, so the elapsed window ends it first.
+    let fixture = Fixture()
+    fixture.begin()
+    // An errored reply keeps the turn on the single verification pass: an
+    // acknowledged write that changed nothing goes on to Cmd-V instead.
+    fixture.editor.appliesWrite = false
+    fixture.editor.replacementResult = .uncertain
+    fixture.verificationTickCost = 0.2
+    let delivered = await fixture.session.deliver("Hello")
+    XCTAssertEqual(delivered, .insertionUncertain("Hello"))
+    // Two capture reads (release, delivery) and two inside the paste (its own
+    // pre-read and the write's guard), then the 0.4s window admits three
+    // verification reads at 0.2s a tick — not the ten the count allows.
+    XCTAssertEqual(fixture.editor.reads, 7, "the window, not the read count, ended the wait")
+  }
+
+  func testATurnBegunDuringAnEarlierDeliveryKeepsItsOwnState() async {
+    // Delivery now spans the editor's settling window, so the user can start
+    // the next dictation inside it. The older turn's epilogue must not reset
+    // the newer turn on its way out: it used to clear the latch, which sent
+    // the second dictation to chat as a question, and the capture owner,
+    // which left it delivering nothing.
+    let fixture = Fixture()
+    fixture.begin()
+    fixture.editor.appliesWrite = false
+    fixture.editor.replacementResult = .uncertain
+    var started = false
+    fixture.onVerificationTick = {
+      guard !started else { return }
+      started = true
+      fixture.session.begin()
+      XCTAssertTrue(fixture.session.claim(transcript: "Type the second one"))
+    }
+    let first = await fixture.session.deliver("Hello")
+    XCTAssertEqual(first, .insertionUncertain("Hello"))
+    XCTAssertTrue(fixture.session.claimsTurn, "the turn begun mid-delivery still owns the session")
+    XCTAssertFalse(fixture.session.canUndoLastDictation, "and is not offered the older turn's undo")
+
+    fixture.onVerificationTick = nil
+    fixture.editor.appliesWrite = true
+    fixture.editor.replacementResult = .applied
+    fixture.session.noteRelease()
+    let second = await fixture.session.deliver("Second")
+    XCTAssertEqual(second, .pasted("Second"))
+    XCTAssertEqual(fixture.editor.value, "Original Second")
+  }
+
   func testCompletionProjectionsNeverDescribeAnUncertainInsertionAsCopiedOrTyped() {
     let uncertain = VoiceTypeSession.Completion.insertionUncertain("Hello")
-    XCTAssertEqual(uncertain.statusHint, "Insertion unconfirmed — check the editor")
+    XCTAssertEqual(uncertain.statusHint, "Couldn't confirm it landed — check the editor")
     XCTAssertEqual(uncertain.journalAcknowledgement, "Dictation insertion unconfirmed; check the editor: Hello")
     XCTAssertEqual(uncertain.text, "Hello")
     XCTAssertFalse(uncertain.isConfirmedDelivery)
 
     let requested = VoiceTypeSession.Completion.pasteRequested("Hello")
-    XCTAssertEqual(requested.statusHint, "Paste requested — check the editor")
+    XCTAssertEqual(requested.statusHint, "Couldn't confirm it landed — check the editor")
     XCTAssertEqual(requested.journalAcknowledgement, "Paste requested; check the editor: Hello")
     XCTAssertEqual(requested.text, "Hello")
     XCTAssertFalse(requested.isConfirmedDelivery)
 
-    let copied = VoiceTypeSession.Completion.copied("Hello")
-    XCTAssertEqual(copied.statusHint, "Copied — press ⌘V to paste")
+    let copied = VoiceTypeSession.Completion.copied("Hello", .insertionUnavailable)
+    XCTAssertEqual(copied.statusHint, "Copied: press ⌘V to paste")
     XCTAssertEqual(copied.journalAcknowledgement, "Copied to clipboard: Hello")
     XCTAssertTrue(copied.isConfirmedDelivery)
+
+    // The permission is the one thing here the user can act on, and the status
+    // hint is gone a moment later — so the transcript has to carry it.
+    let blocked = VoiceTypeSession.Completion.copied("Hello", .accessibilityDenied)
+    XCTAssertEqual(blocked.statusHint, "Copied: turn on Accessibility to paste automatically")
+    XCTAssertEqual(
+      blocked.journalAcknowledgement,
+      "Copied to clipboard: Hello\n\nTurn on Accessibility for this Omi app "
+        + "(System Settings → Privacy & Security → Accessibility) to have dictation "
+        + "paste at your cursor automatically.")
+    XCTAssertEqual(blocked.text, "Hello")
+    XCTAssertTrue(blocked.isConfirmedDelivery)
 
     let pasted = VoiceTypeSession.Completion.pasted("Hello")
     XCTAssertNil(pasted.statusHint)

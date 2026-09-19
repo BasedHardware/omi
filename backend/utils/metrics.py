@@ -140,6 +140,73 @@ def record_jit_first_open(*, event: str, effect: str) -> None:
     JIT_FIRST_OPEN_TOTAL.labels(event=event, effect=effect).inc()
 
 
+# Lazy desktop deferral (the pre-JIT free-desktop cost path): a raw transcript is
+# stored at capture and the paid enrichment runs only when the user first opens
+# the conversation. `stored` vs `enrich_*` is the observed ever-opened fraction,
+# which the JIT first-open deferral for paid tiers is sized against. Bounded
+# label set; anything else collapses to `other` so a new call site cannot mint
+# an unbounded series.
+#
+# Three constraints on reading the ratio (also carried in the HELP text, because
+# whoever writes the PromQL will not read this file):
+#  1. `stored` and `fenced` are emitted by EVERY job that runs the finalizer --
+#     the backend API and the pusher (`routers/pusher.py` ->
+#     `utils/pusher_finalization.py`) -- while `enrich_*` is emitted only by the
+#     backend first-open route. The ratio must therefore be
+#     `sum by (event) (lazy_desktop_deferral_total)` across every such job, and
+#     the pusher scrape target must be live or the denominator is truncated.
+#  2. `enrich_complete / stored` is an attempt-over-persist ratio, NOT a
+#     per-conversation one: a failed enrichment re-arms `deferred`, so the next
+#     open counts a second `enrich_started`, and a retried deferred persist can
+#     count `stored` (or `fenced`) more than once for a single conversation.
+#  3. The ratio is undefined while `FREE_TIER_LOCAL_PROCESSING` is on: the
+#     deferred-store path stops emitting `stored` while the already-stored
+#     backlog keeps emitting `enrich_*`, so the ratio drifts above 100%.
+LAZY_DESKTOP_DEFERRAL_EVENTS = frozenset(
+    {
+        'stored',
+        'fenced',
+        'enrich_started',
+        'enrich_lost_ownership',
+        'enrich_reacquire_error',
+        'enrich_complete',
+        'enrich_failed',
+    }
+)
+
+LAZY_DESKTOP_DEFERRAL_TOTAL = Counter(
+    'lazy_desktop_deferral_total',
+    (
+        'Lazy desktop deferral lifecycle: store at capture and first-open enrichment outcomes; '
+        'never labeled by UID. Aggregate as sum by (event) across BOTH backend and pusher: '
+        'stored/fenced are emitted by every host running the finalizer, enrich_* only by the '
+        'backend first-open route. enrich_complete/stored is an attempt/persist ratio, not a '
+        'per-conversation one (a re-armed retry counts again). The ratio is undefined while '
+        'FREE_TIER_LOCAL_PROCESSING is on: stored stops while the enrich_* backlog drains.'
+    ),
+    ['event'],
+)
+
+# Export zero-valued children so a healthy but idle process is distinguishable
+# from an absent scrape target, matching the journey-metric convention above.
+for _lazy_event in LAZY_DESKTOP_DEFERRAL_EVENTS | {'other'}:
+    LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=_lazy_event)
+
+
+def record_lazy_desktop_deferral(*, event: str) -> None:
+    """Never raises: observability must not change a persistence or enrichment outcome."""
+    try:
+        label = event if event in LAZY_DESKTOP_DEFERRAL_EVENTS else 'other'
+    except Exception:
+        # Unhashable/invalid runtime values must not escape the guard; they
+        # collapse to `other` instead of breaking the owning path.
+        label = 'other'
+    try:
+        LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=label).inc()
+    except Exception:
+        pass
+
+
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
     'Accepted client-segmented product journeys by bounded journey and client kind',

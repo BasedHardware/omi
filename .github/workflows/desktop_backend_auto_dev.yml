@@ -82,7 +82,9 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # First CD WIF slice (C016). Do not pass credentials_json here.
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Login to GCR
         run: gcloud auth configure-docker
@@ -241,6 +243,10 @@ jobs:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
+            MEMORY_BELIEF_MODEL_ENABLED=true
+            BASIC_PLAN_GATE_PROACTIVITY_ENABLED=true
+            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=true
+            MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
@@ -341,31 +347,29 @@ jobs:
             --tag="$CANDIDATE_TAG")"
           echo "url=$candidate_url" >> "$GITHUB_OUTPUT"
 
-      - name: Stage candidate probe signer
-        if: github.event.inputs.candidate_only != 'true'
-        env:
-          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        run: |
-          set -euo pipefail
-          signer_file="$(mktemp "$RUNNER_TEMP/omi-firebase-probe-signer.XXXXXX")"
-          trap 'rm -f "$signer_file"' ERR
-          chmod 600 "$signer_file"
-          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
-          echo "DESKTOP_BACKEND_PROBE_SIGNER_FILE=$signer_file" >> "$GITHUB_ENV"
-          trap - ERR
-
       - name: Mint candidate probe identity
         if: github.event.inputs.candidate_only != 'true'
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
+          # Phase C credential rotation: the probe signs its Firebase custom
+          # token via IAM signJwt as the named production-project signer
+          # (roles/iam.serviceAccountTokenCreator for the deploy identity on
+          # it), so no service-account key is staged in the runner.
+          if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then
+            echo "Set vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT (in the development environment) to the" >&2
+            echo "Firebase auth project's signer, and grant roles/iam.serviceAccountTokenCreator for" >&2
+            echo "omi-ci-deployer-dev on it, before dev release probes can mint a token." >&2
+            exit 1
+          fi
           token_file="$(mktemp "$RUNNER_TEMP/omi-desktop-backend-probe.XXXXXX")"
           chmod 600 "$token_file"
           python3 backend/scripts/firebase_release_probe_token.py \
             --secret-project "$PROJECT_ID" \
             --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
-            --signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \
+            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
             --token-output "$token_file"
           echo "DESKTOP_BACKEND_PROBE_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
 
@@ -549,9 +553,6 @@ jobs:
         run: |
           if [[ -n "${DESKTOP_BACKEND_PROBE_TOKEN_FILE:-}" ]]; then
             rm -f "$DESKTOP_BACKEND_PROBE_TOKEN_FILE"
-          fi
-          if [[ -n "${DESKTOP_BACKEND_PROBE_SIGNER_FILE:-}" ]]; then
-            rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"
           fi
 
       - name: Show Output

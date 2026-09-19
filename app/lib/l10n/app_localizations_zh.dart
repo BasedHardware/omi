@@ -241,7 +241,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchConversations => '搜索对话...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '已选择 $count 项';
   }
 
@@ -2000,6 +2000,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistoryPartial => '部分记忆历史暂不可用。正在显示目前已获取的历史记录。';
 
   @override
+  String get memoryHistory => '历史';
+
+  @override
+  String get memoryAllowUse => '允许使用';
+
+  @override
+  String get memoryDontUse => '不使用';
+
+  @override
   String get undo => '撤销';
 
   @override
@@ -2603,9 +2612,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reviewAndManageConversations => '查看和管理已录制的对话';
 
   @override
-  String get startCapturingConversations => '开始使用您的Omi设备捕获对话以在此处查看。';
-
-  @override
   String get useMobileAppToCapture => '使用您的移动应用程序捕获音频';
 
   @override
@@ -3090,9 +3096,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcribing => '正在转录...';
-
-  @override
-  String get transcriptionFailed => '转录失败';
 
   @override
   String get discardedConversation => '已丢弃的对话';
@@ -3607,9 +3610,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get preparingSystemAudioCapture => '正在准备系统音频捕获';
 
   @override
-  String get clickTheButtonToCaptureAudio => '点击按钮以捕获音频，用于实时转录、AI 洞察和自动保存。';
-
-  @override
   String get reconnecting => '重新连接中...';
 
   @override
@@ -3655,9 +3655,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => '开始录音以查看实时转录';
-
-  @override
   String get paused => '已暂停';
 
   @override
@@ -3676,9 +3673,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => '正在设置系统音频捕获';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => '正在捕获音频并生成转录';
 
   @override
   String get clickToBeginRecordingSystemAudio => '点击开始录制系统音频';
@@ -8610,6 +8604,43 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
+
+  @override
   String get willSyncAutomatically => '将自动同步';
 
   @override
@@ -9789,4 +9820,87 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
+
+  @override
+  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
+
+  @override
+  String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
+
+  @override
+  String get home => '首页';
+
+  @override
+  String get failedToUpdateBaselineStatus => '无法更新基线状态。';
+
+  @override
+  String get unstarConversation => '取消星标对话';
+
+  @override
+  String get moreOptions => '更多选项';
+
+  @override
+  String get filterByDate => '按日期筛选';
+
+  @override
+  String get memoryGraph => '记忆图谱';
+
+  @override
+  String voiceIntroduction(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try another prompt',
+        'start': 'Start speaking',
+        'skipPrompt': 'Skip this prompt',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint':
+            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
+        'saveVoice': 'Save voice profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set up my voice later',
+        'keep': 'Save selected answers',
+        'without': 'Continue without saving answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add another sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and finish',
+        'retryRemaining': 'Retry remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue with what is saved',
+        'reviewAnswers': 'Review answers',
+        'originalGoal': 'Use original wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 }

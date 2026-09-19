@@ -71,6 +71,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   ChatScrollMode _chatScrollMode = ChatScrollMode.followingBottom;
   final List<Timer> _pendingScrollTimers = [];
+  final List<Timer> _ownedLifecycleTimers = [];
   bool _isProgrammaticScroll = false;
   int _lastObservedMessageCount = 0;
   String? _lastObservedMessageId;
@@ -125,15 +126,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       _syncAppleHealthIfConnected();
       // Auto-start voice recording if requested (e.g., from home chat bar mic button)
       if (widget.autoStartVoice && _isInitialLoad) {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            context.read<VoiceRecorderProvider>().startRecording();
-          }
+        _runLater(const Duration(milliseconds: 300), () {
+          context.read<VoiceRecorderProvider>().startRecording();
         });
       } else if (_isInitialLoad) {
         // Auto-focus the text field only on initial load, not on app switches
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (!mounted) return;
+        _runLater(const Duration(milliseconds: 300), () {
           final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
           if (!voiceRecorderProvider.isActive && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
@@ -144,25 +142,23 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       // This sends a message FROM Omi AI, not from the user
       if (widget.autoMessage != null && widget.autoMessage!.isNotEmpty && mounted) {
         // Wait for messages to load first, then add auto-message
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (mounted) {
-            final aiMessage = ServerMessage(
-              const Uuid().v4(),
-              DateTime.now(),
-              widget.autoMessage!,
-              MessageSender.ai,
-              MessageType.text,
-              null,
-              false,
-              [],
-              [],
-              [],
-              askForNps: false,
-            );
-            context.read<MessageProvider>().addMessage(aiMessage);
-            // Scroll after the message is added and rendered only while following.
-            _scheduleModeAwareScroll(delayMs: 100);
-          }
+        _runLater(const Duration(milliseconds: 800), () {
+          final aiMessage = ServerMessage(
+            const Uuid().v4(),
+            DateTime.now(),
+            widget.autoMessage!,
+            MessageSender.ai,
+            MessageType.text,
+            null,
+            false,
+            [],
+            [],
+            [],
+            askForNps: false,
+          );
+          context.read<MessageProvider>().addMessage(aiMessage);
+          // Scroll after the message is added and rendered only while following.
+          _scheduleModeAwareScroll(delayMs: 100);
         });
       }
     });
@@ -198,11 +194,29 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _messageProvider?.removeListener(_onMessageProviderChanged);
+    _cancelOwnedLifecycleTimers();
     _cancelPendingScrolls();
     textController.dispose();
     scrollController.dispose();
     textFieldFocusNode.dispose();
     super.dispose();
+  }
+
+  void _runLater(Duration delay, VoidCallback callback) {
+    late final Timer timer;
+    timer = Timer(delay, () {
+      _ownedLifecycleTimers.remove(timer);
+      if (!mounted) return;
+      callback();
+    });
+    _ownedLifecycleTimers.add(timer);
+  }
+
+  void _cancelOwnedLifecycleTimers() {
+    for (final timer in _ownedLifecycleTimers) {
+      timer.cancel();
+    }
+    _ownedLifecycleTimers.clear();
   }
 
   void _syncAppleHealthIfConnected() async {
@@ -651,6 +665,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                               ),
                                                             ),
                                                             child: TextField(
+                                                              key: const ValueKey('omi.chat.input'),
                                                               enabled: true,
                                                               controller: textController,
                                                               focusNode: textFieldFocusNode,
@@ -761,6 +776,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                         connectivityProvider.isConnected;
 
                                                     return GestureDetector(
+                                                      key: const ValueKey('omi.chat.send'),
                                                       onTap: canSend
                                                           ? () {
                                                               HapticFeedback.mediumImpact();
