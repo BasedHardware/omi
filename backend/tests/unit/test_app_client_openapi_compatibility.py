@@ -243,6 +243,48 @@ def test_removing_success_status_is_response_narrowing_and_compatible():
     assert checker.compare_specs(base, head) == []
 
 
+def test_recorded_released_status_restoration_is_allowed(monkeypatch):
+    """A recorded restoration lets a lost released status come back; nothing else.
+
+    The merge-base baseline can itself carry a spec-only regression (a status
+    removed from the spec while released clients still require it). The record
+    — and only the record — re-allows restoring exactly that (route, method,
+    status) triple.
+    """
+    checker = load_checker()
+    base = contract()
+    base['paths']['/v1/conversations/{conversation_id}'] = {
+        'delete': {'responses': {'200': {'content': {'application/json': {'schema': {'type': 'object'}}}}}}
+    }
+    head = copy.deepcopy(base)
+    head['paths']['/v1/conversations/{conversation_id}']['delete']['responses'] = {'204': {'description': 'No Content'}}
+
+    monkeypatch.setattr(checker_module, 'RELEASED_STATUS_RESTORES', frozenset())
+    assert any(
+        'responses.204: new success response status is not modeled' in item for item in messages(checker, base, head)
+    )
+
+    monkeypatch.setattr(
+        checker_module,
+        'RELEASED_STATUS_RESTORES',
+        frozenset({('/v1/conversations/{conversation_id}', 'delete', '204')}),
+    )
+    assert checker.compare_specs(base, head) == []
+
+
+def test_released_status_restoration_record_is_narrow():
+    """An unrecorded operation cannot borrow a restoration record's allowance."""
+    checker = load_checker()
+    base = contract()
+    head = copy.deepcopy(base)
+    head['paths']['/v1/goals']['post']['responses']['204'] = {'description': 'No Content'}
+
+    assert any(
+        'responses.204: new success response status is not modeled' in item for item in messages(checker, base, head)
+    )
+    assert ('/v1/conversations/{conversation_id}', 'delete', '204') in checker_module.RELEASED_STATUS_RESTORES
+
+
 def test_response_media_types_follow_response_direction():
     checker = load_checker()
     base = contract()
