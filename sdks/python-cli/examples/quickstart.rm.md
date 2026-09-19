@@ -9,7 +9,7 @@ incumbensas u finamiras.
 
 Requisits: Python 3.10 u pli nova versiun ed in access Omi.
 
-Sch'as ha installÃ  `pipx`:
+Sch'as ha installà `pipx`:
 
 ```sh
 pipx install omi-cli
@@ -90,7 +90,7 @@ omi --json memory list --limit 25 --offset 25
 ```
 
 L'emprima cumonda dumonda las emprimas 25 regurdientschas; la segunda dumonda
-las proximas 25. Ina pagina sola n'Ã¨ pia betg in backup cumplet. L'output JSON
+las proximas 25. Ina pagina sola n'è pia betg in backup cumplet. L'output JSON
 mantegna IDs cumplets, entant che tabellas sin l'ecran pudessan scursanir els
 per la mussada.
 
@@ -101,7 +101,7 @@ omi --json memory list --limit 25 --offset 0 > regurdientschas-pagina-1.json
 ```
 
 Quest redirect creescha u surscriva la datoteca locala. Verifitgescha che la
-cumonda haja terminÃ  senza errurs avant d'utilisar il cuntegn. Errurs vegnan
+cumonda haja terminà senza errurs avant d'utilisar il cuntegn. Errurs vegnan
 scrittas en l'output d'errur (stderr); ina datoteca vida na garantescha betg
 che naginas datas existian. La datoteca exportada po cuntegnir datas persunalas:
 tenila privata.
