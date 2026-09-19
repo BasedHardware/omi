@@ -1251,7 +1251,15 @@ def delete_conversation(
 
                 raise account_gate_busy_http_exception() from error
 
+        from utils.notifications import sync_action_item_reminder
+
+        armed = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        for item in armed:
+            if item.get('due_at') and not item.get('completed'):
+                sync_action_item_reminder(
+                    user_id=uid, action_item_id=item['id'], description='', completed=True, due_at=None
+                )
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
     # Screen frames (meeting-note screenshots) are primary conversation
