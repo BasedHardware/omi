@@ -67,6 +67,19 @@ if "requests" not in sys.modules:
         import requests  # type: ignore
     except ImportError:
         requests = types.ModuleType("requests")
+
+        def _dummy_post(*args, **kwargs):
+            return None
+
+        def _dummy_get(*args, **kwargs):
+            return None
+
+        class RequestException(Exception):
+            pass
+
+        requests.post = _dummy_post
+        requests.get = _dummy_get
+        requests.RequestException = RequestException
         sys.modules["requests"] = requests
 
 PLUGIN_DIR = Path(__file__).resolve().parent
@@ -90,7 +103,7 @@ class IQRatingCalculateAITests(unittest.TestCase):
         }
 
     @patch.object(main, "OPENAI_API_KEY", "test-key")
-    @patch.object(main.requests, "post")
+    @patch.object(main.requests, "post", create=True)
     def test_valid_ai_response_assigns_scores(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -118,7 +131,7 @@ class IQRatingCalculateAITests(unittest.TestCase):
         self.assertTrue(scores["bob"]["is_name"])
 
     @patch.object(main, "OPENAI_API_KEY", "test-key")
-    @patch.object(main.requests, "post")
+    @patch.object(main.requests, "post", create=True)
     def test_leading_non_object_element_keeps_valid_scores(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -147,7 +160,7 @@ class IQRatingCalculateAITests(unittest.TestCase):
         self.assertEqual(scores["bob"]["iq"], 110)
 
     @patch.object(main, "OPENAI_API_KEY", "test-key")
-    @patch.object(main.requests, "post")
+    @patch.object(main.requests, "post", create=True)
     def test_null_and_non_integer_iq_values_fallback_without_dropping_batch(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -175,7 +188,7 @@ class IQRatingCalculateAITests(unittest.TestCase):
         self.assertTrue(scores["bob"]["is_name"])
 
     @patch.object(main, "OPENAI_API_KEY", "test-key")
-    @patch.object(main.requests, "post")
+    @patch.object(main.requests, "post", create=True)
     def test_invalid_name_entries_skipped_safely(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -204,7 +217,7 @@ class IQRatingCalculateAITests(unittest.TestCase):
         self.assertIsInstance(scores["bob"]["iq"], int)
 
     @patch.object(main, "OPENAI_API_KEY", "test-key")
-    @patch.object(main.requests, "post")
+    @patch.object(main.requests, "post", create=True)
     def test_non_list_json_response_handled_gracefully(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
