@@ -5,6 +5,57 @@ import SwiftUI
 
 @MainActor
 extension AppState {
+  func toggleConversationListening(source: String = "ui") {
+    setTranscriptionPaused(!isTranscriptionPaused, source: source)
+  }
+
+  func setConversationListening(_ on: Bool, source: String = "ui") {
+    setTranscriptionPaused(!on, source: source)
+  }
+
+  /// Pause/resume transcription forwarding without touching `audioRecordingMode` or tearing
+  /// down mic/BLE capture. Off is the mode that stops capture; this overlay only gates STT.
+  func setTranscriptionPaused(_ paused: Bool, source: String = "ui") {
+    let previous = isTranscriptionPaused
+    guard previous != paused else { return }
+
+    isTranscriptionPaused = paused
+    UserDefaults.standard.set(paused, forKey: .transcriptionPaused)
+    refreshTranscriptionForwardingSnapshot()
+
+    AnalyticsManager.shared.listeningToggled(isListening: !paused, source: source)
+    log(
+      "listening overlay: \(previous ? "paused" : "live") -> \(paused ? "paused" : "live") "
+        + "(source=\(source), mode=\(audioRecordingMode.rawValue))"
+    )
+  }
+
+  func refreshTranscriptionForwardingSnapshot() {
+    setConversationListeningSnapshot(
+      CaptureListeningLogic.shouldForwardTranscriptionAudio(
+        mode: audioRecordingMode,
+        isPaused: isTranscriptionPaused
+      )
+    )
+  }
+
+  nonisolated private func snapshotIsConversationListening() -> Bool {
+    conversationListeningSnapshotLock.lock()
+    defer { conversationListeningSnapshotLock.unlock() }
+    return conversationListeningSnapshot
+  }
+
+  nonisolated func setConversationListeningSnapshot(_ value: Bool) {
+    conversationListeningSnapshotLock.lock()
+    conversationListeningSnapshot = value
+    conversationListeningSnapshotLock.unlock()
+  }
+
+  nonisolated func forwardConversationAudio(_ audioData: Data, to handler: (Data) -> Void) {
+    guard snapshotIsConversationListening() else { return }
+    handler(audioData)
+  }
+
   func toggleTranscription() {
     if isTranscribing {
       AssistantSettings.shared.audioRecordingMode = .off
@@ -461,8 +512,8 @@ extension AppState {
     // Local mode: bypass the mixer — mic and system are transcribed by SEPARATE Parakeet
     // instances so transcripts are diarized by source (mic = you, system = another speaker).
     if !sttSession.useLocalSTT {
-      audioMixer?.start { [weak self] monoMixed in
-        self?.transcriptionService?.sendAudio(monoMixed)
+      audioMixer?.start { [weak self, weak transcriptionService] monoMixed in
+        self?.forwardConversationAudio(monoMixed) { transcriptionService?.sendAudio($0) }
       }
     }
 
@@ -548,7 +599,7 @@ extension AppState {
           }
           let audioData = dictationGate.gated(rawAudioData)
           if useLocalSTT {
-            localService?.appendAudio(audioData)
+            self?.forwardConversationAudio(audioData) { localService?.appendAudio($0) }
           } else {
             mixer?.setMicAudio(audioData)
           }
@@ -602,7 +653,7 @@ extension AppState {
             self?.captureAttempt?.noteFirstAudioFrame()
           }
           if useLocalSTT {
-            localSystem?.appendAudio(audioData)
+            self?.forwardConversationAudio(audioData) { localSystem?.appendAudio($0) }
           } else {
             mixer?.setSystemAudio(audioData)
           }
@@ -939,12 +990,15 @@ extension AppState {
     // Start BLE audio processing and pipe directly to transcription
     await BleAudioService.shared.startProcessing(
       from: connection,
-      transcriptionService: transcriptionService,
+      transcriptionService: nil,
       audioDataHandler: { _ in
         // Audio level is updated by BleAudioService
         Task { @MainActor in
           AudioLevelMonitor.shared.updateMicrophoneLevel(BleAudioService.shared.audioLevel)
         }
+      },
+      conversationAudioHandler: { [weak self, weak transcriptionService] audioData in
+        self?.forwardConversationAudio(audioData) { transcriptionService?.sendAudio($0) }
       }
     )
 

@@ -134,6 +134,11 @@ enum DefaultsKey: String {
   /// Ambient capture mutes its microphone contribution while a dictation app (Wispr Flow,
   /// superwhisper, macOS Dictation) holds the mic. Absent means on.
   case transcriptionIgnoreDictationApps = "transcription_ignoreDictationApps"
+  /// Overlay on `audioRecordingMode`: pause keeps mic/BLE capture up and gates only
+  /// transcription forwarding. Absent means not paused. Never a second recording policy.
+  case transcriptionPaused = "transcriptionPaused"
+  case shortcutToggleListeningEnabled = "shortcut_toggleListeningEnabled"
+  case shortcutToggleListeningKey = "shortcut_toggleListeningKey"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
