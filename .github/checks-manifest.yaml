@@ -1271,6 +1271,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15116: normalize recipient inputs and safely coerce date range parameters"
+  - id: ms365-settings-encoding-tests
+    command: ["python3", "plugins/omi-ms365-app/test_settings_page_encoding.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14895: setup page and OAuth callback must escape user input and URL-encode uid to prevent reflected XSS and attribute breakout; runs hermetically with zero external dependencies"
   - id: wikipedia-request-boundary-tests
     command: ["python3", "plugins/omi-wikipedia-app/test_request_boundary.py"]
     triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
