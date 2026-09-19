@@ -48,6 +48,12 @@
 * [`quickstart.fa.md`](quickstart.fa.md) — گام‌های نخست با omi-cli (Persian Quickstart).
 * [`quickstart.fi.md`](quickstart.fi.md) — Ensiaskeleet omi-cli-työkalun kanssa (Finnish Quickstart).
 * [`quickstart.ga.md`](quickstart.ga.md) — Treoir Mhearthosaithe do omi-cli (Irish Quickstart).
+* [`quickstart.mh.md`](quickstart.mh.md) — jinoe in omi-cli (Marshallese Quickstart).
+* [`quickstart.ch.md`](quickstart.ch.md) — fina na pasu siha yan omi-cli (Chamorro Quickstart).
+* [`quickstart.tet.md`](quickstart.tet.md) — pasu primeiru ho omi-cli (Tetum Quickstart).
+* [`quickstart.tpi.md`](quickstart.tpi.md) — fas sted wantaim omi-cli (Tok Pisin Quickstart).
+* [`quickstart.ay.md`](quickstart.ay.md) — nayrïr saräwinaka omi-cli-mpi (Aymara Quickstart).
+* [`quickstart.nah.md`](quickstart.nah.md) — achto tzintiliztli ica omi-cli (Nahuatl Quickstart).
 * [`quickstart.gl.md`](quickstart.gl.md) — Guía de inicio rápido de omi-cli (Galician Quickstart).
 * [`quickstart.hi.md`](quickstart.hi.md) — omi-cli के साथ शुरुआत (Hindi Quickstart).
 * [`quickstart.hr.md`](quickstart.hr.md) — Prvi koraci s omi-cli (Croatian Quickstart).
