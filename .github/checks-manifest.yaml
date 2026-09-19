@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hive chat tools read the caller limit with a raw body.get('limit', 10); dict.get returns None - not the default - when the backend sends an explicit null for an omitted optional parameter, and items[:None] silently returned every row instead of the documented page size, while a string limit raised TypeError and surfaced as a tool error; all three handlers must coerce the limit to a bounded int"
+  - id: composio-notion-oauth-state-tests
+    command: ["python3", "plugins/composio/test_oauth_state_binding.py"]
+    triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Composio Notion OAuth callback treated the raw state parameter as the uid, so an attacker could complete OAuth for their own workspace and bind the grant to any victim uid; state is now HMAC-signed at initiation and the callback recovers the uid only from states this server issued"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
