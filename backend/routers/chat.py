@@ -148,7 +148,7 @@ def _transcription_http_error(failure: TranscriptionFailure) -> HTTPException:
 
 def _cleanup_temp_voice_wavs(paths: List[str], uid: str) -> None:
     for path in paths:
-        if path.startswith(f'/tmp/{uid}_'):
+        if path.startswith(f'/tmp/{uid}_') or Path(path).resolve().parent == Path('syncing', uid).resolve():
             try:
                 Path(path).unlink()
             except OSError:
