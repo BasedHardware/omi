@@ -69,7 +69,7 @@ def load_app():
         setattr(db, name, lambda *args, **kwargs: None)
 
     stubs = {
-        "fastapi": module("fastapi", FastAPI=FastAPI, Request=object, Query=lambda *a, **k: None, HTTPException=Exception),
+        "fastapi": module("fastapi", FastAPI=FastAPI, Request=object, Query=lambda *a, **k: None, HTTPException=Exception, Depends=lambda *a, **k: None),
         "fastapi.responses": module("fastapi.responses", HTMLResponse=str, RedirectResponse=str, JSONResponse=dict),
         "dotenv": module("dotenv", load_dotenv=lambda *a, **k: None),
         "requests": module("requests"),
