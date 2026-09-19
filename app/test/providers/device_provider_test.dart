@@ -424,6 +424,67 @@ void main() {
       expect(flag2, true, reason: 'Exactly 20% should not reset flag (needs > 20)');
     });
   });
+
+  test('renameDevice persists an alias and updates state', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'rename-user'});
+    await SharedPreferencesUtil.init();
+
+    final provider = DeviceProvider();
+    addTearDown(provider.dispose);
+    final device = BtDevice(
+      id: 'AA:AA:AA:AA:AA:99',
+      name: 'Omi',
+      type: DeviceType.omi,
+      rssi: -50,
+      firmwareRevision: '3.0.20',
+    );
+
+    provider.connectedDevice = device;
+    provider.pairedDevice = device;
+
+    expect(await provider.renameDevice('Kitchen Omi'), isTrue);
+    expect(provider.connectedDevice?.name, 'Kitchen Omi');
+    expect(provider.pairedDevice?.name, 'Kitchen Omi');
+    expect(SharedPreferencesUtil().deviceAlias(device.id), 'Kitchen Omi');
+    expect(SharedPreferencesUtil().btDevice.name, 'Kitchen Omi');
+  });
+
+  test('saveDeviceAlias rejects aliases longer than 40 characters', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'rename-user'});
+    await SharedPreferencesUtil.init();
+
+    const deviceId = 'AA:AA:AA:AA:AA:97';
+    final tooLong = 'A' * 41;
+
+    expect(
+      await SharedPreferencesUtil().saveDeviceAlias(deviceId, tooLong),
+      isFalse,
+    );
+    expect(SharedPreferencesUtil().deviceAlias(deviceId), isEmpty);
+  });
+
+  test('setConnectedDevice reapplies a persisted alias on reconnect', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'rename-user'});
+    await SharedPreferencesUtil.init();
+    await SharedPreferencesUtil().saveDeviceAlias(
+      'AA:AA:AA:AA:AA:98',
+      'Desk Omi',
+    );
+
+    final provider = DeviceProvider();
+    addTearDown(provider.dispose);
+    final rediscovered = BtDevice(
+      id: 'AA:AA:AA:AA:AA:98',
+      name: 'Omi',
+      type: DeviceType.omi,
+      rssi: -50,
+      firmwareRevision: '3.0.20',
+    );
+
+    await provider.setConnectedDevice(rediscovered);
+    expect(provider.connectedDevice?.name, 'Desk Omi');
+    expect(provider.pairedDevice?.name, 'Desk Omi');
+  });
 }
 
 class _TestAnalyticsAdapter implements AnalyticsAdapter {
