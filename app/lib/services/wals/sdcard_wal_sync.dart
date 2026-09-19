@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -54,6 +55,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @visibleForTesting
   set testDevice(BtDevice? device) => _device = device;
+
+  DeviceConnection? _testConnection;
+
+  @visibleForTesting
+  set testConnection(DeviceConnection? connection) => _testConnection = connection;
 
   bool _supportsTimestampMarkers() {
     if (_device == null) return false;
@@ -209,7 +215,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return Future.value(false);
     }
@@ -220,7 +226,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     String deviceId, {
     required void Function(List<int>) onStorageBytesReceived,
   }) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return Future.value(null);
     }
@@ -389,8 +395,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           await callback(file, chunkOffset, timerStart, chunk.length);
         } catch (e) {
           Logger.debug('Error in callback during chunking: $e');
-          hasError = true;
-          break;
+          rethrow;
         }
         timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
       }
