@@ -150,3 +150,23 @@ def test_web_generate_recap_bounds_a_heavy_day():
             )
 
     assert seen['ids'] == ['c2', 'c3']
+
+
+def test_regenerate_records_a_truncated_day_like_the_scheduled_job():
+    import routers.users as users_router
+    import utils.other.notifications as daily_summary_job
+
+    with patch.object(daily_summary_job, '_record_daily_summary_fallback') as recorded:
+        _regenerate(users_router, [_conversation(i, 150_000) for i in range(4)])
+
+    recorded.assert_called_once_with(from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded')
+
+
+def test_regenerate_records_nothing_for_a_normal_day():
+    import routers.users as users_router
+    import utils.other.notifications as daily_summary_job
+
+    with patch.object(daily_summary_job, '_record_daily_summary_fallback') as recorded:
+        _regenerate(users_router, [_conversation(i, 2_000) for i in range(4)])
+
+    recorded.assert_not_called()
