@@ -8,6 +8,7 @@ import logging
 from dotenv import load_dotenv
 
 from .db import get_pending_memories, update_memory_status, get_all_memories
+from .tools_auth import require_composio_tools_auth
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -115,7 +116,11 @@ async def store_fact(uid: str, text: str, source_type: str = "notion", source_id
 
 
 @router.post("/facts", status_code=status.HTTP_200_OK)
-async def create_memory(memory: MemoryCreate, uid: str):
+async def create_memory(
+    memory: MemoryCreate,
+    uid: str,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Create a single memory/fact in OMI"""
     success = create_fact(user_id=uid, text=memory.text, source=memory.text_source, source_spec=memory.text_source_spec)
 
@@ -126,7 +131,10 @@ async def create_memory(memory: MemoryCreate, uid: str):
 
 
 @router.post("/facts/batch", status_code=status.HTTP_200_OK)
-async def create_memories_batch(data: MemoryBatch):
+async def create_memories_batch(
+    data: MemoryBatch,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Create multiple memories/facts in OMI"""
     results = []
 

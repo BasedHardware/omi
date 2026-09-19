@@ -1211,6 +1211,11 @@ checks:
     triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
+  - id: composio-backend-route-auth-tests
+    command: ["python3", "plugins/composio/test_tools_auth.py"]
+    triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Composio's backend routes (/api/omi/facts, /api/omi/facts/batch, /api/notion/blocks, /api/notion/page) take uid from the request and create memories in Omi with the app's integration key or read the user's Notion workspace with their stored OAuth token; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
