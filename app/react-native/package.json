@@ -42,6 +42,7 @@
     "react-native": "0.85.3",
     "react-native-css-interop": "0.2.6",
     "react-native-gesture-handler": "~2.31.2",
+    "react-native-live-audio-stream": "^1.1.1",
     "react-native-reanimated": "4.3.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.25.2",

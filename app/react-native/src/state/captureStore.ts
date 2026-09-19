@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { DeepgramStream, TranscriptSegment } from '@/services/stt';
 import { createVoiceprint, Voiceprint } from '@/services/voiceprint';
+import { startMic, MicHandle } from '@/services/mic';
 import { ENV } from '@/config/env';
 import { useAuthStore } from '@/state/authStore';
 
@@ -34,6 +35,15 @@ function authorizedStreamUrl(): string | null {
   }
 }
 
+// Kept outside the store so the (non-serializable) recorder handle never
+// triggers re-renders and can't be accidentally reset.
+let micHandle: MicHandle | null = null;
+
+function teardownMic() {
+  micHandle?.stop();
+  micHandle = null;
+}
+
 export const useCaptureStore = create<CaptureState>((set, get) => ({
   recording: false,
   connecting: false,
@@ -60,14 +70,33 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
           get().pushSegment({ ...seg, speaker: label });
           void isUser;
         },
-        onOpen: () => set({ connecting: false, recording: true, error: null }),
+        onOpen: () => {
+          // Socket is live; only then start the mic and flip to recording.
+          set({ connecting: false, recording: true, error: null });
+          void startMic(
+            (bytes) => get().stream?.sendAudio(bytes),
+            (err) => {
+              console.error('[capture] mic error:', err);
+              get().stop();
+              set({ error: 'Microphone unavailable or permission denied.' });
+            },
+          ).then((handle) => {
+            if (!handle) {
+              get().stop();
+              return;
+            }
+            // If stop() ran while the mic was still coming up, tear it down now.
+            if (!get().recording) teardownMic();
+            else micHandle = handle;
+          });
+        },
         onError: (err) => {
           console.error('[capture] STT error:', err);
           get().stop();
           set({ error: 'Speech capture failed to start. Check your connection and session.' });
         },
         onClose: () => {
-          if (get().recording) set({ recording: false, connecting: false, stream: null });
+          if (get().recording) get().stop();
         },
       },
       url,
@@ -77,6 +106,7 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
     next.connect();
   },
   stop: () => {
+    teardownMic();
     get().stream?.close();
     set({ recording: false, connecting: false, stream: null });
   },
