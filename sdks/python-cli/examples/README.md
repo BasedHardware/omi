@@ -90,3 +90,8 @@
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
+* [`quickstart.fo.md`](quickstart.fo.md) — føroysk byrjanarvegleiðing fyri omi-cli (Faroese Quickstart).
+* [`quickstart.lb.md`](quickstart.lb.md) — lëtzebuergesch Ufanksguide fir omi-cli (Luxembourgish Quickstart).
+* [`quickstart.fy.md`](quickstart.fy.md) — Fryske flugge startgids foar omi-cli (Frisian Quickstart).
+* [`quickstart.gd.md`](quickstart.gd.md) — stiùireadh tòiseachaidh Gàidhlig airson omi-cli (Scottish Gaelic Quickstart).
+* [`quickstart.br.md`](quickstart.br.md) — huanadenn deraouiñ e brezhoneg evit omi-cli (Breton Quickstart).
