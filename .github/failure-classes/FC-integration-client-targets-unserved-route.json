@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-integration-client-targets-unserved-route",
+  "violated_contract": "An integration client must only send to a backend route that the backend actually registers; hard-coding a version or path the server does not serve fails every call with 404 and the feature dies silently, because the failure surfaces only as a logged error string. hume-ai's create_omi_memory posted to /v1/integrations/{app_id}/memories while the backend only serves POST /v2/integrations/{app_id}/user/memories, so every emotion-memory import failed (issue #14340).",
+  "canonical_prevention": "Pin the exact served route in a manifest-registered hermetic suite that drives the real client function through a capturing fake HTTP client and asserts the full URL, so drift to an unserved route fails CI before merge.",
+  "canonical_prevention_artifact": [
+    "plugins/test_hume_omi_memory_route.py",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["plugins/**"],
+  "status": "open"
+}
