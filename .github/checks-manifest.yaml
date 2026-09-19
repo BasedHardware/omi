@@ -1223,6 +1223,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+  - id: crossref-doi-normalization-tests
+    command: ["python3", "plugins/omi-crossref-app/test_doi_normalization.py"]
+    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14523: resolver URLs with encoded DOI path characters, query strings, or fragments must normalize to one validated DOI before Crossref lookup"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
