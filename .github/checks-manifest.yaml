@@ -1191,6 +1191,12 @@ checks:
     triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "list_events printed event ids cut to 20 characters and create_event printed none, so the ids the tools handed back could not be passed to get_event, update_event or delete_event; the suite round-trips every emitted id through those handlers"
+  - id: twitter-recording-accumulator-tests
+    command: ["python3", "plugins/omi-twitter-app/test_recording_state.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "process_segments persisted a nullable TweetDetector result and then attempted += on a null legacy accumulator; the hermetic suite covers bare triggers, legacy state recovery, multi-segment collection, posting/reset, and passive listening"
+
   - id: twitter-chat-tools-max-results-tests
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
