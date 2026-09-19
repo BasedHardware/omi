@@ -1116,6 +1116,11 @@ checks:
     triggers: ["plugins/omi-notion-app/**"]
     lanes: ["local", "ci"]
     reason: "#13915 get_page read only the first 50 block children and never followed has_more/next_cursor, silently dropping page content; later-page failures must stay errors"
+  - id: spotify-playlist-owner-tests
+    command: ["python3", "plugins/omi-spotify-app/test_playlist_owner.py"]
+    triggers: ["plugins/omi-spotify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#6792 nullable Spotify playlist owner display_name crashed setup playlist parsing and returned HTTP 500 with an empty dropdown"
   - id: hey-omi-question-extraction-tests
     command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
