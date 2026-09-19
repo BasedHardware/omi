@@ -35,8 +35,10 @@ class PeopleProvider extends BaseProvider {
   setPeople() async {
     final value = await getAllPeople();
     loading = false;
-    people = value;
-    SharedPreferencesUtil().cachedPeople = people;
+    if (value != null) {
+      people = value;
+      SharedPreferencesUtil().cachedPeople = people;
+    }
     Logger.debug("${SharedPreferencesUtil().cachedPeople.length} people");
     notifyListeners();
   }
