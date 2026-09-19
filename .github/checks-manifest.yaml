@@ -79,6 +79,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Graph null collections and HTTP-date Retry-After crashed mail/teams/sharepoint/calendar tools (#14247)"
+  - id: ms365-app-settings-encoding-tests
+    command: ["python3", "plugins/omi-ms365-app/test_settings_page_encoding.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "setup page and OAuth callback must escape user input and URL-encode uid to prevent reflected XSS and attribute breakout"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

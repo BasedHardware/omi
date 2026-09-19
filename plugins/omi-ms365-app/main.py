@@ -14,11 +14,13 @@ Exposes:
 """
 from __future__ import annotations
 
+import html
 import json
 import logging
 import secrets
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -56,13 +58,14 @@ async def root() -> str:
 @app.get("/setup/ms365", response_class=HTMLResponse)
 async def setup_page(uid: str = Query(..., description="OMI user id")) -> str:
     """OMI loads this page inside its in-app webview when the user taps 'Setup'."""
-    redirect = f"/auth/microsoft?uid={uid}"
+    safe_uid = quote(uid or "", safe="")
+    safe_redirect = html.escape(f"/auth/microsoft?uid={safe_uid}", quote=True)
     return f"""
     <html><body style="font-family: system-ui; max-width: 640px; margin: 40px auto;">
       <h2>Connect Microsoft 365</h2>
       <p>This will let OMI read and act on your Outlook, Teams and SharePoint data
          on your behalf. You can revoke access at any time.</p>
-      <p><a href="{redirect}"
+      <p><a href="{safe_redirect}"
          style="display:inline-block; background:#2563eb; color:white; padding:12px 20px;
          border-radius:8px; text-decoration:none;">Connect with Microsoft →</a></p>
     </body></html>
@@ -83,12 +86,14 @@ async def auth_callback(
     error: str | None = None,
     error_description: str | None = None,
 ) -> HTMLResponse:
-    if error:
+    if error and isinstance(error, str):
+        safe_error = html.escape(error)
+        safe_desc = html.escape(str(error_description))
         return HTMLResponse(
-            f"<h3>Authorization failed</h3><pre>{error}: {error_description}</pre>",
+            f"<h3>Authorization failed</h3><pre>{safe_error}: {safe_desc}</pre>",
             status_code=400,
         )
-    if not code or not state:
+    if not code or not state or not isinstance(code, str) or not isinstance(state, str):
         raise HTTPException(400, "Missing code or state")
 
     try:
