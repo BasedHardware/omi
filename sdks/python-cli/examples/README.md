@@ -115,3 +115,8 @@
 * [`quickstart.mi.md`](quickstart.mi.md) — he aratohu tere mō omi-cli i te reo Māori (Māori Quickstart).
 * [`quickstart.gn.md`](quickstart.gn.md) — guía ñepyrũ pya'e omi-cli avañe'ẽme (Guarani Quickstart).
 * [`quickstart.ug.md`](quickstart.ug.md) — omi-cli ئۇيغۇرچە تېز باشلاش قوللانمىسى (Uyghur Quickstart).
+* [`quickstart.tw.md`](quickstart.tw.md) — omi-cli ho Twi kasa mu (Twi Quickstart).
+* [`quickstart.ban.md`](quickstart.ban.md) — pituduh kapertama basa Bali (Balinese Quickstart).
+* [`quickstart.st.md`](quickstart.st.md) — mehato ea pele ka Sesotho (Southern Sotho Quickstart).
+* [`quickstart.sc.md`](quickstart.sc.md) — is primos passos in sardu (Sardinian Quickstart).
+* [`quickstart.yi.md`](quickstart.yi.md) — ערשטע טריט מיט omi-cli אויף ייִדיש (Yiddish Quickstart).

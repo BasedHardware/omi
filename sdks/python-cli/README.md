@@ -93,6 +93,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [Diné bizaad (Navajo Quickstart)](examples/quickstart.nv.md).
 > Looking for localized guides? See the [føroysk byrjanarvegleiðing (Faroese Quickstart)](examples/quickstart.fo.md), the [lëtzebuergesch Ufanksguide (Luxembourgish Quickstart)](examples/quickstart.lb.md), the [Fryske flugge startgids (Frisian Quickstart)](examples/quickstart.fy.md), the [stiùireadh tòiseachaidh Gàidhlig (Scottish Gaelic Quickstart)](examples/quickstart.gd.md), or the [huanadenn deraouiñ e brezhoneg (Breton Quickstart)](examples/quickstart.br.md).
 > Looking for localized guides? See the [guida rapida n sicilianu (Sicilian Quickstart)](examples/quickstart.scn.md), the [guida de començament rapid en occitan (Occitan Quickstart)](examples/quickstart.oc.md), the [aratohu tere mō te reo Māori (Māori Quickstart)](examples/quickstart.mi.md), the [guía ñepyrũ pya'e avañe'ẽme (Guarani Quickstart)](examples/quickstart.gn.md), or the [ئۇيغۇرچە تېز باشلاش قوللانمىسى (Uyghur Quickstart)](examples/quickstart.ug.md).
+> Looking for localized guides? See the [omi-cli ho Twi kasa mu (Twi Quickstart)](examples/quickstart.tw.md), the [pituduh kapertama basa Bali (Balinese Quickstart)](examples/quickstart.ban.md), the [mehato ea pele ka Sesotho (Southern Sotho Quickstart)](examples/quickstart.st.md), the [is primos passos in sardu (Sardinian Quickstart)](examples/quickstart.sc.md), or the [ערשטע טריט מיט omi-cli (Yiddish Quickstart)](examples/quickstart.yi.md).
 
 ## Auth
 
