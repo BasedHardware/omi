@@ -489,15 +489,12 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
     seen_ids = set()
 
     for conv in conversations:
-        try:
-            photos = conversations_db.get_conversation_photos(uid, conv["id"])
-            for photo in photos:
-                photo_id = photo.get("id")
-                if photo_id and photo_id not in seen_ids:
-                    all_photos.append(photo)
-                    seen_ids.add(photo_id)
-        except Exception as e:
-            logger.error(f"Error fetching photos for {conv['id']}: {e}")
+        photos = conversations_db.get_conversation_photos(uid, conv["id"])
+        for photo in photos:
+            photo_id = photo.get("id")
+            if photo_id and photo_id not in seen_ids:
+                all_photos.append(photo)
+                seen_ids.add(photo_id)
 
     # Sort by creation time with a uniform tz-aware UTC key. Missing or malformed
     # created_at values are retained and ordered first, with structured metrics.
