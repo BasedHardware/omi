@@ -209,6 +209,10 @@ omi --json local task complete task_123
 omi --json local task delete task_123 --yes
 ```
 
+### Apply the requested time window to exact screen search
+
+The exact app/window/OCR fallback for `omi --json local search-screen` honors the same rolling `--days` window as semantic search.
+
 ## Command surface
 
 The full tree (run `omi --help` for the live version):
