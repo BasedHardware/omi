@@ -115,6 +115,14 @@ class SettingsPageTests(unittest.TestCase):
         self.assertIn("fetch('/update-timezone?uid=' + ENCODED_UID", auth_page)
         self.assertIn("fetch('/logout?uid=' + ENCODED_UID", auth_page)
 
+    def test_authenticated_page_escapes_script_element_terminator_in_uid(self):
+        malicious_uid = "user</script><script>alert('xss')</script>"
+        auth_page = self.render([], uid=malicious_uid)
+
+        self.assertIn('const CURRENT_UID = "user<\\/script><script>alert(\'xss\')<\\/script>";', auth_page)
+        self.assertNotIn('const CURRENT_UID = "user</script>', auth_page)
+        self.assertNotIn('</script><script>alert', auth_page)
+
     def test_dev_interface_uid_escaped(self):
         test_page = asyncio.run(main.test_interface(uid='user" onfocus="alert(1)', dev="true")).content
         self.assertIn('value="user&quot; onfocus=&quot;alert(1)"', test_page)

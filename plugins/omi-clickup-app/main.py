@@ -254,7 +254,7 @@ async def root(uid: str = Query(None)):
     user_timezone = user.get("timezone", "UTC")
     safe_team_name = html.escape(str(team_name))
     safe_timezone = html.escape(str(user_timezone))
-    uid_json = json.dumps(uid)
+    uid_json = json.dumps(uid).replace('</', '<\\/')  # '\/' keeps a raw '</script>' out of the inline <script> block
 
     list_options = '<option value="">Select a list...</option>'
     for lst in lists:
