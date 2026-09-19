@@ -4822,6 +4822,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get newTag => 'НОВЕ';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Потрібна допомога? Напишіть нам';
 
   @override

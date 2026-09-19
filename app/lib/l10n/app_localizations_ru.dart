@@ -4828,6 +4828,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get newTag => 'НОВОЕ';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Нужна помощь? Свяжитесь с нами';
 
   @override

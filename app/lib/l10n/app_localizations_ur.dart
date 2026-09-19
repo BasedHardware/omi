@@ -4824,6 +4824,15 @@ class AppLocalizationsUr extends AppLocalizations {
   String get newTag => 'نیا';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'مدد درکار ہے؟ ہمارے ساتھ بات کریں';
 
   @override

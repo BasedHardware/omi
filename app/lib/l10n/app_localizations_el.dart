@@ -4854,6 +4854,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get newTag => 'ΝΕΟ';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Χρειάζεστε βοήθεια; Συνομιλήστε μαζί μας';
 
   @override

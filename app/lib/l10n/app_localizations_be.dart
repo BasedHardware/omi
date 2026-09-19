@@ -4829,6 +4829,15 @@ class AppLocalizationsBe extends AppLocalizations {
   String get newTag => 'НОВЫ';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Потрэба Дапамога? Пакідайцеся з Намі';
 
   @override

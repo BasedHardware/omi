@@ -4822,6 +4822,15 @@ class AppLocalizationsBn extends AppLocalizations {
   String get newTag => 'নতুন';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'সাহায্যের প্রয়োজন? আমাদের সাথে চ্যাট করুন';
 
   @override

@@ -4824,6 +4824,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get newTag => 'JAUNS';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Nepieciešama palīdzība? Sazinies ar mums';
 
   @override

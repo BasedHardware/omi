@@ -4826,6 +4826,15 @@ class AppLocalizationsMr extends AppLocalizations {
   String get newTag => 'नवीन';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'मदतीची आवश्यकता आहे? आमच्याशी चॅट करा';
 
   @override

@@ -4813,6 +4813,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get newTag => 'NOVÉ';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Potrebujete pomoc? Napíšte nám';
 
   @override

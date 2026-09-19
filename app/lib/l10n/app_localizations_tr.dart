@@ -4826,6 +4826,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get newTag => 'YENİ';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Yardıma mı ihtiyacınız var? Bizimle sohbet edin';
 
   @override

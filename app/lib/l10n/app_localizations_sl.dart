@@ -4824,6 +4824,15 @@ class AppLocalizationsSl extends AppLocalizations {
   String get newTag => 'NOVO';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Potrebna pomoč? Klepetajte z nami';
 
   @override

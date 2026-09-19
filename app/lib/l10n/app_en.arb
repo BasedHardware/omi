@@ -5672,6 +5672,18 @@
     "@newTag": {
         "description": "newTag label"
     },
+    "aiInterjection": "AI Interjection",
+    "@aiInterjection": {
+        "description": "Title for the AI Interjection setting and feature"
+    },
+    "aiListening": "AI Listening",
+    "@aiListening": {
+        "description": "Idle status label shown while the AI interjection agent is listening"
+    },
+    "aiThinking": "AI Thinking",
+    "@aiThinking": {
+        "description": "Active status label shown while the AI interjection agent is composing a response"
+    },
     "needHelpChatWithUs": "Need Help? Chat with us",
     "@needHelpChatWithUs": {
         "description": "needHelpChatWithUs label"

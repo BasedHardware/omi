@@ -4840,6 +4840,15 @@ class AppLocalizationsMk extends AppLocalizations {
   String get newTag => 'НОВО';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Потребна помош? Разговарај со нас';
 
   @override

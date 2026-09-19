@@ -4824,6 +4824,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get newTag => 'MỚI';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Cần trợ giúp? Trò chuyện với chúng tôi';
 
   @override

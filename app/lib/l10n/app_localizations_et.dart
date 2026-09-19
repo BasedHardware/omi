@@ -4815,6 +4815,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String get newTag => 'UUS';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Vajad abi? Vestle meiega';
 
   @override

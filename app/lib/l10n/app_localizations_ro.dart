@@ -4840,6 +4840,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get newTag => 'NOU';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Aveți nevoie de ajutor? Discutați cu noi';
 
   @override

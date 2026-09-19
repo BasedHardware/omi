@@ -4722,6 +4722,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newTag => '新';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => '需要帮助？与我们聊天';
 
   @override

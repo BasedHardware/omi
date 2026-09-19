@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/ai_interjection_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class AiInterjectionIndicator extends StatelessWidget {
   const AiInterjectionIndicator({super.key});
@@ -13,6 +14,7 @@ class AiInterjectionIndicator extends StatelessWidget {
         if (!provider.enabled) return const SizedBox.shrink();
 
         return Container(
+          key: const Key('ai_interjection_indicator'),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: provider.isInterjecting
@@ -33,7 +35,7 @@ class AiInterjectionIndicator extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                provider.isInterjecting ? 'AI Thinking' : 'AI Listening',
+                provider.isInterjecting ? context.l10n.aiThinking : context.l10n.aiListening,
                 style: TextStyle(
                   color: provider.isInterjecting ? Colors.green : Colors.grey,
                   fontSize: 11,

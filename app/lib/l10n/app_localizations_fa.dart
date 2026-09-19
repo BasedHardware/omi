@@ -4820,6 +4820,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get newTag => 'نو';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'به کمک نیاز دارید؟ با ما چت کنید';
 
   @override

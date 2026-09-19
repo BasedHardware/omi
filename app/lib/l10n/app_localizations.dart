@@ -9141,6 +9141,24 @@ abstract class AppLocalizations {
   /// **'NEW'**
   String get newTag;
 
+  /// Title for the AI Interjection setting and feature
+  ///
+  /// In en, this message translates to:
+  /// **'AI Interjection'**
+  String get aiInterjection;
+
+  /// Idle status label shown while the AI interjection agent is listening
+  ///
+  /// In en, this message translates to:
+  /// **'AI Listening'**
+  String get aiListening;
+
+  /// Active status label shown while the AI interjection agent is composing a response
+  ///
+  /// In en, this message translates to:
+  /// **'AI Thinking'**
+  String get aiThinking;
+
   /// needHelpChatWithUs label
   ///
   /// In en, this message translates to:

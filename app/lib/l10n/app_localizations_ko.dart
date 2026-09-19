@@ -4731,6 +4731,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get newTag => '신규';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => '도움이 필요하신가요? 채팅으로 문의하세요';
 
   @override

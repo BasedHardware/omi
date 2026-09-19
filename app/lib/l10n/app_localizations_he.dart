@@ -4779,6 +4779,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get newTag => 'חדש';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'צריך עזרה? שוחח איתנו';
 
   @override

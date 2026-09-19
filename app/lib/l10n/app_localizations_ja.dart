@@ -4729,6 +4729,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get newTag => '新着';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'ヘルプが必要ですか？チャットでお問い合わせ';
 
   @override

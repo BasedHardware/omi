@@ -4835,6 +4835,15 @@ class AppLocalizationsKn extends AppLocalizations {
   String get newTag => 'ಹೊಸ';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'ಸಹಾಯಕ್ಕಾಗಿ? ನಮ್ಮೊಂದಿಗೆ ಚ್ಯಾಟ್ ಮಾಡಿ';
 
   @override

@@ -4839,6 +4839,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get newTag => 'ÚJ';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'Segítségre van szüksége? Csevegjen velünk';
 
   @override

@@ -4849,6 +4849,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String get newTag => 'புதிய';
 
   @override
+  String get aiInterjection => 'AI Interjection';
+
+  @override
+  String get aiListening => 'AI Listening';
+
+  @override
+  String get aiThinking => 'AI Thinking';
+
+  @override
   String get needHelpChatWithUs => 'உதவி தேவையா? எங்களுடன் உரையாடவும்';
 
   @override
