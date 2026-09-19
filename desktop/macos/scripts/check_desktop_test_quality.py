@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard Swift collection construction and keep brittle desktop tests from growing.
 
-The checker enforces three lessons from recurring macOS bug fixes:
+The checker enforces four lessons from recurring macOS bug fixes:
 
 1. `Dictionary(uniqueKeysWithValues:)` is a process-terminating assertion when
    external or persisted data contains a duplicate key. Production code must use
@@ -14,6 +14,10 @@ The checker enforces three lessons from recurring macOS bug fixes:
 3. Wall-clock sleeps make tests timing-dependent. Existing debt is ratcheted;
    new tests should inject a clock, await a signal, or annotate an unavoidable
    integration wait with a reason.
+4. Direct shared UserDefaults mutations let parallel suites change each other's
+   auth owner (#13260). Existing debt is ratcheted; use makeIsolatedDefaults()
+   and inject the returned instance. This is a static tripwire, not alias or
+   interprocedural analysis of all shared state.
 
 Escapes are deliberately local (same line or immediately preceding line):
 
@@ -25,6 +29,9 @@ Escapes are deliberately local (same line or immediately preceding line):
 
   // omi-test-quality: wall-clock-wait -- exercises the real scheduler integration
   try await Task.sleep(for: .milliseconds(10))
+
+  // omi-test-quality: shared-defaults -- integration: exercises a singleton with no defaults seam
+  UserDefaults.standard.set(testOwner, forKey: .authUserId)
 
 The collection escape is only for uniqueness proven by a static type contract.
 The source-inspection escape is only for forbidden-pattern/static wiring
@@ -47,6 +54,7 @@ TEST_ROOT = "desktop/macos/Desktop/Tests"
 SOURCE_INSPECTION_FILE_BASELINE = 53
 SOURCE_INSPECTION_SITE_BASELINE = 143
 WALL_CLOCK_WAIT_BASELINE = 16
+SHARED_DEFAULTS_MUTATION_BASELINE = 292
 
 MIN_REASON_LENGTH = 12
 
@@ -59,6 +67,14 @@ COLLECTION_SAFETY_GUIDANCE = (
 COLLECTION_ANNOTATION_RE = re.compile(r"//\s*omi-collection-safety:\s*static-unique-keys(?:\s*--\s*(.*?))?\s*$")
 SOURCE_ANNOTATION_RE = re.compile(r"//\s*omi-test-quality:\s*source-inspection(?:\s*--\s*(.*?))?\s*$")
 WAIT_ANNOTATION_RE = re.compile(r"//\s*omi-test-quality:\s*wall-clock-wait(?:\s*--\s*(.*?))?\s*$")
+
+DEFAULTS_ANNOTATION_RE = re.compile(r"//\s*omi-test-quality:\s*shared-defaults(?:\s*--\s*(.*?))?\s*$")
+SHARED_DEFAULTS_MUTATION_RE = re.compile(
+    r"\bUserDefaults\s*\.\s*standard\s*\.\s*"
+    r"(?:set|removeObject|register|setPersistentDomain|removePersistentDomain|"
+    r"setVolatileDomain|removeVolatileDomain|addSuite|removeSuite)\s*\(",
+    re.MULTILINE,
+)
 
 STRING_READ_RE = re.compile(r"\bString\s*\(\s*contentsOf(?:File)?\s*:", re.MULTILINE)
 WALL_CLOCK_WAIT_RE = re.compile(
@@ -90,6 +106,7 @@ class ScanReport:
     collection_findings: tuple[Finding, ...]
     source_findings: tuple[Finding, ...]
     wait_findings: tuple[Finding, ...]
+    defaults_findings: tuple[Finding, ...]
     annotation_findings: tuple[Finding, ...]
 
 
@@ -257,14 +274,16 @@ def _annotation_allows(
     *,
     require_static_contract: bool,
     path: str,
+    required_prefix: str | None = None,
 ) -> tuple[bool, Finding | None]:
     annotated = _annotation_line(lines, line, annotation_re)
     if annotated is None:
         return False, None
     annotation_line, match = annotated
     reason = (match.group(1) or "").strip()
-    if require_static_contract:
-        prefix = "static contract:"
+    if require_static_contract or required_prefix:
+        prefix = "static contract:" if require_static_contract else required_prefix
+        assert prefix is not None
         valid = reason.lower().startswith(prefix) and len(reason[len(prefix) :].strip()) >= MIN_REASON_LENGTH
         expectation = f"a '{prefix}' reason of at least {MIN_REASON_LENGTH} characters"
     else:
@@ -344,6 +363,7 @@ def scan_swift_file(path: Path, *, relative_path: str, role: str) -> ScanReport:
     collection_findings: list[Finding] = []
     source_findings: list[Finding] = []
     wait_findings: list[Finding] = []
+    defaults_findings: list[Finding] = []
     annotation_findings: list[Finding] = []
 
     if role == "production":
@@ -417,10 +437,34 @@ def scan_swift_file(path: Path, *, relative_path: str, role: str) -> ScanReport:
                     )
                 )
 
+        for match in SHARED_DEFAULTS_MUTATION_RE.finditer(masked):
+            line = _line_number(text, match.start())
+            allowed, invalid = _annotation_allows(
+                lines,
+                line,
+                DEFAULTS_ANNOTATION_RE,
+                require_static_contract=False,
+                required_prefix="integration:",
+                path=relative_path,
+            )
+            if invalid is not None:
+                annotation_findings.append(invalid)
+            if not allowed:
+                defaults_findings.append(
+                    Finding(
+                        category="shared-defaults",
+                        path=relative_path,
+                        line=line,
+                        excerpt=_line_excerpt(lines, line),
+                        message="test mutates shared defaults instead of an owned unique domain",
+                    )
+                )
+
     return ScanReport(
         collection_findings=tuple(collection_findings),
         source_findings=tuple(source_findings),
         wait_findings=tuple(wait_findings),
+        defaults_findings=tuple(defaults_findings),
         annotation_findings=tuple(annotation_findings),
     )
 
@@ -442,6 +486,7 @@ def scan_repository(root: Path) -> ScanReport:
         collection_findings=tuple(finding for report in reports for finding in report.collection_findings),
         source_findings=tuple(finding for report in reports for finding in report.source_findings),
         wait_findings=tuple(finding for report in reports for finding in report.wait_findings),
+        defaults_findings=tuple(finding for report in reports for finding in report.defaults_findings),
         annotation_findings=tuple(finding for report in reports for finding in report.annotation_findings),
     )
 
@@ -463,11 +508,13 @@ def main() -> int:
     source_files = len({finding.path for finding in report.source_findings})
     source_sites = len(report.source_findings)
     wait_sites = len(report.wait_findings)
+    defaults_sites = len(report.defaults_findings)
 
     if args.print_findings:
         _print_findings(report.collection_findings)
         _print_findings(report.source_findings)
         _print_findings(report.wait_findings)
+        _print_findings(report.defaults_findings)
         _print_findings(report.annotation_findings)
         print(
             "\n"
@@ -475,6 +522,7 @@ def main() -> int:
             f"production-source inspection: {source_files} files / {source_sites} sites "
             f"(baselines {SOURCE_INSPECTION_FILE_BASELINE} / {SOURCE_INSPECTION_SITE_BASELINE})\n"
             f"wall-clock waits: {wait_sites} (baseline {WALL_CLOCK_WAIT_BASELINE})\n"
+            f"shared defaults mutations: {defaults_sites} (baseline {SHARED_DEFAULTS_MUTATION_BASELINE})\n"
             f"invalid annotations: {len(report.annotation_findings)}"
         )
         return 0
@@ -517,6 +565,15 @@ def main() -> int:
             "unavoidable integration wait and include the reason.",
             file=sys.stderr,
         )
+    if defaults_sites > SHARED_DEFAULTS_MUTATION_BASELINE:
+        failed = True
+        print(
+            f"FAIL: direct shared defaults mutations rose to {defaults_sites} "
+            f"(baseline {SHARED_DEFAULTS_MUTATION_BASELINE}). Use makeIsolatedDefaults() and inject it; "
+            "#13260 showed shared auth domains racing between suites. Only a real singleton "
+            "integration boundary may use a local shared-defaults annotation with an integration: reason.",
+            file=sys.stderr,
+        )
     if failed:
         print(
             "See counted sites with: python3 desktop/macos/scripts/check_desktop_test_quality.py --print",
@@ -531,11 +588,14 @@ def main() -> int:
         )
     if wait_sites < WALL_CLOCK_WAIT_BASELINE:
         notes.append("wall-clock-wait debt fell; lower WALL_CLOCK_WAIT_BASELINE")
+    if defaults_sites < SHARED_DEFAULTS_MUTATION_BASELINE:
+        notes.append("shared-defaults debt fell; lower SHARED_DEFAULTS_MUTATION_BASELINE")
     if notes:
         print("NOTE: " + "; ".join(notes) + ".")
     print(
         "OK: no trapping dictionary initializers; desktop test-quality debt at or below "
-        f"baseline ({source_files} source-reading files / {source_sites} sites, {wait_sites} waits)."
+        f"baseline ({source_files} source-reading files / {source_sites} sites, {wait_sites} waits, "
+        f"{defaults_sites} shared defaults mutations)."
     )
     return 0
 

@@ -145,7 +145,12 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertEqual(importProbe.safety, "remote_write")
     XCTAssertEqual(
       importProbe.sideEffects,
-      ["may call model/backend services", "may save imported memory data"])
+      [
+        "mutates local app, UI, or stored state",
+        "may call agent runtime, model, or backend services",
+        "may mutate remote user data",
+        "may call model/backend services", "may save imported memory data",
+      ])
 
     let clearState = try XCTUnwrap(
       descriptors.first { $0.name == "clear_owner_surface_state" })
@@ -155,6 +160,9 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertEqual(
       clearState.sideEffects,
       [
+        "mutates local app, UI, or stored state",
+        "may call agent runtime, model, or backend services",
+        "may mutate remote user data",
         "clears the local non-production main-chat projection",
         "may delete the active owner's main-chat journal turns from the backend",
       ])
