@@ -7,13 +7,19 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 python_version="$(tr -d '[:space:]' < "$repo_root/backend/.python-version")"
-test_file="$repo_root/plugins/omi-coingecko-crypto-app/test_null_optionals.py"
+# Both suites drive the real FastAPI app: null optionals (request models) and
+# malformed provider payloads (response parsing guards).
+test_files=(
+  "$repo_root/plugins/omi-coingecko-crypto-app/test_null_optionals.py"
+  "$repo_root/plugins/omi-coingecko-crypto-app/test_malformed_payloads.py"
+)
 
 pinned_deps=(
   "fastapi==0.121.0"
   "httpx==0.28.1"
   "pydantic==2.13.4"
   "starlette==0.49.1"
+  "pytest==8.4.1"
 )
 
 run_with_uv() {
@@ -21,16 +27,16 @@ run_with_uv() {
   for dep in "${pinned_deps[@]}"; do
     with_args+=(--with "$dep")
   done
-  uv run --no-project --python "$python_version" "${with_args[@]}" -- python "$test_file"
+  uv run --no-project --python "$python_version" "${with_args[@]}" -- python -m pytest "${test_files[@]}" -q
 }
 
 run_with_venv() {
   local python_bin="$1"
-  if ! "$python_bin" -c "from fastapi.testclient import TestClient" 2>/dev/null; then
-    echo "FAIL: $python_bin lacks fastapi/httpx; install deps or use uv for coingecko-null-optionals-tests." >&2
+  if ! "$python_bin" -c "import fastapi, httpx, pytest" 2>/dev/null; then
+    echo "FAIL: $python_bin lacks fastapi/httpx/pytest; install deps or use uv for coingecko-null-optionals-tests." >&2
     exit 1
   fi
-  "$python_bin" "$test_file"
+  "$python_bin" -m pytest "${test_files[@]}" -q
 }
 
 if command -v uv >/dev/null 2>&1; then

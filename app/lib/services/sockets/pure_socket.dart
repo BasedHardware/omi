@@ -43,6 +43,8 @@ typedef SocketHeadersProvider = Future<Map<String, String>> Function();
 
 class PureSocket implements IPureSocket {
   WebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _subscription;
+  int _connectionGeneration = 0;
   WebSocketChannel get channel {
     if (_channel == null) {
       throw Exception('Socket is not connected');
@@ -76,27 +78,56 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
+    // Reserve the attempt before auth can yield. Teardown invalidates both
+    // auth and transport readiness, so neither can revive a retired session.
+    final generation = ++_connectionGeneration;
+    _status = PureSocketStatus.connecting;
     Logger.debug("request wss $url");
     final Map<String, String> headers;
     try {
       headers = {...await _headersProvider(), ..._extraHeaders};
     } on AuthTokenUnavailableException catch (e) {
       Logger.debug('[Socket] Connect blocked before send: ${e.result.runtimeType}');
-      _status = PureSocketStatus.notConnected;
+      if (generation == _connectionGeneration) _status = PureSocketStatus.notConnected;
       return false;
+    } catch (_) {
+      if (generation == _connectionGeneration) _status = PureSocketStatus.notConnected;
+      rethrow;
     }
+    if (generation != _connectionGeneration) return false;
 
-    _channel = IOWebSocketChannel.connect(
+    final channel = IOWebSocketChannel.connect(
       url,
       headers: headers,
       pingInterval: const Duration(seconds: 20),
       connectTimeout: const Duration(seconds: 15),
     );
-    if (_channel?.ready == null) {
-      return false;
-    }
+    _channel = channel;
+    // Consume connection errors even when this attempt has been retired.
+    _subscription = channel.stream.listen(
+      (message) {
+        if (generation != _connectionGeneration) return;
+        if (message == "ping") {
+          // Logger.debug(message);
+          // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
+          channel.sink.add([0x8A, 0x00]);
+          return;
+        }
+        onMessage(message);
+      },
+      onError: (err, trace) {
+        // Handshake failures are handled by ready below, without emitting a
+        // second failure through the established-connection listener.
+        if (generation == _connectionGeneration && _status == PureSocketStatus.connected) onError(err, trace);
+      },
+      onDone: () {
+        if (generation != _connectionGeneration) return;
+        Logger.debug("onDone with close code: ${channel.closeCode}");
+        onClosed(channel.closeCode);
+      },
+      cancelOnError: true,
+    );
 
-    _status = PureSocketStatus.connecting;
     dynamic err;
     try {
       await channel.ready;
@@ -110,8 +141,10 @@ class PureSocket implements IPureSocket {
       err = e;
       DebugLogManager.logWarning('pure_socket_connect_websocket_error', {'url': url, 'error': e.toString()});
     }
+    if (generation != _connectionGeneration) return false;
     if (err != null) {
       Logger.debug("[Socket] Connect error: $err");
+      _retireChannel();
       _status = PureSocketStatus.notConnected;
       return false;
     }
@@ -119,39 +152,25 @@ class PureSocket implements IPureSocket {
     DebugLogManager.logEvent('pure_socket_connected', {'url': url});
     onConnected();
 
-    final that = this;
+    return generation == _connectionGeneration;
+  }
 
-    _channel?.stream.listen(
-      (message) {
-        if (message == "ping") {
-          // Logger.debug(message);
-          // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
-          _channel?.sink.add([0x8A, 0x00]);
-          return;
-        }
-        that.onMessage(message);
-      },
-      onError: (err, trace) {
-        that.onError(err, trace);
-      },
-      onDone: () {
-        Logger.debug("onDone with close code: ${_channel?.closeCode}");
-        that.onClosed(_channel?.closeCode);
-      },
-      cancelOnError: true,
-    );
-
-    return true;
+  void _retireChannel() {
+    _connectionGeneration++;
+    final channel = _channel;
+    final subscription = _subscription;
+    _channel = null;
+    _subscription = null;
+    // Close even while connecting; the adapter delivers the queued close
+    // when its handshake finishes. Never wait for a peer acknowledgement.
+    if (channel != null) unawaited(channel.sink.close(socket_channel_status.normalClosure));
+    if (subscription != null) unawaited(subscription.cancel());
   }
 
   @override
   Future disconnect() async {
     DebugLogManager.logEvent('pure_socket_disconnecting', {'url': url, 'current_status': _status.toString()});
-    if (_status == PureSocketStatus.connected) {
-      // Warn: should not use await cause dead end by socket closed.
-      _channel?.sink.close(socket_channel_status.normalClosure);
-    }
-    _status = PureSocketStatus.disconnected;
+    if (_status == PureSocketStatus.disconnected && _channel == null) return;
     Logger.debug("[Socket] disconnect");
     onClosed(_channel?.closeCode);
   }
@@ -165,6 +184,7 @@ class PureSocket implements IPureSocket {
   @override
   void onClosed([int? closeCode]) {
     _status = PureSocketStatus.disconnected;
+    _retireChannel();
     final closeReason = _getCloseCodeReason(closeCode);
     Logger.debug("Socket closed with code: $closeCode ($closeReason)");
 
@@ -201,6 +221,7 @@ class PureSocket implements IPureSocket {
   @override
   void onError(Object err, StackTrace trace) {
     _status = PureSocketStatus.disconnected;
+    _retireChannel();
     Logger.debug("[Socket] Error: $err");
 
     DebugLogManager.logError(err, trace, 'pure_socket_error', {'url': url});

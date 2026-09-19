@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:collection/collection.dart';
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,7 +16,10 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
+
+typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -34,6 +38,20 @@ class SharedPreferencesUtil {
 
   /// Plain prefs mirror for in-tree native readers (Android background socket).
   static const String _nativeAuthTokenPrefsKey = 'nativeAuthToken';
+
+  /// Native capture implementations read this same SharedPreferences value
+  /// when Dart is backgrounded or suspended.
+  static const String capturePolicyKey = 'capturePolicy';
+  static const String _legacyDeviceMutedKey = 'deviceMuted';
+  static const String _legacyBatchMutedKey = 'batchMuted';
+  static const MethodChannel _capturePolicyChannel = MethodChannel('com.omi/capture_policy');
+  static CapturePolicyBridge? _capturePolicyBridgeForTesting;
+
+  // Fail closed until initialization has loaded the persisted policy.  This
+  // also makes an early read safe while the app is still bringing up prefs.
+  static CapturePolicy _capturePolicyCache = const CapturePolicy(revision: 0, muted: true);
+  static int _capturePolicyNextRevision = 0;
+  static Future<void> _capturePolicyQueue = Future<void>.value();
 
   static bool _mirrorNativeAuthToken = false;
 
@@ -56,6 +74,8 @@ class SharedPreferencesUtil {
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
+    await _loadCapturePolicy();
+    await _reconcileNativeCapturePolicy();
     if (secureStorage != null) {
       _secureStorage = secureStorage;
       _testSecureFallback = null;
@@ -77,6 +97,220 @@ class SharedPreferencesUtil {
       _authTokenCache = _preferences?.getString('authToken') ?? '';
     }
     await _syncNativeAuthToken(_authTokenCache);
+  }
+
+  /// Loads the canonical capture policy and performs the one-time migration
+  /// from the two legacy booleans.  A failed migration leaves the legacy keys
+  /// untouched and keeps Dart fail-closed until a later successful write.
+  static Future<void> _loadCapturePolicy() async {
+    _capturePolicyQueue = Future<void>.value();
+    final prefs = _preferences;
+    if (prefs == null) {
+      _capturePolicyCache = const CapturePolicy(revision: 0, muted: true);
+      _capturePolicyNextRevision = 0;
+      return;
+    }
+
+    final raw = prefs.get(capturePolicyKey);
+    final parsed = raw is String ? CapturePolicy.tryParse(raw) : null;
+    final hasCanonical = prefs.containsKey(capturePolicyKey);
+    final hasLegacy = prefs.containsKey(_legacyDeviceMutedKey) || prefs.containsKey(_legacyBatchMutedKey);
+
+    if (parsed != null) {
+      _capturePolicyCache = parsed;
+      _capturePolicyNextRevision = parsed.revision;
+
+      // Clean up old keys only after the canonical value has been written
+      // successfully. Rewriting is needed when legacy keys remain so a failed
+      // platform write cannot accidentally make the migration appear complete.
+      if (hasLegacy) {
+        try {
+          final persisted = await _persistCapturePolicy(parsed);
+          if (persisted) await _removeLegacyCapturePolicy();
+        } catch (e, stack) {
+          Logger.debug('Capture policy cleanup failed: $e');
+          Logger.debug('Stack: $stack');
+        }
+      }
+      return;
+    }
+
+    final fallback = !hasCanonical
+        ? CapturePolicy.fromLegacy(
+            deviceMuted: prefs.get(_legacyDeviceMutedKey) == true,
+            batchMuted: prefs.get(_legacyBatchMutedKey) == true,
+          )
+        : const CapturePolicy(revision: 0, muted: true);
+
+    try {
+      final persisted = await _persistCapturePolicy(fallback);
+      if (persisted) {
+        _capturePolicyCache = fallback;
+        _capturePolicyNextRevision = fallback.revision;
+        await _removeLegacyCapturePolicy();
+        return;
+      }
+    } catch (e, stack) {
+      Logger.debug('Capture policy migration failed: $e');
+      Logger.debug('Stack: $stack');
+    }
+
+    // A policy that could not be made durable must not authorize capture in
+    // memory. Keep legacy values for a retry on the next initialization.
+    _capturePolicyCache = const CapturePolicy(revision: 0, muted: true);
+    _capturePolicyNextRevision = 0;
+  }
+
+  static Future<bool> _persistCapturePolicy(CapturePolicy policy) async {
+    final prefs = _preferences;
+    if (prefs == null) return false;
+    final persisted = await prefs.setString(capturePolicyKey, policy.encode());
+    if (!persisted) {
+      // SharedPreferences updates its Dart cache before asking the platform
+      // store to persist. Reload the last durable value so a false result is
+      // not mistaken for a successful in-memory write by a later read.
+      try {
+        await prefs.reload();
+      } catch (e, stack) {
+        Logger.debug('Capture policy reload after failed write failed: $e');
+        Logger.debug('Stack: $stack');
+      }
+      return false;
+    }
+    return true;
+  }
+
+  static Future<void> _removeLegacyCapturePolicy() async {
+    final prefs = _preferences;
+    if (prefs == null) return;
+    await prefs.remove(_legacyDeviceMutedKey);
+    await prefs.remove(_legacyBatchMutedKey);
+  }
+
+  /// Native capture can outlive the Flutter engine. If it has already seen a
+  /// newer policy revision, keep Dart closed until a newer explicit intent
+  /// catches it up. This is the recovery path for a failed write followed by
+  /// Flutter engine reconstruction in the same process.
+  static Future<void> _reconcileNativeCapturePolicy() async {
+    if (_capturePolicyBridgeForTesting == null && !Platform.isAndroid && !Platform.isIOS) return;
+
+    final rawRevision = await _invokeCapturePolicyBridge('getRevision', const <String, Object>{});
+    if (rawRevision is! int || rawRevision < 0) {
+      throw StateError('Native capture policy returned an invalid revision');
+    }
+    if (rawRevision > _capturePolicyCache.revision) {
+      _capturePolicyCache = CapturePolicy(revision: rawRevision, muted: true);
+      _capturePolicyNextRevision = rawRevision;
+      return;
+    }
+    // Re-acknowledge the durable intent after engine reconstruction. Native
+    // treats an equal revision as idempotent for the same intent and accepts
+    // the durable state when recovering a missed release acknowledgement.
+    await _applyNativeCapturePolicy(_capturePolicyCache);
+  }
+
+  static Future<void> _applyNativeCapturePolicy(CapturePolicy policy) async {
+    await _invokeCapturePolicyBridge('setMuted', <String, Object>{
+      'muted': policy.muted,
+      'revision': policy.revision,
+    });
+  }
+
+  static Future<Object?> _invokeCapturePolicyBridge(String method, Map<String, Object> arguments) async {
+    final bridge = _capturePolicyBridgeForTesting;
+    if (bridge != null) return bridge(method, arguments);
+    if (!Platform.isAndroid && !Platform.isIOS) return null;
+    return _capturePolicyChannel.invokeMethod<Object?>(method, arguments);
+  }
+
+  @visibleForTesting
+  static set capturePolicyBridgeForTesting(CapturePolicyBridge? bridge) => _capturePolicyBridgeForTesting = bridge;
+
+  /// The effective policy currently visible to Dart.  Mute is published before
+  /// its async persistence completes; unmute is published only after the
+  /// corresponding write is acknowledged.
+  CapturePolicy get capturePolicy => _capturePolicyCache;
+
+  // Read-only compatibility projections for existing injected preference
+  // contracts. Neither alias reads or writes a legacy preference key.
+  bool get deviceMuted => capturePolicy.muted;
+  bool get batchMuted => capturePolicy.muted;
+
+  /// Persists a new capture authorization in revision order.
+  ///
+  /// Writes are serialized because native readers may observe the preference
+  /// outside Dart.  A failed write is surfaced to the caller and leaves the
+  /// effective in-memory state muted.  If a newer request arrives while an
+  /// older write is pending, the older completion cannot publish stale state.
+  Future<CapturePolicy> setCaptureMuted(bool muted) {
+    final requested = CapturePolicy(revision: ++_capturePolicyNextRevision, muted: muted);
+
+    // A mute command takes effect immediately. Unmute waits for persistence so
+    // a slow or failed write cannot expose an authorization that native code
+    // has not received yet.
+    if (muted) _capturePolicyCache = requested;
+    // Observe errors immediately even if an older durable write holds the queue.
+    // Defer reporting until this intent has also attempted its durable deny.
+    final nativeMute = muted
+        ? _applyNativeCapturePolicy(requested).then<(Object, StackTrace)?>(
+            (_) => null,
+            onError: (Object error, StackTrace stack) => (error, stack),
+          )
+        : Future<(Object, StackTrace)?>.value();
+
+    final operation = _capturePolicyQueue.then((_) async {
+      try {
+        final nativeMuteFailure = await nativeMute;
+        final persisted = await _persistCapturePolicy(requested);
+        if (!persisted) {
+          throw StateError('Failed to persist capture policy revision ${requested.revision}');
+        }
+
+        if (nativeMuteFailure != null) {
+          Error.throwWithStackTrace(nativeMuteFailure.$1, nativeMuteFailure.$2);
+        }
+
+        if (!muted && _capturePolicyNextRevision == requested.revision) {
+          // Release native admission only after the durable policy is visible.
+          // A channel error leaves the native latch closed and is propagated.
+          try {
+            await _applyNativeCapturePolicy(requested);
+          } catch (error) {
+            if (_capturePolicyNextRevision == requested.revision) {
+              final rollback = CapturePolicy(revision: ++_capturePolicyNextRevision, muted: true);
+              _capturePolicyCache = rollback;
+              try {
+                final persistedRollback = await _persistCapturePolicy(rollback);
+                if (!persistedRollback) {
+                  Logger.debug('Capture policy rollback did not persist');
+                }
+              } catch (rollbackError, rollbackStack) {
+                Logger.debug('Capture policy rollback failed: $rollbackError');
+                Logger.debug('Stack: $rollbackStack');
+              }
+            }
+            rethrow;
+          }
+        }
+
+        if (_capturePolicyNextRevision == requested.revision) {
+          _capturePolicyCache = requested;
+        }
+        return requested;
+      } catch (error) {
+        // Never let a failed unmute publish an unmuted policy. Preserve a
+        // newer request if one has already superseded this operation.
+        if (_capturePolicyNextRevision == requested.revision) {
+          _capturePolicyCache = CapturePolicy(revision: requested.revision, muted: true);
+        }
+        rethrow;
+      }
+    });
+
+    // Keep the queue usable after a failed operation while preserving the
+    // original error for this caller.
+    _capturePolicyQueue = operation.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return operation;
   }
 
   /// One-time move of `authToken` from SharedPreferences into secure storage.
@@ -310,20 +544,6 @@ class SharedPreferencesUtil {
   bool get phoneBatchAuto => getBool('phoneBatchAuto');
 
   set phoneBatchAuto(bool value) => saveBool('phoneBatchAuto', value);
-
-  // Transcribe Later: pause capture (native writer drops packets, keeps the file
-  // open) so the user can mute a sensitive moment and resume the same recording.
-  bool get batchMuted => getBool('batchMuted');
-
-  set batchMuted(bool value) => saveBool('batchMuted', value);
-
-  // Realtime device mute (double-tap pause). Persisted so the mute survives an
-  // app kill/restart — otherwise the device silently resumes recording on the
-  // next reconnect even though the user muted it. Restored into
-  // CaptureProvider._isPaused at startup and re-applied on reconnect.
-  bool get deviceMuted => getBool('deviceMuted');
-
-  set deviceMuted(bool value) => saveBool('deviceMuted', value);
 
   // Transcribe Later: one-shot flag — when set, the native writer finalizes the
   // current file and starts a fresh one (manual "New recording" cut), then clears it.
