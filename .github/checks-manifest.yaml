@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: dropbox-uid-reflection-encoding-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_uid_reflection.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET / on omi-dropbox-app must percent-encode reflected uid and HTML-escape stored folder_name, display_name, and email to prevent reflected/stored XSS and query corruption (#14578)"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
