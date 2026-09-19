@@ -1,16 +1,7 @@
-"""Duplicate capture folds into the discard exit of `_get_structured` (#3244).
+"""Overlap linking must never short-circuit the ordinary content discard gate.
 
-An Omi device paired to the phone and the macOS app in the same room open two
-`/v4/listen` streams and two conversations. At finalization the second one to
-process must be discarded as a duplicate of the first — before any LLM call —
-with the primary recorded in `external_data`. Every other outcome (no
-overlapping capture, distinct audio, lookup failure, explicit reprocess) must
-leave the existing discard gate exactly where it was.
-
-`process_conversation` is loaded through the sanctioned `stub_modules` +
-`load_module_fresh` seam (see `backend/docs/test_isolation.md`). The policy
-itself is covered by `test_duplicate_capture_policy.py`; this file proves the
-production wiring around it.
+The requested metadata-only wire contract supersedes #13703's auto-discard.
+The durable-finalizer and transaction cases live in test_duplicate_capture_policy.
 """
 
 import os
@@ -247,105 +238,19 @@ def _run(conversation, *, rows=None, lookup_error=None, force_process=False):
     return structured, discarded, lookup, discard_gate, fallback
 
 
-class TestSameRoomDuplicateIsDiscarded:
-    def test_device_capture_is_folded_into_the_completed_mac_capture_before_any_llm_call(self):
-        conversation = _pendant_conversation()
-
-        structured, discarded, lookup, discard_gate, fallback = _run(conversation, rows=[_mac_row()])
-
-        assert discarded is True
-        assert structured.title == '', 'the discard exit is the same one a scrap takes'
-        assert conversation.external_data['duplicate_capture_of'] == 'mac-conv'
-        assert conversation.external_data['conversation_role'] == 'ambient', 'existing provenance is preserved'
-        discard_gate.assert_not_called(), 'no LLM discard call for a capture the primary already carries'
-        fallback.assert_not_called()
-
-    def test_the_lookup_asks_for_captures_still_running_when_this_one_started(self):
-        conversation = _pendant_conversation()
-
-        _, _, lookup, _, _ = _run(conversation, rows=[_mac_row()])
-
-        statuses = sorted(call.kwargs['status'] for call in lookup.call_args_list)
-        assert statuses == ['completed', 'processing']
-        for call in lookup.call_args_list:
-            assert call.args == ('uid-3244',)
-            assert call.kwargs['finished_after'] == conversation.started_at
-            assert call.kwargs['limit'] == pc.CANDIDATE_PAGE_LIMIT
-
-    def test_the_later_of_two_concurrently_processing_captures_yields(self):
-        conversation = _pendant_conversation()
-
-        _, discarded, _, discard_gate, _ = _run(
-            conversation, rows=[_mac_row(status='processing', created_at=T0 + timedelta(seconds=1))]
-        )
-
-        assert discarded is True
-        assert conversation.external_data['duplicate_capture_of'] == 'mac-conv'
-        discard_gate.assert_not_called()
+def test_cross_device_overlap_does_not_short_circuit_content_gate():
+    conversation = _pendant_conversation()
+    _, discarded, lookup, discard_gate, fallback = _run(conversation, rows=[_mac_row()])
+    discard_gate.assert_called_once()
+    lookup.assert_not_called()
+    fallback.assert_not_called()
+    assert discarded is True, 'only the mocked content verdict discards this capture'
+    assert conversation.external_data == {'conversation_role': 'ambient'}
 
 
-class TestEverythingElseKeepsTheExistingGate:
-    def test_no_overlapping_capture_reaches_the_ordinary_discard_gate(self):
-        conversation = _pendant_conversation()
-
-        _, discarded, _, discard_gate, _ = _run(conversation, rows=[])
-
-        discard_gate.assert_called_once()
-        assert discarded is True, 'the mocked LLM verdict decides, exactly as before'
-        assert 'duplicate_capture_of' not in (conversation.external_data or {})
-
-    def test_distinct_audio_in_the_same_window_is_not_folded(self):
-        """#5388: simultaneous captures of different speech stay separate."""
-        conversation = _pendant_conversation()
-
-        _, _, _, discard_gate, _ = _run(conversation, rows=[_mac_row(text=OTHER_TEXT)])
-
-        discard_gate.assert_called_once()
-        assert 'duplicate_capture_of' not in conversation.external_data
-
-    def test_a_capture_that_outlasted_the_other_is_not_folded(self):
-        conversation = _pendant_conversation(seconds=900)
-
-        _, _, _, discard_gate, _ = _run(conversation, rows=[_mac_row(seconds=310)])
-
-        discard_gate.assert_called_once()
-
-    def test_the_same_phone_reconnecting_is_never_its_own_duplicate(self):
-        conversation = _pendant_conversation()
-        row = _mac_row()
-        row.update({'client_device_id': 'phone-hash', 'client_platform': 'ios', 'source': 'omi'})
-
-        _, _, _, discard_gate, _ = _run(conversation, rows=[row])
-
-        discard_gate.assert_called_once()
-
-    def test_a_failed_lookup_fails_open_to_the_ordinary_gate_and_records_the_fallback(self):
-        conversation = _pendant_conversation()
-
-        _, discarded, _, discard_gate, fallback = _run(conversation, lookup_error=RuntimeError('firestore unavailable'))
-
-        discard_gate.assert_called_once()
-        assert discarded is True
-        fallback.assert_called_once()
-        assert fallback.call_args.kwargs['component'] == 'conversation_finalization'
-        assert fallback.call_args.kwargs['outcome'] == 'degraded'
-        assert 'duplicate_capture_of' not in conversation.external_data
-
-    def test_reprocessing_never_consults_the_duplicate_check(self):
-        """`force_process` already means "never discard"; a first open or manual reprocess must not vanish."""
-        conversation = _pendant_conversation()
-
-        structured, discarded, lookup, _, _ = _run(conversation, rows=[_mac_row()], force_process=True)
-
-        assert discarded is False
-        assert structured.title == 'Reprocessed'
-        lookup.assert_not_called()
-
-    def test_a_short_scrap_skips_the_lookup_entirely(self):
-        conversation = _pendant_conversation()
-        conversation.transcript_segments = _segments('just a few words here', 8.0)
-
-        _, _, lookup, discard_gate, _ = _run(conversation, rows=[_mac_row()])
-
-        lookup.assert_not_called()
-        discard_gate.assert_called_once()
+def test_reprocessing_still_never_discards():
+    conversation = _pendant_conversation()
+    structured, discarded, lookup, _, _ = _run(conversation, force_process=True)
+    assert discarded is False
+    assert structured.title == 'Reprocessed'
+    lookup.assert_not_called()

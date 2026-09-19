@@ -26,6 +26,8 @@ class CaptureLifetime implements CaptureScheduling {
   @visibleForTesting
   int get debugTrackedCount => _releases.length;
 
+  bool get isClosed => _closed;
+
   Future<void> _watchCancel(FutureOr<void> work) {
     final pending = Future<void>.sync(() async {
       await work;
@@ -133,6 +135,17 @@ class CaptureLifetime implements CaptureScheduling {
     });
   }
 
+  /// Replace [previous] with [next]. A closed lifetime cancels [next] immediately.
+  StreamSubscription? takeSubscription(StreamSubscription? previous, StreamSubscription? next) {
+    previous?.cancel();
+    if (next == null) return null;
+    if (_closed) {
+      next.cancel();
+      return null;
+    }
+    return next;
+  }
+
   Future<void> close() {
     _closed = true;
     if (_closeFinished) return Future<void>.value();
@@ -210,12 +223,14 @@ class _LifetimeSubscription<T> implements StreamSubscription<T> {
 
   @override
   void onData(void Function(T)? handleData) {
-    _inner.onData(handleData == null
-        ? null
-        : (value) {
-            if (_isClosed()) return;
-            handleData(value);
-          });
+    _inner.onData(
+      handleData == null
+          ? null
+          : (value) {
+              if (_isClosed()) return;
+              handleData(value);
+            },
+    );
   }
 
   @override

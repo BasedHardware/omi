@@ -118,7 +118,10 @@ void main() {
     expect(body, contains('connectivity: dependencies.connectivity'));
     expect(body, contains('preferences: dependencies.preferences'));
     expect(body, contains('bleListeners: dependencies.ble'));
-    expect(body, contains('openSocket: dependencies.openSocket'));
+    expect(body, contains('openConversationSocket'));
+    expect(body, contains('openConversationSocket ??'));
+    expect(body, contains('dependencies.openSocket('));
+    expect(body, contains('sessionOwner: dependencies.owner'));
     final providerSource = File('lib/providers/capture_provider.dart').readAsStringSync();
     expect(providerSource, contains('super.walService'));
     expect(providerSource, contains('super.phoneMicRecorder'));
@@ -130,6 +133,7 @@ void main() {
     expect(providerSource, contains('super.preferences'));
     expect(providerSource, contains('super.bleListeners'));
     expect(providerSource, contains('super.openSocket'));
+    expect(providerSource, contains('super.sessionOwner'));
   });
 
   test('composeCaptureProvider uses injected connectivity, not ConnectivityService', () {
@@ -165,5 +169,21 @@ void main() {
     expect(body, isNot(contains('ConnectivityService')));
     expect(body, isNot(contains('CaptureConnectivityBoundary.production')));
     expect(body, isNot(contains('https://api.omi.me/v1/health')));
+    final refuse = body.indexOf("throw UnsupportedError('composeProductionCaptureProvider refuses FLUTTER_TEST')");
+    expect(refuse, greaterThan(0));
+    final after = body.substring(refuse);
+    expect(after, contains('sessionOwner:'));
+    expect(after, contains('CaptureSessionOwner('));
+    expect(after, contains('RecordingTransferCoordinator.instance'));
+    expect(after, contains('ForegroundUtil.initializeForegroundService'));
+    expect(after, contains('ForegroundUtil.startForegroundTask'));
+    expect(after, contains('ForegroundUtil.stopForegroundTask'));
+    expect(after, contains('Platform.isAndroid'));
+  });
+
+  test('main.dart default capture construction is composeProductionCaptureProvider', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(RegExp(r'(?<![A-Za-z])CaptureProvider\s*\(').allMatches(main), isEmpty);
+    expect(RegExp(r'composeProductionCaptureProvider\s*\(').allMatches(main).length, 2);
   });
 }

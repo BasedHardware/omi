@@ -15,7 +15,6 @@ import 'c1_persistence_test.dart' show HeldStore;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 cancelled queued fingerprint cannot suppress identical content in the next generation', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-store-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
