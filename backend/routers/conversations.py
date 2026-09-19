@@ -13,7 +13,7 @@ import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1631,9 +1631,18 @@ def assign_segments_bulk(
     if value == 'null':
         value = None
 
+    if data.assign_type == 'person_id' and value and not users_db.get_person(uid, value):
+        raise HTTPException(status_code=404, detail='Person not found')
+
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
     before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
+    previous_people = {
+        conversation.transcript_segments[index].person_id
+        for index in segment_indices
+        if conversation.transcript_segments[index].person_id
+        and (data.assign_type != 'person_id' or conversation.transcript_segments[index].person_id != value)
+    }
 
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
@@ -1657,6 +1666,15 @@ def assign_segments_bulk(
         before=before,
         after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
     )
+
+    # Invalidate only profiles taught from these corrected segments, and fence
+    # any older extraction still in flight. Other conversations' teaching survives.
+    for previous_person_id in previous_people:
+        removed = users_db.invalidate_person_speech_profile(
+            uid, previous_person_id, conversation_id, resolved_segment_ids
+        )
+        for sample_path in removed:
+            background_tasks.add_task(delete_speech_profile_blob, sample_path)
 
     # Trigger speaker sample extraction when assigning to a person
     if data.assign_type == 'person_id' and value:
