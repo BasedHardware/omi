@@ -21,7 +21,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-_STUBBED_MODULES = ("httpx", "fastapi", "pydantic")
+_STUBBED_MODULES = ("httpx", "fastapi", "fastapi.exceptions", "fastapi.responses", "pydantic")
 
 
 def _install_module_stubs():
@@ -43,13 +43,16 @@ def _install_module_stubs():
 
     class _AsyncClient:
         def __init__(self, *args, **kwargs):
-            pass
+            self.is_closed = False
 
         async def __aenter__(self):
             return self
 
         async def __aexit__(self, *exc):
             return False
+
+        async def aclose(self):
+            self.is_closed = True
 
         async def get(self, *args, **kwargs):
             raise AssertionError("tests must stub main.api_get; no network allowed")
@@ -65,7 +68,7 @@ def _install_module_stubs():
 
     class FastAPI:
         def __init__(self, *args, **kwargs):
-            pass
+            self.lifespan = kwargs.get("lifespan")
 
         def get(self, *args, **kwargs):
             return lambda f: f
@@ -73,8 +76,37 @@ def _install_module_stubs():
         def post(self, *args, **kwargs):
             return lambda f: f
 
+        def exception_handler(self, *args, **kwargs):
+            return lambda f: f
+
+    class Request:
+        pass
+
     fastapi.FastAPI = FastAPI
+    fastapi.Request = Request
     sys.modules["fastapi"] = fastapi
+
+    fastapi_exceptions = types.ModuleType("fastapi.exceptions")
+
+    class RequestValidationError(Exception):
+        def __init__(self, errors=None):
+            self._errors = errors or []
+
+        def errors(self):
+            return self._errors
+
+    fastapi_exceptions.RequestValidationError = RequestValidationError
+    sys.modules["fastapi.exceptions"] = fastapi_exceptions
+
+    fastapi_responses = types.ModuleType("fastapi.responses")
+
+    class JSONResponse:
+        def __init__(self, content=None, status_code=200):
+            self.content = content
+            self.status_code = status_code
+
+    fastapi_responses.JSONResponse = JSONResponse
+    sys.modules["fastapi.responses"] = fastapi_responses
 
     pydantic = types.ModuleType("pydantic")
 
@@ -398,6 +430,64 @@ class GetAuthorPapersHandlerTests(unittest.TestCase):
         with mock.patch.object(main, "api_get", new=mock.AsyncMock(side_effect=_status_error(404))):
             resp = _run(main.get_author_papers(req))
         self.assertEqual(resp.error, "Author not found.")
+
+
+class InfrastructureAndLifespanTests(unittest.TestCase):
+    def test_root_endpoint(self):
+        resp = _run(main.root())
+        self.assertEqual(resp, {"message": "Semantic Scholar Omi integration is running."})
+
+    def test_health_endpoint(self):
+        resp = _run(main.health())
+        self.assertEqual(resp, {"status": "ok"})
+
+    def test_format_authors_filters_whitespace_names(self):
+        authors = [{"name": "   "}, {"name": "Alice"}, {"name": ""}, {"name": "Bob"}]
+        self.assertEqual(main.format_authors(authors), "Alice, Bob")
+
+    def test_validation_exception_handler(self):
+        exc = main.RequestValidationError([{"msg": "Field 'query' is required"}])
+        resp = _run(main.validation_exception_handler(mock.MagicMock(), exc))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content, {"result": None, "error": "Invalid request: Field 'query' is required"})
+
+    def test_validation_exception_handler_default_msg(self):
+        exc = main.RequestValidationError([])
+        resp = _run(main.validation_exception_handler(mock.MagicMock(), exc))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content, {"result": None, "error": "Invalid request: Validation error"})
+
+    def test_api_get_uses_pooled_client_when_available(self):
+        mock_client = mock.AsyncMock()
+        mock_client.is_closed = False
+        mock_resp = mock.MagicMock()
+        mock_resp.json.return_value = {"data": []}
+        mock_client.get.return_value = mock_resp
+
+        with mock.patch.object(main, "_http_client", mock_client):
+            data = _run(main.api_get("/test", {"q": 1}))
+            self.assertEqual(data, {"data": []})
+            mock_client.get.assert_called_once_with(f"{main.API_BASE}/test", params={"q": 1})
+
+    def test_api_get_fallback_when_client_is_none(self):
+        mock_resp = mock.MagicMock()
+        mock_resp.json.return_value = {"data": []}
+        mock_client = mock.AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+
+        with mock.patch.object(main, "_http_client", None):
+            with mock.patch.object(main.httpx, "AsyncClient", return_value=mock_client):
+                data = _run(main.api_get("/test", {"q": 1}))
+                self.assertEqual(data, {"data": []})
+
+    def test_lifespan_lifecycle(self):
+        async def run_lifespan():
+            async with main.lifespan(main.app):
+                self.assertIsNotNone(main._http_client)
+            self.assertIsNone(main._http_client)
+
+        _run(run_lifespan())
 
 
 class ResponseContractTests(unittest.TestCase):

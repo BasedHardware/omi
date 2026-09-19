@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import re
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from models import (
     ChatToolResponse,
@@ -18,11 +21,36 @@ from models import (
 API_BASE = "https://api.semanticscholar.org/graph/v1"
 TIMEOUT = 20
 
+_http_client: httpx.AsyncClient | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _http_client
+    _http_client = httpx.AsyncClient(timeout=TIMEOUT)
+    try:
+        yield
+    finally:
+        await _http_client.aclose()
+        _http_client = None
+
+
 app = FastAPI(
     title="Semantic Scholar Omi Integration",
     description="No-auth Semantic Scholar chat tools for Omi",
     version="1.0.0",
+    lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    msg = errors[0].get("msg", "Validation error") if errors else "Validation error"
+    return JSONResponse(
+        status_code=200,
+        content={"result": None, "error": f"Invalid request: {msg}"},
+    )
 
 
 _BARE_DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
@@ -81,7 +109,11 @@ def _paper_sort_key(paper: Any) -> tuple[int, int]:
 def format_authors(authors: Any) -> str:
     if not isinstance(authors, list):
         return "Unknown"
-    names = [str(a.get("name")) for a in authors if isinstance(a, dict) and a.get("name")]
+    names = [
+        str(a.get("name")).strip()
+        for a in authors
+        if isinstance(a, dict) and a.get("name") and str(a.get("name")).strip()
+    ]
     return ", ".join(names[:6]) if names else "Unknown"
 
 
@@ -123,6 +155,11 @@ def normalize_identifier(raw: str) -> str:
 
 async def api_get(path: str, params: Dict[str, Any]) -> Dict[str, Any]:
     url = f"{API_BASE}{path}"
+    global _http_client
+    if _http_client is not None and not _http_client.is_closed:
+        resp = await _http_client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -312,6 +349,11 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
         return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
+
+
+@app.get("/health")
+async def health() -> Dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.get("/")
