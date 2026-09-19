@@ -7538,6 +7538,89 @@
           }
         }
       ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Allocated billed cost (including fixed Vertex PT) plus the low estimated vendor STT, per plan, as a 30-day run rate from the settled finops feed. Mirrors the MRR-by-product donut; methodology in the coverage and margin tables below.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "N/A",
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 168
+      },
+      "id": 1006,
+      "options": {
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "planName",
+              "text": "Plan",
+              "type": "string"
+            },
+            {
+              "selector": "estimatedCostMonthly",
+              "text": "Est. monthly cost",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "format": "table",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "rows",
+          "source": "url",
+          "type": "json",
+          "url": "http://127.0.0.1:8899/api/omi/stats/plan-economics",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Cost by plan \u2014 30-day run rate",
+      "type": "piechart"
     }
   ],
   "refresh": "1h",

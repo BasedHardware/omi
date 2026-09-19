@@ -114,11 +114,11 @@ class PlatformScopeTests(unittest.TestCase):
     def test_plan_economics_is_account_scoped_and_discloses_coverage(self) -> None:
         titles = {
             "Plan economics — data coverage", "Cost and margin by plan — 30-day run rate",
-            "Per-user economics by plan",
+            "Per-user economics by plan", "Cost by plan — 30-day run rate",
         }
         for uid in BOARDS:
             panels = [p for p in load(uid)["panels"] if p["title"] in titles]
-            self.assertEqual(len(panels), 3 if uid == "omi-tv" else 0)
+            self.assertEqual(len(panels), 4 if uid == "omi-tv" else 0)
             for panel in panels:
                 self.assertTrue(panel["targets"][0]["url"].endswith("/api/omi/stats/plan-economics"))
                 self.assertEqual(panel["fieldConfig"]["defaults"]["noValue"], "N/A")
