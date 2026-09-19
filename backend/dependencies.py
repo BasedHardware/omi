@@ -8,7 +8,7 @@ from firebase_admin import auth
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -70,6 +70,12 @@ async def get_current_user_id(
     try:
         id_token = credentials.credentials
         decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
+    except ExecutorSaturatedError as error:
+        raise HTTPException(
+            status_code=503,
+            detail='Authentication temporarily unavailable. Try again shortly.',
+            headers={'Retry-After': '1'},
+        ) from error
     except Exception as e:
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
@@ -437,6 +443,27 @@ async def get_uid_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_ke
     return auth.uid
 
 
+async def get_uid_with_conversations_from_segments_write(
+    auth: ApiKeyAuth = Depends(get_auth_with_conversations_write),
+    request: Request = None,
+) -> str:
+    """conversations:write plus the dedicated from-segments budget for the dev route.
+
+    POST /v1/dev/user/conversations/from-segments mirrors the first-party
+    route's dedicated conversations:from-segments policy (30/hour) on top of
+    the shared dev:conversations write ceiling — the same shared-plus-per-route
+    composition as _check_conversation_read_budgets_async, so per-route tuning
+    can never raise the aggregate conversation-write limit. Failure logging
+    includes remote IP and user agent: this route is a scripted-abuse target.
+    """
+    await _check_dev_api_key_rate_limit_async(
+        request=request,
+        auth=auth,
+        policy_name="dev:conversations_from_segments",
+    )
+    return auth.uid
+
+
 async def get_auth_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
     if not has_scope(auth.scopes, Scopes.MEMORIES_READ):
         raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_READ}")
@@ -621,6 +648,26 @@ async def get_developer_memory_default_memory_write_context(
         app_id=auth_context.app_id,
         key_id=auth_context.key_id,
         policy_name="dev:memories",
+    )
+    return auth_context
+
+
+async def get_developer_memory_default_memory_create_context(
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+) -> ProductAuthorizationContext:
+    """POST-only memory-create context: shared hourly ceiling plus burst cap.
+
+    The per-minute ``dev:memories_write_burst`` ceiling exists to stop scripted
+    create bursts (the 2026-09-11 69/min shape), so it must ride only the POST
+    create route — PATCH/DELETE share the hourly write context and must not
+    drain a POST-specific bucket.
+    """
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth_context.uid,
+        app_id=auth_context.app_id,
+        key_id=auth_context.key_id,
+        policy_name="dev:memories_write_burst",
     )
     return auth_context
 

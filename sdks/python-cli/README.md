@@ -1,5 +1,7 @@
 # omi-cli
 
+[Русский: быстрый старт](README.ru.md)
+
 > Talk to Omi from your terminal. Designed for humans **and** agents.
 
 `omi-cli` is the command-line interface to the [Omi](https://omi.me) developer
@@ -62,6 +64,30 @@ omi --json memory list | jq '.[] | {id, content}'
 Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
+Tables without predefined columns include fields from every row, in first-seen order.
+> [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
+
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), or the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md).
+
+> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), or the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md).
+
+> 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
+
+> Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md).
+
+> Looking for localized guides? See the [कोंकणींत सुरवात (Konkani Quickstart)](examples/quickstart.kok.md).
+> Looking for localized guides? See the [🇭🇰 廣東話上手指南 (Cantonese Quickstart)](examples/quickstart.yue.md).
+
+> Looking for localized guides? See the [डोगरी च शुरूआती मार्गदर्शिका (Dogri Quickstart)](examples/quickstart.doi.md).
+
+> Looking for localized guides? See the [🇫🇷 Guide de démarrage rapide en français (French Quickstart)](examples/quickstart.fr.md), the [🇩🇪 Deutsche Schnellstartanleitung (German Quickstart)](examples/quickstart.de.md), the [🇵🇹 Guia de início rápido em português (Portuguese Quickstart)](examples/quickstart.pt.md), or the [🇮🇹 Guida rapida in italiano (Italian Quickstart)](examples/quickstart.it.md).
+> Looking for localized guides? See the [🇮🇳 हिंदी में शुरुआत (Hindi Quickstart)](examples/quickstart.hi.md).
+
+> Looking for localized guides? See the [नेपालीमा सुरुवात (Nepali Quickstart)](examples/quickstart.ne.md).
+> Looking for localized guides? See the [🇵🇰 سنڌي ۾ omi-cli تڪڙو آغاز (Sindhi Quickstart)](examples/quickstart.sd.md).
+
+> Looking for localized guides? See the [🇸🇦 دليل البدء السريع (Arabic Quickstart)](examples/quickstart.ar.md), the [🇻🇳 Hướng dẫn nhanh (Vietnamese Quickstart)](examples/quickstart.vi.md), the [🇨🇿 Rychlý start (Czech Quickstart)](examples/quickstart.cs.md), or the [🇮🇱 מדריך מהיר (Hebrew Quickstart)](examples/quickstart.he.md).
+> Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
 
 ## Auth
 
@@ -251,6 +277,14 @@ omi
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.
+Both transcript JSON and `local call --args-json` require finite numbers:
+`NaN`, `Infinity`, `-Infinity`, and values outside Python's finite floating-point
+range are rejected before opening an API client. In `--json` mode, these input
+errors are reported as JSON on stderr.
+
+`action-item get` searches successive API pages until it finds the ID or
+reaches the end of the results. It can retrieve items beyond the first 1,000;
+looking up an older or missing item may require several API requests.
 
 ## Global flags
 
@@ -281,6 +315,9 @@ The CLI is built so an LLM can use it without a wrapper:
 
 * `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
+* Use `omi --json version` for a machine-readable version object
+  (`{"version": "..."}`). `omi version` and the eager `omi --version` flag
+  retain their plain-text output.
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
 * Successful resource `delete --yes` commands preserve the API response in
@@ -309,7 +346,11 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
-
+POST and PATCH requests are not automatically replayed after an ambiguous
+transport failure or a server error: the server may already have applied the
+write. These failures return exit code `3` with an `outcome unknown` message.
+Check the resource before trying again. Connection-establishment failures and
+rate-limit responses still retry; read retries are unchanged.
 
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`
@@ -339,3 +380,5 @@ bash release.sh --build-only
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
+
+- [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)

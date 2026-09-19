@@ -251,12 +251,18 @@ def test_open_provider_selection_circuit_opens_the_named_provider() -> None:
 def test_circuit_recovers_through_the_half_open_probe() -> None:
     """Opening on serve-death must not brick the provider forever.
 
-    After the cooldown the breaker offers exactly one probe; a successful
-    probe closes the circuit again. This pins the recovery half of the new
-    transition against future "safety" additions.
+    After the serve-error cooldown the breaker offers exactly one probe at a
+    time; a 5xx storm that still accepts connects must not fully re-admit on
+    the first half-open success (RCA 2026-09-09).
     """
     now: List[float] = [0.0]
-    circuit = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30.0, clock=lambda: now[0])
+    circuit = ProviderCircuitBreaker(
+        failure_threshold=3,
+        cooldown_seconds=30.0,
+        clock=lambda: now[0],
+        serve_error_cooldown_seconds=180.0,
+        serve_error_successes_to_close=3,
+    )
 
     circuit.record_serve_failure()
     assert circuit.state == 'open'
@@ -264,9 +270,17 @@ def test_circuit_recovers_through_the_half_open_probe() -> None:
 
     now[0] = 31.0
     assert circuit.state == 'open'
+    assert circuit.allow_request() is False
+    now[0] = 181.0
     assert circuit.allow_request() is True  # the single half-open probe
     assert circuit.allow_request() is False  # and only one
 
+    circuit.record_success()
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
+    circuit.record_success()
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
     circuit.record_success()
     assert circuit.state == 'closed'
     assert circuit.allow_request() is True

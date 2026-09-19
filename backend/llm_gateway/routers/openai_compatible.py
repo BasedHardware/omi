@@ -912,7 +912,10 @@ def _apply_jit_request_budget(request_body: dict[str, Any], budget: JITBudgetHea
 def _contains_jit_unsupported_modality(value: object) -> bool:
     """Reject image/audio payloads whose billable input envelope is not tokenized here."""
     if isinstance(value, Mapping):
-        if value.get('type') in {'image_url', 'image', 'input_audio', 'audio'}:
+        modality = value.get('type')
+        # Tool schemas can define a property named "type" whose value is itself
+        # a schema, or use a list of JSON Schema types. Neither is a modality tag.
+        if isinstance(modality, str) and modality in {'image_url', 'image', 'input_audio', 'audio'}:
             return True
         return any(_contains_jit_unsupported_modality(child) for child in value.values())
     if isinstance(value, (list, tuple)):

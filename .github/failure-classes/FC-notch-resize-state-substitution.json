@@ -5,9 +5,13 @@
   "canonical_prevention": "Route every closed-surface resize through the composed sizing authorities (closedSurfaceSize / collapsedChromeSurfaceSize / notificationPreservingSurfaceSize) instead of re-deriving a bare state size at the call site, and behaviorally assert on the live resize paths that a mounted card and active voice state survive every surface transition.",
   "canonical_prevention_artifact": [
     "desktop/macos/Desktop/Tests/FloatingBarNotchCardSizingTests.swift",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift"
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarSurfaceFloor.swift",
+    "desktop/macos/Desktop/Tests/FloatingBarSurfaceFloorTests.swift"
   ],
-  "evidence_prs": [12630],
+  "evidence_prs": [
+    12630
+  ],
   "scope_hints": [
     "desktop/macos/Desktop/Sources/FloatingControlBar/**"
   ],

@@ -62,6 +62,8 @@ langsmith==0.8.5
 # Vector databases
 pinecone==7.3.0
 qdrant-client==1.11.0
+# Conversation search index (process_conversation → lifecycle → typesense_index)
+typesense==0.21.0
 
 # Knowledge graph
 neo4j==5.23.1

@@ -35,7 +35,7 @@ vi.mock("child_process", async () => {
 
 function createAdapter(configOverrides: Partial<HarnessConfig> & { onRestart?: (reason: string) => void } = {}) {
   const config: HarnessConfig = {
-    authToken: "test-token",
+
     ...configOverrides,
   };
   const adapter = new PiMonoAdapter(config);
@@ -667,6 +667,26 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
   });
 
+  it.each(["authentication", "provider_setup_needed"])("preserves HTTP boundary classification %s for a bare 401", async failureCode => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt("session-1", [{ type: "text", text: "hello" }], [], "act", () => {}, async () => "");
+    (adapter as any).handleEvent(JSON.stringify({ type: "omi_provider_status", status: 401, failureCode }));
+    (adapter as any).handleTurnEnd(makeErrorTurnEndEvent("HTTP 401 status code (no body)"));
+    await expect(prompt).rejects.toMatchObject({ failure: {
+      failureCode, provider: "omi", technicalMessage: "HTTP 401 status code (no body)", retryable: false,
+    } });
+  });
+
+  it("ignores provider status from a superseded request", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt("session-1", [{ type: "text", text: "hello" }], [], "act", () => {}, async () => "");
+    (adapter as any).handleEvent(JSON.stringify({ type: "omi_provider_status", requestId: "old-request", status: 401, failureCode: "authentication" }));
+    (adapter as any).handleTurnEnd(makeErrorTurnEndEvent("HTTP 401 status code (no body)"));
+    await expect(prompt).rejects.not.toHaveProperty("failure");
+  });
+
   it("normalizes bare provider HTTP status errors before surfacing them", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");
@@ -952,7 +972,7 @@ describe("PiMonoAdapter restart lifecycle", () => {
 
   it("runs disposal bookkeeping even when stop fails", async () => {
     const onDisposed = vi.fn();
-    const adapter = new PiMonoAdapter({ authToken: "test-token", onDisposed });
+    const adapter = new PiMonoAdapter({ onDisposed });
     vi.spyOn(adapter, "stop").mockRejectedValueOnce(new Error("stop failed"));
 
     await expect(adapter.dispose()).rejects.toThrow("stop failed");
@@ -965,15 +985,6 @@ describe("PiMonoAdapter source-level invariants", () => {
     fileURLToPath(new URL("../src/adapters/pi-mono.ts", import.meta.url)),
     "utf8"
   );
-
-  it("passes the raw authToken as OMI_API_KEY (no `Bearer ` prefix)", () => {
-    expect(piMonoSrc).toMatch(/env\.OMI_API_KEY\s*=\s*this\.config\.authToken\s*;?/);
-    expect(piMonoSrc).not.toMatch(/env\.OMI_API_KEY\s*=\s*`Bearer \$\{/);
-  });
-
-  it("always scrubs ANTHROPIC_API_KEY from the child env", () => {
-    expect(piMonoSrc).toMatch(/delete\s+env\.ANTHROPIC_API_KEY\s*;?/);
-  });
 
   it("preserves the explicit per-turn JIT gate in the adapter projection", () => {
     expect(toolProjectionFromMetadata({
@@ -1033,7 +1044,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
   it("keeps user extensions enabled while loading the Omi extension", async () => {
     const config: HarnessConfig = {
-      authToken: "test-token",
+
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
     await adapter.start();
@@ -1052,7 +1063,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
   it("includes required base flags: --mode rpc, -e, --provider, --model", async () => {
     const config: HarnessConfig = {
-      authToken: "test-token",
+
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
     await adapter.start();
@@ -1068,24 +1079,58 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     await adapter.stop();
   });
 
-  it("scrubs OMI_API_KEY into the subprocess env from authToken", async () => {
+  it("starts Pi in the kernel-admitted working directory", async () => {
+    const adapter = new PiMonoAdapter({ }, "/fake/pi", "/fake/ext.ts");
+
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-artifacts" });
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { cwd?: string },
+    ];
+    expect(options.cwd).toBe("/tmp/omi-admitted-artifacts");
+    await adapter.stop();
+  });
+
+  it("restarts a pinned Pi worker before rebinding it to another admitted directory", async () => {
+    const adapter = new PiMonoAdapter({ }, "/fake/pi", "/fake/ext.ts");
+
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-a" });
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-b" });
+
+    expect(spawn).toHaveBeenCalledTimes(2);
+    const [, , secondOptions] = vi.mocked(spawn).mock.calls[1] as [
+      string,
+      string[],
+      { cwd?: string },
+    ];
+    expect(secondOptions.cwd).toBe("/tmp/omi-admitted-b");
+    await adapter.stop();
+  });
+
+  it("never gives credentials to the subprocess environment", async () => {
+    const keys = ["OMI_API_KEY", "OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI"];
+    for (const key of keys) vi.stubEnv(key, "inert-test-only");
     const config: HarnessConfig = {
-      authToken: "firebase-id-token-xyz",
+
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
     await adapter.start();
 
     const [, , options] = vi.mocked(spawn).mock.calls[0] as [string, string[], { env: Record<string, string> }];
-    // Raw token, not "Bearer <token>"
-    expect(options.env.OMI_API_KEY).toBe("firebase-id-token-xyz");
+    expect(options.env.OMI_API_KEY).toBeUndefined();
+    expect(options.env.OMI_AUTH_TOKEN).toBeUndefined();
+    expect(Object.keys(options.env).some(key => key.startsWith("OMI_BYOK_"))).toBe(false);
     // Upstream secret must be scrubbed
     expect(options.env.ANTHROPIC_API_KEY).toBeUndefined();
 
     await adapter.stop();
+    vi.unstubAllEnvs();
   });
 
   it("projects chat-first tools into the child env only for an enabled main Chat", async () => {
-    const adapter = new PiMonoAdapter({ authToken: "test-token" }, "/fake/pi", "/fake/ext.ts");
+    const adapter = new PiMonoAdapter({ }, "/fake/pi", "/fake/ext.ts");
     await adapter.setToolProjection({
       surfaceKind: "main_chat",
       chatFirstUi: true,
@@ -1248,6 +1293,35 @@ describe("tool_use event filtering", () => {
 });
 
 describe("PiMonoAdapter served-model attribution", () => {
+  it("returns response-observed provider and model identities from a runtime attempt", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const execution = runtime.executeAttempt(
+      makeAttemptContext(),
+      () => {},
+      new AbortController().signal,
+    );
+
+    (adapter as any).handleEvent(JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+        model: "omi-sonnet",
+        responseModel: "gpt-5.6-luna",
+        provider: "openai-codex",
+      },
+    }));
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+
+    await expect(execution).resolves.toMatchObject({
+      terminalStatus: "succeeded",
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-5.6-luna"],
+    });
+  });
+
   it("reports the response-observed model once per prompt, preferring responseModel", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");

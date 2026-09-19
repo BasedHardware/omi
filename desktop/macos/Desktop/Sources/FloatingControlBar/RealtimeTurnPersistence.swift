@@ -421,6 +421,11 @@ struct InterruptedTurnPayload: Equatable {
   /// barge-in after a fully spoken reply must journal that reply as delivered,
   /// not as a cut-off failure the model later tries to re-deliver.
   let answerDelivered: Bool
+  /// Whether the provider's full answer text had finished when the turn was
+  /// interrupted. A barge-in after response finish cut only spoken delivery:
+  /// the journaled reply is complete, and later turns must not re-answer that
+  /// thread as though the model never gave it.
+  let answerTextCompleted: Bool
 
   init(
     ownerID: String,
@@ -428,7 +433,8 @@ struct InterruptedTurnPayload: Equatable {
     assistantText: String,
     idempotencyKey: String,
     acceptedSpawnOwnerID: String? = nil,
-    answerDelivered: Bool = false
+    answerDelivered: Bool = false,
+    answerTextCompleted: Bool = false
   ) {
     self.ownerID = ownerID
     self.userText = userText
@@ -436,6 +442,7 @@ struct InterruptedTurnPayload: Equatable {
     self.idempotencyKey = idempotencyKey
     self.acceptedSpawnOwnerID = acceptedSpawnOwnerID
     self.answerDelivered = answerDelivered
+    self.answerTextCompleted = answerTextCompleted
   }
 
   /// User-visible chat text for a PTT-barged reply: keep streamed partial text only.

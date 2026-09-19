@@ -97,16 +97,29 @@ def with_backend_pusher_env(payload: str) -> str:
 
 
 def with_conversation_notes_v2_env(payload: str) -> str:
-    """The summary rollout flags are declared on the Cloud Run `backend` service too.
+    """The summary rollout flags are declared on every Cloud Run process_conversation host.
 
-    Only that service is asserted: `process_conversation` runs inline there for reprocess,
-    so a deploy that carries the flags on backend-listen alone is the drift this catches.
+    `backend` runs reprocess inline; `backend-sync` is the Cloud Tasks
+    conversation-finalization writer. A deploy that carries the flags on
+    backend-listen alone (or on backend but not backend-sync) is the drift
+    this catches.
     """
-    return re.sub(
-        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+    flags = (
         r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
-        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},',
+        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
+    )
+    payload = re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags + r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+    return re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags,
         payload,
         count=1,
         flags=re.DOTALL,
@@ -204,7 +217,7 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 
 def with_belief_model_env(payload: str) -> str:
-    """MEMORY_BELIEF_MODEL_ENABLED is declared beside every dev MEMORY_ENABLED site.
+    """Belief processing and its deployment-wide pause are declared together.
 
     The belief model gates writes in process_conversation (backend-listen, pusher, and
     the Cloud Run backend for reprocess), API memory create (backend-integration), and
@@ -213,7 +226,9 @@ def with_belief_model_env(payload: str) -> str:
     """
     return payload.replace(
         '{"name": "MEMORY_ENABLED", "value": "on"},',
-        '{"name": "MEMORY_ENABLED", "value": "on"},\n        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},',
+        '{"name": "MEMORY_ENABLED", "value": "on"},\n'
+        '        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},\n'
+        '        {"name": "MEMORY_BELIEF_AUTOMATION_PAUSED", "value": "false"},',
     )
 
 
@@ -381,6 +396,94 @@ def test_conversation_finalization_capability_contract_rejects_non_writable_memo
         )
         for error in errors
     )
+
+
+def test_conversation_finalization_capability_contract_rejects_missing_summary_pipeline_flag_on_backend_sync():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    del env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert (
+        validator.ValidationError(
+            'prod/cloud_run/backend-sync',
+            'summary-pipeline flag CONVERSATION_NOTES_V2_ENABLED must be a literal on every conversation-finalization host',
+        )
+        in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_summary_pipeline_flag_disagreement():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = 'false'
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/conversation-finalization'
+        and 'CONVERSATION_NOTES_V2_ENABLED disagrees' in error.message
+        and 'prod/cloud_run/backend-sync' in error.message
+        for error in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_normalized_but_not_identical_flag_literals():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    # ' TRUE ' resolves to the same runtime boolean as 'true', but the pusher
+    # co-host gate compares raw literals; admission must not be weaker than it.
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ' TRUE '
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/conversation-finalization'
+        and 'CONVERSATION_NOTES_V2_ENABLED disagrees' in error.message
+        and "' TRUE '" in error.message
+        and "'true'" in error.message
+        for error in errors
+    )
+
+
+@pytest.mark.parametrize('literal', ['on', '1', 'yes', ' true ', 'True', ''])
+def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal):
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+    # utils.free_tier_basic_gates lights a gate only on an untrimmed,
+    # case-insensitive 'true'. A uniform 'on' would pass co-host agreement and
+    # the loose summary-flag literal set while every host ran ungated.
+    flag = 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'
+    env_config['gke']['backend-listen']['env'][flag]['value'] = literal
+    env_config['gke']['pusher']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend-sync']['env'][flag]['value'] = literal
+
+    errors = validator.validate_conversation_finalization_capabilities('dev', env_config)
+
+    assert any(f"{flag} must be exactly 'true' or 'false'" in error.message for error in errors)
+
+
+def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    # '' parses as literal-present so it dodges the omission check, and an
+    # all-empty fleet would also dodge disagreement — yet runtime treats it as
+    # False, the exact silent-off case this contract exists to reject.
+    env_config['gke']['backend-listen']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['gke']['pusher']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['cloud_run']['services']['backend']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/cloud_run/backend-sync'
+        and 'CONVERSATION_NOTES_V2_ENABLED must be an explicit boolean literal' in error.message
+        for error in errors
+    )
+    assert not any('disagrees' in error.message for error in errors)
 
 
 def test_conversation_finalization_capability_contract_rejects_unknown_and_uncovered_declarations():

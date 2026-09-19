@@ -151,9 +151,11 @@ def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> Non
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
 
-    r.set(f'cache:{key}', json.dumps(data, default=str))
+    payload = json.dumps(data, default=str)
     if ttl:
-        r.expire(f'cache:{key}', ttl)
+        r.set(f'cache:{key}', payload, ex=ttl)
+    else:
+        r.set(f'cache:{key}', payload)
 
 
 @try_catch_decorator
@@ -391,14 +393,37 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
     return {app_id: max(0, int(count)) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
+def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
+    """Best-effort cache write. Redis maxmemory must not 500 product requests."""
+    try:
+        r.set(key, value, ex=ttl)
+    except Exception as exc:
+        # redis-py types omit ``exceptions``; match the live maxmemory class by name.
+        if type(exc).__name__ != 'OutOfMemoryError':
+            raise
+        prefix = key.split(':', 1)[0]
+        logger.warning('redis cache write skipped capacity_full prefix=%s', prefix)
+        try:
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='cache_write',
+                to_mode='skip',
+                reason='capacity_full',
+                outcome='degraded',
+                log=logger,
+            )
+        except Exception:
+            pass
+
+
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
-    r.set(f'users:{uid}:name', name)
-    r.expire(f'users:{uid}:name', ttl)
+    _cache_set_fail_open(f'users:{uid}:name', name, ttl)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
-    r.set(f'urls:{blob_path}', signed_url)
-    r.expire(f'urls:{blob_path}', ttl - 1)
+    r.set(f'urls:{blob_path}', signed_url, ex=ttl - 1)
 
 
 def get_cached_signed_url(blob_path: str) -> str:
@@ -423,11 +448,14 @@ def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
     # was finalizing. Every reader rebuilds ``Geolocation`` from this dict, whose
     # optional fields already default to ``None`` when absent.
     present_fields = {key: value for key, value in geolocation.items() if value is not None}
-    r.set(f'users:{uid}:geolocation', _serialize_cache_value(present_fields))
     # 30m: conversation/tool place tagging does not need second-level freshness;
     # clients re-upload on significant moves and at recording start. Keeps the
     # last-known coords available without inventing a tighter freshness policy.
-    r.expire(f'users:{uid}:geolocation', 60 * 30)
+    _cache_set_fail_open(
+        f'users:{uid}:geolocation',
+        _serialize_cache_value(present_fields),
+        60 * 30,
+    )
 
 
 def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
@@ -483,8 +511,14 @@ def remove_public_conversation(conversation_id: str) -> None:
 
 
 def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 300) -> None:
-    r.set(f'users:{uid}:in_progress_memory_id', conversation_id)
-    r.expire(f'users:{uid}:in_progress_memory_id', ttl)
+    # Best-effort pointer written AFTER the authoritative Firestore create of the
+    # in-progress conversation. Every reader falls back to Firestore
+    # (retrieve_in_progress_conversation, get_in_progress_conversation) when the
+    # key is absent, so a Redis capacity failure must skip the write instead of
+    # raising: under prod maxmemory the raise crashed the listen `lifecycle`
+    # lifetime task and tore down live sessions (supervisor `crash`), and the
+    # same raise inside prepare() surfaced as the ASGI WebSocket traceback.
+    _cache_set_fail_open(f'users:{uid}:in_progress_memory_id', conversation_id, ttl)
 
 
 def remove_in_progress_conversation_id(uid: str) -> None:
@@ -500,8 +534,13 @@ def get_in_progress_conversation_id(uid: str) -> str:
 
 def set_conversation_meeting_id(conversation_id: str, meeting_id: str, ttl: int = 86400) -> None:
     """Store the meeting_id for a conversation. TTL defaults to 24 hours."""
-    r.set(f'conversation:{conversation_id}:meeting_id', meeting_id)
-    r.expire(f'conversation:{conversation_id}:meeting_id', ttl)
+    # Same best-effort contract as set_in_progress_conversation_id: the mapping
+    # is an enrichment pointer (meeting-context attribution during processing,
+    # utils/conversations/process_conversation.py), written after the durable
+    # conversation create. Its absence degrades enrichment to the calendar
+    # overlap path, so a Redis capacity failure skips the write rather than
+    # raising out of the listen session bootstrap.
+    _cache_set_fail_open(f'conversation:{conversation_id}:meeting_id', meeting_id, ttl)
 
 
 def get_conversation_meeting_id(conversation_id: str) -> Optional[str]:
@@ -538,6 +577,55 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     return url.decode()
 
 
+FILTER_CATEGORY_CAP = 500
+FILTER_CATEGORY_TRIM_BATCH = 128
+FILTER_CATEGORIES = frozenset({'people', 'topics', 'entities', 'dates'})
+
+# allow-oom: trim must still run when the box is at maxmemory (the incident).
+_FILTER_TRIM_LUA = """#!lua flags=allow-oom
+local key = KEYS[1]
+local cap = tonumber(ARGV[1])
+local batch = tonumber(ARGV[2])
+local n = redis.call('SCARD', key)
+if n <= cap then
+  return {n, 0}
+end
+local to_remove = math.min(n - cap, batch)
+redis.call('SPOP', key, to_remove)
+return {redis.call('SCARD', key), to_remove}
+"""
+
+_FILTER_ADMIT_LUA = """
+local key = KEYS[1]
+local member = ARGV[1]
+local cap = tonumber(ARGV[2])
+if redis.call('SISMEMBER', key, member) == 1 then
+  return 0
+end
+if redis.call('SCARD', key) >= cap then
+  return 0
+end
+return redis.call('SADD', key, member)
+"""
+
+_filter_trim_script = None
+_filter_admit_script = None
+
+
+def _filter_category_scripts() -> tuple[Any, Any]:
+    global _filter_trim_script, _filter_admit_script
+    if _filter_trim_script is None or _filter_admit_script is None:
+        # Register into locals first; publish the globals only after both
+        # registrations succeed so a concurrent caller can never observe a
+        # half-initialized pair (which would raise TypeError outside the
+        # RedisError handler in add_filter_category_item).
+        trim = r.register_script(_FILTER_TRIM_LUA)
+        admit = r.register_script(_FILTER_ADMIT_LUA)
+        _filter_trim_script = trim
+        _filter_admit_script = admit
+    return _filter_trim_script, _filter_admit_script
+
+
 def get_filter_category_items(uid: str, category: str, limit: Optional[int] = None) -> List[str]:
     key = f'users:{uid}:filters:{category}'
     if limit:
@@ -553,7 +641,38 @@ def get_filter_category_items(uid: str, category: str, limit: Optional[int] = No
 
 
 def add_filter_category_item(uid: str, category: str, item: str) -> None:
-    r.sadd(f'users:{uid}:filters:{category}', item)
+    """SADD chat-search filter members with a 500-cap; SPOP-trim oversized sets.
+
+    Redis SETs have no insertion order. Trim is random, one batch per call.
+    Fail-open on Redis errors: never fall back to an uncapped SADD.
+    """
+    if category not in FILTER_CATEGORIES or not item:
+        return
+    key = f'users:{uid}:filters:{category}'
+    try:
+        trim, admit = _filter_category_scripts()
+        after, removed = trim(keys=[key], args=[FILTER_CATEGORY_CAP, FILTER_CATEGORY_TRIM_BATCH])
+        after_n = int(after)
+        removed_n = int(removed)
+        if removed_n:
+            logger.info('filter_category_trim removed=%s after=%s', removed_n, after_n)
+        if after_n < FILTER_CATEGORY_CAP:
+            admit(keys=[key], args=[item, FILTER_CATEGORY_CAP])
+    except redis.exceptions.RedisError:  # type: ignore[attr-defined]
+        try:
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='filter_sadd',
+                to_mode='skip',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+        except Exception:
+            pass
+        return
 
 
 def save_migrated_retrieval_conversation_id(conversation_id: str) -> None:
@@ -1445,6 +1564,12 @@ def get_chat_share(token: str) -> Optional[Dict[str, Any]]:
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def try_acquire_daily_wear_lock(uid: str, date: str, ttl: int = 60 * 60 * 24) -> bool:
+    """At most one wear FCM per uid per UTC day. True iff this caller may send."""
+    result = r.set(f'users:{uid}:daily_wear_lock:{date}', '1', ex=ttl, nx=True)
     return result is not None
 
 

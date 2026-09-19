@@ -15,8 +15,10 @@ inputs:
     description: >-
       Base64-encoded service-account key for the Firebase auth project, used to
       sign release-probe custom tokens locally. This is how the development lane
-      signs for production Firebase without an IAM grant, matching
-      desktop_backend_auto_dev.yml. Mutually exclusive with
+      signs for production Firebase without an IAM grant. desktop-backend
+      auto-dev no longer uses this path -- it signs via IAM signJwt with the
+      named signer (vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT); gcp_backend.yml
+      and sync_ledger still supply a credential. Mutually exclusive with
       firebase_probe_signer_service_account.
     required: false
     default: ''
@@ -42,8 +44,17 @@ inputs:
     required: false
     default: ''
   gcp_credentials:
-    description: 'GCP deployment credentials JSON'
-    required: true
+    description: 'GCP deployment credentials JSON. Required unless WIF inputs are set. Do not pass both.'
+    required: false
+    default: ''
+  workload_identity_provider:
+    description: 'WIF provider resource name. Development CD slice; mutually exclusive with gcp_credentials.'
+    required: false
+    default: ''
+  workload_identity_service_account:
+    description: 'Deployer service account email for WIF. Required when workload_identity_provider is set.'
+    required: false
+    default: ''
   project_id:
     description: 'GCP project ID for deployment'
     required: true
@@ -167,8 +178,36 @@ runs:
         printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
         printf 'DEPLOY_WORKFLOW_ROOT=%s\n' "$workflow_root" >> "$GITHUB_ENV"
 
-    - name: Google Auth
-      id: auth
+    - name: Validate GCP auth inputs
+      shell: bash
+      env:
+        HAS_WIF: ${{ inputs.workload_identity_provider != '' }}
+        HAS_SA: ${{ inputs.workload_identity_service_account != '' }}
+        HAS_JSON: ${{ inputs.gcp_credentials != '' }}
+      run: |
+        set -euo pipefail
+        if [[ "$HAS_WIF" == true && "$HAS_JSON" == true ]]; then
+          echo "Pass WIF or gcp_credentials, not both" >&2
+          exit 1
+        fi
+        if [[ "$HAS_WIF" != true && "$HAS_JSON" != true ]]; then
+          echo "Need workload_identity_provider or gcp_credentials" >&2
+          exit 1
+        fi
+        if [[ "$HAS_WIF" == true && "$HAS_SA" != true ]]; then
+          echo "WIF requires workload_identity_service_account" >&2
+          exit 1
+        fi
+
+    - name: Google Auth (WIF)
+      if: ${{ inputs.workload_identity_provider != '' }}
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.workload_identity_service_account }}
+
+    - name: Google Auth (JSON)
+      if: ${{ inputs.workload_identity_provider == '' }}
       uses: google-github-actions/auth@v3
       with:
         credentials_json: ${{ inputs.gcp_credentials }}
@@ -569,7 +608,7 @@ runs:
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
@@ -656,7 +695,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -724,7 +763,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           --cpu=2
           --memory=2Gi
@@ -833,6 +872,7 @@ runs:
           --audience backend-sync=${{ steps.candidate-urls.outputs.backend_sync_audience }} \
           --audience backend-sync-backfill=${{ steps.candidate-urls.outputs.backend_sync_backfill_audience }} \
           --audience backend-integration=${{ steps.candidate-urls.outputs.backend_integration_audience }} \
+          ${{ inputs.workload_identity_service_account != '' && format('--mint-impersonate {0}', inputs.workload_identity_service_account) || '' }} \
           --evidence-path artifacts/dev-backend-candidate-acceptance.json
 
     - name: Resolve transcription candidate URL
@@ -858,8 +898,9 @@ runs:
         # The development backend authenticates against production Firebase, so
         # a development deploy identity cannot sign this gate's custom token: it
         # failed at custom_token_signing and blocked every manual development
-        # deploy. Sign locally with the Firebase project's own key instead --
-        # the same resolution desktop_backend_auto_dev.yml already uses. The
+        # deploy. Sign locally with the Firebase project's own key instead.
+        # (desktop_backend_auto_dev.yml has since moved to the named-signer
+        # IAM signJwt path; this lane still stages the key.) The
         # named-signer input stays available but needs an IAM grant, so it is
         # only consulted when a credential is not supplied.
         firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' && inputs.firebase_probe_signer_service_account || '' }}

@@ -240,6 +240,76 @@ extension SettingsContentView {
         }
       }
 
+      // Transparency
+      settingsCard(settingId: "general.transparency") {
+        transparencyCard
+      }
+
+    }
+  }
+
+  /// How much of the desktop the glass lets through.
+  ///
+  /// The slider binds straight to the published value, so every glass surface — this pane's own
+  /// panel included — follows the thumb while it is still down. Under the system's Reduce
+  /// Transparency setting the ground is opaque no matter what the slider says, so the control is
+  /// dimmed and says why rather than moving a value that changes nothing.
+  private var transparencyCard: some View {
+    let reduced = reduceTransparencyObserver.isEnabled
+    return VStack(spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.lg) {
+        SettingsIconTile(symbol: "circle.lefthalf.filled")
+
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Transparency")
+            .scaledFont(size: 16, weight: .semibold)
+            .foregroundColor(Ink.primary)
+
+          Text(
+            reduced
+              ? "Off while Reduce Transparency is on in System Settings"
+              : "Glass: \(Int((glassTransparencySettings.transparency * 100).rounded()))%"
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+        }
+
+        Spacer()
+
+        // Reset rewrites the same value the slider does, which changes just as little under Reduce
+        // Transparency, so it wears the slider's disabled state rather than contradicting the caption.
+        if !glassTransparencySettings.isDefault {
+          Button("Reset") {
+            glassTransparencySettings.resetToDefault()
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(reduced)
+          .opacity(reduced ? 0.45 : 1)
+        }
+      }
+
+      HStack(spacing: OmiSpacing.md) {
+        Image(systemName: "square.fill")
+          .scaledFont(size: 12)
+          .foregroundColor(Ink.secondary)
+          .help("Solid")
+
+        Slider(
+          value: $glassTransparencySettings.transparency,
+          in: InkGlassTransparencySettings.range
+        )
+        .tint(Ink.accent)
+        // The side icons' tooltips do not attach to the control, so without this VoiceOver reads a
+        // bare percentage with no word for what it is.
+        .accessibilityLabel("Transparency")
+
+        Image(systemName: "square.dotted")
+          .scaledFont(size: 12)
+          .foregroundColor(Ink.secondary)
+          .help("Clear")
+      }
+      .disabled(reduced)
+      .opacity(reduced ? 0.45 : 1)
     }
   }
 

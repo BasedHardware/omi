@@ -13,7 +13,7 @@ import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -73,6 +73,7 @@ from utils.conversations.meeting_receipt import record_and_persist_finalized_mee
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -180,13 +181,21 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        # A reacquire that RAISED is a broken dependency, not a lost fence.
+        # `deferred=True` doubles as the concurrency fence and clients poll
+        # during enrichment, so a merged label would bury this in benign polls.
+        record_lazy_desktop_deferral(event='enrich_reacquire_error')
         return conversation
     if not reacquired:
         # The row was terminalized or discarded before reacquisition. A stale
         # processor must not persist derived side effects after ownership loss.
+        record_lazy_desktop_deferral(event='enrich_lost_ownership')
         return conversation
 
     def _run_enrichment():
+        # Counted here, not before the submit: a rejected submit (shut-down
+        # pool during a deploy) would otherwise leave a start with no terminal.
+        record_lazy_desktop_deferral(event='enrich_started')
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
@@ -199,15 +208,23 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                 )
+            # The enrichment itself succeeded here; count it now so a receipt
+            # publish failure below is not misattributed to enrichment and does
+            # not skew the stored-vs-enrich_complete reconciliation.
+            record_lazy_desktop_deferral(event='enrich_complete')
             # Deferred desktop meetings must publish their exact Chat receipt
             # at the same terminal transition as ordinary finalization. The
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                record_and_persist_finalized_meeting_receipt(uid, enriched)
+                try:
+                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                except Exception:
+                    logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            record_lazy_desktop_deferral(event='enrich_failed')
             try:
                 recovered = lifecycle_service.recover_deferred_processing_failure(uid, conversation_id)
                 if not recovered:
@@ -1150,6 +1167,10 @@ def patch_conversation_summary(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if result == 'app_result_not_found':
         raise HTTPException(status_code=404, detail="App summary not found for this conversation")
+    if result == 'app_result_ambiguous':
+        raise HTTPException(
+            status_code=409, detail="Multiple summaries share this app ID; edit cannot be targeted safely"
+        )
     return {'status': 'Ok'}
 
 
@@ -1610,9 +1631,18 @@ def assign_segments_bulk(
     if value == 'null':
         value = None
 
+    if data.assign_type == 'person_id' and value and not users_db.get_person(uid, value):
+        raise HTTPException(status_code=404, detail='Person not found')
+
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
     before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
+    previous_people = {
+        conversation.transcript_segments[index].person_id
+        for index in segment_indices
+        if conversation.transcript_segments[index].person_id
+        and (data.assign_type != 'person_id' or conversation.transcript_segments[index].person_id != value)
+    }
 
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
@@ -1636,6 +1666,15 @@ def assign_segments_bulk(
         before=before,
         after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
     )
+
+    # Invalidate only profiles taught from these corrected segments, and fence
+    # any older extraction still in flight. Other conversations' teaching survives.
+    for previous_person_id in previous_people:
+        removed = users_db.invalidate_person_speech_profile(
+            uid, previous_person_id, conversation_id, resolved_segment_ids
+        )
+        for sample_path in removed:
+            background_tasks.add_task(delete_speech_profile_blob, sample_path)
 
     # Trigger speaker sample extraction when assigning to a person
     if data.assign_type == 'person_id' and value:

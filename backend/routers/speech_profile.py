@@ -135,18 +135,27 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     with av.open(file_path) as container:
         duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
 
+    # Extract before upload so a 200 means the same embedding stack used for
+    # live/post-process matching actually stored a voiceprint (#12765).
+    try:
+        embedding = extract_embedding(file_path)
+    except Exception as e:
+        logger.error(f"Speech profile: failed to extract speaker embedding for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Failed to extract speaker embedding") from e
+
+    # Persist the voiceprint before overwriting GCS audio. A Firestore miss
+    # must not leave a new profile blob live without a matching embedding.
+    try:
+        set_user_speaker_embedding(uid, embedding.flatten().tolist())
+    except Exception as e:
+        logger.error(f"Speech profile: failed to store speaker embedding for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Failed to store speaker embedding") from e
+
     url = upload_profile_audio(file_path, uid)
     # Cache the duration only once the profile blob is actually stored: a failed
     # overwrite must not leave the cache describing an upload that never landed.
     set_speech_profile_duration(uid, duration)
-
-    # Extract and store speaker embedding for user identification in listen sessions
-    try:
-        embedding = extract_embedding(file_path)
-        set_user_speaker_embedding(uid, embedding.flatten().tolist())
-        logger.info(f"Speech profile: stored speaker embedding for {uid}")
-    except Exception as e:
-        logger.error(f"Speech profile: failed to extract/store speaker embedding for {uid}: {e}")
+    logger.info("Speech profile: stored speaker embedding for %s", uid)
 
     return {"url": url}
 

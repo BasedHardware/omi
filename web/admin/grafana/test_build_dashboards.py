@@ -111,6 +111,22 @@ class NycTimeContractTests(unittest.TestCase):
 
 
 class PlatformScopeTests(unittest.TestCase):
+    def test_plan_economics_is_account_scoped_and_discloses_coverage(self) -> None:
+        titles = {
+            "Plan economics — data coverage", "Cost and margin by plan — 30-day run rate",
+            "Per-user economics by plan", "Cost by plan — 30-day run rate",
+        }
+        for uid in BOARDS:
+            panels = [p for p in load(uid)["panels"] if p["title"] in titles]
+            self.assertEqual(len(panels), 4 if uid == "omi-tv" else 0)
+            for panel in panels:
+                self.assertTrue(panel["targets"][0]["url"].endswith("/api/omi/stats/plan-economics"))
+                self.assertEqual(panel["fieldConfig"]["defaults"]["noValue"], "N/A")
+        panels = {p["title"]: p for p in load("omi-tv")["panels"] if p["title"] in titles}
+        self.assertEqual(panels["Plan economics — data coverage"]["targets"][0]["root_selector"], "status")
+        unit_fields = {c["selector"] for c in panels["Per-user economics by plan"]["targets"][0]["columns"]}
+        self.assertTrue({"subscribers", "activeUsersPerDay", "costPerSubscriber", "costPerActiveDay", "unitBasis"} <= unit_fields)
+
     def test_every_posthog_query_pins_its_board_platform(self) -> None:
         """The 'same DAU on every board' bug: an unscoped viral-metrics /
         dau-trends / retention / k-factor URL reports macOS-only numbers

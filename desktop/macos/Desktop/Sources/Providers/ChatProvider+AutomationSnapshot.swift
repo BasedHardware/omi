@@ -44,6 +44,7 @@ extension ChatProvider {
         "resources_json": ChatResource.encodeResourcesForPersistence(message.displayResources) ?? "[]",
         "has_metadata": message.metadata != nil ? "true" : "false",
         "models_used": message.metadata?.modelsUsed.joined(separator: ",") ?? "",
+        "provider_targets": message.metadata?.providerTargets.joined(separator: ",") ?? "",
       ]
     }
     let messagesJSON: String

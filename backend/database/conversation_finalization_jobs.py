@@ -618,7 +618,10 @@ def _claim_finalization_job_txn(
 
     lease_epoch = int(job.get('lease_epoch') or 0) + 1
     lease_expires_at = now + timedelta(seconds=lease_seconds)
-    attempt_count = int(job.get('attempt_count') or 0) + 1
+    # Failed-processing count only. Reconnect/session handoffs reclaim the
+    # same job; bumping here made the 5th lease (not the 5th processing
+    # failure) dead-letter the conversation. Increment in mark_finalization_retryable.
+    attempt_count = int(job.get('attempt_count') or 0)
 
     transaction.update(
         job_ref,
@@ -631,9 +634,6 @@ def _claim_finalization_job_txn(
             'lease_epoch': lease_epoch,
             'reconcile_after_at': (firestore.DELETE_FIELD if bool(job.get('requires_byok')) else lease_expires_at),
             'updated_at': now,
-            # The claimer owns the attempt budget: an inline (pusher) worker has
-            # no Cloud Tasks retry count to fence its terminal attempt with.
-            'attempt_count': attempt_count,
         },
     )
     if status == 'queued':
@@ -945,12 +945,14 @@ def _mark_finalization_retryable_txn(
     job = snapshot.to_dict() or {}
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return False
+    attempt_count = int(job.get('attempt_count') or 0) + 1
     transaction.update(
         job_ref,
         {
             'status': 'queued',
             'updated_at': now,
             'lease_expires_at': now,
+            'attempt_count': attempt_count,
             'reconcile_after_at': (
                 firestore.DELETE_FIELD
                 if bool(job.get('requires_byok'))

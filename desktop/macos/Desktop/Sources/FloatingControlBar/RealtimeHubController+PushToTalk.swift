@@ -224,6 +224,7 @@ extension RealtimeHubController {
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
     turnIdempotencyKey = Self.voiceContinuityKey(for: turnID)
+    if journalSuppressedContinuityKey != turnIdempotencyKey { journalSuppressedContinuityKey = nil }
     turnPublicWebEvidence = nil
     resetScreenGrounding(for: turnID)
     if let interruptedTurnTask, !supersedesPendingReplacement {
@@ -237,7 +238,8 @@ extension RealtimeHubController {
             terminal: .interruptedByBargeIn,
             idempotencyKey: interruptedTurn.idempotencyKey,
             acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID,
-            delivery: interruptedTurn.answerDelivered ? .delivered : .notDelivered) ?? false
+            delivery: interruptedTurn.answerDelivered ? .delivered : .notDelivered,
+            answerTextCompleted: interruptedTurn.answerTextCompleted ? true : nil) ?? false
         }
       }
     }
@@ -375,7 +377,38 @@ extension RealtimeHubController {
     return .accepted
   }
 
+  /// Whether a turn's just-spoken text may still be recovered into the journal.
+  /// A deliberately unwritten turn (Silent Type) has no accepted receipt to stand
+  /// recovery down, so it names itself here instead.
+  static func recoversInterruptedTurn(continuityKey: String, suppressedKey: String?) -> Bool {
+    continuityKey.isEmpty || suppressedKey != continuityKey
+  }
+
+  /// Arms the suppression at the start of a turn while Silent Type is on. The
+  /// delivery close path would only name the turn after it has finished
+  /// delivering, but a provider failure during finalization reaches
+  /// `captureInterruptedTurnPayloadIfNeeded` earlier — and recovery must find
+  /// the receipt already standing, not journal the dictation into the chat.
+  /// `commitTurn` ends the suppression for a turn that commits as a question,
+  /// whose provider-failure continuity depends on recovery.
+  func suppressJournalRecoveryAtTurnStart(turnID: VoiceTurnID) {
+    journalSuppressedContinuityKey = Self.voiceContinuityKey(for: turnID)
+  }
+
+  /// Never journal this turn's transcript, on any path: no producing row, and no
+  /// interrupted-turn recovery. Used by a Silent Type dictation, which delivered
+  /// its text to the focused app and must leave the chat untouched.
+  func suppressJournalRecoveryForUnwrittenTurn(turnID: VoiceTurnID) {
+    journalSuppressedContinuityKey = Self.voiceContinuityKey(for: turnID)
+    retireNativeTurnEvidenceAfterRejectedWrite(turnID: turnID)
+  }
+
   func captureInterruptedTurnPayloadIfNeeded() -> Task<InterruptedTurnPayload?, Never>? {
+    if !Self.recoversInterruptedTurn(
+      continuityKey: turnIdempotencyKey, suppressedKey: journalSuppressedContinuityKey)
+    {
+      return nil
+    }
     if turnPersistenceLedger.pendingContinuityKeys.contains(turnIdempotencyKey)
       || turnPersistenceLedger.receipt(for: turnIdempotencyKey)?.accepted == true
       || !prefetchedVoiceContextTurnIDs.isDisjoint(
@@ -402,13 +435,16 @@ extension RealtimeHubController {
     // state of the superseded turn survives on the coordinator's last terminal.
     let coordinator = VoiceTurnCoordinator.shared
     let answerDelivered: Bool
+    let answerTextCompleted: Bool
     if let superseded = coordinator.model.lastTerminal,
       superseded.reason == .interruptedByBargeIn,
       superseded.turnID != activeTurn.id
     {
       answerDelivered = coordinator.lastTerminalAnswerDelivered
+      answerTextCompleted = coordinator.lastTerminalAnswerTextCompleted
     } else {
       answerDelivered = coordinator.fullAnswerDrained(turnID: activeTurn.id)
+      answerTextCompleted = coordinator.providerResponseFinished(turnID: activeTurn.id)
     }
     return Task {
       let resolution = await Self.resolveTranscript(
@@ -423,7 +459,8 @@ extension RealtimeHubController {
           partialAssistantText: partialAssistantText),
         idempotencyKey: idempotencyKey,
         acceptedSpawnOwnerID: acceptedSpawnOwnerID,
-        answerDelivered: answerDelivered)
+        answerDelivered: answerDelivered,
+        answerTextCompleted: answerTextCompleted)
     }
   }
 
@@ -566,6 +603,11 @@ extension RealtimeHubController {
       log("RealtimeHub: rejected duplicate/stale physical commit before provider side effects")
       return .rejectedNoSession
     }
+    // A commit is by definition not a dictation — dictations are routed to the
+    // typing pipeline before any hub commit — so a Silent Type suppression
+    // armed at this turn's start ends here, and the question keeps the
+    // provider-failure continuity that recovery provides.
+    journalSuppressedContinuityKey = nil
 
     if let pending = replacementAudioBuffer {
       VoiceTurnCoordinator.shared.publish(.hubCommitDeferredForReplacement(turnID: turnID))

@@ -59,6 +59,16 @@ _nb = _mod("database.notifications")
 _nb.get_user_time_zone = MagicMock(return_value="UTC")
 _clients = _mod("utils.llm.clients")
 _clients.get_llm = MagicMock(return_value=MagicMock())
+_byok = _mod("utils.byok")
+_byok.has_byok_keys = MagicMock(return_value=False)
+_gw = _mod("utils.llm.gateway_client")
+_gw.should_route_features_through_gateway = MagicMock(return_value=False)
+_mc = _mod("utils.llm.model_config")
+_mc.get_model_config = MagicMock(return_value=("gpt-5.6-luna", "openai"))
+_pc = _mod("utils.llm.prompt_cache")
+_pc.EXPLICIT_CACHE_BREAKPOINT = {"mode": "explicit"}
+_pc.EXPLICIT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}
+_pc.has_cacheable_prefix = MagicMock(return_value=False)
 
 temporal = _load("utils.llm.temporal", "utils/llm/temporal.py")
 proactive = _load("utils.llm.proactive_notification", "utils/llm/proactive_notification.py")
@@ -118,6 +128,25 @@ class TestDateInTz:
         assert temporal.date_in_tz(dt, "Not/AZone") == "2026-05-21"
 
 
+def _prompt_text(invoked):
+    """Flatten what the builder handed the LLM into the text the model actually reads.
+
+    The gate now sends its prompt as two content parts of one message so the stable
+    half can end on a cache breakpoint (see test_mentor_gate_prompt_cache); the other
+    builders still send a plain string. Both render to the same bytes.
+    """
+    if isinstance(invoked, str):
+        return invoked
+    parts = []
+    for message in invoked:
+        content = message.content
+        if isinstance(content, str):
+            parts.append(content)
+        else:
+            parts.extend(part["text"] for part in content)
+    return "".join(parts)
+
+
 def _capture_prompt(fn, **kwargs):
     """Run a proactive builder with the LLM mocked and return the prompt string it built."""
     captured = {}
@@ -127,7 +156,7 @@ def _capture_prompt(fn, **kwargs):
     llm.with_structured_output.return_value = structured
     with patch.object(proactive, "get_llm", return_value=llm):
         fn(**kwargs)
-    return captured["prompt"]
+    return _prompt_text(captured["prompt"])
 
 
 class TestProactivePromptsGrounded:

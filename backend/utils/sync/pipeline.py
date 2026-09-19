@@ -826,7 +826,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
         emb = person.get('speaker_embedding')
         # Only load embedding if person has speech samples — contacts without
         # samples may have stale embeddings from a pre-v3 model (#6238)
-        if emb and person.get('speech_samples'):
+        if emb and person.get('speech_samples') and person.get('speech_samples_version', 1) >= 3:
             cache[person['id']] = {
                 'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                 'name': person['name'],
@@ -1993,7 +1993,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                             len(triggered_caps),
                         )
                         try:
-                            asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+                            start_background_task(
+                                trigger_classifier_if_needed(uid, triggered_caps),
+                                name=f'sync_job_fair_use_classifier:{uid}',
+                            )
                         except Exception as e:
                             logger.error(
                                 'event=sync_classifier outcome=schedule_failed exception_type=%s',

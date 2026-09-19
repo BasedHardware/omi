@@ -84,6 +84,8 @@ make_fixture() {
   mkdir -p "$fixture/scripts" "$fixture/e2e/flows" "$bin_dir"
   ln -s "$CORE_HARNESS" "$fixture/scripts/desktop-core-harness.sh"
   ln -s "$APP_CONFIG" "$fixture/scripts/app-config.sh"
+  ln -s "$MACOS_DIR/scripts/desktop-build-identity.sh" "$fixture/scripts/desktop-build-identity.sh"
+  ln -s "$MACOS_DIR/scripts/desktop-health-check.py" "$fixture/scripts/desktop-health-check.py"
   : >"$fixture/e2e/flows/chat-fault-5xx.yaml"
 
   cat >"$bin_dir/uname" <<'SH'
@@ -92,7 +94,19 @@ printf 'Darwin\n'
 SH
   cat >"$bin_dir/git" <<'SH'
 #!/usr/bin/env bash
-if [[ "${1:-}" == "-C" ]]; then printf 'deadbeef\n'; else exec /usr/bin/git "$@"; fi
+set -euo pipefail
+if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" && "${4:-}" == "--show-toplevel" ]]; then
+  printf '%s\n' "${OMI_FAULT_TEST_REPO_ROOT:?}"
+  exit 0
+fi
+if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" && "${4:-}" == "--verify" ]]; then
+  printf '%s\n' 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+  exit 0
+fi
+if [[ "${1:-}" == "-C" && "${3:-}" == "status" ]]; then
+  exit 0
+fi
+exec /usr/bin/git "$@"
 SH
   cat >"$bin_dir/python3" <<'SH'
 #!/usr/bin/env bash
@@ -156,7 +170,7 @@ bundle_id="com.omi.${OMI_APP_NAME}"
 server='import http.server,json,sys; port=int(sys.argv[1]); bundle=sys.argv[2];
 class H(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
-  body=json.dumps({"ok":True,"bundleIdentifier":bundle}).encode(); self.send_response(200); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
+  body=json.dumps({"ok":True,"bundleIdentifier":bundle,"sourceIdentity":{"revision":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","schemaVersion":1,"workingTreeState":"clean"}}).encode(); self.send_response(200); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
  def log_message(self,*args): pass
 http.server.ThreadingHTTPServer(("127.0.0.1",port),H).serve_forever()'
 # The executable path is an explicit argv value in this portable model; on macOS
@@ -204,7 +218,8 @@ run_case_once() {
   make_fixture "$fixture" "$bin_dir" "$mode"
 
   if [[ "$mode" == term ]]; then
-    PATH="$bin_dir:$PATH" OMI_TEST_FLOW_MODE="$mode" OMI_FAULT_RUN_TOKEN="$token" \
+    PATH="$bin_dir:$PATH" OMI_FAULT_TEST_REPO_ROOT="$fixture" \
+      OMI_TEST_FLOW_MODE="$mode" OMI_FAULT_RUN_TOKEN="$token" \
       OMI_TEST_OWNED_PID_FILE="$owned_file" OMI_TEST_FOREIGN_PID_FILE="$foreign_file" \
       OMI_TEST_SERVER_ERROR_FILE="$error_file" \
       bash "$fixture/scripts/desktop-core-harness.sh" --fault-suite --port "$port" >"$output" 2>&1 &
@@ -225,7 +240,8 @@ run_case_once() {
     [[ "$status" -eq 143 ]] || { cat "$output" >&2; fail "TERM case exited $status, expected 143"; }
   else
     set +e
-    PATH="$bin_dir:$PATH" OMI_TEST_FLOW_MODE="$mode" OMI_FAULT_RUN_TOKEN="$token" \
+    PATH="$bin_dir:$PATH" OMI_FAULT_TEST_REPO_ROOT="$fixture" \
+      OMI_TEST_FLOW_MODE="$mode" OMI_FAULT_RUN_TOKEN="$token" \
       OMI_TEST_OWNED_PID_FILE="$owned_file" OMI_TEST_FOREIGN_PID_FILE="$foreign_file" \
       OMI_TEST_SERVER_ERROR_FILE="$error_file" \
       bash "$fixture/scripts/desktop-core-harness.sh" --fault-suite --port "$port" >"$output" 2>&1
