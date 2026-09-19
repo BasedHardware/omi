@@ -61,6 +61,7 @@ def test_image_upload_stores_the_thumbnail_and_removes_the_temp_copy(chat_client
     response = client.post(route, files={'files': ('photo.png', _png(), 'image/png')})
 
     assert response.status_code == 200
+    assert response.json()[0]['name'] == 'photo.png'
     assert response.json()[0]['thumbnail'].startswith('https://storage.test/')
     assert len(uploaded) == 1
     assert not Path(uploaded[0]).exists()
