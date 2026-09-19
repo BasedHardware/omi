@@ -239,12 +239,129 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return KeyedSubtree(key: key, child: content);
   }
 
+  void _showRenameDeviceDialog(BtDevice device, DeviceProvider provider) {
+    final textController = TextEditingController(text: device.name);
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1C1C1E),
+              title: Text(
+                context.l10n.deviceName,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: textController,
+                    autofocus: true,
+                    maxLength: 25,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: device.name,
+                      hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
+                      counterStyle: const TextStyle(color: Color(0xFF8E8E93)),
+                      enabledBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: Color(0xFF3C3C43)),
+                      ),
+                      focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    context.l10n.cancel,
+                    style: const TextStyle(color: Color(0xFF8E8E93)),
+                  ),
+                ),
+                TextButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final newName = textController.text.trim();
+                          if (newName.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Device name cannot be empty')),
+                            );
+                            return;
+                          }
+
+                          final scaffoldMessenger = ScaffoldMessenger.of(context);
+                          final successMessage = '${context.l10n.deviceName}: $newName';
+                          setDialogState(() => isSaving = true);
+                          try {
+                            final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+                            if (connection == null) {
+                              if (dialogContext.mounted) {
+                                setDialogState(() => isSaving = false);
+                              }
+                              scaffoldMessenger.showSnackBar(
+                                const SnackBar(content: Text('Failed to connect to device')),
+                              );
+                              return;
+                            }
+                            await connection.setDeviceName(newName);
+                            provider.pairedDevice = provider.pairedDevice?.copyWith(name: newName);
+                            if (provider.connectedDevice?.id == device.id) {
+                              provider.connectedDevice = provider.connectedDevice?.copyWith(name: newName);
+                            }
+                            if (provider.pairedDevice != null) {
+                              SharedPreferencesUtil().btDevice = provider.pairedDevice!;
+                            }
+                            await provider.refreshDeviceInfo();
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(content: Text(successMessage)),
+                            );
+                          } catch (e) {
+                            Logger.error('Failed to rename device: $e');
+                            if (dialogContext.mounted) {
+                              setDialogState(() => isSaving = false);
+                            }
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(content: Text('Failed to update device name: $e')),
+                            );
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          context.l10n.confirm,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() => textController.dispose());
+  }
+
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
     final deviceName = device?.name ?? 'Omi DevKit';
     final deviceId = device?.id ?? '12AB34CD:56EF78GH';
     const firmwarePolicy = FirmwareUpdateBuildPolicy.current;
     final isOpenGlass = firmwarePolicy.isOpenGlassDevice(device);
     final allowsFirmwareUpdate = firmwarePolicy.allowsFirmwareUpdateForDevice(device);
+    final canRename = device != null && device.type == DeviceType.omi;
 
     String truncateId(String id) {
       if (id.length > 10) {
@@ -261,8 +378,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             icon: FontAwesomeIcons.microchip,
             title: context.l10n.deviceName,
             chipValue: deviceName,
-            copyValue: deviceName,
-            showChevron: false,
+            copyValue: canRename ? null : deviceName,
+            onTap: canRename ? () => _showRenameDeviceDialog(device, provider) : null,
+            showChevron: canRename,
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
