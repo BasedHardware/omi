@@ -1086,6 +1086,12 @@ checks:
     triggers: ["plugins/omi-notion-app/**"]
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
+  - id: notion-app-max-results-input-tests
+    command: ["python3", "plugins/omi-notion-app/test_max_results_inputs.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13944: optional Notion result limits arrive as JSON null or invalid values; normalize them before sending an API query"
+
   - id: notion-pagination-tests
     command: ["python3", "plugins/omi-notion-app/test_pagination.py"]
     triggers: ["plugins/omi-notion-app/**"]
