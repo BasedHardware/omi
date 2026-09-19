@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi import Depends, FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
 from dotenv import load_dotenv
@@ -9,6 +9,7 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 from simple_storage import SimpleUserStorage, SimpleSessionStorage, OAuthStateStorage, users, save_users
 from twitter_client import TwitterClient
+from twitter_webhook_auth import require_twitter_webhook_auth
 from tweet_detector import TweetDetector
 
 load_dotenv()
@@ -548,7 +549,7 @@ async def check_setup(uid: str = Query(..., description="User ID from OMI")):
 @app.post("/webhook")
 async def webhook(
     request: Request,
-    uid: str = Query(..., description="User ID from OMI"),
+    uid: str = Depends(require_twitter_webhook_auth),
     session_id: str = Query(None, description="Session ID from OMI (optional)"),
     sample_rate: int = Query(None, description="Sample rate (optional, for audio streams)")
 ):

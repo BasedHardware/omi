@@ -31,7 +31,7 @@ def module(name, **attributes):
 
 stubs = {
     "dotenv": module("dotenv", load_dotenv=lambda: None),
-    "fastapi": module("fastapi", FastAPI=Framework, Request=Framework, Query=Framework, HTTPException=Exception),
+    "fastapi": module("fastapi", FastAPI=Framework, Request=Framework, Query=Framework, Depends=Framework, HTTPException=Exception),
     "fastapi.responses": module("fastapi.responses", HTMLResponse=Response, RedirectResponse=Response, JSONResponse=Response),
     "simple_storage": module("simple_storage", SimpleUserStorage=Mock(), SimpleSessionStorage=Mock()),
     "clickup_client": module("clickup_client", ClickUpClient=Mock),

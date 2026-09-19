@@ -1126,6 +1126,21 @@ checks:
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
+  - id: slack-webhook-auth-tests
+    command: ["python3", "plugins/omi-slack-app/test_slack_webhook_auth.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the slack /webhook transcript route keyed deliveries by uid alone, so anyone could inject transcripts into another user's account; the guard must fail closed (503 unconfigured, 401 bad token) and bind the uid"
+  - id: clickup-webhook-auth-tests
+    command: ["python3", "plugins/omi-clickup-app/test_clickup_webhook_auth.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the clickup /webhook transcript route keyed deliveries by uid alone, so anyone could inject transcripts into another user's account; the guard must fail closed (503 unconfigured, 401 bad token) and bind the uid"
+  - id: twitter-webhook-auth-tests
+    command: ["python3", "plugins/omi-twitter-app/test_twitter_webhook_auth.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the twitter /webhook transcript route keyed deliveries by uid alone, so anyone could inject transcripts into another user's account; the guard must fail closed (503 unconfigured, 401 bad token) and bind the uid"
   - id: coingecko-null-optionals-tests
     command: ["bash", "scripts/run-plugin-coingecko-tests.sh"]
     triggers: ["plugins/omi-coingecko-crypto-app/**", "scripts/run-plugin-coingecko-tests.sh", ".github/checks-manifest.yaml"]
