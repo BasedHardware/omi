@@ -9,9 +9,10 @@ import os
 import re
 import sys
 import secrets
+import unicodedata
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from typing import Optional, List, Dict, Any, Tuple
+from urllib.parse import urlencode, urlsplit, parse_qs
 
 import requests
 from dotenv import load_dotenv
@@ -278,6 +279,202 @@ def format_database_info(db: dict) -> str:
     return "\n".join(parts)
 
 
+def sanitize_notion_id(raw: Any) -> Optional[str]:
+    """
+    Sanitize and extract a valid Notion identifier (page, database, or block ID).
+
+    Supports:
+    - Standard 32-hex strings: '8a99478f6b214f1b857c2b28cf9c9a29'
+    - Hyphenated 36-character UUIDs: '8a99478f-6b21-4f1b-857c-2b28cf9c9a29'
+    - Notion URLs: 'https://www.notion.so/workspace/Page-8a99478f6b214f1b857c2b28cf9c9a29?pvs=4'
+    - Conversational/markdown prefixes: 'page:8a99478f...', '#8a99478f...', '`8a99478f...`'
+
+    Returns normalized 36-character hyphenated UUID if a valid 32/36-hex ID is extracted,
+    or None if the input represents a natural language title or cannot be parsed.
+    """
+    if raw is None or isinstance(raw, bool) or not isinstance(raw, (str, int)):
+        return None
+
+    val = str(raw).strip()
+    if not val:
+        return None
+
+    # Strip surrounding quotes, brackets, or markdown delimiters
+    val = val.strip("`'\"<>[]()")
+
+    # Strip common conversational/command prefixes
+    lower_val = val.lower()
+    for prefix in ("page:", "page/", "p:", "database:", "db:", "block:", "#"):
+        if lower_val.startswith(prefix):
+            val = val[len(prefix):].strip()
+            break
+
+    # If Notion URL or HTTP(S) URL, check for modal/peek query param 'p' first
+    if "notion.so" in val or "notion.site" in val or val.startswith(("http://", "https://")):
+        try:
+            parsed = urlsplit(val)
+            # Check if modal peek page query parameter 'p' is present
+            if parsed.query:
+                q_dict = parse_qs(parsed.query)
+                p_vals = q_dict.get("p", [])
+                for pv in p_vals:
+                    pv_match = re.search(r'([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', pv)
+                    if pv_match:
+                        return pv_match.group(1).lower()
+                    pv_hex = re.findall(r'[0-9a-fA-F]{32}', pv)
+                    if pv_hex:
+                        h = pv_hex[-1].lower()
+                        return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
+            path_part = parsed.path.rstrip("/")
+            if path_part:
+                val = path_part.split("/")[-1]
+        except Exception:
+            pass
+
+    # Discard query parameters and fragments if still present
+    if "?" in val:
+        val = val.split("?")[0]
+    if "#" in val:
+        val = val.split("#")[0]
+
+    val = val.strip()
+
+    # 1. Standard hyphenated 36-character UUID (8-4-4-4-12)
+    uuid_match = re.search(r'([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', val)
+    if uuid_match:
+        return uuid_match.group(1).lower()
+
+    # 2. 32 continuous hex characters (Notion URL slugs end with the 32-char ID)
+    hex_matches = re.findall(r'[0-9a-fA-F]{32}', val)
+    if hex_matches:
+        h = hex_matches[-1].lower()
+        return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
+
+    return None
+
+
+def _normalize_title_text(text: Any) -> str:
+    """Normalize Unicode, treat zero-width separators and format controls as whitespace, collapse spaces, and casefold."""
+    if text is None:
+        return ""
+    nfkc = unicodedata.normalize("NFKC", str(text))
+    cleaned = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', ' ', nfkc)
+    return re.sub(r'\s+', ' ', cleaned).strip().casefold()
+
+
+def _clean_target_id(raw: Any) -> Optional[str]:
+    """Extract standard Notion UUID, falling back to URL slug or string ID if clean."""
+    clean = sanitize_notion_id(raw)
+    if clean:
+        return clean
+    if raw is None or isinstance(raw, bool) or not isinstance(raw, (str, int)):
+        return None
+    val = str(raw).strip().strip("`'\"<>[]()")
+    if not val:
+        return None
+    if "notion.so" in val or "notion.site" in val or val.startswith(("http://", "https://")):
+        try:
+            path_part = urlsplit(val).path.rstrip("/")
+            if path_part:
+                val = path_part.split("/")[-1]
+            if "?" in val:
+                val = val.split("?")[0]
+            if "#" in val:
+                val = val.split("#")[0]
+            return val.strip() or None
+        except Exception:
+            return None
+    return val or None
+
+
+def disambiguate_page_by_title(uid: str, query: str) -> Tuple[Optional[str], Optional[dict], Optional[str]]:
+    """
+    Search Notion for active pages matching a title query and disambiguate candidates.
+    Refuses ambiguous matches to prevent silent reads or writes to wrong pages.
+    """
+    clean_query = query.strip()
+    if not clean_query:
+        return None, None, "Page title cannot be empty."
+
+    search_result = notion_api_request(
+        uid,
+        "POST",
+        "/search",
+        json_data={
+            "query": clean_query,
+            "filter": {"property": "object", "value": "page"},
+            "page_size": 20
+        }
+    )
+
+    if not search_result or "error" in search_result:
+        err_msg = search_result.get("error", "Unknown error") if isinstance(search_result, dict) else "Unknown error"
+        return None, None, f"Search failed while resolving page '{clean_query}': {err_msg}"
+
+    results = search_result.get("results", [])
+    if not isinstance(results, list) or not results:
+        return None, None, f"No page found matching '{clean_query}'. Use search or list pages to locate your page ID."
+
+    # Active pages only: never silently write to or update archived pages
+    candidate_pages = [p for p in results if isinstance(p, dict) and not p.get("archived", False)]
+    if not candidate_pages:
+        return None, None, f"No active page found matching '{clean_query}'. Use search to locate archived pages."
+
+    norm_query = _normalize_title_text(clean_query)
+
+    # Tier 1: Exact title match (Unicode NFKC normalized & casefolded)
+    exact_matches = []
+    for page in candidate_pages:
+        title = extract_title(page)
+        if _normalize_title_text(title) == norm_query:
+            exact_matches.append(page)
+
+    if len(exact_matches) == 1:
+        target_page = exact_matches[0]
+        return target_page.get("id"), target_page, None
+
+    if len(exact_matches) > 1:
+        candidates_str = "\n".join([
+            f"- **{extract_title(p)}** (ID: `{p.get('id')}`)"
+            for p in exact_matches[:5]
+        ])
+        return None, None, (
+            f"Multiple pages match '{clean_query}':\n\n{candidates_str}\n\n"
+            "Please specify the exact Page ID to avoid ambiguity."
+        )
+
+    # Tier 2: Word-boundary, prefix, or CJK continuous substring match (enforce min length >= 2 for CJK, >= 3 otherwise)
+    is_cjk = bool(re.search(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', norm_query))
+    min_len = 2 if is_cjk else 3
+    if len(norm_query) >= min_len:
+        partial_matches = []
+        word_boundary_pattern = re.compile(rf'(?:\b|_){re.escape(norm_query)}(?:\b|_)', re.IGNORECASE)
+        for page in candidate_pages:
+            norm_title = _normalize_title_text(extract_title(page))
+            if is_cjk:
+                if norm_query in norm_title:
+                    partial_matches.append(page)
+            else:
+                if norm_title.startswith(norm_query) or word_boundary_pattern.search(norm_title):
+                    partial_matches.append(page)
+
+        if len(partial_matches) == 1:
+            target_page = partial_matches[0]
+            return target_page.get("id"), target_page, None
+
+        if len(partial_matches) > 1:
+            candidates_str = "\n".join([
+                f"- **{extract_title(p)}** (ID: `{p.get('id')}`)"
+                for p in partial_matches[:5]
+            ])
+            return None, None, (
+                f"Multiple pages match '{clean_query}':\n\n{candidates_str}\n\n"
+                "Please specify the exact Page ID to avoid ambiguity."
+            )
+
+    return None, None, f"No page found matching '{clean_query}'. Use search or list pages to locate your page ID."
+
+
 # ============================================
 # Chat Tools Manifest
 # ============================================
@@ -341,7 +538,7 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "page_id": {
                             "type": "string",
-                            "description": "The page ID to get details for. Required."
+                            "description": "The page ID, Notion URL, or page title to get details for. Required."
                         }
                     },
                     "required": ["page_id"]
@@ -366,11 +563,11 @@ async def get_omi_tools_manifest():
                         },
                         "parent_page_id": {
                             "type": "string",
-                            "description": "Parent page ID to create this page under. If not provided, creates in workspace root."
+                            "description": "Parent page ID or Notion URL to create this page under. If not provided, creates in workspace root."
                         },
                         "database_id": {
                             "type": "string",
-                            "description": "Database ID to create this page in (for database entries)."
+                            "description": "Database ID or Notion URL to create this page in (for database entries)."
                         }
                     },
                     "required": ["title"]
@@ -387,7 +584,7 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "page_id": {
                             "type": "string",
-                            "description": "The page ID to update. Required."
+                            "description": "The page ID, Notion URL, or page title to update. Required."
                         },
                         "title": {
                             "type": "string",
@@ -412,7 +609,7 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "page_id": {
                             "type": "string",
-                            "description": "The page ID to append content to. Required."
+                            "description": "The page ID, Notion URL, or page title to append content to. Required."
                         },
                         "content": {
                             "type": "string",
@@ -450,7 +647,7 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "database_id": {
                             "type": "string",
-                            "description": "The database ID to query. Required."
+                            "description": "The database ID or Notion URL to query. Required."
                         },
                         "max_results": {
                             "type": "integer",
@@ -580,23 +777,45 @@ async def tool_get_page(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        page_id = body.get("page_id")
+        raw_page_id = body.get("page_id") or body.get("page") or body.get("id")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not page_id:
+        if not raw_page_id or not str(raw_page_id).strip():
             return ChatToolResponse(error="Page ID is required. Use 'search' or 'list pages' to find page IDs.")
 
         access_token = get_valid_access_token(uid)
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
-        # Get page properties
-        page = notion_api_request(uid, "GET", f"/pages/{page_id}")
+        target_str = str(raw_page_id).strip()
+        clean_id = sanitize_notion_id(target_str)
+        page = None
+        page_id = None
+
+        if clean_id:
+            page_id = clean_id
+            page = notion_api_request(uid, "GET", f"/pages/{page_id}")
+        elif any(ch.isspace() for ch in target_str):
+            resolved_id, resolved_page, err = disambiguate_page_by_title(uid, target_str)
+            if err:
+                return ChatToolResponse(error=err)
+            page_id = resolved_id
+            page = resolved_page
+        else:
+            page_id = target_str
+            page = notion_api_request(uid, "GET", f"/pages/{page_id}")
+            if (not page or "error" in page) and not re.match(r'^[0-9a-fA-F\-]{16,}$', target_str):
+                resolved_id, resolved_page, err = disambiguate_page_by_title(uid, target_str)
+                if err:
+                    return ChatToolResponse(error=err)
+                if resolved_id:
+                    page_id = resolved_id
+                    page = resolved_page
 
         if not page or "error" in page:
-            return ChatToolResponse(error=f"Page not found: {page.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Page not found: {page.get('error', 'Unknown error') if isinstance(page, dict) else 'Unknown error'}")
 
         # Get page content (blocks), following Notion's cursor pagination
         blocks = fetch_page_blocks(uid, page_id)
@@ -656,14 +875,16 @@ async def tool_create_page(request: Request):
         uid = body.get("uid")
         title = body.get("title")
         content = body.get("content", "")
-        parent_page_id = body.get("parent_page_id")
-        database_id = body.get("database_id")
+        parent_page_id = body.get("parent_page_id") or body.get("parent_id")
+        database_id = body.get("database_id") or body.get("db_id")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not title:
-            return ChatToolResponse(error="Page title is required")
+        if title is None or not str(title).strip():
+            return ChatToolResponse(error="Page title is required and cannot be whitespace only.")
+
+        clean_title = str(title).strip()
 
         access_token = get_valid_access_token(uid)
         if not access_token:
@@ -673,22 +894,40 @@ async def tool_create_page(request: Request):
         page_data = {
             "properties": {
                 "title": {
-                    "title": title_items(title)
+                    "title": title_items(clean_title)
                 }
             }
         }
 
         # Set parent
         if database_id:
-            page_data["parent"] = {"database_id": database_id}
-            # For database pages, use Name property instead of title
+            clean_db_id = _clean_target_id(database_id)
+            if not clean_db_id:
+                return ChatToolResponse(error="Invalid database ID provided.")
+            page_data["parent"] = {"database_id": clean_db_id}
+
+            # Dynamically resolve database title property name (defaulting to "Name")
+            title_prop_name = "Name"
+            try:
+                db_schema = notion_api_request(uid, "GET", f"/databases/{clean_db_id}")
+                if db_schema and isinstance(db_schema, dict) and "properties" in db_schema:
+                    for prop_k, prop_v in db_schema["properties"].items():
+                        if isinstance(prop_v, dict) and prop_v.get("type") == "title":
+                            title_prop_name = prop_k
+                            break
+            except Exception:
+                pass
+
             page_data["properties"] = {
-                "Name": {
-                    "title": title_items(title)
+                title_prop_name: {
+                    "title": title_items(clean_title)
                 }
             }
         elif parent_page_id:
-            page_data["parent"] = {"page_id": parent_page_id}
+            clean_parent_id = _clean_target_id(parent_page_id)
+            if not clean_parent_id:
+                return ChatToolResponse(error="Invalid parent page ID provided.")
+            page_data["parent"] = {"page_id": clean_parent_id}
         else:
             # Get workspace ID from user's token info
             tokens = get_notion_tokens(uid)
@@ -720,7 +959,7 @@ async def tool_create_page(request: Request):
         result_parts = [
             "**Page Created!**",
             "",
-            f"**Title:** {title}",
+            f"**Title:** {clean_title}",
             f"**ID:** `{page_id}`"
         ]
 
@@ -744,41 +983,94 @@ async def tool_update_page(request: Request):
         log(f"=== UPDATE_PAGE ===")
 
         uid = body.get("uid")
-        page_id = body.get("page_id")
+        raw_page_id = body.get("page_id") or body.get("page") or body.get("id")
         title = body.get("title")
         archived = body.get("archived")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not page_id:
+        if not raw_page_id or not str(raw_page_id).strip():
             return ChatToolResponse(error="Page ID is required.")
 
         access_token = get_valid_access_token(uid)
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
+        cached_page = None
+        target_str = str(raw_page_id).strip()
+        clean_id = sanitize_notion_id(target_str)
+        if clean_id:
+            page_id = clean_id
+        elif any(ch.isspace() for ch in target_str):
+            resolved_id, resolved_page, err = disambiguate_page_by_title(uid, target_str)
+            if err:
+                return ChatToolResponse(error=err)
+            page_id = resolved_id
+            cached_page = resolved_page
+        else:
+            page_id = target_str
+            # Check if this ID exists or if it's a single-word title needing disambiguation
+            check_page = notion_api_request(uid, "GET", f"/pages/{page_id}")
+            if (not check_page or "error" in check_page) and not re.match(r'^[0-9a-fA-F\-]{16,}$', target_str):
+                resolved_id, resolved_page, err = disambiguate_page_by_title(uid, target_str)
+                if err:
+                    return ChatToolResponse(error=err)
+                if resolved_id:
+                    page_id = resolved_id
+                    cached_page = resolved_page
+            else:
+                cached_page = check_page
+
+        # Validate title if specified
+        if title is not None and not str(title).strip():
+            return ChatToolResponse(error="Page title cannot be empty or whitespace only.")
+
         update_data = {}
         updates = []
 
-        if title:
-            # First get the page to find the title property name
-            page = notion_api_request(uid, "GET", f"/pages/{page_id}")
-            if page and "properties" in page:
+        if title is not None:
+            clean_title = str(title).strip()
+            # First get the page to find the title property name (reusing cached page if available)
+            page = cached_page if (cached_page and "properties" in cached_page) else notion_api_request(uid, "GET", f"/pages/{page_id}")
+            prop_found = False
+            if page and isinstance(page, dict) and "properties" in page:
                 # Find the title property
                 for prop_name, prop in page["properties"].items():
-                    if prop.get("type") == "title":
+                    if isinstance(prop, dict) and prop.get("type") == "title":
                         update_data["properties"] = {
                             prop_name: {
-                                "title": [{"text": {"content": title}}]
+                                "title": title_items(clean_title)
                             }
                         }
-                        updates.append(f"Title: {title}")
+                        updates.append(f"Title: {clean_title}")
+                        prop_found = True
                         break
+            if not prop_found:
+                update_data["properties"] = {
+                    "title": {
+                        "title": title_items(clean_title)
+                    }
+                }
+                updates.append(f"Title: {clean_title}")
 
         if archived is not None:
-            update_data["archived"] = archived
-            updates.append(f"Archived: {archived}")
+            if isinstance(archived, bool):
+                archived_bool = archived
+            elif isinstance(archived, (int, float)):
+                archived_bool = bool(archived)
+            elif isinstance(archived, str):
+                s = archived.strip().lower()
+                if s in ("true", "1", "yes", "archive", "archived"):
+                    archived_bool = True
+                elif s in ("false", "0", "no", "unarchive", "unarchived"):
+                    archived_bool = False
+                else:
+                    return ChatToolResponse(error="Invalid boolean value for archived. Use true or false.")
+            else:
+                archived_bool = bool(archived)
+            update_data["archived"] = archived_bool
+            updates.append(f"Archived: {archived_bool}")
 
         if not update_data:
             return ChatToolResponse(error="No updates provided. Specify title or archived.")
@@ -803,13 +1095,13 @@ async def tool_append_content(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        page_id = body.get("page_id")
+        raw_page_id = body.get("page_id") or body.get("page") or body.get("id")
         content = body.get("content")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not page_id:
+        if not raw_page_id or not str(raw_page_id).strip():
             return ChatToolResponse(error="Page ID is required.")
 
         if not content:
@@ -819,14 +1111,38 @@ async def tool_append_content(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
+        target_str = str(raw_page_id).strip()
+        clean_id = sanitize_notion_id(target_str)
+        if clean_id:
+            page_id = clean_id
+        elif any(ch.isspace() for ch in target_str):
+            resolved_id, _, err = disambiguate_page_by_title(uid, target_str)
+            if err:
+                return ChatToolResponse(error=err)
+            page_id = resolved_id
+        else:
+            page_id = target_str
+
         batches = plan_content_requests(content)
         total = sum(len(batch["children"]) for batch in batches)
         error = append_content_batches(uid, page_id, batches, 0, total)
         if error:
+            # If write failed with 404/400 and target was a word title, disambiguate and retry
+            if ("HTTP 404" in error or "HTTP 400" in error) and not clean_id and not re.match(r'^[0-9a-fA-F\-]{16,}$', target_str):
+                resolved_id, _, disambig_err = disambiguate_page_by_title(uid, target_str)
+                if disambig_err:
+                    return ChatToolResponse(error=disambig_err)
+                if resolved_id:
+                    error = append_content_batches(uid, resolved_id, batches, 0, total)
+                    if error:
+                        return ChatToolResponse(error=error)
+                    return ChatToolResponse(result=f"**Content Added!**\n\nAdded {total} paragraph(s) to the page.")
             return ChatToolResponse(error=error)
 
         return ChatToolResponse(result=f"**Content Added!**\n\nAdded {total} paragraph(s) to the page.")
 
+    except ValueError as e:
+        return ChatToolResponse(error=str(e))
     except Exception:
         log("Error appending content")
         return ChatToolResponse(error="Failed to append content. Check the page before retrying.")
@@ -838,7 +1154,7 @@ async def tool_list_databases(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 20)
+        max_results = min(body.get("max_results") or 10, 20)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -879,20 +1195,24 @@ async def tool_query_database(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        database_id = body.get("database_id")
-        max_results = min(body.get("max_results", 10), 50)
+        raw_database_id = body.get("database_id") or body.get("db_id") or body.get("id")
+        max_results = min(body.get("max_results") or 10, 50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not database_id:
+        if not raw_database_id or not str(raw_database_id).strip():
             return ChatToolResponse(error="Database ID is required. Use 'list databases' to find database IDs.")
 
         access_token = get_valid_access_token(uid)
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
-        result = notion_api_request(uid, "POST", f"/databases/{database_id}/query", json_data={
+        clean_db_id = _clean_target_id(raw_database_id)
+        if not clean_db_id:
+            return ChatToolResponse(error="Invalid database ID provided. Use 'list databases' to find database IDs.")
+
+        result = notion_api_request(uid, "POST", f"/databases/{clean_db_id}/query", json_data={
             "page_size": max_results
         })
 

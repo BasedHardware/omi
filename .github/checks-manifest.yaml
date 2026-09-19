@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: notion-page-disambiguation-tests
+    command: ["python3", "plugins/omi-notion-app/test_page_disambiguation.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Notion tools must sanitize URLs, extract UUIDs, disambiguate page titles while blocking ambiguous collisions, and adaptively resolve database title properties"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
