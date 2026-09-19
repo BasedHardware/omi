@@ -1,326 +1,272 @@
-"""Duplicate-capture policy (#3244): device-on-phone + macOS microphone in one room.
+"""Synthetic contract cases through the real durable finalizer and DB writer.
 
-Behavioral coverage of `utils.conversations.duplicate_capture` through its
-public API with synthetic captures. The noisy-copy fixtures model what two
-microphones and two STT passes over the same speech actually produce (word
-level disagreement, not identical text), and the #5388 fixtures model two
-captures that share a time window but not their audio.
+Contract: the cross-device task requires a non-destructive overlap hint, replacing
+#13703's content-based auto-discard. External providers and query discovery are
+controlled; production matching and strict transaction writes run unchanged.
 """
 
-from __future__ import annotations
-
-import random
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import logging
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from utils.conversations.duplicate_capture import (
-    MIN_CANDIDATE_WORDS,
-    MIN_TRANSCRIPT_CONTAINMENT,
-    MIN_WINDOW_COVERAGE,
-    CaptureRecord,
-    bigram_containment,
-    capture_record,
-    find_duplicate_capture,
-    is_primary_eligible,
-    same_capture_client,
-    transcript_words,
-    window_coverage,
-)
+from database import conversations as conversations_db
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations import duplicate_capture as policy
+from utils.conversations import finalizer
+from utils.conversations import process_conversation as processor
 
-T0 = datetime(2026, 9, 12, 15, 0, tzinfo=timezone.utc)
-
-_USER_TURNS = [
-    'okay so the plan for the pendant firmware release is to ship the codec fix first',
-    'i think we should also bump the advertised battery estimate once the new curve lands',
-    'let me write the release notes tonight and send them to the hardware channel',
-    'we still need someone to verify the pairing flow on the older android builds',
-]
-_REMOTE_TURNS = [
-    'that works for me but the app team wants the opus change behind a flag',
-    'the battery curve is not validated yet so keep the estimate where it is',
-    'i can take the android pairing pass tomorrow morning before standup',
-    'and remember the store listing screenshots are due by the end of the week',
-]
+T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+UID = 'synthetic-overlap-user'
 
 
-def _interleave(*turn_lists: list[str]) -> str:
-    turns: list[str] = []
-    for group in zip(*turn_lists):
-        turns.extend(group)
-    return ' '.join(turns)
+def row(id, source, start=0, end=600, **extra):
+    return {
+        'id': id,
+        'source': source,
+        'status': 'completed',
+        'discarded': False,
+        'started_at': T0 + timedelta(seconds=start),
+        'finished_at': T0 + timedelta(seconds=end),
+        'created_at': T0,
+        'structured': {},
+        'transcript_segments': [],
+        'external_data': {'preserved': 'fixture'},
+        **extra,
+    }
 
 
-ROOM_TEXT = _interleave(_USER_TURNS, _REMOTE_TURNS)
-OTHER_ROOM_TEXT = (
-    'the quarterly numbers came in above forecast because renewals held up better than we modeled '
-    'marketing wants a bigger event budget for the conference season and finance is pushing back '
-    'we agreed to revisit hiring for the support team after the next board meeting closes '
-    'someone should follow up with the vendor about the invoice discrepancy from last month'
-)
+def path(id, uid=UID):
+    return ('users', uid, 'conversations', id)
 
 
-def _noisy(text: str, *, rate: float, seed: int) -> str:
-    """Substitute a fraction of words, the way a second far-field microphone misses them."""
-    rng = random.Random(seed)
-    words = text.split()
-    for index in range(len(words)):
-        if rng.random() < rate:
-            words[index] = f'garbled{index}'
-    return ' '.join(words)
+@pytest.fixture
+def harness(monkeypatch):
+    store = StrictFirestore()
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation', lambda uid, id, **kw: deepcopy(store.rows.get(path(id, uid)))
+    )
+
+    def query(uid, *, status, finished_after, limit):
+        return sorted(
+            [
+                deepcopy(r)
+                for p, r in store.rows.items()
+                if p[:2] == ('users', uid) and r['status'] == status and r['finished_at'] >= finished_after
+            ],
+            key=lambda r: r['finished_at'],
+        )[:limit]
+
+    monkeypatch.setattr(conversations_db, 'get_conversations_finished_after', query)
+
+    async def inline(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def process(uid, language, conversation, **kwargs):
+        # Controllable enrichment seam: persist completion, as the coordinator does.
+        store.rows[path(conversation.id, uid)]['status'] = 'completed'
+        conversation.status = 'completed'
+        kwargs['persistence_observer'](True)
+        return conversation
+
+    monkeypatch.setattr(finalizer, 'run_blocking', inline)
+    monkeypatch.setattr(finalizer, 'process_conversation', process)
+    monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(finalizer, 'trigger_external_integrations', AsyncMock())
+    monkeypatch.setattr(finalizer, 'record_and_persist_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(finalizer, 'persist_capture_arrival_intent', MagicMock())
+    monkeypatch.setattr(
+        finalizer, 'resolve_frame_request_authority', AsyncMock(return_value=SimpleNamespace(enabled=False))
+    )
+    monkeypatch.setattr(
+        finalizer.lifecycle_service,
+        'claim_finalization_fanout',
+        lambda *a: {'status': 'claimed', 'fanout_key': 'fixture'},
+    )
+    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *a: True)
+    monkeypatch.delenv('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', raising=False)
+    monkeypatch.delenv('CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO', raising=False)
+    return store
 
 
-def _segments(text: str, *, seconds: float) -> list[dict]:
-    words = text.split()
-    half = len(words) // 2
-    return [
-        {'text': ' '.join(words[:half]), 'start': 0.0, 'end': seconds / 2},
-        {'text': ' '.join(words[half:]), 'start': seconds / 2, 'end': seconds},
-    ]
-
-
-def _record(
-    conversation_id: str,
-    text: str,
-    *,
-    start: datetime = T0,
-    seconds: float = 300.0,
-    created_at: datetime | None = None,
-    status: str = 'completed',
-    source: str = 'omi',
-    device: str | None = 'phone-hash',
-    platform: str | None = 'ios',
-    discarded: bool = False,
-) -> CaptureRecord:
-    return CaptureRecord(
-        conversation_id=conversation_id,
-        created_at=created_at or start,
-        started_at=start,
-        finished_at=start + timedelta(seconds=seconds),
-        status=status,
-        words=transcript_words(_segments(text, seconds=seconds)),
-        source=source,
-        client_device_id=device,
-        client_platform=platform,
-        discarded=discarded,
+async def finalize(id):
+    return await finalizer.finalize_persisted_conversation(
+        UID, id, finalization_job_id='synthetic-job', dispatch_generation=1, lease_epoch=1
     )
 
 
-def _desktop(conversation_id: str, text: str, **overrides) -> CaptureRecord:
-    overrides.setdefault('source', 'desktop')
-    overrides.setdefault('device', 'mac-hash')
-    overrides.setdefault('platform', 'macos')
-    return _record(conversation_id, text, **overrides)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('last', ['pendant', 'desktop'])
+async def test_finalization_links_shorter_capture_in_either_order_and_replay(harness, last, caplog):
+    harness.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    harness.rows[path(last)]['status'] = 'processing'
+    before = deepcopy(harness.rows)
+    with caplog.at_level(logging.INFO, logger=policy.logger.name):
+        assert await finalize(last) == finalizer.ConversationFinalizationDisposition.completed
+        await finalize(last)
+    before[path(last)]['status'] = 'completed'
+    assert harness.rows[path('pendant')] == before[path('pendant')]
+    secondary = harness.rows[path('desktop')]
+    assert secondary['external_data'] == {
+        'preserved': 'fixture',
+        'duplicate_capture_of': 'pendant',
+        'cross_device_duplicate': {
+            'primary_conversation_id': 'pendant',
+            'method': 'wall_clock_overlap',
+            'overlap_seconds': 490.0,
+            'overlap_ratio': 1.0,
+        },
+    }
+    secondary_without_hint = deepcopy(secondary)
+    secondary_without_hint['external_data'] = before[path('desktop')]['external_data']
+    assert secondary_without_hint == before[path('desktop')]
+    events = [r.message for r in caplog.records if 'cross_device_duplicate_detected' in r.message]
+    assert len(events) == 1
+    assert UID not in events[0] and 'pendant' not in events[0]
+    assert sum(len(t.updates) for t in harness.transactions) == 1
 
 
-class TestSameRoomDuplicateIsFolded:
-    def test_device_capture_finalizing_after_the_mac_is_folded_into_it(self):
-        mac = _desktop('mac-conv', _noisy(ROOM_TEXT, rate=0.15, seed=1))
-        pendant = _record('pendant-conv', ROOM_TEXT, created_at=T0 + timedelta(seconds=3))
-
-        match = find_duplicate_capture(pendant, [mac])
-
-        assert match is not None
-        assert match.primary_conversation_id == 'mac-conv'
-        assert match.window_coverage == pytest.approx(1.0)
-        assert match.transcript_containment >= MIN_TRANSCRIPT_CONTAINMENT
-
-    def test_far_field_disagreement_of_a_quarter_of_the_words_still_matches(self):
-        mac = _desktop('mac-conv', ROOM_TEXT)
-        pendant = _record('pendant-conv', _noisy(ROOM_TEXT, rate=0.25, seed=7))
-
-        assert find_duplicate_capture(pendant, [mac]) is not None
-
-    def test_a_small_start_offset_between_the_two_sessions_is_tolerated(self):
-        mac = _desktop('mac-conv', ROOM_TEXT, start=T0, seconds=300)
-        pendant = _record('pendant-conv', ROOM_TEXT, start=T0 + timedelta(seconds=20), seconds=300)
-
-        match = find_duplicate_capture(pendant, [mac])
-
-        assert match is not None
-        assert MIN_WINDOW_COVERAGE <= match.window_coverage < 1.0
-
-    def test_the_best_carrying_primary_wins_when_several_qualify(self):
-        weak = _desktop('mac-weak', _noisy(ROOM_TEXT, rate=0.3, seed=3), device='mac-a')
-        strong = _desktop('mac-strong', ROOM_TEXT, device='mac-b')
-        pendant = _record('pendant-conv', ROOM_TEXT)
-
-        match = find_duplicate_capture(pendant, [weak, strong])
-
-        assert match is not None and match.primary_conversation_id == 'mac-strong'
-
-
-class TestDistinctSimultaneousCapturesAreKept:
-    """#5388: a pendant in the room plus a headphone meeting on the laptop hold different speech."""
-
-    def test_pendant_hearing_only_the_user_is_not_folded_into_a_remote_only_capture(self):
-        web = _desktop('web-conv', ' '.join(_REMOTE_TURNS * 2), source='web', platform='web', device='browser-hash')
-        pendant = _record('pendant-conv', ' '.join(_USER_TURNS * 2))
-
-        assert find_duplicate_capture(pendant, [web]) is None
-
-    def test_an_unrelated_conversation_in_the_same_window_is_not_a_duplicate(self):
-        mac = _desktop('mac-conv', OTHER_ROOM_TEXT)
-        pendant = _record('pendant-conv', ROOM_TEXT)
-
-        assert find_duplicate_capture(pendant, [mac]) is None
-        assert bigram_containment(pendant.words, mac.words) < MIN_TRANSCRIPT_CONTAINMENT
-
-    def test_a_capture_that_kept_running_after_the_other_stopped_is_kept(self):
-        """Speech recorded after the laptop stopped exists nowhere else."""
-        mac = _desktop('mac-conv', ROOM_TEXT, seconds=300)
-        longer = ROOM_TEXT + ' ' + OTHER_ROOM_TEXT
-        pendant = _record('pendant-conv', longer, seconds=600)
-
-        overlap, coverage = window_coverage(pendant, mac)
-        assert overlap == pytest.approx(300.0)
-        assert coverage == pytest.approx(0.5)
-        assert find_duplicate_capture(pendant, [mac]) is None
-
-    def test_a_short_scrap_is_left_to_the_discard_gate(self):
-        mac = _desktop('mac-conv', ROOM_TEXT)
-        scrap_text = ' '.join(ROOM_TEXT.split()[: MIN_CANDIDATE_WORDS - 1])
-        scrap = _record('pendant-conv', scrap_text, seconds=20)
-
-        assert len(scrap.words) < MIN_CANDIDATE_WORDS
-        assert find_duplicate_capture(scrap, [mac]) is None
-
-    def test_the_same_capture_client_never_folds_into_itself(self):
-        """A reconnecting phone must not be treated as a second device."""
-        earlier = _record('pendant-a', ROOM_TEXT)
-        later = _record('pendant-b', ROOM_TEXT, created_at=T0 + timedelta(seconds=5))
-
-        assert same_capture_client(earlier, later)
-        assert find_duplicate_capture(later, [earlier]) is None
-
-    def test_legacy_rows_without_a_device_hash_compare_platform_and_source(self):
-        a = _record('a', ROOM_TEXT, device=None, platform=None, source='omi')
-        b = _record('b', ROOM_TEXT, device=None, platform=None, source='omi')
-        c = _record('c', ROOM_TEXT, device=None, platform='macos', source='desktop')
-
-        assert same_capture_client(a, b)
-        assert not same_capture_client(a, c)
-
-
-class TestExactlyOneSideYields:
-    """Two sessions that time out on the same silence finalize together."""
-
-    def test_the_later_created_processing_capture_yields_to_the_earlier_one(self):
-        earlier = _desktop('mac-conv', ROOM_TEXT, status='processing', created_at=T0)
-        later = _record('pendant-conv', ROOM_TEXT, status='processing', created_at=T0 + timedelta(seconds=2))
-
-        assert find_duplicate_capture(later, [earlier]) is not None
-        assert find_duplicate_capture(earlier, [later]) is None
-
-    def test_a_completed_counterpart_is_primary_even_when_created_later(self):
-        later_but_done = _desktop('mac-conv', ROOM_TEXT, status='completed', created_at=T0 + timedelta(seconds=30))
-        earlier = _record('pendant-conv', ROOM_TEXT, status='processing', created_at=T0)
-
-        match = find_duplicate_capture(earlier, [later_but_done])
-
-        assert match is not None and match.primary_conversation_id == 'mac-conv'
-
-    def test_in_progress_and_discarded_rows_cannot_be_primaries(self):
-        live = _desktop('mac-live', ROOM_TEXT, status='in_progress')
-        gone = _desktop('mac-gone', ROOM_TEXT, status='completed', discarded=True)
-        pendant = _record('pendant-conv', ROOM_TEXT, created_at=T0 + timedelta(seconds=5))
-
-        assert not is_primary_eligible(pendant, live)
-        assert not is_primary_eligible(pendant, gone)
-        assert find_duplicate_capture(pendant, [live, gone]) is None
-
-    def test_a_row_never_matches_its_own_id(self):
-        me = _record('same-id', ROOM_TEXT, status='processing')
-        stored_copy = _desktop('same-id', ROOM_TEXT, status='processing')
-
-        assert not is_primary_eligible(me, stored_copy)
-
-    def test_an_already_discarded_candidate_is_not_re_evaluated(self):
-        mac = _desktop('mac-conv', ROOM_TEXT)
-        pendant = _record('pendant-conv', ROOM_TEXT, discarded=True)
-
-        assert find_duplicate_capture(pendant, [mac]) is None
-
-
-class TestCaptureRecordProjection:
-    def test_projects_persisted_dict_rows_and_models_alike(self):
-        from models.conversation import Conversation
-        from models.conversation_enums import ConversationSource, ConversationStatus
-        from models.structured import Structured
-        from models.transcript_segment import TranscriptSegment
-
-        model = Conversation(
-            id='conv-model',
-            created_at=T0,
-            started_at=T0,
-            finished_at=T0 + timedelta(minutes=5),
-            structured=Structured(),
-            transcript_segments=[
-                TranscriptSegment(
-                    id='seg-1', text='Hello, world!', speaker='SPEAKER_00', speaker_id=0, is_user=True, start=0, end=2
-                )
-            ],
-            source=ConversationSource.desktop,
-            status=ConversationStatus.processing,
-            client_device_id='mac-hash',
-            client_platform='macos',
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'case',
+    [
+        'threshold',
+        'below_threshold',
+        'low_overlap',
+        'same_source',
+        'primary_discarded',
+        'secondary_discarded',
+        'other_user',
+        'processing',
+        'missing_source',
+        'invalid_window',
+    ],
+)
+async def test_finalizer_does_not_link_ineligible_pairs(harness, case):
+    primary, secondary = row('pendant', 'omi'), row('desktop', 'desktop', 100, 590)
+    if case in {'threshold', 'below_threshold'}:
+        secondary.update(
+            started_at=T0 + timedelta(seconds=540 if case == 'threshold' else 550),
+            finished_at=T0 + timedelta(seconds=600),
         )
-        row = {
-            'id': 'conv-row',
-            'created_at': T0,
-            'started_at': T0.replace(tzinfo=None),
-            'finished_at': (T0 + timedelta(minutes=5)).replace(tzinfo=None),
-            'status': 'completed',
-            'source': 'omi',
-            'client_device_id': 'phone-hash',
-            'client_platform': 'ios',
-            'transcript_segments': [{'text': "Hello world it's me"}],
+    elif case == 'low_overlap':
+        secondary.update(started_at=T0 + timedelta(seconds=450), finished_at=T0 + timedelta(seconds=900))
+    elif case == 'same_source':
+        secondary['source'] = 'omi'
+    elif case == 'primary_discarded':
+        primary['discarded'] = True
+    elif case == 'secondary_discarded':
+        secondary['discarded'] = True
+    elif case == 'processing':
+        primary['status'] = 'processing'
+    elif case == 'missing_source':
+        primary.pop('source')
+    elif case == 'invalid_window':
+        primary['finished_at'] = primary['started_at']
+    harness.rows[path('pendant', 'other-synthetic-user' if case == 'other_user' else UID)] = primary
+    harness.rows[path('desktop')] = secondary
+    before = deepcopy(harness.rows)
+    await finalize('desktop')
+    assert harness.rows == before
+
+
+@pytest.mark.asyncio
+async def test_equal_durations_have_one_stable_primary(harness):
+    harness.rows.update({path('a'): row('a', 'omi'), path('b'): row('b', 'desktop')})
+    await finalize('a')
+    await finalize('b')
+    assert 'duplicate_capture_of' not in harness.rows[path('a')]['external_data']
+    assert harness.rows[path('b')]['external_data']['duplicate_capture_of'] == 'a'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('side', ['pendant', 'desktop'])
+@pytest.mark.parametrize('change', ['discard', 'delete', 'window', 'status'])
+async def test_transaction_fences_changes_after_discovery(harness, monkeypatch, side, change):
+    harness.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    original = conversations_db.link_duplicate_capture
+
+    def race(*args):
+        if change == 'delete':
+            del harness.rows[path(side)]
+        elif change == 'discard':
+            harness.rows[path(side)]['discarded'] = True
+        elif change == 'window':
+            harness.rows[path(side)]['finished_at'] += timedelta(seconds=1)
+        else:
+            harness.rows[path(side)]['status'] = 'processing'
+        return original(*args)
+
+    monkeypatch.setattr(conversations_db, 'link_duplicate_capture', race)
+    await finalize('desktop')
+    assert all('duplicate_capture_of' not in r['external_data'] for r in harness.rows.values())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['query', 'write', 'config'])
+async def test_optional_hint_failure_preserves_finalization(harness, monkeypatch, failure):
+    harness.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    fallback = MagicMock()
+    monkeypatch.setattr(policy, 'record_fallback', fallback)
+    if failure == 'config':
+        monkeypatch.setenv('CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO', 'nan')
+    else:
+        name = 'get_conversations_finished_after' if failure == 'query' else 'link_duplicate_capture'
+        monkeypatch.setattr(conversations_db, name, MagicMock(side_effect=RuntimeError('must not log this')))
+    assert await finalize('desktop') == finalizer.ConversationFinalizationDisposition.completed
+    fallback.assert_called_once()
+    assert all('duplicate_capture_of' not in r['external_data'] for r in harness.rows.values())
+
+
+@pytest.mark.asyncio
+async def test_thresholds_are_configurable(harness, monkeypatch):
+    harness.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    monkeypatch.setenv('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', '500')
+    await finalize('desktop')
+    assert 'duplicate_capture_of' not in harness.rows[path('desktop')]['external_data']
+    monkeypatch.setenv('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', '60')
+    monkeypatch.setenv('CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO', '1')
+    await finalize('desktop')
+    assert 'duplicate_capture_of' not in harness.rows[path('desktop')]['external_data']
+
+
+@pytest.mark.asyncio
+async def test_legacy_reverse_pointer_does_not_create_cycle(harness):
+    primary = row('pendant', 'omi')
+    primary['external_data']['duplicate_capture_of'] = 'desktop'
+    harness.rows.update({path('pendant'): primary, path('desktop'): row('desktop', 'desktop', 100, 590)})
+    before = deepcopy(harness.rows)
+    await finalize('desktop')
+    assert harness.rows == before
+
+
+@pytest.mark.parametrize('persisted', [True, False])
+def test_sync_processor_links_only_after_successful_completion(harness, monkeypatch, persisted):
+    harness.rows.update(
+        {
+            path('pendant'): row('pendant', 'omi', status='processing'),
+            path('desktop'): row('desktop', 'desktop', 100, 590),
         }
+    )
+    conversation = finalizer.deserialize_conversation(harness.rows[path('pendant')])
+    monkeypatch.setattr(processor, '_enrich_meeting_context', MagicMock())
+    monkeypatch.setattr(processor, '_get_structured', lambda *a, **kw: (conversation.structured, False))
+    monkeypatch.setattr(processor, '_get_conversation_obj', lambda *a, **kw: conversation)
+    monkeypatch.setattr(processor, '_calendar_auto_link_enabled', lambda: False)
+    monkeypatch.setattr(processor, 'conversation_apps_opt_in_only', lambda: False)
+    monkeypatch.setattr(processor, 'trigger_conversation_apps', MagicMock())
+    monkeypatch.setattr(processor, 'submit_with_context', MagicMock())
 
-        from_model = capture_record(model)
-        from_row = capture_record(row)
+    def persist(uid, payload):
+        if persisted:
+            harness.rows[path(payload['id'], uid)].update(payload)
+        return persisted
 
-        assert from_model is not None and from_row is not None
-        assert from_model.words == ('hello', 'world')
-        assert from_model.status == 'processing' and from_model.source == 'desktop'
-        assert from_row.words == ('hello', 'world', 'it', 's', 'me')
-        assert from_row.started_at.tzinfo is not None, 'naive Firestore datetimes are normalized to UTC'
-        assert not same_capture_client(from_model, from_row)
-
-    def test_rows_without_a_wall_window_are_ignored(self):
-        assert capture_record({'id': 'x', 'started_at': T0}) is None
-        assert capture_record({'id': 'x', 'started_at': T0, 'finished_at': T0 - timedelta(seconds=1)}) is None
-
-    def test_created_at_falls_back_to_started_at_for_ingress_creates(self):
-        from models.conversation import CreateConversation
-
-        create = CreateConversation(
-            started_at=T0, finished_at=T0 + timedelta(minutes=1), transcript_segments=[], source='desktop'
-        )
-
-        record = capture_record(create)
-
-        assert record is not None
-        assert record.conversation_id is None
-        assert record.created_at == T0
-
-
-class TestBigramContainment:
-    def test_identical_sequences_are_fully_contained(self):
-        words = tuple('a b c d e'.split())
-        assert bigram_containment(words, words) == pytest.approx(1.0)
-
-    def test_containment_is_relative_to_the_candidate(self):
-        short = tuple('a b c'.split())
-        long = tuple('x y a b c d e f'.split())
-        assert bigram_containment(short, long) == pytest.approx(1.0)
-        assert bigram_containment(long, short) == pytest.approx(2 / 7)
-
-    def test_repeated_bigrams_count_only_as_often_as_the_primary_has_them(self):
-        candidate = tuple('yes yes yes yes'.split())
-        primary = tuple('yes yes no'.split())
-        assert bigram_containment(candidate, primary) == pytest.approx(1 / 3)
-
-    def test_too_few_words_have_no_containment(self):
-        assert bigram_containment(('one',), ('one', 'two')) == 0.0
-        assert bigram_containment(('one', 'two'), ('one',)) == 0.0
+    monkeypatch.setattr(processor.lifecycle_service, 'persist_processed_conversation', persist)
+    processor.process_conversation(UID, 'en', conversation, is_reprocess=True, defer_memory_extraction=True)
+    assert ('duplicate_capture_of' in harness.rows[path('desktop')]['external_data']) is persisted

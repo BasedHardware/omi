@@ -1536,9 +1536,8 @@ def get_conversations_finished_after(
 
     Duplicate-capture detection (#3244) asks for the captures that were still
     running when this recording started; ordering by the activity clock keeps
-    the bounded page on the rows nearest that start, which are the only ones
-    that can overlap it. Photos are not loaded — the caller compares windows
-    and transcript words only.
+    the bounded page on the rows nearest that start. Later rows may also
+    overlap; the caller reports saturation. Photos are not loaded.
     """
     client = firestore_client or get_firestore_client()
     user_ref = client.collection('users').document(uid)
@@ -1552,6 +1551,41 @@ def get_conversations_finished_after(
         .limit(limit)
     )
     return [doc.to_dict() for doc in conversations_ref.stream()]
+
+
+def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict, *, firestore_client=None) -> bool:
+    """Add a hint only while both completed capture snapshots still match.
+
+    Read both documents before writing; deletion, discard, or capture-window
+    changes after discovery fence the link. Never alter lifecycle or content.
+    """
+    client = firestore_client or get_firestore_client()
+    collection = client.collection('users').document(uid).collection(conversations_collection)
+    primary_ref = collection.document(primary.conversation_id)
+    secondary_ref = collection.document(secondary.conversation_id)
+
+    @firestore.transactional
+    def link(transaction):
+        primary_row = primary_ref.get(transaction=transaction).to_dict()
+        secondary_row = secondary_ref.get(transaction=transaction).to_dict()
+        for row, expected in ((primary_row, primary), (secondary_row, secondary)):
+            if not row or row.get('discarded') or row.get('status') != 'completed':
+                return False
+            if any(row.get(field) != getattr(expected, field) for field in ('started_at', 'finished_at', 'source')):
+                return False
+        external_data = dict(secondary_row.get('external_data') or {})
+        if external_data.get('duplicate_capture_of') or (primary_row.get('external_data') or {}).get(
+            'duplicate_capture_of'
+        ):
+            return False
+        external_data.update(
+            duplicate_capture_of=primary.conversation_id,
+            cross_device_duplicate={**overlap, 'primary_conversation_id': primary.conversation_id},
+        )
+        transaction.update(secondary_ref, {'external_data': external_data})
+        return True
+
+    return link(client.transaction())
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
