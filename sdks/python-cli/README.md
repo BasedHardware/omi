@@ -87,7 +87,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [🇵🇰 سنڌي ۾ omi-cli تڪڙو آغاز (Sindhi Quickstart)](examples/quickstart.sd.md).
 
 > Looking for localized guides? See the [🇸🇦 دليل البدء السريع (Arabic Quickstart)](examples/quickstart.ar.md), the [🇻🇳 Hướng dẫn nhanh (Vietnamese Quickstart)](examples/quickstart.vi.md), the [🇨🇿 Rychlý start (Czech Quickstart)](examples/quickstart.cs.md), or the [🇮🇱 מדריך מהיר (Hebrew Quickstart)](examples/quickstart.he.md).
-> Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
+> Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md), [🇲🇭 Jintok kōn omi-cli (Marshallese Quickstart)](examples/quickstart.mh.md), [🇹🇱 Tutuhon Ha'u-nia omi-cli (Tetum Quickstart)](examples/quickstart.tet.md), [🇵🇬 Namba Wan Stiat wantaim omi-cli (Tok Pisin Quickstart)](examples/quickstart.tpi.md), [🇧🇴 Nayrïr Jamuqanaka omi-cli ukampi (Aymara Quickstart)](examples/quickstart.ay.md), [🇲🇽 Achtopa Ipan omi-cli (Nahuatl Quickstart)](examples/quickstart.nah.md), [🇬🇺 Guaha gi Tutuhon omi-cli (Chamorro Quickstart)](examples/quickstart.ch.md), [🇲🇿 Matangiriro ne omi-cli (Sena Quickstart)](examples/quickstart.seh.md), or [🇨🇩 Luyantiku ya omi-cli (Kikongo Quickstart)](examples/quickstart.kg.md).
 
 ## Auth
 
