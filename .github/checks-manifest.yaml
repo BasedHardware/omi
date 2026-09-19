@@ -1131,6 +1131,12 @@ checks:
     triggers: ["plugins/**/*.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
+  - id: dropbox-app-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_main.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14130: tools endpoints crashed on malformed/non-dict JSON and null parameters; validates ChatToolResponse contract, defensive payload coercion, and audio buffer bounding"
+
   - id: plugin-oauth-hardening-tests
     command: ["python3", "plugins/oauth/test_oauth_hardening.py"]
     triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
@@ -1221,6 +1227,7 @@ checks:
     triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

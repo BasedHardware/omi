@@ -10,8 +10,8 @@ import secrets
 import struct
 import wave
 from collections import defaultdict
-from datetime import datetime, timedelta
-from typing import Dict, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
 import requests
@@ -30,7 +30,14 @@ from db import (
     get_user_settings,
     store_user_settings,
 )
-from models import Conversation, EndpointResponse
+from models import (
+    Conversation,
+    EndpointResponse,
+    ChatToolResponse,
+    SearchDropboxRequest,
+    ListDropboxRequest,
+    ReadDropboxRequest,
+)
 from dropbox_client import DropboxClient
 
 load_dotenv()
@@ -54,12 +61,25 @@ app = FastAPI(
 
 # ============== Audio Buffer ==============
 # Store audio chunks by user ID
+MAX_AUDIO_BUFFER_BYTES = 50 * 1024 * 1024  # 50 MB limit per user to prevent unbounded memory usage
 audio_buffers: Dict[str, bytes] = defaultdict(bytes)
 audio_sample_rates: Dict[str, int] = {}
 
 
+def _clean_str(val: Any) -> Optional[str]:
+    """Clean and validate string input."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        cleaned = val.strip()
+        return cleaned if cleaned else None
+    return str(val).strip() or None
+
+
 def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
     """Convert raw PCM16 audio to WAV format."""
+    if not isinstance(sample_rate, int) or sample_rate <= 0:
+        sample_rate = 16000
     buffer = io.BytesIO()
     with wave.open(buffer, 'wb') as wav_file:
         wav_file.setnchannels(1)  # Mono
@@ -130,7 +150,7 @@ def refresh_access_token(refresh_token: str) -> Optional[str]:
             data = response.json()
             new_access_token = data.get("access_token")
             expires_in = data.get("expires_in", 14400)  # Default 4 hours
-            new_expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+            new_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
             # Note: We can't update tokens here without uid, caller should handle
             return new_access_token
@@ -448,7 +468,7 @@ async def auth_callback(
             return HTMLResponse("No access token received", status_code=400)
 
         # Calculate expiration
-        expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
         # Get user info
         display_name = ""
@@ -697,42 +717,53 @@ async def get_omi_tools_manifest():
     }
 
 
-@app.post("/tools/search")
+@app.post("/tools/search", response_model=ChatToolResponse)
 async def tool_search_dropbox(request: Request):
     """Search for files in Dropbox."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        query = body.get("query", "")
+        try:
+            body = await request.json()
+        except Exception:
+            return ChatToolResponse(error="Invalid JSON payload")
+
+        if not isinstance(body, dict):
+            return ChatToolResponse(error="Payload must be a JSON object")
+
+        uid = _clean_str(body.get("uid"))
+        query = _clean_str(body.get("query"))
 
         if not uid:
-            return {"error": "Missing user ID"}
+            return ChatToolResponse(error="Missing user ID")
 
         if not query:
-            return {"error": "Please provide a search query"}
+            return ChatToolResponse(error="Please provide a search query")
 
         # Get access token
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return {"error": "Please connect your Dropbox account first in the app settings."}
+            return ChatToolResponse(error="Please connect your Dropbox account first in the app settings.")
 
         # Search Dropbox
         client = DropboxClient(access_token)
         results, error = client.search_files(query, max_results=10)
 
         if error:
-            return {"error": f"Search failed: {error}"}
+            return ChatToolResponse(error=f"Search failed: {error}")
 
         if not results:
-            return {"result": f"No files found matching '{query}'"}
+            return ChatToolResponse(result=f"No files found matching '{query}'")
 
         # Format results
         output = f"**Found {len(results)} file(s) matching '{query}':**\n\n"
         for i, item in enumerate(results, 1):
-            name = item["name"]
-            path = item["path"]
-            file_type = "📁" if item["type"] == "folder" else "📄"
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name", "Unknown")
+            path = item.get("path", "")
+            file_type = "📁" if item.get("type") == "folder" else "📄"
             size = item.get("size", 0)
+            if not isinstance(size, (int, float)):
+                size = 0
             size_str = f"{size / 1024:.1f} KB" if size > 0 else ""
 
             output += f"{i}. {file_type} **{name}**\n"
@@ -741,98 +772,129 @@ async def tool_search_dropbox(request: Request):
                 output += f"   Size: {size_str}\n"
             output += "\n"
 
-        return {"result": output}
+        return ChatToolResponse(result=output)
 
     except Exception as e:
-        return {"error": f"Search error: {str(e)}"}
+        return ChatToolResponse(error=f"Search error: {str(e)}")
 
 
-@app.post("/tools/list")
+@app.post("/tools/list", response_model=ChatToolResponse)
 async def tool_list_dropbox(request: Request):
     """List files in Dropbox folder."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        folder = body.get("folder", "")
+        try:
+            body = await request.json()
+        except Exception:
+            return ChatToolResponse(error="Invalid JSON payload")
+
+        if not isinstance(body, dict):
+            return ChatToolResponse(error="Payload must be a JSON object")
+
+        uid = _clean_str(body.get("uid"))
+        raw_folder = body.get("folder")
+        folder = _clean_str(raw_folder)
 
         if not uid:
-            return {"error": "Missing user ID"}
+            return ChatToolResponse(error="Missing user ID")
 
         # Get access token
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return {"error": "Please connect your Dropbox account first in the app settings."}
+            return ChatToolResponse(error="Please connect your Dropbox account first in the app settings.")
 
         # Get user settings for default folder
         settings = get_user_settings(uid)
-        default_folder = settings.get("folder_name", "Omi Conversations")
+        default_folder = (
+            settings.get("folder_name", "Omi Conversations")
+            if isinstance(settings, dict)
+            else "Omi Conversations"
+        )
 
         # Use default folder if none specified
         if not folder:
             folder = f"/{default_folder}"
+        elif not folder.startswith("/"):
+            folder = f"/{folder}"
 
         # List folder
         client = DropboxClient(access_token)
         results, error = client.list_folder(folder, limit=20)
 
         if error:
-            return {"error": f"Could not list folder: {error}"}
+            return ChatToolResponse(error=f"Could not list folder: {error}")
 
         if not results:
-            return {"result": f"No files found in `{folder}`"}
+            return ChatToolResponse(result=f"No files found in `{folder}`")
 
         # Format results
         output = f"**Files in `{folder}`:**\n\n"
         for i, item in enumerate(results, 1):
-            name = item["name"]
-            file_type = "📁" if item["type"] == "folder" else "📄"
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name", "Unknown")
+            file_type = "📁" if item.get("type") == "folder" else "📄"
             size = item.get("size", 0)
+            if not isinstance(size, (int, float)):
+                size = 0
             size_str = f" ({size / 1024:.1f} KB)" if size > 0 else ""
-            modified = item.get("modified", "")[:10] if item.get("modified") else ""
+            modified_raw = item.get("modified", "")
+            modified = str(modified_raw)[:10] if modified_raw else ""
 
             output += f"{i}. {file_type} **{name}**{size_str}"
             if modified:
                 output += f" - {modified}"
             output += "\n"
 
-        return {"result": output}
+        return ChatToolResponse(result=output)
 
     except Exception as e:
-        return {"error": f"List error: {str(e)}"}
+        return ChatToolResponse(error=f"List error: {str(e)}")
 
 
-@app.post("/tools/read")
+@app.post("/tools/read", response_model=ChatToolResponse)
 async def tool_read_dropbox_file(request: Request):
     """Read and extract text content from a file in Dropbox."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
-        path = body.get("path", "")
+        try:
+            body = await request.json()
+        except Exception:
+            return ChatToolResponse(error="Invalid JSON payload")
+
+        if not isinstance(body, dict):
+            return ChatToolResponse(error="Payload must be a JSON object")
+
+        uid = _clean_str(body.get("uid"))
+        raw_path = body.get("path")
+        path = _clean_str(raw_path)
 
         if not uid:
-            return {"error": "Missing user ID"}
+            return ChatToolResponse(error="Missing user ID")
 
         if not path:
-            return {"error": "Please provide a file path"}
+            return ChatToolResponse(error="Please provide a file path")
+
+        # Ensure path format
+        if not path.startswith("/"):
+            path = f"/{path}"
 
         # Get access token
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return {"error": "Please connect your Dropbox account first in the app settings."}
+            return ChatToolResponse(error="Please connect your Dropbox account first in the app settings.")
 
         # Download file
         client = DropboxClient(access_token)
         file_bytes, error = client.download_file(path)
 
         if error:
-            return {"error": f"Could not download file: {error}"}
+            return ChatToolResponse(error=f"Could not download file: {error}")
 
         if not file_bytes:
-            return {"error": "File is empty"}
+            return ChatToolResponse(error="File is empty")
 
         # Get file extension
-        file_ext = path.lower().split(".")[-1] if "." in path else ""
-        file_name = path.split("/")[-1]
+        file_name = path.rstrip("/").split("/")[-1] if "/" in path else path
+        file_ext = file_name.lower().split(".")[-1] if "." in file_name else ""
 
         # Extract text based on file type
         text_content = ""
@@ -851,11 +913,11 @@ async def tool_read_dropbox_file(request: Request):
                         pages_text.append(f"--- Page {i+1} ---\n{page_text}")
                 text_content = "\n\n".join(pages_text)
                 if not text_content.strip():
-                    return {"error": "Could not extract text from PDF. The PDF may be image-based or scanned."}
+                    return ChatToolResponse(error="Could not extract text from PDF. The PDF may be image-based or scanned.")
             except ImportError:
-                return {"error": "PDF reading is not available. Please contact support."}
+                return ChatToolResponse(error="PDF reading is not available. Please contact support.")
             except Exception as e:
-                return {"error": f"Error reading PDF: {str(e)}"}
+                return ChatToolResponse(error=f"Error reading PDF: {str(e)}")
 
         elif file_ext in [
             "txt",
@@ -880,26 +942,26 @@ async def tool_read_dropbox_file(request: Request):
                 try:
                     text_content = file_bytes.decode("latin-1")
                 except Exception:
-                    return {"error": "Could not decode file as text"}
+                    return ChatToolResponse(error="Could not decode file as text")
 
         elif file_ext in ["doc", "docx"]:
-            return {"error": "Word documents (.doc/.docx) are not yet supported. Please convert to PDF or text."}
+            return ChatToolResponse(error="Word documents (.doc/.docx) are not yet supported. Please convert to PDF or text.")
 
         elif file_ext in ["jpg", "jpeg", "png", "gif", "bmp", "webp"]:
-            return {"error": "Image files cannot be read as text. Please use a document format."}
+            return ChatToolResponse(error="Image files cannot be read as text. Please use a document format.")
 
         elif file_ext in ["mp3", "wav", "m4a", "ogg", "flac"]:
-            return {"error": "Audio files cannot be read as text."}
+            return ChatToolResponse(error="Audio files cannot be read as text.")
 
         elif file_ext in ["mp4", "mov", "avi", "mkv", "webm"]:
-            return {"error": "Video files cannot be read as text."}
+            return ChatToolResponse(error="Video files cannot be read as text.")
 
         else:
             # Try to read as text anyway
             try:
                 text_content = file_bytes.decode("utf-8")
             except Exception:
-                return {"error": f"Cannot read .{file_ext} files as text"}
+                return ChatToolResponse(error=f"Cannot read .{file_ext} files as text")
 
         # Truncate if too long (keep under ~15k chars for reasonable response)
         max_chars = 15000
@@ -911,10 +973,10 @@ async def tool_read_dropbox_file(request: Request):
         # Format output
         output = f"**Contents of `{file_name}`:**\n\n{text_content}"
 
-        return {"result": output}
+        return ChatToolResponse(result=output)
 
     except Exception as e:
-        return {"error": f"Read error: {str(e)}"}
+        return ChatToolResponse(error=f"Read error: {str(e)}")
 
 
 # ============== Audio Streaming Endpoint ==============
@@ -934,8 +996,13 @@ async def receive_audio(
         audio_bytes = await request.body()
 
         if audio_bytes:
+            current_len = len(audio_buffers[uid])
+            if current_len + len(audio_bytes) > MAX_AUDIO_BUFFER_BYTES:
+                print(f"[AUDIO] Buffer limit exceeded for uid={uid}")
+                return {"status": "error", "message": "Audio buffer limit exceeded"}
+
             audio_buffers[uid] += audio_bytes
-            audio_sample_rates[uid] = sample_rate
+            audio_sample_rates[uid] = sample_rate if isinstance(sample_rate, int) and sample_rate > 0 else 16000
             print(f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, total: {len(audio_buffers[uid])} bytes")
 
         return {"status": "ok"}
