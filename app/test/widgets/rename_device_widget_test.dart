@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/rename_device_widget.dart';
+import 'package:omi/services/dev_controls/addressability_catalog.dart';
 
 Widget _host({required Future<bool> Function(String) onRename, String initialName = 'Omi'}) {
   return MaterialApp(
@@ -46,7 +47,7 @@ bool? _lastResult;
 Future<void> _openDialog(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('open')));
   await tester.pumpAndSettle();
-  expect(find.byKey(const Key('rename_device_field')), findsOneWidget);
+  expect(find.byKey(OmiKeys.settingsRenameField), findsOneWidget);
 }
 
 void main() {
@@ -64,12 +65,12 @@ void main() {
     );
     await _openDialog(tester);
 
-    await tester.enterText(find.byKey(const Key('rename_device_field')), '  Kitchen Omi ');
-    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.enterText(find.byKey(OmiKeys.settingsRenameField), '  Kitchen Omi ');
+    await tester.tap(find.byKey(OmiKeys.settingsRenameSave));
     await tester.pumpAndSettle();
 
     expect(sent, ['Kitchen Omi']);
-    expect(find.byKey(const Key('rename_device_field')), findsNothing);
+    expect(find.byKey(OmiKeys.settingsRenameField), findsNothing);
     expect(_lastResult, isTrue);
   });
 
@@ -85,13 +86,13 @@ void main() {
     );
     await _openDialog(tester);
 
-    await tester.enterText(find.byKey(const Key('rename_device_field')), '   ');
-    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.enterText(find.byKey(OmiKeys.settingsRenameField), '   ');
+    await tester.tap(find.byKey(OmiKeys.settingsRenameSave));
     await tester.pumpAndSettle();
 
     expect(calls, 0);
     expect(find.byKey(const Key('rename_device_error')), findsOneWidget);
-    expect(find.byKey(const Key('rename_device_field')), findsOneWidget);
+    expect(find.byKey(OmiKeys.settingsRenameField), findsOneWidget);
   });
 
   testWidgets('rejects a name over the byte budget locally', (tester) async {
@@ -106,8 +107,8 @@ void main() {
     );
     await _openDialog(tester);
 
-    await tester.enterText(find.byKey(const Key('rename_device_field')), 'x' * 21);
-    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.enterText(find.byKey(OmiKeys.settingsRenameField), 'x' * 21);
+    await tester.tap(find.byKey(OmiKeys.settingsRenameSave));
     await tester.pumpAndSettle();
 
     expect(calls, 0);
@@ -118,11 +119,11 @@ void main() {
     await tester.pumpWidget(_host(onRename: (_) async => false));
     await _openDialog(tester);
 
-    await tester.enterText(find.byKey(const Key('rename_device_field')), 'Kitchen Omi');
-    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.enterText(find.byKey(OmiKeys.settingsRenameField), 'Kitchen Omi');
+    await tester.tap(find.byKey(OmiKeys.settingsRenameSave));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('rename_device_field')), findsOneWidget);
+    expect(find.byKey(OmiKeys.settingsRenameField), findsOneWidget);
     expect(find.byKey(const Key('rename_device_error')), findsOneWidget);
     expect(_lastResult, isNull);
   });
@@ -140,12 +141,12 @@ void main() {
     );
     await _openDialog(tester);
 
-    await tester.enterText(find.byKey(const Key('rename_device_field')), 'Kitchen Omi');
-    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.enterText(find.byKey(OmiKeys.settingsRenameField), 'Kitchen Omi');
+    await tester.tap(find.byKey(OmiKeys.settingsRenameSave));
     await tester.pump();
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.tap(find.byKey(OmiKeys.settingsRenameSave));
     await tester.pump();
     expect(calls, 1);
 
@@ -164,8 +165,8 @@ void main() {
     );
     await _openDialog(tester);
 
-    await tester.enterText(find.byKey(const Key('rename_device_field')), 'Kitchen Omi');
-    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.enterText(find.byKey(OmiKeys.settingsRenameField), 'Kitchen Omi');
+    await tester.tap(find.byKey(OmiKeys.settingsRenameSave));
     await tester.pumpAndSettle();
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
@@ -186,7 +187,7 @@ void main() {
     );
     await _openDialog(tester);
 
-    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.tap(find.byKey(OmiKeys.settingsRenameSave));
     await tester.pumpAndSettle();
 
     expect(calls, 0);

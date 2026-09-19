@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/services/dev_controls/addressability_catalog.dart';
 import 'package:omi/services/devices/device_name_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -108,7 +109,7 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
             Container(
               decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
               child: TextField(
-                key: const Key('rename_device_field'),
+                key: OmiKeys.settingsRenameField,
                 controller: _controller,
                 autofocus: true,
                 enabled: !_isSaving,
@@ -144,7 +145,7 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
               children: [
                 Expanded(
                   child: GestureDetector(
-                    key: const Key('rename_device_cancel'),
+                    key: OmiKeys.settingsRenameCancel,
                     onTap: _isSaving ? null : () => Navigator.of(context).pop(false),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -164,7 +165,7 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: GestureDetector(
-                    key: const Key('rename_device_save'),
+                    key: OmiKeys.settingsRenameSave,
                     onTap: _save,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 14),
