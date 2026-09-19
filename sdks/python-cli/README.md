@@ -92,6 +92,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [🇵🇭 Mga Unang Lakang gamit ang omi-cli (Cebuano Quickstart)](examples/quickstart.ceb.md).
 > Looking for localized guides? See the [Diné bizaad (Navajo Quickstart)](examples/quickstart.nv.md).
 > Looking for localized guides? See the [føroysk byrjanarvegleiðing (Faroese Quickstart)](examples/quickstart.fo.md), the [lëtzebuergesch Ufanksguide (Luxembourgish Quickstart)](examples/quickstart.lb.md), the [Fryske flugge startgids (Frisian Quickstart)](examples/quickstart.fy.md), the [stiùireadh tòiseachaidh Gàidhlig (Scottish Gaelic Quickstart)](examples/quickstart.gd.md), or the [huanadenn deraouiñ e brezhoneg (Breton Quickstart)](examples/quickstart.br.md).
+> Looking for localized guides? See the [guida rapida n sicilianu (Sicilian Quickstart)](examples/quickstart.scn.md), the [guida de començament rapid en occitan (Occitan Quickstart)](examples/quickstart.oc.md), the [aratohu tere mō te reo Māori (Māori Quickstart)](examples/quickstart.mi.md), the [guía ñepyrũ pya'e avañe'ẽme (Guarani Quickstart)](examples/quickstart.gn.md), or the [ئۇيغۇرچە تېز باشلاش قوللانمىسى (Uyghur Quickstart)](examples/quickstart.ug.md).
 
 ## Auth
 
