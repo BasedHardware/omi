@@ -291,6 +291,11 @@ class SanitizerAndHelperTests(unittest.TestCase):
         self.assertEqual(main._safe_category("cs.AI"), "cs.ai")
         self.assertEqual(main._safe_category("stat.ML"), "stat.ml")
         self.assertEqual(main._safe_category("quant-ph"), "quant-ph")
+        self.assertEqual(main._safe_category("physics.acc-ph"), "physics.acc-ph")
+        self.assertEqual(main._safe_category("physics.optics"), "physics.optics")
+        self.assertEqual(main._safe_category("cond-mat.mes-hall"), "cond-mat.mes-hall")
+        self.assertEqual(main._safe_category("cond-mat.soft"), "cond-mat.soft")
+        self.assertEqual(main._safe_category("q-bio.NC"), "q-bio.nc")
         self.assertEqual(main._safe_category("  math.PR  "), "math.pr")
         # official arXiv taxonomy categories beyond two-letter subjects
         # (issue #14380)
@@ -316,6 +321,13 @@ class SanitizerAndHelperTests(unittest.TestCase):
         self.assertEqual(main._safe_paper_id("https://arxiv.org/abs/2401.01234"), "2401.01234")
         self.assertEqual(main._safe_paper_id("http://arxiv.org/abs/cs/9901001v2"), "cs/9901001")
         self.assertEqual(main._safe_paper_id("cs/9901001"), "cs/9901001")
+        self.assertEqual(main._safe_paper_id("solv-int/9701001v1"), "solv-int/9701001")
+        self.assertEqual(main._safe_paper_id("solv-int/9701001"), "solv-int/9701001")
+        self.assertEqual(main._safe_paper_id("arXiv:solv-int/9701001v1"), "solv-int/9701001")
+        self.assertEqual(main._safe_paper_id("arxiv:solv-int/9701001v1"), "solv-int/9701001")
+        self.assertEqual(main._safe_paper_id("https://arxiv.org/abs/solv-int/9701001v1"), "solv-int/9701001")
+        self.assertEqual(main._safe_paper_id("math.PR/0001001v2"), "math.PR/0001001")
+        self.assertEqual(main._safe_paper_id("math.pr/0001001v2"), "math.pr/0001001")
         self.assertIsNone(main._safe_paper_id("invalid-id"))
         self.assertIsNone(main._safe_paper_id(""))
         self.assertIsNone(main._safe_paper_id(None))
@@ -527,6 +539,40 @@ class EndpointUnitTests(unittest.TestCase):
         self.assertIsNone(res.result)
         self.assertIn("Provide a valid arXiv paper ID", res.error)
 
+    def test_search_papers_hyphenated_category(self):
+        req = models.SearchPapersRequest(category="physics.acc-ph")
+        with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=SAMPLE_ATOM_FEED)) as mock_req:
+            res = _run(main.search_papers(req))
+            mock_req.assert_called_once_with(
+                {
+                    "search_query": "cat:physics.acc-ph",
+                    "start": 0,
+                    "max_results": 5,
+                    "sortBy": "relevance",
+                    "sortOrder": "descending",
+                }
+            )
+
+        self.assertIsNone(res.error)
+        self.assertIn("Attention Is All You Need", res.result)
+
+    def test_search_papers_combined_query_and_hyphenated_category(self):
+        req = models.SearchPapersRequest(query="electron", category="cond-mat.mes-hall")
+        with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=SAMPLE_ATOM_FEED)) as mock_req:
+            res = _run(main.search_papers(req))
+            mock_req.assert_called_once_with(
+                {
+                    "search_query": "all:electron AND cat:cond-mat.mes-hall",
+                    "start": 0,
+                    "max_results": 5,
+                    "sortBy": "relevance",
+                    "sortOrder": "descending",
+                }
+            )
+
+        self.assertIsNone(res.error)
+        self.assertIn("Attention Is All You Need", res.result)
+
     def test_get_paper_details_versioned_id(self):
         req = models.GetPaperDetailsRequest(paper_id="1706.03762v7")
         with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=SAMPLE_ATOM_FEED)) as mock_req:
@@ -535,6 +581,22 @@ class EndpointUnitTests(unittest.TestCase):
 
         self.assertIsNone(res.error)
         self.assertIn("Attention Is All You Need", res.result)
+
+    def test_get_paper_details_legacy_solv_int_versioned_id(self):
+        req = models.GetPaperDetailsRequest(paper_id="solv-int/9701001v1")
+        with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=SAMPLE_ATOM_FEED)) as mock_req:
+            res = _run(main.get_paper_details(req))
+            mock_req.assert_called_once_with({"id_list": "solv-int/9701001", "max_results": 1})
+
+        self.assertIsNone(res.error)
+        self.assertIn("Attention Is All You Need", res.result)
+
+    def test_get_paper_details_legacy_solv_int_url_and_prefix(self):
+        for test_id in ("https://arxiv.org/abs/solv-int/9701001v1", "arXiv:solv-int/9701001v1", "arxiv:solv-int/9701001v2"):
+            with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=SAMPLE_ATOM_FEED)) as mock_req:
+                res = _run(main.get_paper_details({"paper_id": test_id}))
+                mock_req.assert_called_once_with({"id_list": "solv-int/9701001", "max_results": 1})
+            self.assertIsNone(res.error)
 
     def test_get_paper_details_url_id(self):
         req = models.GetPaperDetailsRequest(paper_id="https://arxiv.org/abs/1706.03762")
