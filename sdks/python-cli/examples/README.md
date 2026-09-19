@@ -11,11 +11,13 @@
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
+* [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
+* [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
@@ -90,3 +92,18 @@
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
+* [`quickstart.bi.md`](quickstart.bi.md) — fes stef wetem omi-cli (Bislama Quickstart).
+* [`quickstart.srn.md`](quickstart.srn.md) — fosi stap nanga omi-cli (Sranan Tongo Quickstart).
+* [`quickstart.krl.md`](quickstart.krl.md) — enzimäzet askelit omi-cli:n kel (Karelian Quickstart).
+* [`quickstart.vro.md`](quickstart.vro.md) — edimädseq sammuq omi-cli-ga (Võro Quickstart).
+* [`quickstart.csb.md`](quickstart.csb.md) — pierszé kroczi z omi-cli (Kashubian Quickstart).
+* [`quickstart.szl.md`](quickstart.szl.md) — pjyrsze kroki z omi-cli (Silesian Quickstart).
+* [`quickstart.rue.md`](quickstart.rue.md) — першы крокы з omi-cli (Rusyn Quickstart).
+* [`quickstart.dsb.md`](quickstart.dsb.md) — pšedne kšace z omi-cli (Lower Sorbian Quickstart).
+* [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
+* [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
+* [`quickstart.crh.md`](quickstart.crh.md) — omi-cli ile ilk adımlar (Crimean Tatar Quickstart).
+* [`quickstart.nv.md`](quickstart.nv.md) — áłtsé bee omi-cli (Navajo Quickstart).
+* [`quickstart.iu.md`](quickstart.iu.md) — ᓯᕗᓪᓕᐹ omi-cli (Inuktitut Quickstart).
+* [`quickstart.chr.md`](quickstart.chr.md) — ᎢᎬᏱ ᏗᏂᎩᏍᏗ omi-cli (Cherokee Quickstart).
+* [`quickstart.dz.md`](quickstart.dz.md) — omi-cli གི་ཐོག་མའི་གོམ་པ། (Dzongkha Quickstart).
