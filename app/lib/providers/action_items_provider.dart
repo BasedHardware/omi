@@ -30,19 +30,29 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
 
+typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(
+  String id, {
+  String? description,
+  bool? completed,
+  DateTime? dueAt,
+});
+
 class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
     ActionItemsFetcher? getActionItems,
     DeleteActionItemRequest? deleteActionItemRequest,
+    UpdateActionItemRequest? updateActionItemRequest,
     api.ActionItemsApi? actionItemsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
+        _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
         _actionItemsApi = actionItemsApi {
     unawaited(_preload());
   }
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
+  final UpdateActionItemRequest _updateActionItemRequest;
   final api.ActionItemsApi? _actionItemsApi;
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
@@ -439,12 +449,7 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      final success = await api.updateActionItem(
-        item.id,
-        description: item.description,
-        completed: newState,
-        dueAt: item.dueAt,
-      );
+      final success = await _updateActionItemRequest(item.id, completed: newState);
 
       if (success == null) {
         _findAndUpdateItemState(item.id, !newState);
