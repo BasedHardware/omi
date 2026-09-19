@@ -1713,12 +1713,12 @@ def get_app_thumbnail_url(thumbnail_id: str) -> str:
 # **********************************
 # ************* CHAT FILES **************
 # **********************************
-def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
+def upload_multi_chat_files(file_paths: List[str], uid: str) -> Dict[str, str]:
     """
     Upload multiple files to Google Cloud Storage in the chat files bucket.
 
     Args:
-        files_name: List of file paths to upload
+        file_paths: List of file paths to upload
         uid: User ID to use as part of the storage path
 
     Returns:
@@ -1727,11 +1727,12 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
     bucket = _get_storage_client().bucket(chat_files_bucket)
     dictFiles: Dict[str, str] = {}
     with owner_storage_write_gate(uid, bucket):
-        for name in files_name:
+        for file_path in file_paths:
+            name = os.path.basename(file_path)
             try:
                 blob = bucket.blob(f'{uid}/{name}')
                 blob.cache_control = 'public, no-cache'
-                blob.upload_from_filename(f'./{name}')
+                blob.upload_from_filename(file_path)
                 try:
                     blob.make_public()
                 except Exception as e:

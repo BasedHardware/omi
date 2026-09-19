@@ -1869,7 +1869,7 @@ def upload_file_chat(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
 ):
-    thumbs_name = []
+    thumb_paths = []
     files_chat = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
@@ -1884,34 +1884,30 @@ def upload_file_chat(
             except UnsupportedChatFileError as error:
                 raise HTTPException(status_code=400, detail=str(error))
 
-            thumb_name = result.get("thumbnail_name", "")
-            if thumb_name != "":
-                thumbs_name.append(thumb_name)
+            thumb_path = result.get("thumbnail", "")
+            if thumb_path != "":
+                thumb_paths.append(thumb_path)
 
             filechat = FileChat(
                 id=str(uuid.uuid4()),
-                name=result.get("file_name", ""),
+                name=safe_suffix,
                 mime_type=result.get("mime_type", ""),
                 openai_file_id=result.get("file_id", ""),
                 created_at=datetime.now(timezone.utc),
-                thumb_name=thumb_name,
+                thumb_name=result.get("thumbnail_name", ""),
             )
             files_chat.append(filechat)
         finally:
             if temp_file.exists():
                 temp_file.unlink()
 
-    if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+    if len(thumb_paths) > 0:
+        thumbs_url = storage.upload_multi_chat_files(thumb_paths, uid)
         for fc in files_chat:
-            if not fc.is_image():
-                continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
-            fc.thumbnail = thumb_path
-            # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
-            if thumb_file.exists():
-                thumb_file.unlink()
+            if fc.is_image():
+                fc.thumbnail = thumbs_url.get(fc.thumb_name, "")
+        for thumb_path in thumb_paths:
+            Path(thumb_path).unlink(missing_ok=True)
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]
@@ -1937,7 +1933,7 @@ def upload_file_chat_v1(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
 ):
-    thumbs_name = []
+    thumb_paths = []
     files_chat = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
@@ -1952,33 +1948,30 @@ def upload_file_chat_v1(
             except UnsupportedChatFileError as error:
                 raise HTTPException(status_code=400, detail=str(error))
 
-            thumb_name = result.get("thumbnail_name", "")
-            if thumb_name != "":
-                thumbs_name.append(thumb_name)
+            thumb_path = result.get("thumbnail", "")
+            if thumb_path != "":
+                thumb_paths.append(thumb_path)
 
             filechat = FileChat(
                 id=str(uuid.uuid4()),
-                name=result.get("file_name", ""),
+                name=safe_suffix,
                 mime_type=result.get("mime_type", ""),
                 openai_file_id=result.get("file_id", ""),
                 created_at=datetime.now(timezone.utc),
-                thumb_name=thumb_name,
+                thumb_name=result.get("thumbnail_name", ""),
             )
             files_chat.append(filechat)
         finally:
             if temp_file.exists():
                 temp_file.unlink()
 
-    if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+    if len(thumb_paths) > 0:
+        thumbs_url = storage.upload_multi_chat_files(thumb_paths, uid)
         for fc in files_chat:
-            if not fc.is_image():
-                continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
-            fc.thumbnail = thumb_path
-            # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
-            thumb_file.unlink()
+            if fc.is_image():
+                fc.thumbnail = thumbs_url.get(fc.thumb_name, "")
+        for thumb_path in thumb_paths:
+            Path(thumb_path).unlink(missing_ok=True)
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]
