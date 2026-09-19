@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: iq-rating-score-parsing-tests
+    command: ["python3", "plugins/iq_rating/test_main.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a non-object element or non-integer iq in the AI score array must skip only that element, not discard the whole batch's scores"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
