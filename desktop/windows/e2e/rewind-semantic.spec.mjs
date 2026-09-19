@@ -294,7 +294,7 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
   // burn ~91s of retries, and the FTS rows must not be held hostage behind it.
   const phase1 = await win.evaluate((q) => window.omi.rewindSearch(q), QUERY)
   assert.deepEqual(
-    phase1.map((g) => g.representative.id).sort(),
+    phase1.groups.map((g) => g.representative.id).sort(),
     ftsIds,
     'phase 1 is keyword-only, and immediate'
   )
@@ -326,7 +326,7 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
   await win.evaluate(() => (window.__semantic = []))
   const degraded = await win.evaluate((q) => window.omi.rewindSearch(q), QUERY)
   assert.deepEqual(
-    degraded.map((g) => g.representative.id).sort(),
+    degraded.groups.map((g) => g.representative.id).sort(),
     ftsIds,
     'degrades to keyword-only instead of erroring'
   )
