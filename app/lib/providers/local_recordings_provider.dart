@@ -44,6 +44,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
   static const String _jobsPrefKey = 'localRecordingJobs';
   Map<String, String> _jobs = {};
 
+  static const String _ownersFileName = 'omibatch_owners.json';
+
   // Exact per-file duration (seconds), computed once by walking the frame
   // prefixes. Finalized .bin files are immutable, so this is cached by fileName.
   final Map<String, int> _secondsByFile = {};
@@ -128,14 +130,25 @@ class LocalRecordingsProvider extends ChangeNotifier {
         _recordings = [];
         return;
       }
+      final uid = SharedPreferencesUtil().uid;
+      final ownersFile = File('${dir.path}/$_ownersFileName');
+      final owners = _readOwners(ownersFile);
+      var ownersChanged = false;
       final list = <LocalRecording>[];
       final seen = <String>{};
+      final onDisk = <String>{};
       for (final entity in dir.listSync().whereType<File>()) {
         final name = entity.path.split('/').last;
         // Only batch recordings (audio_omibatch* — includes the omibatchlimitless
         // marker) — never offline-sync WAL flushes, which share this directory and
         // the same audio_*.bin naming.
         if (!name.startsWith('audio_$batchRecordingDevice') || !name.endsWith('.bin')) continue;
+        onDisk.add(name);
+        if (uid.isNotEmpty && !owners.containsKey(name)) {
+          owners[name] = uid;
+          ownersChanged = true;
+        }
+        if (owners[name] != uid) continue;
         final size = await entity.length();
         seen.add(name);
         final rec = LocalRecording.fromFile(
@@ -149,6 +162,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
         );
         if (rec != null) list.add(rec);
       }
+      final ownerCount = owners.length;
+      owners.removeWhere((name, _) => !onDisk.contains(name));
+      if (ownersChanged || owners.length != ownerCount) await ownersFile.writeAsString(jsonEncode(owners));
       list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       _recordings = list;
       _secondsByFile.removeWhere((k, _) => !seen.contains(k));
@@ -488,6 +504,25 @@ class LocalRecordingsProvider extends ChangeNotifier {
   }
 
   // ───────────────────────── sidecar ─────────────────────────
+
+  Map<String, String> _readOwners(File file) {
+    try {
+      if (!file.existsSync()) return {};
+      final decoded = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      return decoded.map((k, v) => MapEntry(k, v.toString()));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  void clearUserData() {
+    _recordings = [];
+    _jobs = {};
+    _failedName = null;
+    _autoFailures.clear();
+    _stopReconcileTimer();
+    if (!_disposed) notifyListeners();
+  }
 
   Map<String, String> _loadJobs() {
     try {
