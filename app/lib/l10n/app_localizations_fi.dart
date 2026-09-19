@@ -10094,4 +10094,17 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'Toinen laite';
+
+  @override
+  String get pairSecondDevice => 'Yhdistä toinen laite';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.';
+
+  @override
+  String get forgetSecondDevice => 'Unohda toinen laite';
 }

@@ -10129,4 +10129,17 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'Второ устройство';
+
+  @override
+  String get pairSecondDevice => 'Сдвояване на второ устройство';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Свържете OmiGlass заедно с вашия Omi, така че снимките и звукът да влизат в един и същ разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Забрави второто устройство';
 }

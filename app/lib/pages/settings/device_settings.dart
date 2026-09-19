@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
@@ -798,21 +797,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             // Disconnect
             GestureDetector(
               onTap: () async {
-                final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
-
-                await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-                SharedPreferencesUtil().deviceName = '';
-
-                if (deviceId.isNotEmpty) {
-                  await ServiceManager.instance().device.forgetDevice(deviceId);
-                  try {
-                    BleHostApi().unmanageDevice(deviceId);
-                  } catch (_) {}
-                }
-
-                provider.setIsConnected(false);
-                await provider.setConnectedDevice(null);
-                provider.updateConnectingStatus(false);
+                final deviceId = provider.connectedDevice?.id ?? provider.pairedDevice?.id ?? '';
+                // Forgets prefs, connection, transport and native registration; a
+                // paired second device (if any) is promoted and stays connected.
+                await provider.forgetDevice(deviceId);
                 PlatformManager.instance.analytics.disconnectFriendClicked();
                 if (mounted) {
                   Navigator.of(context).pop();

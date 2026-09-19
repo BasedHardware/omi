@@ -10104,4 +10104,17 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'دوسرا ڈیوائس';
+
+  @override
+  String get pairSecondDevice => 'دوسرا ڈیوائس جوڑیں';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'اپنے Omi کے ساتھ OmiGlass کو کنیکٹ کریں تاکہ تصاویر اور آڈیو ایک ہی گفتگو میں جائیں۔';
+
+  @override
+  String get forgetSecondDevice => 'دوسرا ڈیوائس بھول جائیں';
 }

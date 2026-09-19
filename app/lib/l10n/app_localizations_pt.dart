@@ -10102,4 +10102,17 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'Segundo dispositivo';
+
+  @override
+  String get pairSecondDevice => 'Emparelhar um segundo dispositivo';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Conecte o OmiGlass junto ao seu Omi para que fotos e áudio entrem na mesma conversa.';
+
+  @override
+  String get forgetSecondDevice => 'Esquecer segundo dispositivo';
 }

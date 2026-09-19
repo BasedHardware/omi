@@ -10077,4 +10077,17 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'Anden enhed';
+
+  @override
+  String get pairSecondDevice => 'Par en anden enhed';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Forbind OmiGlass sammen med din Omi, så billeder og lyd ender i samme samtale.';
+
+  @override
+  String get forgetSecondDevice => 'Glem anden enhed';
 }

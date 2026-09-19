@@ -61,7 +61,7 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops events with a foreign id so a stale native event can't clobber a fresh session; `start()` onto a live native session adopts the new id and re-emits state so the caller converges; `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
 - Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit iOS, libopus JNI shim Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or auto offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
 
-On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
+Contracts: [on-device speech](../.github/agent-docs/on-device-speech.md); [Omi + OmiGlass together](../.github/agent-docs/multi-device-capture.md) (multi-connection, audio/photo roles).
 
 ## Permission Matrix
 
@@ -75,8 +75,6 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Camera | — | NSCameraUsageDescription | QR/photo features |
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
 | Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
-
-Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
 
 ## Test Strategy
 

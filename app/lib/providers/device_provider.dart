@@ -17,6 +17,7 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/devices/device_pairing_roles.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -50,8 +51,45 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   RingStatus? _ringStatus;
   RingStatus? get ringStatus => _ringStatus;
 
+  /// The device carrying audio for the current session (the "primary" device
+  /// the rest of the app knows: battery, firmware, storage sync). Roles are
+  /// assigned by [DevicePairingRoles] from every connected device.
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
+
+  /// Camera device connected next to [connectedDevice] — OmiGlass paired with
+  /// an Omi pendant. Its photos join the pendant's conversation. Null when no
+  /// second device is connected (an OmiGlass on its own is [connectedDevice]).
+  BtDevice? companionDevice;
+  bool get isCompanionConnected => companionDevice != null;
+  int companionBatteryLevel = -1;
+  StreamSubscription<List<int>>? _companionBatteryListener;
+
+  /// Every device currently connected, in connection order.
+  final Map<String, BtDevice> _connectedDevices = {};
+  List<BtDevice> get connectedDevices => List.unmodifiable(_connectedDevices.values);
+
+  /// The saved device that is not the current primary — shown as the
+  /// (possibly offline) second device. When both saved devices are offline the
+  /// primary slot is [pairedDevice] and this is the companion slot.
+  BtDevice? get pairedCompanionDevice {
+    final preferences = SharedPreferencesUtil();
+    final currentPrimaryId = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice!.id : preferences.btDevice.id;
+    for (final saved in [preferences.btDevice, preferences.companionBtDevice]) {
+      if (saved != null && saved.id.isNotEmpty && saved.id != currentPrimaryId) return saved;
+    }
+    return null;
+  }
+
+  Future<void> _rolesReconciliation = Future.value();
+
+  @visibleForTesting
+  Future<void> get pendingRolesReconciliation => _rolesReconciliation;
+
+  /// Id of the device whose full connect path ([_onDeviceConnected]) is in
+  /// effect. Distinct from [connectedDevice], which the pairing flow sets
+  /// eagerly before that path has run.
+  String? _activeAudioDeviceId;
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
@@ -94,8 +132,23 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Timer? _disconnectRescanTimer;
   Timer? _firmwarePromptTimer;
   bool _isDisposed = false;
-  final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
-  final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
+  // Keeps scanning while a device is already paired so the picker can offer a
+  // second device (OmiGlass next to an Omi). The default loop stops as soon as
+  // something is paired; this one runs until [stopDiscoveryScanning].
+  bool _discoveryWhilePaired = false;
+  // One debouncer pair per device id: a pendant and glasses connecting within
+  // the same 100 ms must not cancel each other's connect handling.
+  final Map<String, Debouncer> _disconnectDebouncers = {};
+  final Map<String, Debouncer> _connectDebouncers = {};
+
+  @visibleForTesting
+  static Duration disconnectDebounceDelay = const Duration(milliseconds: 500);
+
+  Debouncer _disconnectDebouncerFor(String deviceId) =>
+      _disconnectDebouncers.putIfAbsent(deviceId, () => Debouncer(delay: disconnectDebounceDelay));
+
+  Debouncer _connectDebouncerFor(String deviceId) =>
+      _connectDebouncers.putIfAbsent(deviceId, () => Debouncer(delay: const Duration(milliseconds: 100)));
 
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
@@ -229,12 +282,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future getDeviceInfo() async {
     if (connectedDevice != null) {
       if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
-        SharedPreferencesUtil().btDevice = pairedDevice!;
+        _persistPairedDevice(pairedDevice!);
         return;
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
-      SharedPreferencesUtil().btDevice = pairedDevice!;
+      _persistPairedDevice(pairedDevice!);
     } else {
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
         pairedDevice = BtDevice.empty();
@@ -243,6 +296,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
     }
     notifyListeners();
+  }
+
+  /// Refreshes the saved copy of the audio device. When it already occupies the
+  /// companion slot (pendant offline, glasses promoted to audio) the slot is
+  /// updated in place so the pendant stays saved as primary.
+  void _persistPairedDevice(BtDevice device) {
+    final preferences = SharedPreferencesUtil();
+    if (preferences.companionBtDevice?.id == device.id && preferences.btDevice.id != device.id) {
+      preferences.companionBtDevice = device;
+      return;
+    }
+    preferences.btDevice = device;
   }
 
   Future<bool> findDevice() {
@@ -441,37 +506,41 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _lastBatteryNotifyTime = null;
   }
 
-  /// Kicks off a single connection attempt. Native handles auto-reconnect after this.
+  /// Kicks off a single connection attempt per saved device that is not yet
+  /// connected. Native handles auto-reconnect after this.
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     if (_isDisposed) return;
-    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
-
     if (ServiceManager.instance().device.staleBondRecoveryRequired) {
       Logger.debug('initiateConnection ($caller): blocked until stale bond recovery');
       return;
     }
 
-    // Already connected — nothing to do
-    if (isConnected || connectedDevice != null) return;
+    final pairedDeviceIds = SharedPreferencesUtil().pairedDeviceIds;
 
     // No paired device (onboarding) — start periodic scanning so devices
     // turned on after the page loads are still discovered.
-    if (pairedDeviceId.isEmpty) {
-      if (boundDeviceOnly) return;
+    if (pairedDeviceIds.isEmpty) {
+      if (isConnected || connectedDevice != null || boundDeviceOnly) return;
       _startDiscoveryScanning();
       return;
     }
 
-    // Known device — use ensureConnection which creates the NativeBleTransport,
+    final pending = pairedDeviceIds.where((id) => !_connectedDevices.containsKey(id)).toList();
+    if (pending.isEmpty) return;
+
+    // Known devices — use ensureConnection which creates the NativeBleTransport,
     // then connects natively. If native is already connected, it just re-notifies Dart.
     // force: true ensures we retry even if a previous attempt left a stale connection.
-    try {
-      await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: true);
-    } catch (e) {
-      // Timeout or transport failure — native keeps trying in the background.
-      // NativeBleTransport's BleBridge registration persists, so auto-reconnect still works.
-      Logger.debug('initiateConnection ($caller): ensureConnection failed: $e');
-    }
+    // Attempts run in parallel so an out-of-range pendant does not delay the glasses.
+    await Future.wait(pending.map((deviceId) async {
+      try {
+        await ServiceManager.instance().device.ensureConnection(deviceId, force: true);
+      } catch (e) {
+        // Timeout or transport failure — native keeps trying in the background.
+        // NativeBleTransport's BleBridge registration persists, so auto-reconnect still works.
+        Logger.debug('initiateConnection ($caller): ensureConnection($deviceId) failed: $e');
+      }
+    }));
   }
 
   void _startDiscoveryScanning() {
@@ -481,7 +550,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _discoveryTimer = Timer.periodic(const Duration(seconds: 10), (_) => _runDiscoveryScan());
   }
 
+  void startDiscoveryScanning() {
+    if (_isDisposed) return;
+    _discoveryWhilePaired = true;
+    _startDiscoveryScanning();
+  }
+
   void stopDiscoveryScanning() {
+    _discoveryWhilePaired = false;
     _discoveryTimer?.cancel();
     _discoveryTimer = null;
   }
@@ -493,7 +569,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool get hasActiveDiscoveryTimer => _discoveryTimer?.isActive ?? false;
 
   Future<void> _runDiscoveryScan() async {
-    if (SharedPreferencesUtil().btDevice.id.isNotEmpty || isConnected) {
+    if (!_discoveryWhilePaired && (SharedPreferencesUtil().btDevice.id.isNotEmpty || isConnected)) {
       _discoveryTimer?.cancel();
       return;
     }
@@ -516,19 +592,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     ServiceManager.instance().device.clearStaleBondRecoveryRequirement();
 
-    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
-    if (pairedDeviceId.isEmpty) {
+    final pairedDeviceIds = SharedPreferencesUtil().pairedDeviceIds;
+    if (pairedDeviceIds.isEmpty) {
       updateConnectingStatus(false);
       return;
     }
 
     try {
-      var connection = await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: true);
-      if (connection != null) {
-        await setConnectedDevice(connection.device);
-        setisDeviceStorageSupport();
-        SharedPreferencesUtil().deviceName = connection.device.name;
-        setIsConnected(true);
+      final connections = await Future.wait(pairedDeviceIds.map((deviceId) async {
+        try {
+          return await ServiceManager.instance().device.ensureConnection(deviceId, force: true);
+        } catch (e) {
+          Logger.debug('scanAndConnectToDevice: connection to $deviceId failed: $e');
+          return null;
+        }
+      }));
+      final connectedNow = connections.whereType<DeviceConnection>().map((c) => c.device).toList();
+      if (connectedNow.isNotEmpty) {
+        for (final device in connectedNow) {
+          await registerConnectedDevice(device);
+        }
       }
     } catch (e) {
       Logger.debug('scanAndConnectToDevice: connection failed: $e');
@@ -545,7 +628,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void setIsConnected(bool value) {
     isConnected = value;
-    if (isConnected) {
+    if (isConnected && !_discoveryWhilePaired) {
       _discoveryTimer?.cancel();
     }
     notifyListeners();
@@ -560,17 +643,23 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
+    _companionBatteryListener?.cancel();
     _discoveryTimer?.cancel();
     _disconnectRescanTimer?.cancel();
     _firmwarePromptTimer?.cancel();
-    _disconnectDebouncer.cancel();
-    _connectDebouncer.cancel();
+    for (final debouncer in _disconnectDebouncers.values) {
+      debouncer.cancel();
+    }
+    for (final debouncer in _connectDebouncers.values) {
+      debouncer.cancel();
+    }
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
 
-  void onDeviceDisconnected() async {
+  Future<void> onDeviceDisconnected() async {
     Logger.debug('onDisconnected inside: $connectedDevice');
+    _activeAudioDeviceId = null;
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _bleChargingStatusListener?.cancel();
@@ -639,8 +728,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return (message, hasUpdate, version, latestFirmwareDetails);
   }
 
-  void _onDeviceConnected(BtDevice device) async {
+  Future<void> _onDeviceConnected(BtDevice device) async {
     Logger.debug('_onConnected inside: $connectedDevice');
+    _activeAudioDeviceId = device.id;
     final deviceSetup = setConnectedDevice(device);
     final connectionSession = _firmwareUpdateCheckSessionGuard.capture();
     await deviceSetup;
@@ -819,7 +909,136 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connection == null) {
       return;
     }
-    _onDeviceConnected(connection.device);
+    await registerConnectedDevice(connection.device);
+  }
+
+  void _handleDeviceDisconnected(String deviceId) {
+    _connectedDevices.remove(deviceId);
+    unawaited(_reconcileRoles());
+  }
+
+  /// Records [device] as connected and re-assigns capture roles. Safe to call
+  /// more than once for the same device (the connection callback and the
+  /// pairing flow both report it).
+  Future<void> registerConnectedDevice(BtDevice device) {
+    _connectedDevices[device.id] = device;
+    return _reconcileRoles();
+  }
+
+  /// Re-derives which connected device carries audio and which one carries
+  /// photos, then drives the existing single-device connect/disconnect paths
+  /// for the audio role and the companion hooks for the photo role.
+  ///
+  /// Runs serialized: a pendant and glasses (dis)connecting together must be
+  /// applied one after the other, on top of the state the previous pass left.
+  Future<void> _reconcileRoles() {
+    final run = _rolesReconciliation.then((_) => _reconcileRolesNow());
+    _rolesReconciliation = run.catchError((Object e) {
+      Logger.debug('DeviceProvider: role reconciliation failed: $e');
+    });
+    return run;
+  }
+
+  Future<void> _reconcileRolesNow() async {
+    final connected = _connectedDevices.values.toList();
+    final audio = DevicePairingRoles.selectAudioDevice(connected);
+    final photo = DevicePairingRoles.selectPhotoDevice(connected);
+    final companion = photo != null && photo.id != audio?.id ? photo : null;
+    Logger.debug(
+      'DeviceProvider: roles audio=${audio?.id} photo=${photo?.id} '
+      '(connected=${connected.map((d) => d.id).toList()}, active=$_activeAudioDeviceId)',
+    );
+
+    final previousAudioId = _activeAudioDeviceId;
+    if (audio == null) {
+      if (previousAudioId != null || connectedDevice != null || isConnected) {
+        await onDeviceDisconnected();
+      }
+    } else if (audio.id != previousAudioId) {
+      // The previous audio device went away (rather than being demoted to the
+      // photo role) — run its full teardown first so analytics and syncs see it.
+      if (previousAudioId != null && !_connectedDevices.containsKey(previousAudioId)) {
+        await onDeviceDisconnected();
+      }
+      await _onDeviceConnected(audio);
+    }
+
+    // A device demoted from audio to photos already reported its connection.
+    await _setCompanionDevice(companion, alreadyReported: companion != null && companion.id == previousAudioId);
+    notifyListeners();
+  }
+
+  Future<void> _setCompanionDevice(BtDevice? device, {bool alreadyReported = false}) async {
+    final changed = companionDevice?.id != device?.id;
+    companionDevice = device;
+    if (!changed) {
+      // Keep the photo device in sync even when the id is unchanged: the audio
+      // device may have changed underneath it.
+      await captureProvider?.updatePhotoDevice(device);
+      return;
+    }
+
+    _companionBatteryListener?.cancel();
+    _companionBatteryListener = null;
+    companionBatteryLevel = -1;
+    notifyListeners();
+
+    if (device != null) {
+      Logger.debug('DeviceProvider: companion device connected ${device.id} (${device.type.name})');
+      if (!alreadyReported) PlatformManager.instance.analytics.deviceConnected(device);
+      companionBatteryLevel = await _retrieveBatteryLevel(device.id);
+      if (companionDevice?.id != device.id) return; // roles moved on meanwhile
+      _companionBatteryListener = await _getBleBatteryLevelListener(
+        device.id,
+        onBatteryLevelChange: (int value) {
+          if (companionDevice?.id != device.id || value == companionBatteryLevel) return;
+          companionBatteryLevel = value;
+          notifyListeners();
+        },
+      );
+    } else {
+      Logger.debug('DeviceProvider: companion device disconnected');
+    }
+    await captureProvider?.updatePhotoDevice(device);
+    notifyListeners();
+  }
+
+  /// Unpairs the second device: disconnects it, drops it from the saved
+  /// devices, and lets role reconciliation move photos/audio back to the
+  /// remaining device.
+  Future<void> forgetCompanionDevice() async {
+    final device = pairedCompanionDevice ?? companionDevice;
+    if (device == null) return;
+    await forgetDevice(device.id);
+  }
+
+  /// Unpairs [deviceId]: forgets it in preferences (promoting the other saved
+  /// device to primary when needed), tears down its connection, transport and
+  /// native registration, and re-assigns capture roles to whatever is left.
+  Future<void> forgetDevice(String deviceId) async {
+    if (deviceId.isEmpty) return;
+    Logger.debug('DeviceProvider: forgetting device $deviceId');
+    final preferences = SharedPreferencesUtil();
+    preferences.forgetSavedBtDevice(deviceId);
+    if (preferences.pairedDeviceIds.isEmpty) {
+      preferences.deviceName = '';
+    }
+
+    await ServiceManager.instance().device.forgetDevice(deviceId);
+    try {
+      await BleHostApi().unmanageDevice(deviceId);
+    } catch (e) {
+      Logger.debug('DeviceProvider: unmanageDevice($deviceId) failed: $e');
+    }
+
+    _connectedDevices.remove(deviceId);
+    await _reconcileRoles();
+    if (connectedDevice == null) {
+      // Nothing left connected: refresh pairedDevice from the (possibly
+      // promoted) saved slot so the UI shows the right device as offline.
+      await getDeviceInfo();
+    }
+    updateConnectingStatus(false);
   }
 
   void _checkFirmwareUpdates() async {
@@ -1070,17 +1289,20 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Logger.debug("provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}");
     switch (state) {
       case DeviceConnectionState.connected:
-        _disconnectDebouncer.cancel();
-        _connectDebouncer.run(() => _handleDeviceConnected(deviceId));
+        _disconnectDebouncerFor(deviceId).cancel();
+        _connectDebouncerFor(deviceId).run(() => _handleDeviceConnected(deviceId));
         break;
       case DeviceConnectionState.connecting:
         break;
       case DeviceConnectionState.disconnected:
-        _connectDebouncer.cancel();
-        // Check if this is the paired device or currently connected device
-        // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
-        if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
-          _disconnectDebouncer.run(onDeviceDisconnected);
+        _connectDebouncerFor(deviceId).cancel();
+        // Only devices we track (connected, or the saved device whose connect
+        // attempt just failed) drive teardown; stray ids from a scan do not.
+        if (_connectedDevices.containsKey(deviceId) ||
+            deviceId == connectedDevice?.id ||
+            deviceId == pairedDevice?.id ||
+            deviceId == companionDevice?.id) {
+          _disconnectDebouncerFor(deviceId).run(() => _handleDeviceDisconnected(deviceId));
         }
         break;
     }

@@ -10179,4 +10179,17 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'Deuxième appareil';
+
+  @override
+  String get pairSecondDevice => 'Associer un deuxième appareil';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connectez OmiGlass en plus de votre Omi pour que les photos et l\'audio rejoignent la même conversation.';
+
+  @override
+  String get forgetSecondDevice => 'Oublier le deuxième appareil';
 }

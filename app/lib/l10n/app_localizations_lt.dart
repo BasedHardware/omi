@@ -10112,4 +10112,17 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'Antras įrenginys';
+
+  @override
+  String get pairSecondDevice => 'Susieti antrą įrenginį';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.';
+
+  @override
+  String get forgetSecondDevice => 'Pamiršti antrą įrenginį';
 }

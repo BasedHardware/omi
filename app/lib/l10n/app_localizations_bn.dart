@@ -10098,4 +10098,17 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'দ্বিতীয় ডিভাইস';
+
+  @override
+  String get pairSecondDevice => 'দ্বিতীয় ডিভাইস যুক্ত করুন';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'আপনার Omi-এর পাশে OmiGlass সংযুক্ত করুন, যাতে ছবি ও অডিও একই কথোপকথনে যায়।';
+
+  @override
+  String get forgetSecondDevice => 'দ্বিতীয় ডিভাইস ভুলে যান';
 }
