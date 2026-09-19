@@ -216,13 +216,29 @@ class RecordingAccumulatorTests(unittest.TestCase):
         )
         self.assertNotIn(None, session.values())
 
-    def test_multiple_segments_accumulate_without_type_error(self) -> None:
+    def test_null_segment_text_handled_cleanly(self) -> None:
         session = _session()
-        for text in ("Tweet now", "A useful", "update"):
-            self.run_async(
-                PROCESS_SEGMENTS(session, [{"text": text}], {"access_token": "fixture"})
+        result = self.run_async(
+            PROCESS_SEGMENTS(session, [{"text": None}, {"text": "Tweet now"}], {"access_token": "fixture"})
+        )
+        self.assertEqual(result, "collecting_1")
+        self.assertEqual(session["accumulated_text"], "")
+
+    def test_ai_returning_none_aborts_cleanly(self) -> None:
+        session = _session(tweet_mode="recording", segments_count=2, accumulated_text="part 1 part 2")
+        detector = PROCESS_SEGMENTS.__globals__["tweet_detector"]
+        original = detector.ai_extract_tweet_from_segments
+        async def mock_none(text: str) -> Optional[str]:
+            return None
+        detector.ai_extract_tweet_from_segments = mock_none
+        try:
+            result = self.run_async(
+                PROCESS_SEGMENTS(session, [{"text": "part 3"}], {"access_token": "fixture"})
             )
-        self.assertEqual(len(TWITTER_CLIENT.calls), 1)
+            self.assertEqual(result, "❌ No valid tweet content")
+            self.assertEqual(session["tweet_mode"], "idle")
+        finally:
+            detector.ai_extract_tweet_from_segments = original
 
 
 if __name__ == "__main__":

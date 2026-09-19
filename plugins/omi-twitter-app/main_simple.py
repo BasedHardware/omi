@@ -691,7 +691,7 @@ async def process_segments(
     """
     
     # Extract text from segments
-    segment_texts = [seg.get("text", "") for seg in segments]
+    segment_texts = [(seg.get("text") or "") for seg in segments]
     full_text = " ".join(segment_texts)
     
     session_id = session["session_id"]
@@ -721,7 +721,7 @@ async def process_segments(
         segments_count = session.get("segments_count", 0)
         
         # Add this segment
-        accumulated += " " + full_text
+        accumulated = f"{accumulated} {full_text}".strip() if accumulated else full_text
         segments_count += 1
         
         print(f"📝 Segment {segments_count}/3 received", flush=True)
@@ -736,14 +736,15 @@ async def process_segments(
 
             print(f"✨ AI extracted tweet (len={tweet_len})", flush=True)
             
-            if len(cleaned_content.strip()) > 3:
+            cleaned_tweet = (cleaned_content or "").strip()
+            if len(cleaned_tweet) > 3:
                 print(f"📤 Posting to Twitter...", flush=True)
-                result = await twitter_client.post_tweet(user["access_token"], cleaned_content)
+                result = await twitter_client.post_tweet(user["access_token"], cleaned_tweet)
                 
                 if result and result.get("success"):
                     SimpleSessionStorage.reset_session(session_id)
                     print(f"🎉 SUCCESS! Tweet ID: {result.get('tweet_id')}", flush=True)
-                    return f"✅ Tweet posted: '{cleaned_content}'"
+                    return f"✅ Tweet posted: '{cleaned_tweet}'"
                 else:
                     error = result.get("error", "Unknown") if result else "Failed"
                     SimpleSessionStorage.reset_session(session_id)
