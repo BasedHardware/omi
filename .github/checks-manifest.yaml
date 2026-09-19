@@ -787,6 +787,31 @@ checks:
     triggers: [".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/workflows/mobile_internal_build.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "internal mobile builds are dispatched on a cadence, so who gets an instant build and when the batch fires must stay pinned rather than drift back to build-per-merge"
+  - id: mobile-distribution-contract
+    command: ["python3", ".github/scripts/test_mobile_distribution.py"]
+    triggers: [".github/scripts/mobile_distribution.py", ".github/scripts/test_mobile_distribution.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "mobile Codemagic distribution evidence must be explicit, platform-specific, source-bound, and fail closed when post-publish state is missing or unknown"
+  - id: mobile-release-identity
+    command: ["python3", "app/scripts/mobile_release_identity_test.py"]
+    triggers: ["app/scripts/mobile_release_identity.py", "app/scripts/mobile_release_identity_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "platform-specific Codemagic tags must resolve one strict version/build/source identity before a mobile publisher or Flutter build runs"
+  - id: mobile-store-version-contract
+    command: ["python3", "app/scripts/mobile_store_version_test.py"]
+    triggers: ["app/scripts/mobile_store_version.py", "app/scripts/mobile_store_version_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "store lookup failures and malformed responses must not be treated as empty history or build zero"
+  - id: mobile-release-admission
+    command: ["python3", ".github/scripts/test_verify_mobile_release_admission.py"]
+    triggers: [".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", ".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/workflows/mobile-app-checks.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "tag admission must consume exact-SHA first-attempt Release Eligibility and the explicit Mobile Release Eligibility aggregate"
+  - id: mobile-admission-collector
+    command: ["python3", ".github/scripts/test_collect_mobile_release_admission.py"]
+    triggers: [".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "tag builds must collect authenticated GitHub proof before the hermetic mobile admission verifier is allowed to pass"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]
