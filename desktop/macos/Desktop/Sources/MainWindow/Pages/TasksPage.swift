@@ -3908,7 +3908,12 @@ struct TasksPage: View {
           }
           cancelMultiSelectButton
         } else {
-          tasksMoreMenu
+          if !viewModel.displayTasks.isEmpty {
+            selectTasksButton
+          }
+          if chatProvider != nil && TaskAgentSettings.shared.isChatEnabled {
+            taskAssistantButton
+          }
           addTaskButton
         }
       }
@@ -4044,30 +4049,6 @@ struct TasksPage: View {
     .help("Filter tasks by status")
   }
 
-  private var selectModeButton: some View {
-    Button {
-      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-        viewModel.toggleMultiSelectMode()
-      }
-    } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(
-          systemName: viewModel.isMultiSelectMode ? "checkmark.circle" : "checkmark.circle.badge.questionmark"
-        )
-        .scaledFont(size: OmiType.caption)
-        Text(viewModel.isMultiSelectMode ? "Done" : "Select")
-          .scaledFont(size: OmiType.body, weight: .medium)
-      }
-      .foregroundColor(viewModel.isMultiSelectMode ? Ink.primary : Ink.secondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .glassChip(isActive: viewModel.isMultiSelectMode)
-    }
-    .buttonStyle(.plain)
-    .help(viewModel.isMultiSelectMode ? "Exit selection" : "Select tasks for bulk actions")
-    .accessibilityIdentifier("tasks-select-toggle")
-  }
-
   private var multiSelectControls: some View {
     HStack(spacing: OmiSpacing.md) {
       Button {
@@ -4146,76 +4127,43 @@ struct TasksPage: View {
     .buttonStyle(.plain)
   }
 
-  private var tasksMoreMenu: some View {
-    Menu {
-      if !viewModel.displayTasks.isEmpty {
-        Button {
-          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-            viewModel.toggleMultiSelectMode()
-          }
-        } label: {
-          Label("Select tasks…", systemImage: "checkmark.circle")
-        }
-      }
-
-      if chatProvider != nil && TaskAgentSettings.shared.isChatEnabled {
-        Button {
-          if showChatPanel {
-            closeChatPanel()
-          } else if let selectedId = viewModel.keyboardSelectedTaskId,
-            let task = viewModel.displayTasks.first(where: { $0.id == selectedId })
-          {
-            openChatForTask(task)
-          } else {
-            adjustWindowWidth(expand: true)
-            OmiMotion.withGated(.easeInOut(duration: 0.25)) {
-              showChatPanel = true
-            }
-          }
-        } label: {
-          Label(showChatPanel ? "Close task assistant" : "Open task assistant", systemImage: "bubble.left")
-        }
+  /// Selection is the one thing most readers come to this corner for, so it is a labelled button
+  /// and not an item folded behind `…`. A word says what a glyph made you guess.
+  private var selectTasksButton: some View {
+    Button {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+        viewModel.toggleMultiSelectMode()
       }
     } label: {
-      PageQueryActionLabel(icon: "ellipsis", title: "More")
+      PageQueryActionLabel(title: "Select")
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More task actions")
-    .accessibilityLabel("More task actions")
-    .accessibilityIdentifier("tasks-more-actions")
+    .buttonStyle(.plain)
+    .help("Select tasks for bulk actions")
+    .accessibilityLabel("Select tasks")
+    .accessibilityIdentifier("tasks-select-toggle")
   }
 
-  private var chatToggleButton: some View {
+  private var taskAssistantButton: some View {
     Button {
       if showChatPanel {
         closeChatPanel()
       } else if let selectedId = viewModel.keyboardSelectedTaskId,
         let task = viewModel.displayTasks.first(where: { $0.id == selectedId })
       {
-        // A task is selected — open chat directly for it
         openChatForTask(task)
       } else {
-        // No task selected — open empty sidebar
         adjustWindowWidth(expand: true)
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = true
         }
       }
     } label: {
-      Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(showChatPanel ? Ink.primary : Ink.secondary)
-        .padding(OmiSpacing.sm)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(showChatPanel ? Ink.primary.opacity(0.12) : Ink.rowFill)
-        )
+      PageQueryActionLabel(icon: "bubble.left", title: showChatPanel ? "Close Assistant" : "Assistant")
     }
     .buttonStyle(.plain)
-    .help(showChatPanel ? "Close chat panel" : "Open task chat")
-    .accessibilityLabel(showChatPanel ? "Close task chat" : "Open task chat")
+    .help(showChatPanel ? "Close task assistant" : "Open task assistant")
+    .accessibilityLabel(showChatPanel ? "Close task assistant" : "Open task assistant")
+    .accessibilityIdentifier("tasks-assistant-toggle")
   }
 
   // MARK: - Loading View
