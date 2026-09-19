@@ -59,6 +59,18 @@
 * [`quickstart.fa.md`](quickstart.fa.md) — گام‌های نخست با omi-cli (Persian Quickstart).
 * [`quickstart.fi.md`](quickstart.fi.md) — Ensiaskeleet omi-cli-työkalun kanssa (Finnish Quickstart).
 * [`quickstart.ga.md`](quickstart.ga.md) — Treoir Mhearthosaithe do omi-cli (Irish Quickstart).
+* [`quickstart.ast.md`](quickstart.ast.md) — guía de primeros pasos n'asturianu (Asturian Quickstart).
+* [`quickstart.vec.md`](quickstart.vec.md) — guida dei primi passi in vèneto (Venetian Quickstart).
+* [`quickstart.co.md`](quickstart.co.md) — guida di i primi passi in corsu (Corsican Quickstart).
+* [`quickstart.sm.md`](quickstart.sm.md) — taʻiala muamua i le gagana Samoa (Samoan Quickstart).
+* [`quickstart.to.md`](quickstart.to.md) — fakahinohino fuofua ʻi he lea faka-Tonga (Tongan Quickstart).
+* [`quickstart.haw.md`](quickstart.haw.md) — alakaʻi mua ma ka ʻōlelo Hawaiʻi (Hawaiian Quickstart).
+* [`quickstart.kl.md`](quickstart.kl.md) — ilitsersuut siulleq kalaallisut (Greenlandic Quickstart).
+* [`quickstart.mni.md`](quickstart.mni.md) — অহানবা খোংচাৎ মৈতৈলোনদা (Meitei Quickstart).
+* [`quickstart.tcy.md`](quickstart.tcy.md) — ಸುರುತ ಪಟ್ಟೊ ತುಳುಟ್ (Tulu Quickstart).
+* [`quickstart.nd.md`](quickstart.nd.md) — izinyathelo zokuqala ngesiNdebele (Northern Ndebele Quickstart).
+* [`quickstart.kg.md`](quickstart.kg.md) — mikangidulu ya ntete na Kikongo (Kongo Quickstart).
+* [`quickstart.seh.md`](quickstart.seh.md) — mapito oyambirira mu chisena (Sena Quickstart).
 * [`quickstart.gl.md`](quickstart.gl.md) — Guía de inicio rápido de omi-cli (Galician Quickstart).
 * [`quickstart.hi.md`](quickstart.hi.md) — omi-cli के साथ शुरुआत (Hindi Quickstart).
 * [`quickstart.hr.md`](quickstart.hr.md) — Prvi koraci s omi-cli (Croatian Quickstart).
