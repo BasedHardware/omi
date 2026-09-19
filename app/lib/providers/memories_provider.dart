@@ -1315,6 +1315,9 @@ class MemoriesProvider extends ChangeNotifier {
 
   void deleteMemory(Memory memory) {
     _cancelDeletionTimer();
+    if (_pendingDeletionId != null) {
+      unawaited(_finalizeDeletion());
+    }
 
     _lastDeletedMemory = memory;
     _pendingDeletionId = memory.id;
@@ -1363,7 +1366,7 @@ class MemoriesProvider extends ChangeNotifier {
       }
     }
 
-    if (!deleteSucceeded && _pendingDeletionId == id && deletedMemory?.id == id) {
+    if (!deleteSucceeded && deletedMemory?.id == id) {
       if (!_memories.any((memory) => memory.id == id)) {
         _memories.add(deletedMemory!);
       }
