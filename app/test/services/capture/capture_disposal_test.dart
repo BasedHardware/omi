@@ -1,3 +1,4 @@
+import 'package:omi/services/capture/capture_policy.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -9,7 +10,7 @@ import '../../support/capture/virtual_capture_time.dart';
 
 class _MutePrefs implements SharedPreferencesUtil {
   @override
-  bool get deviceMuted => true;
+  CapturePolicy get capturePolicy => const CapturePolicy(revision: 0, muted: true);
   @override
   dynamic noSuchMethod(Invocation i) => throw StateError('Unexpected preferences read: ${i.memberName}');
 }

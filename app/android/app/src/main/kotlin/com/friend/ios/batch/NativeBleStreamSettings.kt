@@ -7,6 +7,9 @@ internal interface NativeBlePreferences {
     fun string(key: String, defaultValue: String = ""): String
     fun boolean(key: String, defaultValue: Boolean = false): Boolean
     fun integer(key: String, defaultValue: Int): Int
+
+    /** Whether a preference key exists, including a present-but-empty value. */
+    fun contains(key: String): Boolean = false
 }
 
 internal data class NativeBleStreamConfig(

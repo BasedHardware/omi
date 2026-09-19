@@ -1,3 +1,4 @@
+import 'package:omi/services/capture/capture_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/capture/capture_composition.dart';
 import '../support/spine/contract.dart';
@@ -6,7 +7,7 @@ import 'c1_composition_test.dart' show dependencies, MemoryPrefs;
 class BatchPrefs extends MemoryPrefs {
   bool muted = true;
   @override
-  bool get batchMuted => muted;
+  CapturePolicy get capturePolicy => CapturePolicy(revision: 0, muted: muted);
 }
 
 void main() {
