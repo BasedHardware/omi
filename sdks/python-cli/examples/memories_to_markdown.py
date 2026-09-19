@@ -227,13 +227,60 @@ def filter_memories(
     return filtered
 
 
+def _sanitize_group_key(group_key: str) -> str:
+    """Turn a group key (category or date) into a filesystem-safe slug."""
+    return re.sub(r"[^\w-]", "_", group_key).strip("_") or "memories"
+
+
+def _allocate_unique_filenames(safe_keys: Dict[str, str]) -> Dict[str, str]:
+    """Map every group key to its own ``<slug>_memories.md`` filename.
+
+    Distinct categories can sanitize to the same slug (``work/life`` and
+    ``work?life`` both become ``work_life``), and writing both would silently
+    overwrite the first group's file. Each group therefore gets a unique name:
+    it keeps its natural filename when that name is free, otherwise it receives
+    a deterministic numeric suffix (``work_life_2_memories.md``).
+
+    Every natural filename is reserved up front, so a disambiguated name can
+    never steal the natural name of another group (``work_life_2`` stays
+    available for a real ``work_life_2`` category). Names are compared
+    casefolded, since they would also collide on a case-insensitive
+    filesystem, and allocation follows sorted keys, which keeps repeated
+    exports of the same groups stable even when the input order changes.
+    """
+    natural_names = {f"{safe_key}_memories.md".casefold() for safe_key in safe_keys.values()}
+    used_names: Set[str] = set()
+    filenames: Dict[str, str] = {}
+
+    for group_key in sorted(safe_keys):
+        safe_key = safe_keys[group_key]
+        filename = f"{safe_key}_memories.md"
+        if filename.casefold() in used_names:
+            counter = 2
+            while True:
+                candidate = f"{safe_key}_{counter}_memories.md"
+                folded = candidate.casefold()
+                if folded not in used_names and folded not in natural_names:
+                    break
+                counter += 1
+            filename = candidate
+        used_names.add(filename.casefold())
+        filenames[group_key] = filename
+
+    return filenames
+
+
 def write_grouped_directory(
     items: List[Dict[str, Any]],
     output_dir: Path,
     group_by: str = "category",
     title_prefix: str = "Omi Memories",
 ) -> List[Path]:
-    """Write memories into separate Markdown files in an output directory safely."""
+    """Write memories into separate Markdown files in an output directory safely.
+
+    Filenames are disambiguated so that two groups whose names sanitize to the
+    same slug produce two distinct files instead of one overwriting the other.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     resolved_dir = output_dir.resolve()
     written_files: List[Path] = []
@@ -250,9 +297,10 @@ def write_grouped_directory(
             key = cat if cat else "other"
             groups.setdefault(key, []).append(it)
 
+    filenames = _allocate_unique_filenames({group_key: _sanitize_group_key(group_key) for group_key in groups})
+
     for group_key, group_items in sorted(groups.items()):
-        safe_key = re.sub(r"[^\w-]", "_", group_key).strip("_") or "memories"
-        filename = f"{safe_key}_memories.md"
+        filename = filenames[group_key]
         target_path = (output_dir / filename).resolve()
 
         if not str(target_path).startswith(str(resolved_dir)):
