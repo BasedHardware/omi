@@ -1561,15 +1561,30 @@ class MemoriesProvider extends ChangeNotifier {
     return result.persisted;
   }
 
-  Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
+  /// Returns `true` when every requested visibility change was accepted by the
+  /// server.
+  ///
+  /// `updateMemoryVisibilityServer` reports a rejected request by returning
+  /// `false` (it only throws on unexpected errors), so the failure path must be
+  /// checked explicitly. Flipping the local flag on a rejected request is what
+  /// made "Make All Memories Private" claim success while the server kept
+  /// serving those memories as public.
+  Future<bool> updateAllMemoriesVisibility(bool makePrivate) async {
     final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
     int updatedCount = 0;
+    int failedCount = 0;
     List<Memory> memoriesSuccessfullyUpdated = [];
 
     for (var memory in List.from(_memories)) {
       if (memory.visibility != visibility) {
         try {
-          await updateMemoryVisibilityServer(memory.id, visibility.name);
+          final updatedOnServer =
+              await updateMemoryVisibilityServer(memory.id, visibility.name);
+          if (!updatedOnServer) {
+            failedCount++;
+            print('Server rejected visibility update for memory ${memory.id}');
+            continue;
+          }
           final idx = _memories.indexWhere((m) => m.id == memory.id);
           if (idx != -1) {
             _memories[idx].visibility = visibility;
@@ -1577,6 +1592,7 @@ class MemoriesProvider extends ChangeNotifier {
             updatedCount++;
           }
         } catch (e) {
+          failedCount++;
           print('Failed to update visibility for memory ${memory.id}: $e');
         }
       }
@@ -1590,5 +1606,6 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     _setCategories();
+    return failedCount == 0;
   }
 }
