@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hive chat tools read the caller limit with a raw body.get('limit', 10); dict.get returns None - not the default - when the backend sends an explicit null for an omitted optional parameter, and items[:None] silently returned every row instead of the documented page size, while a string limit raised TypeError and surfaced as a tool error; all three handlers must coerce the limit to a bounded int"
+  - id: dropbox-uid-reflection-encoding-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_uid_reflection.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET / on omi-dropbox-app must percent-encode reflected uid and HTML-escape stored folder_name, display_name, and email to prevent reflected/stored XSS and query corruption (#14578)"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
