@@ -266,12 +266,14 @@ class MemoryManagementSheet extends StatelessWidget {
 
   void _makeAllMemoriesPrivate(BuildContext context) async {
     Navigator.pop(context);
-    await provider.updateAllMemoriesVisibility(true);
+    final success = await provider.updateAllMemoriesVisibility(true);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.l10n.allMemoriesPrivateResult),
+          content: Text(success
+              ? context.l10n.allMemoriesPrivateResult
+              : context.l10n.somethingWentWrong),
           backgroundColor: AppStyles.backgroundTertiary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -284,12 +286,14 @@ class MemoryManagementSheet extends StatelessWidget {
 
   void _makeAllMemoriesPublic(BuildContext context) async {
     Navigator.pop(context);
-    await provider.updateAllMemoriesVisibility(false);
+    final success = await provider.updateAllMemoriesVisibility(false);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.l10n.allMemoriesPublicResult),
+          content: Text(success
+              ? context.l10n.allMemoriesPublicResult
+              : context.l10n.somethingWentWrong),
           backgroundColor: AppStyles.backgroundTertiary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
