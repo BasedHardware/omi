@@ -438,6 +438,13 @@ class MemoriesProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    // Break the load-coalescing join: a caller that arrives after the clear
+    // must start a fresh load, not await the retired session's in-flight one
+    // (whose result the generation guard would then discard).
+    _inFlightLoad = null;
+    _inFlightLoadLimit = 100;
+    _inFlightLoadDeviceScoped = false;
+    _inFlightLoadView = MemoryCollectionView.usefulNow;
     _memories = [];
     _selectedCategories = {};
     _showOnlyManual = false;
