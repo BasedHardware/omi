@@ -11,7 +11,7 @@ from urllib.parse import quote, urlencode, urlparse, urlsplit, urlunsplit
 from cryptography.hazmat.primitives import serialization
 from jwt.algorithms import RSAAlgorithm
 from fastapi import APIRouter, Request, HTTPException, Form
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
@@ -235,6 +235,39 @@ def _redirect_scheme(redirect_uri: Optional[str]) -> str:
     return (urlparse(redirect_uri).scheme or "missing").lower()[:64]
 
 
+def _auth_emulator_active() -> bool:
+    return bool(os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip())
+
+
+def _emulator_oauth_credentials(provider: str) -> str:
+    return json.dumps(
+        {
+            "provider": provider,
+            "id_token": "emulator",
+            "access_token": "emulator",
+            "provider_id": "emulator.local",
+            "emulator": True,
+            "email": f"{provider}-local@omi.test",
+            "full_name": "Local Dev",
+        }
+    )
+
+
+async def _issue_emulator_auth_code(session_data: Dict[str, Any]) -> str:
+    """Mint a one-time auth code without contacting Google or Apple.
+
+    The local harness has no OAuth client secrets and iOS will not render the
+    HTTP authorize page, so local_dev completes the PKCE loop against the
+    Firebase Auth emulator instead.
+    """
+    provider = session_data.get("provider") or "google"
+    auth_code = str(uuid.uuid4())
+    app_redirect_uri = session_data.get("redirect_uri", _DEFAULT_MOBILE_REDIRECT)
+    code_data = _auth_code_data_from_session(_emulator_oauth_credentials(provider), app_redirect_uri, session_data)
+    await run_blocking(critical_executor, set_auth_code, auth_code, code_data, 300)
+    return auth_code
+
+
 def _build_callback_redirect_url(redirect_uri: str, code: str, state: Optional[str]) -> str:
     """Append the one-time callback parameters without losing a URI fragment.
 
@@ -321,6 +354,7 @@ async def auth_authorize(
     state: Optional[str] = None,
     code_challenge: Optional[str] = None,
     code_challenge_method: Optional[str] = None,
+    response_mode: Optional[str] = None,
 ):
     """
     User authentication authorization endpoint for the main Omi app
@@ -345,6 +379,28 @@ async def auth_authorize(
             redirect_scheme=redirect_scheme,
         )
         raise HTTPException(status_code=400, detail="Unsupported provider")
+
+    normalized_response_mode = (response_mode or "").strip().lower()
+    if normalized_response_mode not in {"", "json"}:
+        _log_auth_event(
+            provider=provider,
+            stage="authorize_validated",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="unsupported_response_mode",
+            redirect_scheme=redirect_scheme,
+        )
+        raise HTTPException(status_code=400, detail="Unsupported response_mode")
+    if normalized_response_mode == "json" and not _auth_emulator_active():
+        _log_auth_event(
+            provider=provider,
+            stage="authorize_validated",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="emulator_response_mode_without_emulator",
+            redirect_scheme=redirect_scheme,
+        )
+        raise HTTPException(status_code=400, detail="response_mode=json requires the Firebase Auth emulator")
 
     # Strict allowlist on where we'll deliver the auth code post-callback.
     try:
@@ -385,6 +441,30 @@ async def auth_authorize(
         auth_flow_id=auth_flow_id,
         redirect_scheme=redirect_scheme,
     )
+
+    # Local harness: complete PKCE against the Auth emulator instead of
+    # redirecting to Google/Apple. The offline child env has no OAuth client
+    # ID, and iOS Safari View Controller will not render the HTTP authorize
+    # page — both would leave the user on a blank screen.
+    if _auth_emulator_active():
+        auth_code = await _issue_emulator_auth_code(session_data)
+        _log_auth_event(
+            provider=provider,
+            stage="auth_code_created",
+            outcome="succeeded",
+            auth_flow_id=auth_flow_id,
+            redirect_scheme=redirect_scheme,
+        )
+        _log_auth_event(
+            provider=provider,
+            stage="authorize_redirect_created",
+            outcome="succeeded",
+            auth_flow_id=auth_flow_id,
+            redirect_scheme=redirect_scheme,
+        )
+        if normalized_response_mode == "json":
+            return JSONResponse({"code": auth_code, "state": state or ""})
+        return RedirectResponse(url=_build_callback_redirect_url(redirect_uri, auth_code, state))
 
     # Redirect to provider OAuth
     if provider == 'google':
@@ -729,12 +809,16 @@ async def auth_token(
                     auth_flow_id=auth_flow_id,
                     redirect_scheme=redirect_scheme,
                 )
-                custom_token = await _generate_custom_token(
-                    provider,
-                    id_token,
-                    access_token,
-                    display_name=full_name,
-                    referral_code=referral_code,
+                custom_token = (
+                    await _generate_emulator_custom_token(oauth_credentials)
+                    if oauth_credentials.get("emulator")
+                    else await _generate_custom_token(
+                        provider,
+                        id_token,
+                        access_token,
+                        display_name=full_name,
+                        referral_code=referral_code,
+                    )
                 )
                 response["custom_token"] = custom_token
                 _log_auth_event(
@@ -1049,6 +1133,27 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: Di
             status_code=500,
         )
         raise HTTPException(status_code=500, detail="Failed to exchange Apple code for tokens")
+
+
+async def _generate_emulator_custom_token(oauth_credentials: Dict[str, Any]) -> str:
+    """Mint a Firebase custom token for a stable local-dev emulator user."""
+    if not _auth_emulator_active():
+        raise Exception("Auth emulator is not configured")
+
+    provider = oauth_credentials.get("provider") or "google"
+    uid = f"local-{provider}"
+    email = oauth_credentials.get("email") or f"{provider}-local@omi.test"
+    display_name = oauth_credentials.get("full_name") or "Local Dev"
+
+    def _mint() -> str:
+        try:
+            firebase_admin.auth.get_user(uid)
+        except firebase_admin.auth.UserNotFoundError:
+            firebase_admin.auth.create_user(uid=uid, email=email, display_name=display_name)
+        token = firebase_admin.auth.create_custom_token(uid)
+        return token.decode("utf-8") if isinstance(token, bytes) else cast(str, token)
+
+    return await run_blocking(critical_executor, _mint)
 
 
 async def _generate_custom_token(
