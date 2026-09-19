@@ -9,9 +9,10 @@ import sys
 import secrets
 import hashlib
 import base64
+import html
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from dotenv import load_dotenv
@@ -968,7 +969,8 @@ async def root(uid: str = Query(None)):
     tokens = get_twitter_tokens(uid)
 
     if not tokens:
-        auth_url = f"/auth/twitter?uid={uid}"
+        safe_uid = quote(uid or "", safe="")
+        auth_url = f"/auth/twitter?uid={safe_uid}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1011,6 +1013,8 @@ async def root(uid: str = Query(None)):
 
     # User is connected
     username = tokens.get("username", "Unknown")
+    safe_username = html.escape(str(username or "Unknown"), quote=True)
+    safe_uid = quote(uid or "", safe="")
 
     return HTMLResponse(content=f"""
     <html>
@@ -1024,7 +1028,7 @@ async def root(uid: str = Query(None)):
                 <div class="success-box">
                     <div class="icon" style="font-size: 48px;">✓</div>
                     <h2>Twitter Connected</h2>
-                    <p>Connected as @{username}</p>
+                    <p>Connected as @{safe_username}</p>
                 </div>
 
                 <div class="card">
@@ -1034,7 +1038,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Who mentioned me on Twitter?"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={safe_uid}" class="btn btn-secondary btn-block">
                     Disconnect Twitter
                 </a>
 
@@ -1080,7 +1084,8 @@ async def twitter_callback(
     error: str = Query(None)
 ):
     """Handle Twitter OAuth2 callback."""
-    if error:
+    if error and isinstance(error, str):
+        safe_error = html.escape(error)
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>
@@ -1088,7 +1093,7 @@ async def twitter_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{safe_error}</p>
                     </div>
                 </div>
             </body>
@@ -1154,7 +1159,7 @@ async def twitter_callback(
 
         if response.status_code != 200:
             log(f"Token exchange failed: {response.status_code}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            return HTMLResponse(content=f"Token exchange failed: {html.escape(response.text)}", status_code=400)
 
         token_response = response.json()
         access_token = token_response.get("access_token")
@@ -1183,6 +1188,9 @@ async def twitter_callback(
 
         store_twitter_tokens(uid, access_token, refresh_token, expires_at, username, twitter_user_id)
 
+        safe_username = html.escape(str(username or "user"), quote=True)
+        safe_uid = quote(uid or "", safe="")
+
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1195,10 +1203,10 @@ async def twitter_callback(
                     <div class="success-box">
                         <div class="icon" style="font-size: 72px;">🎉</div>
                         <h2>Successfully Connected!</h2>
-                        <p>Your Twitter account @{username} is now linked to Omi</p>
+                        <p>Your Twitter account @{safe_username} is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="/?uid={safe_uid}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1218,7 +1226,7 @@ async def twitter_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content=f"Authentication error: {html.escape(str(e))}", status_code=500)
 
 
 @app.get("/setup/twitter")
@@ -1232,7 +1240,7 @@ async def check_setup(uid: str = Query(...)):
 async def disconnect(uid: str = Query(...)):
     """Disconnect Twitter."""
     delete_twitter_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid or '', safe='')}")
 
 
 @app.get("/health")
