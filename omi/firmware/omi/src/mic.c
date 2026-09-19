@@ -23,6 +23,7 @@
 #include "storage.h"
 #include "t5838_aad.h"
 #include "transport.h"
+#include "vad_gate.h"
 #endif
 
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
@@ -400,7 +401,10 @@ static void exit_hw_aad(void)
     atomic_set(&aad_in_sleep, 0);
     atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
     sd_request_power(true);   /* power on + remount SD before audio starts flowing */
-    mic_resume();             /* dmic START reclaims CLK via pinctrl */
+    /* Reset software VAD before mic_resume(): mic thread must not run software_vad_process()
+     * concurrently with software_vad_on_hardware_wake(). */
+    vad_gate_on_hw_wake(k_uptime_get());
+    mic_resume(); /* dmic START reclaims CLK via pinctrl */
     LOG_INF("AAD: WAKE -> mic resumed");
 }
 
@@ -439,11 +443,10 @@ static void aad_track_silence(const int16_t *buf, size_t n)
     if (avg_abs_amplitude(buf, n) >= CONFIG_OMI_VAD_ABS_THRESHOLD) {
         aad_last_voice_ms = now;
     }
-    /* Sleep after a long silence whether online or offline. When connected, the
-     * BLE link stays up (only the mic + PDM sleep); sound resumes streaming.
-     * BUT never sleep while a BLE sync transfer is running: the AAD entry +
-     * conn-param low-power would stall the sync. Defer sleep until it finishes. */
-    if (!atomic_get(&aad_in_sleep) && !storage_transfer_active() &&
+    /* Hardware AAD turns the mic off — audio during sleep is lost until WAKE.
+     * Skip sleep while a phone is connected so live capture keeps sampling.
+     * Also wait until the software gate is quiet and no sync is active. */
+    if (!atomic_get(&aad_in_sleep) && !is_connected && !storage_transfer_active() && vad_gate_allows_hw_aad_sleep() &&
         (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
         atomic_set(&aad_req_sleep, 1);
         k_sem_give(&aad_sem);
