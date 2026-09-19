@@ -121,6 +121,26 @@ class GitHubSettingsEncodingTests(unittest.TestCase):
         self.assertNotIn('const CURRENT_UID = "user</script>', content)
         self.assertNotIn('</script><script>alert', content)
 
+    def test_authenticated_page_json_serializes_provider_labels_and_keys(self):
+        user = {
+            "access_token": "valid_token",
+            "github_username": "octocat",
+            "selected_repo": "owner/repo",
+            "available_repos": [{"full_name": "owner/repo", "private": False}],
+            "agent_provider": "claude_code",
+            "agent_api_keys": {
+                "claude_code": '</script>alert("xss")',
+                "coder": 'a"onmouseover="alert(1)',
+            },
+        }
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user):
+            content = asyncio.run(main.root(uid="u123")).content
+
+        self.assertIn('const agentProviderLabels = {"claude_code": "Claude Code"};', content)
+        self.assertIn('const agentProviderKeys = {"claude_code": "<\\/script>a...", "coder": "a\\"onmouseo', content)
+        self.assertNotIn('const agentProviderKeys = {"claude_code": "</script>', content)
+        self.assertNotIn('"coder": "a"onmouseover', content)
+
     def test_callback_success_escapes_username_and_encodes_uid(self):
         mock_github = Mock()
         mock_github.exchange_code_for_token.return_value = {"access_token": "tok123"}

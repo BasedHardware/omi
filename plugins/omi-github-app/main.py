@@ -932,12 +932,10 @@ async def root(uid: str = Query(None)):
         key: (value[:10] + "...") if value else ""
         for key, value in agent_api_keys.items()
     }
-    provider_labels_js = "{" + ",".join(
-        [f'"{key}":"{meta["label"]}"' for key, meta in PROVIDERS.items()]
-    ) + "}"
-    provider_keys_js = "{" + ",".join(
-        [f'"{key}":"{value}"' for key, value in masked_keys_by_provider.items()]
-    ) + "}"
+    provider_labels_js = json.dumps(
+        {key: meta["label"] for key, meta in PROVIDERS.items()}
+    ).replace('</', '<\\/')  # '\/' keeps a raw '</script>' out of the inline <script> block
+    provider_keys_js = json.dumps(masked_keys_by_provider).replace('</', '<\\/')  # keys and masked values are user-derived strings
 
     safe_username = html.escape(github_username)
     safe_masked_agent_key = html.escape(masked_agent_key, quote=True)
