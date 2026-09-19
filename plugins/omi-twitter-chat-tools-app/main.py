@@ -5,6 +5,7 @@ This app provides Twitter/X integration through OAuth2 authentication
 and chat tools for managing tweets, reading timeline, and more.
 """
 import os
+import html
 import sys
 import secrets
 import hashlib
@@ -1154,7 +1155,7 @@ async def twitter_callback(
 
         if response.status_code != 200:
             log(f"Token exchange failed: {response.status_code}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            return HTMLResponse(content=f"Token exchange failed: {html.escape(response.text, quote=True)}", status_code=400)
 
         token_response = response.json()
         access_token = token_response.get("access_token")
@@ -1218,7 +1219,7 @@ async def twitter_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content=f"Authentication error: {html.escape(str(e), quote=True)}", status_code=500)
 
 
 @app.get("/setup/twitter")
