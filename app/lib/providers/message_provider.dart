@@ -28,8 +28,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
 
+typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
+
 class MessageProvider extends ChangeNotifier {
-  MessageProvider();
+  MessageProvider({ChatFilesUploader? filesUploader}) : _filesUploader = filesUploader ?? uploadFilesServer;
+
+  final ChatFilesUploader _filesUploader;
 
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
@@ -55,6 +59,7 @@ class MessageProvider extends ChangeNotifier {
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
   List<MessageFile> uploadedFiles = [];
+  final Map<File, MessageFile> _uploadedBySelection = Map.identity();
   bool isUploadingFiles = false;
   Map<String, bool> uploadingFiles = {};
 
@@ -293,20 +298,23 @@ class MessageProvider extends ChangeNotifier {
 
   void clearSelectedFile(int index) {
     if (index < 0 || index >= selectedFiles.length) return;
-    selectedFiles.removeAt(index);
+    final removed = selectedFiles.removeAt(index);
     selectedFileTypes.removeAt(index);
-    if (index < uploadedFiles.length) uploadedFiles.removeAt(index);
+    final uploaded = _uploadedBySelection.remove(removed);
+    if (uploaded != null) uploadedFiles.remove(uploaded);
     notifyListeners();
   }
 
   void clearSelectedFiles() {
     selectedFiles.clear();
     selectedFileTypes.clear();
+    _uploadedBySelection.clear();
     notifyListeners();
   }
 
   void clearUploadedFiles() {
     uploadedFiles.clear();
+    _uploadedBySelection.clear();
     notifyListeners();
   }
 
@@ -316,6 +324,7 @@ class MessageProvider extends ChangeNotifier {
     selectedFiles = [];
     selectedFileTypes = [];
     uploadedFiles = [];
+    _uploadedBySelection.clear();
     uploadingFiles = {};
     notifyListeners();
   }
@@ -325,13 +334,17 @@ class MessageProvider extends ChangeNotifier {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
       List<MessageFile>? res;
       try {
-        res = await uploadFilesServer(files, appId: appId);
+        res = await _filesUploader(files, appId: appId);
       } catch (e) {
         Logger.debug('uploadFiles failed: $e');
         res = null;
       }
       if (res != null) {
-        uploadedFiles.addAll(res);
+        for (var i = 0; i < res.length && i < files.length; i++) {
+          if (!selectedFiles.any((f) => identical(f, files[i]))) continue;
+          uploadedFiles.add(res[i]);
+          _uploadedBySelection[files[i]] = res[i];
+        }
       } else {
         for (var i = selectedFiles.length - 1; i >= 0; i--) {
           if (files.any((f) => identical(f, selectedFiles[i]))) {
