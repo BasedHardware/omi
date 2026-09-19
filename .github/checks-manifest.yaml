@@ -1137,6 +1137,11 @@ checks:
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "escapes Slack channel and workspace names at HTML boundaries, percent-encodes reflected uid parameter to prevent attribute breakout and URL query corruption in setup and OAuth callback pages"
+  - id: slack-chat-tools-tests
+    command: ["python3", "plugins/omi-slack-app/test_slack_chat_tools.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Slack chat tools must resolve raw channel IDs, mention syntax (<#C...>), and archive URLs, while rejecting malformed/non-string parameters with 400 validation errors instead of uncaught AttributeErrors"
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
