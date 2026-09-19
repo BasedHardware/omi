@@ -1177,6 +1177,16 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: dropbox-app-settings-encoding-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_settings_page_encoding.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "OAuth callback error, exceptions, and connect/disconnect/settings uid links must be properly HTML-escaped and URL-encoded to prevent reflected XSS"
+  - id: dropbox-app-client-tests
+    command: ["pytest", "plugins/omi-dropbox-app/test_dropbox_client.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "regression suite for dropbox client download retry and error handling"
   - id: mcp-date-filter-tests
     command: ["python3", "mcp/tests/test_date_filters.py"]
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
