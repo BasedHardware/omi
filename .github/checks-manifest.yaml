@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: sec-edgar-app-tests
+    command: ["python3", "plugins/omi-sec-edgar-app/test_main.py"]
+    triggers: ["plugins/omi-sec-edgar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SEC EDGAR app must resolve ticker, CIK, and company names safely, filter filings by form, format annual XBRL facts, ignore Omi uid, and fail closed on SEC denial, non-JSON, malformed, and oversized payloads"
   - id: hive-limit-coercion-tests
     command: ["python3", "plugins/omi-hive-app/test_limit_coercion.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
