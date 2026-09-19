@@ -21,6 +21,7 @@ from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
+from utils.product_metrics import extract_app_version, extract_surface, record_product_event
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
@@ -1889,6 +1890,8 @@ def _create_conversation_from_segments(
     *,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
+    app_version: Optional[str] = None,
+    surface: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -2102,6 +2105,8 @@ def _create_conversation_from_segments(
     receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
+    # Only new successful ingests reach here; idempotent replays return above.
+    record_product_event("conversation_created", app_version=app_version, surface=surface)
     return ConversationResponse(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
@@ -2127,6 +2132,8 @@ def create_conversation_from_segments_user(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        app_version=extract_app_version(http_request),
+        surface=extract_surface(http_request),
     )
 
 
@@ -2194,6 +2201,8 @@ def create_conversation_from_segments(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        app_version=extract_app_version(http_request),
+        surface="unknown",  # Developer API key does not establish a first-party surface.
     )
 
 

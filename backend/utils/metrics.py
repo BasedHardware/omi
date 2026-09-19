@@ -12,6 +12,12 @@ from utils.journey_metrics_contract import (
     CLIENT_KINDS,
 )
 
+OMI_PRODUCT_EVENT_TOTAL = Counter(
+    'omi_product_event_total',
+    'Successful product events by bounded event, app version, and surface.',
+    ['event', 'app_version', 'surface'],
+)
+
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
     'Number of currently active WebSocket connections in backend-listen',
