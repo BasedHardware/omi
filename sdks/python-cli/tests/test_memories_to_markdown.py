@@ -138,6 +138,45 @@ class TestMemoriesToMarkdown(unittest.TestCase):
         self.assertEqual(len(items), 3)
         self.assertEqual(items[0]["id"], "mem_01_work")
 
+    def test_colliding_category_filenames_preserve_every_group(self):
+        categories = ["work/life", "work?life", "work_life_2", "!!!", "???", "memories_2", "memories"]
+        items = [{"category": category, "content": f"Memory {index}"} for index, category in enumerate(categories)]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            written = m2m.write_grouped_directory(items, output_dir)
+
+            self.assertEqual(len(set(written)), len(items))
+            self.assertEqual(len(list(output_dir.glob("*.md"))), len(items))
+            for item in items:
+                matching = [path for path in written if f"- {item['content']}\n" in path.read_text(encoding="utf-8")]
+                self.assertEqual(len(matching), 1, item)
+            self.assertIn("Memory 2", (output_dir / "work_life_2_memories.md").read_text(encoding="utf-8"))
+            self.assertIn("Memory 5", (output_dir / "memories_2_memories.md").read_text(encoding="utf-8"))
+
+            # The same groups keep the same filenames even when input order changes.
+            repeated = m2m.write_grouped_directory(list(reversed(items)), output_dir)
+            self.assertEqual(written, repeated)
+            self.assertEqual(len(list(output_dir.glob("*.md"))), len(items))
+
+    def test_casefold_equivalent_filenames_preserve_every_group(self):
+        items = [
+            {"category": "straße", "content": "First memory"},
+            {"category": "strasse", "content": "Second memory"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            written = m2m.write_grouped_directory(items, Path(tmp_dir))
+            self.assertEqual(len({path.name.casefold() for path in written}), 2)
+            for item in items:
+                self.assertEqual(sum(item["content"] in path.read_text(encoding="utf-8") for path in written), 1)
+
+    def test_noncolliding_category_filenames_remain_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            written = m2m.write_grouped_directory(self.sample_memories, Path(tmp_dir))
+            self.assertEqual(
+                {path.name for path in written},
+                {"work_memories.md", "skills_memories.md", "learnings_memories.md"},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

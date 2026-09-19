@@ -61,6 +61,11 @@ python memories_to_markdown.py memories.json --output-dir ./vault/memories/ --gr
 
 This creates files like `work_memories.md`, `skills_memories.md`, `learnings_memories.md`, etc.
 
+If custom category names become identical after filename sanitization (for example,
+`work/life` and `work?life`), each group gets its own file with a numeric suffix
+where needed. Re-exporting the same set of groups uses the same filenames and
+replaces those generated notes, regardless of input order.
+
 ### 5. Group by Date into Daily Notes
 
 Split memories into daily logs:
