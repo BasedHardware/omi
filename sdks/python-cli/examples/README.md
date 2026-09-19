@@ -21,6 +21,7 @@
 * [`quickstart.ar.md`](quickstart.ar.md) — دليل البدء السريع لـ omi-cli بالعربية (Arabic Quickstart).
 * [`quickstart.vi.md`](quickstart.vi.md) — hướng dẫn nhanh omi-cli bằng tiếng Việt (Vietnamese Quickstart).
 * [`quickstart.cs.md`](quickstart.cs.md) — český rychlý start pro omi-cli (Czech Quickstart).
+* [`quickstart.co.md`](quickstart.co.md) — Primi passi cù omi-cli (Corsican Quickstart).
 * [`quickstart.he.md`](quickstart.he.md) — מדריך התחלה מהירה של omi-cli בעברית (Hebrew Quickstart).
 * [`quickstart.fr.md`](quickstart.fr.md) — guide de démarrage rapide omi-cli en français (French Quickstart).
 * [`quickstart.de.md`](quickstart.de.md) — deutsche Schnellstartanleitung für omi-cli (German Quickstart).
@@ -75,6 +76,9 @@
 * [`quickstart.sl.md`](quickstart.sl.md) — Prvi koraki z omi-cli (Slovenian Quickstart).
 * [`quickstart.so.md`](quickstart.so.md) — Tallaabooyinka ugu Horeeya ee omi-cli (Somali Quickstart).
 * [`quickstart.sq.md`](quickstart.sq.md) — Hapat e Parë me omi-cli (Albanian Quickstart).
+* [`quickstart.sm.md`](quickstart.sm.md) — Muamua laasaga ma omi-cli (Samoan Quickstart).
+* [`quickstart.haw.md`](quickstart.haw.md) — ʻO nā hana mua me omi-cli (Hawaiian Quickstart).
+* [`quickstart.to.md`](quickstart.to.md) — Siaki muamua mo omi-cli (Tongan Quickstart).
 * [`quickstart.te.md`](quickstart.te.md) — omi-cli తో ప్రారంభ దశలు (Telugu Quickstart).
 * [`quickstart.tg.md`](quickstart.tg.md) — omi-cli Дастури оғози сареъ (Tajik Quickstart).
 * [`quickstart.tl.md`](quickstart.tl.md) — Mga Unang Hakbang gamit ang omi-cli (Tagalog Quickstart).
