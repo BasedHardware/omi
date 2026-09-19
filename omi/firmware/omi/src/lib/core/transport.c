@@ -472,6 +472,7 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 #endif
 #ifdef CONFIG_OMI_ENABLE_BUTTON
     features |= OMI_FEATURE_BUTTON;
+    features |= OMI_FEATURE_BUTTON_TAPS;
 #endif
 #ifdef CONFIG_OMI_ENABLE_BATTERY
     features |= OMI_FEATURE_BATTERY;

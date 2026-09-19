@@ -114,6 +114,20 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<StreamSubscription?> performGetBleButtonTapsListener(
+      {required void Function(List<int>) onTapsReceived}) async {
+    try {
+      final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTapsCharacteristicUuid);
+      return stream.listen((value) {
+        if (value.isNotEmpty) onTapsReceived(value);
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting up button taps listener: $e');
+      return null;
+    }
+  }
+
+  @override
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {

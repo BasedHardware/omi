@@ -521,6 +521,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get doubleTap => 'Double Tap';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
   String get ledBrightness => 'LED Brightness';
 
   @override
@@ -592,6 +595,15 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Double Tap Action';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
 
   @override
   String get endAndProcess => 'Tapusin & Proseso ang Pag-uusap';

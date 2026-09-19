@@ -520,6 +520,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get doubleTap => 'Dvojité ťuknutie';
 
   @override
+  String get singleTap => 'Jedno ťuknutie';
+
+  @override
   String get ledBrightness => 'Jas LED';
 
   @override
@@ -591,6 +594,15 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Akcia dvojitého ťuknutia';
+
+  @override
+  String get tripleTap => 'Trojité ťuknutie';
+
+  @override
+  String get tripleTapAction => 'Akcia trojitého ťuknutia';
+
+  @override
+  String get singleTapAction => 'Akcia jedného ťuknutia';
 
   @override
   String get endAndProcess => 'Ukončiť a spracovať konverzáciu';

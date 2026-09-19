@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Double Tap",
+    "singleTap": "Single Tap",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,9 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Double Tap Action",
+    "tripleTap": "Triple Tap",
+    "tripleTapAction": "Triple Tap Action",
+    "singleTapAction": "Single Tap Action",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

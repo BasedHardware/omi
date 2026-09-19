@@ -519,6 +519,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get doubleTap => 'दुहेरी टॅप';
 
   @override
+  String get singleTap => 'एकेरी टॅप';
+
+  @override
   String get ledBrightness => 'LED चमक';
 
   @override
@@ -590,6 +593,15 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'दुहेरी टॅप क्रिया';
+
+  @override
+  String get tripleTap => 'तिहेरी टॅप';
+
+  @override
+  String get tripleTapAction => 'तिहेरी टॅप क्रिया';
+
+  @override
+  String get singleTapAction => 'एकेरी टॅप क्रिया';
 
   @override
   String get endAndProcess => 'संभाषण समाप्त आणि प्रक्रिया करा';

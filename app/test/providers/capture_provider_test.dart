@@ -1755,4 +1755,81 @@ void main() {
       });
     });
   });
+
+  group('button tap sequence', () {
+    setUp(() {
+      SharedPreferencesUtil().singleTapAction = 3;
+      SharedPreferencesUtil().doubleTapAction = 3;
+      SharedPreferencesUtil().tripleTapAction = 3;
+    });
+
+    test('a mapped tap runs on the tap itself when no longer tap is mapped', () {
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a mapped tap waits for the sequence end while a longer tap is mapped', () {
+      SharedPreferencesUtil().doubleTapAction = 2;
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      provider.handleButtonTapsForTesting('device', [2, 1]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a triple tap runs on the third tap and the sequence end does not repeat it', () {
+      SharedPreferencesUtil().singleTapAction = 1;
+      SharedPreferencesUtil().tripleTapAction = 2;
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+      provider.handleButtonTapsForTesting('device', [1, 2]);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      provider.handleButtonTapsForTesting('device', [1, 3]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+
+      provider.handleButtonTapsForTesting('device', [2, 3]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a truncated notification is ignored', () {
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1]);
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+    });
+  });
+
+  group('legacy button stream', () {
+    setUp(() {
+      SharedPreferencesUtil().singleTapAction = 0;
+    });
+
+    test('the release that trails a single tap does not end the question it started', () {
+      final provider = CaptureProvider();
+
+      provider.handleLegacyButtonForTesting('device', [1, 0, 0, 0, 0, 0, 0, 0]);
+      expect(provider.voiceQuestionActiveForTesting, isTrue);
+
+      provider.handleLegacyButtonForTesting('device', [5, 0, 0, 0, 0, 0, 0, 0]);
+      expect(provider.voiceQuestionActiveForTesting, isTrue);
+    });
+
+    test('a release still ends a question started by holding the button', () {
+      final provider = CaptureProvider();
+
+      provider.handleLegacyButtonForTesting('device', [3, 0, 0, 0, 0, 0, 0, 0]);
+      expect(provider.voiceQuestionActiveForTesting, isTrue);
+
+      provider.handleLegacyButtonForTesting('device', [5, 0, 0, 0, 0, 0, 0, 0]);
+      expect(provider.voiceQuestionActiveForTesting, isFalse);
+    });
+  });
 }

@@ -519,6 +519,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get doubleTap => 'Dvojité klepnutí';
 
   @override
+  String get singleTap => 'Jednoduché klepnutí';
+
+  @override
   String get ledBrightness => 'Jas LED';
 
   @override
@@ -589,6 +592,15 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Akce dvojitého klepnutí';
+
+  @override
+  String get tripleTap => 'Trojité klepnutí';
+
+  @override
+  String get tripleTapAction => 'Akce trojitého klepnutí';
+
+  @override
+  String get singleTapAction => 'Akce jednoduchého klepnutí';
 
   @override
   String get endAndProcess => 'Ukončit a zpracovat konverzaci';
