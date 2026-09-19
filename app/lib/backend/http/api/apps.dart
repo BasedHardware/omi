@@ -52,8 +52,10 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
 }) async {
   final url = '${Env.apiBaseUrl}v2/apps?offset=$offset&limit=$limit&include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
+  if (response == null || response.statusCode != 200 || response.body.isEmpty) {
+    throw Exception('Failed to load the app catalog');
+  }
   try {
-    if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
     final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 
     final List<Map<String, dynamic>> parsed = [];
@@ -73,7 +75,7 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return [];
+    rethrow;
   }
 }
 
@@ -199,13 +201,13 @@ Future<List<App>> retrievePopularApps() async {
 
 Future<List<String>> getEnabledAppsServer() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/enabled', headers: {}, body: '', method: 'GET');
+  if (response == null || response.statusCode != 200) throw Exception('Failed to load enabled apps');
   try {
-    if (response == null || response.statusCode != 200) return [];
     return wire.GeneratedEnabledAppsResponse.fromJsonList(jsonDecode(response.body) as List<dynamic>).items;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return [];
+    rethrow;
   }
 }
 
