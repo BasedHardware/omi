@@ -25,4 +25,15 @@ void main() {
   test('a rating without a reason sends no reason', () {
     expect(sent(chatMessageRatingPath('message-1', 1)), {'message_id': 'message-1', 'value': '1'});
   });
+
+  test('a summary rating reason reaches the server unchanged', () {
+    for (final reason in texts) {
+      final query = sent(conversationSummaryRatingPath('conversation-1', -1, reason: reason));
+      expect(query, {'memory_id': 'conversation-1', 'value': '-1', 'reason': reason});
+    }
+  });
+
+  test('a summary rating without a reason sends no reason', () {
+    expect(sent(conversationSummaryRatingPath('conversation-1', 1)), {'memory_id': 'conversation-1', 'value': '1'});
+  });
 }

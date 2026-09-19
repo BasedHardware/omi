@@ -275,9 +275,18 @@ Future<bool> deletePersonSpeechSample(String personId, int sampleIndex) async {
 
 /*Analytics*/
 
+@visibleForTesting
+String conversationSummaryRatingPath(String conversationId, int value, {String? reason}) {
+  var path = 'v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value';
+  if (reason != null && reason.isNotEmpty) {
+    path += '&reason=${Uri.encodeQueryComponent(reason)}';
+  }
+  return path;
+}
+
 Future<bool> setConversationSummaryRating(String conversationId, int value, {String? reason}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value&reason=$reason',
+    url: '${Env.apiBaseUrl}${conversationSummaryRatingPath(conversationId, value, reason: reason)}',
     headers: {},
     method: 'POST',
     body: '',
