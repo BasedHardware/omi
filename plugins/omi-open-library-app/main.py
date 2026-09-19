@@ -65,7 +65,7 @@ class ChatToolResponse(BaseModel):
 
 
 def _safe_limit(limit: Any, default: int = 5) -> int:
-    if limit is None or limit == "":
+    if limit is None or limit == "" or isinstance(limit, bool):
         return default
     try:
         limit = int(limit)
@@ -148,9 +148,12 @@ def _format_book(doc: dict[str, Any], index: int) -> str:
 
 def _format_subject_work(work: dict[str, Any], index: int) -> str:
     title = _clean_text(work.get("title")) or "Untitled"
+    raw_authors = work.get("authors") or []
+    if not isinstance(raw_authors, list):
+        raw_authors = [raw_authors]
     authors = ", ".join(
         _clean_text(author.get("name"))
-        for author in work.get("authors", [])
+        for author in raw_authors
         if isinstance(author, dict) and _clean_text(author.get("name"))
     )
     authors = authors or "unknown author"
@@ -279,6 +282,9 @@ async def get_omi_tools_manifest():
 
 @app.post("/tools/search_books", response_model=ChatToolResponse)
 async def search_books(payload: dict[str, Any]):
+    if not isinstance(payload, dict):
+        return ChatToolResponse(error="Request payload must be a JSON object.")
+
     query = _clean_text(payload.get("query"))
     author = _clean_text(payload.get("author"))
     subject = _clean_text(payload.get("subject"))
@@ -297,7 +303,8 @@ async def search_books(payload: dict[str, Any]):
 
     try:
         data = await _request_json("/search.json", params=params)
-        docs = data.get("docs", [])[:limit]
+        raw_docs = data.get("docs") or []
+        docs = raw_docs[:limit] if isinstance(raw_docs, list) else []
         if not docs:
             return ChatToolResponse(result="No matching books found.")
 
@@ -316,6 +323,9 @@ async def search_books(payload: dict[str, Any]):
 
 @app.post("/tools/get_book_details", response_model=ChatToolResponse)
 async def get_book_details(payload: dict[str, Any]):
+    if not isinstance(payload, dict):
+        return ChatToolResponse(error="Request payload must be a JSON object.")
+
     work_id = _work_id(payload.get("work_id"))
     isbn = _safe_isbn(payload.get("isbn"))
 
@@ -330,22 +340,35 @@ async def get_book_details(payload: dict[str, Any]):
                 return ChatToolResponse(result=f"No Open Library details found for ISBN {isbn}.")
 
             title = _clean_text(book.get("title")) or "Untitled"
+            raw_authors = book.get("authors") or []
+            if not isinstance(raw_authors, list):
+                raw_authors = [raw_authors]
             authors = ", ".join(
                 _clean_text(author.get("name"))
-                for author in book.get("authors", [])
+                for author in raw_authors
                 if isinstance(author, dict) and _clean_text(author.get("name"))
             ) or "unknown author"
+
+            raw_publishers = book.get("publishers") or []
+            if not isinstance(raw_publishers, list):
+                raw_publishers = [raw_publishers]
             publishers = ", ".join(
                 _clean_text(publisher.get("name"))
-                for publisher in book.get("publishers", [])
+                for publisher in raw_publishers
                 if isinstance(publisher, dict) and _clean_text(publisher.get("name"))
             )
+
             publish_date = _clean_text(book.get("publish_date")) or "unknown date"
+
+            raw_subjects = book.get("subjects") or []
+            if not isinstance(raw_subjects, list):
+                raw_subjects = [raw_subjects]
             subjects = ", ".join(
                 _clean_text(subject.get("name"))
-                for subject in book.get("subjects", [])[:6]
+                for subject in raw_subjects[:6]
                 if isinstance(subject, dict) and _clean_text(subject.get("name"))
             )
+
             details = [
                 f"{title}",
                 f"Author: {authors}",
@@ -391,6 +414,9 @@ async def get_book_details(payload: dict[str, Any]):
 
 @app.post("/tools/search_subject", response_model=ChatToolResponse)
 async def search_subject(payload: dict[str, Any]):
+    if not isinstance(payload, dict):
+        return ChatToolResponse(error="Request payload must be a JSON object.")
+
     subject = _clean_text(payload.get("subject"))
     slug = _subject_slug(subject)
     limit = _safe_limit(payload.get("limit"))
@@ -400,7 +426,8 @@ async def search_subject(payload: dict[str, Any]):
     try:
         encoded_slug = quote(slug)
         data = await _request_json(f"/subjects/{encoded_slug}.json", params={"limit": limit})
-        works = data.get("works", [])[:limit]
+        raw_works = data.get("works") or []
+        works = raw_works[:limit] if isinstance(raw_works, list) else []
         if not works:
             return ChatToolResponse(result=f"No books found for subject {subject}.")
 
