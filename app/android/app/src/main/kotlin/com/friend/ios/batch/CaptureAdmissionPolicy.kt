@@ -10,7 +10,7 @@ import org.json.JSONObject
  * gone. A revision is stamped on work admitted by a callback and checked again
  * at the sink boundary; this retires work queued before a policy change.
  */
-internal data class CaptureAdmissionPolicy(
+data class CaptureAdmissionPolicy(
     val muted: Boolean,
     val revision: Long,
 ) {
