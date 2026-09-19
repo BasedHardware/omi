@@ -349,6 +349,10 @@ write. These failures return exit code `3` with an `outcome unknown` message.
 Check the resource before trying again. Connection-establishment failures and
 rate-limit responses still retry; read retries are unchanged.
 
+## Allow clearing an action item due date
+
+`omi action-item update ID --clear-due-at` removes a due date on servers supporting explicit null PATCH fields (backend fix #13029). It cannot be combined with `--due-at`. Omitting both leaves the date unchanged.
+
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`
 (UTC), numeric offsets, and optional fractional seconds, for example
