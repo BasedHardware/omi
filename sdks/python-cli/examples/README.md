@@ -58,6 +58,14 @@
 * [`quickstart.cy.md`](quickstart.cy.md) — Canllaw Cychwyn Cyflym omi-cli (Welsh Quickstart).
 * [`quickstart.doi.md`](quickstart.doi.md) — omi-cli डोगरी शुरूआती मार्गदर्शिका (Dogri Quickstart).
 * [`quickstart.el.md`](quickstart.el.md) — Πρώτα βήματα με το omi-cli (Greek Quickstart).
+* [`quickstart.nap.md`](quickstart.nap.md) — 'e primme passe cu omi-cli (Neapolitan Quickstart).
+* [`quickstart.fj.md`](quickstart.fj.md) — na istepu taumada kei omi-cli (Fijian Quickstart).
+* [`quickstart.pap.md`](quickstart.pap.md) — promé pasonan cu omi-cli (Papiamento Quickstart).
+* [`quickstart.mwl.md`](quickstart.mwl.md) — purmeiros passos cun omi-cli (Mirandese Quickstart).
+* [`quickstart.hsb.md`](quickstart.hsb.md) — prěnje kroki z omi-cli (Upper Sorbian Quickstart).
+* [`quickstart.rm.md`](quickstart.rm.md) — prims pass cun omi-cli (Romansh Quickstart).
+* [`quickstart.rup.md`](quickstart.rup.md) — protili pãshefts cu omi-cli (Aromanian Quickstart).
+* [`quickstart.ext.md`](quickstart.ext.md) — los primerus pasus con omi-cli (Extremaduran Quickstart).
 * [`quickstart.eo.md`](quickstart.eo.md) — Komencante per omi-cli (Esperanto Quickstart).
 * [`quickstart.et.md`](quickstart.et.md) — omi-cli Kiirjuhend (Estonian Quickstart).
 * [`quickstart.eu.md`](quickstart.eu.md) — Hasteko Gida Azkarra: omi-cli (Basque Quickstart).
