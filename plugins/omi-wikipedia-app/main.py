@@ -184,7 +184,8 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/search_articles", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_articles(payload: dict[str, Any]):
+async def search_articles(payload: Optional[dict[str, Any]] = None):
+    payload = payload or {}
     query = (payload.get("query") or "").strip()
     if not query:
         return ChatToolResponse(error="Missing required field: query")
@@ -226,7 +227,8 @@ async def search_articles(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_article_summary", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_article_summary(payload: dict[str, Any]):
+async def get_article_summary(payload: Optional[dict[str, Any]] = None):
+    payload = payload or {}
     title = (payload.get("title") or "").strip()
     if not title:
         return ChatToolResponse(error="Missing required field: title")
@@ -251,7 +253,8 @@ async def get_article_summary(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_random_article", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_random_article(payload: dict[str, Any]):
+async def get_random_article(payload: Optional[dict[str, Any]] = None):
+    payload = payload or {}
     language = _safe_language(payload.get("language"))
     url = f"https://{language}.wikipedia.org/w/api.php"
 
