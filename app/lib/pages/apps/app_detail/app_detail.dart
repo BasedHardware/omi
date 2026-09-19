@@ -1038,7 +1038,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16.0),
                                 onTap: () async {
-                                  final rawUrl = "${step.url}?uid=${SharedPreferencesUtil().uid}";
+                                  final rawUrl = appSetupUrlWithUid(step.url, SharedPreferencesUtil().uid);
                                   final uri = Uri.tryParse(rawUrl);
                                   if (uri == null) {
                                     ScaffoldMessenger.of(
@@ -1513,7 +1513,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     if (hasAuthSteps && app.externalIntegration!.authSteps.isNotEmpty) {
       final firstStep = app.externalIntegration!.authSteps.first;
-      final rawUrl = "${firstStep.url}?uid=${SharedPreferencesUtil().uid}";
+      final rawUrl = appSetupUrlWithUid(firstStep.url, SharedPreferencesUtil().uid);
       final uri = Uri.tryParse(rawUrl);
       if (uri == null) {
         if (mounted) {
