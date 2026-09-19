@@ -1258,6 +1258,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14270: tool_search_issues bound a raw body.get('limit', 5) to a non-nullable $first: Int!, so the null the backend sends for an omitted limit failed both the searchIssues query and the issues(filter:) fallback; the limit must run through coerce_limit()"
+  - id: shipbob-app-security-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_shipbob_security.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET / setup page must safely JSON-serialize uid in inline scripts to prevent script-context breakouts, URL-encode uid in links, and escape callback errors"
   - id: desktop-build-source-identity
     command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
