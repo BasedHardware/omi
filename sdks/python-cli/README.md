@@ -378,3 +378,5 @@ bash release.sh --build-only
 MIT — see [`LICENSE`](LICENSE).
 
 - [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
+
+> Looking for localized guides? See the [🇪🇸 Guía rapida d'omi-cli (Aragonese Quickstart)](examples/quickstart.an.md).
