@@ -49,6 +49,7 @@ def load_app():
     fastapi.FastAPI = FastAPI
     fastapi.Request = object
     fastapi.Query = lambda default=None, **kwargs: default
+    fastapi.Depends = lambda default=None, **kwargs: default
     fastapi.HTTPException = Exception
     responses = ModuleType("fastapi.responses")
     responses.HTMLResponse = str

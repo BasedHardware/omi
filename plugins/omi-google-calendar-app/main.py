@@ -14,7 +14,7 @@ from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import Depends, FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from db import (
@@ -29,6 +29,7 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
+from calendar_tools_auth import require_calendar_tools_auth
 
 load_dotenv()
 
@@ -506,7 +507,7 @@ async def get_omi_tools_manifest():
 # ============================================
 
 @app.post("/tools/list_events", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_list_events(request: Request):
+async def tool_list_events(request: Request, _auth: None = Depends(require_calendar_tools_auth)):
     """List upcoming calendar events."""
     try:
         body = await request.json()
@@ -571,7 +572,7 @@ async def tool_list_events(request: Request):
 
 
 @app.post("/tools/create_event", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_create_event(request: Request):
+async def tool_create_event(request: Request, _auth: None = Depends(require_calendar_tools_auth)):
     """Create a new calendar event."""
     try:
         body = await request.json()
@@ -685,7 +686,7 @@ async def tool_create_event(request: Request):
 
 
 @app.post("/tools/get_event", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_event(request: Request):
+async def tool_get_event(request: Request, _auth: None = Depends(require_calendar_tools_auth)):
     """Get details of a specific event."""
     try:
         body = await request.json()
@@ -752,7 +753,7 @@ async def tool_get_event(request: Request):
 
 
 @app.post("/tools/update_event", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_update_event(request: Request):
+async def tool_update_event(request: Request, _auth: None = Depends(require_calendar_tools_auth)):
     """Update an existing calendar event."""
     try:
         body = await request.json()
@@ -840,7 +841,7 @@ async def tool_update_event(request: Request):
 
 
 @app.post("/tools/delete_event", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_delete_event(request: Request):
+async def tool_delete_event(request: Request, _auth: None = Depends(require_calendar_tools_auth)):
     """Delete a calendar event."""
     try:
         body = await request.json()
@@ -877,7 +878,7 @@ async def tool_delete_event(request: Request):
 
 
 @app.post("/tools/list_calendars", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_list_calendars(request: Request):
+async def tool_list_calendars(request: Request, _auth: None = Depends(require_calendar_tools_auth)):
     """List all calendars available to the user."""
     try:
         body = await request.json()

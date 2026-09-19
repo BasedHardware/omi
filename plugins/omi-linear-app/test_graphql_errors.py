@@ -81,6 +81,7 @@ def _install_module_stubs():
     fastapi.HTTPException = HTTPException
     fastapi.Request = Request
     fastapi.Query = Query
+    fastapi.Depends = Query
     sys.modules["fastapi"] = fastapi
 
     responses = types.ModuleType("fastapi.responses")
