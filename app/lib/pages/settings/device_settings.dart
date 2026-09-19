@@ -239,6 +239,39 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return KeyedSubtree(key: key, child: content);
   }
 
+
+  Future<void> _renameDevice(BtDevice device, DeviceProvider provider) async {
+    final controller = TextEditingController(text: device.name);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.deviceName),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: Text(context.l10n.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (newName == null || newName.trim().isEmpty || newName.trim() == device.name) return;
+    await provider.renameDevice(newName);
+    if (mounted) setState(() {});
+  }
+
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
     final deviceName = device?.name ?? 'Omi DevKit';
     final deviceId = device?.id ?? '12AB34CD:56EF78GH';
@@ -262,7 +295,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             title: context.l10n.deviceName,
             chipValue: deviceName,
             copyValue: deviceName,
-            showChevron: false,
+            showChevron: device != null,
+            onTap: device == null ? null : () => _renameDevice(device, provider),
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
