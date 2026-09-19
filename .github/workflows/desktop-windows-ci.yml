@@ -18,11 +18,13 @@ on:
     paths:
       - 'desktop/windows/**'
       - '.github/workflows/desktop-windows-ci.yml'
+      - '.github/workflows/desktop_windows_release.yml'
   pull_request:
     branches: [main]
     paths:
       - 'desktop/windows/**'
       - '.github/workflows/desktop-windows-ci.yml'
+      - '.github/workflows/desktop_windows_release.yml'
 
 defaults:
   run:
@@ -93,7 +95,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build unpacked app
-        run: pnpm run build:unpack
+        run: pnpm run build:win:unpack
       - name: Upload unpacked build
         uses: actions/upload-artifact@v7
         with:
