@@ -4,13 +4,14 @@ Whoop Integration App for Omi
 This app provides Whoop fitness tracker integration through OAuth2 authentication
 and chat tools for accessing strain, recovery, sleep, and workout data.
 """
+import html
 import os
 import html
 import sys
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from dotenv import load_dotenv
@@ -1013,7 +1014,8 @@ async def root(uid: str = Query(None)):
     tokens = get_whoop_tokens(uid)
 
     if not tokens:
-        auth_url = f"/auth/whoop?uid={uid}"
+        auth_url = f"/auth/whoop?uid={quote(uid, safe='')}"
+        safe_auth_url = html.escape(auth_url, quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1027,7 +1029,7 @@ async def root(uid: str = Query(None)):
                     <h1>Whoop</h1>
                     <p>Track your recovery, strain, and sleep through Omi chat</p>
 
-                    <a href="{auth_url}" class="btn btn-primary btn-block">
+                    <a href="{safe_auth_url}" class="btn btn-primary btn-block">
                         Connect Whoop
                     </a>
 
@@ -1055,6 +1057,7 @@ async def root(uid: str = Query(None)):
         """)
 
     # User is connected
+    safe_disconnect_url = html.escape(f"/disconnect?uid={quote(uid, safe='')}", quote=True)
     return HTMLResponse(content=f"""
     <html>
         <head>
@@ -1077,7 +1080,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Show my recent workouts"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="{safe_disconnect_url}" class="btn btn-secondary btn-block">
                     Disconnect Whoop
                 </a>
 
@@ -1123,7 +1126,8 @@ async def whoop_callback(
     error: str = Query(None)
 ):
     """Handle Whoop OAuth2 callback."""
-    if error:
+    if error and isinstance(error, str):
+        safe_error = html.escape(error)
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>
@@ -1131,14 +1135,14 @@ async def whoop_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{html.escape(error or "", quote=True)}</p>
+                        <p>{safe_error}</p>
                     </div>
                 </div>
             </body>
         </html>
         """, status_code=400)
 
-    if not code or not state:
+    if not code or not state or not isinstance(code, str) or not isinstance(state, str):
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>
@@ -1202,6 +1206,7 @@ async def whoop_callback(
 
         store_whoop_tokens(uid, access_token, refresh_token, expires_at)
 
+        safe_continue_url = html.escape(f"/?uid={quote(uid, safe='')}", quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1217,7 +1222,7 @@ async def whoop_callback(
                         <p>Your Whoop is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="{safe_continue_url}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1237,7 +1242,8 @@ async def whoop_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        safe_error = html.escape(str(e))
+        return HTMLResponse(content=f"Authentication error: {safe_error}", status_code=500)
 
 
 @app.get("/setup/whoop")
@@ -1251,7 +1257,7 @@ async def check_setup(uid: str = Query(...)):
 async def disconnect(uid: str = Query(...)):
     """Disconnect Whoop."""
     delete_whoop_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 @app.get("/health")
