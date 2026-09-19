@@ -2,6 +2,8 @@
 
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
+* [`agent_quickstart.fi.md`](agent_quickstart.fi.md) — opas AI-agenteille
+  suomeksi (Finnish Agent Quickstart).
 * [`agent_quickstart.zh-CN.md`](agent_quickstart.zh-CN.md) — 面向 Agent 的
   omi-cli 指南 (Simplified Chinese agent guide).
 * [`agent_quickstart.zh-TW.md`](agent_quickstart.zh-TW.md) — 給 Agent 的
