@@ -2428,7 +2428,10 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
     if app.get('uid') != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to delete API keys for this app')
 
-    delete_api_key_db(app_id, key_id)
+    if not delete_api_key_db(app_id, key_id):
+        # The client shows "API key revoked successfully" for any 2xx, so a delete that
+        # removed nothing must not be reported as a confirmed revocation.
+        raise HTTPException(status_code=404, detail='API key not found')
 
     return {'status': 'ok', 'message': 'API key deleted'}
 
