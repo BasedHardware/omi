@@ -570,7 +570,7 @@ class ServerConversation {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
-      'source': source?.toString(),
+      'source': source?.name,
       'language': language,
       'external_data': externalIntegration?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
