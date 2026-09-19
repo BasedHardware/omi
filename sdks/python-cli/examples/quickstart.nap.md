@@ -47,9 +47,9 @@ omi auth status
 omi auth whoami
 ```
 
-`status` mmustra 'o stato locale e ammuccia 'o segreto, ma nun verifica 'a validità ncopp'ô server. `whoami` fa na dumanna autenticata; si riesce, è chiaro ca 'e credenziale faticano, senza ammUSTÀ 'o nomme tujo.
+`status` mmustra 'o stato locale e ammuccia 'o segreto, ma nun verifica 'a validità ncopp'ô server. `whoami` fa na dumanna autenticata; si riesce, è chiaro ca 'e credenziale faticano, senza ammustà 'o nomme tujo.
 
-'A cunfigurazzione se sarva 'e default dint'a `~/.omi/config.toml`. Nun spartì stu file: pò tenè credenziale prubbecate.
+'A cunfigurazzione se sarva 'e default dint'a `~/.omi/config.toml`. Nun spartì stu file: pò tenè credenziale private.
 
 ## Esplorà 'e date tuje
 
@@ -84,7 +84,7 @@ Pe' sarvà na paggena dint'a nu file:
 omi --json memory list --limit 25 --offset 0 > memorie-paggena-1.json
 ```
 
-Sta ridirezzione cria o sorascrive nu file locale. Sicurte ca 'a cummanna è fernuta primma 'e ausà 'o cuntenuto. Ll'errure se scrivono ncopp'â l'output 'e errure (stderr); nu file vacante nun è na prova ca nun ce stanno date. Nu file esportato pò tenè nfurmaziune perzunale: tienilo prubbeco.
+Sta ridirezzione cria o sorascrive nu file locale. Sicurte ca 'a cummanna è fernuta primma 'e ausà 'o cuntenuto. Ll'errure se scrivono ncopp'â l'output 'e errure (stderr); nu file vacante nun è na prova ca nun ce stanno date. Nu file esportato pò tenè nfurmaziune perzunale: tienilo privato.
 
 ## Ascì
 
