@@ -4,6 +4,7 @@ Dropbox Integration App for Omi.
 Automatically saves conversation summaries, transcripts, and audio to Dropbox.
 """
 
+import html
 import io
 import os
 import secrets
@@ -12,7 +13,7 @@ import wave
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, Optional
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -218,7 +219,12 @@ def get_home_page_html(
     if settings is None:
         settings = get_user_settings(uid)
 
+    uid_q = quote(uid, safe="")
     if connected:
+        display_name_h = html.escape(display_name or "")
+        email_h = html.escape(email or "")
+        folder_name_val = settings.get("folder_name", "Omi Conversations") if settings else "Omi Conversations"
+        folder_name_h = html.escape(folder_name_val)
         return f"""
 <!DOCTYPE html>
 <html>
@@ -249,14 +255,14 @@ def get_home_page_html(
         <h1>Dropbox Connected</h1>
         <p class="status">Your Dropbox account is connected</p>
         <div class="user-info">
-            <strong>{display_name}</strong><br>
-            <span style="color: #666;">{email}</span>
+            <strong>{display_name_h}</strong><br>
+            <span style="color: #666;">{email_h}</span>
         </div>
 
-        <form class="settings-form" method="POST" action="/settings?uid={uid}">
+        <form class="settings-form" method="POST" action="/settings?uid={uid_q}">
             <div class="form-group">
                 <label for="folder_name">Folder Name</label>
-                <input type="text" id="folder_name" name="folder_name" value="{settings.get('folder_name', 'Omi Conversations')}" placeholder="Omi Conversations">
+                <input type="text" id="folder_name" name="folder_name" value="{folder_name_h}" placeholder="Omi Conversations">
             </div>
 
             <div class="form-group">
@@ -282,7 +288,7 @@ def get_home_page_html(
 
             <div class="actions">
                 <button type="submit" class="btn btn-primary">Save Settings</button>
-                <a href="/disconnect?uid={uid}" class="btn btn-danger">Disconnect</a>
+                <a href="/disconnect?uid={uid_q}" class="btn btn-danger">Disconnect</a>
             </div>
         </form>
     </div>
@@ -309,7 +315,7 @@ def get_home_page_html(
     <div class="card">
         <h1>Connect Dropbox</h1>
         <p>Connect your Dropbox account to automatically save your Omi conversations.</p>
-        <a href="/auth/dropbox?uid={uid}" class="btn">Connect Dropbox</a>
+        <a href="/auth/dropbox?uid={uid_q}" class="btn">Connect Dropbox</a>
     </div>
 </body>
 </html>
@@ -472,17 +478,19 @@ async def auth_callback(
         )
 
         # Redirect to home page
-        return RedirectResponse(url=f"/?uid={uid}")
+        return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
-        return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
+        return HTMLResponse(
+            f"Error during authorization: {html.escape(str(e))}", status_code=500
+        )
 
 
 @app.get("/disconnect")
 async def disconnect(uid: str = Query(...)):
     """Disconnect Dropbox account."""
     delete_dropbox_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 # ============== Settings Endpoint ==============
@@ -501,7 +509,7 @@ async def update_settings(request: Request, uid: str = Query(...)):
     }
 
     store_user_settings(uid, settings)
-    return RedirectResponse(url=f"/?uid={uid}", status_code=303)
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 # ============== Webhook Endpoint ==============
