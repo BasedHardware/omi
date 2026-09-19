@@ -602,6 +602,16 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
     lanes: ["local", "ci"]
     reason: "#9571/#9600 reject naive datetime min/max fallbacks in backend sort keys"
+  - id: notification-dispatch-boundary
+    command: ["python3", ".github/scripts/check_notification_dispatch_boundary.py", "--base", "{base}"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_notification_dispatch_boundary.py", ".github/scripts/notification_dispatch_boundary_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9518: notification policy converges only if new producers cannot bypass the typed dispatcher and call the FCM transport directly"
+  - id: notification-dispatch-boundary-tests
+    command: ["python3", ".github/scripts/test_check_notification_dispatch_boundary.py"]
+    triggers: [".github/scripts/check_notification_dispatch_boundary.py", ".github/scripts/test_check_notification_dispatch_boundary.py", ".github/scripts/notification_dispatch_boundary_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the staged notification-owner ratchet must resolve aliases, ignore its transport owner, and reject baseline-assisted growth"
   - id: backend-route-policy-baseline
     command: ["python3", "backend/scripts/check_route_policy_baseline.py", "--base-ref", "{base}"]
     triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
