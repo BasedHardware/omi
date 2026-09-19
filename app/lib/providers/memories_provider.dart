@@ -533,6 +533,7 @@ class MemoriesProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _cancelDeletionTimer();
     _connectivityProvider?.removeListener(_onConnectivityChanged);
     super.dispose();
   }

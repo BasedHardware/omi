@@ -91,6 +91,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _discoveryTimer;
+  Timer? _disconnectRescanTimer;
+  Timer? _firmwarePromptTimer;
+  bool _isDisposed = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
@@ -530,6 +533,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// Kicks off a single connection attempt. Native handles auto-reconnect after this.
   /// Hardware connect is not account publication; `_handleDeviceConnected` is.
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
+    if (_isDisposed) return;
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
 
     if (ServiceManager.instance().device.staleBondRecoveryRequired) {
@@ -561,10 +565,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _startDiscoveryScanning() {
+    if (_isDisposed) return;
     _discoveryTimer?.cancel();
     _runDiscoveryScan();
     _discoveryTimer = Timer.periodic(const Duration(seconds: 10), (_) => _runDiscoveryScan());
   }
+
+  void stopDiscoveryScanning() {
+    _discoveryTimer?.cancel();
+    _discoveryTimer = null;
+  }
+
+  @visibleForTesting
+  void startDiscoveryScanningForTesting() => _startDiscoveryScanning();
+
+  @visibleForTesting
+  bool get hasActiveDiscoveryTimer => _discoveryTimer?.isActive ?? false;
 
   Future<void> _runDiscoveryScan() async {
     if (SharedPreferencesUtil().btDevice.id.isNotEmpty || isConnected) {
@@ -645,6 +661,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
     _discoveryTimer?.cancel();
+    _disconnectRescanTimer?.cancel();
+    _firmwarePromptTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
