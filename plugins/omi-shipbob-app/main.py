@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import Depends, FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -41,6 +41,7 @@ from models import (
     GetOrdersRequest,
     GetFulfillmentCentersRequest,
 )
+from shipbob_tools_auth import require_shipbob_tools_auth
 
 
 def log(msg: str):
@@ -598,7 +599,7 @@ async def disconnect_shipbob(uid: str):
     return RedirectResponse(url=f"/?uid={uid}")
 
 
-@app.post("/select-channel")
+@app.post("/select-channel", dependencies=[Depends(require_shipbob_tools_auth)])
 async def select_channel(request: Request):
     """Select a channel for the user."""
     body = await _safe_body(request)
@@ -622,7 +623,7 @@ async def select_channel(request: Request):
 # ============================================
 
 
-@app.post("/tools/get_inventory", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_inventory", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_inventory(request: Request):
     """
     Get inventory levels for all items or a specific product.
@@ -682,7 +683,7 @@ async def tool_get_inventory(request: Request):
         return ChatToolResponse(error=f"Failed to get inventory: {str(e)}")
 
 
-@app.post("/tools/get_products", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_products", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_products(request: Request):
     """
     Get list of products.
@@ -726,7 +727,7 @@ async def tool_get_products(request: Request):
         return ChatToolResponse(error=f"Failed to get products: {str(e)}")
 
 
-@app.post("/tools/create_wro", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/create_wro", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_create_wro(request: Request):
     """
     Create a Warehouse Receiving Order (WRO).
@@ -882,7 +883,7 @@ async def tool_create_wro(request: Request):
         return ChatToolResponse(error=f"Failed to create WRO: {str(e)}")
 
 
-@app.post("/tools/get_wros", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_wros", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_wros(request: Request):
     """
     Get Warehouse Receiving Orders.
@@ -939,7 +940,7 @@ async def tool_get_wros(request: Request):
         return ChatToolResponse(error=f"Failed to get WROs: {str(e)}")
 
 
-@app.post("/tools/cancel_wro", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/cancel_wro", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_cancel_wro(request: Request):
     """
     Cancel a Warehouse Receiving Order.
@@ -979,7 +980,7 @@ async def tool_cancel_wro(request: Request):
         return ChatToolResponse(error=f"Failed to cancel WRO: {str(e)}")
 
 
-@app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_orders(request: Request):
     """
     Get recent orders.
@@ -1041,7 +1042,7 @@ async def tool_get_orders(request: Request):
         return ChatToolResponse(error=f"Failed to get orders: {str(e)}")
 
 
-@app.post("/tools/get_fulfillment_centers", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_fulfillment_centers", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_fulfillment_centers(request: Request):
     """
     Get available fulfillment centers.
