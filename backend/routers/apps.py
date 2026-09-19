@@ -1174,16 +1174,23 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
         update_dict['chat_tools'] = fetched_tools
 
     chat_messages = manifest_result.get('chat_messages')
-    ext_int_update = {}
+    # Merge into the stored integration instead of replacing it. update_app_in_db writes through
+    # Firestore update(), where a top-level map value replaces the whole field: sending only the
+    # three chat_messages_* keys deleted webhook_url, triggers_on, actions, app_home_url,
+    # setup_completed_url, auth_steps and chat_tools_manifest_url, silently disconnecting the app
+    # for every user who installed it (and breaking the next refresh with a 400).
+    merged_external_integration = dict(external_integration)
     if chat_messages:
-        ext_int_update['chat_messages_enabled'] = chat_messages.get('enabled', False)
-        ext_int_update['chat_messages_target'] = chat_messages.get('target', 'app')
-        ext_int_update['chat_messages_notify'] = chat_messages.get('notify', False)
+        merged_external_integration['chat_messages_enabled'] = chat_messages.get('enabled', False)
+        merged_external_integration['chat_messages_target'] = chat_messages.get('target', 'app')
+        merged_external_integration['chat_messages_notify'] = chat_messages.get('notify', False)
     else:
-        ext_int_update['chat_messages_enabled'] = False
-        ext_int_update['chat_messages_target'] = 'app'
-        ext_int_update['chat_messages_notify'] = False
-    update_dict['external_integration'] = ext_int_update
+        merged_external_integration['chat_messages_enabled'] = False
+        merged_external_integration['chat_messages_target'] = 'app'
+        merged_external_integration['chat_messages_notify'] = False
+    # Single assignment: the write carries the full merged map, never a second
+    # external_integration key that would shadow the preserved fields.
+    update_dict['external_integration'] = merged_external_integration
 
     update_app_in_db(update_dict)
 
