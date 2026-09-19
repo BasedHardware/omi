@@ -118,6 +118,12 @@ explicitly labelled local fixtures. Use
 `data=empty` for successful empty reads. Neither mode makes account requests.
 This entry is not included in the PWA production build.
 
+Add `&tokens=hana` to apply the experimental Hana-inspired token treatment
+(alpha-based label hierarchy and separator alphas from
+`react-native/src/ui/hanaTokens.ts`; `@hana-ui/react` itself is not published).
+It changes colors only — layout, materials, and interaction defaults are
+untouched, and the flag defaults to off.
+
 Desktop setup separates the AI assistant gallery from Connect data. Both are
 browsable catalogs; until adapters exist, they explicitly say Coming soon and
 never claim a connection. Apps retains the real account catalog under Your apps.
