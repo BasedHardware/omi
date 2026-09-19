@@ -102,6 +102,7 @@ Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manife
 CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
 
 ### Test Patterns
+- Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
 - HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
 - Test state machine logic via minimal abstractions mirroring production flow
