@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: dropbox-uid-reflection-encoding-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_uid_reflection.py"]
+    triggers: ["plugins/omi-dropbox-app/**"]
+    lanes: ["local", "ci"]
+    reason: "the unauthenticated GET / reflected the client-controlled uid raw into href/action attributes, and the user-set folder_name was rendered raw into a value= attribute (stored); a quote breaks out of the attribute and &/# corrupt the query"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
