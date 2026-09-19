@@ -105,3 +105,8 @@
 * [`quickstart.ty.md`](quickstart.ty.md) — te mau taahiraa matamua ma omi-cli (Tahitian Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
 * [`quickstart.bs.md`](quickstart.bs.md) — vodič za brzi početak rada s omi-cli (Bosnian Quickstart).
+* [`quickstart.fo.md`](quickstart.fo.md) — føroysk byrjanarvegleiðing fyri omi-cli (Faroese Quickstart).
+* [`quickstart.lb.md`](quickstart.lb.md) — lëtzebuergesch Ufanksguide fir omi-cli (Luxembourgish Quickstart).
+* [`quickstart.fy.md`](quickstart.fy.md) — Fryske flugge startgids foar omi-cli (Frisian Quickstart).
+* [`quickstart.gd.md`](quickstart.gd.md) — stiùireadh tòiseachaidh Gàidhlig airson omi-cli (Scottish Gaelic Quickstart).
+* [`quickstart.br.md`](quickstart.br.md) — huanadenn deraouiñ e brezhoneg evit omi-cli (Breton Quickstart).
