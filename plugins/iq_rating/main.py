@@ -305,6 +305,9 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
                 if answer and answer.upper() != "NONE":
                     batch_valid = [n.strip() for n in answer.split(",") if n and n.strip()]
                     valid_names.extend(batch_valid)
+                elif not answer:
+                    logger.warning("Anomalous 200 with empty OpenAI response for batch; retaining batch")
+                    valid_names.extend(batch)
             else:
                 logger.error(f"OpenAI API error: {response.status_code}")
                 valid_names.extend(batch)

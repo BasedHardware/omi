@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Frankfurter currency conversion, latest rates, and supported currencies must safely handle unmanaged HTTP client contexts, non-dict API responses, and non-finite numbers without 500s or AttributeErrors"
+  - id: iq-rating-app-tests
+    command: ["python3", "plugins/iq_rating/test_main.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13980: IQ rating plugin must filter human names, guard OpenAI API exceptions, retain batches on anomalous 200 responses, and run hermetic stdlib-only unit tests"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
