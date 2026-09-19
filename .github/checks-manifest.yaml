@@ -59,6 +59,11 @@ checks:
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13928: holiday API error payloads, whitespace country codes, missing lifespan clients, and malformed holiday fields must return clean chat-tool responses without uncaught exceptions"
+  - id: omi-open-library-tests
+    command: ["python3", "plugins/omi-open-library-app/test_main.py"]
+    triggers: ["plugins/omi-open-library-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13939: Open Library responses with null or non-dict payloads must not raise TypeError or AttributeError during formatting or search slicing"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]
