@@ -6,6 +6,10 @@ site-packages (the manifest lane runs plain python3). The async chat-tool
 handlers are invoked through asyncio.run with api_get stubbed to return canned
 Graph API payloads, so no network access is required.
 
+Note on model validation: The hermetic test runner uses a minimal BaseModel stub
+without full Pydantic v2 field constraint validation. Full Pydantic v2 model
+validation (such as Optional[int] for max_results) is verified against the real pydantic package.
+
 Covers BasedHardware/omi#13925: null/non-dict `data` and `papers` payloads,
 mixed-type year/citationCount sort keys, null or non-dict `authors` entries,
 unnormalized DOI/arXiv identifiers, and transport-level httpx errors that
@@ -404,6 +408,12 @@ class ResponseContractTests(unittest.TestCase):
     def test_response_requires_result_or_error(self):
         with self.assertRaises(ValueError):
             main.ChatToolResponse()
+
+    def test_request_models_accept_null_max_results(self):
+        req1 = main.SearchPapersRequest(query="attention", max_results=None)
+        self.assertIsNone(req1.max_results)
+        req2 = main.GetAuthorPapersRequest(author_id="42", max_results=None)
+        self.assertIsNone(req2.max_results)
 
 
 class UrlNormalizationAndPoolTests(unittest.TestCase):
