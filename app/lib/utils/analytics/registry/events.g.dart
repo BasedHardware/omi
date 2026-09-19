@@ -37,3 +37,95 @@ final class TranscribeLaterToggled extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"enabled": enabled};
 }
+
+final class DeviceOnboardingCompleted extends RegisteredEvent {
+  const DeviceOnboardingCompleted();
+  @override
+  String get wireName => "Device Onboarding Completed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class TranscribeLaterRecordingProcessed extends RegisteredEvent {
+  const TranscribeLaterRecordingProcessed();
+  @override
+  String get wireName => "Transcribe Later Recording Processed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class CalendarEnabled extends RegisteredEvent {
+  const CalendarEnabled();
+  @override
+  String get wireName => "Calendar Enabled";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class CalendarDisabled extends RegisteredEvent {
+  const CalendarDisabled();
+  @override
+  String get wireName => "Calendar Disabled";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class CalendarSelected extends RegisteredEvent {
+  const CalendarSelected();
+  @override
+  String get wireName => "Calendar Selected";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class ConversationDisplaySettingsOpened extends RegisteredEvent {
+  const ConversationDisplaySettingsOpened();
+  @override
+  String get wireName => "Conversation Display Settings Opened";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DeveloperModeEnabled extends RegisteredEvent {
+  const DeveloperModeEnabled();
+  @override
+  String get wireName => "Developer Mode Enabled";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DeveloperModeDisabled extends RegisteredEvent {
+  const DeveloperModeDisabled();
+  @override
+  String get wireName => "Developer Mode Disabled";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class DeveloperSettingsSaved extends RegisteredEvent {
+  const DeveloperSettingsSaved({required this.hasWebhookMemoryCreated, required this.hasWebhookTranscriptReceived});
+  final bool hasWebhookMemoryCreated;
+  final bool hasWebhookTranscriptReceived;
+  @override
+  String get wireName => "Developer Settings Saved";
+  @override
+  Map<String, Object> get properties => {"has_webhook_memory_created": hasWebhookMemoryCreated, "has_webhook_transcript_received": hasWebhookTranscriptReceived};
+}
+
+final class VoiceResponseToggled extends RegisteredEvent {
+  const VoiceResponseToggled({required this.enabled});
+  final bool enabled;
+  @override
+  String get wireName => "Voice Response Audio Toggled";
+  @override
+  Map<String, Object> get properties => {"enabled": enabled};
+}
+
+final class ShowShortConversationsToggled extends RegisteredEvent {
+  const ShowShortConversationsToggled({required this.showShort});
+  final bool showShort;
+  @override
+  String get wireName => "Show Short Conversations Toggled";
+  @override
+  Map<String, Object> get properties => {"show_short": showShort};
+}

@@ -14,6 +14,8 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/device.dart';
@@ -423,7 +425,7 @@ class AnalyticsManager {
     _pendingTimedEvents.removeWhere((_, started) => started.isBefore(cutoff));
   }
 
-  void onboardingCompleted() => track('Onboarding Completed');
+  void onboardingCompleted() => const TypedEvents().emit(const OnboardingCompleted());
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
@@ -437,20 +439,18 @@ class AnalyticsManager {
   void deviceOnboardingStepCompleted(String step) =>
       track('Device Onboarding Step Completed', properties: {'step': step});
 
-  void deviceOnboardingCompleted() => track('Device Onboarding Completed');
+  void deviceOnboardingCompleted() => const TypedEvents().emit(const DeviceOnboardingCompleted());
 
   void deviceOnboardingAbandoned(int step) => track('Device Onboarding Abandoned', properties: {'step': step});
 
   void deviceOnboardingDoubleTapConfigured(int action) =>
       track('Device Onboarding Double Tap Configured', properties: {'action': action});
 
-  void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
-        'Developer Settings Saved',
-        properties: {
-          'has_webhook_memory_created': hasWebhookConversationCreated,
-          'has_webhook_transcript_received': hasWebhookTranscriptReceived,
-        },
-      );
+  void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) =>
+      const TypedEvents().emit(DeveloperSettingsSaved(
+        hasWebhookMemoryCreated: hasWebhookConversationCreated,
+        hasWebhookTranscriptReceived: hasWebhookTranscriptReceived,
+      ));
 
   void pageOpened(String name) {
     setInteractionContext(screenName: name, target: 'screen');
@@ -479,9 +479,9 @@ class AnalyticsManager {
     track('App Rated', properties: {'app_id': appId, 'rating': rating});
   }
 
-  void phoneMicRecordingStarted() => track('Phone Mic Recording Started');
+  void phoneMicRecordingStarted() => const TypedEvents().emit(const PhoneMicRecordingStarted());
 
-  void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
+  void phoneMicRecordingStopped() => const TypedEvents().emit(const PhoneMicRecordingStopped());
 
   void recordingUploadStarted({
     required String attemptId,
@@ -550,12 +550,12 @@ class AnalyticsManager {
 
   // Transcribe Later (batch / offline capture)
   void transcribeLaterToggled({required bool enabled}) =>
-      track('Transcribe Later Toggled', properties: {'enabled': enabled});
+      const TypedEvents().emit(TranscribeLaterToggled(enabled: enabled));
 
   void transcribeLaterRecordingCaptured({int? durationSeconds}) =>
       track('Transcribe Later Recording Captured', properties: {'duration_seconds': durationSeconds});
 
-  void transcribeLaterRecordingProcessed() => track('Transcribe Later Recording Processed');
+  void transcribeLaterRecordingProcessed() => const TypedEvents().emit(const TranscribeLaterRecordingProcessed());
 
   // Phone Calls (VoIP)
   void phoneCallPageOpened() => track('Phone Call Page Opened');
@@ -634,18 +634,18 @@ class AnalyticsManager {
   }
 
   void calendarEnabled() {
-    track('Calendar Enabled');
+    const TypedEvents().emit(const CalendarEnabled());
     setUserProperty('Calendar Enabled', true);
   }
 
   void calendarDisabled() {
-    track('Calendar Disabled');
+    const TypedEvents().emit(const CalendarDisabled());
     setUserProperty('Calendar Enabled', false);
   }
 
   void calendarModePressed(String mode) => track('Calendar Mode $mode Pressed');
 
-  void calendarSelected() => track('Calendar Selected');
+  void calendarSelected() => const TypedEvents().emit(const CalendarSelected());
 
   void bottomNavigationTabClicked(String tab) {
     setInteractionContext(screenName: tab, target: 'bottom_navigation');
@@ -1111,10 +1111,10 @@ class AnalyticsManager {
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
   // Conversation Display Settings Events
-  void conversationDisplaySettingsOpened() => track('Conversation Display Settings Opened');
+  void conversationDisplaySettingsOpened() => const TypedEvents().emit(const ConversationDisplaySettingsOpened());
 
   void showShortConversationsToggled(bool showShort) =>
-      track('Show Short Conversations Toggled', properties: {'show_short': showShort});
+      const TypedEvents().emit(ShowShortConversationsToggled(showShort: showShort));
 
   void showDiscardedConversationsToggled(bool showDiscarded) =>
       track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
@@ -1124,7 +1124,7 @@ class AnalyticsManager {
         properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
       );
 
-  void voiceResponseToggled(bool enabled) => track('Voice Response Audio Toggled', properties: {'enabled': enabled});
+  void voiceResponseToggled(bool enabled) => const TypedEvents().emit(VoiceResponseToggled(enabled: enabled));
 
   void voiceResponseModeChanged(int mode) {
     const names = {0: 'off', 1: 'headphones_only', 2: 'always'};
@@ -1197,12 +1197,12 @@ class AnalyticsManager {
       track('Re-process Memory', properties: getConversationEventProperties(conversation));
 
   void developerModeEnabled() {
-    track('Developer Mode Enabled');
+    const TypedEvents().emit(const DeveloperModeEnabled());
     setUserProperty('Dev Mode Enabled', true);
   }
 
   void developerModeDisabled() {
-    track('Developer Mode Disabled');
+    const TypedEvents().emit(const DeveloperModeDisabled());
     setUserProperty('Dev Mode Enabled', false);
   }
 

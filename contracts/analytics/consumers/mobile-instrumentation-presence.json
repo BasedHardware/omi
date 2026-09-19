@@ -8,7 +8,18 @@
     "onboardingCompleted",
     "phoneMicRecordingStarted",
     "phoneMicRecordingStopped",
-    "transcribeLaterToggled"
+    "transcribeLaterToggled",
+    "deviceOnboardingCompleted",
+    "transcribeLaterRecordingProcessed",
+    "calendarEnabled",
+    "calendarDisabled",
+    "calendarSelected",
+    "conversationDisplaySettingsOpened",
+    "developerModeEnabled",
+    "developerModeDisabled",
+    "developerSettingsSaved",
+    "voiceResponseToggled",
+    "showShortConversationsToggled"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [
