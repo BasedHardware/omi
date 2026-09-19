@@ -289,16 +289,22 @@ Future<bool> setConversationSummaryRating(String conversationId, int value, {Str
   return data.status == 'ok';
 }
 
-Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
-  // Build URL with required params
-  String url = '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value';
-
-  // Add reason param if provided (for thumbs down feedback)
+@visibleForTesting
+String chatMessageRatingPath(String messageId, int value, {String? reason}) {
+  var path = 'v1/users/analytics/chat_message?message_id=$messageId&value=$value';
   if (reason != null && reason.isNotEmpty) {
-    url += '&reason=$reason';
+    path += '&reason=${Uri.encodeQueryComponent(reason)}';
   }
+  return path;
+}
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'POST', body: '');
+Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}${chatMessageRatingPath(messageId, value, reason: reason)}',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
   if (response == null) return false;
   Logger.debug('setMessageResponseRating response: ${response.body}');
   if (response.statusCode != 200) return false;
