@@ -5,7 +5,7 @@ This app provides Hive project management integration through API key authentica
 and chat tools for managing projects, tasks, actions, and searching.
 """
 import os
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
@@ -387,28 +387,48 @@ def get_user_projects(uid: str, workspace_id: Optional[str] = None) -> List[Hive
     return projects
 
 
-def find_project_by_name(uid: str, name: str) -> Tuple[Optional[HiveProject], List[HiveProject]]:
-    """Find a project by name.
+def find_project_by_name(uid: str, name: str) -> tuple[Optional[HiveProject], List[HiveProject]]:
+    """Resolve a project only when the requested name identifies one project.
 
-    Returns (project, candidates). An exact (case-insensitive) name wins;
-    a partial match is used only when it is the single candidate, so a
-    name like "Q3" in a workspace with both "Q3 Marketing" and "Q3 Sales"
-    refuses instead of silently creating the task in whichever project
-    happened to be listed first.
+    Exact matches are preferred over partial matches. A tier is authoritative
+    only when it contains exactly one project; returning candidates lets
+    callers explain an ambiguity instead of silently choosing the first API
+    result.
     """
-    projects = get_user_projects(uid)
-    name_lower = name.lower()
+    if not isinstance(name, str) or not name.strip():
+        return None, []
 
-    exact = [p for p in projects if p.name.lower() == name_lower]
+    projects = get_user_projects(uid) or []
+    name_key = name.strip().casefold()
+
+    exact = [
+        project for project in projects
+        if isinstance(getattr(project, "name", None), str)
+        and project.name.strip().casefold() == name_key
+    ]
     if len(exact) == 1:
         return exact[0], exact
     if len(exact) > 1:
         return None, exact
 
-    partial = [p for p in projects if name_lower in p.name.lower()]
+    partial = [
+        project for project in projects
+        if isinstance(getattr(project, "name", None), str)
+        and name_key in project.name.casefold()
+    ]
     if len(partial) == 1:
         return partial[0], partial
     return None, partial
+
+
+def _format_candidates(candidates: List[Any]) -> str:
+    """Return stable, de-duplicated candidate names for user-facing errors."""
+    names = []
+    for candidate in candidates:
+        name = getattr(candidate, "name", None)
+        if isinstance(name, str) and name.strip() and name.strip() not in names:
+            names.append(name.strip())
+    return ", ".join(names)
 
 
 def get_project_tasks(uid: str, project_id: str, limit: int = 20) -> List[HiveTask]:
@@ -694,8 +714,10 @@ async def tool_hive_get_tasks(request: Request):
             target_project, candidates = find_project_by_name(uid, project_name)
             if not target_project:
                 if candidates:
-                    names = ", ".join(f"'{p.name}'" for p in candidates)
-                    return ChatToolResponse(error=f"'{project_name}' matches more than one project: {names}. Say the full project name.")
+                    return ChatToolResponse(
+                        error=(f"Project name '{project_name}' is ambiguous. "
+                               f"Choose one of: {_format_candidates(candidates)}")
+                    )
                 return ChatToolResponse(error=f"Could not find project: {project_name}")
         else:
             # Use default project
@@ -760,8 +782,10 @@ async def tool_hive_create_task(request: Request):
             target_project, candidates = find_project_by_name(uid, project_name)
             if not target_project:
                 if candidates:
-                    names = ", ".join(f"'{p.name}'" for p in candidates)
-                    return ChatToolResponse(error=f"'{project_name}' matches more than one project: {names}. Say the full project name.")
+                    return ChatToolResponse(
+                        error=(f"Project name '{project_name}' is ambiguous. "
+                               f"Choose one of: {_format_candidates(candidates)}")
+                    )
                 return ChatToolResponse(error=f"Could not find project: {project_name}")
         else:
             # Use default project
@@ -781,23 +805,38 @@ async def tool_hive_create_task(request: Request):
         # Handle parent task (for sub-actions)
         parent_id = parent_task_id
         if not parent_id and parent_task_name:
-            # Search for the parent task to get its ID
-            # searching limited to the target project if possible, or global
-            # For now global search_tasks is what we have
-            found_tasks = search_tasks(uid, parent_task_name, limit=5)
+            if not isinstance(parent_task_name, str) or not parent_task_name.strip():
+                return ChatToolResponse(error="Parent task name must not be empty.")
 
-            # Restrict to the target project: a subtask belongs to its
-            # parent's project, so a same-named task in a different project
-            # is not a candidate, not a fallback.
-            project_tasks = [t for t in found_tasks if t.project_id == target_project.id]
+            # Search globally, then accept a parent only when exactly one
+            # case-insensitive exact-name match exists in the target project.
+            # Never fall back to another project or to a fuzzy first result.
+            found_tasks = search_tasks(uid, parent_task_name, limit=50) or []
+            project_tasks = [
+                task for task in found_tasks
+                if getattr(task, "project_id", None) == target_project.id
+            ]
+            parent_name_key = parent_task_name.strip().casefold()
+            exact_parents = [
+                task for task in project_tasks
+                if isinstance(getattr(task, "name", None), str)
+                and task.name.strip().casefold() == parent_name_key
+            ]
 
-            if len(project_tasks) == 1:
-                parent_id = project_tasks[0].id
-            elif len(project_tasks) > 1:
-                names = ", ".join(f"'{t.name}'" for t in project_tasks)
-                return ChatToolResponse(error=f"'{parent_task_name}' matches more than one task in **{target_project.name}**: {names}. Say the full task name or pass parent_task_id.")
+            if len(exact_parents) == 1:
+                parent_id = exact_parents[0].id
             else:
-                return ChatToolResponse(error=f"Could not find parent task '{parent_task_name}' in project **{target_project.name}**.")
+                candidate_text = _format_candidates(project_tasks)
+                if len(exact_parents) > 1:
+                    detail = f"multiple exact matches: {candidate_text}"
+                elif candidate_text:
+                    detail = f"candidates: {candidate_text}"
+                else:
+                    detail = "no matching task in that project"
+                return ChatToolResponse(
+                    error=(f"Could not find a unique parent task '{parent_task_name}' "
+                           f"in project '{target_project.name}' ({detail}).")
+                )
 
         # Create the task via REST API - endpoint is /actions/create
         # Body params: workspace, title, projectId, description
