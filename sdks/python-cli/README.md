@@ -1,6 +1,6 @@
 # omi-cli
 
-[Русский: быстрый старт](README.ru.md)
+[Русский: быстрый старт](README.ru.md) · [日本語 README](README.ja.md)
 
 > Talk to Omi from your terminal. Designed for humans **and** agents.
 
