@@ -10091,4 +10091,33 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get renameDevice => 'Gi enheten nytt navn';
+
+  @override
+  String get renameDeviceDescription =>
+      'Navnet lagres på selve Omi-enheten, så det vises på alle telefoner du parer den med.';
+
+  @override
+  String get tapToRename => 'Trykk for å gi nytt navn';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Enhetsnavnet kan ikke være tomt';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Navnet er for langt (opptil $maxBytes tegn; emoji og aksenter teller ekstra)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Navnet inneholder tegn som ikke støttes';
+
+  @override
+  String get deviceRenameFailed => 'Kunne ikke lagre navnet på Omi-enheten. Sjekk at den er tilkoblet, og prøv igjen.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Enheten har fått navnet $name';
+  }
 }

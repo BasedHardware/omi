@@ -10102,4 +10102,34 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get renameDevice => 'Renomear dispositivo';
+
+  @override
+  String get renameDeviceDescription =>
+      'O nome fica salvo no próprio Omi, então aparece em qualquer celular com que você o emparelhar.';
+
+  @override
+  String get tapToRename => 'Toque para renomear';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'O nome do dispositivo não pode estar vazio';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'O nome é muito longo (até $maxBytes caracteres; emojis e acentos contam mais)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'O nome contém caracteres não suportados';
+
+  @override
+  String get deviceRenameFailed =>
+      'Não foi possível guardar o nome no seu Omi. Verifique se está ligado e tente novamente.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Dispositivo renomeado para $name';
+  }
 }

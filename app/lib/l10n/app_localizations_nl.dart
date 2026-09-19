@@ -10120,4 +10120,34 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get renameDevice => 'Apparaat hernoemen';
+
+  @override
+  String get renameDeviceDescription =>
+      'De naam wordt op je Omi zelf opgeslagen en verschijnt dus op elke telefoon waarmee je hem koppelt.';
+
+  @override
+  String get tapToRename => 'Tik om te hernoemen';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'De apparaatnaam mag niet leeg zijn';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Naam is te lang (maximaal $maxBytes tekens; emoji en accenten tellen extra)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'De naam bevat niet-ondersteunde tekens';
+
+  @override
+  String get deviceRenameFailed =>
+      'De naam kon niet op je Omi worden opgeslagen. Controleer of hij verbonden is en probeer het opnieuw.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Apparaat hernoemd naar $name';
+  }
 }

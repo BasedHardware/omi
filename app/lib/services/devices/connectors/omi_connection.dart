@@ -9,6 +9,7 @@ import 'package:version/version.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/device_name_policy.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/notifications.dart';
@@ -19,6 +20,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsDeviceNameCharacteristicUuid = '19b10014-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -878,6 +880,46 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
+  @override
+  Future<String?> performGetDeviceName() async {
+    try {
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid);
+      return OmiDeviceNamePolicy.decode(value);
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting device name: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> performSetDeviceName(String name) async {
+    final List<int> payload;
+    try {
+      payload = OmiDeviceNamePolicy.encode(name);
+    } on ArgumentError catch (e) {
+      Logger.debug('OmiDeviceConnection: Refusing to send invalid device name: $e');
+      return false;
+    }
+
+    try {
+      await transport.writeCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid, payload);
+    } catch (e) {
+      // The firmware answers a rejected or unpersisted name with an ATT error,
+      // which surfaces here as a failed write.
+      Logger.debug('OmiDeviceConnection: Error setting device name: $e');
+      return false;
+    }
+
+    // Read back so the caller only records a name the device really holds.
+    final confirmed = await performGetDeviceName();
+    if (confirmed != name) {
+      Logger.debug('OmiDeviceConnection: Device name readback mismatch (expected "$name", got "$confirmed")');
+      return false;
+    }
+    device.name = name;
+    return true;
+  }
+
   Future<bool> readChargingStatus() async {
     try {
       final value = await transport.readCharacteristic(
@@ -965,6 +1007,14 @@ class OmiDeviceConnection extends DeviceConnection {
         }
       } catch (e) {
         Logger.debug('OmiDeviceConnection: Error reading manufacturer name: $e');
+      }
+
+      // Name persisted on the device (firmware with OmiFeatures.deviceName).
+      // Older firmware has no such characteristic; the read fails and the
+      // advertised/stored name stays in use.
+      final storedName = await performGetDeviceName();
+      if (storedName != null) {
+        deviceInfo['deviceName'] = storedName;
       }
 
       // Check if device has image streaming capability (for OpenGlass/OmiGlass detection)

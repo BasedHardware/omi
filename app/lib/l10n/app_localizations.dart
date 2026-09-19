@@ -18674,6 +18674,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}'**
   String voiceIntroduction(String part);
+
+  /// Title of the dialog that renames the connected Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Rename Device'**
+  String get renameDevice;
+
+  /// Explains that the device name is stored on the device itself
+  ///
+  /// In en, this message translates to:
+  /// **'The name is saved on your Omi, so it shows up on any phone you pair with.'**
+  String get renameDeviceDescription;
+
+  /// Subtitle of the device name row when renaming is supported
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to rename'**
+  String get tapToRename;
+
+  /// Validation error when the device name is blank
+  ///
+  /// In en, this message translates to:
+  /// **'Device name cannot be empty'**
+  String get deviceNameCannotBeEmpty;
+
+  /// Validation error when the device name exceeds the byte limit
+  ///
+  /// In en, this message translates to:
+  /// **'Name is too long (up to {maxBytes} characters; emoji and accents count extra)'**
+  String deviceNameTooLong(int maxBytes);
+
+  /// Validation error when the device name has control characters
+  ///
+  /// In en, this message translates to:
+  /// **'Name contains unsupported characters'**
+  String get deviceNameInvalidCharacters;
+
+  /// Error shown when the device rejected or did not confirm the new name
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the name to your Omi. Check that it is connected and try again.'**
+  String get deviceRenameFailed;
+
+  /// Confirmation after the device accepted the new name
+  ///
+  /// In en, this message translates to:
+  /// **'Device renamed to {name}'**
+  String deviceRenamed(String name);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

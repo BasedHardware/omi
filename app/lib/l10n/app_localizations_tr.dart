@@ -10105,4 +10105,33 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get renameDevice => 'Cihazı Yeniden Adlandır';
+
+  @override
+  String get renameDeviceDescription =>
+      'Ad Omi\'nin kendisine kaydedilir, böylece eşleştirdiğiniz her telefonda görünür.';
+
+  @override
+  String get tapToRename => 'Yeniden adlandırmak için dokunun';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Cihaz adı boş olamaz';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Ad çok uzun (en fazla $maxBytes karakter; emoji ve aksanlı harfler daha fazla sayılır)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Ad desteklenmeyen karakterler içeriyor';
+
+  @override
+  String get deviceRenameFailed => 'Ad Omi\'nize kaydedilemedi. Bağlı olduğunu kontrol edip yeniden deneyin.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Cihaz adı $name olarak değiştirildi';
+  }
 }

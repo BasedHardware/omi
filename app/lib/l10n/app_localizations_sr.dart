@@ -10107,4 +10107,33 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get renameDevice => 'Преименуј уређај';
+
+  @override
+  String get renameDeviceDescription =>
+      'Име се чува на самом Omi уређају, па се приказује на сваком телефону са којим га упарите.';
+
+  @override
+  String get tapToRename => 'Додирните за преименовање';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Име уређаја не може бити празно';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Име је предугачко (до $maxBytes знакова; емоџији и dijakritički znakovi se računaju više)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Име садржи неподржане знакове';
+
+  @override
+  String get deviceRenameFailed => 'Име није могло да се сачува на Omi. Проверите да ли је повезан и покушајте поново.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Уређај је преименован у $name';
+  }
 }
