@@ -10105,4 +10105,17 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'İkinci cihaz';
+
+  @override
+  String get pairSecondDevice => 'İkinci cihazı eşleştir';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass\'ı Omi\'nizin yanına bağlayın.';
+
+  @override
+  String get forgetSecondDevice => 'İkinci cihazı unut';
 }

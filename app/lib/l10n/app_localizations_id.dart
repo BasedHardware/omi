@@ -10102,4 +10102,17 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'Perangkat kedua';
+
+  @override
+  String get pairSecondDevice => 'Pasangkan perangkat kedua';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Sambungkan OmiGlass bersama Omi Anda agar foto dan audio masuk ke percakapan yang sama.';
+
+  @override
+  String get forgetSecondDevice => 'Lupakan perangkat kedua';
 }

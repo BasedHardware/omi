@@ -10124,4 +10124,17 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'ಎರಡನೇ ಸಾಧನ';
+
+  @override
+  String get pairSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'ಫೋಟೋಗಳು ಮತ್ತು ಆಡಿಯೊ ಒಂದೇ ಸಂವಾದಕ್ಕೆ ಹೋಗಲು ನಿಮ್ಮ Omi ಜೊತೆಗೆ OmiGlass ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get forgetSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ';
 }

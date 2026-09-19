@@ -3250,6 +3250,5 @@
     "secondDevice": "Teine seade",
     "pairSecondDevice": "Seo teine seade",
     "pairSecondDeviceDescription": "Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.",
-    "forgetSecondDevice": "Unusta teine seade",
-    "processingTakingLonger": "Ikka käimas — see võtab kauem aega kui tavaliselt."
+    "forgetSecondDevice": "Unusta teine seade"
 }

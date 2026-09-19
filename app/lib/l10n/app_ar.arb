@@ -3250,6 +3250,5 @@
     "secondDevice": "الجهاز الثاني",
     "pairSecondDevice": "إقران جهاز ثانٍ",
     "pairSecondDeviceDescription": "اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.",
-    "forgetSecondDevice": "نسيان الجهاز الثاني",
-    "processingTakingLonger": "ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد."
+    "forgetSecondDevice": "نسيان الجهاز الثاني"
 }

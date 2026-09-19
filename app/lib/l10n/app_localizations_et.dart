@@ -10086,4 +10086,17 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get secondDevice => 'Teine seade';
+
+  @override
+  String get pairSecondDevice => 'Seo teine seade';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.';
+
+  @override
+  String get forgetSecondDevice => 'Unusta teine seade';
 }

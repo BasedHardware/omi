@@ -3250,6 +3250,5 @@
     "secondDevice": "두 번째 기기",
     "pairSecondDevice": "두 번째 기기 페어링",
     "pairSecondDeviceDescription": "Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.",
-    "forgetSecondDevice": "두 번째 기기 삭제",
-    "processingTakingLonger": "아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요."
+    "forgetSecondDevice": "두 번째 기기 삭제"
 }
