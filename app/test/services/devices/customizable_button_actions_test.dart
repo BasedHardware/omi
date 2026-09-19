@@ -143,4 +143,43 @@ void main() {
       }
     });
   });
+
+  group('Button Action Routing Logic Tests', () {
+    (int action, String eventType)? resolveTapAction(int buttonState, SharedPreferencesUtil prefs) {
+      return switch (buttonState) {
+        1 => (prefs.singlePressAction, 'single_press'),
+        2 => (prefs.doublePressAction, 'double_press'),
+        6 => (prefs.triplePressAction, 'triple_press'),
+        _ => null,
+      };
+    }
+
+    test('Routes tap states to configured preferences', () {
+      final prefs = SharedPreferencesUtil();
+      prefs.singlePressAction = 3;
+      prefs.doublePressAction = 1;
+      prefs.triplePressAction = 0;
+
+      expect(resolveTapAction(1, prefs), equals((3, 'single_press')));
+      expect(resolveTapAction(2, prefs), equals((1, 'double_press')));
+      expect(resolveTapAction(6, prefs), equals((0, 'triple_press')));
+
+      // Non-tap or unconfigured states (e.g. 0, 3 long press, 4, 5 release)
+      expect(resolveTapAction(0, prefs), isNull);
+      expect(resolveTapAction(3, prefs), isNull);
+      expect(resolveTapAction(4, prefs), isNull);
+      expect(resolveTapAction(5, prefs), isNull);
+    });
+
+    test('Customized preferences dynamically redirect button routing', () {
+      final prefs = SharedPreferencesUtil();
+      prefs.singlePressAction = 1; // Mute
+      prefs.doublePressAction = 2; // Star
+      prefs.triplePressAction = 4; // Disabled
+
+      expect(resolveTapAction(1, prefs), equals((1, 'single_press')));
+      expect(resolveTapAction(2, prefs), equals((2, 'double_press')));
+      expect(resolveTapAction(6, prefs), equals((4, 'triple_press')));
+    });
+  });
 }

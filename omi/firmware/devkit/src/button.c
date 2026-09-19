@@ -182,42 +182,43 @@ void check_button_level(struct k_work *work_item)
     uint8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
     ButtonEvent event = BUTTON_EVENT_NONE;
 
-    // 1. 处理按下（按键按下开始）
+    // 1. Handle button press start
     if (btn_state == BUTTON_PRESSED && !btn_is_pressed) {
         btn_is_pressed = true;
         btn_press_start_time = now;
     }
-    // 2. 处理松开（按键释放结束）
+    // 2. Handle button release
     else if (btn_state == BUTTON_RELEASED && btn_is_pressed) {
         btn_is_pressed = false;
         uint32_t press_duration = now - btn_press_start_time;
 
-        // 短按累加敲击次数
+        // Short press: accumulate tap count
         if (press_duration < TAP_THRESHOLD_MS) {
             tap_count++;
             btn_last_tap_time = now;
 
-            // 达到 3 次立即触发三击，无需等待超时窗口
+            // Immediate trigger on 3 taps without waiting for timeout window
             if (tap_count >= 3) {
                 event = BUTTON_EVENT_TRIPLE_TAP;
                 tap_count = 0;
                 btn_last_tap_time = 0;
             }
         } else {
-            // 超过短按阈值的无效释放（例如长按中途放弃），彻底清理连击状态，杜绝幽灵单击注入
+            // Release exceeding short tap threshold (e.g. aborted long press);
+            // clear tap state to prevent ghost taps.
             tap_count = 0;
             btn_last_tap_time = 0;
         }
     }
 
-    // 3. 长按判定（按住达到 3 秒固定关机）
+    // 3. Long press detection (hold >= 3 seconds triggers power off)
     if (btn_is_pressed && (now - btn_press_start_time >= LONG_PRESS_TIME_MS)) {
         event = BUTTON_EVENT_LONG_PRESS;
         tap_count = 0;
         btn_last_tap_time = 0;
     }
 
-    // 4. 超时窗口判定（在按键已释放且有未判定的敲击时）
+    // 4. Timeout window evaluation (when button is released and taps are pending)
     if (tap_count > 0 && !btn_is_pressed) {
         uint32_t time_since_last_tap = now - btn_last_tap_time;
 
@@ -232,7 +233,7 @@ void check_button_level(struct k_work *work_item)
         }
     }
 
-    // 5. 事件分发与通知
+    // 5. Event dispatch and notification
     switch (event) {
     case BUTTON_EVENT_SINGLE_TAP:
         LOG_PRINTK("single tap detected\n");
@@ -254,18 +255,18 @@ void check_button_level(struct k_work *work_item)
             LOG_PRINTK("long press detected\n");
             btn_last_event = event;
 
-            // 进入低功耗关机
+            // Enter low-power shutdown
             is_off = true;
             bt_off();
             turnoff_all();
-            return; // 关机后不再重调度工作项
+            return; // Do not reschedule work item after power off
         }
         break;
     default:
         break;
     }
 
-    // 按键完全释放且无活动时复位状态
+    // Reset state when button is fully released and idle
     if (!btn_is_pressed && tap_count == 0 && event == BUTTON_EVENT_NONE) {
         if (btn_last_event == BUTTON_EVENT_LONG_PRESS) {
             btn_last_event = BUTTON_EVENT_NONE;

@@ -540,7 +540,6 @@ class CaptureController extends ChangeNotifier
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   DateTime? _lastButtonActionTime; // Debounce timestamp for button operations
   static const _buttonActionDebounce = Duration(milliseconds: 400);
-  bool _isForceProcessing = false; // Mutex guard for forceProcessingCurrentConversation
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
 
   RecordingState recordingState = RecordingState.stop;
@@ -2469,31 +2468,23 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> forceProcessingCurrentConversation() async {
-    if (_isForceProcessing) {
-      Logger.debug("forceProcessingCurrentConversation: already in progress, ignoring reentrant call");
-      return;
-    }
-    _isForceProcessing = true;
-
     final sessionStart = _sessionStartSeconds;
 
-    try {
-      // Force-drain tail buffer before clearing state
-      final phoneSync = _wal.getSyncs().phone;
-      await phoneSync.finalizeCurrentSession();
-      _clearSessionLocation();
+    // Force-drain tail buffer before clearing state
+    final phoneSync = _wal.getSyncs().phone;
+    await phoneSync.finalizeCurrentSession();
+    _clearSessionLocation();
 
-      await _resetStateVariables();
-      externalActions.addProcessingConversation(
-        ServerConversation(
-          id: '0',
-          createdAt: DateTime.now(),
-          structured: Structured('', ''),
-          status: ConversationStatus.processing,
-        ),
-      );
-
-      final result = await processInProgressConversation();
+    _resetStateVariables();
+    externalActions.addProcessingConversation(
+      ServerConversation(
+        id: '0',
+        createdAt: DateTime.now(),
+        structured: Structured('', ''),
+        status: ConversationStatus.processing,
+      ),
+    );
+    processInProgressConversation().then((result) async {
       if (result == null || result.conversation == null) {
         externalActions.removeProcessingConversation('0');
         return;
@@ -2507,12 +2498,9 @@ class CaptureController extends ChangeNotifier
         await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
         _autoSyncSessionWals();
       }
-    } catch (e) {
-      externalActions.removeProcessingConversation('0');
-      Logger.debug("Error in forceProcessingCurrentConversation: $e");
-    } finally {
-      _isForceProcessing = false;
-    }
+    });
+
+    return;
   }
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
