@@ -1,6 +1,8 @@
 import os
 import json
 import base64
+import hashlib
+import hmac
 import requests
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request, status, Form, BackgroundTasks
@@ -38,6 +40,27 @@ def init_notion_credentials(client_id: str, client_secret: str, redirect_uri: st
     logger.info(f"Redirect URI: {redirect_uri}")
 
 
+def _signed_state(uid: str) -> str:
+    """Bind the uid to a state value this server issued (HMAC-SHA256)."""
+    sig = hmac.new(
+        (NOTION_CLIENT_SECRET or "").encode("utf-8"),
+        uid.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:32]
+    return f"{uid}:{sig}"
+
+
+def _uid_from_state(state: str) -> Optional[str]:
+    """Return the uid from a signed state, or None if it wasn't issued here."""
+    uid, sep, sig = state.rpartition(":")
+    if not sep or not uid:
+        return None
+    expected = _signed_state(uid).rpartition(":")[2]
+    if not hmac.compare_digest(expected, sig):
+        return None
+    return uid
+
+
 # Models
 class NotionSearchRequest(BaseModel):
     uid: str
@@ -63,7 +86,7 @@ async def auth_notion(request: Request, uid: str):
 
     # URL encode both the redirect_uri and state
     encoded_redirect_uri = requests.utils.quote(NOTION_REDIRECT_URI, safe='')
-    encoded_state = requests.utils.quote(uid)
+    encoded_state = requests.utils.quote(_signed_state(uid), safe='')
 
     oauth_url = f"https://api.notion.com/v1/oauth/authorize?client_id={NOTION_CLIENT_ID}&response_type=code&owner=user&redirect_uri={encoded_redirect_uri}&state={encoded_state}"
 
@@ -224,6 +247,11 @@ async def extract_all_pages(access_token: str, uid: str):
 @router.get("/callback")
 async def notion_callback(request: Request, background_tasks: BackgroundTasks, code: str, state: str):
     """Handle Notion OAuth callback"""
+    uid = _uid_from_state(state)
+    if not uid:
+        logger.warning("Rejected Notion OAuth callback with invalid state")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state")
+
     try:
         # Exchange code for access token
         response = requests.post(
@@ -240,10 +268,10 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         access_token = token_data.get("access_token")
         workspace_id = token_data.get("workspace_id")
         workspace_name = token_data.get("workspace_name", "Notion Workspace")  # Get workspace name from response
-        store_notion_credentials(state, access_token, workspace_id, workspace_name)
+        store_notion_credentials(uid, access_token, workspace_id, workspace_name)
 
         # Start page extraction in background
-        background_tasks.add_task(extract_all_pages, access_token, state)
+        background_tasks.add_task(extract_all_pages, access_token, uid)
 
         # Redirect to success page immediately
         return templates.TemplateResponse("notion_success.html", {"request": request})
