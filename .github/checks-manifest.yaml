@@ -44,6 +44,11 @@ checks:
     triggers: ["plugins/omi-whoop-app/**"]
     lanes: ["local", "ci"]
     reason: "#13927: get_body_measurements requested the nonexistent /body_measurement route so every call failed with a blank error; the documented path is /user/measurement/body and an empty upstream error body must still surface the HTTP status"
+  - id: whoop-app-oauth-encoding-tests
+    command: ["python3", "plugins/omi-whoop-app/test_oauth_reflection_encoding.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14890: the Whoop plugin builds its HTML with f-strings, so an attacker-supplied uid in /?uid= or /auth/whoop?uid= broke out of the href attribute, the unauthenticated /auth/whoop/callback error parameter was reflected into the error box, and upstream exception text was echoed verbatim into the 500 page; every uid must be percent-encoded with quote(uid, safe='') and every reflected value HTML-escaped for its context"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]

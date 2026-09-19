@@ -10,7 +10,7 @@ import sys
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -998,6 +998,9 @@ async def tool_get_profile(request: Request):
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage."""
+    # Guard against FastAPI's Query sentinel when the handler is invoked
+    # directly (tests, internal callers) instead of through the HTTP layer.
+    uid = uid if isinstance(uid, str) else ""
     if not uid:
         return {
             "app": "Whoop Omi Integration",
@@ -1013,7 +1016,10 @@ async def root(uid: str = Query(None)):
     tokens = get_whoop_tokens(uid)
 
     if not tokens:
-        auth_url = f"/auth/whoop?uid={uid}"
+        # uid is attacker-controlled: percent-encode it for the query string
+        # and HTML-escape the resulting href so it cannot break out of the
+        # attribute (reflected XSS / parameter injection).
+        safe_auth_url = html.escape(f"/auth/whoop?uid={quote(uid, safe='')}", quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1027,7 +1033,7 @@ async def root(uid: str = Query(None)):
                     <h1>Whoop</h1>
                     <p>Track your recovery, strain, and sleep through Omi chat</p>
 
-                    <a href="{auth_url}" class="btn btn-primary btn-block">
+                    <a href="{safe_auth_url}" class="btn btn-primary btn-block">
                         Connect Whoop
                     </a>
 
@@ -1055,6 +1061,7 @@ async def root(uid: str = Query(None)):
         """)
 
     # User is connected
+    safe_disconnect_url = html.escape(f"/disconnect?uid={quote(uid, safe='')}", quote=True)
     return HTMLResponse(content=f"""
     <html>
         <head>
@@ -1077,7 +1084,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Show my recent workouts"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="{safe_disconnect_url}" class="btn btn-secondary btn-block">
                     Disconnect Whoop
                 </a>
 
@@ -1123,6 +1130,12 @@ async def whoop_callback(
     error: str = Query(None)
 ):
     """Handle Whoop OAuth2 callback."""
+    # Guard against FastAPI's Query sentinels when the handler is invoked
+    # directly (tests, internal callers) instead of through the HTTP layer.
+    code = code if isinstance(code, str) else None
+    state = state if isinstance(state, str) else None
+    error = error if isinstance(error, str) else None
+
     if error:
         return HTMLResponse(content=f"""
         <html>
@@ -1131,7 +1144,7 @@ async def whoop_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{html.escape(error or "", quote=True)}</p>
+                        <p>{html.escape(error, quote=True)}</p>
                     </div>
                 </div>
             </body>
@@ -1202,6 +1215,9 @@ async def whoop_callback(
 
         store_whoop_tokens(uid, access_token, refresh_token, expires_at)
 
+        # uid comes from the stored OAuth state mapping; encode it for the query
+        # string and escape the href so it cannot break out of the attribute.
+        safe_continue_url = html.escape(f"/?uid={quote(uid, safe='')}", quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1217,7 +1233,7 @@ async def whoop_callback(
                         <p>Your Whoop is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="{safe_continue_url}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1237,7 +1253,10 @@ async def whoop_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        # The exception message can embed upstream/attacker-influenced text, so
+        # it must be escaped before being reflected into the HTML body.
+        safe_error = html.escape(str(e), quote=True)
+        return HTMLResponse(content=f"Authentication error: {safe_error}", status_code=500)
 
 
 @app.get("/setup/whoop")
@@ -1250,8 +1269,9 @@ async def check_setup(uid: str = Query(...)):
 @app.get("/disconnect")
 async def disconnect(uid: str = Query(...)):
     """Disconnect Whoop."""
+    uid = uid if isinstance(uid, str) else ""
     delete_whoop_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 @app.get("/health")
