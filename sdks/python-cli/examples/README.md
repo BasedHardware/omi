@@ -35,6 +35,7 @@
 * [`quickstart.ha.md`](quickstart.ha.md) — Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart).
 * [`quickstart.mai.md`](quickstart.mai.md) — omi-cli त्वरित मार्गदर्शिका (Maithili Quickstart).
 * [`quickstart.as.md`](quickstart.as.md) — omi-cli ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart).
+* [`quickstart.ast.md`](quickstart.ast.md) — Primeiros pasos con omi-cli (Asturian Quickstart).
 * [`quickstart.sd.md`](quickstart.sd.md) — سنڌي ۾ omi-cli تڪڙو آغاز (Sindhi Quickstart).
 * [`quickstart.af.md`](quickstart.af.md) — Begin met omi-cli (Afrikaans Quickstart).
 * [`quickstart.az.md`](quickstart.az.md) — omi-cli ilə İlk Addımlar (Azerbaijani Quickstart).
