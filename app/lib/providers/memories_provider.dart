@@ -1561,15 +1561,19 @@ class MemoriesProvider extends ChangeNotifier {
     return result.persisted;
   }
 
-  Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
+  Future<bool> updateAllMemoriesVisibility(bool makePrivate) async {
     final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
     int updatedCount = 0;
+    var allUpdated = true;
     List<Memory> memoriesSuccessfullyUpdated = [];
 
     for (var memory in List.from(_memories)) {
       if (memory.visibility != visibility) {
         try {
-          await updateMemoryVisibilityServer(memory.id, visibility.name);
+          if (!await updateMemoryVisibilityServer(memory.id, visibility.name)) {
+            allUpdated = false;
+            continue;
+          }
           final idx = _memories.indexWhere((m) => m.id == memory.id);
           if (idx != -1) {
             _memories[idx].visibility = visibility;
@@ -1577,6 +1581,7 @@ class MemoriesProvider extends ChangeNotifier {
             updatedCount++;
           }
         } catch (e) {
+          allUpdated = false;
           print('Failed to update visibility for memory ${memory.id}: $e');
         }
       }
@@ -1590,5 +1595,6 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     _setCategories();
+    return allUpdated;
   }
 }
