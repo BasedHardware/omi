@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 @preconcurrency import CoreAudio
+import ContextCore
 import Foundation
 
 /// Microphone capture, delivered as 16 kHz mono Int16 little-endian PCM.
@@ -31,7 +32,7 @@ final class MicCapture: AudioSource, @unchecked Sendable {
     private let targetSampleRate: Double = 16000
 
     /// Peak ≤ 5 (≈ -76 dBFS) over a whole window is silence, not quiet speech.
-    private let silentPeakThreshold: Int16 = 5
+    private let silentPeakThreshold: UInt16 = 5
     /// Windows of ~1 s that must be silent in a row before the stack is rebuilt.
     private let silentWindowThreshold = 2
     /// Give a rebuilt stack this long to deliver real audio before judging it again.
@@ -79,7 +80,7 @@ final class MicCapture: AudioSource, @unchecked Sendable {
     // Silent-mic watchdog, owned by the IO thread. Tracks the peak amplitude inside a ~1 s
     // window so a mic that is alive-but-silent (the Bluetooth A2DP/HFP profile flip) is
     // detected and recovered from.
-    private var watchdogWindowPeak: Int16 = 0
+    private var watchdogWindowPeak: UInt16 = 0
     private var watchdogWindowStart: CFAbsoluteTime = 0
     private var consecutiveSilentWindows = 0
     private var silenceRecoveryArmed = true
@@ -396,29 +397,15 @@ final class MicCapture: AudioSource, @unchecked Sendable {
         let processedFrameLength = Int(outputBuffer.frameLength)
         guard processedFrameLength > 0 else { return }
 
-        var pcm = [Int16]()
-        pcm.reserveCapacity(processedFrameLength)
-        var sumOfSquares: Float = 0
-
-        for i in 0..<processedFrameLength {
-            let sample = channelData[i]
-            let pcmSample = Int16(max(-32768, min(32767, sample * 32767)))
-            pcm.append(pcmSample)
-
-            let normalized = Float(pcmSample) / 32767.0
-            sumOfSquares += normalized * normalized
-
-            // Accumulate the watchdog peak here rather than in a second pass over the buffer:
-            // this is the audio callback hot path.
-            let absoluteSample = pcmSample == Int16.min ? Int16.max : Int16(pcmSample.magnitude)
-            if absoluteSample > watchdogWindowPeak { watchdogWindowPeak = absoluteSample }
-        }
-
-        // Little-endian, which is native on Apple platforms.
-        let byteData = pcm.withUnsafeBufferPointer { Data(buffer: $0) }
+        // Encode through the shared production seam so this path has the same rounding, clamping,
+        // and NaN handling as every other PCM consumer. Derive both the level and watchdog peak
+        // from those encoded bytes: quantisation is part of the signal the downstream path sees.
+        let byteData = PCM.int16LE(
+            from: UnsafeBufferPointer(start: channelData, count: processedFrameLength))
+        watchdogWindowPeak = max(watchdogWindowPeak, PCM.peak(int16LE: byteData))
 
         checkSilentMicWindow()
-        reportLevel(rms: sqrt(sumOfSquares / Float(processedFrameLength)))
+        reportLevel(rms: PCM.rms(int16LE: byteData))
 
         onChunk?(byteData)
     }
