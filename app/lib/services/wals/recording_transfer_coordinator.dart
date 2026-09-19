@@ -116,6 +116,27 @@ class RecordingTransferCoordinator {
   /// foreground-only and startup is always another wake.
   DateTime? nextCooldownAt;
 
+  /// True while a recovery pass (including a chained pending wake) is running.
+  /// Cooldown timers start that pass with [unawaited]; observers must use
+  /// [waitUntilIdle] rather than a wall-clock sleep.
+  bool get hasInFlight => _inFlight != null;
+
+  /// Completes when no recovery pass is running, including wakes chained from
+  /// [_pendingWake]. Bounded: a stuck pass fails instead of hanging teardown.
+  Future<void> waitUntilIdle({int maxTurns = 32}) async {
+    for (var i = 0; i < maxTurns; i++) {
+      final active = _inFlight;
+      if (active != null) {
+        await active;
+        continue;
+      }
+      // `whenComplete` may start a chained wake on a later microtask.
+      await Future<void>.delayed(Duration.zero);
+      if (_inFlight == null) return;
+    }
+    throw StateError('RecordingTransferCoordinator did not become idle after $maxTurns turns');
+  }
+
   /// Configures the application singleton after the provider can surface
   /// reconciliation and presentation results. Wakes received before that point
   /// are retained rather than dropped.
@@ -298,6 +319,11 @@ class RecordingTransferCoordinator {
   }
 
   void dispose() {
+    // Invalidate injected-scheduler callbacks too: those timers are not held
+    // in [_cooldownTimer], so cancelling the native timer is not enough.
+    _cooldownGeneration++;
+    _pendingWake = null;
+    nextCooldownAt = null;
     _connectivitySubscription?.cancel();
     _cooldownTimer?.cancel();
     _cooldownTimer = null;

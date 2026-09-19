@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
@@ -84,22 +86,17 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   String? folderId,
   bool? starred,
 }) async {
-  String url =
-      '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
-
-  // Add date filters if provided
-  if (startDate != null) {
-    url += '&start_date=${startDate.toUtc().toIso8601String()}';
-  }
-  if (endDate != null) {
-    url += '&end_date=${endDate.toUtc().toIso8601String()}';
-  }
-  if (folderId != null) {
-    url += '&folder_id=$folderId';
-  }
-  if (starred != null) {
-    url += '&starred=$starred';
-  }
+  String url = conversationCollectionUrl(
+    Env.apiBaseUrl ?? '',
+    limit: limit,
+    offset: offset,
+    statuses: statuses,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    folderId: folderId,
+    starred: starred,
+  );
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
@@ -234,10 +231,7 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
 
 /// Fetch calendar events in [start, end] that have no recorded conversation.
 /// Returns capture-gap rows (never conversations), or an empty list on error.
-Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({
-  required DateTime start,
-  required DateTime end,
-}) async {
+Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({required DateTime start, required DateTime end}) async {
   final url =
       '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
@@ -246,9 +240,8 @@ Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({
     var body = utf8.decode(response.bodyBytes);
     return (jsonDecode(body) as List<dynamic>)
         .map(
-          (row) => CalendarCaptureGap.fromGenerated(
-            wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>),
-          ),
+          (row) =>
+              CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>)),
         )
         .toList();
   }
@@ -282,6 +275,98 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
 
 Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
+}
+
+String conversationCollectionUrl(
+  String baseUrl, {
+  int limit = 50,
+  int offset = 0,
+  List<ConversationStatus> statuses = const [],
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? folderId,
+  bool? starred,
+}) {
+  final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  var url =
+      '${root}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
+  if (startDate != null) {
+    url += '&start_date=${startDate.toUtc().toIso8601String()}';
+  }
+  if (endDate != null) {
+    url += '&end_date=${endDate.toUtc().toIso8601String()}';
+  }
+  if (folderId != null) {
+    url += '&folder_id=$folderId';
+  }
+  if (starred != null) {
+    url += '&starred=$starred';
+  }
+  return url;
+}
+
+/// Typed conversation list/detail. Legacy [getConversations]/[getConversationById]
+/// stay for unmigrated callers; 403/503/missing are distinct here instead of null.
+class ConversationApi {
+  ConversationApi({required String baseUrl, ApiSend? send})
+      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+        _send = send;
+
+  final String _baseUrl;
+  final ApiSend? _send;
+
+  Future<ApiResult<List<ServerConversation>>> list({
+    int limit = 50,
+    int offset = 0,
+    List<ConversationStatus> statuses = const [],
+    bool includeDiscarded = true,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? folderId,
+    bool? starred,
+  }) async {
+    final sent = await executeApi<String>(
+      request: ApiRequest(
+        url: conversationCollectionUrl(
+          _baseUrl,
+          limit: limit,
+          offset: offset,
+          statuses: statuses,
+          includeDiscarded: includeDiscarded,
+          startDate: startDate,
+          endDate: endDate,
+          folderId: folderId,
+          starred: starred,
+        ),
+        method: 'GET',
+      ),
+      send: _send,
+      decode: (body) => body,
+    );
+    return switch (sent) {
+      ApiFailure(:final problem) => ApiFailure(problem),
+      ApiSuccess(:final data) => decodeApiRows<ServerConversation>(
+          data,
+          ServerConversation.fromJson,
+          fallback: recordFallback,
+        ),
+    };
+  }
+
+  Future<ApiResult<ServerConversation>> byId(String id) {
+    return executeApi<ServerConversation>(
+      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      send: _send,
+      decode: (body) {
+        final decoded = jsonDecode(body);
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('conversation detail is not an object');
+        }
+        return ServerConversation.fromJson(decoded);
+      },
+    );
+  }
 }
 
 /// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy

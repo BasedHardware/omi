@@ -2,6 +2,92 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.364",
+      "date": "2026-09-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.363",
+      "date": "2026-09-18",
+      "changes": [
+        "Free-tier conversation summaries now run on this Mac with Apple Intelligence when it is available",
+        "Fixed on-device conversation summaries not appearing after sync"
+      ]
+    },
+    {
+      "version": "0.12.362",
+      "date": "2026-09-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.361",
+      "date": "2026-09-17",
+      "changes": [
+        "Live notes no longer retry on every sentence when your plan doesn't include AI notes"
+      ]
+    },
+    {
+      "version": "0.12.360",
+      "date": "2026-09-17",
+      "changes": [
+        "Fixed chat failing after long sessions or an offline period, and show sign-in recovery when a session expires",
+        "Fixed repeated meeting summaries, preserved cached notes and sources, and improved headings and lists"
+      ]
+    },
+    {
+      "version": "0.12.359",
+      "date": "2026-09-17",
+      "changes": [
+        "Fixed deferred realtime answers completing silently instead of becoming available to the next voice turn."
+      ]
+    },
+    {
+      "version": "0.12.358",
+      "date": "2026-09-17",
+      "changes": [
+        "Rewind opens faster by loading the app-filter list after the overlay is ready."
+      ]
+    },
+    {
+      "version": "0.12.357",
+      "date": "2026-09-17",
+      "changes": [
+        "Chat-first tab switches acknowledge the mounted page sooner so navigation feels snappier."
+      ]
+    },
+    {
+      "version": "0.12.356",
+      "date": "2026-09-16",
+      "changes": [
+        "Explicit remember/save requests typed in chat now save the memory reliably; a runtime timestamp prefix on the request could previously make them be rejected as unauthorized."
+      ]
+    },
+    {
+      "version": "0.12.355",
+      "date": "2026-09-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.354",
+      "date": "2026-09-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.353",
+      "date": "2026-09-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.352",
       "date": "2026-09-15",
       "changes": [

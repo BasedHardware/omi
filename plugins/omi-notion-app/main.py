@@ -4,7 +4,9 @@ Notion Integration App for Omi
 This app provides Notion integration through OAuth2 authentication
 and chat tools for managing pages, databases, and content.
 """
+import html
 import os
+import re
 import sys
 import secrets
 from datetime import datetime, timedelta
@@ -923,13 +925,28 @@ async def tool_query_database(request: Request):
 
 
 # ============================================
+# Validation & Sanitization Helpers
+# ============================================
+
+def _sanitize_uid(uid: Optional[str]) -> Optional[str]:
+    """Sanitize and validate uid to prevent script injection or parameter tampering."""
+    if not uid:
+        return None
+    clean = uid.strip()
+    if re.fullmatch(r"^[a-zA-Z0-9_\-]{1,128}$", clean):
+        return clean
+    return None
+
+
+# ============================================
 # OAuth & Setup Endpoints
 # ============================================
 
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage."""
-    if not uid:
+    clean_uid = _sanitize_uid(uid)
+    if not clean_uid:
         return {
             "app": "Notion Omi Integration",
             "version": "1.0.0",
@@ -941,10 +958,11 @@ async def root(uid: str = Query(None)):
             }
         }
 
-    tokens = get_notion_tokens(uid)
+    tokens = get_notion_tokens(clean_uid)
 
     if not tokens:
-        auth_url = f"/auth/notion?uid={uid}"
+        safe_uid = html.escape(clean_uid, quote=True)
+        auth_url = f"/auth/notion?uid={safe_uid}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -986,7 +1004,8 @@ async def root(uid: str = Query(None)):
         """)
 
     # User is connected
-    workspace_name = tokens.get("workspace_name", "Your Workspace")
+    safe_uid = html.escape(clean_uid, quote=True)
+    workspace_name = html.escape(tokens.get("workspace_name", "Your Workspace"), quote=True)
 
     return HTMLResponse(content=f"""
     <html>
@@ -1010,7 +1029,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Search for budget in Notion"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={safe_uid}" class="btn btn-secondary btn-block">
                     Disconnect Notion
                 </a>
 
@@ -1024,11 +1043,15 @@ async def root(uid: str = Query(None)):
 @app.get("/auth/notion")
 async def notion_auth(uid: str = Query(...)):
     """Start Notion OAuth2 flow."""
+    clean_uid = _sanitize_uid(uid)
+    if not clean_uid:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+
     if not NOTION_CLIENT_ID or not NOTION_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Notion OAuth credentials not configured")
 
-    state = f"{uid}:{secrets.token_urlsafe(32)}"
-    store_oauth_state(uid, state)
+    state = f"{clean_uid}:{secrets.token_urlsafe(32)}"
+    store_oauth_state(clean_uid, state)
 
     params = {
         "client_id": NOTION_CLIENT_ID,
@@ -1164,15 +1187,21 @@ async def notion_callback(
 @app.get("/setup/notion")
 async def check_setup(uid: str = Query(...)):
     """Check if user has completed Notion setup."""
-    tokens = get_notion_tokens(uid)
+    clean_uid = _sanitize_uid(uid)
+    if not clean_uid:
+        return {"is_setup_completed": False}
+    tokens = get_notion_tokens(clean_uid)
     return {"is_setup_completed": tokens is not None}
 
 
 @app.get("/disconnect")
 async def disconnect(uid: str = Query(...)):
     """Disconnect Notion."""
-    delete_notion_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    clean_uid = _sanitize_uid(uid)
+    if not clean_uid:
+        return RedirectResponse(url="/")
+    delete_notion_tokens(clean_uid)
+    return RedirectResponse(url=f"/?uid={clean_uid}")
 
 
 @app.get("/health")
