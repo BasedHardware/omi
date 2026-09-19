@@ -1197,6 +1197,68 @@ describe('useChat — default thread backend hydration (B5 cross-device read par
   })
 })
 
+describe('useChat — default thread older-page pagination (loadOlder / backend offset)', () => {
+  const settleHistory = async (result: { current: { history: unknown[] } }): Promise<void> => {
+    for (let k = 0; k < 50 && !result.current.history.length; k++) await flush()
+  }
+  const settleLength = async (result: { current: { history: unknown[] } }, target: number): Promise<void> => {
+    for (let k = 0; k < 50 && result.current.history.length < target; k++) await flush()
+  }
+  // Newest-first wire page, as the backend returns it.
+  const wirePage = (prefix: string, n: number): unknown[] =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `${prefix}-${i}`,
+      text: `${prefix} ${i}`,
+      sender: i % 2 ? 'ai' : 'human',
+      createdAt: `2026-01-01T00:00:00Z`
+    }))
+
+  it('R6 — loadOlder fetches the next older page at the advanced offset and prepends it', async () => {
+    prefs.chatHistoryMode = 'infinite'
+    // First page fills BACKEND_HISTORY_LIMIT (100) → hasMoreOlder true, offset 100.
+    sessionMocks.getMessages.mockResolvedValueOnce(wirePage('p1', 100))
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await settleHistory(result)
+    })
+    expect(result.current.history).toHaveLength(100)
+    expect(result.current.hasMoreOlder).toBe(true)
+
+    // Older page is short (< limit) → after load, hasMoreOlder flips false.
+    sessionMocks.getMessages.mockResolvedValueOnce(wirePage('p2', 3))
+    await act(async () => {
+      result.current.loadOlder()
+      await settleLength(result, 103)
+    })
+    // Requested the second page from the correct offset against the same source.
+    expect(sessionMocks.getMessages).toHaveBeenLastCalledWith({ limit: 100, offset: 100 })
+    expect(result.current.history).toHaveLength(103)
+    // p2 is newest-first ['p2-0','p2-1','p2-2']; reversed to chronological then
+    // prepended, so the oldest ('p2-2') is now at the very front.
+    expect(result.current.history[0]).toMatchObject({ id: 'p2-2', content: 'p2 2' })
+    expect(result.current.history[103 - 100]).toMatchObject({ id: 'p1-99' }) // seam: p2 then p1
+    expect(result.current.hasMoreOlder).toBe(false)
+  })
+
+  it('R7 — loadOlder no-ops when there is no older page to fetch', async () => {
+    prefs.chatHistoryMode = 'infinite'
+    sessionMocks.getMessages.mockResolvedValueOnce(wirePage('p1', 2)) // < limit → no more
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await settleHistory(result)
+    })
+    expect(result.current.hasMoreOlder).toBe(false)
+    const callsBefore = sessionMocks.getMessages.mock.calls.length
+    await act(async () => {
+      result.current.loadOlder()
+      await flush()
+    })
+    // Guarded: no extra backend read, history untouched.
+    expect(sessionMocks.getMessages.mock.calls.length).toBe(callsBefore)
+    expect(result.current.history).toHaveLength(2)
+  })
+})
+
 
 describe('useChat — chat quota gate (Mac AgentBridge.quotaExceeded parity)', () => {
   it('blocks a send when the quota is exhausted — popup shown, no fetch, no history entry', async () => {

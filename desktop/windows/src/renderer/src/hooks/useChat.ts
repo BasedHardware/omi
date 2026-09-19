@@ -17,7 +17,7 @@ import type {
   VoiceHubSeedContext
 } from '../../../shared/types'
 import { saveDesktopMessage } from '../lib/desktopChatMessages'
-import { getMessages as getSessionMessages } from '../lib/chatSessionsClient'
+import { getMessages as getSessionMessages, type DesktopMessage } from '../lib/chatSessionsClient'
 import {
   awaitUploadsSettled,
   clearAttachments,
@@ -81,9 +81,24 @@ export type ChatMsg = {
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 
-// Number of turns to fetch from the backend on the default-thread mount.
-// Matches Mac's single-page import size; pagination is deferred.
+// Number of turns to fetch per backend page on the default shared thread.
+// Matches Mac's single-page import size; older pages are fetched on demand via
+// `loadOlder()` (offset pagination against the same `/v2/desktop/messages` source
+// — INV-CHAT-1: one shared transcript, no second store, no mirroring).
 const BACKEND_HISTORY_LIMIT = 100
+
+// Project a backend shared-thread message (newest-first wire shape) to the
+// render `ChatMsg`. Shared by the initial hydrate and `loadOlder` so both pages
+// map identically.
+function toSharedThreadMsg(m: DesktopMessage): ChatMsg {
+  return {
+    id: m.id,
+    role: m.sender === 'ai' ? 'assistant' : 'user',
+    content: m.text,
+    ...(m.evidence ? { evidence: m.evidence } : {}),
+    ...(m.attachments?.length ? { attachments: m.attachments } : {})
+  }
+}
 
 // Hard ceiling on a single streamed reply. Mirrors the macOS client's per-send
 // watchdog (ChatProvider.swift): if the SAME generation is still in flight after
@@ -124,6 +139,12 @@ const NOT_READY_POLL_INTERVAL_MS = 300
 
 export type UseChat = {
   history: ChatMsg[]
+  /** True when the default shared thread may have older turns on the backend
+   *  beyond the pages already loaded. Drives the "load older" affordance. */
+  hasMoreOlder: boolean
+  /** Fetch the next older page of the default shared thread (backend `offset`)
+   *  and prepend it to `history`. No-op when there is nothing older to load. */
+  loadOlder: () => void
   sending: boolean
   /** Monotonic signal emitted after a hosted chat request settles. Consumers can
    *  use it for post-send work without inferring completion from the shared busy
@@ -283,6 +304,13 @@ export function useChat(): UseChat {
     })
   }
   const startedAtRef = useRef<number>(0)
+  // Default-thread backend pagination: how many shared-thread turns we've pulled
+  // so far (the `offset` for the next older page) and whether an older page may
+  // still exist. Reset by the initial hydrate / thread switch (INV-CHAT-1: reads
+  // come from the one shared backend thread, never a local mirror).
+  const backendOffsetRef = useRef(0)
+  const loadingOlderRef = useRef(false)
+  const [hasMoreOlder, setHasMoreOlder] = useState(false)
   // Synchronous mirror of `sending` for the re-entrancy guard. The `sending` state
   // captured in a `send` closure can be stale (e.g. a queued/auto-sent voice
   // message firing right as a previous reply finishes), which would wrongly drop
@@ -352,6 +380,9 @@ export function useChat(): UseChat {
     onSettled: () => void
   ): void => {
     const run = async (): Promise<void> => {
+      // Fresh thread read resets the pagination cursor.
+      backendOffsetRef.current = 0
+      setHasMoreOlder(false)
       if (auth.currentUser) {
         try {
           const msgs = await getSessionMessages({ limit: BACKEND_HISTORY_LIMIT })
@@ -359,15 +390,9 @@ export function useChat(): UseChat {
           if (msgs.length) {
             // Backend returns messages newest-first; reverse to chronological order
             // for display (same as mobile: messages.sort ascending by createdAt).
-            setHistory(
-              [...msgs].reverse().map((m) => ({
-                id: m.id,
-                role: m.sender === 'ai' ? ('assistant' as const) : ('user' as const),
-                content: m.text,
-                ...(m.evidence ? { evidence: m.evidence } : {}),
-                ...(m.attachments?.length ? { attachments: m.attachments } : {})
-              }))
-            )
+            setHistory([...msgs].reverse().map(toSharedThreadMsg))
+            backendOffsetRef.current = msgs.length
+            setHasMoreOlder(msgs.length === BACKEND_HISTORY_LIMIT)
             return
           }
         } catch {
@@ -393,6 +418,35 @@ export function useChat(): UseChat {
         /* no prior conversation */
       })
       .finally(onSettled)
+  }
+
+  // Fetch the next OLDER page of the default shared thread and prepend it.
+  // Reads the same `/v2/desktop/messages` source at an increased `offset` —
+  // never a local mirror (INV-CHAT-1: one shared transcript, one loader/writer).
+  // No-ops unless signed in, the last page filled the limit (so an older page may
+  // exist), and no older-load is already in flight.
+  const loadOlderMessages = (): void => {
+    if (!auth.currentUser || loadingOlderRef.current || !hasMoreOlder) return
+    const requestedOffset = backendOffsetRef.current
+    loadingOlderRef.current = true
+    void getSessionMessages({ limit: BACKEND_HISTORY_LIMIT, offset: requestedOffset })
+      .then((older) => {
+        // A hydrate from reset()/switchThread()/selectApp() advanced or zeroed the
+        // cursor mid-load; this page belongs to a stale thread, so drop it.
+        if (backendOffsetRef.current !== requestedOffset) return
+        if (older.length) {
+          const prepend = [...older].reverse().map(toSharedThreadMsg)
+          setHistory((h) => [...prepend, ...h])
+        }
+        backendOffsetRef.current = requestedOffset + older.length
+        setHasMoreOlder(older.length === BACKEND_HISTORY_LIMIT)
+      })
+      .catch(() => {
+        /* keep the current page; a later scroll-up can retry */
+      })
+      .finally(() => {
+        loadingOlderRef.current = false
+      })
   }
 
   // In infinite mode the ongoing thread is loaded once on mount — backend first
@@ -1764,6 +1818,8 @@ export function useChat(): UseChat {
 
   return {
     history,
+    hasMoreOlder,
+    loadOlder: loadOlderMessages,
     sending,
     quotaCheckSeq,
     speaking,
