@@ -570,7 +570,9 @@ class ServerConversation {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
-      'source': source?.toString(),
+      // Cache/webhook payloads use the wire value (for example `sdcard`),
+      // not Dart's enum rendering (`ConversationSource.sdcard`).
+      'source': source?.name,
       'language': language,
       'external_data': externalIntegration?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
