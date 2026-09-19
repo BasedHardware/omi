@@ -2197,7 +2197,9 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         client = get_webhook_client()
-        res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+        setup_url = app.external_integration.setup_completed_url
+        separator = '&' if '?' in setup_url else '?'
+        res = await client.get(f'{setup_url}{separator}uid={uid}')
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
         if res.status_code != 200 or not _setup_completed_from_response(res):
             raise HTTPException(status_code=400, detail='App setup is not completed')
