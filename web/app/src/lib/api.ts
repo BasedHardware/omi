@@ -1598,16 +1598,13 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
     const token = await getIdToken();
     if (!token) return [];
 
-    const response = await fetch(
-      `${API_BASE_URL}/v1/apps/proactive-notification-scopes`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-App-Platform': 'web',
-        },
+    const response = await fetch(`${API_BASE_URL}/v1/app/proactive-notification-scopes`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
       },
-    );
+    });
 
     if (!response.ok) return [];
     return response.json();
