@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
+import html
+from urllib.parse import quote
 import sys
 from dotenv import load_dotenv
 from typing import List, Any
@@ -168,7 +170,7 @@ async def root(uid: str = Query(None)):
     
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        auth_url = f"/auth?uid={quote(uid, safe='')}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -248,7 +250,7 @@ async def root(uid: str = Query(None)):
     for channel in channels:
         selected_attr = 'selected' if channel['id'] == selected_channel else ''
         privacy = "🔒" if channel.get('is_private') else "#"
-        channel_options += f'<option value="{channel["id"]}" {selected_attr}>{privacy} {channel["name"]}</option>'
+        channel_options += f'<option value="{html.escape(channel["id"])}" {selected_attr}>{privacy} {html.escape(channel["name"])}</option>'
     
     return HTMLResponse(content=f"""
     <html>
@@ -264,7 +266,7 @@ async def root(uid: str = Query(None)):
                 <div class="card" style="margin-top: 20px;">
                     <h2>💬 Slack Settings</h2>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
-                        Connected to <span class="username">{team_name}</span>
+                        Connected to <span class="username">{html.escape(team_name)}</span>
                     </p>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 16px;">
                         Default channel (optional - you can specify channel in voice command):
@@ -349,7 +351,7 @@ async def root(uid: str = Query(None)):
                     const channel = select.value;
                     
                     try {{
-                        const response = await fetch('/update-channel?uid={uid}&channel=' + encodeURIComponent(channel), {{
+                        const response = await fetch('/update-channel?uid=' + encodeURIComponent(document.getElementById('uid').value) + '&channel=' + encodeURIComponent(channel), {{
                             method: 'POST'
                         }});
                         
@@ -366,7 +368,7 @@ async def root(uid: str = Query(None)):
                 }}
                 
                 function refreshChannels() {{
-                    fetch('/refresh-channels?uid={uid}', {{
+                    fetch('/refresh-channels?uid=' + encodeURIComponent(document.getElementById('uid').value), {{
                         method: 'POST'
                     }})
                     .then(response => response.json())
@@ -385,14 +387,14 @@ async def root(uid: str = Query(None)):
                 
                 async function logoutUser() {{
                     try {{
-                        const response = await fetch('/logout?uid={uid}', {{
+                        const response = await fetch('/logout?uid=' + encodeURIComponent(document.getElementById('uid').value), {{
                             method: 'POST'
                         }});
                         
                         const data = await response.json();
                         
                         if (data.success) {{
-                            window.location.href = '/?uid={uid}';
+                            window.location.href = '/?uid=' + encodeURIComponent(document.getElementById('uid').value);
                         }} else {{
                             alert('❌ Logout failed: ' + data.error);
                         }}
@@ -519,14 +521,14 @@ async def auth_callback(
                             <div class="icon" style="font-size: 72px; animation: pulse 1.5s infinite;">🎉</div>
                             <h2 style="font-size: 28px; margin: 16px 0;">Successfully Connected!</h2>
                             <p style="font-size: 17px; margin: 12px 0;">
-                                Your Slack workspace <strong>{team_name}</strong> is now linked
+                                Your Slack workspace <strong>{html.escape(team_name)}</strong> is now linked
                             </p>
                             <p style="font-size: 16px; margin: 8px 0;">
                                 Found <strong>{len(channels)}</strong> {('channel' if len(channels) == 1 else 'channels')}
                             </p>
                         </div>
                         
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={quote(uid, safe='')}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings →
                         </a>
                         
@@ -560,7 +562,7 @@ async def auth_callback(
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
                             <p style="margin-bottom: 16px;">Failed to complete authentication.</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <a href="/auth?uid={quote(uid, safe='')}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
@@ -978,7 +980,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     <h2>Authentication</h2>
                     <div class="input-group">
                         <label>User ID (UID):</label>
-                        <input type="text" id="uid" value="{uid}">
+                        <input type="text" id="uid" value="{html.escape(uid)}">
                     </div>
                     <button class="btn btn-primary" onclick="authenticate()">🔐 Authenticate Slack</button>
                     <button class="btn btn-secondary" onclick="checkAuth()">🔍 Check Auth Status</button>
