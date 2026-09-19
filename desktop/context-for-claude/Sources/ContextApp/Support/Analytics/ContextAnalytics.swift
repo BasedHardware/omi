@@ -145,6 +145,7 @@ enum ContextAnalytics {
     @MainActor
     static func recordPermissionSnapshot() {
         guard isEnabled else { return }
+        record(.permissionCache(Permissions.systemAudioRecordsReconciled))
         for capability in Capability.allCases {
             let state: AnalyticsEvent.PermissionState
             if Permissions.check(capability) {

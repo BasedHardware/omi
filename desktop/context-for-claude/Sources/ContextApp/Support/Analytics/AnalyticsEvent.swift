@@ -52,6 +52,13 @@ enum AnalyticsEvent: Sendable {
     /// with it" stops being a guess.
     case permission(Permission, PermissionState)
 
+    /// Once per launch, explains whether the persisted system-audio answers survived reconciliation.
+    /// No signing requirement, certificate, or hash leaves the machine.
+    case permissionCache(Permissions.SystemAudioRecordOutcome)
+
+    /// Brokered permission actions, not proof that macOS displayed a dialog or granted access.
+    case permissionAction(Permission, PermissionAction)
+
     /// Onboarding reached a step. Ordinal only — the step *names* are product copy that changes every
     /// release, and a funnel keyed on copy is a funnel that resets every release.
     case onboardingStep(index: Int, of: Int)
@@ -168,6 +175,11 @@ enum AnalyticsEvent: Sendable {
         /// rather than that someone said no. Conflating the two would hide a class of failure that
         /// looks exactly like abandonment in the funnel. See `Permissions.grantWasLost`.
         case revoked
+    }
+
+    enum PermissionAction: String, Sendable, CaseIterable {
+        case requested
+        case settingsOpened = "settings_opened"
     }
 
     /// The three things this app can be capturing. `CaptureComponent.storage` has no analogue on
@@ -370,6 +382,8 @@ enum AnalyticsEvent: Sendable {
         case .appLaunched: return "cfc_app_launched"
         case .dailyActive: return "cfc_daily_active"
         case .permission: return "cfc_permission"
+        case .permissionCache: return "cfc_permission_cache"
+        case .permissionAction: return "cfc_permission_action"
         case .onboardingStep: return "cfc_onboarding_step"
         case .onboardingFinished: return "cfc_onboarding_finished"
         case .accountStateChanged: return "cfc_account_state"
@@ -399,6 +413,12 @@ enum AnalyticsEvent: Sendable {
 
         case let .permission(permission, state):
             return ["permission": .string(permission.rawValue), "state": .string(state.rawValue)]
+
+        case let .permissionCache(outcome):
+            return ["permission": .string(Permission.systemAudio.rawValue), "outcome": .string(outcome.rawValue)]
+
+        case let .permissionAction(permission, action):
+            return ["permission": .string(permission.rawValue), "action": .string(action.rawValue)]
 
         case let .onboardingStep(index, total):
             return ["step_index": .int(index), "step_total": .int(total)]
