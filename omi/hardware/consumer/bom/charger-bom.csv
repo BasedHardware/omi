@@ -1,0 +1,11 @@
+ID,SKU,Description,Manufacturer,MPN,Designator,Qty,Board,Category,Populate,LCSC_PN,JLC_Status,Stock_Note
+58,114993689,Omi2 Charger,,,,1,charger,assembly-header,n/a,,,
+59,322101051,Omi2-Charger Foot Pads (1 set = 2 pads);D22.4*H1.5mm,,,,1,charger,accessory,n/a,,,
+60,202004256,PCBA;Omi2 Charger Board,,,,1,charger,pcba-reference,n/a,,,
+61,319016304,PCB;Omi2 Charger Board v1.0,,,,1,charger,pcb-reference,n/a,,,
+62,310031584,SMD IC PWR MGR EFUSE;6.5V-2.8A-6SON,TI,TPS25200DRVR,U1,1,charger,component,yes,C128401,Extended,In stock
+63,304050312,SMD Diode ESD 5.5V-6V-12pF-30KV-30KV;X1SON(2),TI,TPD1E10B06DPYR,D3,1,charger,component,yes,C48260,Extended,In stock
+64,301010642,SMD RES;280K-1%-1/16W-0402,YAGEO,RC0402FR-07280KL,"R1,R2",2,charger,component,yes,C185434,Extended,In stock
+65,302010235,SMD CAP Ceramic 22uF-25V-20%-X5R;0805,YAGEO,CC0805MKX5R8BB226,C2,1,charger,component,yes,C784585,Extended,In stock
+66,302010024,SMD CAP Ceramic 100nF-25V-10%-X7R;0402,YAGEO,CC0402KRX7R8BB104,C1,1,charger,component,yes,C105883,Extended,In stock
+67,320991566,SMD Pogo Pin WH3.3mm;2.3*2.3*4MM,JINLANTIAN,CA62-PG308,"PP1,PP2",2,charger,component,yes,,N/A,Not on LCSC
