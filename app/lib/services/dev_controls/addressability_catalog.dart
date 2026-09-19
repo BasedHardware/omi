@@ -25,6 +25,7 @@ abstract final class OmiKeys {
   static const devicesBack = ValueKey<String>('omi.devices.back');
   static const devicesGuide = ValueKey<String>('omi.devices.guide');
   static const homeTabHome = ValueKey<String>('omi.home.tab_home');
+  static const actionItemsRetry = ValueKey<String>('omi.action_items.retry');
 }
 
 const addressableControlsJson =

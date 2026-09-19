@@ -10,11 +10,13 @@ retry, identify or delivery changes belong here.
 
 Generated sealed event classes accept only declared fields. Property keys are
 Dart parameter names; each explicit wire_name preserves legacy spelling, including
-underscores. SDK provenance keys cannot be event fields. The initial schema
-admits booleans; subsequent batches may add bounded counts and generated closed
-enums with rejection tests. Never accept arbitrary String, Map, Object, payload,
-uid, hashed device address, transcript, memory text, email or exception text.
-This is an allowlist, not a PII regex filter pretending to sanitize values.
+underscores. SDK provenance keys cannot be event fields. The schema admits booleans, unbounded
+ints whose *name* is not identity or content, and per-property closed enums
+(generated Dart enums that emit the declared wire strings). Rejection tests refuse
+free String, double, Map, Object, and one-value "enums". Never accept arbitrary
+String, Map, Object, payload, uid, hashed device address, transcript, memory text,
+email or exception text. This is an allowlist, not a PII regex filter pretending
+to sanitize values.
 C8 owns unadopted legacy events, including Memory Created/getTranscript statistics;
 C7 makes no privacy claim for them. Unsafe events need reviewed replacements,
 not byte-preserving migration. The pending emission oracle checks literal sink
