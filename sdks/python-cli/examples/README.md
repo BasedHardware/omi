@@ -90,3 +90,9 @@
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
+* [`quickstart.ms.md`](quickstart.ms.md) — Bermula dengan omi-cli (Malay Quickstart).
+* [`quickstart.sw.md`](quickstart.sw.md) — Kuanza kutumia omi-cli (Swahili Quickstart).
+* [`quickstart.am.md`](quickstart.am.md) — ከ omi-cli ጋር መጀመር (Amharic Quickstart).
+* [`quickstart.ig.md`](quickstart.ig.md) — Ibido na omi-cli (Igbo Quickstart).
+* [`quickstart.ht.md`](quickstart.ht.md) — Kòmanse ak omi-cli (Haitian Creole Quickstart).
+* [`quickstart.sr.md`](quickstart.sr.md) — Почетак рада са omi-cli (Serbian Quickstart).
