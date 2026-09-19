@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,6 +91,27 @@ List<List<Object>> c8SliceGoldens(Map<String, Object> globals) => [
       ],
     ];
 
+void fireC8TypeExtension(TypedEvents typed) {
+  typed.emit(const TypeExtensionProbe(enabled: false, count: 0, mode: TypeExtensionProbeMode.off));
+  typed.emit(const TypeExtensionProbe(enabled: true, count: 1, mode: TypeExtensionProbeMode.headphonesOnly));
+  typed.emit(const TypeExtensionProbe(enabled: true, count: 99, mode: TypeExtensionProbeMode.always));
+}
+
+List<List<Object>> c8TypeExtensionGoldens(Map<String, Object> globals) => [
+      [
+        'Type Extension Probe',
+        {...globals, 'enabled': false, 'count': 0, 'mode': 'off'}
+      ],
+      [
+        'Type Extension Probe',
+        {...globals, 'enabled': true, 'count': 1, 'mode': 'headphones_only'}
+      ],
+      [
+        'Type Extension Probe',
+        {...globals, 'enabled': true, 'count': 99, 'mode': 'always'}
+      ],
+    ];
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
@@ -116,5 +138,44 @@ void main() {
     expect(emissionPayloads(adapter.events), c8SliceGoldens(globals));
     expect(adapter.events.every((event) => !event.$2.containsKey('correlation_id')), isTrue);
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
+  });
+
+  test('C8 type-extension emit matches goldens for bool, int, and closed enum', () async {
+    final adapter = RecordingAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    fireC8TypeExtension(const TypedEvents());
+    await AnalyticsManager.flushPending(force: true);
+    await AnalyticsManager.flushPending(force: true);
+    final globals = <String, Object>{
+      'app_platform': PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown'),
+      'app_version': '1.0.543',
+      'app_build': '992',
+    };
+    expect(emissionPayloads(adapter.events), c8TypeExtensionGoldens(globals));
+    expect(adapter.events.every((event) => event.$2['count'] is int), isTrue);
+    expect(adapter.events.every((event) => event.$2['mode'] is String), isTrue);
+    expect(adapter.events.every((event) => !event.$2.containsKey('correlation_id')), isTrue);
+    expect(AnalyticsManager.queuedEventCountForTesting, 0);
+  });
+
+  test('C8 type-extension constructors reject free values and cannot carry a mutated property bag', () {
+    dynamic construct = TypeExtensionProbe.new;
+    for (final value in <Object>[
+      'synthetic@local.test',
+      'synthetic transcript',
+      {'content': 'synthetic memory'},
+    ]) {
+      expect(() => construct(enabled: true, count: 1, mode: value), throwsA(isA<TypeError>()));
+      expect(() => construct(enabled: value, count: 1, mode: TypeExtensionProbeMode.off), throwsA(isA<TypeError>()));
+      expect(() => construct(enabled: true, count: value, mode: TypeExtensionProbeMode.off), throwsA(isA<TypeError>()));
+    }
+    expect(() => construct(enabled: true, count: 1, mode: 17), throwsA(isA<TypeError>()));
+    expect(() => construct(enabled: 17, count: 1, mode: TypeExtensionProbeMode.off), throwsA(isA<TypeError>()));
+    expect(() => construct(enabled: true, count: true, mode: TypeExtensionProbeMode.off), throwsA(isA<TypeError>()));
+    const event = TypeExtensionProbe(enabled: true, count: 99, mode: TypeExtensionProbeMode.headphonesOnly);
+    expect(event.properties, {'enabled': true, 'count': 99, 'mode': 'headphones_only'});
+    event.properties['transcript'] = 'synthetic private transcript';
+    expect(event.properties, {'enabled': true, 'count': 99, 'mode': 'headphones_only'});
   });
 }
