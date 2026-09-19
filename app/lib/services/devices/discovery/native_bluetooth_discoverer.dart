@@ -103,9 +103,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
   static bool _isPlaud(BlePeripheral p) {
     final name = p.name.toLowerCase();
-    return name.startsWith('plaud') ||
-        name.contains('notepin') ||
-        _hasService(p, plaudServiceUuid);
+    return name.startsWith('plaud') || name.contains('notepin') || _hasService(p, plaudServiceUuid);
   }
 
   static bool _isFieldy(BlePeripheral p) {
