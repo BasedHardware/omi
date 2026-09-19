@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: slack-fuzzy-channel-resolution-tests
+    command: ["python3", "plugins/omi-slack-app/test_channel_resolution.py"]
+    triggers: ["plugins/omi-slack-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#14112 resolve voice-dictated channel names using difflib similarity scoring"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
