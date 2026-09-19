@@ -319,9 +319,11 @@ async def home(request: Request, uid: Optional[str] = None):
         if "error" not in orders_result:
             recent_orders = orders_result
     
+    uid_q = urllib.parse.quote(uid, safe="") if uid else ""
     return templates.TemplateResponse("setup.html", {
         "request": request,
         "uid": uid,
+        "uid_q": uid_q,
         "authenticated": authenticated,
         "shop_info": shop_info,
         "recent_orders": recent_orders,
@@ -451,7 +453,8 @@ async def shopify_callback(
         store_default_store(uid, shop, shop_data.get("name", shop))
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={uid}")
+    safe_uid = urllib.parse.quote(uid, safe="")
+    return RedirectResponse(url=f"/?uid={safe_uid}")
 
 
 @app.get("/setup/shopify", tags=["setup"])
@@ -465,7 +468,8 @@ async def check_setup(uid: str):
 async def disconnect_shopify(uid: str):
     """Disconnect Shopify account."""
     delete_shopify_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    safe_uid = urllib.parse.quote(uid, safe="")
+    return RedirectResponse(url=f"/?uid={safe_uid}")
 
 
 # ============================================
