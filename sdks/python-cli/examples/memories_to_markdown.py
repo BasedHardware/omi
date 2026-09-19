@@ -250,9 +250,25 @@ def write_grouped_directory(
             key = cat if cat else "other"
             groups.setdefault(key, []).append(it)
 
+    safe_keys = {
+        key: re.sub(r"[^\w-]", "_", key).strip("_") or "memories"
+        for key in groups
+    }
+    # Reserve natural filenames before allocating suffixes so a collision
+    # cannot take the filename of another group (for example work_life_2).
+    reserved_names = {f"{key}_memories.md".casefold() for key in safe_keys.values()}
+    used_names: Set[str] = set()
     for group_key, group_items in sorted(groups.items()):
-        safe_key = re.sub(r"[^\w-]", "_", group_key).strip("_") or "memories"
+        safe_key = safe_keys[group_key]
         filename = f"{safe_key}_memories.md"
+        if filename.casefold() in used_names:
+            suffix = 2
+            while True:
+                filename = f"{safe_key}_{suffix}_memories.md"
+                if filename.casefold() not in reserved_names | used_names:
+                    break
+                suffix += 1
+        used_names.add(filename.casefold())
         target_path = (output_dir / filename).resolve()
 
         if not str(target_path).startswith(str(resolved_dir)):
