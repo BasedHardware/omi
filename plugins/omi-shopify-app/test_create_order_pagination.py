@@ -40,7 +40,7 @@ stubs = {
     "requests": module("requests", RequestException=OSError),
     "dotenv": module("dotenv", load_dotenv=lambda: None),
     "fastapi": module("fastapi", **{name: Framework for name in
-        ("FastAPI", "HTTPException", "Request", "Query", "Form")}),
+        ("FastAPI", "HTTPException", "Request", "Query", "Form", "Depends")}),
     "fastapi.responses": module("fastapi.responses", **{name: Framework for name in
         ("HTMLResponse", "RedirectResponse", "JSONResponse")}),
     "fastapi.staticfiles": module("fastapi.staticfiles", StaticFiles=Framework),

@@ -10,9 +10,18 @@ from typing import Optional, Dict, Any, List, Tuple
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Query, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+try:
+    from fastapi import Depends
+except ImportError:
+    Depends = lambda default=None, **kwargs: default
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+
+try:
+    from .hive_tools_auth import require_hive_tools_auth
+except ImportError:
+    from hive_tools_auth import require_hive_tools_auth
 
 from db import (
     store_hive_credentials,
@@ -608,7 +617,7 @@ async def disconnect_hive(uid: str):
 # ============================================
 
 @app.post("/tools/hive_get_projects", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_hive_get_projects(request: Request):
+async def tool_hive_get_projects(request: Request, _auth: None = Depends(require_hive_tools_auth)):
     """
     Get user's Hive projects.
     Chat tool for Omi - retrieves the user's projects.
@@ -643,7 +652,7 @@ async def tool_hive_get_projects(request: Request):
 
 
 @app.post("/tools/hive_get_tasks", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_hive_get_tasks(request: Request):
+async def tool_hive_get_tasks(request: Request, _auth: None = Depends(require_hive_tools_auth)):
     """
     Get tasks from a Hive project.
     Chat tool for Omi - retrieves tasks for a project.
@@ -702,7 +711,7 @@ async def tool_hive_get_tasks(request: Request):
 
 
 @app.post("/tools/hive_create_task", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_hive_create_task(request: Request):
+async def tool_hive_create_task(request: Request, _auth: None = Depends(require_hive_tools_auth)):
     """
     Create a new task (Action) in Hive.
     Chat tool for Omi - creates a task in a project.
@@ -808,7 +817,7 @@ async def tool_hive_create_task(request: Request):
 
 
 @app.post("/tools/hive_search", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_hive_search(request: Request):
+async def tool_hive_search(request: Request, _auth: None = Depends(require_hive_tools_auth)):
     """
     Search for tasks and projects in Hive.
     Chat tool for Omi - searches across Hive.
@@ -851,7 +860,7 @@ async def tool_hive_search(request: Request):
 
 
 @app.post("/tools/hive_update_task_status", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_hive_update_task_status(request: Request):
+async def tool_hive_update_task_status(request: Request, _auth: None = Depends(require_hive_tools_auth)):
     """
     Update the status of a task in Hive.
     Chat tool for Omi - updates task status.

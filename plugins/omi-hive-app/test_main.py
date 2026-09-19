@@ -52,6 +52,7 @@ def load_app():
     fastapi.HTTPException = HTTPException
     fastapi.Query = lambda default=None, **kwargs: default
     fastapi.Form = lambda default=None, **kwargs: default
+    fastapi.Depends = lambda default=None, **kwargs: default
 
     staticfiles = ModuleType("fastapi.staticfiles")
     staticfiles.StaticFiles = lambda **kwargs: None
@@ -196,7 +197,7 @@ class HiveAppTests(unittest.TestCase):
         })
         project = stubs["models"].HiveProject(id="p_backend", name="Backend")
         with patch.object(app_module, "is_connected", return_value=True):
-            with patch.object(app_module, "find_project_by_name", return_value=project):
+            with patch.object(app_module, "find_project_by_name", return_value=(project, [project])):
                 with patch.object(app_module, "get_hive_credentials", return_value={"workspace_id": "ws_1"}):
                     with patch.object(app_module, "hive_rest_request", return_value={"id": "t_1", "title": "Implement Oauth"}):
                         resp = asyncio.run(app_module.tool_hive_create_task(req))

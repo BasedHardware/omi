@@ -16,7 +16,16 @@ from urllib.parse import urlencode
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Query, HTTPException
+try:
+    from fastapi import Depends
+except ImportError:
+    Depends = lambda default=None, **kwargs: default
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+
+try:
+    from .notion_tools_auth import require_notion_tools_auth
+except ImportError:
+    from notion_tools_auth import require_notion_tools_auth
 
 from db import (
     store_notion_tokens,
@@ -471,7 +480,7 @@ async def get_omi_tools_manifest():
 # ============================================
 
 @app.post("/tools/search", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_search(request: Request):
+async def tool_search(request: Request, _auth: None = Depends(require_notion_tools_auth)):
     """Search Notion workspace."""
     try:
         body = await request.json()
@@ -531,7 +540,7 @@ async def tool_search(request: Request):
 
 
 @app.post("/tools/list_pages", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_list_pages(request: Request):
+async def tool_list_pages(request: Request, _auth: None = Depends(require_notion_tools_auth)):
     """List recently edited pages."""
     try:
         body = await request.json()
@@ -575,7 +584,7 @@ async def tool_list_pages(request: Request):
 
 
 @app.post("/tools/get_page", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_page(request: Request):
+async def tool_get_page(request: Request, _auth: None = Depends(require_notion_tools_auth)):
     """Get page details and content."""
     try:
         body = await request.json()
@@ -647,7 +656,7 @@ async def tool_get_page(request: Request):
 
 
 @app.post("/tools/create_page", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_create_page(request: Request):
+async def tool_create_page(request: Request, _auth: None = Depends(require_notion_tools_auth)):
     """Create a new page in Notion."""
     try:
         body = await request.json()
@@ -737,7 +746,7 @@ async def tool_create_page(request: Request):
 
 
 @app.post("/tools/update_page", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_update_page(request: Request):
+async def tool_update_page(request: Request, _auth: None = Depends(require_notion_tools_auth)):
     """Update a page's properties."""
     try:
         body = await request.json()
@@ -798,7 +807,7 @@ async def tool_update_page(request: Request):
 
 
 @app.post("/tools/append_content", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_append_content(request: Request):
+async def tool_append_content(request: Request, _auth: None = Depends(require_notion_tools_auth)):
     """Append content to a page."""
     try:
         body = await request.json()
@@ -833,7 +842,7 @@ async def tool_append_content(request: Request):
 
 
 @app.post("/tools/list_databases", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_list_databases(request: Request):
+async def tool_list_databases(request: Request, _auth: None = Depends(require_notion_tools_auth)):
     """List databases in workspace."""
     try:
         body = await request.json()
@@ -864,7 +873,6 @@ async def tool_list_databases(request: Request):
 
         for db in databases:
             result_parts.append(format_database_info(db))
-            result_parts.append("")
 
         return ChatToolResponse(result="\n".join(result_parts))
 
@@ -874,7 +882,7 @@ async def tool_list_databases(request: Request):
 
 
 @app.post("/tools/query_database", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_query_database(request: Request):
+async def tool_query_database(request: Request, _auth: None = Depends(require_notion_tools_auth)):
     """Query a database to get its entries."""
     try:
         body = await request.json()

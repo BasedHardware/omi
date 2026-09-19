@@ -21,11 +21,19 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
+try:
+    from fastapi import Depends
+except ImportError:
+    Depends = lambda default=None, **kwargs: default
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, URLSafeSerializer
 
 from config import get_settings
 from services import auth, mail, profile
+try:
+    from .ms365_tools_auth import require_ms365_tools_auth
+except ImportError:
+    from ms365_tools_auth import require_ms365_tools_auth
 from services import calendar as cal
 from services import teams as teams_svc
 from services import sharepoint as sp
@@ -205,7 +213,7 @@ def tool_args(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/tools/{tool_name}")
-async def tool_dispatch(tool_name: str, request: Request) -> Any:
+async def tool_dispatch(tool_name: str, request: Request, _auth: None = Depends(require_ms365_tools_auth)) -> Any:
     body: dict[str, Any] = {}
     try:
         body = await request.json()

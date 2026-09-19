@@ -539,7 +539,13 @@ class TestCancelWroRegression13183(unittest.TestCase):
 
     def setUp(self):
         from fastapi.testclient import TestClient
+        try:
+            from .shipbob_tools_auth import require_shipbob_tools_auth
+        except ImportError:
+            from shipbob_tools_auth import require_shipbob_tools_auth
 
+        main.app.dependency_overrides[require_shipbob_tools_auth] = lambda: None
+        self.addCleanup(main.app.dependency_overrides.clear)
         self.client = TestClient(main.app)
 
     @patch("main.get_shipbob_headers", return_value=_headers_ok())
