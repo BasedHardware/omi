@@ -501,6 +501,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceName => 'Όνομα Συσκευής';
 
   @override
+  String get deviceNameStoredOnPhone => 'Αποθηκεύεται μόνο σε αυτό το τηλέφωνο.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Αποθηκεύεται στο Omi σας, οπότε εμφανίζεται σε κάθε συνδεδεμένο τηλέφωνο.';
+
+  @override
   String get deviceId => 'Αναγνωριστικό συσκευής';
 
   @override

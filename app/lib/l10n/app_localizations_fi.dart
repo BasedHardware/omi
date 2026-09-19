@@ -496,6 +496,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceName => 'Laitteen nimi';
 
   @override
+  String get deviceNameStoredOnPhone => 'Tallennettu vain tähän puhelimeen.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Tallennettu Omiisi, joten se näkyy jokaisessa yhdistetyssä puhelimessa.';
+
+  @override
   String get deviceId => 'Laitteen tunnus';
 
   @override

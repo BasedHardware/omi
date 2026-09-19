@@ -639,6 +639,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return (message, hasUpdate, version, latestFirmwareDetails);
   }
 
+  Future<void> _syncStoredDeviceName(BtDevice device) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+    if (connection == null || (await connection.getFeatures() & OmiFeatures.deviceNameStorage) == 0) return;
+    await SharedPreferencesUtil().adoptStoredDeviceName(device.id, await connection.getStoredDeviceName());
+    notifyListeners();
+  }
+
   void _onDeviceConnected(BtDevice device) async {
     Logger.debug('_onConnected inside: $connectedDevice');
     final deviceSetup = setConnectedDevice(device);
@@ -679,6 +686,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;
+    await _syncStoredDeviceName(device);
 
     // Wals — pass the firmware resolved by getDeviceInfo() above so background
     // discovery routes ring-buffer devices correctly; `device` here is the raw
