@@ -17,8 +17,10 @@ import {
   markScreenActivitySyncCandidates,
   setAppMeta
 } from '../ipc/db'
+import { getRewindSettings } from './captureService'
 import {
   buildScreenActivitySyncPayload,
+  parseAccountGeneration,
   resolveWindowsClientDeviceId
 } from './screenActivitySyncLogic'
 
@@ -27,6 +29,7 @@ export {
   buildScreenActivitySyncPayload,
   clientDeviceIdFromInstallId,
   formatScreenActivityTimestamp,
+  parseAccountGeneration,
   resolveWindowsClientDeviceId
 } from './screenActivitySyncLogic'
 
@@ -37,6 +40,7 @@ const REQUEST_TIMEOUT_MS = 60_000
 let timer: ReturnType<typeof setInterval> | null = null
 let tickInFlight: Promise<void> | null = null
 let consecutiveFailures = 0
+let cachedAccountGeneration: { epoch: number; value: number } | null = null
 
 onSessionReset(() => {
   stopScreenActivitySync()
@@ -69,6 +73,7 @@ export function stopScreenActivitySync(): void {
     timer = null
   }
   consecutiveFailures = 0
+  cachedAccountGeneration = null
 }
 
 async function runSyncTick(): Promise<void> {
@@ -88,9 +93,16 @@ async function syncTick(): Promise<void> {
     const candidates = fetchScreenActivitySyncCandidates(BATCH_SIZE)
     if (candidates.length === 0) return
 
+    // Generation is the server-authoritative cutover projection (macOS
+    // AccountCutoverControlManager), never inferred from local queue state.
+    const accountGeneration = await resolveAccountGeneration(session, epoch)
+    if (getSessionEpoch() !== epoch) return
+
     const payload = buildScreenActivitySyncPayload(candidates, {
       clientDeviceId: resolveClientDeviceId(),
-      deviceName: hostname()
+      deviceName: hostname(),
+      accountGeneration,
+      retentionDays: getRewindSettings().retentionDays
     })
 
     const ok = await pushScreenActivityRows(session, payload, epoch)
@@ -107,6 +119,40 @@ async function syncTick(): Promise<void> {
     consecutiveFailures = 0
   } catch (e) {
     console.warn('[screen-activity-sync] tick error:', (e as Error).message)
+  }
+}
+
+async function resolveAccountGeneration(session: BackendSession, epoch: number): Promise<number> {
+  if (cachedAccountGeneration?.epoch === epoch) return cachedAccountGeneration.value
+  const url = `${session.apiBase.replace(/\/$/, '')}/v1/account/cutover/control`
+  try {
+    const res = await fetchWithFreshToken(
+      (s) =>
+        withTimeout(
+          REQUEST_TIMEOUT_MS,
+          (signal) =>
+            net.fetch(url, {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${s.token}`,
+                'X-App-Platform': 'windows'
+              },
+              signal
+            }),
+          getAbortSignal()
+        ),
+      'screen-activity-cutover'
+    )
+    if (getSessionEpoch() !== epoch) return 0
+    if (!res.ok) return 0
+    const parsed = parseAccountGeneration(await res.json())
+    if (parsed === null) return 0
+    cachedAccountGeneration = { epoch, value: parsed }
+    return parsed
+  } catch {
+    // Legacy default matches the backend Field(default=0) and macOS
+    // AccountCutoverControl.legacyDefault. Retry next tick; do not cache failures.
+    return 0
   }
 }
 

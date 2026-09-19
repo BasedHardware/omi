@@ -4,6 +4,7 @@ import {
   buildScreenActivitySyncPayload,
   clientDeviceIdFromInstallId,
   formatScreenActivityTimestamp,
+  parseAccountGeneration,
   resolveWindowsClientDeviceId
 } from './screenActivitySyncLogic'
 import type { ScreenActivitySyncCandidate } from '../ipc/db'
@@ -36,9 +37,21 @@ describe('screenActivitySync helpers', () => {
   it('bounds device retention to six days', () => {
     expect(boundedDeviceRetentionSeconds(14)).toBe(6 * 24 * 60 * 60)
     expect(boundedDeviceRetentionSeconds(2)).toBe(2 * 24 * 60 * 60)
+    expect(boundedDeviceRetentionSeconds(1)).toBe(24 * 60 * 60)
+    expect(boundedDeviceRetentionSeconds(0)).toBeUndefined()
+    expect(boundedDeviceRetentionSeconds(-1)).toBeUndefined()
   })
 
-  it('builds sync rows with optional embeddings', () => {
+  it('parses server-authoritative cutover generation', () => {
+    expect(parseAccountGeneration({ account_generation: 7 })).toBe(7)
+    expect(parseAccountGeneration({ account_generation: 0 })).toBe(0)
+    expect(parseAccountGeneration({ account_generation: -1 })).toBeNull()
+    expect(parseAccountGeneration({ account_generation: 1.5 })).toBeNull()
+    expect(parseAccountGeneration({})).toBeNull()
+    expect(parseAccountGeneration(null)).toBeNull()
+  })
+
+  it('builds sync payload with macOS-parity retention and generation', () => {
     const candidates: ScreenActivitySyncCandidate[] = [
       {
         id: 42,
@@ -52,9 +65,13 @@ describe('screenActivitySync helpers', () => {
     ]
     const payload = buildScreenActivitySyncPayload(candidates, {
       clientDeviceId: 'windows_abcd1234',
-      deviceName: 'DESKTOP-TEST'
+      deviceName: 'DESKTOP-TEST',
+      accountGeneration: 7,
+      retentionDays: 14
     })
     expect(payload).toEqual({
+      account_generation: 7,
+      deviceRetentionSeconds: 6 * 24 * 60 * 60,
       rows: [
         expect.objectContaining({
           id: 42,
@@ -67,5 +84,29 @@ describe('screenActivitySync helpers', () => {
     })
     expect(payload.rows[0].embedding).toBeUndefined()
     expect(payload.rows[0]).not.toHaveProperty('captureEligible')
+  })
+
+  it('omits deviceRetentionSeconds when Rewind retention is unlimited', () => {
+    const payload = buildScreenActivitySyncPayload(
+      [
+        {
+          id: 1,
+          ts: Date.UTC(2026, 0, 15, 12, 0, 0),
+          app: 'Code',
+          windowTitle: 'main.ts',
+          ocrText: 'hi',
+          priorState: 0,
+          embedding: null
+        }
+      ],
+      {
+        clientDeviceId: 'windows_abcd1234',
+        deviceName: 'DESKTOP-TEST',
+        accountGeneration: 0,
+        retentionDays: 0
+      }
+    )
+    expect(payload.account_generation).toBe(0)
+    expect(payload).not.toHaveProperty('deviceRetentionSeconds')
   })
 })
