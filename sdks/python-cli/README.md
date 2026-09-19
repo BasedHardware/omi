@@ -89,6 +89,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [🇸🇦 دليل البدء السريع (Arabic Quickstart)](examples/quickstart.ar.md), the [🇻🇳 Hướng dẫn nhanh (Vietnamese Quickstart)](examples/quickstart.vi.md), the [🇨🇿 Rychlý start (Czech Quickstart)](examples/quickstart.cs.md), or the [🇮🇱 מדריך מהיר (Hebrew Quickstart)](examples/quickstart.he.md).
 > Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
 > Looking for localized guides? See the [🇵🇭 Mga Unang Lakang gamit ang omi-cli (Cebuano Quickstart)](examples/quickstart.ceb.md).
+> Looking for localized guides? See the [🇧🇩 বাংলা নির্দেশিকা (Bengali Quickstart)](examples/quickstart.bn.md), the [🇵🇰 اردو رہنمائی (Urdu Quickstart)](examples/quickstart.ur.md), the [🇮🇳 தமிழ் வழிகாட்டி (Tamil Quickstart)](examples/quickstart.ta.md), the [🇮🇳 मराठी मार्गदर्शक (Marathi Quickstart)](examples/quickstart.mr.md), the [🇮🇳 ગુજરાતી માર્ગદર્શિકા (Gujarati Quickstart)](examples/quickstart.gu.md), the [🇮🇳 ಕನ್ನಡ ಮಾರ್ಗದರ್ಶಿ (Kannada Quickstart)](examples/quickstart.kn.md), the [🇮🇳 മലയാളം ഗൈഡ് (Malayalam Quickstart)](examples/quickstart.ml.md), or the [🇮🇳 ଓଡ଼ିଆ ମାର୍ଗଦର୍ଶିକା (Odia Quickstart)](examples/quickstart.or.md).
 
 ## Auth
 
