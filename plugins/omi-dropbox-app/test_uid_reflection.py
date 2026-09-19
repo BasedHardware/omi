@@ -9,6 +9,7 @@ Framework-only stubs (fastapi, dotenv, requests, db, models, dropbox_client);
 the real `get_home_page_html` is exercised. No network, no third-party packages.
 """
 
+import asyncio
 import html
 import sys
 import types
@@ -56,8 +57,17 @@ def _load_main():
     sys.modules["fastapi"] = fastapi
 
     responses = types.ModuleType("fastapi.responses")
-    for name in ("HTMLResponse", "RedirectResponse", "JSONResponse"):
-        setattr(responses, name, type(name, (), {"__init__": lambda self, *a, **k: None}))
+    class _MockHTMLResponse:
+        def __init__(self, content="", status_code=200, **k):
+            self.content = content
+            self.status_code = status_code
+    class _MockRedirectResponse:
+        def __init__(self, url="", status_code=307, **k):
+            self.url = url
+            self.status_code = status_code
+    responses.HTMLResponse = _MockHTMLResponse
+    responses.RedirectResponse = _MockRedirectResponse
+    responses.JSONResponse = type("JSONResponse", (), {"__init__": lambda self, *a, **k: None})
     fastapi.responses = responses
     sys.modules["fastapi.responses"] = responses
 
@@ -143,6 +153,24 @@ class UidReflectionTest(unittest.TestCase):
     def test_ordinary_uid_still_renders(self) -> None:
         page = MAIN.get_home_page_html(uid="abc123", connected=False)
         self.assertIn("/auth/dropbox?uid=abc123", page)
+
+    def test_auth_callback_error_is_escaped(self) -> None:
+        """OAuth error param must be HTML-escaped on the error page."""
+        resp = asyncio.run(MAIN.auth_callback(error=BREAKOUT))
+        self.assertEqual(resp.status_code, 400)
+        self.assertNotIn(BREAKOUT, resp.content)
+        self.assertNotIn("<script>alert(1)</script>", resp.content)
+        self.assertIn(html.escape(BREAKOUT), resp.content)
+
+    def test_auth_callback_error_description_is_escaped(self) -> None:
+        """OAuth error_description param must be HTML-escaped on the error page."""
+        resp = asyncio.run(
+            MAIN.auth_callback(error="access_denied", error_description=BREAKOUT)
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertNotIn(BREAKOUT, resp.content)
+        self.assertNotIn("<script>alert(1)</script>", resp.content)
+        self.assertIn(html.escape(BREAKOUT), resp.content)
 
 
 if __name__ == "__main__":

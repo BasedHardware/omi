@@ -6,6 +6,7 @@ Automatically saves conversation summaries, transcripts, and audio to Dropbox.
 
 import html
 import io
+import logging
 import os
 import secrets
 import struct
@@ -14,6 +15,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 from urllib.parse import quote, urlencode
+
+logger = logging.getLogger(__name__)
 
 import requests
 from dotenv import load_dotenv
@@ -397,6 +400,7 @@ async def auth_callback(
     """Handle Dropbox OAuth callback."""
     # Handle errors
     if error:
+        err_msg = html.escape(error_description or error)
         return HTMLResponse(
             f"""
 <!DOCTYPE html>
@@ -404,7 +408,7 @@ async def auth_callback(
 <head><title>Authorization Failed</title></head>
 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
     <h1 style="color: #dc3545;">Authorization Failed</h1>
-    <p>{error_description or error}</p>
+    <p>{err_msg}</p>
 </body>
 </html>
 """,
@@ -442,7 +446,7 @@ async def auth_callback(
         )
 
         if response.status_code != 200:
-            return HTMLResponse(f"Token exchange failed: {response.text}", status_code=400)
+            return HTMLResponse(f"Token exchange failed: {html.escape(response.text)}", status_code=400)
 
         token_data = response.json()
         access_token = token_data.get("access_token")
@@ -481,9 +485,8 @@ async def auth_callback(
         return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
-        return HTMLResponse(
-            f"Error during authorization: {html.escape(str(e))}", status_code=500
-        )
+        logger.error(f"Error during authorization for {uid}: {e}")
+        return HTMLResponse("Error during authorization", status_code=500)
 
 
 @app.get("/disconnect")
