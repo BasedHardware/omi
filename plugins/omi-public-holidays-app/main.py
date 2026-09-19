@@ -245,7 +245,13 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
         if len(holidays) > request.limit:
             lines.append(f"... {len(holidays) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return ChatToolResponse(error=f"no holidays returned for {request.country_code} in {request.year}")
+        return ChatToolResponse(error=f"holiday lookup failed: {exc}")
     except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"holiday lookup failed: {exc}")
+    except Exception as exc:
         return ChatToolResponse(error=f"holiday lookup failed: {exc}")
 
 
@@ -262,7 +268,13 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
         if len(holidays) > request.limit:
             lines.append(f"... {len(holidays) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return ChatToolResponse(error=f"no upcoming holidays returned for {request.country_code}")
+        return ChatToolResponse(error=f"upcoming holiday lookup failed: {exc}")
     except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"upcoming holiday lookup failed: {exc}")
+    except Exception as exc:
         return ChatToolResponse(error=f"upcoming holiday lookup failed: {exc}")
 
 
@@ -279,7 +291,13 @@ async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
         if len(weekends) > request.limit:
             lines.append(f"... {len(weekends) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return ChatToolResponse(error=f"no long weekends returned for {request.country_code} in {request.year}")
+        return ChatToolResponse(error=f"long-weekend lookup failed: {exc}")
     except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"long-weekend lookup failed: {exc}")
+    except Exception as exc:
         return ChatToolResponse(error=f"long-weekend lookup failed: {exc}")
 
 
@@ -291,9 +309,15 @@ async def list_supported_countries() -> ChatToolResponse:
             return ChatToolResponse(error="country list request returned no countries")
         lines = ["Supported countries:"]
         for item in countries:
-            lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
+            if not isinstance(item, dict):
+                continue
+            code = item.get("countryCode") or "Unknown"
+            name = item.get("name") or "Unknown"
+            lines.append(f"- {code}: {name}")
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"country list request failed: {exc}")
+    except Exception as exc:
         return ChatToolResponse(error=f"country list request failed: {exc}")
 
 
