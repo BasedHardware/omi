@@ -6,6 +6,13 @@
   omi-cli 指南 (Simplified Chinese agent guide).
 * [`agent_quickstart.zh-TW.md`](agent_quickstart.zh-TW.md) — 給 Agent 的
   omi-cli 指南 (Traditional Chinese agent guide).
+* [`agent_quickstart.ko.md`](agent_quickstart.ko.md) — 에이전트를 위한 omi-cli (Korean agent guide).
+* [`agent_quickstart.it.md`](agent_quickstart.it.md) — omi-cli per agenti (Italian agent guide).
+* [`agent_quickstart.tr.md`](agent_quickstart.tr.md) — Ajanlar için omi-cli (Turkish agent guide).
+* [`agent_quickstart.id.md`](agent_quickstart.id.md) — omi-cli untuk agent (Indonesian agent guide).
+* [`agent_quickstart.nl.md`](agent_quickstart.nl.md) — omi-cli voor agents (Dutch agent guide).
+* [`agent_quickstart.pl.md`](agent_quickstart.pl.md) — omi-cli dla agentów (Polish agent guide).
+* [`agent_quickstart.uk.md`](agent_quickstart.uk.md) — omi-cli для агентів (Ukrainian agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
