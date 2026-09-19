@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Frankfurter currency conversion, latest rates, and supported currencies must safely handle unmanaged HTTP client contexts, non-dict API responses, and non-finite numbers without 500s or AttributeErrors"
+  - id: omi-wikipedia-tests
+    command: ["python3", "plugins/omi-wikipedia-app/test_main.py"]
+    triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Wikipedia search, summary, and random endpoints must safely handle null or non-dict payloads, missing content URLs, and connection pooling without socket exhaustion or AttributeErrors"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
