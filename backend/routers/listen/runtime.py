@@ -600,13 +600,21 @@ class ListenSessionRuntime:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
             self.state.dg_usage_ms_pending = 0
         if self.use_custom_stt:
-            # Exempt from transcription billing and live caps, but the speech
-            # still drives Omi-paid LLM post-processing — meter it in its own
-            # isolated fair-use lane so the spend is visible (#7690).
-            if FAIR_USE_ENABLED and self.receiver.vad_gate is not None:
+            # Exempt from transcription billing and live STT caps. Speech still
+            # drives Omi-paid LLM post-processing: meter the isolated fair-use
+            # lane and record speech_seconds (never transcription_seconds) so
+            # the processing budget can cap enrichment (#7690).
+            custom_speech_ms = 0
+            if self.receiver.vad_gate is not None:
                 custom_speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
-                if custom_speech_ms:
+                if FAIR_USE_ENABLED and custom_speech_ms:
                     await self.persistence.call(record_speech_ms, self.request.uid, custom_speech_ms, 'custom_stt')
+            if custom_speech_ms:
+                await self.persistence.call(
+                    record_usage,
+                    self.request.uid,
+                    speech_seconds=custom_speech_ms // 1000,
+                )
             return 0
         if not self.state.last_usage_record_timestamp:
             return 0
