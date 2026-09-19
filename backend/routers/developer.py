@@ -975,6 +975,7 @@ def delete_action_item(
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     action_items_db.delete_action_item(uid, action_item_id)
+    sync_action_item_reminder(user_id=uid, action_item_id=action_item_id, description='', completed=True, due_at=None)
     return {"success": True}
 
 
