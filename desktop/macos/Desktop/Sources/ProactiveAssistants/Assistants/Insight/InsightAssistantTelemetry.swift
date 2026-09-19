@@ -27,6 +27,8 @@ enum InsightAssistantTelemetry {
     case systemBannerDelivered = "system_banner_delivered"
     case systemDeliveryFailed = "system_delivery_failed"
     case staleOwner = "stale_owner"
+    case presenceActive = "presence_active"
+    case userSnoozed = "user_snoozed"
   }
 
   enum Surface: String, CaseIterable, Sendable {
