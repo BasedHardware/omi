@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/url_utils.dart';
 
 class MarkdownViewer extends StatefulWidget {
   final String markdown;
@@ -59,11 +60,7 @@ class _MarkdownViewerState extends State<MarkdownViewer> {
               },
               onTapLink: (text, href, title) {
                 if (href != null) {
-                  if (href.contains('?')) {
-                    href += '&uid=${SharedPreferencesUtil().uid}';
-                  } else {
-                    href += '?uid=${SharedPreferencesUtil().uid}';
-                  }
+                  href = withUidQueryParameter(href, SharedPreferencesUtil().uid);
                   launchUrl(Uri.parse(href));
                 }
               },

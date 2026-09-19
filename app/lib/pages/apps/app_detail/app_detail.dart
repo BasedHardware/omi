@@ -28,6 +28,7 @@ import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/url_utils.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
@@ -1038,7 +1039,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16.0),
                                 onTap: () async {
-                                  final rawUrl = "${step.url}?uid=${SharedPreferencesUtil().uid}";
+                                  final rawUrl = withUidQueryParameter(step.url, SharedPreferencesUtil().uid);
                                   final uri = Uri.tryParse(rawUrl);
                                   if (uri == null) {
                                     ScaffoldMessenger.of(
@@ -1513,7 +1514,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     if (hasAuthSteps && app.externalIntegration!.authSteps.isNotEmpty) {
       final firstStep = app.externalIntegration!.authSteps.first;
-      final rawUrl = "${firstStep.url}?uid=${SharedPreferencesUtil().uid}";
+      final rawUrl = withUidQueryParameter(firstStep.url, SharedPreferencesUtil().uid);
       final uri = Uri.tryParse(rawUrl);
       if (uri == null) {
         if (mounted) {
