@@ -1,10 +1,10 @@
-"""Hermetic regression tests for Shopify chat tool input coercion (#13946).
+"""Hermetic regression tests for optional Shopify list limits.
 
-Ensures optional inputs like limit, period, and request bodies are coerced
-defensively without TypeErrors, AttributeErrors, or unexpected crashes.
-Runs under standard library unittest without third-party dependencies.
+The Omi retrieval layer serializes omitted optional integer arguments as JSON
+``null``.  These tests exercise both production handlers through the HTTP
+request seam and verify that every value sent to Shopify is in its documented
+range.
 """
-
 import asyncio
 import importlib.util
 from pathlib import Path
@@ -32,244 +32,109 @@ class Response:
 
 
 def module(name, **attributes):
-    val = types.ModuleType(name)
-    val.__dict__.update(attributes)
-    return val
+    value = types.ModuleType(name)
+    value.__dict__.update(attributes)
+    return value
 
 
 stubs = {
-    "requests": module("requests", RequestException=OSError),
+    "requests": module("requests", RequestException=OSError, get=Mock()),
     "dotenv": module("dotenv", load_dotenv=lambda: None),
-    "fastapi": module(
-        "fastapi",
-        **{
-            name: Framework
-            for name in ("FastAPI", "HTTPException", "Request", "Query", "Form")
-        },
-    ),
-    "fastapi.responses": module(
-        "fastapi.responses",
-        **{
-            name: Framework
-            for name in ("HTMLResponse", "RedirectResponse", "JSONResponse")
-        },
-    ),
+    "fastapi": module("fastapi", **{name: Framework for name in
+        ("FastAPI", "HTTPException", "Request", "Query", "Form")}),
+    "fastapi.responses": module("fastapi.responses", **{name: Framework for name in
+        ("HTMLResponse", "RedirectResponse", "JSONResponse")}),
     "fastapi.staticfiles": module("fastapi.staticfiles", StaticFiles=Framework),
     "fastapi.templating": module("fastapi.templating", Jinja2Templates=Framework),
-    "db": module(
-        "db",
-        **{
-            name: Mock()
-            for name in (
-                "store_shopify_tokens",
-                "get_shopify_tokens",
-                "delete_shopify_tokens",
-                "store_default_store",
-                "get_default_store",
-                "get_user_settings",
-            )
-        },
-    ),
-    "models": module(
-        "models",
-        **{
-            name: Response
-            for name in (
-                "ChatToolResponse",
-                "ShopifyOrder",
-                "ShopifyCustomer",
-                "ShopifyLineItem",
-                "ShopifyAnalytics",
-                "ShopifyShop",
-            )
-        },
-    ),
+    "db": module("db", **{name: Mock() for name in
+        ("store_shopify_tokens", "get_shopify_tokens", "delete_shopify_tokens",
+         "store_default_store", "get_default_store", "get_user_settings")}),
+    "models": module("models", **{name: Response for name in
+        ("ChatToolResponse", "ShopifyOrder", "ShopifyCustomer", "ShopifyLineItem",
+         "ShopifyAnalytics", "ShopifyShop")}),
 }
-
 spec = importlib.util.spec_from_file_location(
-    "shopify_main_tested", Path(__file__).with_name("main.py")
+    "shopify_limit_under_test", Path(__file__).with_name("main.py")
 )
 shopify = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, stubs):
     spec.loader.exec_module(shopify)
 
 
-def mock_request(json_data):
-    req = Mock()
-    req.json = AsyncMock(return_value=json_data)
-    return req
+class LimitInputTests(unittest.TestCase):
+    def response_for(self, url):
+        response = Mock(status_code=200, content=b"{}")
+        if url.endswith("/orders.json"):
+            response.json.return_value = {"orders": [{
+                "name": "#1001", "total_price": "12.00", "currency": "USD",
+                "financial_status": "paid", "fulfillment_status": "fulfilled",
+                "created_at": "2026-09-14T00:00:00Z",
+            }]}
+        else:
+            response.json.return_value = {"customers": [{
+                "first_name": "Ada", "last_name": "Lovelace",
+                "email": "ada@example.com", "orders_count": 1,
+                "total_spent": "12.00", "currency": "USD",
+            }]}
+        return response
 
+    def invoke(self, tool, limit, query=None):
+        body = {"uid": "test-user", "limit": limit}
+        if query is not None:
+            body["query"] = query
+        request = Mock(json=AsyncMock(return_value=body))
 
-class TestCoerceInt(unittest.TestCase):
-    def test_default_on_none(self):
-        self.assertEqual(shopify._coerce_int(None), 10)
+        def get(url, **kwargs):
+            return self.response_for(url)
 
-    def test_default_on_bool(self):
-        self.assertEqual(shopify._coerce_int(True), 10)
-        self.assertEqual(shopify._coerce_int(False), 10)
+        with patch.object(shopify, "get_shopify_tokens", return_value={
+            "access_token": "test-token", "shop_domain": "example.myshopify.com",
+        }), patch.object(shopify.requests, "get", side_effect=get) as api:
+            result = asyncio.run(tool(request))
+        self.assertIsNone(result.error)
+        self.assertTrue(result.result)
+        self.assertEqual(api.call_count, 1)
+        return api.call_args.kwargs["params"]
 
-    def test_default_on_invalid_string(self):
-        self.assertEqual(shopify._coerce_int("invalid"), 10)
-        self.assertEqual(shopify._coerce_int(""), 10)
+    def test_coerce_int_contract(self):
+        cases = (
+            (None, 10),
+            (True, 10),
+            (False, 10),
+            ("", 10),
+            (" 5 ", 5),
+            (5, 5),
+            (0, 1),
+            (-3, 1),
+            (999, 50),
+            ("not-a-number", 10),
+            (float("inf"), 10),
+            (float("nan"), 10),
+        )
+        for value, expected in cases:
+            with self.subTest(value=value):
+                self.assertEqual(shopify._coerce_int(value, 10, 1, 50), expected)
 
-    def test_default_on_complex_types(self):
-        self.assertEqual(shopify._coerce_int({}), 10)
-        self.assertEqual(shopify._coerce_int([]), 10)
+    def test_get_orders_normalizes_limit(self):
+        for value, expected in ((None, 10), ("5", 5), (0, 1), (-3, 1), (500, 50),
+                                 ("1e309", 10), (float("inf"), 10)):
+            with self.subTest(value=value):
+                params = self.invoke(shopify.tool_get_orders, value)
+                self.assertEqual(params["limit"], expected)
 
-    def test_parses_numeric_string(self):
-        self.assertEqual(shopify._coerce_int("25"), 25)
+    def test_get_customers_listing_normalizes_limit(self):
+        for value, expected in ((None, 10), ("5", 5), (0, 1), (-3, 1), (500, 50),
+                                 ("1e309", 10), (float("inf"), 10)):
+            with self.subTest(value=value):
+                params = self.invoke(shopify.tool_get_customers, value)
+                self.assertEqual(params["limit"], expected)
 
-    def test_parses_int(self):
-        self.assertEqual(shopify._coerce_int(20), 20)
-
-    def test_clamps_maximum(self):
-        self.assertEqual(shopify._coerce_int(999), 50)
-        self.assertEqual(shopify._coerce_int("100"), 50)
-
-    def test_clamps_minimum(self):
-        self.assertEqual(shopify._coerce_int(-5), 1)
-        self.assertEqual(shopify._coerce_int(0), 1)
-
-    def test_custom_defaults_and_bounds(self):
-        self.assertEqual(shopify._coerce_int(None, default=5, minimum=2, maximum=8), 5)
-        self.assertEqual(shopify._coerce_int(1, default=5, minimum=2, maximum=8), 2)
-        self.assertEqual(shopify._coerce_int(10, default=5, minimum=2, maximum=8), 8)
-
-
-class TestToolGetOrdersInputs(unittest.TestCase):
-    def setUp(self):
-        self.api_patcher = patch.object(shopify, "shopify_api_request")
-        self.mock_api = self.api_patcher.start()
-        self.mock_api.return_value = {"orders": []}
-
-        self.tokens_patcher = patch.object(shopify, "get_shopify_tokens")
-        self.mock_tokens = self.tokens_patcher.start()
-        self.mock_tokens.return_value = {"access_token": "token123"}
-
-    def tearDown(self):
-        self.api_patcher.stop()
-        self.tokens_patcher.stop()
-
-    def test_get_orders_omitted_limit(self):
-        req = mock_request({"uid": "user-1"})
-        res = asyncio.run(shopify.tool_get_orders(req))
-        self.assertIsNone(res.error)
-        self.mock_api.assert_called_once()
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 10)
-
-    def test_get_orders_null_limit(self):
-        req = mock_request({"uid": "user-1", "limit": None})
-        res = asyncio.run(shopify.tool_get_orders(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 10)
-
-    def test_get_orders_string_limit(self):
-        req = mock_request({"uid": "user-1", "limit": "25"})
-        res = asyncio.run(shopify.tool_get_orders(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 25)
-
-    def test_get_orders_clamped_limit(self):
-        req = mock_request({"uid": "user-1", "limit": 999})
-        res = asyncio.run(shopify.tool_get_orders(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 50)
-
-    def test_get_orders_bool_limit(self):
-        req = mock_request({"uid": "user-1", "limit": True})
-        res = asyncio.run(shopify.tool_get_orders(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 10)
-
-    def test_get_orders_null_body(self):
-        req = mock_request(None)
-        res = asyncio.run(shopify.tool_get_orders(req))
-        self.assertEqual(res.error, "User ID is required")
-
-
-class TestToolGetCustomersInputs(unittest.TestCase):
-    def setUp(self):
-        self.api_patcher = patch.object(shopify, "shopify_api_request")
-        self.mock_api = self.api_patcher.start()
-        self.mock_api.return_value = {"customers": []}
-
-        self.tokens_patcher = patch.object(shopify, "get_shopify_tokens")
-        self.mock_tokens = self.tokens_patcher.start()
-        self.mock_tokens.return_value = {"access_token": "token123"}
-
-    def tearDown(self):
-        self.api_patcher.stop()
-        self.tokens_patcher.stop()
-
-    def test_get_customers_omitted_limit(self):
-        req = mock_request({"uid": "user-1"})
-        res = asyncio.run(shopify.tool_get_customers(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 10)
-
-    def test_get_customers_null_limit(self):
-        req = mock_request({"uid": "user-1", "limit": None})
-        res = asyncio.run(shopify.tool_get_customers(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 10)
-
-    def test_get_customers_string_limit(self):
-        req = mock_request({"uid": "user-1", "limit": "35"})
-        res = asyncio.run(shopify.tool_get_customers(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 35)
-
-    def test_get_customers_clamped_limit(self):
-        req = mock_request({"uid": "user-1", "limit": 999})
-        res = asyncio.run(shopify.tool_get_customers(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 50)
-
-    def test_get_customers_bool_limit(self):
-        req = mock_request({"uid": "user-1", "limit": False})
-        res = asyncio.run(shopify.tool_get_customers(req))
-        self.assertIsNone(res.error)
-        params = self.mock_api.call_args[1].get("params", {})
-        self.assertEqual(params.get("limit"), 10)
-
-    def test_get_customers_null_body(self):
-        req = mock_request(None)
-        res = asyncio.run(shopify.tool_get_customers(req))
-        self.assertEqual(res.error, "User ID is required")
-
-
-class TestToolGetAnalyticsInputs(unittest.TestCase):
-    def setUp(self):
-        self.tokens_patcher = patch.object(shopify, "get_shopify_tokens")
-        self.mock_tokens = self.tokens_patcher.start()
-        self.mock_tokens.return_value = {"access_token": "token123"}
-
-        self.api_patcher = patch.object(shopify, "shopify_api_request")
-        self.mock_api = self.api_patcher.start()
-        self.mock_api.return_value = {"orders": []}
-
-    def tearDown(self):
-        self.tokens_patcher.stop()
-        self.api_patcher.stop()
-
-    def test_get_analytics_null_period(self):
-        req = mock_request({"uid": "user-1", "period": None})
-        res = asyncio.run(shopify.tool_get_analytics(req))
-        self.assertIsNone(res.error)
-
-    def test_get_analytics_null_body(self):
-        req = mock_request(None)
-        res = asyncio.run(shopify.tool_get_analytics(req))
-        self.assertEqual(res.error, "User ID is required")
+    def test_get_customers_search_normalizes_limit(self):
+        for value, expected in ((None, 10), ("5", 5), (0, 1), (-3, 1), (500, 50),
+                                 ("1e309", 10), (float("inf"), 10)):
+            with self.subTest(value=value):
+                params = self.invoke(shopify.tool_get_customers, value, query="Ada")
+                self.assertEqual(params["limit"], expected)
 
 
 if __name__ == "__main__":

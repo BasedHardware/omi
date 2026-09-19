@@ -5,8 +5,10 @@ This app provides Shopify integration through OAuth authentication
 and chat tools for analytics, orders, and customer management.
 """
 import os
+import builtins
 import hmac
 import hashlib
+import sys
 import urllib.parse
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
@@ -34,6 +36,28 @@ from models import (
     ShopifyAnalytics,
     ShopifyShop,
 )
+
+
+def _safe_print(*args, **kwargs):
+    """Keep diagnostic logging usable on legacy Windows consoles.
+
+    Shopify responses may contain emoji labels, while a CP1252 stdout cannot
+    encode them.  Logging must never turn a successful tool operation into an
+    exception, so retry with escaped text only when the console rejects it.
+    """
+    try:
+        builtins.print(*args, **kwargs)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        safe_args = [
+            str(value).encode(encoding, errors="backslashreplace").decode(encoding)
+            for value in args
+        ]
+        builtins.print(*safe_args, **kwargs)
+
+
+# All existing diagnostics in this module resolve to the safe logger above.
+print = _safe_print
 
 load_dotenv()
 
@@ -85,6 +109,33 @@ def get_auth_header(access_token: str) -> Dict[str, str]:
         "X-Shopify-Access-Token": access_token,
         "Content-Type": "application/json",
     }
+
+
+def _coerce_int(value, default, minimum, maximum) -> int:
+    """Return a bounded integer for optional values supplied by chat tools.
+
+    The retrieval layer includes optional manifest fields in the JSON body with
+    a ``null`` value when the caller omits them.  Treat null, booleans,
+    non-integral types, malformed strings, and non-finite values as the
+    documented default before applying the API-safe bounds.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return default
+        try:
+            number = int(value, 10)
+        except (TypeError, ValueError, OverflowError):
+            return default
+    else:
+        return default
+
+    return max(minimum, min(number, maximum))
 
 
 def shopify_api_request(
@@ -421,22 +472,6 @@ def parse_date(date_str: str) -> Optional[datetime]:
             continue
     
     return None
-
-
-def _coerce_int(
-    value: Any,
-    default: int = 10,
-    minimum: int = 1,
-    maximum: int = 50,
-) -> int:
-    """Coerce an untyped input (e.g. from JSON) to a clamped integer."""
-    if value is None or isinstance(value, bool):
-        return default
-    try:
-        parsed = int(value)
-    except (ValueError, TypeError, OverflowError):
-        return default
-    return max(minimum, min(parsed, maximum))
 
 
 @app.post("/tools/get_analytics", tags=["chat_tools"], response_model=ChatToolResponse)
