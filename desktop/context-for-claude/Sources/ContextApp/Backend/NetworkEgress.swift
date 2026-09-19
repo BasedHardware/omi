@@ -69,6 +69,13 @@ enum NetworkEgress {
         /// work and sends it when the switch goes off, and an analytics event that did the same would
         /// mean Airgap Mode delayed the disclosure instead of preventing it. There is no catching up.
         case analytics = "analytics"
+        /// Crash and handled-error reporting to the dedicated `omi-nk3/context-for-claude` Sentry
+        /// project. See `ContextSentry`.
+        ///
+        /// Suppressed reports are dropped. Airgap retires the SDK cache generation; it is not
+        /// replayed after the switch turns off. Healthy crash reports survive normal relaunches.
+        /// The area is `.settings` because the control the user meets is the Airgap toggle.
+        case crashReporting = "crash-reporting"
 
         /// The subsystem a suppression is reported under, so the fallback record lands in the same
         /// area as that client's other degradations rather than in an "airgap" bucket of its own.
@@ -87,6 +94,9 @@ enum NetworkEgress {
             // lands beside the other two clients a user meets in Settings rather than inventing an
             // area that would hold exactly one client.
             case .analytics: return .settings
+            // Same reasoning as analytics: crash reporting reports on all of them, and the only
+            // control a user meets is the Airgap toggle itself.
+            case .crashReporting: return .settings
             }
         }
     }
@@ -162,6 +172,12 @@ enum NetworkEgress {
             // should not discover that a week of their activity went up at that moment.
             return "Airgap Mode is on, so no usage counts are recorded. "
                 + "Nothing is held back to send later — those days simply aren't measured."
+        case .crashReporting:
+            // Same "dropped, not held" voice as analytics, because the same promise is being kept:
+            // crash diagnostics are discarded under Airgap Mode and cached ones are deleted, so
+            // the sentence must not let anyone read "queued".
+            return "Airgap Mode is on, so crash diagnostics aren't reported. "
+                + "Nothing is held back to send later."
         }
     }
 

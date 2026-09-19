@@ -4,18 +4,19 @@ import Foundation
 ///
 /// Call `recordFallback` whenever the app takes a fail-open path: provider/mode switches,
 /// correctness shortcuts, retries, drops, or permission loss. This is the single contract surface;
-/// remote telemetry (PostHog/Sentry) can be wired behind it later without touching call sites.
+/// remote telemetry (PostHog, Sentry) is wired behind it — no call site reaches a sink directly.
 ///
 /// Sensitive data must never be passed here: areas, modes, and outcomes are closed enums; reasons
-/// are short fixed slugs, not user text.
+/// are short fixed slugs, not user text. The sinks inherit that property: the analytics event and
+/// the Sentry handled report are both built from these closed values and nothing else.
 ///
-/// **This helper does not egress, and a future remote sink must keep it that way.** `ContextLog`
-/// writes to `os.Logger` and, only under `CONTEXT_DEBUG=1`, to a local file; nothing here opens a
-/// socket. That is load-bearing rather than incidental: `NetworkEgress` reports every Airgap Mode
-/// suppression through this function, so a telemetry client wired in below that phoned home would
-/// turn the airgap guard itself into the disclosure it exists to prevent — and it would fire on
-/// exactly the machines whose users asked for silence. Anything added here must consult
-/// `NetworkEgress.isSuppressed` before sending, and must not report its own suppression.
+/// **Sinks below this line must consult `NetworkEgress.isSuppressed` before sending, and must not
+/// report their own suppression.** `NetworkEgress` reports every Airgap Mode suppression through
+/// this function, so a sink that forwarded one would phone home on exactly the machines whose
+/// users asked for silence — and it would fire on exactly the machines whose users asked for
+/// silence. Each sink owns its refusal (`ContextAnalytics.recordFallback` maps and drops;
+/// `ContextSentry.shared.report` re-checks suppression and the admission gate live); this function
+/// is the fan-out, not the state authority.
 enum ContextFallbackArea: String, Sendable, CaseIterable {
     case capture
     case upload
@@ -47,7 +48,8 @@ enum ContextTelemetry {
         from: String,
         to: String,
         reason: String,
-        outcome: ContextFallbackOutcome
+        outcome: ContextFallbackOutcome,
+        reportDiagnostic: (ContextSentryHandledReport) -> Void = { ContextSentry.shared.report($0) }
     ) {
         ContextLog.info("[fallback] area=\(area.rawValue) from=\(from) to=\(to) reason=\(reason) outcome=\(outcome.rawValue)", "telemetry")
 
@@ -63,12 +65,12 @@ enum ContextTelemetry {
         // this function, which would call `record` again. See `ContextAnalytics.recordFallback`.
         if let mapped = AnalyticsEvent.FallbackReason(slug: reason), mapped != .airgapMode {
             ContextAnalytics.recordFallback(area: area, outcome: outcome, reason: mapped)
+            // Crash/error diagnostics, behind the same vocabulary mapping and the same
+            // airgap-mode exclusion. `ContextSentry.shared.report` re-checks suppression and the
+            // admission gate at send time; the SDK-side whitelist (`ContextSentryPolicy`) is what
+            // bounds the payload, and it passes only these closed values through.
+            reportDiagnostic(
+                ContextSentryHandledReport(area: area, outcome: outcome, reason: mapped))
         }
-        // Remote telemetry (PostHog/Sentry) requires project-specific credentials and SDKs that
-        // are not yet dependencies of this package. The structured log above is the contract; a
-        // future provider can read it or be called here without changing callers — but only behind
-        // `NetworkEgress.isSuppressed`, for the reason in this type's documentation. Until then the
-        // Settings row's "no telemetry leaves this Mac" is true unconditionally, not just in Airgap
-        // Mode, which is why that row no longer claims to suppress telemetry.
     }
 }

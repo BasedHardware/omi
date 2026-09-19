@@ -1,0 +1,3 @@
+{
+  "change": "Added a disabled-by-default Sentry integration for Context for Claude, with filtered diagnostics and Airgap cache retirement. Dedicated-project configuration and native crash verification are still required before enabling reporting."
+}

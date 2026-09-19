@@ -11,6 +11,12 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.24.0"),
+        // Crash and handled-error diagnostics for a dedicated Sentry project (never the Omi
+        // desktop app's project or DSN). Pinned to the exact revision `desktop/macos/Desktop/
+        // Package.swift` audits so a fix that lands for one is audited for the other; sentry-cocoa
+        // is MIT-licensed. The integration's lifecycle and payload rules live in
+        // `Sources/ContextApp/Support/Sentry/` — see `docs/sentry.md` for the contract.
+        .package(url: "https://github.com/getsentry/sentry-cocoa.git", exact: "8.58.0"),
         // Tags were pulled upstream; pin the revision Omi desktop uses.
         .package(
             url: "https://github.com/FluidInference/FluidAudio.git",
@@ -62,6 +68,7 @@ let package = Package(
                 "ContextCore",
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "Sentry", package: "sentry-cocoa"),
             ],
             // The generated sounds. `Resources/Fonts` reaches the app the other way — loose files
             // copied by `scripts/build.sh` — because they are registered from a directory URL. The

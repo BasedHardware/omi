@@ -60,6 +60,7 @@ Third-party dependencies
 
 GRDB.swift — https://github.com/groue/GRDB.swift — MIT License
 FluidAudio — https://github.com/FluidInference/FluidAudio — Apache License 2.0
+Sentry Cocoa — https://github.com/getsentry/sentry-cocoa — MIT License
 
 Open Runde (Resources/Fonts/OpenRunde-*.otf) — https://github.com/lauridskern/open-runde
   SIL Open Font License 1.1

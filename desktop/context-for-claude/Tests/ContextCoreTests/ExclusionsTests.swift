@@ -508,6 +508,50 @@ final class ExclusionsTests: XCTestCase {
         XCTAssertFalse(engine.snapshot().isFaviconFetchAllowed)
     }
 
+    func testCrashGenerationMigratesLegacyConfigurationAndSurvivesNormalRelaunch() throws {
+        try write("{\"version\":1,\"airgapMode\":false}")
+        let engine = makeEngine()
+        XCTAssertNil(engine.current.crashReportingGeneration)
+        let generation = try XCTUnwrap(engine.prepareCrashReportingGeneration())
+        XCTAssertEqual(engine.prepareCrashReportingGeneration(), generation)
+        XCTAssertEqual(makeEngine().prepareCrashReportingGeneration(), generation)
+        engine.setExcludePrivateBrowsing(false)
+        XCTAssertEqual(makeEngine().prepareCrashReportingGeneration(), generation)
+    }
+
+    func testAirgapRetiresCrashGenerationInTheSameWriteAsTheSetting() throws {
+        let engine = makeEngine()
+        let first = try XCTUnwrap(engine.prepareCrashReportingGeneration())
+        let config = root.appendingPathComponent("exclusions.json")
+        let frames = root.appendingPathComponent("Frames")
+        let token = engine.addObserver { set in
+            let reloaded = ExclusionEngine(configurationURL: config, framesRoot: frames).current
+            XCTAssertEqual(reloaded.airgapMode, set.airgapMode)
+            XCTAssertEqual(reloaded.crashReportingGeneration, set.crashReportingGeneration)
+        }
+        defer { engine.removeObserver(token) }
+        engine.setAirgapMode(true)
+        let retired = try XCTUnwrap(engine.current.crashReportingGeneration)
+        XCTAssertNotEqual(retired, first)
+        XCTAssertNil(engine.prepareCrashReportingGeneration())
+        XCTAssertNil(makeEngine().prepareCrashReportingGeneration())
+        engine.setAirgapMode(false)
+        let next = try XCTUnwrap(makeEngine().prepareCrashReportingGeneration())
+        XCTAssertNotEqual(next, first)
+        XCTAssertNotEqual(next, retired)
+    }
+
+    func testUnpersistedCrashGenerationNeverAuthorizesSDKStartup() {
+        let engine = ExclusionEngine(
+            configurationURL: URL(fileURLWithPath: "/dev/null/nowhere/exclusions.json"),
+            framesRoot: root)
+        XCTAssertNil(engine.prepareCrashReportingGeneration())
+        guard case .notPersisted = engine.health else {
+            return XCTFail("failed generation persistence must be reported")
+        }
+        XCTAssertNil(engine.prepareCrashReportingGeneration())
+    }
+
     /// The favicon URL is always the domain's own. A third-party favicon service would tell someone
     /// else every domain the user chose to hide, which is the opposite of what this pane is for.
     func testFaviconRequestsGoToTheDomainItselfAndNowhereElse() throws {

@@ -607,6 +607,9 @@ public struct ExclusionSet: Sendable, Equatable {
     public let websites: Set<DomainPattern>
     public let excludePrivateBrowsing: Bool
     public let airgapMode: Bool
+    /// Persisted with Airgap changes so a crash-report cache from an earlier consent period is
+    /// never reopened. Nil is the legacy state, before diagnostics have been configured.
+    public let crashReportingGeneration: UUID?
     public let health: ExclusionHealth
 
     /// Display names that must also be refused, for callers that have no bundle identifier.
@@ -634,6 +637,7 @@ public struct ExclusionSet: Sendable, Equatable {
         websites: Set<DomainPattern> = [],
         excludePrivateBrowsing: Bool = true,
         airgapMode: Bool = false,
+        crashReportingGeneration: UUID? = nil,
         health: ExclusionHealth = .defaultsOnly,
         excludedDisplayNames: Set<String> = [],
         lockedNameFragments: [String] = ExclusionCatalog.lockedNameFragments
@@ -644,6 +648,7 @@ public struct ExclusionSet: Sendable, Equatable {
         self.websites = websites
         self.excludePrivateBrowsing = excludePrivateBrowsing
         self.airgapMode = airgapMode
+        self.crashReportingGeneration = crashReportingGeneration
         self.health = health
         self.excludedDisplayNames = excludedDisplayNames
         self.lockedNameFragments = lockedNameFragments
@@ -668,6 +673,7 @@ public struct ExclusionSet: Sendable, Equatable {
             && lhs.categories == rhs.categories && lhs.websites == rhs.websites
             && lhs.excludePrivateBrowsing == rhs.excludePrivateBrowsing
             && lhs.airgapMode == rhs.airgapMode && lhs.health == rhs.health
+            && lhs.crashReportingGeneration == rhs.crashReportingGeneration
             && lhs.excludedDisplayNames == rhs.excludedDisplayNames
             && lhs.lockedNameFragments == rhs.lockedNameFragments
     }
@@ -875,6 +881,7 @@ public struct ExclusionSet: Sendable, Equatable {
             websites: Set(configuration.excludedDomains.compactMap(DomainPattern.init)),
             excludePrivateBrowsing: failing || configuration.excludePrivateBrowsing,
             airgapMode: failing || configuration.airgapMode,
+            crashReportingGeneration: configuration.crashReportingGeneration,
             health: health,
             excludedDisplayNames: displayNames(
                 userApps: configuration.excludedApps, categories: categories))
@@ -912,6 +919,7 @@ struct ExclusionConfiguration: Codable, Equatable, Sendable {
     var excludedDomains: [String] = []
     var excludePrivateBrowsing: Bool = true
     var airgapMode: Bool = false
+    var crashReportingGeneration: UUID?
 
     static let empty = ExclusionConfiguration()
 
@@ -943,6 +951,7 @@ struct ExclusionConfiguration: Codable, Equatable, Sendable {
         excludePrivateBrowsing =
             try container.decodeIfPresent(Bool.self, forKey: .excludePrivateBrowsing) ?? true
         airgapMode = try container.decodeIfPresent(Bool.self, forKey: .airgapMode) ?? false
+        crashReportingGeneration = try container.decodeIfPresent(UUID.self, forKey: .crashReportingGeneration)
     }
 
     init() {}
@@ -1246,8 +1255,24 @@ public final class ExclusionEngine: @unchecked Sendable {
         mutate { configuration in
             guard configuration.airgapMode != enabled else { return false }
             configuration.airgapMode = enabled
+            configuration.crashReportingGeneration = UUID()
             return true
         }
+    }
+
+    /// Returns a durably configured cache generation, without enabling diagnostics itself.
+    /// Ordinary relaunches retain it; an Airgap transition replaces it in the same atomic write
+    /// as the setting. A failed settings write never authorizes starting crash reporting.
+    public func prepareCrashReportingGeneration() -> UUID? {
+        guard !current.airgapMode else { return nil }
+        mutate { configuration in
+            guard configuration.crashReportingGeneration == nil else { return false }
+            configuration.crashReportingGeneration = UUID()
+            return true
+        }
+        let set = current
+        guard !set.airgapMode, set.health == .configured else { return nil }
+        return set.crashReportingGeneration
     }
 
     /// Re-reads the configuration from disk. For an external edit, or a second process.

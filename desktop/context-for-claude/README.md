@@ -103,6 +103,20 @@ nothing at all.
 
 [`docs/analytics.md`](docs/analytics.md).
 
+## Crash diagnostics
+
+The Sentry integration targets a **dedicated CFC project**, with no PostHog identity linkage.
+It filters exception text, thread names, paths, device names, and captured locals from reports.
+Airgap closes admission for new sends and retires the cache; requests already admitted may finish.
+Normal crash reports survive a restart, but retired cache generations are not replayed.
+
+Reporting is disabled until the dedicated project's DSN is supplied in the shipping bundle.
+Project provisioning, native compilation/tests, and end-to-end symbolication are still pending;
+this is not yet verified crash coverage.
+
+Details, including the release/dist convention and the dSYM plan:
+[`docs/sentry.md`](docs/sentry.md).
+
 ## What Claude gets
 
 Twelve tools. The descriptions are written for Claude, so it reaches for them unprompted. In
