@@ -337,15 +337,52 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
-  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
-  int get doubleTapAction => getInt('doubleTapAction');
+  // --- Hardware Button Customization Actions ---
+  // 0 = End & Process Conversation
+  // 1 = Pause/Resume Recording (Mute/Unmute)
+  // 2 = Star Ongoing Conversation
+  // 3 = Ask Question (Start/End Voice Session)
+  // 4 = None (Do nothing)
+  static const Set<int> validButtonActions = {0, 1, 2, 3, 4};
 
-  set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+  int _getSanitizedButtonAction(String key, int defaultVal) {
+    final val = getInt(key, defaultValue: defaultVal);
+    return validButtonActions.contains(val) ? val : defaultVal;
+  }
 
-  // Keep backward compatibility
-  bool get doubleTapPausesMuting => doubleTapAction == 1;
+  void _saveSanitizedButtonAction(String key, int val, int defaultVal) {
+    saveInt(key, validButtonActions.contains(val) ? val : defaultVal);
+  }
 
-  set doubleTapPausesMuting(bool value) => doubleTapAction = value ? 1 : 0;
+  // Single press action (default: 3 = Ask Question)
+  int get singlePressAction => _getSanitizedButtonAction('singlePressAction', 3);
+  set singlePressAction(int value) => _saveSanitizedButtonAction('singlePressAction', value, 3);
+
+  // Double press action (default: 1 = Mute/Unmute; fallback to doubleTapAction if present)
+  int get doublePressAction {
+    if (_preferences?.containsKey('doublePressAction') ?? false) {
+      return _getSanitizedButtonAction('doublePressAction', 1);
+    }
+    if (_preferences?.containsKey('doubleTapAction') ?? false) {
+      return _getSanitizedButtonAction('doubleTapAction', 1);
+    }
+    return 1;
+  }
+
+  set doublePressAction(int value) {
+    _saveSanitizedButtonAction('doublePressAction', value, 1);
+    _saveSanitizedButtonAction('doubleTapAction', value, 1);
+  }
+
+  // Triple press action (default: 0 = End Conversation)
+  int get triplePressAction => _getSanitizedButtonAction('triplePressAction', 0);
+  set triplePressAction(int value) => _saveSanitizedButtonAction('triplePressAction', value, 0);
+
+  // Double tap backward compatibility
+  int get doubleTapAction => doublePressAction;
+  set doubleTapAction(int value) => doublePressAction = value;
+  bool get doubleTapPausesMuting => doublePressAction == 1;
+  set doubleTapPausesMuting(bool value) => doublePressAction = value ? 1 : 0;
 
   // Custom STT configuration
   CustomSttConfig get customSttConfig {
