@@ -47,6 +47,13 @@ def load_app():
     fastapi_responses.HTMLResponse = str
     fastapi_responses.JSONResponse = dict
 
+    requests = types.ModuleType("requests")
+    requests.post = MagicMock()
+    requests.get = MagicMock()
+    requests_exceptions = types.ModuleType("requests.exceptions")
+    requests_exceptions.RequestException = Exception
+    requests.exceptions = requests_exceptions
+
     spec = importlib.util.spec_from_file_location("iq_rating_hermetic", Path(__file__).with_name("main.py"))
     module = importlib.util.module_from_spec(spec)
     with patch.dict(
@@ -54,6 +61,8 @@ def load_app():
         {
             "fastapi": fastapi,
             "fastapi.responses": fastapi_responses,
+            "requests": requests,
+            "requests.exceptions": requests.exceptions,
         },
     ):
         spec.loader.exec_module(module)
