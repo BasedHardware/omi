@@ -1,5 +1,6 @@
 import html
 import re
+from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import quote
 
@@ -11,10 +12,19 @@ from models import AuthorWorksInput, ChatToolResponse, GetWorkInput, SearchWorks
 CROSSREF_BASE = "https://api.crossref.org"
 TIMEOUT = 20.0
 
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        app_instance.state.http_client = client
+        yield
+
+
 app = FastAPI(
     title="Crossref Omi Integration",
     description="No-auth Crossref chat tools for paper metadata search and lookup",
     version="1.0.1",
+    lifespan=lifespan,
 )
 
 
@@ -49,19 +59,57 @@ def clean(text: Any) -> str:
     return value.strip()
 
 
-def extract_year(item: dict[str, Any]) -> str:
+def extract_year(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
     for key in ("published-print", "published-online", "issued"):
-        date_parts = (item.get(key) or {}).get("date-parts", [])
-        if date_parts and date_parts[0]:
-            return clean(date_parts[0][0])
+        container = item.get(key)
+        if not isinstance(container, dict):
+            continue
+        date_parts = container.get("date-parts")
+        if not isinstance(date_parts, (list, tuple)) or not date_parts:
+            continue
+        first = date_parts[0]
+        if isinstance(first, (list, tuple)) and first:
+            return clean(first[0])
     return ""
 
 
-async def crossref_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{CROSSREF_BASE}{path}", params=params)
-        response.raise_for_status()
-        return response.json()
+def _extract_title(item: Any) -> str:
+    if not isinstance(item, dict):
+        return "Untitled"
+    title = item.get("title")
+    if isinstance(title, str):
+        return clean(title) or "Untitled"
+    if isinstance(title, (list, tuple)) and title:
+        return clean(title[0]) or "Untitled"
+    return "Untitled"
+
+
+def _extract_items(payload: Any) -> list[Any]:
+    if not isinstance(payload, dict):
+        return []
+    message = payload.get("message")
+    if not isinstance(message, dict):
+        return []
+    items = message.get("items")
+    return items if isinstance(items, list) else []
+
+
+async def _fetch_json(client: Any, path: str, params: dict[str, Any]) -> Any:
+    response = await client.get(f"{CROSSREF_BASE}{path}", params=params)
+    response.raise_for_status()
+    return response.json()
+
+
+async def crossref_get(path: str, params: dict[str, Any]) -> Any:
+    client = getattr(getattr(app, "state", None), "http_client", None)
+    if client is not None:
+        return await _fetch_json(client, path, params)
+    # Lifespan pool unavailable (e.g. direct invocation): fall back to a
+    # per-request client rather than failing.
+    async with httpx.AsyncClient(timeout=TIMEOUT) as fallback:
+        return await _fetch_json(fallback, path, params)
 
 
 @app.get("/health")
@@ -187,15 +235,16 @@ async def search_crossref_works(payload: SearchWorksInput):
         )
     except Exception as exc:
         return ChatToolResponse(error=f"Crossref request failed: {exc}")
-    items = payload.get("message", {}).get("items", [])
+    items = _extract_items(payload)
     if not items:
         return ChatToolResponse(result=f"No Crossref results found for '{query}'.")
 
     lines = [f"Top {len(items)} Crossref results for '{query}':"]
     for idx, item in enumerate(items, 1):
-        title = clean((item.get("title") or ["Untitled"])[0])
-        doi = clean(item.get("DOI"))
-        year = extract_year(item)
+        record = item if isinstance(item, dict) else {}
+        title = _extract_title(record)
+        doi = clean(record.get("DOI"))
+        year = extract_year(record)
         lines.append(f"{idx}. {title} ({year})")
         lines.append(f"   DOI: {doi}")
     return ChatToolResponse(result="\n".join(lines))
@@ -213,8 +262,10 @@ async def get_crossref_work(payload: GetWorkInput):
         payload = await crossref_get(f"/works/{quote(normalized, safe='')}", {})
     except Exception as exc:
         return ChatToolResponse(error=f"Crossref request failed: {exc}")
-    item = payload.get("message", {})
-    title = clean((item.get("title") or ["Untitled"])[0])
+    item = payload.get("message") if isinstance(payload, dict) else None
+    if not isinstance(item, dict) or not item:
+        return ChatToolResponse(error=f"No Crossref work found for DOI '{normalized}'.")
+    title = _extract_title(item)
     publisher = clean(item.get("publisher"))
     doi_out = clean(item.get("DOI"))
     url = clean(item.get("URL"))
@@ -251,15 +302,16 @@ async def get_crossref_works_by_author(payload: AuthorWorksInput):
         )
     except Exception as exc:
         return ChatToolResponse(error=f"Crossref request failed: {exc}")
-    items = payload.get("message", {}).get("items", [])
+    items = _extract_items(payload)
     if not items:
         return ChatToolResponse(result=f"No recent works found for author '{author}'.")
 
     lines = [f"Recent works for '{author}':"]
     for idx, item in enumerate(items, 1):
-        title = clean((item.get("title") or ["Untitled"])[0])
-        doi = clean(item.get("DOI"))
-        year = extract_year(item)
+        record = item if isinstance(item, dict) else {}
+        title = _extract_title(record)
+        doi = clean(record.get("DOI"))
+        year = extract_year(record)
         lines.append(f"{idx}. {title} ({year})")
         lines.append(f"   DOI: {doi}")
     return ChatToolResponse(result="\n".join(lines))
