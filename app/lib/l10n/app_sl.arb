@@ -11104,6 +11104,5 @@
     "secondDevice": "Druga naprava",
     "pairSecondDevice": "Seznani drugo napravo",
     "pairSecondDeviceDescription": "Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.",
-    "forgetSecondDevice": "Pozabi drugo napravo",
-    "processingTakingLonger": "Še poteka — traja dlje kot običajno."
+    "forgetSecondDevice": "Pozabi drugo napravo"
 }

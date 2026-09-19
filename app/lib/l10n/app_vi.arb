@@ -3532,6 +3532,5 @@
     "secondDevice": "Thiết bị thứ hai",
     "pairSecondDevice": "Ghép nối thiết bị thứ hai",
     "pairSecondDeviceDescription": "Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.",
-    "forgetSecondDevice": "Quên thiết bị thứ hai",
-    "processingTakingLonger": "Vẫn đang xử lý — mất nhiều thời gian hơn bình thường."
+    "forgetSecondDevice": "Quên thiết bị thứ hai"
 }

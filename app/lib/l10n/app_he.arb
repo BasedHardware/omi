@@ -11104,6 +11104,5 @@
     "secondDevice": "מכשיר שני",
     "pairSecondDevice": "צימוד מכשיר שני",
     "pairSecondDeviceDescription": "חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.",
-    "forgetSecondDevice": "שכח את המכשיר השני",
-    "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל."
+    "forgetSecondDevice": "שכח את המכשיר השני"
 }

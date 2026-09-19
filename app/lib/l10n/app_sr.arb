@@ -11104,6 +11104,5 @@
     "secondDevice": "Други уређај",
     "pairSecondDevice": "Упари други уређај",
     "pairSecondDeviceDescription": "Повежите OmiGlass уз свој Omi како би фотографије и звук ишли у исти разговор.",
-    "forgetSecondDevice": "Заборави други уређај",
-    "processingTakingLonger": "Još traje — ovo traje duže nego inače."
+    "forgetSecondDevice": "Заборави други уређај"
 }

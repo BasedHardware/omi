@@ -3567,6 +3567,5 @@
     "secondDevice": "İkinci cihaz",
     "pairSecondDevice": "İkinci cihazı eşleştir",
     "pairSecondDeviceDescription": "Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass'ı Omi'nizin yanına bağlayın.",
-    "forgetSecondDevice": "İkinci cihazı unut",
-    "processingTakingLonger": "Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor."
+    "forgetSecondDevice": "İkinci cihazı unut"
 }

@@ -3532,6 +3532,5 @@
     "secondDevice": "Otrā ierīce",
     "pairSecondDevice": "Savienot pārī otro ierīci",
     "pairSecondDeviceDescription": "Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.",
-    "forgetSecondDevice": "Aizmirst otro ierīci",
-    "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti."
+    "forgetSecondDevice": "Aizmirst otro ierīci"
 }
