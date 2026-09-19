@@ -594,6 +594,30 @@ class AppLocalizationsCa extends AppLocalizations {
   String get doubleTapAction => 'Acció de doble toc';
 
   @override
+  String get singleTap => 'Un toc';
+
+  @override
+  String get tripleTap => 'Triple toc';
+
+  @override
+  String get longPress => 'Pulsació llarga';
+
+  @override
+  String get singleTapAction => 'Acció d\'un toc';
+
+  @override
+  String get tripleTapAction => 'Acció de triple toc';
+
+  @override
+  String get powerOnOff => 'Apaga';
+
+  @override
+  String get doNothing => 'No fer res';
+
+  @override
+  String get longPressFixedSubtitle => 'Mantingueu premut 3 segons per apagar l\'Omi. Això no es pot canviar.';
+
+  @override
   String get endAndProcess => 'Finalitzar i processar conversa';
 
   @override

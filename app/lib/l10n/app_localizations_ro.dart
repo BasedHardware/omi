@@ -594,6 +594,31 @@ class AppLocalizationsRo extends AppLocalizations {
   String get doubleTapAction => 'Acțiune dublă apăsare';
 
   @override
+  String get singleTap => 'Apăsare simplă';
+
+  @override
+  String get tripleTap => 'Triplă apăsare';
+
+  @override
+  String get longPress => 'Apăsare lungă';
+
+  @override
+  String get singleTapAction => 'Acțiune apăsare simplă';
+
+  @override
+  String get tripleTapAction => 'Acțiune triplă apăsare';
+
+  @override
+  String get powerOnOff => 'Pornire / Oprire';
+
+  @override
+  String get doNothing => 'Nu face nimic';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Țineți apăsat 3 secunde pentru a porni sau opri Omi. Acest lucru nu poate fi schimbat.';
+
+  @override
   String get endAndProcess => 'Încheie și procesează conversația';
 
   @override

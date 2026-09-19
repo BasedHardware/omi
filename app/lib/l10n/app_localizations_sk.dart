@@ -593,6 +593,30 @@ class AppLocalizationsSk extends AppLocalizations {
   String get doubleTapAction => 'Akcia dvojitého ťuknutia';
 
   @override
+  String get singleTap => 'Jedno ťuknutie';
+
+  @override
+  String get tripleTap => 'Trojité ťuknutie';
+
+  @override
+  String get longPress => 'Dlhé stlačenie';
+
+  @override
+  String get singleTapAction => 'Akcia jedného ťuknutia';
+
+  @override
+  String get tripleTapAction => 'Akcia trojitého ťuknutia';
+
+  @override
+  String get powerOnOff => 'Zapnutie / Vypnutie';
+
+  @override
+  String get doNothing => 'Nerobiť nič';
+
+  @override
+  String get longPressFixedSubtitle => 'Podržte 3 sekundy na zapnutie alebo vypnutie Omi. Toto sa nedá zmeniť.';
+
+  @override
   String get endAndProcess => 'Ukončiť a spracovať konverzáciu';
 
   @override

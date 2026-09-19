@@ -591,6 +591,30 @@ class AppLocalizationsBs extends AppLocalizations {
   String get doubleTapAction => 'Akcija duplog dodira';
 
   @override
+  String get singleTap => 'Jedan dodir';
+
+  @override
+  String get tripleTap => 'Trostruki dodir';
+
+  @override
+  String get longPress => 'Dugi pritisak';
+
+  @override
+  String get singleTapAction => 'Akcija jednog dodira';
+
+  @override
+  String get tripleTapAction => 'Akcija trostrukog dodira';
+
+  @override
+  String get powerOnOff => 'Uključi / Isključi';
+
+  @override
+  String get doNothing => 'Ne radi ništa';
+
+  @override
+  String get longPressFixedSubtitle => 'Držite 3 sekunde da uključite ili isključite Omi. Ovo se ne može promijeniti.';
+
+  @override
   String get endAndProcess => 'Završi i obradi razgovor';
 
   @override

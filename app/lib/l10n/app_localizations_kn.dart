@@ -592,6 +592,31 @@ class AppLocalizationsKn extends AppLocalizations {
   String get doubleTapAction => 'ಗುಣ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
 
   @override
+  String get singleTap => 'ಒಂದು ಟ್ಯಾಪ್';
+
+  @override
+  String get tripleTap => 'ಮೂರು ಟ್ಯಾಪ್';
+
+  @override
+  String get longPress => 'ದೀರ್ಘ ಒತ್ತು';
+
+  @override
+  String get singleTapAction => 'ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
+
+  @override
+  String get tripleTapAction => 'ಮೂರು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
+
+  @override
+  String get powerOnOff => 'ಆನ್ / ಆಫ್ ಮಾಡಿ';
+
+  @override
+  String get doNothing => 'ಏನೂ ಮಾಡಬೇಡಿ';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'ನಿಮ್ಮ Omi ಅನ್ನು ಆನ್ ಅಥವಾ ಆಫ್ ಮಾಡಲು 3 ಸೆಕೆಂಡ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ. ಇದನ್ನು ಬದಲಾಯಿಸಲಾಗುವುದಿಲ್ಲ.';
+
+  @override
   String get endAndProcess => 'ಸಂವಾದ ಆತೊಡೆತು ಮತ್ತು ಪ್ರಕ್ರಿಯೆ';
 
   @override

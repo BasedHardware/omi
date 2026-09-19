@@ -585,6 +585,30 @@ class AppLocalizationsAr extends AppLocalizations {
   String get doubleTapAction => 'إجراء النقر المزدوج';
 
   @override
+  String get singleTap => 'نقرة واحدة';
+
+  @override
+  String get tripleTap => 'نقرة ثلاثية';
+
+  @override
+  String get longPress => 'ضغطة مطولة';
+
+  @override
+  String get singleTapAction => 'إجراء النقرة الواحدة';
+
+  @override
+  String get tripleTapAction => 'إجراء النقرة الثلاثية';
+
+  @override
+  String get powerOnOff => 'تشغيل / إيقاف التشغيل';
+
+  @override
+  String get doNothing => 'لا تفعل شيئًا';
+
+  @override
+  String get longPressFixedSubtitle => 'اضغط مطولًا لمدة 3 ثوانٍ لتشغيل Omi أو إيقافه. لا يمكن تغيير هذا.';
+
+  @override
   String get endAndProcess => 'إنهاء ومعالجة المحادثة';
 
   @override
