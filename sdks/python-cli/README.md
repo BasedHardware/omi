@@ -90,7 +90,6 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
 > Looking for localized guides? See the [🇮🇩 Phôn Bagah ngön omi-cli (Acehnese Quickstart)](examples/quickstart.ace.md).
 
-
 ## Auth
 
 Two auth methods, both fully wired:
