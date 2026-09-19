@@ -994,11 +994,15 @@ async def root(uid: str = Query(None)):
     current_calendar_name = "Primary Calendar"
     if calendars:
         for cal in calendars:
-            selected = "selected" if cal["id"] == current_calendar or (current_calendar == "primary" and cal["primary"]) else ""
-            primary_badge = " (Primary)" if cal["primary"] else ""
-            calendar_options += f'<option value="{cal["id"]}" {selected}>{cal["name"]}{primary_badge}</option>'
+            cal_id = str(cal.get("id", ""))
+            cal_name = str(cal.get("name", ""))
+            selected = "selected" if cal_id == current_calendar or (current_calendar == "primary" and cal.get("primary")) else ""
+            primary_badge = " (Primary)" if cal.get("primary") else ""
+            safe_id = html.escape(cal_id, quote=True)
+            safe_name = html.escape(cal_name)
+            calendar_options += f'<option value="{safe_id}" {selected}>{safe_name}{primary_badge}</option>'
             if selected:
-                current_calendar_name = cal["name"] + primary_badge
+                current_calendar_name = cal_name + primary_badge
     else:
         calendar_options = '<option value="primary" selected>Primary Calendar</option>'
 
@@ -1183,7 +1187,7 @@ async def google_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content=f"Authentication error: {html.escape(str(e))}", status_code=500)
 
 
 @app.get("/setup/google")
