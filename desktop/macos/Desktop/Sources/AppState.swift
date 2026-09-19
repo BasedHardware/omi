@@ -298,18 +298,23 @@ extension DesktopAlertPresenting {
 
 @MainActor
 class AppState: ObservableObject {
-  private static let conversationListeningDefaultsKey = "omi.listening.enabled"
-
   /// Weak reference to the current AppState instance, set on init.
   /// Used by background services (e.g. TranscriptionRetryService) to check recording state.
   static weak var current: AppState?
 
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
-  @AppStorage(AppState.conversationListeningDefaultsKey) var persistedConversationListening = true
 
   // Transcription state
-  @Published var isConversationListening =
-    UserDefaults.standard.object(forKey: AppState.conversationListeningDefaultsKey) as? Bool ?? true
+  /// Overlay on `audioRecordingMode`. Pause keeps mic/BLE capture up and gates only
+  /// transcription forwarding — it is not equivalent to mode Off and never writes the mode.
+  @Published var isTranscriptionPaused = UserDefaults.standard.bool(forKey: .transcriptionPaused)
+  /// UI projection: mode is not Off and the pause overlay is clear.
+  var isConversationListening: Bool {
+    CaptureListeningLogic.shouldForwardTranscriptionAudio(
+      mode: audioRecordingMode,
+      isPaused: isTranscriptionPaused
+    )
+  }
   @Published var isTranscribing = false {
     didSet {
       // Preferred-mic reconnect must track live Listening even when Settings is closed (#10921).
@@ -696,7 +701,7 @@ class AppState: ObservableObject {
     ShortcutSettings.migratePTTMicrophoneChoiceIfNeeded()
     // Register as the current instance so background services can check recording state
     AppState.current = self
-    setConversationListeningSnapshot(isConversationListening)
+    refreshTranscriptionForwardingSnapshot()
     ownerChangeObserver = NotificationCenter.default.addObserver(
       forName: .runtimeOwnerDidChange, object: nil, queue: nil
     ) { [weak self] _ in
@@ -979,6 +984,7 @@ class AppState: ObservableObject {
     ) { [weak self] _ in
       Task { @MainActor in
         guard let self else { return }
+        self.refreshTranscriptionForwardingSnapshot()
         switch AssistantSettings.shared.audioRecordingMode {
         case .off:
           self.stopTranscription()
