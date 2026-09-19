@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import os
+import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import typer
 
-from omi_cli.errors import NotFoundError, UsageError
+from omi_cli.errors import NotFoundError, UsageError, CliError, EXIT_SERVER
 from omi_cli.models import MemoryCategory, MemoryVisibility
 from omi_cli.output import shorten
 
 if TYPE_CHECKING:
     from omi_cli.main import AppContext
-
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -38,6 +41,11 @@ def list_memories(
         help="Comma-separated category filter (e.g. 'work,skills').",
     ),
 ) -> None:
+    """
+    List memories for the current user.
+
+    Supports pagination via limit and offset, and filtering by memory categories.
+    """
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         items = client.get(
@@ -67,6 +75,12 @@ def get_memory(
     typer_ctx: typer.Context,
     memory_id: str = typer.Argument(..., help="Memory ID."),
 ) -> None:
+    """
+    Fetch a single memory by its unique identifier.
+
+    Since the dev API lacks a direct get-by-id endpoint, this implements
+    client-side filtering by paging through the user's memories.
+    """
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         # The dev API exposes list+search but no single-resource read for memories;
@@ -99,6 +113,11 @@ def create_memory(
     visibility: MemoryVisibility = typer.Option(MemoryVisibility.private, "--visibility", help="public or private."),
     tag: list[str] = typer.Option([], "--tag", help="Tag (repeat for multiple)."),
 ) -> None:
+    """
+    Create a new memory for the user.
+
+    Content is required. Category, visibility, and tags are optional.
+    """
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {"content": content, "visibility": visibility.value, "tags": tag}
     if category is not None:
@@ -118,6 +137,11 @@ def update_memory(
     visibility: Optional[MemoryVisibility] = typer.Option(None, "--visibility", help="public or private."),
     tag: Optional[list[str]] = typer.Option(None, "--tag", help="Replace tags (repeat for multiple)."),
 ) -> None:
+    """
+    Update fields of an existing memory.
+
+    At least one field must be provided for update.
+    """
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
     if content is not None:
@@ -144,6 +168,11 @@ def delete_memory(
     memory_id: str = typer.Argument(..., help="Memory ID."),
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
+    """
+    Delete a specific memory by its ID.
+
+    Requires confirmation unless the --yes flag is used.
+    """
     ctx = _ctx(typer_ctx)
     if not confirm:
         typer.confirm(f"Delete memory {memory_id}?", abort=True)
@@ -152,3 +181,75 @@ def delete_memory(
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted memory [bold]{memory_id}[/bold].")
+
+
+@app.command("export", help="Export memories to a JSON file. Warning: uses offset pagination, so it's not a point-in-time snapshot; changes during export may cause duplicates or missing items.")
+def export_memories(
+    typer_ctx: typer.Context,
+    output: Path = typer.Option(Path("memories_export.json"), "--output", "-o", help="Output file path."),
+    categories: Optional[str] = typer.Option(None, "--categories", "-c", help="Filter export by one or more categories (comma-separated)."),
+) -> None:
+    """
+    Export user memories to a JSON file.
+    
+    Fetches memories using pagination and streams them directly to the
+    output file to prevent memory exhaustion for large datasets.
+    """
+    ctx = _ctx(typer_ctx)
+    limit = 100
+    offset = 0
+
+    # Atomic write: write to temp file first, then rename to target.
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temp_file = tempfile.NamedTemporaryFile("w", dir=output.parent, delete=False, encoding="utf-8")
+    
+    try:
+        with ctx.make_client() as client:
+            temp_file.write("[")
+            first_item = True
+            
+            while True:
+                # Pass categories to API if provided (backend might ignore, but it's the correct interface)
+                params = {"limit": limit, "offset": offset}
+                if categories:
+                    params["categories"] = categories
+
+                page = client.get("/v1/dev/user/memories", params=params)
+
+                # Fail-fast: if API returns None but we expected a page, stop and fail.
+                if page is None:
+                    if offset == 0:
+                        break
+                    raise CliError(
+                        f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write.",
+                        exit_code=EXIT_SERVER,
+                    )
+
+                # Normalize categories to a list for client-side filtering
+                cat_list = [c.strip() for c in categories.split(",")] if categories else None
+
+                for item in page:
+                    # Client-side filter: ensure we only export requested categories
+                    if cat_list and item.get("category") not in cat_list:
+                        continue
+                        
+                    if not first_item:
+                        temp_file.write(",")
+                    json.dump(item, temp_file, ensure_ascii=False)
+                    first_item = False
+                
+                if not page:
+                    break
+                
+                offset += limit
+
+            temp_file.write("]")
+            temp_file.close()
+            os.replace(temp_file.name, output)
+    except Exception:
+        temp_file.close()
+        if os.path.exists(temp_file.name):
+            os.remove(temp_file.name)
+        raise
+
+    ctx.renderer.success(f"Exported memories to [bold]{output}[/bold] via streaming.")

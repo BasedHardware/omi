@@ -154,3 +154,116 @@ def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock,
     result = cli_runner.invoke(app, ["--no-color", *command])
     assert result.exit_code == 0, result.output
     assert "[draft] literal [/bold] :warning:" in result.stdout
+
+
+def test_memory_export_success_multipage(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    page1 = [{"id": f"m{i}", "content": f"val{i}"} for i in range(100)]
+    page2 = [{"id": "m100", "content": "val100"}]
+    import httpx
+
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(200, json=page1), httpx.Response(200, json=page2), httpx.Response(200, json=[])]
+    )
+    out_file = tmp_path / "subdir" / "export.json"
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert len(data) == 101
+    assert data[0]["id"] == "m0"
+    assert data[-1]["id"] == "m100"
+    assert len(route.calls) == 3
+    assert route.calls[1].request.url.params["offset"] == "100"
+    assert route.calls[2].request.url.params["offset"] == "200"
+
+
+def test_memory_export_empty(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(json=[])
+    out_file = tmp_path / "empty_export.json"
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert data == []
+
+
+def test_memory_export_fail_fast_on_api_error(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    page1 = [{"id": f"m{i}", "content": f"val{i}"} for i in range(100)]
+    import httpx
+    from omi_cli.errors import ServerError
+
+    # OmiClient retries GET 5xx up to 4 times (MAX_RETRY_ATTEMPTS).
+    # We provide 4 responses to satisfy the retry loop, then the final error.
+    respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(200, json=page1), 
+            httpx.Response(500, json={"error": "server error"}), 
+            httpx.Response(500, json={"error": "server error"}), 
+            httpx.Response(500, json={"error": "server error"}), 
+            httpx.Response(500, json={"error": "server error"}), 
+        ]
+    )
+    out_file = tmp_path / "failed_export.json"
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
+    assert result.exit_code == 3  # EXIT_SERVER
+    # Crucial: verify that partial write did not leak to output path
+    assert not out_file.exists()
+
+
+def test_memory_export_api_none_at_offset(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    """Verify that a None response at offset > 0 triggers RuntimeError and prevents partial write."""
+    page1 = [{"id": f"m{i}", "content": "val"} for i in range(100)]
+    import httpx
+
+    respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(200, json=page1), httpx.Response(204)]
+    )
+    out_file = tmp_path / "none_export.json"
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
+    assert result.exit_code != 0
+    # RuntimeError is printed to stdout/stderr by Typer's exception handler
+    # We check result.stdout/stderr or the exception itself if available
+    assert "API returned None unexpectedly at offset 100" in str(result.exception) or \
+           "API returned None unexpectedly at offset 100" in result.stdout or \
+           "API returned None unexpectedly at offset 100" in result.stderr
+    # Crucial: verify no file was left behind
+    assert not out_file.exists()
+
+
+
+def test_memory_export_categories(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    """Verify that export filters by category both via API and client-side."""
+    import httpx
+    # Mock API: return a mix of categories on first page, then empty
+    page1 = [
+        {"id": "m1", "category": "work", "content": "work 1"},
+        {"id": "m2", "category": "personal", "content": "personal 1"},
+        {"id": "m3", "category": "work", "content": "work 2"},
+    ]
+    
+    respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(200, json=page1), httpx.Response(200, json=[])]
+    )
+    
+    out_file = tmp_path / "cat_export.json"
+    
+    # Export only 'work'
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file), "--categories", "work"])
+    
+    assert result.exit_code == 0
+    assert out_file.exists()
+    
+    # Verify content
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert len(data) == 2
+    assert all(item["category"] == "work" for item in data)
+    assert any(item["id"] == "m1" for item in data)
+    assert any(item["id"] == "m3" for item in data)
+    
+    # Verify API call included categories param
+    # we need to check the last call since side_effect was used
+    # respx stores calls in the route
+    route = respx_mock.get("/v1/dev/user/memories")
+    request = route.calls.last.request
+    assert request.url.params["categories"] == "work"
+
