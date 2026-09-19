@@ -1147,6 +1147,11 @@ checks:
     triggers: ["plugins/omi-notion-app/**"]
     lanes: ["local", "ci"]
     reason: "#13915 get_page read only the first 50 block children and never followed has_more/next_cursor, silently dropping page content; later-page failures must stay errors"
+  - id: notion-app-security-tests
+    command: ["python3", "plugins/omi-notion-app/test_notion_security.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "OAuth callback endpoint must HTML-escape error parameter against reflected XSS, URL-encode uid in redirect and continuation links, and escape workspace names"
   - id: hey-omi-question-extraction-tests
     command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
