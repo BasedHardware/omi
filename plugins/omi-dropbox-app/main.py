@@ -11,6 +11,7 @@ import struct
 import wave
 from collections import defaultdict
 from datetime import datetime, timedelta
+import time
 from typing import Dict, Optional
 from urllib.parse import urlencode
 
@@ -53,9 +54,29 @@ app = FastAPI(
 )
 
 # ============== Audio Buffer ==============
+# Maximum allowed audio buffer per user (25 MB ~ 13.6 mins of 16kHz mono PCM16)
+MAX_AUDIO_BUFFER_BYTES = 25 * 1024 * 1024
+# Audio buffer TTL in seconds (1 hour)
+AUDIO_BUFFER_TTL_SECONDS = 3600
+
 # Store audio chunks by user ID
 audio_buffers: Dict[str, bytes] = defaultdict(bytes)
 audio_sample_rates: Dict[str, int] = {}
+audio_timestamps: Dict[str, float] = {}
+
+
+def cleanup_stale_audio_buffers() -> None:
+    """Evict audio buffers older than AUDIO_BUFFER_TTL_SECONDS to prevent memory leaks."""
+    now = time.time()
+    stale_uids = [
+        u for u, last_ts in audio_timestamps.items()
+        if now - last_ts > AUDIO_BUFFER_TTL_SECONDS
+    ]
+    for u in stale_uids:
+        audio_buffers.pop(u, None)
+        audio_sample_rates.pop(u, None)
+        audio_timestamps.pop(u, None)
+        print(f"[AUDIO] Evicted stale buffer for uid={u}")
 
 
 def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
@@ -71,12 +92,10 @@ def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
 
 def get_and_clear_audio(uid: str) -> Optional[bytes]:
     """Get accumulated audio for a user and clear the buffer."""
-    if uid in audio_buffers and audio_buffers[uid]:
-        audio_data = audio_buffers[uid]
-        sample_rate = audio_sample_rates.get(uid, 16000)
-        del audio_buffers[uid]
-        if uid in audio_sample_rates:
-            del audio_sample_rates[uid]
+    audio_data = audio_buffers.pop(uid, None)
+    sample_rate = audio_sample_rates.pop(uid, 16000)
+    audio_timestamps.pop(uid, None)
+    if audio_data:
         return create_wav_file(audio_data, sample_rate)
     return None
 
@@ -549,6 +568,10 @@ async def on_conversation_created(
         f"[WEBHOOK] Settings: folder={folder_name}, summary={save_summary}, transcript={save_transcript}, audio={save_audio}"
     )
 
+    # If audio saving is disabled, ensure buffer is cleared to avoid memory leak
+    if not save_audio:
+        get_and_clear_audio(uid)
+
     # Nothing to save
     if not save_summary and not save_transcript and not save_audio:
         print(f"[WEBHOOK] Nothing to save (all disabled)")
@@ -701,7 +724,12 @@ async def get_omi_tools_manifest():
 async def tool_search_dropbox(request: Request):
     """Search for files in Dropbox."""
     try:
-        body = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            return {"error": "Invalid JSON request body"}
+        if not isinstance(body, dict):
+            return {"error": "Request body must be a JSON object"}
         uid = body.get("uid")
         query = body.get("query", "")
 
@@ -751,7 +779,12 @@ async def tool_search_dropbox(request: Request):
 async def tool_list_dropbox(request: Request):
     """List files in Dropbox folder."""
     try:
-        body = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            return {"error": "Invalid JSON request body"}
+        if not isinstance(body, dict):
+            return {"error": "Request body must be a JSON object"}
         uid = body.get("uid")
         folder = body.get("folder", "")
 
@@ -805,7 +838,12 @@ async def tool_list_dropbox(request: Request):
 async def tool_read_dropbox_file(request: Request):
     """Read and extract text content from a file in Dropbox."""
     try:
-        body = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            return {"error": "Invalid JSON request body"}
+        if not isinstance(body, dict):
+            return {"error": "Request body must be a JSON object"}
         uid = body.get("uid")
         path = body.get("path", "")
 
@@ -931,12 +969,27 @@ async def receive_audio(
     Accumulates audio until the conversation webhook is triggered.
     """
     try:
+        if not uid or not uid.strip():
+            return {"status": "error", "message": "Missing or invalid uid parameter"}
+
+        if sample_rate < 8000 or sample_rate > 48000:
+            return {"status": "error", "message": f"Invalid sample_rate: {sample_rate}. Must be between 8000 and 48000."}
+
+        cleanup_stale_audio_buffers()
+
         audio_bytes = await request.body()
 
         if audio_bytes:
+            current_len = len(audio_buffers[uid])
+            incoming_len = len(audio_bytes)
+            if current_len + incoming_len > MAX_AUDIO_BUFFER_BYTES:
+                print(f"[AUDIO] Buffer ceiling exceeded for uid={uid} ({current_len + incoming_len} > {MAX_AUDIO_BUFFER_BYTES})")
+                return {"status": "error", "message": "Audio buffer size limit exceeded"}
+
             audio_buffers[uid] += audio_bytes
             audio_sample_rates[uid] = sample_rate
-            print(f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, total: {len(audio_buffers[uid])} bytes")
+            audio_timestamps[uid] = time.time()
+            print(f"[AUDIO] Received {incoming_len} bytes for uid={uid}, total: {len(audio_buffers[uid])} bytes")
 
         return {"status": "ok"}
     except Exception as e:
