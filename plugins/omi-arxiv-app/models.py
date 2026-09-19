@@ -47,7 +47,7 @@ class GetPaperDetailsRequest(BaseModel):
 
     paper_id: str = Field(
         ...,
-        description="arXiv paper ID (e.g. 2401.01234, cs/9901001, or full arxiv.org/abs URL).",
+        description="arXiv paper ID or arxiv.org/abs URL. Include vN for a specific version; omit it for the latest.",
     )
 
 
