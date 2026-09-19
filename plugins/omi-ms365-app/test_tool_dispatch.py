@@ -75,7 +75,7 @@ def load_app():
     services.auth.get_access_token = get_access_token
 
     stubs = {
-        "fastapi": _module("fastapi", FastAPI=FastAPI, HTTPException=HTTPException, Query=lambda *a, **k: None, Request=object),
+        "fastapi": _module("fastapi", FastAPI=FastAPI, HTTPException=HTTPException, Query=lambda *a, **k: None, Request=object, Depends=lambda *a, **k: None),
         "fastapi.responses": _module("fastapi.responses", HTMLResponse=str, JSONResponse=dict, RedirectResponse=str),
         "itsdangerous": _module("itsdangerous", BadSignature=Exception, URLSafeSerializer=Serializer),
         "config": _module("config", get_settings=lambda: settings),
