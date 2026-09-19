@@ -109,6 +109,7 @@ OAUTH_REDIRECT_URL=http://localhost:8000/auth/callback
 OPENAI_API_KEY=your_openai_key
 
 # App Settings
+TWITTER_WEBHOOK_SECRET=your_webhook_shared_secret  # Required: authenticates /webhook transcript deliveries
 APP_HOST=0.0.0.0
 APP_PORT=8000
 ```
