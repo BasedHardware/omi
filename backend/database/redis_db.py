@@ -322,8 +322,9 @@ def get_user_app_subscription_customer_id(app_id: str, uid: str) -> Optional[str
     return val.decode()
 
 
-def enable_app(uid: str, app_id: str) -> None:
-    r.sadd(f'users:{uid}:enabled_plugins', app_id)
+def enable_app(uid: str, app_id: str) -> bool:
+    """Enable an app and report whether this call added a new membership."""
+    return bool(r.sadd(f'users:{uid}:enabled_plugins', app_id))
 
 
 def disable_app(uid: str, app_id: str) -> None:
