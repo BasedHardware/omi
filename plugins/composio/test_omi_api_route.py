@@ -43,6 +43,11 @@ def load_module():
     db.update_memory_status = lambda *_args, **_kwargs: None
     db.get_all_memories = lambda *_args, **_kwargs: []
 
+    # The tools-auth guard (shared-secret shared across the backend routes) is
+    # imported by src/omi_api.py; stub it so this route test stays hermetic.
+    tools_auth = ModuleType("src.tools_auth")
+    tools_auth.require_composio_tools_auth = lambda *_args, **_kwargs: None
+
     spec = importlib.util.spec_from_file_location("src.omi_api", Path(__file__).parent / "src" / "omi_api.py")
     module = importlib.util.module_from_spec(spec)
     with patch.dict(
@@ -54,6 +59,7 @@ def load_module():
             "requests": requests,
             "src": src,
             "src.db": db,
+            "src.tools_auth": tools_auth,
         },
     ):
         spec.loader.exec_module(module)
