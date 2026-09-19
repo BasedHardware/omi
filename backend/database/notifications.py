@@ -111,7 +111,10 @@ def get_user_time_zone(uid: str) -> Optional[str]:
 def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
     """Persist the client's reported IANA timezone on the user document."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    client.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+    user_ref = client.collection('users').document(uid)
+    user_doc = user_ref.get()
+    user_data = _typed_doc(user_doc) if getattr(user_doc, "exists", False) else {}
+    user_ref.set({'time_zone': time_zone, **daily_summary_schedule_defaults(user_data)}, merge=True)
 
 
 def resolve_user_timezone(uid: str) -> str:
